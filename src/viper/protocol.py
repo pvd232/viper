@@ -5,6 +5,10 @@ the exact Git source tree, requested environments, observed execution
 conditions, and immutable stage-result snapshots.
 """
 
+# Temporary re-exports keep intermediate extraction commits executable. This
+# module is deleted after every protocol type has one final owner.
+# ruff: noqa: F401
+
 from __future__ import annotations
 
 import re
@@ -161,6 +165,37 @@ from .runtime import ResolvedLocalEnvironment as ResolvedLocalEnvironment
 from .runtime import StartupVariable as StartupVariable
 from .runtime import TorchDeterminismSpec as TorchDeterminismSpec
 from .runtime import TorchPrecisionSpec as TorchPrecisionSpec
+from .stages import (
+    BaseSpec,
+    BuildSpec,
+    DownloadSpec,
+    EmbedSpec,
+    EvaluateSpec,
+    FutureInputRef,
+    InternalInputRef,
+    InternalSpec,
+    ParameterizedSpec,
+    ResolvedBaseSpec,
+    ResolvedBuildSpec,
+    ResolvedDownloadSpec,
+    ResolvedEvaluateSpec,
+    ResolvedFutureInputRef,
+    ResolvedInternalInputRef,
+    ResolvedInternalSpec,
+    ResolvedSpec,
+    ResolvedStageRef,
+    ResolvedStoredInputRef,
+    ResolvedTrainSpec,
+    Spec,
+    StoredInputRef,
+    TrainSpec,
+)
+from .stages import ParameterizedStageSpec as ParameterizedStageSpec
+from .stages import ResolvedEmbedSpec as ResolvedEmbedSpec
+from .stages import ResolvedStageInvocationRef as ResolvedStageInvocationRef
+from .stages import StageContextBinding as StageContextBinding
+from .stages import StageImplementationRef as StageImplementationRef
+from .stages import StageInvocationReceipt as StageInvocationReceipt
 
 # ---------------------------------------------------------------------------
 # File locations
@@ -200,57 +235,6 @@ from .runtime import TorchPrecisionSpec as TorchPrecisionSpec
 # ---------------------------------------------------------------------------
 # Measurement
 # ---------------------------------------------------------------------------
-
-
-class StageImplementationRef(ProtocolModel):
-    """Identify one project-owned top-level stage callable by exact file bytes."""
-
-    path: PythonRepoRelPath
-    symbol: PythonSymbol
-    sha256: SHA256
-    bytes: int = Field(gt=0)
-
-
-class StageContextBinding(ProtocolModel):
-    """Persist the stable values used to construct one live stage context."""
-
-    schema_version: Literal[1] = 1
-    run_id: RunId
-    attempt_id: int = Field(ge=1)
-    stage_id: StageId
-    parameter_model: ParameterModelRef
-    parameter_digest: SHA256
-    inputs: dict[InputName, RepoRelPath]
-    retrievals: dict[InputName, HttpRetrievalContextBinding] = Field(
-        default_factory=dict
-    )
-    artifacts: dict[ArtifactName, RepoRelPath]
-    metric_ids: tuple[MetricId, ...]
-    numpy_generator_names: tuple[HumanId, ...]
-
-
-class StageInvocationReceipt(ProtocolModel):
-    """Record the callable, logical context, timing, and outcome of one invocation."""
-
-    implementation: StageImplementationRef
-    context: StageContextBinding
-    context_digest: SHA256
-    started_at: AwareDatetime
-    completed_at: AwareDatetime
-    outcome: Literal["succeeded", "failed", "cancelled", "preempted"]
-
-    @model_validator(mode="after")
-    def validate_timing(self) -> StageInvocationReceipt:
-        """Require completion to follow invocation start."""
-        if self.completed_at <= self.started_at:
-            raise ValueError("invocation completion must be after invocation start")
-        return self
-
-
-class ResolvedStageInvocationRef(ResolvedFileRef):
-    """Identify one immutable stage-invocation receipt."""
-
-    kind: Literal["stage_invocation"] = "stage_invocation"
 
 
 class MetricCriterion(ProtocolModel):
@@ -380,14 +364,6 @@ class AttemptJournalRef(ResolvedFileRef):
     """Identify one immutable attempt journal."""
 
     kind: Literal["attempt_journal"] = "attempt_journal"
-
-
-class ResolvedStageRef(ProtocolModel):
-    """Binds one completed stage to its immutable stage-result snapshot."""
-
-    stage_id: StageId
-    snapshot: StageResultSnapshot
-    resolved_spec: SnapshotFileRef
 
 
 class RunAttempt(ProtocolModel):
@@ -655,334 +631,9 @@ class BenchmarkResult(ProtocolModel):
 # ---------------------------------------------------------------------------
 
 
-class StoredInputRef(ProtocolModel):
-    """A promoted artifact selected before the run begins."""
-
-    kind: Literal["stored"] = "stored"
-    pointer: ArtifactPointerRef
-    path: RepoRelPath
-    data_role: DataRole
-
-    @model_validator(mode="after")
-    def validate_materialization_path(self) -> StoredInputRef:
-        """Keep materialized input bytes within their promoted-input scope."""
-        pointer_scope = self.pointer.path.split("/")[:3]
-        materialization_parts = self.path.split("/")
-        if (
-            len(materialization_parts) < 3
-            or materialization_parts[:3] != pointer_scope
-            or repo_file_paths_overlap(self.path, self.pointer.path)
-            or materialization_parts[-1].endswith(".pointer.yaml")
-        ):
-            raise ValueError(
-                "stored input path must use the pointer's category and entity ID "
-                "and must not use or overlap a pointer-file path"
-            )
-        return self
-
-
-class FutureInputRef(ProtocolModel):
-    """One named artifact produced by an earlier stage in the same run."""
-
-    kind: Literal["future"] = "future"
-    producer_stage_id: StageId
-    producer_artifact: ArtifactName
-
-
-InternalInputRef = Annotated[
-    StoredInputRef | FutureInputRef,
-    Field(discriminator="kind"),
-]
-
-
 # ---------------------------------------------------------------------------
 # Stage specifications
 # ---------------------------------------------------------------------------
-
-
-class BaseSpec(ProtocolModel):
-    """Execution request recorded before a stage runs."""
-
-    kind: str
-    schema_version: Literal[1] = 1
-
-    implementation: StageImplementationRef
-
-    environment: EnvironmentSpec | None = None
-    metric_ids: tuple[MetricId, ...] = ()
-
-    artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def validate_artifact_paths(self) -> BaseSpec:
-        """Enforce entrypoint, artifact, and metric declarations."""
-        if len(set(self.metric_ids)) != len(self.metric_ids):
-            raise ValueError("stage metric IDs must be unique")
-
-        artifact_categories = {
-            "download": "datasets",
-            "build": "priors",
-            "embed": "models",
-            "train": "models",
-            "evaluate": "evaluations",
-        }
-        artifact_category = artifact_categories.get(self.kind)
-        if artifact_category is None:
-            raise ValueError("stage kind has no artifact category contract")
-
-        checkpoint_artifacts = {PARAMETERS, RESUME_STATE}
-        if self.kind != "train" and checkpoint_artifacts & set(self.artifacts):
-            raise ValueError(
-                "parameters and resume_state are reserved for training stages"
-            )
-        if self.kind != "evaluate" and PREDICTIONS in self.artifacts:
-            raise ValueError("predictions is reserved for evaluation stages")
-
-        artifact_roots: dict[RepoRelPath, ArtifactName] = {}
-
-        for name, artifact in self.artifacts.items():
-            parts = artifact.path.split("/")
-            if (
-                len(parts) < 8
-                or parts[0] != "experiments"
-                or parts[2] != "runs"
-                or parts[5] != "artifacts"
-                or parts[6] != artifact_category
-                or re.fullmatch(r"[a-z][a-z0-9_]*", parts[7]) is None
-                or (artifact.kind == "file" and len(parts) < 9)
-            ):
-                raise ValueError(
-                    f"artifact {name!r} path must use a run artifact category "
-                    "and entity ID"
-                )
-
-            if repo_file_paths_overlap(artifact.path, self.implementation.path):
-                raise ValueError(
-                    f"artifact {name!r} path collides with the stage implementation"
-                )
-
-            for previous_path, previous_name in artifact_roots.items():
-                if repo_file_paths_overlap(artifact.path, previous_path):
-                    raise ValueError(
-                        f"artifact roots for {previous_name!r} and {name!r} "
-                        f"overlap: {previous_path} and {artifact.path}"
-                    )
-
-            artifact_roots[artifact.path] = name
-
-        return self
-
-
-class ParameterizedSpec(BaseSpec):
-    """Request an operation governed by one project-defined parameter model."""
-
-    parameter_model: ParameterModelRef
-
-
-class DownloadSpec(ParameterizedSpec):
-    """Request verified HTTP retrievals followed by one project operation."""
-
-    kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
-    inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    transport: HttpTransportSpec
-    policy: HttpRetrievalPolicy
-    params: parameters.Download
-
-
-class InternalSpec(ParameterizedSpec):
-    """Request a stage that consumes stored or prior-stage artifacts."""
-
-    inputs: dict[InputName, InternalInputRef] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def validate_local_path_collisions(self) -> InternalSpec:
-        """Keep stored inputs, scripts, and artifact paths disjoint."""
-        stored_inputs = {
-            name: ref for name, ref in self.inputs.items() if ref.kind == "stored"
-        }
-
-        materialization_paths: dict[RepoRelPath, InputName] = {}
-
-        for name, ref in stored_inputs.items():
-            for previous_path, previous_name in materialization_paths.items():
-                if repo_file_paths_overlap(ref.path, previous_path):
-                    raise ValueError(
-                        f"input materialization paths for {previous_name!r} and "
-                        f"{name!r} collide: {previous_path} and {ref.path}"
-                    )
-
-            materialization_paths[ref.path] = name
-
-            if repo_file_paths_overlap(ref.path, self.implementation.path):
-                raise ValueError(
-                    f"input {name!r} path collides with the stage implementation"
-                )
-
-            for artifact_name, artifact in self.artifacts.items():
-                if repo_file_paths_overlap(artifact.path, ref.path):
-                    raise ValueError(
-                        f"artifact {artifact_name!r} path collides with input {name!r}"
-                    )
-
-        return self
-
-
-class BuildSpec(InternalSpec):
-    """Request construction of a project-defined prior artifact."""
-
-    kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: parameters.Build
-
-
-class EmbedSpec(InternalSpec):
-    """Request construction of a project-defined embedding artifact."""
-
-    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: parameters.Embed
-
-
-class TrainSpec(InternalSpec):
-    """Request training and one terminal replay checkpoint."""
-
-    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: parameters.Train
-
-    @model_validator(mode="after")
-    def validate_terminal_checkpoint(self) -> TrainSpec:
-        """Enforce the canonical terminal checkpoint and resume inputs."""
-        required_artifacts = {PARAMETERS, RESUME_STATE}
-        missing_artifacts = required_artifacts - set(self.artifacts)
-        if missing_artifacts:
-            missing = ", ".join(sorted(missing_artifacts))
-            raise ValueError(
-                f"training stages must declare terminal checkpoint artifacts: {missing}"
-            )
-
-        model_input = self.inputs.get(PARAMETERS_INPUT)
-        state_input = self.inputs.get(RESUME_STATE_INPUT)
-
-        if (model_input is None) != (state_input is None):
-            raise ValueError("checkpoint inputs must be declared together")
-
-        if model_input is None or state_input is None:
-            return self
-
-        if model_input.kind != state_input.kind:
-            raise ValueError("checkpoint inputs must use the same input kind")
-
-        if model_input.kind == "stored" and state_input.kind == "stored":
-            if any(
-                input_ref.pointer.path.split("/")[1] != "models"
-                for input_ref in (model_input, state_input)
-            ):
-                raise ValueError("stored checkpoint inputs must use inputs/models")
-
-        if model_input.kind == "future" and state_input.kind == "future":
-            if model_input.producer_stage_id != state_input.producer_stage_id:
-                raise ValueError(
-                    "checkpoint inputs must select one checkpoint-producing stage"
-                )
-            if model_input.producer_artifact != PARAMETERS:
-                raise ValueError("parameters input must select parameters")
-            if state_input.producer_artifact != RESUME_STATE:
-                raise ValueError("resume_state input must select resume_state")
-
-        return self
-
-
-class EvaluateSpec(InternalSpec):
-    """Request prediction and metrics for one fixed model, dataset, and split."""
-
-    kind: Literal["evaluate"] = "evaluate"  # pyright: ignore[reportIncompatibleVariableOverride]
-    evaluation_id: EvaluationId
-    metric_ids: tuple[MetricId, ...] = Field(  # pyright: ignore[reportGeneralTypeIssues]
-        min_length=1
-    )
-    split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: parameters.Evaluate
-
-    @model_validator(mode="after")
-    def validate_evaluation_contract(self) -> EvaluateSpec:
-        """Require fixed evaluation inputs and one canonical prediction artifact."""
-        if len(set(self.metric_ids)) != len(self.metric_ids):
-            raise ValueError("evaluation metric IDs must be unique")
-        if len(set(self.split_inputs)) != len(self.split_inputs):
-            raise ValueError("evaluation split input names must be unique")
-
-        model_input = self.inputs.get(PARAMETERS_INPUT)
-        if model_input is None:
-            raise ValueError("evaluation requires a parameters input")
-
-        dataset_input = self.inputs.get(EVALUATION_DATASET_INPUT)
-        if dataset_input is None:
-            raise ValueError("evaluation requires an evaluation_dataset input")
-        if dataset_input.kind != "stored":
-            raise ValueError("evaluation_dataset must be a stored input")
-        if dataset_input.pointer.path.split("/")[1] != "datasets":
-            raise ValueError("evaluation_dataset must use inputs/datasets")
-        if dataset_input.data_role not in {"evaluation", "benchmark"}:
-            raise ValueError(
-                "evaluation_dataset data_role must be evaluation or benchmark"
-            )
-
-        reserved_inputs = {PARAMETERS_INPUT, EVALUATION_DATASET_INPUT}
-        if reserved_inputs & set(self.split_inputs):
-            raise ValueError(
-                "evaluation split inputs must differ from reserved input names"
-            )
-
-        missing_splits = set(self.split_inputs) - set(self.inputs)
-        if missing_splits:
-            missing = ", ".join(sorted(missing_splits))
-            raise ValueError(f"evaluation split inputs are undeclared: {missing}")
-
-        for split_name in self.split_inputs:
-            split_input = self.inputs[split_name]
-            if split_input.kind != "stored":
-                raise ValueError(
-                    f"evaluation split input {split_name!r} must be stored"
-                )
-            if split_input.pointer.path.split("/")[1] != "benchmarks":
-                raise ValueError(
-                    f"evaluation split input {split_name!r} must use inputs/benchmarks"
-                )
-            if split_input.data_role != dataset_input.data_role:
-                raise ValueError(
-                    f"evaluation split input {split_name!r} data_role must match "
-                    "evaluation_dataset"
-                )
-
-        if model_input.kind == "future":
-            if model_input.producer_artifact != PARAMETERS:
-                raise ValueError("same-run evaluation must consume parameters")
-        else:
-            if model_input.pointer.path.split("/")[1] != "models":
-                raise ValueError("stored evaluation model must use inputs/models")
-            if model_input.data_role not in {"training", "validation"}:
-                raise ValueError(
-                    "stored evaluation parameters data_role must be training or "
-                    "validation"
-                )
-
-        prediction = self.artifacts.get(PREDICTIONS)
-        if prediction is None:
-            raise ValueError("evaluation must declare a predictions artifact")
-
-        if any(
-            artifact.data_role != dataset_input.data_role
-            for artifact in self.artifacts.values()
-        ):
-            raise ValueError(
-                "evaluation artifact data_role must match evaluation_dataset"
-            )
-
-        if any(
-            artifact.path.split("/")[7] != self.evaluation_id
-            for artifact in self.artifacts.values()
-        ):
-            raise ValueError("evaluation artifact entity IDs must match evaluation_id")
-
-        return self
 
 
 class DownloadVariantStageParams(ProtocolModel):
@@ -1053,282 +704,11 @@ class VariantSpec(ProtocolModel):
         return self
 
 
-ParameterizedStageSpec = DownloadSpec | BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
-
-
-Spec = Annotated[
-    ParameterizedStageSpec,
-    Field(discriminator="kind"),
-]
-
 # ---------------------------------------------------------------------------
 # Resolved input refs
 # ---------------------------------------------------------------------------
 
 
-class ResolvedStoredInputRef(ProtocolModel):
-    """Bind a stored stage input to its verified pointer file."""
-
-    kind: Literal["stored"] = "stored"
-    pointer: ResolvedArtifactPointerRef
-
-
-class ResolvedFutureInputRef(ProtocolModel):
-    """Bind a future input to its completed producer stage."""
-
-    kind: Literal["future"] = "future"
-    producer: ResolvedStageRef
-
-
-ResolvedInternalInputRef = Annotated[
-    ResolvedStoredInputRef | ResolvedFutureInputRef,
-    Field(discriminator="kind"),
-]
-
-
 # ---------------------------------------------------------------------------
 # Resolved execution records
 # ---------------------------------------------------------------------------
-
-
-class ResolvedBaseSpec(ProtocolModel):
-    """Record an execution and the exact output files it produced."""
-
-    schema_version: Literal[1] = 1
-    kind: str
-
-    spec: BaseSpec
-    source: ResolvedGitFileRef
-
-    environment: ResolvedEnvironment
-    execution_context: ExecutionContext
-    startup: ProcessStartupReceipt
-    invocation: ResolvedStageInvocationRef
-
-    command: tuple[str, ...] = Field(min_length=1)
-
-    artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
-    completed_at: AwareDatetime
-
-    @model_validator(mode="after")
-    def validate_common_invariants(self) -> ResolvedBaseSpec:
-        """Match realized source, artifacts, environment, and context to the request."""
-        if not self.command[0]:
-            raise ValueError("command executable must be nonempty")
-
-        if self.source.stored_at.path != self.spec.implementation.path:
-            raise ValueError(
-                "resolved source entrypoint must match the stage implementation path"
-            )
-
-        if set(self.artifacts) != set(self.spec.artifacts):
-            raise ValueError(
-                "resolved artifact names must match declared artifact names"
-            )
-
-        for name, resolved_artifact in self.artifacts.items():
-            declared_artifact = self.spec.artifacts[name]
-
-            if resolved_artifact.kind != declared_artifact.kind:
-                raise ValueError(
-                    f"resolved artifact {name!r} kind must match its declaration"
-                )
-
-            if declared_artifact.kind == "file" and resolved_artifact.kind == "file":
-                if resolved_artifact.file.path != declared_artifact.path:
-                    raise ValueError(
-                        f"resolved artifact {name!r} path must match its declaration"
-                    )
-                continue
-
-            if (
-                declared_artifact.kind == "bundle"
-                and resolved_artifact.kind == "bundle"
-            ):
-                for member in resolved_artifact.members:
-                    expected_path = f"{declared_artifact.path}/{member.relative_path}"
-                    if member.file.path != expected_path:
-                        raise ValueError(
-                            f"resolved artifact {name!r} member path must equal "
-                            "its declared bundle root plus relative path"
-                        )
-
-        requested_environment = self.spec.environment
-        if requested_environment is not None:
-            if self.environment.kind != requested_environment.kind:
-                raise ValueError("resolved environment kind must match its request")
-
-            if isinstance(self.environment, ResolvedGCEEnvironment) and isinstance(
-                requested_environment,
-                GCEEnvironmentSpec,
-            ):
-                if self.environment.provisioning != requested_environment.provisioning:
-                    raise ValueError(
-                        "resolved GCE provisioning source must match the stage "
-                        "environment override"
-                    )
-                if self.environment.machine_type != requested_environment.machine_type:
-                    raise ValueError(
-                        "resolved machine type must match the stage "
-                        "environment override"
-                    )
-
-            if self.environment.compute != requested_environment.compute:
-                raise ValueError(
-                    "resolved compute must match the stage environment override"
-                )
-
-            if (
-                self.environment.python_environment
-                != requested_environment.python_environment
-            ):
-                raise ValueError(
-                    "resolved Python environment must match the stage "
-                    "environment override"
-                )
-
-            resolved_lockfile = self.environment.lockfile
-            requested_lockfile = requested_environment.lockfile
-
-            if (
-                resolved_lockfile.stored_at.repository != requested_lockfile.repository
-                or resolved_lockfile.stored_at.commit != requested_lockfile.commit
-                or resolved_lockfile.stored_at.path != requested_lockfile.path
-            ):
-                raise ValueError(
-                    "resolved lockfile must match the stage environment override"
-                )
-
-        host = self.execution_context.host
-        if self.environment.kind != host.provider:
-            raise ValueError("resolved environment kind must match the observed host")
-        if isinstance(self.environment, ResolvedGCEEnvironment) and isinstance(
-            host,
-            GCEHostContext,
-        ):
-            if self.environment.provisioning != host.provisioning:
-                raise ValueError(
-                    "resolved GCE provisioning source must match the observed host"
-                )
-            if self.environment.machine_type != host.machine_type:
-                raise ValueError(
-                    "resolved machine type must match the observed host machine type"
-                )
-
-        compute = self.environment.compute
-        backend = self.execution_context.backend
-
-        if compute.kind != backend.kind:
-            raise ValueError("resolved compute kind must match the observed backend")
-
-        if compute.kind == "cuda" and backend.kind == "cuda":
-            if len(backend.gpu_devices) != compute.count:
-                raise ValueError(
-                    "observed CUDA device count must match the resolved compute"
-                )
-            if any(device.model != compute.model for device in backend.gpu_devices):
-                raise ValueError(
-                    "observed CUDA device models must match the resolved compute"
-                )
-
-        return self
-
-
-class ResolvedDownloadSpec(ResolvedBaseSpec):
-    """Bind every frozen HTTP input to its completed retrieval evidence."""
-
-    kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
-    spec: DownloadSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-
-    retrievals: dict[InputName, ResolvedHttpRetrieval]
-
-    @model_validator(mode="after")
-    def validate_download_retrievals(self) -> ResolvedDownloadSpec:
-        """Match every retrieval to its input, request, transport, and timing."""
-        if set(self.retrievals) != set(self.spec.inputs):
-            raise ValueError("resolved retrieval names must match download inputs")
-        for input_name, retrieval in self.retrievals.items():
-            if retrieval.input_name != input_name:
-                raise ValueError("resolved retrieval input name differs from its key")
-            if retrieval.request != self.spec.inputs[input_name]:
-                raise ValueError(
-                    "resolved retrieval request differs from download input"
-                )
-            if retrieval.transport.spec != self.spec.transport:
-                raise ValueError("resolved retrieval transport differs from stage spec")
-            if retrieval.completed_at > self.completed_at:
-                raise ValueError("download retrieval cannot follow stage completion")
-        return self
-
-
-class ResolvedInternalSpec(ResolvedBaseSpec):
-    """Record an operation that consumes previously produced artifacts."""
-
-    spec: InternalSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-    inputs: dict[InputName, ResolvedInternalInputRef]
-
-    @model_validator(mode="after")
-    def validate_internal_inputs(self) -> ResolvedInternalSpec:
-        """Match each realized internal input to the frozen request."""
-        if set(self.inputs) != set(self.spec.inputs):
-            raise ValueError(
-                "resolved input names must match the stage spec input names"
-            )
-
-        for name, resolved_input in self.inputs.items():
-            spec_input = self.spec.inputs[name]
-
-            if resolved_input.kind != spec_input.kind:
-                raise ValueError(
-                    f"resolved input {name!r} kind must match the stage spec input"
-                )
-
-            if (
-                resolved_input.kind == "stored"
-                and spec_input.kind == "stored"
-                and resolved_input.pointer.stored_at != spec_input.pointer
-            ):
-                raise ValueError(
-                    f"resolved input {name!r} pointer location must match "
-                    "the stage spec pointer location"
-                )
-
-        return self
-
-
-class ResolvedBuildSpec(ResolvedInternalSpec):
-    """Record the realized execution of one build stage."""
-
-    kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
-    spec: BuildSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
-class ResolvedEmbedSpec(ResolvedInternalSpec):
-    """Record the realized execution of one embedding stage."""
-
-    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
-    spec: EmbedSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
-class ResolvedTrainSpec(ResolvedInternalSpec):
-    """Record the realized execution of one training stage."""
-
-    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
-    spec: TrainSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
-class ResolvedEvaluateSpec(ResolvedInternalSpec):
-    """Record the realized execution of one evaluation stage."""
-
-    kind: Literal["evaluate"] = "evaluate"  # pyright: ignore[reportIncompatibleVariableOverride]
-    spec: EvaluateSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
-ResolvedSpec = Annotated[
-    ResolvedDownloadSpec
-    | ResolvedBuildSpec
-    | ResolvedEmbedSpec
-    | ResolvedTrainSpec
-    | ResolvedEvaluateSpec,
-    Field(discriminator="kind"),
-]
