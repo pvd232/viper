@@ -6,39 +6,21 @@ import hashlib
 import importlib.util
 import inspect
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Generic, TypeVar, cast
 
-import numpy as np
-
 from . import parameters
-from .ids import HumanId, InputName, MetricId, RunId, StageId
-from .metrics import MetricHandle
+from ._stage_context import StageContext
 from .protocol import (
-    ArtifactName,
     ParameterizedSpec,
     StageImplementationRef,
 )
 
 ParamsT = TypeVar("ParamsT", bound=parameters.ParameterSet)
 DecoratedStage = TypeVar("DecoratedStage", bound=Callable[..., None])
-
-
-@dataclass(frozen=True)
-class StageContext(Generic[ParamsT]):
-    """Carry one validated project-stage invocation inside the controlled child."""
-
-    run_id: RunId
-    attempt_id: int
-    stage_id: StageId
-    params: ParamsT
-    inputs: Mapping[InputName, Path]
-    artifacts: Mapping[ArtifactName, Path]
-    metrics: Mapping[MetricId, MetricHandle]
-    numpy_generators: Mapping[HumanId, np.random.Generator]
 
 
 @dataclass(frozen=True)
