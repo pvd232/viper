@@ -81,6 +81,18 @@ from .ids import (
     StageId,
     VariantId,
 )
+from .metrics import FloatComparator as FloatComparator
+from .metrics import Measurement as Measurement
+from .metrics import MetricDependency as MetricDependency
+from .metrics import MetricExecutionReceipt as MetricExecutionReceipt
+from .metrics import MetricImplementationRef as MetricImplementationRef
+from .metrics import MetricKind as MetricKind
+from .metrics import MetricMode as MetricMode
+from .metrics import (
+    MetricSpec,
+)
+from .metrics import MetricVerificationReceipt as MetricVerificationReceipt
+from .metrics import ResolvedMetricDependency as ResolvedMetricDependency
 from .parameters import ParameterModelRef as ParameterModelRef
 from .references import (
     ArtifactPointerRef,
@@ -125,7 +137,6 @@ from .runtime import (
     GCEEnvironmentSpec,
     GCEHostContext,
     ProcessStartupReceipt,
-    PythonEnvironmentSpec,
     ReproducibilitySpec,
     ResolvedEnvironment,
     ResolvedGCEEnvironment,
@@ -144,6 +155,7 @@ from .runtime import NumericalRuntimeContext as NumericalRuntimeContext
 from .runtime import NumPyRandomnessSpec as NumPyRandomnessSpec
 from .runtime import ParallelismSpec as ParallelismSpec
 from .runtime import PythonDistributionSpec as PythonDistributionSpec
+from .runtime import PythonEnvironmentSpec as PythonEnvironmentSpec
 from .runtime import RandomnessContext as RandomnessContext
 from .runtime import ResolvedLocalEnvironment as ResolvedLocalEnvironment
 from .runtime import StartupVariable as StartupVariable
@@ -188,26 +200,6 @@ from .runtime import TorchPrecisionSpec as TorchPrecisionSpec
 # ---------------------------------------------------------------------------
 # Measurement
 # ---------------------------------------------------------------------------
-
-
-MetricKind = Literal["training", "evaluation", "diagnostic"]
-MetricMode = Literal["recompute", "live"]
-
-
-class FloatComparator(ProtocolModel):
-    """Define equality for one recomputed floating-point metric."""
-
-    mode: Literal["exact", "absolute", "relative"] = "exact"
-    tolerance: float = Field(default=0.0, ge=0, allow_inf_nan=False)
-
-    @model_validator(mode="after")
-    def validate_tolerance(self) -> FloatComparator:
-        """Require a positive tolerance for approximate comparison modes."""
-        if self.mode != "exact" and self.tolerance == 0:
-            raise ValueError("approximate metric comparison requires tolerance")
-        if self.mode == "exact" and self.tolerance != 0:
-            raise ValueError("exact metric comparison requires zero tolerance")
-        return self
 
 
 class StageImplementationRef(ProtocolModel):
@@ -259,153 +251,6 @@ class ResolvedStageInvocationRef(ResolvedFileRef):
     """Identify one immutable stage-invocation receipt."""
 
     kind: Literal["stage_invocation"] = "stage_invocation"
-
-
-class MetricImplementationRef(ProtocolModel):
-    """Identify one project-owned metric callable by exact file bytes."""
-
-    path: PythonRepoRelPath
-    symbol: PythonSymbol
-    sha256: SHA256
-    bytes: int = Field(gt=0)
-
-
-class MetricDependency(ProtocolModel):
-    """Select one stage value and the data role accepted by a metric."""
-
-    source: Literal["input", "artifact"]
-    name: HumanId
-    required_data_role: DataRole
-
-
-class MetricSpec(ProtocolModel):
-    """Bind one metric identity to its role, parameters, and implementation."""
-
-    schema_version: Literal[1] = 1
-    metric_id: MetricId
-    kind: MetricKind
-    implementation: MetricImplementationRef
-    params: parameters.Metric
-    mode: MetricMode
-    dependencies: tuple[MetricDependency, ...] = ()
-    comparator: FloatComparator | None = None
-
-    @model_validator(mode="after")
-    def validate_lifecycle(self) -> MetricSpec:
-        """Require one complete live or recomputed metric configuration."""
-        identities = tuple(
-            (dependency.source, dependency.name) for dependency in self.dependencies
-        )
-        if len(set(identities)) != len(identities):
-            raise ValueError("metric dependencies must be unique")
-        if self.mode == "recompute":
-            if not self.dependencies:
-                raise ValueError("recomputed metrics require dependencies")
-            if self.comparator is None:
-                raise ValueError("recomputed metrics require a comparator")
-        elif self.dependencies or self.comparator is not None:
-            raise ValueError("live metrics do not declare dependencies or a comparator")
-        if self.kind == "evaluation" and self.mode != "recompute":
-            raise ValueError("evaluation metrics require recomputation")
-        return self
-
-
-class ResolvedMetricDependency(ProtocolModel):
-    """Bind one metric dependency to its exact persisted files."""
-
-    dependency: MetricDependency
-    files: tuple[ResolvedFileRef, ...] = Field(min_length=1)
-
-
-class MetricExecutionReceipt(ProtocolModel):
-    """Record one controlled metric worker execution and its scalar result."""
-
-    schema_version: Literal[1] = 1
-    run_id: RunId
-    attempt_id: int = Field(ge=1)
-    metric_id: MetricId
-    stage_id: StageId
-    purpose: Literal["measurement", "verification"]
-    implementation: MetricImplementationRef
-    params: parameters.Metric
-    dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
-    startup: ProcessStartupReceipt
-    execution_context: ExecutionContext
-    python_environment: PythonEnvironmentSpec
-    value: float = Field(allow_inf_nan=False)
-    started_at: AwareDatetime
-    completed_at: AwareDatetime
-    outcome: Literal["succeeded"] = "succeeded"
-
-
-class Measurement(ProtocolModel):
-    """One observed metric value produced during a run stage."""
-
-    run_id: RunId
-    attempt_id: int = Field(ge=1)
-    stage_id: StageId
-    metric_id: MetricId
-
-    value: float = Field(allow_inf_nan=False)
-    measured_at: AwareDatetime
-
-    epoch: int | None = Field(default=None, ge=0)
-    step: int | None = Field(default=None, ge=0)
-
-
-class MetricVerificationReceipt(ProtocolModel):
-    """Bind one measurement to independent recomputation evidence."""
-
-    schema_version: Literal[1] = 1
-    metric_id: MetricId
-    stage_id: StageId
-    measurement: Measurement
-    production: MetricExecutionReceipt
-    recomputation: MetricExecutionReceipt
-    comparator: FloatComparator
-    passed: bool
-    completed_at: AwareDatetime
-
-    @model_validator(mode="after")
-    def validate_execution_ownership(self) -> MetricVerificationReceipt:
-        """Require both workers to select one measurement and frozen invocation."""
-        if self.metric_id != self.measurement.metric_id:
-            raise ValueError("verification metric ID differs from its measurement")
-        if self.stage_id != self.measurement.stage_id:
-            raise ValueError("verification stage ID differs from its measurement")
-        expected_identity = (
-            self.measurement.run_id,
-            self.measurement.attempt_id,
-            self.measurement.stage_id,
-            self.measurement.metric_id,
-        )
-        for receipt in (self.production, self.recomputation):
-            received_identity = (
-                receipt.run_id,
-                receipt.attempt_id,
-                receipt.stage_id,
-                receipt.metric_id,
-            )
-            if received_identity != expected_identity:
-                raise ValueError("metric worker identity differs from its measurement")
-        if self.production.purpose != "measurement":
-            raise ValueError("production receipt must use measurement purpose")
-        if self.recomputation.purpose != "verification":
-            raise ValueError("recomputation receipt must use verification purpose")
-        if (
-            self.production.implementation != self.recomputation.implementation
-            or self.production.params != self.recomputation.params
-            or self.production.dependencies != self.recomputation.dependencies
-        ):
-            raise ValueError("metric worker invocation bindings differ")
-        if self.production.value != self.measurement.value:
-            raise ValueError("production value differs from its measurement")
-        if self.completed_at < max(
-            self.production.completed_at,
-            self.recomputation.completed_at,
-        ):
-            raise ValueError("verification completion precedes a worker receipt")
-        return self
 
 
 class MetricCriterion(ProtocolModel):
