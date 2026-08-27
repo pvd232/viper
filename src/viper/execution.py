@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import os
 import signal
-import subprocess
 import tempfile
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -14,7 +13,8 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from ._schema import RepoRelPath
+from ._execution.errors import RunError
+from ._execution.source import RunFetcher, _git, _resolved_git_file
 from .artifacts import ArtifactPointer
 from .experiments import ExperimentSpec
 from .http import (
@@ -39,15 +39,11 @@ from .paths import retrieval_body_path
 from .preflight import preflight_plan
 from .references import (
     GitFileRef,
-    HuggingFaceFileRef,
-    LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
     ResolvedFileRef,
     ResolvedGitFileRef,
     ResolvedRunSpecRef,
     SnapshotFileRef,
-    StageResultSnapshotRef,
-    StorageModel,
 )
 from .runs import (
     AttemptFailure,
@@ -94,18 +90,11 @@ from .verification import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
-    fetch_git_file_bytes,
-    fetch_huggingface_file_bytes,
-    list_huggingface_snapshot_files,
     read_attempt_reference,
     verify_promoted_artifact,
     verify_run_result,
 )
 from .workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
-
-
-class RunError(RuntimeError):
-    """Report a local plan, source, materialization, or execution failure."""
 
 
 class RunResult(BaseModel):
@@ -127,56 +116,6 @@ class ConfirmationRunResult(BaseModel):
     attempt_reference: ResolvedAttemptRef
     attempt_path: Path
     journal_path: Path
-
-
-def _git(repository_root: Path, *arguments: str) -> bytes:
-    """Run one bounded Git query against the selected repository."""
-    try:
-        return subprocess.run(
-            ("git", "-C", str(repository_root), *arguments),
-            check=True,
-            capture_output=True,
-        ).stdout
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        raise RunError("local Git evidence could not be read") from exc
-
-
-class RunFetcher:
-    """Retrieve frozen Git source and repository-local immutable outputs."""
-
-    def __init__(
-        self,
-        repository_root: Path,
-        store: LocalArtifactStore,
-        source_repository: str,
-    ) -> None:
-        """Bind retrieval to one local Git checkout and output store."""
-        self.repository_root = repository_root.resolve()
-        self.store = store
-        self.source_repository = source_repository
-
-    def __call__(self, location: StorageModel) -> bytes:
-        """Retrieve one file from its declared immutable backend."""
-        if isinstance(location, GitFileRef):
-            if str(location.repository) != self.source_repository:
-                return fetch_git_file_bytes(location)
-            return _git(
-                self.repository_root,
-                "show",
-                f"{location.commit}:{location.path}",
-            )
-        if isinstance(location, HuggingFaceFileRef):
-            return fetch_huggingface_file_bytes(location)
-        return self.store.fetch(location)
-
-    def list_snapshot_files(
-        self,
-        snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
-    ) -> tuple[RepoRelPath, ...]:
-        """List every regular file in one immutable stage snapshot."""
-        if isinstance(snapshot, StageResultSnapshotRef):
-            return list_huggingface_snapshot_files(snapshot)
-        return self.store.list_snapshot_files(snapshot)
 
 
 def _write_synchronized(path: Path, raw: bytes) -> None:
@@ -377,19 +316,6 @@ def _reconcile_abandoned_attempts(
         _write_attempt_document(root, run_root, recovered_attempt, store)
         recovered[attempt_id] = recovered_attempt
     return tuple(recovered[key] for key in sorted(recovered))
-
-
-def _resolved_git_file(
-    fetcher: RunFetcher,
-    location: GitFileRef,
-) -> ResolvedGitFileRef:
-    """Retrieve and identify one exact file in the local Git checkout."""
-    raw = fetcher(location)
-    return ResolvedGitFileRef(
-        sha256=hashlib.sha256(raw).hexdigest(),
-        bytes=len(raw),
-        stored_at=location,
-    )
 
 
 def _write_materialized_file(root: Path, relative_path: str, raw: bytes) -> None:

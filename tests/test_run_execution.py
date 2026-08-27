@@ -152,7 +152,7 @@ def test_local_fetcher_dispatches_hugging_face_inputs(
         repo_type="dataset",
     )
     monkeypatch.setattr(
-        "viper.execution.fetch_huggingface_file_bytes",
+        "viper._execution.source.fetch_huggingface_file_bytes",
         lambda location: b"remote bytes",
     )
     fetcher = RunFetcher(
