@@ -15,7 +15,7 @@ stage's effective environment.
 
 ## Implementation status
 
-[`execute_stage_process()`](../../src/viper/stage_execution.py) derives environment
+[`execute_stage_process()`](../../src/viper/execution/_stage.py) derives environment
 variables through `process_environment()` and supplies them when launching
 `viper._workers.stages`. [`stages.main()`](../../src/viper/_workers/stages.py) then
 applies library controls before executing the project script.

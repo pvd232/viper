@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..metric_execution import MetricWorkerContext, MetricWorkerResult
+from ..execution._metric import MetricWorkerContext, MetricWorkerResult
 from ..metrics import (
     MetricContext,
     MetricExecutionReceipt,

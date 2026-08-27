@@ -55,10 +55,12 @@ from ..api import (
 )
 from ..artifacts import ArtifactPointer
 from ..authoring import freeze_run_plan, load_run_plan_draft
-from ..benchmark import BenchmarkExecutionError, BenchmarkResult
-from ..benchmark import execute_benchmark as execute_benchmark_run
-from ..execution import RunError
-from ..execution import run as execute_run
+from ..benchmark import BenchmarkResult
+from ..execution._benchmark import BenchmarkExecutionError
+from ..execution._benchmark import benchmark as execute_benchmark_run
+from ..execution._errors import RunError
+from ..execution._run import run as execute_run
+from ..execution._stage import StageExecutionError, execute_stage_process
 from ..inspection import InspectionError
 from ..inspection import attempt_status as inspect_attempt_status
 from ..inspection import compare_runs as compare_verified_runs
@@ -68,7 +70,6 @@ from ..preflight import preflight_plan
 from ..project_init import ProjectInitializationError, initialize_project
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
-from ..stage_execution import StageExecutionError, execute_stage_process
 from ..verification import (
     StorageFetcher,
     VerificationError,

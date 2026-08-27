@@ -144,7 +144,7 @@ callable(context)
 
 The live `StageContext` contains Python runtime objects. VIPER also persists a
 serializable binding that names the same invocation through stable paths and
-identities. The [stage-execution module](../../src/viper/stage_execution.py)
+identities. The [stage executor](../../src/viper/execution/_stage.py)
 and [stage worker](../../src/viper/_workers/stages.py) implement this boundary.
 
 ## 5. Inputs retain lineage and data-use roles
@@ -203,7 +203,7 @@ verification receipt stores the recomputed value and the worker's execution
 evidence. The verifier compares that value with the recorded measurement.
 
 The [metric module](../../src/viper/metrics.py) defines the contract. The
-[metric executor](../../src/viper/metric_execution.py) runs recomputation.
+[metric executor](../../src/viper/execution/_metric.py) runs recomputation.
 
 ## 8. Attempts preserve success and failure
 
@@ -215,7 +215,7 @@ failure evidence and logs.
 
 `viper retry` appends another attempt to the same plan. Earlier evidence remains
 addressable through the terminal `ResolvedRun`. The
-[execution module](../../src/viper/execution.py) coordinates attempts, and the
+[execution package](../../src/viper/execution/) coordinates attempts, and the
 [journal module](../../src/viper/journal.py) owns their transition history.
 
 ## 9. Verification reconstructs the run
@@ -248,7 +248,7 @@ An evaluation measures one candidate. A benchmark applies one evaluation
 definition across candidates and requires an independent confirmation attempt
 for each candidate.
 
-`execute_benchmark()` starts a new attempt from the candidate's frozen
+`execution.benchmark()` starts a new attempt from the candidate's frozen
 `RunSpec`. The benchmark checks artifact parity and applies its metric criteria
 to independently recomputed values:
 
@@ -270,7 +270,7 @@ verified BenchmarkResult
 
 Each architecture belongs to its own run plan. One `BenchmarkSpec` can govern
 the common evaluation applied to all of them. The
-[benchmark module](../../src/viper/benchmark.py) constructs the result.
+[execution package](../../src/viper/execution/) constructs the result.
 
 ## 11. Agents and humans use the same operations
 

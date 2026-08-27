@@ -7,8 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from viper.execution._process import (
+    ExecutionPolicy,
+    WorkerError,
+    WorkerRequest,
+    execute_worker,
+)
 from viper.journal import DurableJournal, JournalEntry
-from viper.worker import ExecutionPolicy, WorkerError, WorkerRequest, execute_worker
 from viper.workspace import (
     AttemptWorkspace,
     RunWorkspaceLock,

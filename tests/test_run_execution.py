@@ -35,8 +35,13 @@ from viper.artifacts import (
     StageArtifactRef,
 )
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
-from viper.execution import RunError, RunFetcher, execute_benchmark_confirmation
+from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
+from viper.execution._errors import RunError
+from viper.execution._metric import MetricWorkerResult
+from viper.execution._run import execute_benchmark_confirmation
+from viper.execution._source import RunFetcher
+from viper.execution._stage import StageExecutionError, execute_stage_process
 from viper.experiments import (
     DownloadVariantStageParams,
     ExperimentSpec,
@@ -45,7 +50,6 @@ from viper.experiments import (
     VariantSpec,
 )
 from viper.journal import DurableJournal
-from viper.metric_execution import MetricWorkerResult
 from viper.metrics import (
     FloatComparator,
     Measurement,
@@ -70,7 +74,6 @@ from viper.runtime import (
     observe_gce_provisioning,
 )
 from viper.serialization import parse_yaml_bytes, serialize_document
-from viper.stage_execution import StageExecutionError, execute_stage_process
 from viper.stages import (
     DownloadSpec,
     FutureInputRef,
@@ -152,7 +155,7 @@ def test_local_fetcher_dispatches_hugging_face_inputs(
         repo_type="dataset",
     )
     monkeypatch.setattr(
-        "viper._execution.source.fetch_huggingface_file_bytes",
+        "viper.execution._source.fetch_huggingface_file_bytes",
         lambda location: b"remote bytes",
     )
     fetcher = RunFetcher(
@@ -528,7 +531,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         return process
 
     monkeypatch.setattr(
-        "viper._execution.attempt.execute_stage_process",
+        "viper.execution._attempt.execute_stage_process",
         fail_first_train,
     )
     with pytest.raises(RunError, match="attempt 2 failed"):
@@ -555,10 +558,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert (root / RUN_ROOT / "attempts/2/resolved.yaml").is_file()
 
     monkeypatch.setattr(
-        "viper._execution.attempt.execute_stage_process",
+        "viper.execution._attempt.execute_stage_process",
         execute_stage_process,
     )
-    result = execute_run(root, frozen.files[-1], retry=True)
+    result = execute_retry(root, frozen.files[-1])
 
     assert result.resolved_run.status == "succeeded"
     assert result.resolved_run_path.is_file()

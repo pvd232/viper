@@ -1,6 +1,7 @@
 """Run one frozen project plan."""
 
 from sample_project.stages.train import train
+
 from viper import run
 
 

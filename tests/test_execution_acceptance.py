@@ -18,6 +18,7 @@ from viper.artifacts import (
     ResolvedSingleFileArtifact,
     SingleFileArtifactSpec,
 )
+from viper.execution._stage import execute_stage_process
 from viper.http import (
     ObservedHttpResponse,
     ResolvedHttpRetrieval,
@@ -30,7 +31,6 @@ from viper.runs import (
     RunStageRef,
 )
 from viper.serialization import serialize_document
-from viper.stage_execution import execute_stage_process
 from viper.stages import (
     DownloadSpec,
     StageImplementationRef,

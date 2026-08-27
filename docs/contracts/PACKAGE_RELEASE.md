@@ -52,11 +52,11 @@ source module after its final entity moves.
 | `artifacts` | Artifact declarations, resolved artifacts, pointers, and loader identities |
 | `references` | Hash-bound references to separately stored values |
 | `metrics` | Metric interfaces, specifications, measurements, dependencies, and verification receipts |
-| `benchmark` | Benchmark specifications, execution, comparisons, and results |
+| `benchmark` | Benchmark specifications, comparisons, and results |
 | `http` | HTTP requests, transports, retrievals, contexts, and receipts |
 | `runtime` | Environment, reproducibility, startup, and execution-context contracts |
 | `resume` | Random-generator, data-loader, and resume-state contracts |
-| `execution` | Public run, retry, and benchmark orchestration |
+| `execution` | Public run, retry, and benchmark operations |
 | `verification` | Public run, artifact, pointer, and benchmark verification |
 | `serialization` | Canonical YAML and JSON encoding and parsing |
 | `storage` | Storage retrieval, immutable publication, and local storage |

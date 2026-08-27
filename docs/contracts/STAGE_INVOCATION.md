@@ -12,7 +12,7 @@ parameter value, input paths, and artifact paths accepted for that stage.
 
 ## Implementation
 
-[`stage_execution.py`](../../src/viper/stage_execution.py) validates the exact
+[`execution/_stage.py`](../../src/viper/execution/_stage.py) validates the exact
 parameter class before launch and constructs a stable `StageContextBinding`.
 [`_workers/stages.py`](../../src/viper/_workers/stages.py) validates the binding, creates
 the live `StageContext`, and calls the exact decorated function once. The

@@ -9,7 +9,7 @@ from ..journal import DurableJournal
 from ..runs import AttemptFailure, RunAttempt, RunSpec
 from ..serialization import parse_yaml_bytes
 from ..storage import LocalArtifactStore
-from .publication import _publish_attempt_files, _write_attempt_document
+from ._publication import _publish_attempt_files, _write_attempt_document
 
 
 def _reconcile_abandoned_attempts(

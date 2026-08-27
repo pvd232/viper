@@ -6,7 +6,7 @@ import importlib
 from importlib import resources
 
 import viper
-from viper import api
+from viper import api, execution
 
 PUBLIC_MODULES = (
     "api",
@@ -55,6 +55,14 @@ def test_every_public_module_imports() -> None:
     """Import every module promised by the public API inventory."""
     for name in PUBLIC_MODULES:
         assert importlib.import_module(f"viper.{name}") is not None
+
+
+def test_execution_namespace_uses_operation_names_once() -> None:
+    """Expose run, retry, and benchmark beneath their execution namespace."""
+    assert tuple(execution.__all__) == ("benchmark", "retry", "run")
+    assert callable(execution.run)
+    assert callable(execution.retry)
+    assert callable(execution.benchmark)
 
 
 def test_api_exports_and_registries_are_complete() -> None:

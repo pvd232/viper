@@ -16,7 +16,7 @@ from ..stages import (
     StageInvocationReceipt,
 )
 from ..storage import LocalArtifactStore
-from .errors import RunError
+from ._errors import RunError
 
 
 def _write_synchronized(path: Path, raw: bytes) -> None:

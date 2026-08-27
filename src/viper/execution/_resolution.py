@@ -14,7 +14,6 @@ from ..runtime import (
     ResolvedGCEEnvironment,
     ResolvedLocalEnvironment,
 )
-from ..stage_execution import StageProcessResult
 from ..stages import (
     BaseSpec,
     DownloadSpec,
@@ -27,8 +26,9 @@ from ..stages import (
     ResolvedStageInvocationRef,
     ResolvedTrainSpec,
 )
-from .errors import RunError
-from .source import RunFetcher, _resolved_git_file
+from ._errors import RunError
+from ._source import RunFetcher, _resolved_git_file
+from ._stage import StageProcessResult
 
 
 def _resolved_environment(

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ._execution.attempt import _execute_attempt
-from ._execution.errors import RunError as RunError
-from ._execution.results import ConfirmationRunResult as ConfirmationRunResult
-from ._execution.results import RunResult as RunResult
-from ._execution.source import RunFetcher as RunFetcher
+from ._attempt import _execute_attempt
+from ._errors import RunError as RunError
+from ._results import ConfirmationRunResult as ConfirmationRunResult
+from ._results import RunResult as RunResult
+from ._source import RunFetcher as RunFetcher
 
 
 def run(
@@ -28,6 +28,21 @@ def run(
     )
     assert isinstance(result, RunResult)
     return result
+
+
+def retry(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> RunResult:
+    """Append one attempt to a failed frozen run and verify its result."""
+    return run(
+        repository_root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+        retry=True,
+    )
 
 
 def execute_benchmark_confirmation(

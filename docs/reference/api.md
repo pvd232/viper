@@ -85,6 +85,21 @@ verification.
 `viper.retry(run_spec, repository_root=...)` allocates the next attempt for the
 same frozen plan and returns `RetrySuccess`.
 
+Administrative Python callers can execute complete plans directly through the
+execution namespace:
+
+```python
+from viper import execution
+
+run_result = execution.run(repository_root, run_spec_path)
+retry_result = execution.retry(repository_root, run_spec_path)
+benchmark_result = execution.benchmark(
+    repository_root,
+    resolved_run_path,
+    benchmark_spec_path,
+)
+```
+
 ## Typed operations
 
 `viper.api` defines every operation name, request model, success model, failure
@@ -230,7 +245,7 @@ Public types and functions have one owner:
 | `viper.http` | Requests, transports, retrievals, and HTTP execution context |
 | `viper.runtime` | Environments, startup controls, and observed execution context |
 | `viper.resume` | Optimizer, generator, DataLoader, and resume-state contracts |
-| `viper.execution` | Complete run, retry, and benchmark coordination |
+| `viper.execution` | Run, retry, and benchmark operations |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval through the local store |

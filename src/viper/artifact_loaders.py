@@ -17,9 +17,9 @@ from ._schema import (
     ArtifactName,
 )
 from .artifacts import ArtifactLoaderRef
+from .execution._process import ExecutionPolicy, WorkerRequest, execute_worker
 from .resume import ResumeState
 from .runs import RunSpec
-from .worker import ExecutionPolicy, WorkerRequest, execute_worker
 
 
 class ArtifactLoaderError(RuntimeError):

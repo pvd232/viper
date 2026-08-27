@@ -36,8 +36,8 @@ from ..verification import (
     verify_promoted_artifact,
 )
 from ..workspace import AttemptWorkspace
-from .errors import RunError
-from .source import RunFetcher
+from ._errors import RunError
+from ._source import RunFetcher
 
 
 def _write_materialized_file(root: Path, relative_path: str, raw: bytes) -> None:

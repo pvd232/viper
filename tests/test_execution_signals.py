@@ -38,8 +38,8 @@ from viper.artifacts import (
     StageArtifactRef,
 )
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
-from viper.execution import RunFetcher
 from viper.execution import run as execute_run
+from viper.execution._source import RunFetcher
 from viper.experiments import (
     DownloadVariantStageParams,
     ExperimentSpec,

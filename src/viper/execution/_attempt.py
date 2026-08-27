@@ -12,7 +12,6 @@ from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
 from ..journal import DurableJournal
-from ..metric_execution import MetricExecutionError
 from ..preflight import preflight_plan
 from ..references import (
     GitFileRef,
@@ -27,11 +26,6 @@ from ..runs import (
     RunSpec,
 )
 from ..serialization import load_stage_spec, parse_yaml_bytes, serialize_document
-from ..stage_execution import (
-    StageExecutionError,
-    StageProcessInterrupted,
-    execute_stage_process,
-)
 from ..stages import (
     BaseSpec,
     DownloadSpec,
@@ -48,20 +42,25 @@ from ..verification import (
     verify_run_result,
 )
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
-from .errors import RunError
-from .materialization import _resolve_inputs, _retrieve_download_inputs
-from .metrics import _run_after_stage_metrics
-from .publication import (
+from ._errors import RunError
+from ._materialization import _resolve_inputs, _retrieve_download_inputs
+from ._metric import MetricExecutionError, _run_after_stage_metrics
+from ._publication import (
     _publish_attempt_files,
     _publish_invocation_receipt,
     _replace_synchronized,
     _write_attempt_document,
     _write_synchronized,
 )
-from .recovery import _reconcile_abandoned_attempts
-from .resolution import _resolved_environment, _resolved_stage
-from .results import ConfirmationRunResult, RunResult
-from .source import RunFetcher, _git, _resolved_git_file
+from ._recovery import _reconcile_abandoned_attempts
+from ._resolution import _resolved_environment, _resolved_stage
+from ._results import ConfirmationRunResult, RunResult
+from ._source import RunFetcher, _git, _resolved_git_file
+from ._stage import (
+    StageExecutionError,
+    StageProcessInterrupted,
+    execute_stage_process,
+)
 
 
 def _execute_attempt(

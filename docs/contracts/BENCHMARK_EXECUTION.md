@@ -14,9 +14,10 @@ rules.
 
 [`verify_benchmark_result()`](../../src/viper/verification.py) verifies a supplied
 confirmation attempt, estimator parity, prediction parity, metric criteria,
-and benchmark status. [`execute_benchmark()`](../../src/viper/benchmark.py) verifies
-the candidate, executes a new confirmation attempt, constructs every comparison
-receipt, verifies the completed result, and writes `benchmark.result.yaml`.
+and benchmark status. [`execution.benchmark()`](../../src/viper/execution/_benchmark.py)
+verifies the candidate, executes a new confirmation attempt, constructs every
+comparison receipt, verifies the completed result, and writes
+`benchmark.result.yaml`.
 
 ## Application operation
 
@@ -124,7 +125,7 @@ applied.
 
 ## Verification
 
-`execute_benchmark()` returns after `verify_benchmark_result()` accepts the
+`execution.benchmark()` returns after `verify_benchmark_result()` accepts the
 newly constructed result. The verifier reconstructs every artifact digest,
 loads every metric-verification receipt, applies every threshold, and derives
 the expected final status. It also requires the confirmation attempt ID to
@@ -152,10 +153,10 @@ exceed every candidate run attempt ID and its purpose to equal
 
 ## Acceptance case
 
-The candidate run trains and evaluates one model. `execute_benchmark()` runs the
-same frozen plan as attempt `2`, recomputes the declared evaluation metric, and
-publishes a passing `BenchmarkResult` after artifact parity and metric criteria
-pass.
+The candidate run trains and evaluates one model. `execution.benchmark()` runs
+the same frozen plan as attempt `2`, recomputes the declared evaluation metric,
+and publishes a passing `BenchmarkResult` after artifact parity and metric
+criteria pass.
 
 Replacing one prediction file with different bytes of the same length causes
 benchmark verification to fail on its SHA-256 identity.

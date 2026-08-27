@@ -14,10 +14,10 @@ from typing import cast
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from . import parameters
+from .execution._process import ExecutionPolicy, WorkerRequest, execute_worker
 from .parameters import ParameterModelRef
 from .serialization import load_stage_spec
 from .stages import ParameterizedSpec
-from .worker import ExecutionPolicy, WorkerRequest, execute_worker
 
 
 class ParameterValidationError(RuntimeError):

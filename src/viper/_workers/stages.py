@@ -11,6 +11,7 @@ from types import MappingProxyType
 from typing import Any
 
 from .._parameter_validation import instantiate_parameters
+from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalHandle
 from ..metrics import MeasurementSink, MetricHandle, bind_live_metric
@@ -23,7 +24,6 @@ from ..runtime import (
     observe_python_environment,
 )
 from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
-from ..stage_execution import StageWorkerContext, StageWorkerResult
 from ..stages import (
     DownloadContext,
     DownloadSpec,

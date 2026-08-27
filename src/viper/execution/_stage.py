@@ -15,12 +15,12 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from ._parameter_validation import (
+from .._parameter_validation import (
     ParameterValidationError,
     validate_stage_parameters,
 )
-from ._schema import ArtifactName
-from .artifacts import (
+from .._schema import ArtifactName
+from ..artifacts import (
     BundleArtifactSpec,
     ResolvedArtifact,
     ResolvedBundleArtifact,
@@ -28,24 +28,24 @@ from .artifacts import (
     ResolvedSingleFileArtifact,
     SingleFileArtifactSpec,
 )
-from .http import (
+from ..http import (
     HttpRetrievalContextBinding,
     ResolvedHttpRetrieval,
 )
-from .references import SnapshotFileRef
-from .runs import (
+from ..references import SnapshotFileRef
+from ..runs import (
     RunSpec,
     RunStageRef,
 )
-from .runtime import (
+from ..runtime import (
     ExecutionContext,
     ProcessStartupReceipt,
     PythonEnvironmentSpec,
     process_environment,
     select_cuda_device,
 )
-from .serialization import document_digest
-from .stages import (
+from ..serialization import document_digest
+from ..stages import (
     BaseSpec,
     ParameterizedSpec,
     ParameterizedStageSpec,
@@ -301,7 +301,7 @@ def execute_stage_process(
         cuda_ordinal=cuda_ordinal,
     )
     environment.update({str(key): value for key, value in startup_environment.items()})
-    package_root = str(Path(__file__).resolve().parents[1])
+    package_root = str(Path(__file__).resolve().parents[2])
     existing_python_path = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = (
         package_root
