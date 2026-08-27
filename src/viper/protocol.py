@@ -87,6 +87,15 @@ from .references import LocalFileRef as LocalFileRef
 from .references import ResolvedBenchmarkResultRef as ResolvedBenchmarkResultRef
 from .references import StorageModel as StorageModel
 from .references import StorageRef as StorageRef
+from .resume import DataLoaderConfiguration as DataLoaderConfiguration
+from .resume import DataLoaderResumeState as DataLoaderResumeState
+from .resume import LegacyNumPyRNGState as LegacyNumPyRNGState
+from .resume import MainProcessRNGState as MainProcessRNGState
+from .resume import NumPyRNGState as NumPyRNGState
+from .resume import PCG64GeneratorState as PCG64GeneratorState
+from .resume import PCG64InternalState as PCG64InternalState
+from .resume import PythonRNGState as PythonRNGState
+from .resume import ResumeState as ResumeState
 from .runtime import ComputeBackendContext as ComputeBackendContext
 from .runtime import ComputeSpec as ComputeSpec
 from .runtime import CPUBackendContext as CPUBackendContext
@@ -96,7 +105,6 @@ from .runtime import CUDABackendContext as CUDABackendContext
 from .runtime import CUDAComputeSpec as CUDAComputeSpec
 from .runtime import CUDADeviceContext as CUDADeviceContext
 from .runtime import (
-    DataLoaderConfiguration,
     EnvironmentSpec,
     ExecutionContext,
     GCEEnvironmentSpec,
@@ -269,76 +277,6 @@ def http_origin(url: HttpUrl) -> HttpOrigin:
 # ---------------------------------------------------------------------------
 # Training resume state
 # ---------------------------------------------------------------------------
-
-
-class PythonRNGState(ProtocolModel):
-    """Serializable state returned by Python's global random generator."""
-
-    version: int = Field(ge=0)
-    internal_state: tuple[int, ...] = Field(min_length=1)
-    gaussian_cache: float | None
-
-
-UInt32 = Annotated[int, Field(ge=0, lt=2**32)]
-UInt128 = Annotated[int, Field(ge=0, lt=2**128)]
-
-
-class PCG64InternalState(ProtocolModel):
-    """The 128-bit state and stream increment of one PCG64 generator."""
-
-    state: UInt128
-    inc: UInt128
-
-
-class PCG64GeneratorState(ProtocolModel):
-    """Complete state required to restore one NumPy PCG64 generator."""
-
-    bit_generator: Literal["PCG64"] = "PCG64"
-    state: PCG64InternalState
-    has_uint32: Literal[0, 1]
-    uinteger: UInt32
-
-
-class LegacyNumPyRNGState(ProtocolModel):
-    """Complete state required to restore NumPy's global MT19937 generator."""
-
-    bit_generator: Literal["MT19937"] = "MT19937"
-    keys: tuple[UInt32, ...] = Field(min_length=624, max_length=624)
-    position: int = Field(ge=0, le=624)
-    has_gaussian: Literal[0, 1]
-    cached_gaussian: float = Field(allow_inf_nan=False)
-
-
-class NumPyRNGState(ProtocolModel):
-    """Named PCG64 states and the optional legacy global NumPy state."""
-
-    generators: dict[HumanId, PCG64GeneratorState]
-    legacy_global: LegacyNumPyRNGState | None
-
-
-class MainProcessRNGState(ProtocolModel):
-    """Generator states owned by the main training process."""
-
-    python: PythonRNGState
-    numpy: NumPyRNGState
-    torch_cpu: bytes = Field(min_length=1)
-    torch_cuda: tuple[bytes, ...]
-
-
-class DataLoaderResumeState(ProtocolModel):
-    """DataLoader configuration and state restored at a checkpoint."""
-
-    configuration: DataLoaderConfiguration
-    state_dict: dict[str, object] = Field(min_length=1)
-
-
-class ResumeState(ProtocolModel):
-    """State required to continue one training stage exactly."""
-
-    schema_version: Literal[1] = 1
-    optimizer_state: dict[str, object] = Field(min_length=1)
-    main_process_rng: MainProcessRNGState
-    dataloader: DataLoaderResumeState
 
 
 # ---------------------------------------------------------------------------

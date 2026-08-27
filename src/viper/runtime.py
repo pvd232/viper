@@ -30,6 +30,7 @@ from ._schema import (
 )
 from .ids import HumanId
 from .references import GitFileRef, ResolvedGitFileRef
+from .resume import DataLoaderConfiguration
 
 
 class GCEBootImageRef(ProtocolModel):
@@ -150,28 +151,6 @@ ResolvedEnvironment = Annotated[
     ResolvedGCEEnvironment | ResolvedLocalEnvironment,
     Field(discriminator="kind"),
 ]
-
-
-class DataLoaderConfiguration(ProtocolModel):
-    """Fix worker and prefetch behavior for the training DataLoader."""
-
-    workers: int = Field(ge=0)
-    prefetch_factor: int | None = Field(default=None, ge=1)
-    persistent_workers: bool = False
-    in_order: Literal[True] = True
-
-    @model_validator(mode="after")
-    def validate_worker_configuration(self) -> DataLoaderConfiguration:
-        """Enforce valid worker, prefetch, and persistence combinations."""
-        if self.workers == 0:
-            if self.prefetch_factor is not None:
-                raise ValueError("prefetch_factor requires workers > 0")
-            if self.persistent_workers:
-                raise ValueError("persistent_workers requires workers > 0")
-        elif self.prefetch_factor is None:
-            raise ValueError("prefetch_factor is required when workers > 0")
-
-        return self
 
 
 class NumPyRandomnessSpec(ProtocolModel):
