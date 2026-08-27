@@ -27,7 +27,7 @@ both named `viper`.
 | [training resume](src/viper/resume.py) | Captures, serializes, restores, and validates optimizer, generator, and stateful-loader state | `capture_resume_state()`, `restore_resume_state()` |
 | [plan authoring](viper/authoring.py) | Writes canonical experiment, variant, benchmark, stage, and frozen run-plan files | `freeze_run_plan()`, `write_experiment_spec()`, `write_variant_spec()` |
 | [stage execution](src/viper/stage_execution.py) | Invokes one canonical stage command and hashes every declared output file | `execute_stage_process()` |
-| [current runner](viper/runner.py) | Executes and verifies a complete frozen run in the implemented trusted-host environment | `run()` |
+| [execution](src/viper/execution.py) | Executes and verifies a complete frozen run in the implemented trusted-host environment | `run()` |
 | [preflight](viper/preflight.py) | Checks the committed plan, source repository, environment kind, stage identities, code paths, plan relationships, and metric implementations | `preflight_local_plan()` |
 | [local storage](viper/local_store.py) | Publishes immutable stage snapshots and run files beneath `.viper/store` | `LocalArtifactStore` |
 | [installed command](viper/cli.py) | Exposes authoring, preflight, execution, validation, verification, and discovery | `viper preflight`, `viper run`, `viper verify-run` |
@@ -215,7 +215,7 @@ make check-release
 ```
 
 Pytest still honors direct file selection. For example,
-`python -m pytest tests/test_runner_acceptance.py -q` runs that complete module.
+`python -m pytest tests/test_run_execution.py -q` runs that complete module.
 
 ## Current boundaries
 

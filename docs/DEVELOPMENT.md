@@ -82,7 +82,7 @@ python -m pytest tests -q -m domain_parameters
 Direct file selection continues to work:
 
 ```bash
-python -m pytest tests/test_runner_acceptance.py -q
+python -m pytest tests/test_run_execution.py -q
 ```
 
 Add every new test module to both manifests in `tests/conftest.py`. Collection

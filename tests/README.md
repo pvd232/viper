@@ -14,7 +14,7 @@ loaders, metric implementations, and exact training resume behavior.
 | [parameter-validation tests](test_parameter_validation.py) | Project Pydantic classes are byte-bound, loaded from a top-level symbol, checked against the correct parameter category, and invoked in a dedicated worker. |
 | [command tests](test_cli.py) | The installed command dispatches to the public validation surface and reports the validated protocol type. |
 | [execution acceptance test](test_execution_acceptance.py) | A real stage entrypoint runs with the canonical command and every declared output file receives an exact hash and byte count. |
-| [runner acceptance test](test_runner_acceptance.py) | A real two-stage local run freezes a project parameter model, preflights, executes, publishes, verifies, and rejects a tampered artifact. |
+| [run execution test](test_run_execution.py) | A real two-stage local run freezes a project parameter model, preflights, executes, publishes, verifies, and rejects a tampered artifact. |
 | [resume tests](test_resume.py) | Python, NumPy, PyTorch, optimizer, and stateful DataLoader state round-trip so resumption selects the same next batch with zero or multiple workers. |
 | [artifact-loader tests](test_artifact_loaders.py) | A user-owned loader reconstructs its declared JSON artifact. |
 | [artifact-validation tests](test_artifact_validation.py) | Exact loader identities and typed loadability or semantic-validation outcomes are enforced. |
@@ -95,7 +95,7 @@ python -m pytest tests -q -m domain_parameters
 Direct file selection runs the requested file independently of its tier:
 
 ```text
-python -m pytest tests/test_runner_acceptance.py -q
+python -m pytest tests/test_run_execution.py -q
 ```
 
 ## Adding coverage

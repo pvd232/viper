@@ -436,7 +436,7 @@ only after verification succeeds.
    launch.
 9. VIPER source, [project initialization](../src/viper/project_init.py), generated
    user-project source and tests.
-10. VIPER source, [complete-plan runner](../src/viper/runner.py) and
+10. VIPER source, [complete-plan execution](../src/viper/execution.py) and
    [verification](../src/viper/verification.py), attempt execution, publication, and
    verification.
 11. VIPER tests, [generated-project acceptance](../tests/test_generated_project_acceptance.py),

@@ -21,7 +21,7 @@ or GCE observer from that effective environment. The GCE observer constructs
 [`GCEHostContext`](../../src/viper/runtime.py), the CPU context, the selected CPU or
 CUDA backend context, and the numerical runtime context.
 
-[`run()`](../../src/viper/runner.py) resolves each stage's effective environment,
+[`run()`](../../src/viper/execution.py) resolves each stage's effective environment,
 launches the stage on the active host, and stores
 [`ResolvedGCEEnvironment`](../../src/viper/runtime.py) with the observed execution
 context. [`verify_run_result()`](../../src/viper/verification.py) checks the complete

@@ -173,8 +173,8 @@ def execute_benchmark(
     timeout_seconds: float | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute, assemble, verify, and publish one benchmark confirmation."""
+    from .execution import RunFetcher, execute_benchmark_confirmation
     from .local_store import LocalArtifactStore
-    from .runner import RunFetcher, execute_benchmark_confirmation
     from .serialization import document_digest, parse_yaml_bytes, serialize_document
     from .verification import (
         VerificationPolicy,

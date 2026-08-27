@@ -33,7 +33,7 @@ inline annotations distributed with the installed `viper` package.
 | `viper.preflight` | Complete-plan checks for the active single-host environment |
 | `viper.references` | Hash-bound references to separately stored values |
 | `viper.resume` | Training resume-state capture, persistence, and restoration |
-| `viper.runner` | Complete trusted single-host run execution and publication |
+| `viper.execution` | Complete trusted single-host run execution and publication |
 | `viper.runs` | Run plans, attempts, attempt references, and resolved runs |
 | `viper.runtime` | Environment, reproducibility, startup, and execution-context contracts |
 | `viper.serialization` | Duplicate-key-safe parsing and canonical document encoding |
@@ -64,7 +64,7 @@ viper.parameters
 viper.preflight
 viper.references
 viper.resume
-viper.runner
+viper.execution
 viper.runs
 viper.runtime
 viper.stage_execution

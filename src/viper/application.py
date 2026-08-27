@@ -28,6 +28,8 @@ from .artifacts import (
 from .authoring import freeze_run_plan, load_run_plan_draft
 from .benchmark import BenchmarkExecutionError, BenchmarkResult
 from .benchmark import execute_benchmark as execute_benchmark_run
+from .execution import RunError
+from .execution import run as execute_run
 from .ids import RunId, StageId
 from .inspection import (
     InspectionError,
@@ -43,8 +45,6 @@ from .inspection import plan_diff as compare_frozen_plans
 from .journal import AttemptState
 from .preflight import PreflightCheck, preflight_plan
 from .project_init import ProjectInitializationError, initialize_project
-from .runner import RunError
-from .runner import run as execute_run
 from .runs import (
     ResolvedRun,
     RunSpec,

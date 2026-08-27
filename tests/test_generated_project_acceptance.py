@@ -16,8 +16,8 @@ from tests.fixtures import (
     python_environment,
     reproducibility,
 )
-from tests.test_runner_acceptance import REPOSITORY, _git
-from tests.test_runner_acceptance import http_source as runner_http_source
+from tests.test_run_execution import REPOSITORY, _git
+from tests.test_run_execution import http_source as execution_http_source
 from viper import parameters
 from viper._schema import (
     PARAMETERS,
@@ -91,7 +91,7 @@ from viper.stages import (
 
 ACQUISITION_RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAC"
 CANDIDATE_RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAD"
-http_source = runner_http_source
+http_source = execution_http_source
 
 
 def _stage_implementation(root: Path, stage: str) -> StageImplementationRef:

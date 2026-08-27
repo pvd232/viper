@@ -37,6 +37,8 @@ from viper.artifacts import (
     StageArtifactRef,
 )
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
+from viper.execution import RunFetcher
+from viper.execution import run as execute_run
 from viper.experiments import (
     DownloadVariantStageParams,
     ExperimentSpec,
@@ -52,8 +54,6 @@ from viper.references import (
     GitFileRef,
     GitSource,
 )
-from viper.runner import RunFetcher
-from viper.runner import run as execute_run
 from viper.runs import (
     ResolvedRun,
     RunSpec,

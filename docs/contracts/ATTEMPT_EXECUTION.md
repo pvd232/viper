@@ -17,7 +17,7 @@ attempt.
 
 ## Implementation
 
-[`run()`](../../src/viper/runner.py) acquires a run-scoped advisory lock, allocates
+[`run()`](../../src/viper/execution.py) acquires a run-scoped advisory lock, allocates
 the next durable attempt ID, and writes the allocation event before preflight.
 Every successful or failed attempt reaches a terminal journal state and enters
 the terminal `ResolvedRun`. [`retry()`](../../src/viper/application.py) accepts the
