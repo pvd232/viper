@@ -1,0 +1,175 @@
+"""Define immutable storage and exact-file references."""
+
+from __future__ import annotations
+
+import re
+from typing import Annotated, Literal
+
+from pydantic import Field, HttpUrl, model_validator
+
+from ._schema import SHA256, GitCommit, NonEmptyStr, ProtocolModel, RepoRelPath
+
+
+class GitSource(ProtocolModel):
+    """A repository snapshot identified by an exact Git commit."""
+
+    kind: Literal["git"] = "git"
+    repository: HttpUrl
+    commit: GitCommit
+
+
+class GitFileRef(GitSource):
+    """A file stored at an exact Git revision."""
+
+    path: RepoRelPath
+
+
+class ArtifactPointerRef(GitFileRef):
+    """A Git reference to the pointer selecting a promoted artifact."""
+
+    @model_validator(mode="after")
+    def validate_pointer_path(self) -> ArtifactPointerRef:
+        """Enforce the canonical promoted-input pointer path."""
+        parts = self.path.split("/")
+        selection_name = (
+            parts[3].removesuffix(".pointer.yaml") if len(parts) == 4 else ""
+        )
+        if (
+            len(parts) != 4
+            or parts[0] != "inputs"
+            or parts[1] not in {"benchmarks", "datasets", "models", "priors"}
+            or not parts[3].endswith(".pointer.yaml")
+            or re.fullmatch(r"[a-z][a-z0-9_]*", parts[2]) is None
+            or re.fullmatch(r"[a-z][a-z0-9_]*", selection_name) is None
+        ):
+            raise ValueError(
+                "artifact pointer path must match "
+                "inputs/<category>/<entity_id>/<selection_name>.pointer.yaml"
+            )
+        return self
+
+
+class HuggingFaceFileRef(ProtocolModel):
+    """A file stored at an exact Hugging Face repository revision."""
+
+    kind: Literal["huggingface"] = "huggingface"
+    repository: NonEmptyStr
+    commit: GitCommit
+    path: RepoRelPath
+    repo_type: Literal["model", "dataset", "space"]
+
+
+class StageResultSnapshotRef(ProtocolModel):
+    """The immutable repository revision containing one completed stage."""
+
+    kind: Literal["huggingface"] = "huggingface"
+    repository: NonEmptyStr
+    commit: GitCommit
+    repo_type: Literal["model", "dataset", "space"]
+
+
+class LocalFileRef(ProtocolModel):
+    """A file in one immutable revision of a repository-local VIPER store."""
+
+    kind: Literal["local"] = "local"
+    store: RepoRelPath = ".viper/store"
+    commit: SHA256
+    path: RepoRelPath
+
+
+class LocalStageResultSnapshotRef(ProtocolModel):
+    """One immutable stage-result revision in a repository-local VIPER store."""
+
+    kind: Literal["local"] = "local"
+    store: RepoRelPath = ".viper/store"
+    commit: SHA256
+
+
+StageResultSnapshot = Annotated[
+    StageResultSnapshotRef | LocalStageResultSnapshotRef,
+    Field(discriminator="kind"),
+]
+
+StorageModel = GitFileRef | HuggingFaceFileRef | LocalFileRef
+
+StorageRef = Annotated[
+    StorageModel,
+    Field(discriminator="kind"),
+]
+
+
+class ResolvedFileRef(ProtocolModel):
+    """Identify one hashed file and its immutable storage location."""
+
+    sha256: SHA256
+    bytes: int = Field(ge=0)
+    stored_at: StorageRef
+
+
+class SnapshotFileRef(ProtocolModel):
+    """Identify one exact file within a stage-result snapshot."""
+
+    path: RepoRelPath
+    sha256: SHA256
+    bytes: int = Field(ge=0)
+
+
+class ResolvedGitFileRef(ResolvedFileRef):
+    """Identify an exact file stored at an immutable Git revision."""
+
+    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class ResolvedArtifactPointerRef(ResolvedFileRef):
+    """Identify an exact verified artifact-pointer file."""
+
+    kind: Literal["artifact_pointer"] = "artifact_pointer"
+    stored_at: ArtifactPointerRef  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class ResolvedRunSpecRef(ResolvedFileRef):
+    """Identify the exact run specification governing one run."""
+
+    kind: Literal["run_spec"] = "run_spec"
+    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class ResolvedRunRef(ResolvedFileRef):
+    """Identify one terminal resolved-run document."""
+
+    kind: Literal["resolved_run"] = "resolved_run"
+
+
+class ResolvedBenchmarkSpecRef(ResolvedFileRef):
+    """Identify the exact benchmark specification applied to a run."""
+
+    kind: Literal["benchmark_spec"] = "benchmark_spec"
+    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class ResolvedBenchmarkResultRef(ResolvedFileRef):
+    """Identify one completed benchmark result."""
+
+    kind: Literal["benchmark_result"] = "benchmark_result"
+
+
+__all__ = [
+    "ArtifactPointerRef",
+    "GitFileRef",
+    "GitSource",
+    "HuggingFaceFileRef",
+    "LocalFileRef",
+    "LocalStageResultSnapshotRef",
+    "ResolvedArtifactPointerRef",
+    "ResolvedBenchmarkResultRef",
+    "ResolvedBenchmarkSpecRef",
+    "ResolvedFileRef",
+    "ResolvedGitFileRef",
+    "ResolvedRunRef",
+    "ResolvedRunSpecRef",
+    "SnapshotFileRef",
+    "StageResultSnapshot",
+    "StageResultSnapshotRef",
+    "StorageModel",
+    "StorageRef",
+]

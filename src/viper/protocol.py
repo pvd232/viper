@@ -32,7 +32,6 @@ from ._schema import (
     BenchmarkId,
     DataRole,
     EvaluationId,
-    GitCommit,
     NonEmptyStr,
     NormalizedDistributionName,
     ProtocolModel,
@@ -56,6 +55,26 @@ from .ids import (
     VariantId,
 )
 from .parameters import ParameterModelRef as ParameterModelRef
+from .references import (
+    ArtifactPointerRef,
+    GitFileRef,
+    GitSource,
+    LocalStageResultSnapshotRef,
+    ResolvedArtifactPointerRef,
+    ResolvedBenchmarkResultRef,
+    ResolvedBenchmarkSpecRef,
+    ResolvedFileRef,
+    ResolvedGitFileRef,
+    ResolvedRunRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    StageResultSnapshot,
+    StageResultSnapshotRef,
+)
+from .references import HuggingFaceFileRef as HuggingFaceFileRef
+from .references import LocalFileRef as LocalFileRef
+from .references import StorageModel as StorageModel
+from .references import StorageRef as StorageRef
 
 # ---------------------------------------------------------------------------
 # File locations
@@ -171,162 +190,14 @@ def http_origin(url: HttpUrl) -> HttpOrigin:
     return HttpOrigin(scheme=scheme, host=host.lower().rstrip("."), port=port)
 
 
-class GitSource(ProtocolModel):
-    """A repository snapshot identified by an exact Git commit."""
-
-    kind: Literal["git"] = "git"
-    repository: HttpUrl
-    commit: GitCommit
-
-
-class GitFileRef(GitSource):
-    """A file stored at an exact Git revision."""
-
-    path: RepoRelPath
-
-
-class ArtifactPointerRef(GitFileRef):
-    """A Git reference to the pointer selecting a promoted artifact."""
-
-    @model_validator(mode="after")
-    def validate_pointer_path(self) -> ArtifactPointerRef:
-        """Enforce the canonical promoted-input pointer path."""
-        parts = self.path.split("/")
-        selection_name = (
-            parts[3].removesuffix(".pointer.yaml") if len(parts) == 4 else ""
-        )
-        if (
-            len(parts) != 4
-            or parts[0] != "inputs"
-            or parts[1] not in {"benchmarks", "datasets", "models", "priors"}
-            or not parts[3].endswith(".pointer.yaml")
-            or re.fullmatch(r"[a-z][a-z0-9_]*", parts[2]) is None
-            or re.fullmatch(r"[a-z][a-z0-9_]*", selection_name) is None
-        ):
-            raise ValueError(
-                "artifact pointer path must match "
-                "inputs/<category>/<entity_id>/<selection_name>.pointer.yaml"
-            )
-        return self
-
-
-class HuggingFaceFileRef(ProtocolModel):
-    """A file stored at an exact Hugging Face repository revision."""
-
-    kind: Literal["huggingface"] = "huggingface"
-    repository: NonEmptyStr
-    commit: GitCommit
-    path: RepoRelPath
-    repo_type: Literal["model", "dataset", "space"]
-
-
-class StageResultSnapshotRef(ProtocolModel):
-    """The immutable repository revision containing one completed stage."""
-
-    kind: Literal["huggingface"] = "huggingface"
-    repository: NonEmptyStr
-    commit: GitCommit
-    repo_type: Literal["model", "dataset", "space"]
-
-
-class LocalFileRef(ProtocolModel):
-    """A file in one immutable revision of a repository-local VIPER store."""
-
-    kind: Literal["local"] = "local"
-    store: RepoRelPath = ".viper/store"
-    commit: SHA256
-    path: RepoRelPath
-
-
-class LocalStageResultSnapshotRef(ProtocolModel):
-    """One immutable stage-result revision in a repository-local VIPER store."""
-
-    kind: Literal["local"] = "local"
-    store: RepoRelPath = ".viper/store"
-    commit: SHA256
-
-
-StageResultSnapshot = Annotated[
-    StageResultSnapshotRef | LocalStageResultSnapshotRef,
-    Field(discriminator="kind"),
-]
-
-
-StorageModel = GitFileRef | HuggingFaceFileRef | LocalFileRef
-
-StorageRef = Annotated[
-    StorageModel,
-    Field(discriminator="kind"),
-]
-
 # ---------------------------------------------------------------------------
 # Verified files and code
 # ---------------------------------------------------------------------------
 
 
-class ResolvedFileRef(ProtocolModel):
-    """An exact file whose bytes have been hashed.
-
-    sha256 identifies the file contents.
-    bytes records the file length.
-    stored_at says where those exact bytes can be retrieved.
-    """
-
-    sha256: SHA256
-    bytes: int = Field(ge=0)
-    stored_at: StorageRef
-
-
-class SnapshotFileRef(ProtocolModel):
-    """One exact file within a stage-result snapshot."""
-
-    path: RepoRelPath
-    sha256: SHA256
-    bytes: int = Field(ge=0)
-
-
-class ResolvedGitFileRef(ResolvedFileRef):
-    """An exact, verified file stored at an immutable Git revision."""
-
-    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
-class ResolvedArtifactPointerRef(ResolvedFileRef):
-    """Identify an exact verified artifact-pointer file."""
-
-    kind: Literal["artifact_pointer"] = "artifact_pointer"
-    stored_at: ArtifactPointerRef  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
 # ---------------------------------------------------------------------------
 # Artifact selectors
 # ---------------------------------------------------------------------------
-
-
-class ResolvedRunSpecRef(ResolvedFileRef):
-    """Identifies the exact RunSpec file governing one run."""
-
-    kind: Literal["run_spec"] = "run_spec"
-    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
-class ResolvedRunRef(ResolvedFileRef):
-    """Identifies one terminal ResolvedRun file."""
-
-    kind: Literal["resolved_run"] = "resolved_run"
-
-
-class ResolvedBenchmarkSpecRef(ResolvedFileRef):
-    """Identifies the exact benchmark specification applied to a run."""
-
-    kind: Literal["benchmark_spec"] = "benchmark_spec"
-    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
-
-
-class ResolvedBenchmarkResultRef(ResolvedFileRef):
-    """Identifies one completed benchmark result."""
-
-    kind: Literal["benchmark_result"] = "benchmark_result"
 
 
 class StageArtifactRef(ProtocolModel):
