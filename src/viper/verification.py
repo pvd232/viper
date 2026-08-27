@@ -11,7 +11,6 @@ import subprocess
 import tempfile
 from collections import Counter
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -34,6 +33,14 @@ from ._schema import (
     RepoRelPath,
     repo_file_paths_overlap,
 )
+from ._verification.models import VerificationError as VerificationError
+from ._verification.models import VerificationPolicy as VerificationPolicy
+from ._verification.models import VerifiedArtifact as VerifiedArtifact
+from ._verification.models import VerifiedBenchmarkResult as VerifiedBenchmarkResult
+from ._verification.models import VerifiedInput as VerifiedInput
+from ._verification.models import VerifiedRunPlan as VerifiedRunPlan
+from ._verification.models import VerifiedRunResult as VerifiedRunResult
+from ._verification.models import VerifiedSnapshotFile as VerifiedSnapshotFile
 from .artifact_loaders import (
     ArtifactLoaderError,
     ArtifactValidationResult,
@@ -262,24 +269,6 @@ def resolved_stage_spec_path(run: RunSpec, stage_id: StageId) -> RepoRelPath:
     return f"{run_root(run)}/stages/{stage_id}/resolved.yaml"
 
 
-class VerificationError(ValueError):
-    """A referenced file could not be retrieved or failed verification."""
-
-
-@dataclass(frozen=True)
-class VerificationPolicy:
-    """Define which source repositories may execute project-owned code."""
-
-    trusted_source_repositories: frozenset[str]
-
-    def permits_source(self, repository: object) -> bool:
-        """Return whether project code from one repository may execute."""
-        normalized = str(repository).rstrip("/")
-        return normalized in {
-            trusted.rstrip("/") for trusted in self.trusted_source_repositories
-        }
-
-
 def unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Construct one JSON object while rejecting duplicate field names."""
     result: dict[str, object] = {}
@@ -288,68 +277,6 @@ def unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
             raise ValueError(f"duplicate JSON key: {key!r}")
         result[key] = value
     return result
-
-
-@dataclass(frozen=True)
-class VerifiedSnapshotFile:
-    """One snapshot file whose bytes match its recorded identity."""
-
-    reference: SnapshotFileRef
-    content: bytes
-
-
-@dataclass(frozen=True)
-class VerifiedArtifact:
-    """One resolved artifact and all of its verified files."""
-
-    artifact: ResolvedArtifact
-    files: tuple[VerifiedSnapshotFile, ...]
-    data_role: DataRole
-    references: tuple[ResolvedFileRef, ...] = ()
-
-
-@dataclass(frozen=True)
-class VerifiedInput:
-    """A verified artifact and the local path where a stage consumes it."""
-
-    path: RepoRelPath
-    data_role: DataRole
-    artifact: ResolvedArtifact
-    files: tuple[VerifiedSnapshotFile, ...]
-    references: tuple[ResolvedFileRef, ...] = ()
-
-
-@dataclass(frozen=True)
-class VerifiedRunPlan:
-    """The connected records constituting one verified run plan."""
-
-    run: RunSpec
-    experiment: ExperimentSpec
-    variant: VariantSpec
-    benchmark: BenchmarkSpec | None
-    stages: dict[StageId, BaseSpec]
-
-
-@dataclass(frozen=True)
-class VerifiedRunResult:
-    """A verified terminal run and its connected records."""
-
-    result: ResolvedRun
-    plan: VerifiedRunPlan
-    attempts: tuple[RunAttempt, ...]
-    resolved_stages: dict[StageId, ResolvedBaseSpec]
-    measurements: tuple[Measurement, ...]
-
-
-@dataclass(frozen=True)
-class VerifiedBenchmarkResult:
-    """A benchmark result and its verified run and confirmation execution."""
-
-    result: BenchmarkResult
-    run: VerifiedRunResult
-    confirmation: RunAttempt
-    confirmation_stages: dict[StageId, ResolvedBaseSpec]
-    confirmation_measurements: tuple[Measurement, ...]
 
 
 def fetch_git_file_bytes(
