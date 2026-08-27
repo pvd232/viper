@@ -1,5 +1,6 @@
-"""Tests for deterministic package-index release verification."""
+"""Tests for package metadata and deterministic index verification."""
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,43 @@ from tests.release_index import (
     published_hashes,
     require_identical_files,
 )
+
+
+def test_release_metadata_matches_the_approved_public_identity() -> None:
+    """Freeze the package identity and supported installation contract."""
+    root = Path(__file__).parents[1]
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+
+    assert project["name"] == "viper-provenance"
+    assert project["version"] == "0.1.0a2"
+    assert project["description"] == (
+        "Run and verify reproducible ML experiments with machine-readable "
+        "guardrails for agents."
+    )
+    assert project["requires-python"] == ">=3.11"
+    assert project["license"] == "Apache-2.0"
+    assert project["license-files"] == ["LICENSE"]
+    assert project["authors"] == [
+        {"name": "Peter Driscoll", "email": "peterdriscoll27@gmail.com"}
+    ]
+    assert project["maintainers"] == project["authors"]
+    assert project["urls"] == {
+        "Repository": "https://github.com/pvd232/viper",
+        "Documentation": "https://github.com/pvd232/viper/tree/main/docs",
+        "Issues": "https://github.com/pvd232/viper/issues",
+    }
+    assert project["scripts"] == {"viper": "viper.cli:main"}
+    assert project["dependencies"] == [
+        "huggingface_hub>=1,<2",
+        "httpx>=0.28,<1",
+        "numpy>=2,<3",
+        "pydantic>=2.12,<3",
+        "PyYAML>=6,<7",
+        "torch>=2.6,<3",
+        "torchdata==0.11.0",
+    ]
 
 
 def test_distribution_hashes_binds_each_release_filename(tmp_path: Path) -> None:
