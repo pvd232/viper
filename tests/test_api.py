@@ -45,7 +45,7 @@ def test_api_schema_and_capability_discovery() -> None:
 
 def test_validate_stage_returns_typed_success() -> None:
     """Validate a local stage through the public Python operation."""
-    path = Path("examples/provenance/stages/download/spec.yaml")
+    path = Path("examples/synthetic/experiments/example/stages/download/spec.yaml")
 
     result = validate_stage(ValidateStageRequest(path=path))
 

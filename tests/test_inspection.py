@@ -33,6 +33,7 @@ from viper.verification import VerifiedRunPlan, VerifiedRunResult
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"
 COMMIT = "a" * 40
+EXAMPLE_STAGE = Path("examples/synthetic/experiments/example/stages/download/spec.yaml")
 
 
 def _run(stage_raw: bytes, *, seed: int) -> RunSpec:
@@ -108,7 +109,7 @@ def _run(stage_raw: bytes, *, seed: int) -> RunSpec:
 
 def _write_plan(root: Path, *, seed: int) -> Path:
     """Write one complete frozen plan beneath a temporary repository root."""
-    stage_raw = Path("examples/provenance/stages/download/spec.yaml").read_bytes()
+    stage_raw = EXAMPLE_STAGE.read_bytes()
     stage_path = root / RUN_ROOT / "stages/download/spec.yaml"
     stage_path.parent.mkdir(parents=True)
     stage_path.write_bytes(stage_raw)

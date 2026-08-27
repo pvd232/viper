@@ -81,7 +81,7 @@ agree. Complete each phase in document order.
 Every implementation phase ends with this repository gate:
 
 ```bash
-ruff check src/viper tests examples/project/src
+ruff check src/viper tests examples/synthetic/src
 pyright --pythonpath "$(command -v python)"
 python -m pytest -q
 git diff --check
@@ -865,9 +865,9 @@ commit for each proven duplicate family.
 
 ## Phase 17. Replace the example suite
 
-- [ ] Delete the fragmentary examples and version-stale persisted examples.
-- [ ] Generate one synthetic project through `viper init`.
-- [ ] Commit its source, authored specifications, tests, and concise usage
+- [x] Delete the fragmentary examples and version-stale persisted examples.
+- [x] Generate one synthetic project through `viper init`.
+- [x] Commit its source, authored specifications, tests, and concise usage
   guide.
 - [ ] Execute acquisition, the five-stage candidate plan, benchmark
   confirmation, and terminal verification from the installed wheel.

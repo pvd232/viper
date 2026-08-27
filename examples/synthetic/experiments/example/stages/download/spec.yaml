@@ -1,0 +1,70 @@
+kind: download
+schema_version: 1
+implementation:
+  path: src/sample_project/stages/download.py
+  symbol: download
+  sha256: 910fe8004296d069a5f8af0863a7201adbc737713114cf37fc6051c0ec5552c2
+  bytes: 510
+environment: null
+metric_ids: []
+artifacts:
+  dataset:
+    kind: file
+    path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/datasets/synthetic/dataset.txt
+    loader:
+      path: src/sample_project/artifact_loaders/bytes_file.py
+      symbol: load
+      sha256: bd95723e8f125165e4fa975e965b2038ca02e88897976baa6183d1bc5495bacc
+      bytes: 178
+    data_role: training
+  split:
+    kind: file
+    path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/datasets/synthetic/split.txt
+    loader:
+      path: src/sample_project/artifact_loaders/bytes_file.py
+      symbol: load
+      sha256: bd95723e8f125165e4fa975e965b2038ca02e88897976baa6183d1bc5495bacc
+      bytes: 178
+    data_role: evaluation
+parameter_model:
+  path: src/sample_project/parameters.py
+  symbol: DownloadParameters
+  sha256: c62911026f6fb5bbf11aec9ed98d4e2b4f9661d25d088e858c6c8e1684b25fdc
+  bytes: 838
+inputs:
+  dataset:
+    kind: http
+    method: GET
+    url: https://example.com/viper-synthetic-dataset.txt
+    headers: {}
+    version: v1
+    expected_body_sha256: c6590e360c923a8db90afe047ffbfe234b94f4490ec5f63ded68ed498655c0d0
+    expected_body_bytes: 24
+    credentials: null
+  split:
+    kind: http
+    method: GET
+    url: https://example.com/viper-synthetic-split.txt
+    headers: {}
+    version: v1
+    expected_body_sha256: c6590e360c923a8db90afe047ffbfe234b94f4490ec5f63ded68ed498655c0d0
+    expected_body_bytes: 24
+    credentials: null
+transport:
+  kind: builtin
+  transport_id: httpx
+policy:
+  allowed_schemes:
+  - https
+  allowed_hosts:
+  - example.com
+  allowed_ports:
+  - 443
+  accepted_statuses:
+  - 200
+  max_redirects: 2
+  max_body_bytes: 1024
+  timeout_seconds: 30.0
+params:
+  schema_version: 1
+  media_type: text/plain

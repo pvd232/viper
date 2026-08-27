@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -62,7 +63,6 @@ from viper.metrics import (
     MetricSpec,
 )
 from viper.parameters import ParameterModelRef
-from viper.project_init import initialize_project
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -249,7 +249,7 @@ def test_generated_project_executes_five_stage_benchmark(
 ) -> None:
     """Run generated code through acquisition, training, and confirmation."""
     root = tmp_path / "generated"
-    initialize_project(root, "sample_project")
+    shutil.copytree(Path("examples/synthetic"), root)
     _git(root, "init", "--quiet")
     _git(root, "config", "user.email", "viper@example.com")
     _git(root, "config", "user.name", "VIPER Test")

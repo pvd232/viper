@@ -12,10 +12,12 @@ from viper.serialization import (
     serialize_record,
 )
 
+EXAMPLE_STAGE = Path("examples/synthetic/experiments/example/stages/download/spec.yaml")
+
 
 def test_deprecated_serializer_preserves_canonical_bytes() -> None:
     """Emit one warning and return the canonical document bytes."""
-    document = load_stage_spec(Path("examples/provenance/stages/download/spec.yaml"))
+    document = load_stage_spec(EXAMPLE_STAGE)
 
     with pytest.warns(DeprecationWarning, match="serialize_document"):
         legacy = serialize_record(document)
