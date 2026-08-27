@@ -280,7 +280,7 @@ python -m pytest tests/test_contract_audit.py -q
 ```bash
 python -m pytest tests/test_stage_invocation.py tests/test_process_startup.py \
   tests/test_runner_signals.py tests/test_runner_acceptance.py \
-  tests/test_application.py tests/test_cli.py -q
+  tests/test_api.py tests/test_cli.py -q
 ```
 
 **Commit boundaries**
@@ -555,7 +555,7 @@ python -m pytest tests/test_worker.py tests/test_runner_acceptance.py \
 
 ```bash
 python -m pytest tests/test_benchmark_execution.py \
-  tests/test_verifier_acceptance.py tests/test_application.py tests/test_cli.py -q
+  tests/test_verifier_acceptance.py tests/test_api.py tests/test_cli.py -q
 ```
 
 **Commit boundaries**
@@ -661,7 +661,7 @@ python -m pytest tests/test_runtime.py tests/test_cloud_execution.py \
 **Focused gate**
 
 ```bash
-python -m pytest tests/test_application.py tests/test_application_json.py \
+python -m pytest tests/test_api.py tests/test_api_json.py \
   tests/test_cli.py tests/test_public_api.py tests/test_project_init.py -q
 ```
 
@@ -765,7 +765,7 @@ the new skill package.
 - [x] Assign every public entity and operation to one defining module.
 - [x] Define the small root package interface used by project code.
 - [x] Declare `viper.protocol`, `viper.runner`, `viper.verifier`, and
-  `viper.application` retired for 0.1.0a2.
+  `viper.api` retired for 0.1.0a2.
 - [x] Preserve serialized document fields and discriminators across the Python
   import refactor.
 - [x] Define an installed-wheel import inventory that verifies each documented
@@ -822,15 +822,15 @@ every public type has one definition; schema and serialization tests pass.
 
 ## Phase 15. Decompose execution and verification
 
-- [ ] Move public run, retry, and benchmark orchestration to
+- [x] Move public run, retry, and benchmark orchestration to
   `viper.execution`.
-- [ ] Move public verification operations to `viper.verification`.
-- [ ] Move bounded helper operations into private modules named for their
+- [x] Move public verification operations to `viper.verification`.
+- [x] Move bounded helper operations into private modules named for their
   stable responsibility.
-- [ ] Move child-process entrypoints into `viper._workers`.
-- [ ] Update public requests, results, CLI dispatch, schemas, tests, and docs in
+- [x] Move child-process entrypoints into `viper._workers`.
+- [x] Update public requests, results, CLI dispatch, schemas, tests, and docs in
   the same increment.
-- [ ] Delete `viper.runner` and `viper.verifier` after their last consumers
+- [x] Delete `viper.runner` and `viper.verifier` after their last consumers
   move.
 
 **Acceptance gate:** direct Python execution, CLI execution, retry, benchmark
@@ -841,10 +841,10 @@ deletion commit for retired modules.
 
 ## Phase 16. Consolidate the application surface
 
-- [ ] Assign typed application requests, results, dispatch, schema discovery,
+- [x] Assign typed application requests, results, dispatch, schema discovery,
   and capability discovery to `viper.api`.
-- [ ] Update the CLI and root package to call `viper.api`.
-- [ ] Delete `viper.application` after its last consumer moves.
+- [x] Update the CLI and root package to call `viper.api`.
+- [x] Delete `viper.application` after its last consumer moves.
 - [ ] Inventory repeated coordinators, worker launchers, serializers, storage
   adapters, and validation helpers.
 - [ ] Delete dead code and merge exact-operation duplicates whose inputs,

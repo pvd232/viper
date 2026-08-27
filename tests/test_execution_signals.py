@@ -31,6 +31,7 @@ from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
 )
+from viper._verification.attempt import _verify_stage_invocation
 from viper.artifacts import (
     ArtifactLoaderRef,
     SingleFileArtifactSpec,
@@ -77,7 +78,6 @@ from viper.stages import (
 from viper.verification import (
     VerificationError,
     VerificationPolicy,
-    _verify_stage_invocation,
     read_attempt_reference,
     verify_attempt_stages,
     verify_run_result,

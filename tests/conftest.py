@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 TIER_BY_MODULE = {
-    "test_application": "contract",
-    "test_application_json": "unit",
+    "test_api": "contract",
+    "test_api_json": "unit",
     "test_artifact_loaders": "unit",
     "test_artifact_validation": "contract",
     "test_authoring": "contract",
@@ -42,8 +42,8 @@ TIER_BY_MODULE = {
 }
 
 DOMAIN_BY_MODULE = {
-    "test_application": "domain_application",
-    "test_application_json": "domain_application",
+    "test_api": "domain_application",
+    "test_api_json": "domain_application",
     "test_artifact_loaders": "domain_artifacts",
     "test_artifact_validation": "domain_artifacts",
     "test_authoring": "domain_authoring",

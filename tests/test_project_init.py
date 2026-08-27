@@ -7,7 +7,7 @@ import sys
 from os import environ
 from pathlib import Path
 
-from viper.application import (
+from viper.api import (
     InitProjectRequest,
     ViperFailure,
     dispatch,

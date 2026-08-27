@@ -21,7 +21,7 @@ receipt, verifies the completed result, and writes `benchmark.result.yaml`.
 ## Application operation
 
 ```python
-class ExecuteBenchmarkRequest(ApplicationModel):
+class ExecuteBenchmarkRequest(APIModel):
     resolved_run: Path
     benchmark_spec: Path
     repository_root: Path

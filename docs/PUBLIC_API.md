@@ -17,7 +17,7 @@ inline annotations distributed with the installed `viper` package.
 
 | Module | Public responsibility |
 | --- | --- |
-| `viper.application` | Typed operations, requests, successes, failures, schema discovery, and capability discovery |
+| `viper.api` | Typed operations, requests, successes, failures, schema discovery, and capability discovery |
 | `viper.artifacts` | Artifact declarations, resolved artifacts, pointers, and loader identities |
 | `viper.authoring` | Canonical experiment, variant, benchmark, stage, and run-plan documents |
 | `viper.benchmark` | Benchmark specifications, execution, comparisons, and results |
@@ -48,7 +48,7 @@ inline annotations distributed with the installed `viper` package.
 `import viper` exposes these modules:
 
 ```python
-viper.application
+viper.api
 viper.artifacts
 viper.authoring
 viper.benchmark
@@ -91,7 +91,7 @@ viper.run
 ```
 
 `viper.run(stage_callable)` is the ordinary Python adapter. The complete-plan
-application operation remains `viper.application.run(request)`.
+application operation remains `viper.api.run(request)`.
 
 `viper.StageContext.numpy_generators` exposes the named NumPy generator objects
 configured by the frozen run controls. The mapping keys match the names stored
@@ -100,15 +100,15 @@ in the stage invocation binding and process-startup receipts.
 The release application surface also includes:
 
 ```python
-viper.application.retry
-viper.application.execute_benchmark
-viper.application.init_project
+viper.api.retry
+viper.api.execute_benchmark
+viper.api.init_project
 ```
 
 Import concrete classes and functions from their owning module. For example:
 
 ```python
-from viper.application import ValidateStageRequest, validate_stage
+from viper.api import ValidateStageRequest, validate_stage
 from viper.runs import RunSpec
 ```
 

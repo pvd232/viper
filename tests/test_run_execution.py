@@ -27,8 +27,8 @@ from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
 )
-from viper.application import CompareRunsRequest, RunSuccess
-from viper.application import compare_runs as compare_runs_application
+from viper.api import CompareRunsRequest, RunSuccess
+from viper.api import compare_runs as compare_runs_application
 from viper.artifacts import (
     ArtifactLoaderRef,
     SingleFileArtifactSpec,
@@ -461,7 +461,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
 
     requests = []
     monkeypatch.setattr(
-        "viper.api.application_run",
+        "viper.api._run_request",
         lambda request: (
             requests.append(request)
             or RunSuccess(

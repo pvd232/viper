@@ -1,4 +1,4 @@
-"""Expose VIPER application operations through the installed command."""
+"""Expose VIPER API operations through the installed command."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
-from .application import (
-    ApplicationModel,
+from .api import (
+    APIModel,
     OperationName,
     SuccessModel,
     ViperFailure,
@@ -30,7 +30,7 @@ class ViperArgumentParser(argparse.ArgumentParser):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the VIPER command parser and its application subcommands."""
+    """Build the VIPER command parser and its API subcommands."""
     parser = ViperArgumentParser(prog="viper")
     parser.add_argument(
         "--json",
@@ -158,7 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _operation_and_payload(
     arguments: argparse.Namespace,
 ) -> tuple[OperationName, dict[str, Any]]:
-    """Map parsed command arguments onto one application operation."""
+    """Map parsed command arguments onto one API operation."""
     values = vars(arguments).copy()
     command = values.pop("command")
     values.pop("json_output")
@@ -191,7 +191,7 @@ def _operation_and_payload(
 
 
 def _human_success(result: SuccessModel) -> str:
-    """Render one concise human result for an application success."""
+    """Render one concise human result for an API success."""
     if result.operation == "validate_stage":
         return f"valid {getattr(result, 'stage_kind')} stage"
     if result.operation == "validate_resolved_stage":
@@ -264,7 +264,7 @@ def _human_success(result: SuccessModel) -> str:
     return "\n".join(capabilities)
 
 
-def _render(result: ApplicationModel, *, json_output: bool) -> int:
+def _render(result: APIModel, *, json_output: bool) -> int:
     """Write one result to its declared channel and return an exit status."""
     if json_output:
         sys.stdout.buffer.write(result_json_bytes(result))

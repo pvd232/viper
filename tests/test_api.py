@@ -1,10 +1,10 @@
-"""Tests for the typed VIPER application boundary."""
+"""Tests for VIPER's typed Python API."""
 
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from viper.application import (
+from viper.api import (
     CapabilitiesRequest,
     SchemaRequest,
     StatusRequest,
@@ -20,7 +20,7 @@ from viper.application import (
 from viper.journal import DurableJournal
 
 
-def test_application_schema_and_capability_discovery() -> None:
+def test_api_schema_and_capability_discovery() -> None:
     """Return registered schemas and the installed operation inventory."""
     schema = get_schema(SchemaRequest(name="RunSpec"))
     capabilities = get_capabilities(CapabilitiesRequest())
@@ -100,7 +100,7 @@ def test_failure_details_redact_credentials() -> None:
 
 
 def test_status_returns_latest_durable_attempt_state(tmp_path: Path) -> None:
-    """Expose a local attempt journal through the typed application boundary."""
+    """Expose a local attempt journal through the typed API."""
     journal_path = tmp_path / "journal.jsonl"
     journal = DurableJournal(journal_path)
     journal.append(

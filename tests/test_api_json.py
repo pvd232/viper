@@ -1,11 +1,11 @@
-"""Golden tests for the stable application JSON result families."""
+"""Golden tests for the stable API JSON result families."""
 
 from pathlib import Path
 
 import pytest
 from pydantic import HttpUrl
 
-from viper.application import (
+from viper.api import (
     CapabilitiesRequest,
     FailureOrigin,
     ViperFailure,
@@ -13,7 +13,7 @@ from viper.application import (
     result_json_bytes,
 )
 
-GOLDEN_ROOT = Path(__file__).parent / "golden/application"
+GOLDEN_ROOT = Path(__file__).parent / "golden/api"
 
 
 def test_success_json_matches_golden_document() -> None:

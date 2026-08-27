@@ -1,7 +1,7 @@
 """VIPER execution and artifact provenance engine."""
 
 from . import (
-    application,
+    api,
     artifacts,
     authoring,
     benchmark,
@@ -27,7 +27,7 @@ from . import (
 )
 
 __all__ = [
-    "application",
+    "api",
     "artifacts",
     "authoring",
     "benchmark",

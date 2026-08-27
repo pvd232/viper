@@ -110,8 +110,8 @@ viper run path/to/spec.yaml --repository-root .
 
 The Python adapter first checks that the launched callable matches the path,
 symbol, bytes, decorator kind, and parameter class selected by the plan. It
-then delegates complete-plan execution to `viper.application.run`. See
-[api.py](../src/viper/api.py) and [application.py](../src/viper/application.py).
+then delegates complete-plan execution to `viper.api.run`. See
+[api.py](../src/viper/api.py) and [api.py](../src/viper/api.py).
 
 ## 4. From experiment decisions to a frozen plan
 
@@ -364,7 +364,7 @@ journal. `plan-diff` compares two frozen plans. `compare-runs` compares two
 verified terminal runs. `lineage` returns the directed upstream graph for a
 verified run. Their Python interfaces live in [inspection.py](../src/viper/inspection.py),
 and their stable application surface is defined in
-[application.py](../src/viper/application.py).
+[api.py](../src/viper/api.py).
 
 The machine-readable interface gives an agent bounded actions and explicit
 failure identities. The provenance guarantee still depends on the frozen plan,

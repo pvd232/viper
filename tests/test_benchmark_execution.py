@@ -1,12 +1,12 @@
-"""Tests for benchmark execution models and the typed application operation."""
+"""Tests for benchmark execution models and the typed API operation."""
 
 from pathlib import Path
 
 import pytest
 
 from tests.test_verification_acceptance import build_benchmark_fixture
-from viper.application import ExecuteBenchmarkRequest
-from viper.application import execute_benchmark as execute_benchmark_application
+from viper.api import ExecuteBenchmarkRequest
+from viper.api import execute_benchmark as execute_benchmark_application
 from viper.benchmark import BenchmarkExecutionResult, BenchmarkSpec
 from viper.references import (
     LocalFileRef,
@@ -40,7 +40,7 @@ def test_benchmark_result_reference_accepts_local_immutable_storage() -> None:
     assert reference.stored_at.kind == "local"
 
 
-def test_application_returns_the_verified_benchmark_result(
+def test_api_returns_the_verified_benchmark_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -48,7 +48,7 @@ def test_application_returns_the_verified_benchmark_result(
     result, _, _ = build_benchmark_fixture()
     result_path = tmp_path / "benchmark.result.yaml"
     monkeypatch.setattr(
-        "viper.application.execute_benchmark_run",
+        "viper.api.execute_benchmark_run",
         lambda *args, **kwargs: BenchmarkExecutionResult(
             result=result,
             result_path=result_path,

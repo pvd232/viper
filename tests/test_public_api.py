@@ -6,10 +6,10 @@ import importlib
 from importlib import resources
 
 import viper
-from viper import application
+from viper import api
 
 ROOT_MODULES = (
-    "application",
+    "api",
     "artifacts",
     "authoring",
     "benchmark",
@@ -71,12 +71,12 @@ def test_every_public_module_imports() -> None:
         assert importlib.import_module(f"viper.{name}") is not None
 
 
-def test_application_exports_and_registries_are_complete() -> None:
-    """Resolve every exported name and every declared application operation."""
-    for name in application.__all__:
-        assert getattr(application, name) is not None
-    assert tuple(application.REQUEST_REGISTRY) == application.OPERATIONS
-    assert tuple(application.HANDLER_REGISTRY) == application.OPERATIONS
+def test_api_exports_and_registries_are_complete() -> None:
+    """Resolve every exported name and every declared API operation."""
+    for name in api.__all__:
+        assert getattr(api, name) is not None
+    assert tuple(api.REQUEST_REGISTRY) == api.OPERATIONS
+    assert tuple(api.HANDLER_REGISTRY) == api.OPERATIONS
 
 
 def test_parameter_categories_form_the_public_extension_namespace() -> None:

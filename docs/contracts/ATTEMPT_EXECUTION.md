@@ -20,7 +20,7 @@ attempt.
 [`run()`](../../src/viper/execution.py) acquires a run-scoped advisory lock, allocates
 the next durable attempt ID, and writes the allocation event before preflight.
 Every successful or failed attempt reaches a terminal journal state and enters
-the terminal `ResolvedRun`. [`retry()`](../../src/viper/application.py) accepts the
+the terminal `ResolvedRun`. [`retry()`](../../src/viper/api.py) accepts the
 same frozen plan after a failed run and appends the next attempt.
 
 `SIGINT` closes the active attempt as `cancelled`. `SIGTERM` closes it as

@@ -1,13 +1,13 @@
-# `viper.application`
+# `viper.api`
 
-`viper.application` is VIPER's public operation layer. Python callers pass a
+`viper.api` is VIPER's public operation layer. Python callers pass a
 typed request model to a function. The `viper` command validates a mapping,
 calls the same function, and renders its result.
 
 Project stage modules use the root `viper.run(stage_callable)` adapter defined
 by [Process startup](contracts/PROCESS_STARTUP.md). That adapter and the
 installed command both delegate complete-run coordination to
-`viper.application.run(request)`. The callable argument binds the launched
+`viper.api.run(request)`. The callable argument binds the launched
 module to one frozen stage. The application operation executes the complete
 ordered run plan.
 
