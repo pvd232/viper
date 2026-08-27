@@ -12,11 +12,11 @@ implementation.
 ## Reviewed scope
 
 The review covers the ten contracts indexed by [README.md](README.md), the
-[formal protocol](../ProvenanceS1_v3.md), the
-[application API](../APPLICATION_API.md), the [public API](../PUBLIC_API.md),
-the [master checklist](../PUBLICATION_TODO.md), the active `viper` package, and
-the test suite. The audit result applies to the complete document set in the
-Git commit containing this report.
+[formal protocol](../reference/protocol.md), the
+[public API](../reference/api.md), the
+[master checklist](../PUBLICATION_TODO.md), the active `viper` package, and the
+test suite. The audit result applies to the complete document set in the Git
+commit containing this report.
 
 Historical material under `archive/` and reference material under `prior/`
 remain outside the active design state.

@@ -3,8 +3,8 @@
 This file is the single implementation and publication checklist for
 VIPER. Phases 0–10 record the completed `0.1.0a1` release. Phases 11–21 govern
 the `0.1.0a2` public-repository revision. The
-[protocol](ProvenanceS1_v3.md) owns serialized provenance semantics. The
-[application API](APPLICATION_API.md) owns public operations. The
+[protocol](reference/protocol.md) owns serialized provenance semantics. The
+[public API](reference/api.md) owns public operations. The
 [contract index](contracts/README.md) owns the mechanics required to support
 each release claim.
 
@@ -95,7 +95,7 @@ When implementation reveals an incomplete contract, revise the owning file in
 `docs/contracts/`, review that revision, and resume implementation from the
 approved text.
 
-Each phase also updates the affected sections of `ProvenanceS1_v3.md`. A phase
+Each phase also updates the affected sections of `reference/protocol.md`. A phase
 closes when its implementation contract, formal protocol, public API,
 implementation, and tests describe the same fields and guarantees.
 
@@ -216,7 +216,7 @@ python -m pytest tests/test_contract_audit.py -q
 - [x] Add `ProcessStartupReceipt` with the allowlisted child environment,
   applied controls, and one initialized-state digest for each configured
   generator.
-- [x] Update `ProvenanceS1_v3.md` with the callable, context, receipt, and
+- [x] Update `reference/protocol.md` with the callable, context, receipt, and
   process-startup relationships.
 - [x] Add one public decorator for each stage kind.
 - [x] Resolve decorator metadata into the frozen implementation and parameter
@@ -626,9 +626,9 @@ python -m pytest tests/test_runtime.py tests/test_cloud_execution.py \
 - [x] Capture output and exit status for every CLI command in acceptance tests.
 - [x] Freeze one `PreflightCheckCode` for every release-gated preflight rule.
 - [x] Freeze the operation, schema, capability, decorator, context, and helper
-  imports listed in `PUBLIC_API.md`.
+  imports listed in `reference/api.md`.
 - [x] Define the unit, contract, integration, release, live-CUDA, and domain
-  validation interface in `PUBLIC_API.md` and `DEVELOPMENT.md`.
+  validation interface in `reference/api.md` and `development/testing.md`.
 - [x] Register strict pytest configuration and require one tier and one domain
   for every test module.
 - [x] Package `viper/py.typed` and verify the marker through the public API
@@ -765,7 +765,7 @@ the new skill package.
 - [x] Assign every public entity and operation to one defining module.
 - [x] Define the small root package interface used by project code.
 - [x] Declare `viper.protocol`, `viper.runner`, `viper.verifier`, and
-  `viper.api` retired for 0.1.0a2.
+  `viper.application` retired for 0.1.0a2.
 - [x] Preserve serialized document fields and discriminators across the Python
   import refactor.
 - [x] Define an installed-wheel import inventory that verifies each documented
@@ -880,24 +880,24 @@ documented example using only files contained in the public repository.
 
 ## Phase 18. Rewrite the public documentation
 
-- [ ] Rewrite the root README around installation, the first verified run, the
+- [x] Rewrite the root README around installation, the first verified run, the
   core guarantee, and the complete example.
-- [ ] Move the formal protocol to `docs/reference/protocol.md`.
-- [ ] Rewrite the technical overview as
+- [x] Move the formal protocol to `docs/reference/protocol.md`.
+- [x] Rewrite the technical overview as
   `docs/explanation/how-viper-works.md`.
-- [ ] Merge `PUBLIC_API.md` and `APPLICATION_API.md` into
+- [x] Merge `PUBLIC_API.md` and `APPLICATION_API.md` into
   `docs/reference/api.md`.
-- [ ] Move the getting-started guide to
+- [x] Move the getting-started guide to
   `docs/tutorials/getting-started.md`.
-- [ ] Move versioning to `docs/reference/versioning.md`.
-- [ ] Convert `DEVELOPMENT.md` into root `CONTRIBUTING.md` and move detailed
+- [x] Move versioning to `docs/reference/versioning.md`.
+- [x] Convert `DEVELOPMENT.md` into root `CONTRIBUTING.md` and move detailed
   validation instructions to `docs/development/testing.md`.
-- [ ] Keep the approved implementation contracts beneath `docs/contracts/`.
-- [ ] Delete obsolete plans, editorial files, end-to-end essays, and the
+- [x] Keep the approved implementation contracts beneath `docs/contracts/`.
+- [x] Delete obsolete plans, editorial files, end-to-end essays, and the
   UUID-named image.
-- [ ] Audit the README, documentation, example prose, metadata, CLI help, and
+- [x] Audit the README, documentation, example prose, metadata, CLI help, and
   release notes with the direct-prose procedure.
-- [ ] Validate internal links and PyPI rendering.
+- [x] Validate internal links and PyPI rendering.
 
 **Acceptance gate:** documentation uses the final imports, every command runs,
 every internal link resolves, and the direct-prose check passes.

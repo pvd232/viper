@@ -1,8 +1,10 @@
-prune archive
-exclude viper_provenance.egg-info/*
-exclude docs/PUBLICATION_TODO.md
-include docs/ProvenanceS1_v3.md
-include docs/VERSIONING.md
-recursive-include examples/provenance *.yaml
-recursive-include examples/project/src *.py
+prune src/viper_provenance.egg-info
+include docs/README.md
+recursive-include docs/contracts *.md
+recursive-include docs/development *.md
+recursive-include docs/explanation *.md
+recursive-include docs/reference *.md
+recursive-include docs/releases *.md
+recursive-include docs/tutorials *.md
+recursive-include examples/synthetic *.md *.py *.toml *.yaml
 recursive-include tests *.md *.py

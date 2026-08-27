@@ -244,7 +244,7 @@ def _implemented_schema_findings(root: Path) -> tuple[int, list[AuditFinding]]:
 def audit_repository(root: Path) -> AuditResult:
     """Run deterministic contract checks for one VIPER repository root."""
     contracts_dir = root / "docs" / "contracts"
-    protocol_path = root / "docs" / "ProvenanceS1_v3.md"
+    protocol_path = root / "docs" / "reference" / "protocol.md"
     checklist_path = root / "docs" / "PUBLICATION_TODO.md"
     contract_paths = sorted(
         path

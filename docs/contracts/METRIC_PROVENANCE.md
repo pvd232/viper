@@ -27,7 +27,7 @@ The runner launches separate production and verification workers under the
 run's startup controls. Each worker records its startup and observed execution
 context. The attempt publishes one `MetricVerificationReceipt` that binds both
 workers to the recorded measurement and dependency files. The verifier checks
-that complete evidence without invoking project metric code.
+that complete stored evidence directly.
 
 Live training and diagnostic metrics use the same frozen implementation
 identity. The stage worker loads each selected live implementation, binds it to

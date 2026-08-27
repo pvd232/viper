@@ -33,9 +33,9 @@ Each contract uses one status:
 | [Cloud execution](CLOUD_EXECUTION.md) | Implemented | Execution on a pre-provisioned GCE instance |
 | [Package release](PACKAGE_RELEASE.md) | Approved | Clean public repository, installed-distribution, and publication acceptance |
 
-The [master execution checklist](../PUBLICATION_TODO.md) orders these contracts. The
-[protocol](../ProvenanceS1_v3.md) remains the authority for serialized VIPER
-documents.
+The [master execution checklist](../PUBLICATION_TODO.md) orders these contracts.
+The [protocol](../reference/protocol.md) remains the authority for serialized
+VIPER documents.
 
 The [contract audit](AUDIT.md) records the evidence supporting each contract's
 current status.

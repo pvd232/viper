@@ -84,7 +84,7 @@ class TrainParameters(viper.parameters.Train):
     learning_rate: float
 
 
-@viper.train_stage(params=TrainParameters)
+@viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
     ...
 

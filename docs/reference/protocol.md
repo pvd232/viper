@@ -1,7 +1,8 @@
 # Foundational reproducibility formalism
 
 This document defines the VIPER 0.1 protocol target. The contract index records
-implementation status for each increment: [VIPER contracts](contracts/README.md).
+implementation status for each increment:
+[VIPER contracts](../contracts/README.md).
 
 ## Contents
 
@@ -2254,8 +2255,9 @@ A metric with `mode="recompute"` names every stage input or artifact it
 receives, supplies a comparator, and executes in a dedicated worker after the
 stage completes. Verification launches a second worker with the same immutable
 dependencies. A metric with `mode="live"` has kind `training` or `diagnostic`,
-has no file dependencies or comparator, and enters the stage through a
-runner-owned `MetricHandle`. An evaluation metric uses `mode="recompute"`.
+uses an empty file-dependency set, omits the comparator, and enters the stage
+through a runner-owned `MetricHandle`. An evaluation metric uses
+`mode="recompute"`.
 
 An exact comparator has zero tolerance. An absolute or relative comparator has
 a positive tolerance.
@@ -3865,11 +3867,11 @@ module, project transport, metric, and artifact loader.
 
 When a project uses `tools/`, that directory contains repository-maintenance,
 migration, generation, and inspection utilities. A tool has one documented
-purpose and is not selected by `BaseSpec.implementation`.
+purpose. `BaseSpec.implementation` selects production stage source.
 
 When a project uses `tests/`, that directory contains deterministic checks for
 its entrypoints, metrics, and loaders. Test files may be present in the source
-snapshot and are not stage entrypoints.
+snapshot. Stage implementation references select the production entrypoints.
 
 The run directory is the durable output root. Artifact files, measurements,
 logs, resolved records, and benchmark results use stable repository-relative
@@ -3919,7 +3921,8 @@ At this boundary:
 2. $o_k^{(0)}$ contains the initial optimization state.
 3. $r_k^{(0)}$ contains every generator state after initialization.
 4. $b_k^{(0)}$ records the initial sampler position.
-5. The DataLoader configuration exists, however, the iterator it produces does not exist, and no batch has been selected.
+5. The DataLoader configuration exists. Iterator creation and first-batch
+   selection occur inside the first transition.
 
 ```text
 global seed
@@ -3978,7 +3981,7 @@ $$
 
 The operation $B_{\alpha,\beta,q,t}$:
 
-1. creates a DataLoader iterator when no iterator exists;
+1. creates a DataLoader iterator at the start of a loader pass;
 2. obtains the next index batch;
 3. retrieves the selected observations;
 4. applies the configured transformations and collation;
@@ -3986,8 +3989,8 @@ The operation $B_{\alpha,\beta,q,t}$:
 6. records the resulting sampler and DataLoader position.
 
 Let $r_{k,\mathrm{sampling}}^{(t+1)}$ contain the generator states after the
-iterator and sampler have selected the index batch for update $t+1$, but before
-the selected observations are retrieved, transformed, and collated. The
+iterator and sampler have selected the index batch for update $t+1$. Retrieval,
+transformation, and collation of those observations follow this boundary. The
 generator-state transition inside $B_{\alpha,\beta,q,t}$ is:
 
 $$
@@ -4002,7 +4005,7 @@ The first transition includes generator changes caused by iterator creation and
 randomized index generation. The second includes generator changes caused by
 stochastic dataset retrieval, transformations, or custom collation.
 
-If selecting the index batch consumes no randomness, then:
+When index selection preserves the generator state:
 
 $$
 r_{k,\mathrm{sampling}}^{(t+1)}
@@ -4010,8 +4013,7 @@ r_{k,\mathrm{sampling}}^{(t+1)}
 r_k^{(t)}.
 $$
 
-If retrieving, transforming, and collating the selected observations consume
-no randomness, then:
+When retrieval, transformation, and collation preserve the generator state:
 
 $$
 r_{k,\mathrm{batch}}^{(t+1)}
@@ -4080,7 +4082,8 @@ $$
 
 This behavior is defined by the [PyTorch 2.13.0 `Dropout` implementation](https://github.com/pytorch/pytorch/blob/v2.13.0/torch/nn/modules/dropout.py#L35-L72).
 
-If no operation between batch materialization and completed gradient computation consumes randomness, then:
+When the operations between batch materialization and completed gradient
+computation preserve the generator state:
 
 $$
 r_{k,\mathrm{gradient}}^{(t+1)}
@@ -4088,7 +4091,8 @@ r_{k,\mathrm{gradient}}^{(t+1)}
 r_{k,\mathrm{batch}}^{(t+1)}.
 $$
 
-**Persistent model buffers.** If the forward computation changes no persistent model buffers, then:
+**Persistent model buffers.** When the forward computation preserves every
+persistent model buffer:
 
 $$
 \theta_{k,\mathrm{forward}}^{(t+1)}
@@ -4139,9 +4143,9 @@ b_k^{(t+1)}
 b_{k,\mathrm{batch}}^{(t+1)}.
 $$
 
-The operations $A_{\beta,q,t}$ and $P_{\beta,q,t}$ have no generator-state
-argument in this factorization. The generator component of the completed state
-is therefore:
+The operations $A_{\beta,q,t}$ and $P_{\beta,q,t}$ receive optimization and
+model-state arguments only. The generator component of the completed state is
+therefore:
 
 $$
 r_k^{(t+1)}
@@ -4213,7 +4217,7 @@ $$
 
 $s_k^{(t)}$ contains the training state after exactly $t$ completed optimizer
 updates and before any data are selected for update $t+1$. When $t=N_k$, the
-stage terminates without selecting another batch.
+stage terminates at that boundary and batch selection ends with update $N_k$.
 
 **Base case.** Initialization produces $s_k^{(0)}$ before the first DataLoader
 iterator is created and before the first batch is selected. The invariant holds
@@ -4302,9 +4306,9 @@ $$
 #### Multiprocess prefetching
 
 With `num_workers > 0`, Appendix B shows that the DataLoader can select and
-prepare later batches before the current optimizer update completes. The
-single-process clause "before any data are selected for update $t+1$" therefore
-does not describe a multiprocess boundary.
+prepare later batches before the current optimizer update completes. The clause
+"before any data are selected for update $t+1$" applies exclusively to the
+single-process boundary.
 
 For multiprocess loading, $s_k^{(t)}$ contains the training state after exactly
 $t$ completed optimizer updates and every DataLoader action completed by that
@@ -4323,8 +4327,8 @@ This appendix expands the batch-selection operation
 $B_{\alpha,\beta,q,t}$ from Appendix A.2. A training stage supplies one
 explicit `torch.Generator` to a map-style DataLoader with shuffled sampling and
 automatic batching. The same generator supplies the DataLoader base seed and
-the `RandomSampler` permutation. `BatchSampler` groups indices without
-consuming randomness. The diagrams assume `persistent_workers=False`.
+the `RandomSampler` permutation. `BatchSampler` groups indices deterministically.
+The diagrams assume `persistent_workers=False`.
 
 The generator states after iterator creation and randomized index generation
 form $r_{k,\mathrm{sampling}}^{(t+1)}$. The generator states after retrieval,
@@ -4424,18 +4428,18 @@ BatchSampler
 
 Dataset retrieval loads the observations named by one index batch.
 Transformations process those observations. Collation combines the processed
-observations into the batch returned by `next(iterator)`. Collation does not
-select additional observations.
+observations into the batch returned by `next(iterator)`. Index selection is
+complete before collation begins.
 
 `BatchSampler` maintains a position in the sampler's index stream. In this
 single-process view, each `next(iterator)` consumes the next index batch from
-that stream. `BatchSampler` has no RNG state.
+that stream. Position is the complete `BatchSampler` state.
 
 For the first batch, the shared generator state after the base-seed draw and
 shuffled-permutation generation belongs to
 $r_{k,\mathrm{sampling}}^{(t+1)}$. Any generator changes caused by dataset
 retrieval, transformations, or custom collation occur between the sampling-state
-and batch-state boundaries. When those operations consume no randomness, the
+and batch-state boundaries. When those operations preserve generator state, the
 two states are equal.
 
 ### Multiprocess loading
@@ -4543,13 +4547,13 @@ sampler generator S₀
     └── S₀ → S₁
 ```
 
-Giving both generators the same numeric seed does not join their states.
+Equal numeric seeds still produce two independently advancing generator states.
 
-#### No generator supplied
+#### Default generator path
 
-When no generator is supplied, PyTorch uses its default CPU generator to draw
-the DataLoader base seed and a seed for a private `RandomSampler` generator.
-The private generator then produces the shuffled permutation:
+When the generator argument is omitted, PyTorch uses its default CPU generator
+to draw the DataLoader base seed and a seed for a private `RandomSampler`
+generator. The private generator then produces the shuffled permutation:
 
 ```text
 default PyTorch CPU generator
