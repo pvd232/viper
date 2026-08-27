@@ -17,5 +17,5 @@
   source layout and prediction representation project-defined.
 - Separate the installed runtime package from repository documentation,
   historical designs, and examples.
-- Consolidate record encoding and YAML parsing in `serialization.py`, and name
-  single-stage invocation explicitly in `stage_execution.py`.
+- Consolidate record encoding and YAML parsing in `serialization.py`.
+- Expose run, retry, and benchmark operations through `viper.execution`.

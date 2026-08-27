@@ -60,9 +60,7 @@ jobs:
       - name: Smoke-test the built wheel
         run: |
           python -m pip install --force-reinstall --no-deps dist/*.whl
-          python -I -c "import viper; assert all(getattr(viper, name) for name in viper.__all__)"
-          python -I -c "from importlib import resources; import viper; assert resources.files(viper).joinpath('py.typed').is_file()"
-          python -I -c "import importlib; modules = ('api', 'artifacts', 'authoring', 'benchmark', 'execution', 'experiments', 'http', 'ids', 'inspection', 'journal', 'materialization', 'metrics', 'parameters', 'preflight', 'references', 'resume', 'runs', 'runtime', 'serialization', 'stage_execution', 'stages', 'storage', 'verification', 'worker', 'workspace'); assert all(importlib.import_module(f'viper.{name}') for name in modules)"
+          python -I -m pytest tests/test_public_api.py -q
           python -I -c "from viper import api; assert all(getattr(api, name) for name in api.__all__)"
           python -I -c "from viper.api import CapabilitiesRequest, get_capabilities; result = get_capabilities(CapabilitiesRequest()); assert 'run' in result.operations and 'init_project' in result.operations and 'RunSpec' in result.schemas"
           viper --json capabilities
