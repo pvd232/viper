@@ -52,7 +52,8 @@ The project writes its weights to that slot through `weights_path`.
 
 ## Parameter categories
 
-Projects subclass one category from `viper.parameters` for each extension:
+Stage and HTTP transport implementations subclass the category selected by
+their parameter-model reference. Metrics receive a versioned open JSON mapping:
 
 | Category | Selected by |
 | --- | --- |
@@ -61,11 +62,14 @@ Projects subclass one category from `viper.parameters` for each extension:
 | `Embed` | `EmbedSpec.parameter_model` |
 | `Train` | `TrainSpec.parameter_model` |
 | `Evaluate` | `EvaluateSpec.parameter_model` |
-| `Metric` | `MetricSpec.parameter_model` |
+| `Metric` | `MetricSpec.params` |
 | `HttpTransport` | `ProjectHttpTransportSpec.parameter_model` |
 
 `ParameterModelRef` fixes the class through its repository-relative source
-path, top-level symbol, SHA-256 digest, and byte count.
+path, top-level symbol, SHA-256 digest, and byte count. `MetricSpec.params`
+rehydrates as `viper.parameters.Metric`; the frozen metric implementation
+defines the meaning of its project fields and receives the same mapping during
+production and recomputation.
 
 ## Python execution
 

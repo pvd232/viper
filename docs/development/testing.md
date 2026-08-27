@@ -97,5 +97,14 @@ Run the protocol and validation-architecture tests after changing a serialized
 schema or verifier relationship:
 
 ```bash
-python -m pytest tests/test_protocol.py tests/test_validation_architecture.py -q
+python -m pytest \
+  tests/test_documentation.py \
+  tests/test_protocol.py \
+  tests/test_validation_architecture.py \
+  -q
 ```
+
+`test_documentation.py` compares every protocol class repeated in the formal
+reference with its defining source class. It also checks type aliases, local
+links, API operation names, CLI command names, release metadata, and multiline
+math fences.

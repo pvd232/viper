@@ -35,7 +35,7 @@ serialized documents, state transitions, and verification relationships.
 
 A family specification $\alpha$ determines:
 
-$$
+```math
 \alpha
 \longmapsto
 \left(
@@ -43,7 +43,7 @@ $$
 I_\alpha,
 \mathcal{G}_\alpha
 \right),
-$$
+```
 
 where:
 
@@ -53,24 +53,24 @@ where:
 
 Thus:
 
-$$
+```math
 I_\alpha
 :
 \Theta_\alpha
 \longrightarrow
 \mathcal{G}_\alpha.
-$$
+```
 
 The estimator specification $\beta$ determines the map from datasets to
 parameter values:
 
-$$
+```math
 T_{\alpha,\beta}
 :
 \mathcal{D}
 \longrightarrow
 \Theta_\alpha.
-$$
+```
 
 The run plan $q$ fixes:
 
@@ -80,11 +80,11 @@ The run plan $q$ fixes:
 
 The selected dataset is a member of the estimator's dataset space:
 
-$$
+```math
 D_q
 \in
 \mathcal{D}.
-$$
+```
 
 The exact dataset artifacts selected by the stage inputs, together with the
 stage callables and typed parameters that select samples, features, quality
@@ -92,22 +92,22 @@ controls, and transformations, determine $D_q$.
 
 The final parameter value produced by the run is denoted:
 
-$$
+```math
 \widehat{\theta}_q
 \in
 \Theta_\alpha.
-$$
+```
 
 Its fitted prediction function is:
 
-$$
+```math
 \widehat{g}_q
 =
 I_\alpha
 \left(
 \widehat{\theta}_q
 \right).
-$$
+```
 
 ## 2. Construction of the run plan
 
@@ -147,7 +147,7 @@ Define:
 
 The run-plan space is:
 
-$$
+```math
 \mathcal{Q}
 =
 \mathcal{M}
@@ -157,11 +157,11 @@ $$
 \mathcal{H}
 \times
 \Omega^+.
-$$
+```
 
 A run plan is:
 
-$$
+```math
 q
 =
 \left(
@@ -172,7 +172,7 @@ h_q,
 \right)
 \in
 \mathcal{Q}.
-$$
+```
 
 ### Run metadata
 
@@ -191,9 +191,9 @@ parallelism controls applied to every stage.
 
 The shared environment is:
 
-$$
+```math
 h_q\in\mathcal{H}.
-$$
+```
 
 It supplies the requested environment for each stage that uses the shared environment.
 
@@ -201,7 +201,7 @@ It supplies the requested environment for each stage that uses the shared enviro
 
 The stage sequence is:
 
-$$
+```math
 \boldsymbol{\omega}_q
 =
 \left\langle
@@ -211,14 +211,14 @@ $$
 \Omega^+,
 \qquad
 m\geq 1.
-$$
+```
 
 The index $j\in\{1,\ldots,m\}$ identifies a stage’s position in the execution order.
 
 Each $\omega_j$ declares:
 
 - Stage kind.
-- Script.
+- Implementation callable.
 - Inputs.
 - Parameters.
 - Outputs.
@@ -253,7 +253,7 @@ stage $j$.
 Let $E_j$ be the set of possible runtime states for stage $j$. The states
 permitted by $q$ are:
 
-$$
+```math
 E_{q,j}
 =
 \left\{
@@ -261,11 +261,11 @@ e_j\in E_j:
 e_j\text{ satisfies }h_{q,j}
 \text{ and }c_q
 \right\}.
-$$
+```
 
 The complete permitted runtime-state set is:
 
-$$
+```math
 E_q
 =
 E_{q,1}
@@ -273,7 +273,7 @@ E_{q,1}
 \cdots
 \times
 E_{q,m}.
-$$
+```
 
 The stage specifications in $q$ fix the computation. The selected environments
 and $c_q$ define $E_q$, the runtime variation permitted while executing that
@@ -282,7 +282,7 @@ value for every member of $E_q$.
 
 One execution realizes:
 
-$$
+```math
 e
 =
 \left(
@@ -290,15 +290,15 @@ e_1,\ldots,e_m
 \right)
 \in
 E_q.
-$$
+```
 
 A valid run plan requires:
 
-$$
+```math
 E_q
 \neq
 \varnothing.
-$$
+```
 
 ```text
 q
@@ -322,11 +322,11 @@ The index $j\in\{1,\ldots,m\}$ continues to identify a stage position. Let
 $\Omega_{\mathrm{train}}\subseteq\Omega$ be the set of valid training-stage
 specifications. Fix one position $k$ such that:
 
-$$
+```math
 \omega_k
 \in
 \Omega_{\mathrm{train}}.
-$$
+```
 
 The stage $\omega_k$ is therefore a training stage. Let
 $N_k\in\mathbb{N}_{>0}$ be its number of optimizer updates. The index
@@ -336,16 +336,16 @@ after $t$ updates in $\omega_k$.
 
 Its realized runtime state is:
 
-$$
+```math
 e_k
 \in
 E_{q,k}.
-$$
+```
 
 When $\omega_k$ begins from initialization, one initialization operation
 produces the initial training state:
 
-$$
+```math
 s_k^{(0)}
 =
 I^{\mathrm{init}}_{\alpha,\beta,q}
@@ -364,7 +364,7 @@ b_k^{(0)}
 \right)
 \in
 \mathcal{S}_{k,0}.
-$$
+```
 
 This joint definition preserves the dependencies created during
 initialization. Random parameter initialization advances the generator it
@@ -392,83 +392,10 @@ $s_k^{(0)}$ as the state reconstructed from that checkpoint.
 
 ## 5. Training-state transition
 
-At update $t+1$, compute the gradient:
+For the fixed training stage $\omega_k$, one completed optimizer update is the
+transition:
 
-$$
-g_k^{(t+1)}
-=
-G_{\alpha,\beta,q,t}
-\left(
-\omega_k,
-D_q,
-e_k,
-\theta_k^{(t)},
-r_k^{(t)},
-b_k^{(t)}
-\right).
-$$
-
-Update the optimization state:
-
-$$
-o_k^{(t+1)}
-=
-A_{\beta,q,t}
-\left(
-\omega_k,
-e_k,
-o_k^{(t)},
-g_k^{(t+1)}
-\right).
-$$
-
-Update the model parameters:
-
-$$
-\theta_k^{(t+1)}
-=
-P_{\beta,q,t}
-\left(
-\omega_k,
-e_k,
-\theta_k^{(t)},
-o_k^{(t+1)}
-\right).
-$$
-
-Advance the random-number-generator and batch states:
-
-$$
-\left(
-r_k^{(t+1)},
-b_k^{(t+1)}
-\right)
-=
-C_{\alpha,\beta,q,t}
-\left(
-\omega_k,
-D_q,
-e_k,
-s_k^{(t)}
-\right).
-$$
-
-Reassemble the next training state:
-
-$$
-s_k^{(t+1)}
-=
-\left(
-\theta_k^{(t+1)},
-o_k^{(t+1)},
-r_k^{(t+1)},
-b_k^{(t+1)}
-\right).
-$$
-
-For the fixed training stage $\omega_k$, these component updates define:
-
-$$
+```math
 U_{\alpha,\beta,q,t}
 \left(
 \omega_k,
@@ -484,11 +411,11 @@ E_{q,k}
 \mathcal{S}_{k,t}
 \longrightarrow
 \mathcal{S}_{k,t+1},
-$$
+```
 
-with:
+where:
 
-$$
+```math
 s_k^{(t+1)}
 =
 U_{\alpha,\beta,q,t}
@@ -498,12 +425,32 @@ D_q,
 e_k,
 s_k^{(t)}
 \right).
-$$
+```
+
+The transition selects the data for update $t+1$, performs the forward and
+backward computations, applies the optimizer update, and returns:
+
+```math
+s_k^{(t+1)}
+=
+\left(
+\theta_k^{(t+1)},
+o_k^{(t+1)},
+r_k^{(t+1)},
+b_k^{(t+1)}
+\right).
+```
+
+The returned model state includes parameter changes from the optimizer and
+persistent-buffer changes from the forward computation. The returned generator
+and batch states include every change made while selecting and processing the
+data for that update. Appendix A defines these internal operations in causal
+order.
 
 Repeated application for $t=0,\ldots,N_k-1$ produces the training-state
 sequence:
 
-$$
+```math
 s_k^{(0)}
 \longmapsto
 s_k^{(1)}
@@ -511,7 +458,7 @@ s_k^{(1)}
 \cdots
 \longmapsto
 s_k^{(N_k)}.
-$$
+```
 
 The stage sequence $\boldsymbol{\omega}_q$ is a component of $q$.
 Its $k$th member $\omega_k$ is the fixed stage-specification argument of every
@@ -522,48 +469,48 @@ transition in this training stage.
 Let $k_*$ be the position of the training stage whose `parameters`
 artifact is selected as the estimator output by $q$. The run estimator is:
 
-$$
+```math
 T_{\alpha,\beta,q}
 :
 E_q
 \longrightarrow
 \Theta_\alpha.
-$$
+```
 
 It applies the stages fixed by $q$ and returns the terminal model-parameter
 value produced by $\omega_{k_*}$:
 
-$$
+```math
 T_{\alpha,\beta,q}(e)
 =
 \theta_{k_*}^{(N_{k_*})}.
-$$
+```
 
 The plan provides strict parameter reproducibility exactly when:
 
-$$
+```math
 \forall e,e'\in E_q,
 \qquad
 T_{\alpha,\beta,q}(e)
 =
 T_{\alpha,\beta,q}(e').
-$$
+```
 
 The common value is:
 
-$$
+```math
 \widehat{\theta}_q.
-$$
+```
 
 Therefore:
 
-$$
+```math
 \forall e\in E_q,
 \qquad
 T_{\alpha,\beta,q}(e)
 =
 \widehat{\theta}_q.
-$$
+```
 
 The protocol represents equality of two terminal parameter values by equality
 of their `parameters` artifacts: identical relative paths, SHA-256
@@ -571,7 +518,7 @@ values, byte counts, and bundle membership under the loader fixed by $q$.
 
 Because $\alpha$ is fixed by $q$, strict parameter reproducibility also gives:
 
-$$
+```math
 I_\alpha
 \left(
 T_{\alpha,\beta,q}(e)
@@ -583,7 +530,7 @@ I_\alpha
 \right)
 =
 \widehat{g}_q.
-$$
+```
 
 ## 7. Stage outputs and terminal training checkpoints
 
@@ -614,19 +561,19 @@ sₖ⁽⁰⁾ → sₖ⁽¹⁾ → ··· → sₖ⁽ᴺᵏ⁾
 
 Its single checkpoint is its terminal state:
 
-$$
+```math
 s_k^{(N_k)}.
-$$
+```
 
 The artifacts representing $s_k^{(N_k)}$ belong to the declared stage output
 $y_k$. A later training stage $\omega_\ell$ that continues from this checkpoint
 begins from the reconstructed state:
 
-$$
+```math
 s_\ell^{(0)}
 =
 s_k^{(N_k)}.
-$$
+```
 
 If $q$ permits replay from $s_k^{(t)}$ for some $0<t<N_k$, that state terminates
 $\omega_k$ and the remaining updates belong to another training stage. Each
@@ -654,7 +601,7 @@ For the checkpoint of training stage $\omega_k$, let
 $a_\theta$ denote the `parameters` artifact and let $a_c$ denote the
 `resume_state` artifact. Then:
 
-$$
+```math
 \mathcal{A}
 \left(
 s_k^{(N_k)}
@@ -666,19 +613,19 @@ a_c
 \right\}
 \subseteq
 \mathcal{A}(y_k).
-$$
+```
 
 Their values are:
 
-$$
+```math
 v_{a_\theta}^{(k)}
 =
 \theta_k^{(N_k)},
-$$
+```
 
 and:
 
-$$
+```math
 v_{a_c}^{(k)}
 =
 \left(
@@ -686,7 +633,7 @@ o_k^{(N_k)},
 r_k^{(N_k)},
 b_k^{(N_k)}
 \right).
-$$
+```
 
 ```text
 sₖ⁽ᴺᵏ⁾
@@ -776,7 +723,7 @@ This is the coarsest artifact partition satisfying the two required uses:
 
 For artifact $a\in\mathcal{A}(y_j)$, let:
 
-$$
+```math
 F_j(a)
 =
 \left\{
@@ -784,48 +731,53 @@ f_1,\ldots,f_n
 \right\},
 \qquad
 n\geq 1,
-$$
+```
 
 be the files assigned to that artifact.
 
 Let $L_{j,a}$ be the loader selected for artifact $a$ by stage $\omega_j$.
 The files must reconstruct the artifact value:
 
-$$
+```math
 L_{j,a}
 \left(
 F_j(a)
 \right)
 =
 v_a^{(j)}.
-$$
+```
 
 Here, $v_a^{(j)}$ denotes the value returned by the frozen loader. Generic
 artifact verification establishes representation identity and loadability.
 The reserved `resume_state` artifact also passes the protocol-owned
 `ResumeState` validator.
 
-Every member of $F_j(a)$ is required. Removing any member either prevents loading or changes the reconstructed value.
+The protocol assigns physical form by cardinality. A single-file artifact has:
 
-The cardinality determines the physical form:
-
-$$
+```math
 \left|F_j(a)\right|
 =
-1
-\quad\Longrightarrow\quad
-\text{single-file artifact},
-$$
+1,
+```
 
-and:
+A bundle artifact preserves one declared directory root and the relative path
+of each member. It has:
 
-$$
+```math
 \left|F_j(a)\right|
 \geq
-2
-\quad\Longrightarrow\quad
-\text{bundle artifact}.
-$$
+2.
+```
+
+The verifier enumerates every regular file beneath a declared bundle root and
+requires exact agreement with the resolved member list. It then checks the
+identity of every listed file and invokes the frozen loader. These checks prove
+bundle completeness, file identity, and loadability for the representation
+selected by the author.
+
+Artifact minimality is an authoring condition: removing any member either
+prevents loading or changes the reconstructed value. The verifier checks the
+selected representation. The author establishes minimality during plan design.
 
 ```text
 artifact name a
@@ -835,7 +787,7 @@ artifact name a
     │
     └── files F_j(a)
         ├── one file: single-file artifact
-        └── two or more files: bundle artifact
+        └── two or more named members beneath a root: bundle artifact
 ```
 
 ## 10. Boundary rules
@@ -846,13 +798,14 @@ The protocol applies completeness and parsimony at three nested boundaries:
    training stage ends at its single terminal checkpoint $s_k^{(N_k)}$.
 2. A separate artifact exists for every value that a required use loads
    independently.
-3. A file belongs to an artifact exactly when its loader requires that file to
-   reconstruct the artifact value.
+3. An author includes a file in an artifact exactly when its loader requires
+   that file to reconstruct the artifact value.
 
 These rules supply direct parsimony tests:
 
-- Two adjacent training stages can be merged exactly when their shared state is
-  outside the permitted replay-state set.
+- A permitted replay state requires a training-stage boundary. An author can
+  remove another training-stage boundary when the merged stage preserves every
+  declared input, environment, operation, output, and required replay state.
 - Two artifacts can be merged exactly when every required use loads both
   values together.
 - A file can be removed from $F_j(a)$ exactly when $L_{j,a}$ still reconstructs
@@ -860,12 +813,13 @@ These rules supply direct parsimony tests:
 
 Experiment design declares the required replay positions and independently
 loadable uses. Plan authoring applies these tests before $q$ is frozen. Once
-$q$ is frozen, its stage boundaries, artifact names, and file sets are the
-selected representation enforced by Pydantic and the external verifier.
+$q$ is frozen, its stage boundaries and artifact declarations are fixed.
+Execution resolves each declared artifact to its exact file set. Pydantic and
+the external verifier enforce that selected representation.
 
-With the permitted replay states and required uses fixed, the resulting stage
-sequence, artifact partition, and file sets are the coarsest complete
-representation.
+When authoring satisfies all three parsimony tests, the resulting stage
+sequence, artifact partition, and file sets form the coarsest complete
+representation for the declared replay states and required uses.
 
 ## 11. Complete dependency chain
 
@@ -1065,8 +1019,10 @@ class LocalFileRef(ProtocolModel):
     path: RepoRelPath
 
 
+StorageModel = GitFileRef | HuggingFaceFileRef | LocalFileRef
+
 StorageRef = Annotated[
-    GitFileRef | HuggingFaceFileRef | LocalFileRef,
+    StorageModel,
     Field(discriminator="kind"),
 ]
 ```
@@ -1298,23 +1254,23 @@ keys(ResolvedBaseSpec.artifacts)
 
 The cardinality of $F_j(a)$ determines the resolved form:
 
-$$
+```math
 \left|F_j(a)\right|
 =
 1
 \quad\Longleftrightarrow\quad
 \text{ResolvedSingleFileArtifact},
-$$
+```
 
 and:
 
-$$
+```math
 \left|F_j(a)\right|
 \geq
 2
 \quad\Longleftrightarrow\quad
 \text{ResolvedBundleArtifact}.
-$$
+```
 
 For a single-file artifact:
 
@@ -1343,14 +1299,14 @@ the resolved member list. It then verifies every file in $F_j(a)$, materializes
 the representation, and invokes the loader in a dedicated worker. A successful
 generic loader invocation establishes `artifact.loadability`:
 
-$$
+```math
 L_{j,a}
 \left(
 F_j(a)
 \right)
 =
 v_a^{(j)}.
-$$
+```
 
 ### Stage-result snapshot
 
@@ -1365,25 +1321,28 @@ class ResolvedStageRef(ProtocolModel):
 
 ```text
 one resolved stage-spec file
++ every retrieved response body for a download stage
 + every file in every resolved artifact
 ```
 
 `ResolvedStageRef.resolved_spec` identifies the resolved stage-spec file within
 that snapshot. The loaded resolved spec identifies every artifact file through
-its `artifacts` mapping.
+its `artifacts` mapping. A `ResolvedDownloadSpec` also identifies every
+retrieved response body through its `retrievals` mapping.
 
 ```text
 ResolvedStageRef
 ├── snapshot
 ├── resolved_spec
 │   └── loads one ResolvedBaseSpec subtype
-└── snapshot + resolved artifact file paths
-    └── identifies every physical artifact file
+└── snapshot + paths loaded from the resolved spec
+    ├── identifies every physical artifact file
+    └── identifies every retrieved body for a download stage
 ```
 
 A completed stage has one `ResolvedStageRef`. Its snapshot commit therefore
-binds the resolved execution record and every file representing the stage's
-declared output $y_j$.
+binds the resolved execution document, every file representing the stage's
+declared output $y_j$, and each response body consumed by a download stage.
 
 ## 14. Run, input, and attempt records
 
@@ -1584,7 +1543,7 @@ DataRole = Literal["training", "validation", "evaluation", "benchmark"]
 
 The roles are ordered by downstream restriction:
 
-$$
+```math
 \mathrm{training}
 \prec
 \mathrm{validation}
@@ -1592,7 +1551,7 @@ $$
 \mathrm{evaluation}
 \prec
 \mathrm{benchmark}.
-$$
+```
 
 The role of a source artifact is assigned when that artifact enters the
 provenance graph. VIPER records and propagates that declaration. Scientific use
@@ -1605,11 +1564,11 @@ stored-input declaration and the selected artifact declaration. A
 
 For every stage input $x$ and every artifact $a$ produced by that stage:
 
-$$
+```math
 \operatorname{role}(x)
 \preceq
 \operatorname{role}(a).
-$$
+```
 
 This rule propagates the strongest input restriction to every derived output.
 A training stage accepts only `training` and `validation` inputs. An ordinary
@@ -1631,6 +1590,9 @@ AttemptStatus = Literal[
     "preempted",
     "cancelled",
 ]
+
+
+AttemptPurpose = Literal["run", "benchmark_confirmation"]
 
 
 AttemptFailureCode = Literal[
@@ -1659,7 +1621,7 @@ class AttemptJournalRef(ResolvedFileRef):
 class RunAttempt(ProtocolModel):
     schema_version: Literal[1] = 1
     attempt_id: int = Field(ge=1)
-    purpose: Literal["run", "benchmark_confirmation"]
+    purpose: AttemptPurpose
     status: AttemptStatus
     started_at: AwareDatetime
     completed_at: AwareDatetime
@@ -1668,7 +1630,7 @@ class RunAttempt(ProtocolModel):
     invocations: tuple[ResolvedStageInvocationRef, ...]
     journal: AttemptJournalRef
     measurement_files: tuple[ResolvedFileRef, ...]
-    metric_verification_files: tuple[ResolvedFileRef, ...]
+    metric_verification_files: tuple[ResolvedFileRef, ...] = ()
     log_files: tuple[ResolvedFileRef, ...]
     failure: AttemptFailure | None
 
@@ -1828,7 +1790,7 @@ class GCEEnvironmentSpec(ProtocolModel):
 
 class LocalEnvironmentSpec(ProtocolModel):
     kind: Literal["local"] = "local"
-    compute: ComputeSpec
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
     lockfile: GitFileRef
     python_environment: PythonEnvironmentSpec
 
@@ -1916,7 +1878,7 @@ class ResolvedGCEEnvironment(ProtocolModel):
 
 class ResolvedLocalEnvironment(ProtocolModel):
     kind: Literal["local"] = "local"
-    compute: ComputeSpec
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
     lockfile: ResolvedGitFileRef
     python_environment: PythonEnvironmentSpec
 
@@ -1940,10 +1902,9 @@ class GCEHostContext(ProtocolModel):
 
 class LocalHostContext(ProtocolModel):
     provider: Literal["local"] = "local"
-    host_name: NonEmptyStr
-    guest_os_name: NonEmptyStr
-    guest_os_version: NonEmptyStr
-    kernel_release: NonEmptyStr
+    operating_system: NonEmptyStr
+    release: NonEmptyStr
+    architecture: NonEmptyStr
 
 
 HostContext = Annotated[
@@ -2010,14 +1971,17 @@ class ExecutionContext(ProtocolModel):
     numerical_runtime: NumericalRuntimeContext
 
 
+GeneratorFamily = Literal[
+    "python",
+    "numpy_generator",
+    "numpy_legacy",
+    "torch_cpu",
+    "torch_cuda",
+]
+
+
 class GeneratorInitializationReceipt(ProtocolModel):
-    family: Literal[
-        "python",
-        "numpy_generator",
-        "numpy_legacy",
-        "torch_cpu",
-        "torch_cuda",
-    ]
+    family: GeneratorFamily
     seed: RNGSeed
     name: HumanId | None = None
     device_index: int | None = Field(default=None, ge=0)
@@ -2045,14 +2009,14 @@ For stage $\omega_j$, let $\widetilde{h}_j$ denote its resolved environment and
 let $x_j$ denote its execution context. The realized runtime state recorded by
 the protocol is:
 
-$$
+```math
 e_j
 =
 \left(
 \widetilde{h}_j,
 x_j
 \right).
-$$
+```
 
 The verifier establishes $e_j\in E_{q,j}$ through these equalities:
 
@@ -2202,7 +2166,7 @@ class MetricImplementationRef(ProtocolModel):
 
 class MetricDependency(ProtocolModel):
     source: Literal["input", "artifact"]
-    name: InputName | ArtifactName
+    name: HumanId
     required_data_role: DataRole
 
 
@@ -2222,16 +2186,16 @@ class ResolvedMetricDependency(ProtocolModel):
     files: tuple[ResolvedFileRef, ...] = Field(min_length=1)
 
 
-class MetricHandle(Protocol):
-    def update(self, *args: object, **kwargs: object) -> None:
+class MetricHandle:
+    def update(self, *args: Any, **kwargs: Any) -> None:
         ...
 
     def record(
         self,
-        *args: object,
+        *args: Any,
         epoch: int | None = None,
         step: int | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> Measurement:
         ...
 
@@ -2480,7 +2444,7 @@ MetricVerificationReceipt.production.metric_id
 class HttpOrigin(ProtocolModel):
     scheme: Literal["http", "https"]
     host: NonEmptyStr
-    port: Annotated[int, Field(ge=1, le=65535)]
+    port: int = Field(ge=1, le=65535)
 
 
 class EnvironmentSecretRef(ProtocolModel):
@@ -2684,8 +2648,11 @@ class EvaluateSpec(InternalSpec):
     params: viper.parameters.Evaluate
 
 
+ParameterizedStageSpec = DownloadSpec | BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
+
+
 Spec = Annotated[
-    DownloadSpec | BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec,
+    ParameterizedStageSpec,
     Field(discriminator="kind"),
 ]
 ```
@@ -2893,13 +2860,13 @@ RESUME_STATE: ArtifactName = "resume_state"
 
 The first artifact reconstructs $\theta_k^{(N_k)}$. The second reconstructs:
 
-$$
+```math
 \left(
 o_k^{(N_k)},
 r_k^{(N_k)},
 b_k^{(N_k)}
 \right).
-$$
+```
 
 Together they reconstruct the single terminal checkpoint $s_k^{(N_k)}$.
 Additional artifact names identify auxiliary outputs of the same stage.
@@ -2983,8 +2950,9 @@ keys(ResolvedTrainSpec.artifacts)
 ```
 
 `ResolvedStageRef.snapshot` identifies the immutable commit containing the
-resolved stage spec and every file reached through its resolved artifacts. The
-executor adds the stage to `RunAttempt.resolved_stages` after that complete
+resolved stage spec, every file reached through its resolved artifacts, and
+every response body reached through a download stage's resolved retrievals.
+The executor adds the stage to `RunAttempt.resolved_stages` after that complete
 snapshot has been published and verified.
 
 ### Continuation
@@ -3004,18 +2972,18 @@ The verifier retrieves the producer's resolved spec, selects the two reserved
 artifacts, verifies every file and loader identity, and invokes both loaders.
 Their returned values define:
 
-$$
+```math
 L_{k,a_\theta}
 \left(
 F_k(a_\theta)
 \right)
 =
 \theta_k^{(N_k)},
-$$
+```
 
 and:
 
-$$
+```math
 L_{k,a_c}
 \left(
 F_k(a_c)
@@ -3026,18 +2994,18 @@ o_k^{(N_k)},
 r_k^{(N_k)},
 b_k^{(N_k)}
 \right).
-$$
+```
 
 The continuing stage receives the two verified artifact paths through
 `StageContext.inputs`. Its frozen project implementation restores the initial
 state of $\omega_\ell$ from the loader values. A project that claims exact
 resumption establishes:
 
-$$
+```math
 s_\ell^{(0)}
 =
 s_k^{(N_k)}.
-$$
+```
 
 For stored resumption from an earlier run, both `ArtifactPointer` records
 must select the same resolved run, successful attempt, and producer stage. One
@@ -3060,11 +3028,11 @@ RunSpec.estimator.stage_id
 producer ResolvedStageRef.stage_id
 ```
 
-$$
+```math
 \widehat{\theta}_q
 =
 \theta_{k_*}^{(N_{k_*})}.
-$$
+```
 
 The enforcement path is:
 
@@ -3338,11 +3306,11 @@ input in the confirmation attempt passes the input-lineage checks in Section
 
 Let their realized runtime states be $e,e'\in E_q$. Estimator parity requires:
 
-$$
+```math
 T_{\alpha,\beta,q}(e)
 =
 T_{\alpha,\beta,q}(e').
-$$
+```
 
 The verifier establishes this pairwise equality by reconstructing the
 `ArtifactComparisonReceipt` for the artifact selected by `RunSpec.estimator`.
@@ -3488,11 +3456,11 @@ For each `ResolvedStageRef`, the verifier:
 
 These checks establish that the recorded runtime state satisfies:
 
-$$
+```math
 e_j
 \in
 E_{q,j}.
-$$
+```
 
 ### Artifact verification
 
@@ -3517,14 +3485,14 @@ For every artifact name in the loaded resolved stage spec, the verifier:
 
 For a generic artifact, this traversal establishes:
 
-$$
+```math
 L_{j,a}
 \left(
 F_j(a)
 \right)
 =
 v_a^{(j)}.
-$$
+```
 
 ### Metric verification
 
@@ -3599,11 +3567,11 @@ resume_state artifact
 
 The replay executor invokes both loaders and reconstructs:
 
-$$
+```math
 s_\ell^{(0)}
 =
 s_k^{(N_k)}.
-$$
+```
 
 ### Run-result verification
 
@@ -3834,15 +3802,15 @@ repository/
                     ├── artifacts/
                     │   ├── datasets/
                     │   │   └── <dataset_id>/
-                    │   │       └── dataset.h5ad
+                    │   │       └── <dataset file or bundle>
                     │   ├── priors/
                     │   │   └── <prior_id>/
-                    │   │       └── prior.pt
+                    │   │       └── <prior file or bundle>
                     │   ├── models/
                     │   │   └── <model_id>/
-                    │   │       ├── embedding.pt
-                    │   │       ├── parameters.safetensors
-                    │   │       └── resume_state.pt
+                    │   │       ├── <embedding file or bundle>
+                    │   │       ├── <parameters file or bundle>
+                    │   │       └── <resume-state file or bundle>
                     │   └── evaluations/
                     │       └── <evaluation_id>/
                     │           └── <prediction file or bundle>
@@ -3884,15 +3852,18 @@ member filenames beneath that root.
 
 This appendix expands the transition $U_{\alpha,\beta,q,t}$ defined in
 Section 5 into batch selection, gradient computation, one optimizer update,
-and state reassembly. The induction applies to single-process loading with one
-selected batch per optimizer update. The final subsection states the changes
-required for gradient accumulation and multiprocess prefetching.
+and state reassembly. The displayed optimizer factorization uses standard
+PyTorch Adam, whose update preserves the generator state supplied by the
+preceding gradient computation. The induction applies to single-process
+loading with one selected batch per optimizer update. The final subsection
+states the changes required for gradient accumulation and multiprocess
+prefetching.
 
 ### A.1 Initial state
 
 Initialization produces:
 
-$$
+```math
 \begin{aligned}
 s_k^{(0)}
 &=
@@ -3911,7 +3882,7 @@ r_k^{(0)},
 b_k^{(0)}
 \right).
 \end{aligned}
-$$
+```
 
 At this boundary:
 
@@ -3946,18 +3917,18 @@ sₖ⁽⁰⁾ = (θₖ⁽⁰⁾, oₖ⁽⁰⁾, rₖ⁽⁰⁾, bₖ⁽⁰⁾)
 
 Fix:
 
-$$
+```math
 t
 \in
 \left\{
 0,\ldots,N_k-1
 \right\}.
-$$
+```
 
 Let $d_k^{(t+1)}$ be the transformed and collated batch consumed by update
 $t+1$. Define batch selection by:
 
-$$
+```math
 \begin{aligned}
 &
 \left(
@@ -3976,7 +3947,7 @@ r_k^{(t)},
 b_k^{(t)}
 \right).
 \end{aligned}
-$$
+```
 
 The operation $B_{\alpha,\beta,q,t}$:
 
@@ -3992,13 +3963,13 @@ iterator and sampler have selected the index batch for update $t+1$. Retrieval,
 transformation, and collation of those observations follow this boundary. The
 generator-state transition inside $B_{\alpha,\beta,q,t}$ is:
 
-$$
+```math
 r_k^{(t)}
 \longmapsto
 r_{k,\mathrm{sampling}}^{(t+1)}
 \longmapsto
 r_{k,\mathrm{batch}}^{(t+1)}.
-$$
+```
 
 The first transition includes generator changes caused by iterator creation and
 randomized index generation. The second includes generator changes caused by
@@ -4006,19 +3977,19 @@ stochastic dataset retrieval, transformations, or custom collation.
 
 When index selection preserves the generator state:
 
-$$
+```math
 r_{k,\mathrm{sampling}}^{(t+1)}
 =
 r_k^{(t)}.
-$$
+```
 
 When retrieval, transformation, and collation preserve the generator state:
 
-$$
+```math
 r_{k,\mathrm{batch}}^{(t+1)}
 =
 r_{k,\mathrm{sampling}}^{(t+1)}.
-$$
+```
 
 For the first batch of a DataLoader pass:
 
@@ -4042,7 +4013,7 @@ after that batch.
 
 Using $d_k^{(t+1)}$, the training procedure clears the stored gradients, performs the forward computation, computes the loss, and performs backpropagation. Define:
 
-$$
+```math
 \begin{aligned}
 &
 \left(
@@ -4062,7 +4033,7 @@ d_k^{(t+1)},
 r_{k,\mathrm{batch}}^{(t+1)}
 \right).
 \end{aligned}
-$$
+```
 
 Here:
 
@@ -4073,37 +4044,37 @@ Here:
 
 **Generator state.** During training, Dropout samples a new Bernoulli mask during each forward call. Its sampling advances the applicable generator state:
 
-$$
+```math
 r_{k,\mathrm{batch}}^{(t+1)}
 \longmapsto
 r_{k,\mathrm{gradient}}^{(t+1)}.
-$$
+```
 
 This behavior is defined by the [PyTorch 2.13.0 `Dropout` implementation](https://github.com/pytorch/pytorch/blob/v2.13.0/torch/nn/modules/dropout.py#L35-L72).
 
 When the operations between batch materialization and completed gradient
 computation preserve the generator state:
 
-$$
+```math
 r_{k,\mathrm{gradient}}^{(t+1)}
 =
 r_{k,\mathrm{batch}}^{(t+1)}.
-$$
+```
 
 **Persistent model buffers.** When the forward computation preserves every
 persistent model buffer:
 
-$$
+```math
 \theta_{k,\mathrm{forward}}^{(t+1)}
 =
 \theta_k^{(t)}.
-$$
+```
 
 ### A.4 Optimizer update
 
 Update the optimization state:
 
-$$
+```math
 o_k^{(t+1)}
 =
 A_{\beta,q,t}
@@ -4113,11 +4084,11 @@ e_k,
 o_k^{(t)},
 g_k^{(t+1)}
 \right).
-$$
+```
 
 Update the model parameters:
 
-$$
+```math
 \theta_k^{(t+1)}
 =
 P_{\beta,q,t}
@@ -4127,7 +4098,7 @@ e_k,
 \theta_{k,\mathrm{forward}}^{(t+1)},
 o_k^{(t+1)}
 \right).
-$$
+```
 
 These equations separate the two state changes performed by one optimizer
 update: the update to $o_k^{(t)}$ and the update to $\theta_k^{(t)}$. PyTorch
@@ -4136,27 +4107,27 @@ performs both inside [`Adam.step()`](https://github.com/pytorch/pytorch/blob/v2.
 The completed-update boundary retains the data-selection state produced during
 batch selection:
 
-$$
+```math
 b_k^{(t+1)}
 =
 b_{k,\mathrm{batch}}^{(t+1)}.
-$$
+```
 
 The operations $A_{\beta,q,t}$ and $P_{\beta,q,t}$ receive optimization and
 model-state arguments only. The generator component of the completed state is
 therefore:
 
-$$
+```math
 r_k^{(t+1)}
 =
 r_{k,\mathrm{gradient}}^{(t+1)}.
-$$
+```
 
 ### A.5 Reassembly
 
 The completed update produces:
 
-$$
+```math
 s_k^{(t+1)}
 =
 \left(
@@ -4165,11 +4136,11 @@ o_k^{(t+1)},
 r_k^{(t+1)},
 b_k^{(t+1)}
 \right).
-$$
+```
 
 The complete transition is:
 
-$$
+```math
 \begin{aligned}
 s_k^{(t)}
 &\longmapsto
@@ -4196,7 +4167,7 @@ o_k^{(t+1)}
 &\longmapsto
 s_k^{(t+1)}.
 \end{aligned}
-$$
+```
 
 This composition is the operation
 $U_{\alpha,\beta,q,t}\left(\omega_k,D_q,e_k,s_k^{(t)}\right)$ defined in
@@ -4206,13 +4177,13 @@ Section 5.
 
 For every:
 
-$$
+```math
 t
 \in
 \left\{
 0,\ldots,N_k
 \right\},
-$$
+```
 
 $s_k^{(t)}$ contains the training state after exactly $t$ completed optimizer
 updates and before any data are selected for update $t+1$. When $t=N_k$, the
@@ -4247,18 +4218,18 @@ also the number of batches consumed in epoch $h$.
 
 Define the cumulative update index at each epoch boundary by:
 
-$$
+```math
 \begin{aligned}
 \tau_{k,0}
 &= 0, \\
 \tau_{k,h+1}
 &= \tau_{k,h} + M_{k,h}.
 \end{aligned}
-$$
+```
 
 Epoch $h$ contains the transitions whose starting indices satisfy:
 
-$$
+```math
 t
 \in
 \left\{
@@ -4266,26 +4237,26 @@ t
 \ldots,
 \tau_{k,h+1}-1
 \right\}.
-$$
+```
 
 It begins at $s_k^{(\tau_{k,h})}$ and ends at
 $s_k^{(\tau_{k,h+1})}$. Consequently:
 
-$$
+```math
 N_k
 =
 \tau_{k,H_k}
 =
 \sum_{h=0}^{H_k-1} M_{k,h}.
-$$
+```
 
 If every epoch contains $M_k$ optimizer updates, then:
 
-$$
+```math
 N_k
 =
 H_k M_k.
-$$
+```
 
 ### A.8 Scope extensions
 
@@ -4296,11 +4267,11 @@ transition. If $\beta$ uses gradient accumulation, batch selection and gradient
 computation repeat several times before the optimizer update. The index $t$
 continues to count completed optimizer updates:
 
-$$
+```math
 s_k^{(t)}
 \longmapsto
 s_k^{(t+1)}.
-$$
+```
 
 #### Multiprocess prefetching
 

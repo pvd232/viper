@@ -8,6 +8,7 @@ loaders, metric implementations, and exact training resume behavior.
 | File | Contract verified |
 |---|---|
 | [protocol tests](test_protocol.py) | Individual Pydantic models reject invalid fields, paths, identifiers, stage relationships, and checkpoint declarations. |
+| [documentation tests](test_documentation.py) | The formal protocol, API table, links, release metadata, and example vocabulary match the package source. |
 | [verifier tests](test_verification.py) | The verifier retrieves referenced bytes and enforces relationships among run plans, stages, inputs, artifacts, attempts, measurements, and benchmarks. |
 | [verifier acceptance tests](test_verification_acceptance.py) | A complete synthetic provenance chain passes through the public verifier; targeted mutations prove that broken hashes, timing, snapshots, and lineage fail. |
 | [authoring tests](test_authoring.py) | Canonical experiment, variant, stage, and run-plan files are written at identity-based paths, and each frozen stage reference matches the exact serialized bytes. |
@@ -16,9 +17,9 @@ loaders, metric implementations, and exact training resume behavior.
 | [execution acceptance test](test_execution_acceptance.py) | A real stage entrypoint runs with the canonical command and every declared output file receives an exact hash and byte count. |
 | [run execution test](test_run_execution.py) | A real two-stage local run freezes a project parameter model, preflights, executes, publishes, verifies, and rejects a tampered artifact. |
 | [resume tests](test_resume.py) | Python, NumPy, PyTorch, optimizer, and stateful DataLoader state round-trip so resumption selects the same next batch with zero or multiple workers. |
-| [artifact-loader tests](test_artifact_loaders.py) | A user-owned loader reconstructs its declared JSON artifact. |
-| [artifact-validation tests](test_artifact_validation.py) | Exact loader identities and typed loadability or semantic-validation outcomes are enforced. |
-| [metric tests](test_metrics.py) | Metric implementations compute their declared values and reject nonfinite inputs. |
+| [artifact-validation tests](test_artifact_validation.py) | Exact loader identities, isolated loader execution, and typed loadability or semantic-validation outcomes are enforced. |
+| [metric-interface tests](test_metric_interface.py) | Decorated metric functions, stateful metric classes, and live measurement handles follow the public interface. |
+| [metric-provenance tests](test_metric_provenance.py) | Production and recomputation workers bind the same implementation, parameters, dependencies, and runtime evidence. |
 | [shared fixtures](fixtures.py) | Independent test modules use shared builders to construct the same valid metric and resume records. |
 
 `test_verification_acceptance.py` exercises the verifier with an in-memory document

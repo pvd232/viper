@@ -1,6 +1,23 @@
 # Changelog
 
-## 0.1.0a1 — unreleased
+## 0.1.0a2 — unreleased
+
+- Split the public protocol into domain-owned modules and remove the retired
+  `viper.protocol`, `viper.runner`, and `viper.verifier` import paths.
+- Expose complete-plan operations as `viper.execution.run()`,
+  `viper.execution.retry()`, and `viper.execution.benchmark()`.
+- Keep the package root focused on stage decorators, runtime contexts, project
+  parameter categories, and Python-entrypoint execution.
+- Add `viper init` with one complete synthetic project and an installed-wheel
+  acceptance test.
+- Add typed stage invocation, controlled HTTP retrieval, metric recomputation,
+  durable attempt files, benchmark execution, and local CPU or CUDA runtime
+  evidence.
+- Validate the public package on Python 3.11 through 3.14 and Pydantic 2.12.
+- Publish a focused public repository with task-based documentation and one
+  executable example.
+
+## 0.1.0a1 — 2026-08-25
 
 - Define the v3 run-plan, stage, artifact, attempt, evaluation, benchmark, and
   resolved-record contracts.

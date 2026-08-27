@@ -68,6 +68,7 @@ class AttemptJournalRef(ResolvedFileRef):
 class RunAttempt(ProtocolModel):
     """Record the status and published files of one run attempt."""
 
+    schema_version: Literal[1] = 1
     attempt_id: int = Field(ge=1)
     purpose: AttemptPurpose
     status: AttemptStatus

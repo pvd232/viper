@@ -210,6 +210,10 @@ def run_payload() -> dict:
 class RunPlanTests(unittest.TestCase):
     """Verify run-level identity, seed, stage, and attempt invariants."""
 
+    def test_attempt_document_declares_its_schema_version(self) -> None:
+        """Keep the canonical attempt document independently versioned."""
+        self.assertEqual(RunAttempt.model_fields["schema_version"].default, 1)
+
     def test_run_plan_owns_shared_environment_and_reproducibility(self) -> None:
         """Verify that run plan owns shared environment and reproducibility."""
         run = RunSpec.model_validate(run_payload())
