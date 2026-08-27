@@ -3,10 +3,13 @@
 Run and verify reproducible ML experiments with machine-readable guardrails for
 agents.
 
-VIPER freezes an experiment before execution. The frozen plan identifies the
-source commit, stage code, parameters, inputs, environment, and reproducibility
-controls. After execution, VIPER verifies the files and relationships that
-support the result.
+VIPER gives every ML experiment a fixed plan and a verifiable execution
+history. Before a run begins, it binds the source commit, stage implementations,
+parameters, inputs, runtime environment, and reproducibility controls. During
+execution, VIPER records the resolved inputs, produced artifacts, measurements,
+and runtime evidence for each stage. Verification checks those records against
+the frozen plan, tying every accepted result to the exact code, data, and
+execution that produced it.
 
 ## Install
 
