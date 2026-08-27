@@ -42,6 +42,18 @@ from ._schema import (
     repo_file_paths_overlap,
 )
 from ._schema import SelectionName as SelectionName
+from .artifacts import ArtifactLoaderRef as ArtifactLoaderRef
+from .artifacts import ArtifactPointer as ArtifactPointer
+from .artifacts import (
+    ArtifactSpec,
+    ResolvedArtifact,
+    StageArtifactRef,
+)
+from .artifacts import BundleArtifactSpec as BundleArtifactSpec
+from .artifacts import ResolvedBundleArtifact as ResolvedBundleArtifact
+from .artifacts import ResolvedBundleMember as ResolvedBundleMember
+from .artifacts import ResolvedSingleFileArtifact as ResolvedSingleFileArtifact
+from .artifacts import SingleFileArtifactSpec as SingleFileArtifactSpec
 from .ids import (
     ExperimentId,
     FactorId,
@@ -61,7 +73,6 @@ from .references import (
     GitSource,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
-    ResolvedBenchmarkResultRef,
     ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
     ResolvedGitFileRef,
@@ -73,6 +84,7 @@ from .references import (
 )
 from .references import HuggingFaceFileRef as HuggingFaceFileRef
 from .references import LocalFileRef as LocalFileRef
+from .references import ResolvedBenchmarkResultRef as ResolvedBenchmarkResultRef
 from .references import StorageModel as StorageModel
 from .references import StorageRef as StorageRef
 
@@ -198,22 +210,6 @@ def http_origin(url: HttpUrl) -> HttpOrigin:
 # ---------------------------------------------------------------------------
 # Artifact selectors
 # ---------------------------------------------------------------------------
-
-
-class StageArtifactRef(ProtocolModel):
-    """Selects one named artifact produced by one stage."""
-
-    stage_id: StageId
-    artifact_name: ArtifactName
-
-
-class ArtifactPointer(ProtocolModel):
-    """Selects one artifact accepted as a reusable input."""
-
-    schema_version: Literal[1] = 1
-    run: ResolvedRunRef
-    artifact: StageArtifactRef
-    benchmark_result: ResolvedBenchmarkResultRef | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -581,15 +577,6 @@ class StageImplementationRef(ProtocolModel):
 
     path: PythonRepoRelPath
     symbol: PythonSymbol
-    sha256: SHA256
-    bytes: int = Field(gt=0)
-
-
-class ArtifactLoaderRef(ProtocolModel):
-    """Identify one project-owned artifact loader by exact file bytes."""
-
-    path: PythonRepoRelPath
-    symbol: PythonSymbol = "load"
     sha256: SHA256
     bytes: int = Field(gt=0)
 
@@ -1511,30 +1498,6 @@ InternalInputRef = Annotated[
 # ---------------------------------------------------------------------------
 
 
-class SingleFileArtifactSpec(ProtocolModel):
-    """Declares one named artifact written as one file."""
-
-    kind: Literal["file"] = "file"
-    path: RepoRelPath
-    loader: ArtifactLoaderRef
-    data_role: DataRole
-
-
-class BundleArtifactSpec(ProtocolModel):
-    """Declares one named artifact written beneath one directory root."""
-
-    kind: Literal["bundle"] = "bundle"
-    path: RepoRelPath
-    loader: ArtifactLoaderRef
-    data_role: DataRole
-
-
-ArtifactSpec = Annotated[
-    SingleFileArtifactSpec | BundleArtifactSpec,
-    Field(discriminator="kind"),
-]
-
-
 class BaseSpec(ProtocolModel):
     """Execution request recorded before a stage runs."""
 
@@ -1924,49 +1887,6 @@ ResolvedInternalInputRef = Annotated[
 # ---------------------------------------------------------------------------
 # Resolved execution records
 # ---------------------------------------------------------------------------
-
-
-class ResolvedSingleFileArtifact(ProtocolModel):
-    """Records the exact file representing one artifact."""
-
-    kind: Literal["file"] = "file"
-    file: SnapshotFileRef
-
-
-class ResolvedBundleMember(ProtocolModel):
-    """Records one exact file beneath a bundle artifact's directory root."""
-
-    relative_path: RepoRelPath
-    file: SnapshotFileRef
-
-
-class ResolvedBundleArtifact(ProtocolModel):
-    """Records every exact file representing one bundle artifact."""
-
-    kind: Literal["bundle"] = "bundle"
-    members: tuple[ResolvedBundleMember, ...] = Field(min_length=2)
-
-    @model_validator(mode="after")
-    def validate_member_paths(self) -> ResolvedBundleArtifact:
-        """Require unique, ordered, and nonoverlapping bundle member paths."""
-        relative_paths = tuple(member.relative_path for member in self.members)
-        if len(set(relative_paths)) != len(relative_paths):
-            raise ValueError("bundle member paths must be unique")
-        if relative_paths != tuple(sorted(relative_paths)):
-            raise ValueError("bundle members must use canonical path order")
-
-        for index, relative_path in enumerate(relative_paths):
-            for prior_path in relative_paths[:index]:
-                if repo_file_paths_overlap(relative_path, prior_path):
-                    raise ValueError("bundle member paths must not overlap")
-
-        return self
-
-
-ResolvedArtifact = Annotated[
-    ResolvedSingleFileArtifact | ResolvedBundleArtifact,
-    Field(discriminator="kind"),
-]
 
 
 class ResolvedBaseSpec(ProtocolModel):
