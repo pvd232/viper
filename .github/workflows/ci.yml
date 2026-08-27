@@ -42,6 +42,20 @@ jobs:
       - name: Run integration tests
         run: python -m pytest tests -q -m "integration and not live_cuda"
 
+  minimum-pydantic:
+    needs: fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install the oldest supported Pydantic release
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test]" "pydantic==2.12.0"
+      - name: Validate project-defined parameter subclasses
+        run: python -m pytest tests/test_parameter_validation.py -q
+
   release-candidate:
     needs: fast
     runs-on: ubuntu-latest

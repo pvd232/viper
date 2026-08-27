@@ -1,8 +1,6 @@
 """Define the public parameter categories that projects may specialize."""
 
-from __future__ import annotations
-
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
@@ -40,7 +38,7 @@ class Evaluate(ParameterSet):
     """Model-specific parameters outside the shared evaluation contract."""
 
     @model_validator(mode="after")
-    def exclude_shared_fields(self) -> Evaluate:
+    def exclude_shared_fields(self) -> Self:
         """Keep metric IDs and split inputs on EvaluateSpec."""
         supplied = set(self.model_extra or {})
         if {"metric_ids", "split_inputs"} & supplied:
