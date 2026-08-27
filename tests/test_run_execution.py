@@ -45,7 +45,6 @@ from viper.experiments import (
     VariantSpec,
 )
 from viper.journal import DurableJournal
-from viper.local_store import LocalArtifactStore
 from viper.metric_execution import MetricWorkerResult
 from viper.metrics import (
     FloatComparator,
@@ -79,6 +78,7 @@ from viper.stages import (
     TrainSpec,
     load_stage_callable,
 )
+from viper.storage import LocalArtifactStore
 from viper.verification import (
     VerificationError,
     VerificationPolicy,

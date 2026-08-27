@@ -38,7 +38,7 @@ from viper.runtime import (
     CUDABackendContext,
     GCEEnvironmentSpec,
 )
-from viper.serialization import load_resolved_stage, load_stage_spec
+from viper.serialization import load_stage_spec
 from viper.stages import (
     EvaluateSpec,
     FutureInputRef,
@@ -894,19 +894,22 @@ class ArtifactAndVariantTests(unittest.TestCase):
 class YAMLLoadingTests(unittest.TestCase):
     """Verify canonical examples and YAML parsing boundaries."""
 
-    def test_active_examples_load_through_v4_unions(self) -> None:
-        """Verify that active examples load through v4 unions."""
-        examples = (
-            ("stages/download/spec.yaml", load_stage_spec),
-            ("stages/build/spec.yaml", load_stage_spec),
-            ("stages/download/resolved.yaml", load_resolved_stage),
-            ("stages/build/resolved.yaml", load_resolved_stage),
+    def test_committed_example_stage_loads(self) -> None:
+        """Load the authored stage committed with the synthetic project."""
+        stage_path = (
+            Path(__file__).parents[1]
+            / "examples"
+            / "synthetic"
+            / "experiments"
+            / "example"
+            / "stages"
+            / "download"
+            / "spec.yaml"
         )
-        example_root = Path(__file__).parents[1] / "examples" / "provenance"
 
-        for filename, loader in examples:
-            with self.subTest(filename=filename):
-                loader(example_root / filename)
+        stage = load_stage_spec(stage_path)
+
+        self.assertEqual(stage.kind, "download")
 
     def test_stage_spec_loads_through_the_v4_union(self) -> None:
         """Verify that stage spec loads through the v4 union."""

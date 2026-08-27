@@ -48,7 +48,6 @@ from viper.experiments import (
     VariantSpec,
 )
 from viper.journal import DurableJournal
-from viper.local_store import LocalArtifactStore
 from viper.parameters import ParameterModelRef
 from viper.preflight import preflight_plan
 from viper.references import (
@@ -75,6 +74,7 @@ from viper.stages import (
     StageInvocationReceipt,
     TrainSpec,
 )
+from viper.storage import LocalArtifactStore
 from viper.verification import (
     VerificationError,
     VerificationPolicy,

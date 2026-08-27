@@ -15,7 +15,6 @@ from ..http import (
     resolve_transport,
 )
 from ..ids import InputName, StageId
-from ..local_store import LocalArtifactStore
 from ..paths import retrieval_body_path
 from ..references import ResolvedArtifactPointerRef
 from ..runs import RunSpec
@@ -30,6 +29,7 @@ from ..stages import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
+from ..storage import LocalArtifactStore
 from ..verification import (
     VerificationPolicy,
     VerifiedArtifact,

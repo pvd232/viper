@@ -23,7 +23,6 @@ from viper.http import (
     ResolvedHttpRetrieval,
     ResolvedHttpTransport,
 )
-from viper.local_store import LocalArtifactStore
 from viper.parameters import ParameterModelRef
 from viper.paths import retrieval_body_path
 from viper.runs import (
@@ -36,6 +35,7 @@ from viper.stages import (
     DownloadSpec,
     StageImplementationRef,
 )
+from viper.storage import LocalArtifactStore
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_download/runs/baseline/{RUN_ID}"

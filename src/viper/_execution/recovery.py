@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ..journal import DurableJournal
-from ..local_store import LocalArtifactStore
 from ..runs import AttemptFailure, RunAttempt, RunSpec
 from ..serialization import parse_yaml_bytes
+from ..storage import LocalArtifactStore
 from .publication import _publish_attempt_files, _write_attempt_document
 
 

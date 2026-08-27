@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 
 from .._schema import RepoRelPath
-from ..local_store import LocalArtifactStore
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
@@ -16,6 +15,7 @@ from ..references import (
     StageResultSnapshotRef,
     StorageModel,
 )
+from ..storage import LocalArtifactStore
 from ..verification import (
     fetch_git_file_bytes,
     fetch_huggingface_file_bytes,

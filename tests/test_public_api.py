@@ -8,34 +8,27 @@ from importlib import resources
 import viper
 from viper import api
 
-ROOT_MODULES = (
+PUBLIC_MODULES = (
     "api",
     "artifacts",
-    "authoring",
     "benchmark",
     "execution",
     "experiments",
     "http",
-    "ids",
-    "inspection",
-    "journal",
-    "local_store",
-    "materialization",
     "metrics",
     "parameters",
-    "preflight",
     "references",
     "resume",
     "runs",
     "runtime",
-    "stage_execution",
+    "serialization",
     "stages",
-    "worker",
-    "workspace",
+    "storage",
+    "verification",
 )
 
 ROOT_EXPORTS = (
-    *ROOT_MODULES,
+    "parameters",
     "StageContext",
     "DownloadContext",
     "HttpRetrievalHandle",
@@ -51,18 +44,11 @@ ROOT_EXPORTS = (
     "retry",
 )
 
-PUBLIC_MODULES = (
-    *ROOT_MODULES,
-    "serialization",
-    "verification",
-)
 
-
-def test_root_package_exports_documented_modules() -> None:
-    """Keep the root module inventory equal to the documented public surface."""
+def test_root_package_exports_project_interface() -> None:
+    """Keep the package root limited to the project-facing interface."""
     assert tuple(viper.__all__) == ROOT_EXPORTS
-    for name in ROOT_MODULES:
-        assert getattr(viper, name).__name__ == f"viper.{name}"
+    assert viper.parameters.__name__ == "viper.parameters"
 
 
 def test_every_public_module_imports() -> None:

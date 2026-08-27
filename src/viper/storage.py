@@ -1,4 +1,4 @@
-"""Publish and retrieve immutable files in a repository-local VIPER store."""
+"""Publish and retrieve immutable files through the local VIPER store."""
 
 from __future__ import annotations
 

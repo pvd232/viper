@@ -5,8 +5,8 @@ PYTHON ?= python
 check: check-fast
 
 check-fast:
-	ruff check src/viper tests examples/project/src
-	ruff format --check src/viper tests examples/project/src
+	ruff check src/viper tests examples/synthetic/src
+	ruff format --check src/viper tests examples/synthetic/src
 	pyright --pythonpath "$$($(PYTHON) -c 'import shutil; print(shutil.which("python"))')"
 	$(PYTHON) -m pytest tests -q -m "unit or contract"
 

@@ -1,57 +1,6 @@
-"""VIPER execution and artifact provenance engine."""
+"""Expose the project-facing VIPER interface."""
 
-from . import (
-    api,
-    artifacts,
-    authoring,
-    benchmark,
-    execution,
-    experiments,
-    http,
-    ids,
-    inspection,
-    journal,
-    local_store,
-    materialization,
-    metrics,
-    parameters,
-    preflight,
-    references,
-    resume,
-    runs,
-    runtime,
-    stage_execution,
-    stages,
-    worker,
-    workspace,
-)
-
-__all__ = [
-    "api",
-    "artifacts",
-    "authoring",
-    "benchmark",
-    "execution",
-    "experiments",
-    "http",
-    "ids",
-    "inspection",
-    "journal",
-    "local_store",
-    "materialization",
-    "metrics",
-    "parameters",
-    "preflight",
-    "references",
-    "resume",
-    "runs",
-    "runtime",
-    "stage_execution",
-    "stages",
-    "worker",
-    "workspace",
-]
-
+from . import parameters
 from .api import retry, run
 from .http import (
     HttpRetrievalHandle,
@@ -69,7 +18,8 @@ from .stages import (
     train_stage,
 )
 
-__all__ += [
+__all__ = [
+    "parameters",
     "StageContext",
     "DownloadContext",
     "HttpRetrievalHandle",

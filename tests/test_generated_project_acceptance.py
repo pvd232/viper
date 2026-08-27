@@ -55,7 +55,6 @@ from viper.experiments import (
     TrainVariantStageParams,
     VariantSpec,
 )
-from viper.local_store import LocalArtifactStore
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
@@ -88,6 +87,7 @@ from viper.stages import (
     StoredInputRef,
     TrainSpec,
 )
+from viper.storage import LocalArtifactStore
 
 ACQUISITION_RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAC"
 CANDIDATE_RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAD"

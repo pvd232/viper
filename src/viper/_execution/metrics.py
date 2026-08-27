@@ -9,7 +9,6 @@ from typing import cast
 
 from ..experiments import ExperimentSpec
 from ..ids import StageId
-from ..local_store import LocalArtifactStore
 from ..metric_execution import MetricExecutionError, execute_metric_process
 from ..metrics import (
     FloatComparator,
@@ -23,6 +22,7 @@ from ..references import ResolvedFileRef
 from ..runs import RunSpec
 from ..serialization import serialize_document
 from ..stages import BaseSpec
+from ..storage import LocalArtifactStore
 from .errors import RunError
 from .publication import _write_synchronized
 

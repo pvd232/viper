@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from viper.local_store import LocalArtifactStore
 from viper.references import LocalFileRef
+from viper.storage import LocalArtifactStore
 
 
-def test_local_store_publishes_and_retrieves_one_content_revision(
+def test_storage_publishes_and_retrieves_one_content_revision(
     tmp_path: Path,
 ) -> None:
     """Verify stable revision identity and exact retrieval for related files."""
@@ -31,7 +31,7 @@ def test_local_store_publishes_and_retrieves_one_content_revision(
     )
 
 
-def test_local_store_resolved_files_share_one_revision(tmp_path: Path) -> None:
+def test_storage_resolved_files_share_one_revision(tmp_path: Path) -> None:
     """Verify a related publication yields exact references in one revision."""
     store = LocalArtifactStore(tmp_path)
     references = store.resolved_files(

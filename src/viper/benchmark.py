@@ -26,7 +26,7 @@ from .runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
 from .stages import EvaluateSpec, ResolvedStageRef
 
 if TYPE_CHECKING:
-    from .local_store import LocalArtifactStore
+    from .storage import LocalArtifactStore
 
 
 class MetricCriterion(ProtocolModel):
@@ -174,8 +174,8 @@ def execute_benchmark(
 ) -> BenchmarkExecutionResult:
     """Execute, assemble, verify, and publish one benchmark confirmation."""
     from .execution import RunFetcher, execute_benchmark_confirmation
-    from .local_store import LocalArtifactStore
     from .serialization import document_digest, parse_yaml_bytes, serialize_document
+    from .storage import LocalArtifactStore
     from .verification import (
         VerificationPolicy,
         verify_attempt_stages,

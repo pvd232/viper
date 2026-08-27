@@ -12,7 +12,6 @@ from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
 from ..journal import DurableJournal
-from ..local_store import LocalArtifactStore, snapshot_file
 from ..metric_execution import MetricExecutionError
 from ..preflight import preflight_plan
 from ..references import (
@@ -41,6 +40,7 @@ from ..stages import (
     ResolvedStageInvocationRef,
     ResolvedStageRef,
 )
+from ..storage import LocalArtifactStore, snapshot_file
 from ..verification import (
     VerificationError,
     VerificationPolicy,
