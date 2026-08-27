@@ -12,7 +12,7 @@ from viper.serialization import (
     serialize_record,
 )
 
-EXAMPLE_STAGE = Path("examples/synthetic/experiments/example/stages/download/spec.yaml")
+EXAMPLE_STAGE = Path(__file__).parent / "data/download_stage.yaml"
 
 
 def test_deprecated_serializer_preserves_canonical_bytes() -> None:

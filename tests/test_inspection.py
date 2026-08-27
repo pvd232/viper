@@ -33,7 +33,7 @@ from viper.verification import VerifiedRunPlan, VerifiedRunResult
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"
 COMMIT = "a" * 40
-EXAMPLE_STAGE = Path("examples/synthetic/experiments/example/stages/download/spec.yaml")
+EXAMPLE_STAGE = Path(__file__).parent / "data/download_stage.yaml"
 
 
 def _run(stage_raw: bytes, *, seed: int) -> RunSpec:

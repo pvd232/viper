@@ -898,17 +898,13 @@ class ArtifactAndVariantTests(unittest.TestCase):
 class YAMLLoadingTests(unittest.TestCase):
     """Verify canonical examples and YAML parsing boundaries."""
 
-    def test_committed_example_stage_loads(self) -> None:
-        """Load the authored stage committed with the synthetic project."""
+    def test_download_stage_fixture_loads(self) -> None:
+        """Load the canonical download-stage parser fixture."""
         stage_path = (
             Path(__file__).parents[1]
-            / "examples"
-            / "synthetic"
-            / "experiments"
-            / "example"
-            / "stages"
-            / "download"
-            / "spec.yaml"
+            / "tests"
+            / "data"
+            / "download_stage.yaml"
         )
 
         stage = load_stage_spec(stage_path)

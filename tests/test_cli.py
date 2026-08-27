@@ -19,7 +19,7 @@ class CommandLineTests(unittest.TestCase):
 
     def test_validate_stage_command_loads_active_example(self) -> None:
         """Validate one canonical stage file and report its stage kind."""
-        path = Path("examples/synthetic/experiments/example/stages/download/spec.yaml")
+        path = Path(__file__).parent / "data/download_stage.yaml"
         output = StringIO()
 
         with redirect_stdout(output):
