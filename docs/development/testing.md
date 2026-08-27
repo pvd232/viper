@@ -6,14 +6,26 @@ one implementation area.
 
 ## Activate the environment
 
+Create the project environment once and install the development dependencies:
+
 ```bash
-conda activate mantra
-echo "$CONDA_DEFAULT_ENV"
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --editable ".[test,release]"
+```
+
+The final command installs the current checkout plus its optional testing and
+release tools.
+
+For later sessions, reactivate the existing environment and confirm its Python
+interpreter:
+
+```bash
+source .venv/bin/activate
 python -c 'import sys; print(sys.executable)'
 ```
 
-The environment name must be `mantra`, and the interpreter must resolve from
-that environment.
+The reported path must resolve beneath the repository's `.venv` directory.
 
 ## Run the validation gates
 

@@ -64,8 +64,9 @@ exercise serialized records.
 
 ## Running the tests
 
-From the repository root, activate the `mantra` Conda environment. Use the
-fast development gate during implementation:
+From the repository root, activate the `.venv` environment created in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md). Use the fast development gate during
+implementation:
 
 ```text
 make check

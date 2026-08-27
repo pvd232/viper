@@ -5,17 +5,24 @@ execution evidence, verifier, and tests.
 
 ## Set up the repository
 
-Repository commands use the Conda environment named `mantra`:
+Create and activate a project-local Python environment:
 
 ```bash
-conda activate mantra
-python -m pip install -e '.[test,release]'
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --editable ".[test,release]"
 ```
 
-Confirm the environment before running project commands:
+On Windows, activate the environment with `.venv\Scripts\activate`.
+
+The installation command reads VIPER and its dependencies from the current
+checkout. Editable mode makes source changes available immediately. The
+bracketed names add the `test` and `release` dependency groups declared in
+`pyproject.toml`.
+
+Confirm that Python resolves from `.venv` before running project commands:
 
 ```bash
-echo "$CONDA_DEFAULT_ENV"
 python -c 'import sys; print(sys.executable)'
 ```
 

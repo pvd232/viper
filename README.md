@@ -144,10 +144,21 @@ artifact parity plus the declared metric criteria.
 
 ## Development
 
-VIPER uses the `mantra` Conda environment for repository checks.
+Create an isolated environment for the checkout:
 
 ```bash
-conda activate mantra
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --editable ".[test,release]"
+```
+
+The final command installs VIPER from the current directory. Editable mode
+keeps Python imports pointed at this checkout. `[test,release]` adds the two
+optional dependency groups declared in `pyproject.toml`.
+
+Run the repository checks inside that environment:
+
+```bash
 make check
 make check-integration
 make check-release

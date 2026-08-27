@@ -19,10 +19,12 @@ working agreements and load the user-scoped skills relevant to the active task.
 
 - Read `README.md` and `pyproject.toml` before running repository Python,
   package, test, schema, or validation commands.
-- Activate the Conda environment named `mantra` before running those commands.
-- Verify the active environment and Python interpreter once per shell session.
-- Activate `mantra` at the start of every new shell. Environment activation is
-  session-scoped.
+- Use the project-local `.venv` created by the setup procedure in
+  `CONTRIBUTING.md`.
+- Activate `.venv` before running repository commands and verify that the
+  Python interpreter resolves beneath that directory.
+- Reactivate `.venv` at the start of every new shell. Environment activation
+  is session-scoped.
 
 ## Evidence and documentation
 
