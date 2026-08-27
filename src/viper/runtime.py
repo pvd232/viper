@@ -1,0 +1,482 @@
+"""Apply run-wide reproducibility controls and observe the active Python runtime."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.metadata
+import json
+import os
+import pickle
+import platform
+import random
+import re
+import subprocess
+import urllib.parse
+import urllib.request
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any, cast
+
+import numpy as np
+import torch
+
+from .protocol import (
+    ComputeSpec,
+    CPUBackendContext,
+    CPUContext,
+    CUDABackendContext,
+    CUDAComputeSpec,
+    CUDADeviceContext,
+    EnvironmentSpec,
+    ExecutionContext,
+    GCEBootImageRef,
+    GCEEnvironmentSpec,
+    GCEHostContext,
+    GCEMachineImageRef,
+    GCEProvisioningRef,
+    GeneratorInitializationReceipt,
+    HostContext,
+    LocalHostContext,
+    NativeLibraryContext,
+    NativeThreadPoolContext,
+    NumericalRuntimeContext,
+    ProcessStartupReceipt,
+    PythonDistributionSpec,
+    PythonEnvironmentSpec,
+    ReproducibilitySpec,
+    RNGSeed,
+    StartupVariable,
+)
+
+_GCE_METADATA_ROOT = "http://metadata.google.internal/computeMetadata/v1"
+MetadataGetter = Callable[[str], str]
+ProvisioningIdGetter = Callable[[str, str, str], str]
+
+
+@dataclass(frozen=True)
+class RuntimeInitialization:
+    """Return the live named generators and the startup evidence for one child."""
+
+    numpy_generators: dict[str, np.random.Generator]
+    receipt: ProcessStartupReceipt
+
+
+def observe_python_environment() -> PythonEnvironmentSpec:
+    """Record the interpreter and every installed Python distribution."""
+    versions: dict[str, str] = {}
+    for distribution in importlib.metadata.distributions():
+        try:
+            raw_name = distribution.metadata["Name"]
+        except KeyError:
+            continue
+        name = re.sub(r"[-_.]+", "-", raw_name).lower()
+        version = distribution.version
+        previous = versions.get(name)
+        if previous is not None and previous != version:
+            raise RuntimeError(f"installed distribution {name!r} has multiple versions")
+        versions[name] = version
+    if not versions:
+        raise RuntimeError("the active Python environment has no distributions")
+    return PythonEnvironmentSpec(
+        python_version=platform.python_version(),
+        distributions=tuple(
+            PythonDistributionSpec(name=name, version=versions[name])
+            for name in sorted(versions)
+        ),
+    )
+
+
+def _gce_metadata(path: str) -> str:
+    """Read one predefined value from the GCE metadata server."""
+    request = urllib.request.Request(
+        f"{_GCE_METADATA_ROOT}/{path}",
+        headers={"Metadata-Flavor": "Google"},
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return response.read().decode("utf-8")
+
+
+def _gce_provisioning_id(kind: str, project: str, name: str) -> str:
+    """Return the server-defined ID for one GCE provisioning resource."""
+    token = json.loads(_gce_metadata("instance/service-accounts/default/token"))
+    access_token = cast(str, token["access_token"])
+    project_value = urllib.parse.quote(project, safe="")
+    resource_value = urllib.parse.quote(name, safe="")
+    collection = "images" if kind == "boot_image" else "machineImages"
+    request = urllib.request.Request(
+        "https://compute.googleapis.com/compute/v1/projects/"
+        f"{project_value}/global/{collection}/{resource_value}",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        resource = json.loads(response.read())
+    return cast(str, resource["id"])
+
+
+def _gce_resource_name(value: str, resource: str) -> str:
+    """Extract one terminal resource name from a metadata resource path."""
+    parts = value.strip("/").split("/")
+    try:
+        index = parts.index(resource)
+        name = parts[index + 1]
+    except (ValueError, IndexError) as exc:
+        raise RuntimeError(f"invalid GCE {resource} metadata path: {value}") from exc
+    if not name:
+        raise RuntimeError(f"empty GCE {resource} metadata name")
+    return name
+
+
+def observe_gce_provisioning(
+    metadata_get: MetadataGetter = _gce_metadata,
+    provisioning_id_get: ProvisioningIdGetter = _gce_provisioning_id,
+) -> GCEProvisioningRef:
+    """Resolve the active VM provisioning source and server-defined ID."""
+    value = metadata_get("instance/image")
+    if value:
+        parts = value.strip("/").split("/")
+        if (
+            len(parts) != 5
+            or parts[0] != "projects"
+            or parts[2:4] != ["global", "images"]
+        ):
+            raise RuntimeError(f"invalid GCE image metadata path: {value}")
+        project, name = parts[1], parts[4]
+        return GCEBootImageRef(
+            project=project,
+            name=name,
+            id=provisioning_id_get("boot_image", project, name),
+        )
+
+    kind = metadata_get("instance/attributes/viper-provisioning-kind")
+    if kind != "machine_image":
+        raise RuntimeError("GCE provisioning metadata is absent")
+    project = metadata_get("instance/attributes/viper-provisioning-project")
+    name = metadata_get("instance/attributes/viper-provisioning-name")
+    declared_id = metadata_get("instance/attributes/viper-provisioning-id")
+    observed_id = provisioning_id_get(kind, project, name)
+    if declared_id != observed_id:
+        raise RuntimeError("GCE machine-image metadata ID differs from the API")
+    return GCEMachineImageRef(project=project, name=name, id=observed_id)
+
+
+def process_environment(
+    seed: RNGSeed,
+    reproducibility: ReproducibilitySpec,
+    compute: ComputeSpec,
+    *,
+    cuda_ordinal: int | None = None,
+) -> dict[StartupVariable, str]:
+    """Return environment variables that must exist when Python starts."""
+    values: dict[StartupVariable, str] = {
+        "PYTHONHASHSEED": str(seed),
+        "OMP_NUM_THREADS": str(reproducibility.parallelism.torch_intraop_threads),
+        "MKL_NUM_THREADS": str(reproducibility.parallelism.torch_intraop_threads),
+    }
+    workspace = reproducibility.determinism.cublas_workspace_config
+    if workspace is not None:
+        values["CUBLAS_WORKSPACE_CONFIG"] = workspace
+    if isinstance(compute, CUDAComputeSpec):
+        if compute.count != 1:
+            raise ValueError("startup.distributed: CUDA count must equal one")
+        if cuda_ordinal is None:
+            raise ValueError("a CUDA stage requires one selected device ordinal")
+        values["CUDA_VISIBLE_DEVICES"] = str(cuda_ordinal)
+    else:
+        values["CUDA_VISIBLE_DEVICES"] = ""
+    return values
+
+
+def _sha256(value: bytes) -> str:
+    """Return the lowercase SHA-256 digest of one runtime-state encoding."""
+    return hashlib.sha256(value).hexdigest()
+
+
+def _numpy_state_bytes(generator: np.random.Generator) -> bytes:
+    """Encode one NumPy bit-generator state in canonical JSON form."""
+    return json.dumps(
+        generator.bit_generator.state,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _startup_environment() -> dict[StartupVariable, str]:
+    """Read the allowlisted startup variables from the active child process."""
+    names: tuple[StartupVariable, ...] = (
+        "CUBLAS_WORKSPACE_CONFIG",
+        "CUDA_VISIBLE_DEVICES",
+        "MKL_NUM_THREADS",
+        "OMP_NUM_THREADS",
+        "PYTHONHASHSEED",
+    )
+    return {
+        name: os_value
+        for name in names
+        if (os_value := os.environ.get(name)) is not None
+    }
+
+
+def apply_reproducibility(
+    seed: RNGSeed,
+    reproducibility: ReproducibilitySpec,
+) -> RuntimeInitialization:
+    """Apply run controls and return the exact initialized generator objects."""
+    random.seed(seed)
+    receipts = [
+        GeneratorInitializationReceipt(
+            family="python",
+            seed=seed,
+            state_sha256=_sha256(pickle.dumps(random.getstate(), protocol=5)),
+        )
+    ]
+
+    named_generators = {
+        name: np.random.Generator(np.random.PCG64(seed))
+        for name in sorted(reproducibility.numpy_randomness.generators)
+    }
+    receipts.extend(
+        GeneratorInitializationReceipt(
+            family="numpy_generator",
+            name=name,
+            seed=seed,
+            state_sha256=_sha256(_numpy_state_bytes(generator)),
+        )
+        for name, generator in named_generators.items()
+    )
+    if reproducibility.numpy_randomness.capture_legacy_global:
+        np.random.seed(seed)
+        receipts.append(
+            GeneratorInitializationReceipt(
+                family="numpy_legacy",
+                seed=seed,
+                state_sha256=_sha256(pickle.dumps(np.random.get_state(), protocol=5)),
+            )
+        )
+
+    torch.manual_seed(seed)
+    receipts.append(
+        GeneratorInitializationReceipt(
+            family="torch_cpu",
+            seed=seed,
+            state_sha256=_sha256(torch.get_rng_state().numpy().tobytes()),
+        )
+    )
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        receipts.extend(
+            GeneratorInitializationReceipt(
+                family="torch_cuda",
+                seed=seed,
+                device_index=index,
+                state_sha256=_sha256(state.cpu().numpy().tobytes()),
+            )
+            for index, state in enumerate(torch.cuda.get_rng_state_all())
+        )
+
+    determinism = reproducibility.determinism
+    torch.use_deterministic_algorithms(
+        determinism.deterministic_algorithms,
+        warn_only=determinism.deterministic_warn_only,
+    )
+    torch.backends.cudnn.deterministic = determinism.cudnn_deterministic
+    torch.backends.cudnn.benchmark = determinism.cudnn_benchmark
+
+    precision = reproducibility.precision
+    torch.set_float32_matmul_precision(precision.float32_matmul_precision)
+    torch.backends.cudnn.allow_tf32 = precision.cudnn_allow_tf32
+
+    parallelism = reproducibility.parallelism
+    torch.set_num_threads(parallelism.torch_intraop_threads)
+    torch.set_num_interop_threads(parallelism.torch_interop_threads)
+
+    return RuntimeInitialization(
+        numpy_generators=named_generators,
+        receipt=ProcessStartupReceipt(
+            environment=_startup_environment(),
+            reproducibility=reproducibility,
+            generators=tuple(receipts),
+        ),
+    )
+
+
+def _numpy_build_dependency(name: str) -> NativeLibraryContext:
+    """Read one BLAS or LAPACK identity from NumPy's build configuration."""
+    configuration = np.show_config(mode="dicts")
+    assert isinstance(configuration, Mapping)
+    dependencies = configuration.get("Build Dependencies", {})
+    dependency: Mapping[str, Any] = {}
+    if isinstance(dependencies, Mapping):
+        candidate = dependencies.get(name, {})
+        if isinstance(candidate, Mapping):
+            dependency = candidate
+    return NativeLibraryContext(
+        implementation=str(dependency.get("name", "unreported")),
+        version=str(dependency.get("version", "unreported")),
+    )
+
+
+def _instruction_features() -> tuple[str, ...]:
+    """Read the enabled SIMD extensions reported by NumPy."""
+    configuration = np.show_config(mode="dicts")
+    assert isinstance(configuration, Mapping)
+    simd = configuration.get("SIMD Extensions", {})
+    features: list[str] = []
+    if isinstance(simd, Mapping):
+        for group in ("baseline", "found"):
+            values = simd.get(group, ())
+            if isinstance(values, list):
+                features.extend(str(value) for value in values)
+    return tuple(dict.fromkeys(features)) or ("unreported",)
+
+
+def _nvidia_driver_version() -> str:
+    """Read the NVIDIA driver version visible to the active child."""
+    try:
+        output = subprocess.run(
+            (
+                "nvidia-smi",
+                "--query-gpu=driver_version",
+                "--format=csv,noheader",
+            ),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError("CUDA backend driver identity is unavailable") from exc
+    version = output.splitlines()[0].strip() if output.splitlines() else ""
+    if not version:
+        raise RuntimeError("CUDA backend driver identity is empty")
+    return version
+
+
+def _cuda_backend() -> CUDABackendContext:
+    """Observe the single CUDA device exposed to the active child."""
+    if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
+        raise RuntimeError("the CUDA child must expose exactly one device")
+    properties = torch.cuda.get_device_properties(0)
+    cudnn_version = torch.backends.cudnn.version()
+    return CUDABackendContext(
+        gpu_devices=(
+            CUDADeviceContext(
+                ordinal=0,
+                model=properties.name,
+                compute_capability_major=properties.major,
+                compute_capability_minor=properties.minor,
+                memory_bytes=properties.total_memory,
+            ),
+        ),
+        nvidia_driver_version=_nvidia_driver_version(),
+        pytorch_cuda_version=torch.version.cuda or "unreported",
+        cudnn_version=str(cudnn_version or "unreported"),
+    )
+
+
+def select_cuda_device(model: str) -> int:
+    """Return the first host CUDA ordinal whose model matches the request."""
+    if not torch.cuda.is_available():
+        raise RuntimeError("requested CUDA is unavailable")
+    for ordinal in range(torch.cuda.device_count()):
+        if torch.cuda.get_device_properties(ordinal).name == model:
+            return ordinal
+    raise RuntimeError(f"requested CUDA device model is unavailable: {model}")
+
+
+def _observe_execution(host: HostContext, compute: ComputeSpec) -> ExecutionContext:
+    """Capture CPU, backend, and numerical runtime facts for one observed host."""
+    architecture = platform.machine() or "unreported"
+    processor = platform.processor() or architecture
+    return ExecutionContext(
+        host=host,
+        cpu=CPUContext(
+            architecture=architecture,
+            model=processor,
+            instruction_features=_instruction_features(),
+        ),
+        backend=(
+            _cuda_backend()
+            if isinstance(compute, CUDAComputeSpec)
+            else CPUBackendContext()
+        ),
+        numerical_runtime=NumericalRuntimeContext(
+            python_version=platform.python_version(),
+            pytorch_version=torch.__version__,
+            numpy_version=np.__version__,
+            blas=_numpy_build_dependency("blas"),
+            lapack=_numpy_build_dependency("lapack"),
+            native_thread_pools=(
+                NativeThreadPoolContext(
+                    implementation="pytorch_intraop",
+                    version=torch.__version__,
+                    threads=torch.get_num_threads(),
+                ),
+                NativeThreadPoolContext(
+                    implementation="pytorch_interop",
+                    version=torch.__version__,
+                    threads=torch.get_num_interop_threads(),
+                ),
+            ),
+        ),
+    )
+
+
+def observe_local_execution(compute: ComputeSpec) -> ExecutionContext:
+    """Capture local host, CPU, backend, and numerical runtime facts."""
+    architecture = platform.machine() or "unreported"
+    return _observe_execution(
+        LocalHostContext(
+            operating_system=platform.system() or "unreported",
+            release=platform.release() or "unreported",
+            architecture=architecture,
+        ),
+        compute,
+    )
+
+
+def observe_gce_execution(
+    compute: ComputeSpec,
+    *,
+    metadata_get: MetadataGetter = _gce_metadata,
+    provisioning_id_get: ProvisioningIdGetter = _gce_provisioning_id,
+) -> ExecutionContext:
+    """Capture GCE host, CPU, backend, and numerical runtime facts."""
+    try:
+        os_release = platform.freedesktop_os_release()
+    except OSError:
+        os_release = {}
+    return _observe_execution(
+        GCEHostContext(
+            project_id=metadata_get("project/project-id"),
+            provisioning=observe_gce_provisioning(
+                metadata_get,
+                provisioning_id_get,
+            ),
+            machine_type=_gce_resource_name(
+                metadata_get("instance/machine-type"), "machineTypes"
+            ),
+            zone=_gce_resource_name(metadata_get("instance/zone"), "zones"),
+            guest_os_name=os_release.get("ID", platform.system() or "unreported"),
+            guest_os_version=os_release.get(
+                "VERSION_ID", platform.release() or "unreported"
+            ),
+            kernel_release=platform.release() or "unreported",
+        ),
+        compute,
+    )
+
+
+def observe_execution(environment: EnvironmentSpec) -> ExecutionContext:
+    """Observe the host and backend selected by one effective environment."""
+    if isinstance(environment, GCEEnvironmentSpec):
+        return observe_gce_execution(environment.compute)
+    return observe_local_execution(environment.compute)
+
+
+def autocast_context(reproducibility: ReproducibilitySpec) -> Any:
+    """Construct the run-wide autocast context for the active backend."""
+    precision = reproducibility.precision
+    if not precision.autocast_enabled:
+        return torch.autocast(device_type="cpu", enabled=False)
+    dtype = torch.float16 if precision.autocast_dtype == "float16" else torch.bfloat16
+    device_type = "cuda" if torch.cuda.is_available() else "cpu"
+    return torch.autocast(device_type=device_type, dtype=dtype, enabled=True)

@@ -1,0 +1,53 @@
+artifacts:
+  dataset:
+    data_role: training
+    kind: file
+    loader:
+      path: project/loaders/bytes_file.py
+      symbol: load
+      sha256: 54a72cad28c27adf98f35d71ac6396047209306e96fc2db46fd124cfe543fac3
+      bytes: 45
+    path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/artifacts/datasets/toy/dataset.bin
+  split:
+    data_role: evaluation
+    kind: file
+    loader:
+      path: project/loaders/bytes_file.py
+      symbol: load
+      sha256: 54a72cad28c27adf98f35d71ac6396047209306e96fc2db46fd124cfe543fac3
+      bytes: 45
+    path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/artifacts/datasets/toy/split.json
+environment: null
+inputs:
+  archive:
+    expected_body_bytes: 18
+    expected_body_sha256: fa290811a43532ec503a79fd6a363a26ebd26c576c38da8d160c00e7adf551e3
+    headers: {}
+    kind: http
+    method: GET
+    url: https://example.com/toy-v1.tar.gz
+    version: v1
+kind: download
+implementation:
+  bytes: 11
+  path: pipelines/download.py
+  sha256: 1d1f584e9b70775f170b219746c0a4e1c076f56603afd3f9882a14940e78e592
+  symbol: download
+parameter_model:
+  bytes: 220
+  path: examples/provenance/project/parameters/download.py
+  sha256: 026d418373a9ddb5a561462a66f36f856e17464d41d4d0dbd61aead24d4ab762
+  symbol: DownloadParameters
+params: {}
+policy:
+  accepted_statuses: [200]
+  allowed_hosts: [example.com]
+  allowed_ports: [443]
+  allowed_schemes: [https]
+  max_body_bytes: 1048576
+  max_redirects: 2
+  timeout_seconds: 30.0
+schema_version: 1
+transport:
+  kind: builtin
+  transport_id: httpx

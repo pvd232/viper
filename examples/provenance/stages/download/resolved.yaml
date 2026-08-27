@@ -1,0 +1,210 @@
+artifacts:
+  dataset:
+    file:
+      bytes: 19
+      path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/artifacts/datasets/toy/dataset.bin
+      sha256: ff4d9a2c0010c81febd3543419ccb5c7661227272e13307cc4eaab3d69d90d71
+    kind: file
+  split:
+    file:
+      bytes: 15
+      path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/artifacts/datasets/toy/split.json
+      sha256: cc3b7081a32a1fb7ad2274549b2cf812ca297eb4a83e7d3ed13626395eff3f0a
+    kind: file
+command:
+  - python
+  - pipelines/download.py
+  - experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/stages/download/spec.yaml
+completed_at: "2026-08-20T20:10:00Z"
+environment:
+  compute:
+    kind: cpu
+  kind: gce
+  lockfile:
+    bytes: 13
+    sha256: 3c2f134d506eaabc7f88a3e16c96d59f406471419ecda997602a042899cc13c8
+    stored_at:
+      commit: "1111111111111111111111111111111111111111"
+      kind: git
+      path: environment.yml
+      repository: https://github.com/example/mantra
+  provisioning:
+    id: "123456789"
+    kind: boot_image
+    name: mantra-image
+    project: mantra-project
+  machine_type: n2-standard-8
+  python_environment:
+    python_version: "3.13.0"
+    distributions:
+      - name: viper-provenance
+        version: "0.1.0"
+execution_context:
+  backend:
+    device: cpu
+    kind: cpu
+  cpu:
+    architecture: x86_64
+    instruction_features: [avx2]
+    model: Intel Cascade Lake
+  host:
+    provisioning:
+      id: "123456789"
+      kind: boot_image
+      name: mantra-image
+      project: mantra-project
+    guest_os_name: debian
+    guest_os_version: "12"
+    kernel_release: "6.1"
+    machine_type: n2-standard-8
+    project_id: mantra-project
+    provider: gce
+    zone: us-central1-a
+  numerical_runtime:
+    blas: {implementation: openblas, version: 0.3.30}
+    lapack: {implementation: openblas, version: 0.3.30}
+    native_thread_pools:
+      - {implementation: openblas, threads: 1, version: 0.3.30}
+    numpy_version: 2.3.0
+    python_version: 3.14.0
+    pytorch_version: 2.8.0
+invocation:
+  bytes: 1
+  kind: stage_invocation
+  sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  stored_at:
+    commit: "3333333333333333333333333333333333333333"
+    kind: huggingface
+    path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/attempts/1/invocations/download.yaml
+    repo_type: dataset
+    repository: example/viper-runs
+startup:
+  environment:
+    CUBLAS_WORKSPACE_CONFIG: ":4096:8"
+    CUDA_VISIBLE_DEVICES: ""
+    MKL_NUM_THREADS: "1"
+    OMP_NUM_THREADS: "1"
+    PYTHONHASHSEED: "42"
+  generators: []
+  reproducibility:
+    determinism:
+      cublas_workspace_config: ":4096:8"
+      cudnn_benchmark: false
+      cudnn_deterministic: true
+      deterministic_algorithms: true
+      deterministic_warn_only: false
+    numpy_randomness:
+      capture_legacy_global: true
+      generators:
+        training: PCG64
+    parallelism:
+      dataloader:
+        in_order: true
+        persistent_workers: false
+        prefetch_factor: null
+        workers: 0
+      process_count: 1
+      torch_interop_threads: 1
+      torch_intraop_threads: 1
+    precision:
+      autocast_dtype: null
+      autocast_enabled: false
+      cudnn_allow_tf32: false
+      float32_matmul_precision: highest
+kind: download
+retrievals:
+  archive:
+    body:
+      bytes: 18
+      sha256: fa290811a43532ec503a79fd6a363a26ebd26c576c38da8d160c00e7adf551e3
+      stored_at:
+        commit: "3333333333333333333333333333333333333333"
+        kind: huggingface
+        path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/stages/download/retrievals/archive/body
+        repo_type: dataset
+        repository: example/viper-runs
+    completed_at: "2026-08-20T20:05:00Z"
+    input_name: archive
+    request:
+      expected_body_bytes: 18
+      expected_body_sha256: fa290811a43532ec503a79fd6a363a26ebd26c576c38da8d160c00e7adf551e3
+      headers: {}
+      kind: http
+      method: GET
+      url: https://example.com/toy-v1.tar.gz
+      version: v1
+    response:
+      response_headers:
+        content-length: "18"
+        content-type: application/gzip
+      response_url: https://example.com/toy-v1.tar.gz
+      status: 200
+    started_at: "2026-08-20T20:04:00Z"
+    transport:
+      external_executables: []
+      spec:
+        kind: builtin
+        transport_id: httpx
+schema_version: 1
+source:
+  bytes: 11
+  sha256: 1d1f584e9b70775f170b219746c0a4e1c076f56603afd3f9882a14940e78e592
+  stored_at:
+    commit: "1111111111111111111111111111111111111111"
+    kind: git
+    path: pipelines/download.py
+    repository: https://github.com/example/mantra
+spec:
+  artifacts:
+    dataset:
+      data_role: training
+      kind: file
+      loader:
+        path: project/loaders/bytes_file.py
+        symbol: load
+        sha256: 54a72cad28c27adf98f35d71ac6396047209306e96fc2db46fd124cfe543fac3
+        bytes: 45
+      path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/artifacts/datasets/toy/dataset.bin
+    split:
+      data_role: evaluation
+      kind: file
+      loader:
+        path: project/loaders/bytes_file.py
+        symbol: load
+        sha256: 54a72cad28c27adf98f35d71ac6396047209306e96fc2db46fd124cfe543fac3
+        bytes: 45
+      path: experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA/artifacts/datasets/toy/split.json
+  environment: null
+  inputs:
+    archive:
+      expected_body_bytes: 18
+      expected_body_sha256: fa290811a43532ec503a79fd6a363a26ebd26c576c38da8d160c00e7adf551e3
+      headers: {}
+      kind: http
+      method: GET
+      url: https://example.com/toy-v1.tar.gz
+      version: v1
+  kind: download
+  implementation:
+    bytes: 11
+    path: pipelines/download.py
+    sha256: 1d1f584e9b70775f170b219746c0a4e1c076f56603afd3f9882a14940e78e592
+    symbol: download
+  parameter_model:
+    bytes: 220
+    path: examples/provenance/project/parameters/download.py
+    sha256: 026d418373a9ddb5a561462a66f36f856e17464d41d4d0dbd61aead24d4ab762
+    symbol: DownloadParameters
+  params: {}
+  policy:
+    accepted_statuses: [200]
+    allowed_hosts: [example.com]
+    allowed_ports: [443]
+    allowed_schemes: [https]
+    max_body_bytes: 1048576
+    max_redirects: 2
+    timeout_seconds: 30.0
+  schema_version: 1
+  transport:
+    kind: builtin
+    transport_id: httpx

@@ -1,0 +1,16 @@
+{
+    "include": [
+        "src/viper",
+        "examples/project/src",
+        "tests"
+    ],
+    "exclude": [
+        "archive"
+    ],
+    "pythonVersion": "3.11",
+    "typeCheckingMode": "standard",
+    "extraPaths": [
+        "src",
+        "examples/project/src"
+    ]
+}

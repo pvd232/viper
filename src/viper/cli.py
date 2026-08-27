@@ -1,0 +1,309 @@
+"""Expose VIPER application operations through the installed command."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Any, NoReturn
+
+from .application import (
+    ApplicationModel,
+    OperationName,
+    SuccessModel,
+    ViperFailure,
+    dispatch,
+    result_json_bytes,
+)
+
+
+class CliParseError(ValueError):
+    """Carry one command-line syntax failure into the result renderer."""
+
+
+class ViperArgumentParser(argparse.ArgumentParser):
+    """Raise parser failures so JSON mode retains one-document output."""
+
+    def error(self, message: str) -> NoReturn:
+        """Convert one argparse syntax error into a catchable exception."""
+        raise CliParseError(message)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the VIPER command parser and its application subcommands."""
+    parser = ViperArgumentParser(prog="viper")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="emit one machine-readable result document",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    for name, help_text in (
+        ("validate-stage", "validate one authored stage specification"),
+        ("validate-resolved-stage", "validate one resolved stage specification"),
+        ("validate-run", "validate one frozen run specification"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+
+    freeze = commands.add_parser(
+        "freeze-run",
+        help="write canonical stage specs and a hash-bound RunSpec",
+    )
+    freeze.add_argument("draft", type=Path)
+    freeze.add_argument("--repository-root", type=Path, default=Path.cwd())
+
+    preflight = commands.add_parser(
+        "preflight",
+        help="inspect every applicable check before local execution",
+    )
+    preflight.add_argument("run_spec", type=Path)
+    preflight.add_argument("--repository-root", type=Path, default=Path.cwd())
+
+    execute = commands.add_parser(
+        "execute-stage",
+        help="run one stage from a frozen local run plan",
+    )
+    execute.add_argument("run_spec", type=Path)
+    execute.add_argument("stage_id")
+    execute.add_argument("--repository-root", type=Path, default=Path.cwd())
+    execute.add_argument("--timeout-seconds", type=float)
+
+    run_command = commands.add_parser(
+        "run",
+        help="execute and verify one complete run on this host",
+    )
+    run_command.add_argument("run_spec", type=Path)
+    run_command.add_argument("--repository-root", type=Path, default=Path.cwd())
+    run_command.add_argument("--timeout-seconds", type=float)
+
+    retry_command = commands.add_parser(
+        "retry",
+        help="append one attempt to a failed frozen run",
+    )
+    retry_command.add_argument("run_spec", type=Path)
+    retry_command.add_argument("--repository-root", type=Path, default=Path.cwd())
+    retry_command.add_argument("--timeout-seconds", type=float)
+
+    benchmark_command = commands.add_parser(
+        "execute-benchmark",
+        help="execute and verify one independent benchmark confirmation",
+    )
+    benchmark_command.add_argument("resolved_run", type=Path)
+    benchmark_command.add_argument("benchmark_spec", type=Path)
+    benchmark_command.add_argument(
+        "--repository-root",
+        type=Path,
+        default=Path.cwd(),
+    )
+    benchmark_command.add_argument("--timeout-seconds", type=float)
+
+    plan_diff = commands.add_parser(
+        "plan-diff",
+        help="compare two complete frozen run plans",
+    )
+    plan_diff.add_argument("left_run_spec", type=Path)
+    plan_diff.add_argument("right_run_spec", type=Path)
+    plan_diff.add_argument("--left-repository-root", type=Path, default=Path.cwd())
+    plan_diff.add_argument("--right-repository-root", type=Path, default=Path.cwd())
+
+    status = commands.add_parser(
+        "status",
+        help="read the latest durable state of one local attempt",
+    )
+    status.add_argument("path", type=Path)
+
+    compare_runs = commands.add_parser(
+        "compare-runs",
+        help="compare all connected evidence from two verified runs",
+    )
+    compare_runs.add_argument("left_path", type=Path)
+    compare_runs.add_argument("right_path", type=Path)
+    compare_runs.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
+    for name, help_text in (
+        ("verify-run", "verify one terminal resolved run"),
+        ("verify-benchmark", "verify one benchmark result"),
+        ("verify-pointer", "verify one promoted artifact pointer"),
+        ("lineage", "return the verified upstream lineage of one run"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+        command.add_argument(
+            "--trust-source",
+            action="append",
+            required=True,
+            help="source repository URL approved to supply executable loaders",
+        )
+
+    schema = commands.add_parser("schema", help="return one public JSON Schema")
+    schema.add_argument("name")
+    commands.add_parser("capabilities", help="list installed VIPER capabilities")
+    initialize = commands.add_parser(
+        "init",
+        help="create a five-stage starter project",
+    )
+    initialize.add_argument("path", type=Path)
+    initialize.add_argument("--package", required=True)
+    return parser
+
+
+def _operation_and_payload(
+    arguments: argparse.Namespace,
+) -> tuple[OperationName, dict[str, Any]]:
+    """Map parsed command arguments onto one application operation."""
+    values = vars(arguments).copy()
+    command = values.pop("command")
+    values.pop("json_output")
+    mapping: dict[str, OperationName] = {
+        "validate-stage": "validate_stage",
+        "validate-resolved-stage": "validate_resolved_stage",
+        "validate-run": "validate_run_spec",
+        "freeze-run": "freeze_run",
+        "preflight": "preflight",
+        "execute-stage": "execute_stage",
+        "run": "run",
+        "retry": "retry",
+        "execute-benchmark": "execute_benchmark",
+        "plan-diff": "plan_diff",
+        "lineage": "lineage",
+        "status": "status",
+        "compare-runs": "compare_runs",
+        "verify-run": "verify_run",
+        "verify-benchmark": "verify_benchmark",
+        "verify-pointer": "verify_pointer",
+        "schema": "get_schema",
+        "capabilities": "get_capabilities",
+        "init": "init_project",
+    }
+    operation = mapping[command]
+    trusted = values.pop("trust_source", None)
+    if trusted is not None:
+        values["trusted_source_repositories"] = trusted
+    return operation, values
+
+
+def _human_success(result: SuccessModel) -> str:
+    """Render one concise human result for an application success."""
+    if result.operation == "validate_stage":
+        return f"valid {getattr(result, 'stage_kind')} stage"
+    if result.operation == "validate_resolved_stage":
+        return f"valid resolved {getattr(result, 'stage_kind')} stage"
+    if result.operation == "validate_run_spec":
+        return "valid run plan"
+    if result.operation == "freeze_run":
+        files = getattr(result, "files")
+        return f"froze run {getattr(result, 'run_id')} in {len(files)} files"
+    if result.operation == "preflight":
+        checks = getattr(result, "checks")
+        failures = sum(check.status == "failure" for check in checks)
+        return (
+            "preflight ready"
+            if failures == 0
+            else f"preflight found {failures} failures"
+        )
+    if result.operation == "execute_stage":
+        artifacts = getattr(result, "artifacts")
+        count = sum(
+            1 if artifact.kind == "file" else len(artifact.members)
+            for artifact in artifacts.values()
+        )
+        return (
+            f"executed stage {getattr(result, 'stage_id')} and identified {count} files"
+        )
+    if result.operation == "run":
+        return f"completed and verified run {getattr(result, 'run_id')}"
+    if result.operation == "retry":
+        return (
+            f"completed attempt {getattr(result, 'attempt_id')} for run "
+            f"{getattr(result, 'run_id')}"
+        )
+    if result.operation == "execute_benchmark":
+        benchmark = getattr(result, "result")
+        return (
+            f"benchmark {benchmark.status}: confirmation attempt "
+            f"{benchmark.confirmation.stored_at.path}"
+        )
+    if result.operation == "plan_diff":
+        changes = getattr(result, "changes")
+        if not changes:
+            return "plans are identical"
+        return "\n".join(f"{change.kind}: {change.path}" for change in changes)
+    if result.operation == "lineage":
+        return (
+            f"verified lineage with {len(getattr(result, 'nodes'))} nodes and "
+            f"{len(getattr(result, 'edges'))} edges"
+        )
+    if result.operation == "status":
+        state = getattr(result, "state")
+        entries = getattr(result, "entry_count")
+        return f"attempt state {state or 'empty'} after {entries} journal entries"
+    if result.operation == "compare_runs":
+        changes = getattr(result, "changes")
+        if not changes:
+            return "verified runs are identical"
+        return "\n".join(f"{change.kind}: {change.path}" for change in changes)
+    if result.operation == "verify_run":
+        return f"verified run {getattr(result, 'run_id')}"
+    if result.operation == "verify_benchmark":
+        return f"verified benchmark result {getattr(result, 'benchmark_status')}"
+    if result.operation == "verify_pointer":
+        return f"verified artifact with {getattr(result, 'file_count')} files"
+    if result.operation == "get_schema":
+        return result.model_dump_json(indent=2)
+    if result.operation == "init_project":
+        return f"created project at {getattr(result, 'project_root')}"
+    capabilities = getattr(result, "operations")
+    return "\n".join(capabilities)
+
+
+def _render(result: ApplicationModel, *, json_output: bool) -> int:
+    """Write one result to its declared channel and return an exit status."""
+    if json_output:
+        sys.stdout.buffer.write(result_json_bytes(result))
+    elif isinstance(result, ViperFailure):
+        print(result.message, file=sys.stderr)
+    else:
+        assert isinstance(result, SuccessModel)
+        print(_human_success(result))
+    if isinstance(result, ViperFailure):
+        return 1
+    assert isinstance(result, SuccessModel)
+    if result.operation == "preflight" and not getattr(result, "ready"):
+        return 1
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Parse, dispatch, and render one VIPER command."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    json_output = "--json" in arguments
+    parser = build_parser()
+    try:
+        parsed = parser.parse_args(arguments)
+    except CliParseError as exc:
+        failure = ViperFailure(
+            operation=None,
+            origin="cli",
+            code="invalid_request",
+            message=str(exc),
+        )
+        if json_output:
+            return _render(failure, json_output=True)
+        parser.print_usage(sys.stderr)
+        return _render(failure, json_output=False)
+
+    operation, payload = _operation_and_payload(parsed)
+    result = dispatch(operation, payload)
+    return _render(result, json_output=parsed.json_output)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

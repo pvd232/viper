@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "viper-provenance"
+version = "0.1.0a1"
+description = "Run and verify reproducible ML experiments with machine-readable guardrails for agents."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Peter Driscoll", email = "peterdriscoll27@gmail.com" },
+]
+maintainers = [
+    { name = "Peter Driscoll", email = "peterdriscoll27@gmail.com" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "huggingface_hub>=1,<2",
+    "httpx>=0.28,<1",
+    "numpy>=2,<3",
+    "pydantic>=2.12,<3",
+    "PyYAML>=6,<7",
+    "torch>=2.6,<3",
+    "torchdata==0.11.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pyright>=1.1.400,<2",
+    "pytest>=9,<10",
+    "ruff>=0.12,<1",
+]
+release = [
+    "build>=1.2,<2",
+    "twine>=6,<7",
+]
+
+[project.urls]
+Repository = "https://github.com/pvd232/viper"
+Documentation = "https://github.com/pvd232/viper/tree/main/docs"
+Issues = "https://github.com/pvd232/viper/issues"
+
+[project.scripts]
+viper = "viper.cli:main"
+
+[tool.ruff]
+exclude = ["archive"]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["D", "E", "F", "I", "UP"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "examples/project/src"]
+strict_config = true
+strict_markers = true
+markers = [
+    "unit: isolated behavior within one implementation boundary",
+    "contract: one public or cross-document contract with bounded collaborators",
+    "integration: execution across a process, runner, CLI, or durable-attempt boundary",
+    "release: complete generated-project or installed-distribution acceptance",
+    "live_cuda: requires the designated host with one real CUDA device",
+    "domain_application: application API, CLI, project scaffold, or public imports",
+    "domain_artifacts: artifact loading and semantic validation",
+    "domain_authoring: plan construction and canonical authoring",
+    "domain_execution: stage, worker, runner, resume, benchmark, or host execution",
+    "domain_http: controlled HTTP retrieval",
+    "domain_metrics: metric declaration, execution, and verification",
+    "domain_parameters: project parameter identity and validation",
+    "domain_protocol: protocol models, serialization, and contract audit",
+    "domain_release: generated-project and distribution acceptance",
+    "domain_storage: local immutable storage",
+    "domain_verification: preflight, inspection, and provenance verification",
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["viper*"]
+
+[tool.setuptools.package-data]
+viper = ["py.typed"]
