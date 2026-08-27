@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
+from ._schema import SHA256, ProtocolModel, PythonRepoRelPath, PythonSymbol
+
 
 class ParameterSet(BaseModel):
     """A versioned JSON parameter mapping that project classes may specialize."""
@@ -56,6 +58,15 @@ class HttpTransport(ParameterSet):
     """Parameters consumed by one project-defined HTTP transport."""
 
 
+class ParameterModelRef(ProtocolModel):
+    """Identify one project-owned Pydantic parameter class by exact file bytes."""
+
+    path: PythonRepoRelPath
+    symbol: PythonSymbol
+    sha256: SHA256
+    bytes: int = Field(gt=0)
+
+
 __all__ = [
     "Build",
     "Download",
@@ -63,5 +74,6 @@ __all__ = [
     "Evaluate",
     "HttpTransport",
     "Metric",
+    "ParameterModelRef",
     "Train",
 ]

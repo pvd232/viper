@@ -55,6 +55,7 @@ from .ids import (
     StageId,
     VariantId,
 )
+from .parameters import ParameterModelRef as ParameterModelRef
 
 # ---------------------------------------------------------------------------
 # File locations
@@ -702,15 +703,6 @@ class FloatComparator(ProtocolModel):
         if self.mode == "exact" and self.tolerance != 0:
             raise ValueError("exact metric comparison requires zero tolerance")
         return self
-
-
-class ParameterModelRef(ProtocolModel):
-    """Identify one project-owned Pydantic parameter class by exact file bytes."""
-
-    path: PythonRepoRelPath
-    symbol: PythonSymbol
-    sha256: SHA256
-    bytes: int = Field(gt=0)
 
 
 class StageImplementationRef(ProtocolModel):

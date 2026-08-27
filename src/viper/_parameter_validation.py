@@ -14,7 +14,8 @@ from typing import cast
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from . import parameters
-from .protocol import ParameterizedSpec, ParameterModelRef
+from .parameters import ParameterModelRef
+from .protocol import ParameterizedSpec
 from .serialization import load_stage_spec
 from .worker import ExecutionPolicy, WorkerRequest, execute_worker
 
