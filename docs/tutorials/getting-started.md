@@ -43,24 +43,30 @@ A project parameter class extends the matching category from
 
 ```python
 import viper
+from my_project.training import train_model
 
 
 class TrainParameters(viper.parameters.Train):
     epochs: int
+    learning_rate: float
 
 
 @viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
-    dataset = context.inputs["dataset"]
+    dataset_path = context.inputs["dataset"]
     weights_path = context.artifacts["parameters"]
-
-    model = fit(dataset, epochs=context.params.epochs)
-    save_weights(model, weights_path)
+    train_model(
+        dataset_path=dataset_path,
+        weights_path=weights_path,
+        epochs=context.params.epochs,
+        learning_rate=context.params.learning_rate,
+    )
 ```
 
 VIPER validates the frozen parameter mapping through `TrainParameters` before
 calling `train`. The worker supplies the resulting object as `context.params`.
 It also supplies the materialized input path and the allocated artifact path.
+`train_model` belongs to the project and performs the scientific computation.
 The `parameters` key names VIPER's required trained-model artifact.
 `weights_path` names that artifact's destination inside the project.
 

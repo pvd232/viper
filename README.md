@@ -3,8 +3,10 @@
 Run and verify reproducible ML experiments with machine-readable guardrails for
 agents.
 
-VIPER makes ML experiments reproducible and auditable. It freezes each
-experiment before execution, then records and verifies the resulting run.
+VIPER fixes an experiment before it runs and ties each result to the code and
+data that produced it. Artifacts keep the same verifiable structure in a local
+store or remote repository, so a run preserves its provenance as it moves
+between machines.
 
 ## Install
 
@@ -35,6 +37,7 @@ artifact loaders.
 from pathlib import Path
 
 import viper
+from my_project.training import train_model
 
 
 class TrainParameters(viper.parameters.Train):
@@ -46,8 +49,8 @@ class TrainParameters(viper.parameters.Train):
 def train(context: viper.StageContext[TrainParameters]) -> None:
     dataset: Path = context.inputs["dataset"]
     weights_path: Path = context.artifacts["parameters"]
-    run_training(
-        dataset=dataset,
+    train_model(
+        dataset_path=dataset,
         weights_path=weights_path,
         epochs=context.params.epochs,
         learning_rate=context.params.learning_rate,
@@ -57,6 +60,9 @@ def train(context: viper.StageContext[TrainParameters]) -> None:
 Freezing identifies `train`, `TrainParameters`, and their source files by
 repository-relative path, SHA-256 digest, and byte count. Execution constructs
 the validated `TrainParameters` value and passes it through `context.params`.
+`train_model` belongs to the project, and the frozen source commit fixes the
+module that defines it.
+
 The `parameters` artifact key is VIPER's required slot for trained model state;
 `weights_path` is the destination used by the project code.
 

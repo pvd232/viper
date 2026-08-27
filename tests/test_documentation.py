@@ -13,6 +13,12 @@ from viper.api import OPERATIONS
 ROOT = Path(__file__).parents[1]
 PROTOCOL = ROOT / "docs/reference/protocol.md"
 API_REFERENCE = ROOT / "docs/reference/api.md"
+TRAINING_GUIDES = (
+    ROOT / "README.md",
+    API_REFERENCE,
+    ROOT / "docs/tutorials/getting-started.md",
+    ROOT / "docs/explanation/how-viper-works.md",
+)
 
 PUBLIC_MARKDOWN = (
     ROOT / "README.md",
@@ -313,6 +319,22 @@ def test_public_examples_distinguish_weights_from_the_artifact_key() -> None:
 
     assert 'weights_path = context.artifacts["parameters"]' in public_text
     assert "parameters_path" not in public_text
+
+
+def test_training_examples_name_the_project_owned_training_function() -> None:
+    """Keep project computation separate from VIPER's stage context."""
+    undefined_calls = (
+        "run_training(",
+        "model = fit(",
+        "update_model(",
+        "save_weights(",
+    )
+
+    for path in TRAINING_GUIDES:
+        text = path.read_text()
+        assert "from my_project.training import train_model" in text
+        assert "train_model(" in text
+        assert all(call not in text for call in undefined_calls)
 
 
 def test_current_docs_do_not_reference_retired_public_modules() -> None:

@@ -41,19 +41,24 @@ decorators and typed contexts:
 
 ```python
 import viper
+from my_project.training import train_model
 
 
 class TrainParameters(viper.parameters.Train):
     epochs: int
+    learning_rate: float
 
 
 @viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
-    dataset = context.inputs["dataset"]
+    dataset_path = context.inputs["dataset"]
     weights_path = context.artifacts["parameters"]
-
-    model = fit(dataset, epochs=context.params.epochs)
-    save_weights(model, weights_path)
+    train_model(
+        dataset_path=dataset_path,
+        weights_path=weights_path,
+        epochs=context.params.epochs,
+        learning_rate=context.params.learning_rate,
+    )
 ```
 
 The decorator binds `train` to the training-stage category and
@@ -61,6 +66,7 @@ The decorator binds `train` to the training-stage category and
 validated parameters, materialized input paths, writable artifact paths, live
 metric handles, named NumPy generators, and active run identity. The
 [stage module](../../src/viper/stages.py) owns this interface.
+`train_model` belongs to the project and performs the scientific computation.
 The `parameters` artifact key is VIPER's required slot for trained model state.
 The project uses `weights_path` as the local name for that destination.
 
