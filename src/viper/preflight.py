@@ -15,29 +15,33 @@ from ._parameter_validation import (
     validate_stage_parameters,
     verify_parameter_model_bytes,
 )
-from .http import HttpRetrievalError, resolve_transport, validate_request_policy
+from .http import (
+    HttpRetrievalError,
+    ProjectHttpTransportSpec,
+    resolve_transport,
+    validate_request_policy,
+)
 from .ids import StageId
 from .metrics import MetricError, validate_metric_definition
-from .protocol import (
-    BaseSpec,
-    DownloadSpec,
-    FutureInputRef,
-    GCEEnvironmentSpec,
-    GCEHostContext,
+from .references import (
     GitFileRef,
-    InternalSpec,
-    ParameterizedSpec,
-    ProjectHttpTransportSpec,
-    RunSpec,
     StorageModel,
 )
+from .runs import RunSpec
 from .runtime import (
+    GCEEnvironmentSpec,
+    GCEHostContext,
     observe_gce_execution,
     observe_python_environment,
     select_cuda_device,
 )
 from .serialization import load_stage_spec, parse_yaml_bytes
 from .stages import (
+    BaseSpec,
+    DownloadSpec,
+    FutureInputRef,
+    InternalSpec,
+    ParameterizedSpec,
     StageDefinitionError,
     validate_stage_definition,
     verify_stage_implementation_bytes,

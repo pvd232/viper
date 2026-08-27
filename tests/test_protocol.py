@@ -16,26 +16,34 @@ from tests.fixtures import (
     stage_implementation_ref,
 )
 from viper import parameters
-from viper.protocol import (
+from viper._schema import (
     PARAMETERS,
     PREDICTIONS,
     RESUME_STATE,
-    CUDABackendContext,
     DataRole,
-    EvaluateSpec,
+)
+from viper.artifacts import ResolvedBundleArtifact
+from viper.experiments import VariantSpec
+from viper.metrics import (
     FloatComparator,
-    FutureInputRef,
-    GCEEnvironmentSpec,
     MetricDependency,
     MetricImplementationRef,
     MetricSpec,
-    ResolvedBundleArtifact,
+)
+from viper.runs import (
     RunAttempt,
     RunSpec,
-    TrainSpec,
-    VariantSpec,
+)
+from viper.runtime import (
+    CUDABackendContext,
+    GCEEnvironmentSpec,
 )
 from viper.serialization import load_resolved_stage, load_stage_spec
+from viper.stages import (
+    EvaluateSpec,
+    FutureInputRef,
+    TrainSpec,
+)
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64

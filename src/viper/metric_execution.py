@@ -12,16 +12,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ._schema import ArtifactName
 from .ids import InputName, StageId
-from .protocol import (
-    ArtifactName,
-    BaseSpec,
+from .metrics import (
     MetricExecutionReceipt,
     MetricSpec,
     ResolvedMetricDependency,
-    RunSpec,
 )
+from .runs import RunSpec
 from .runtime import process_environment, select_cuda_device
+from .stages import BaseSpec
 
 
 class MetricExecutionError(RuntimeError):

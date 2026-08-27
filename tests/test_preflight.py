@@ -12,20 +12,24 @@ from tests.fixtures import (
     stage_implementation_ref,
 )
 from viper import parameters
-from viper.materialization import future_input_paths
-from viper.preflight import preflight_plan
-from viper.protocol import (
+from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
+)
+from viper.artifacts import SingleFileArtifactSpec
+from viper.materialization import future_input_paths
+from viper.preflight import preflight_plan
+from viper.runs import (
+    RunSpec,
+    RunStageRef,
+)
+from viper.serialization import serialize_document
+from viper.stages import (
     BuildSpec,
     DownloadSpec,
     FutureInputRef,
-    RunSpec,
-    RunStageRef,
-    SingleFileArtifactSpec,
     TrainSpec,
 )
-from viper.serialization import serialize_document
 
 
 def _artifact(path: str) -> SingleFileArtifactSpec:

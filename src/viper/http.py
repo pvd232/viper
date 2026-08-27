@@ -36,7 +36,6 @@ from ._schema import (
     PythonRepoRelPath,
     PythonSymbol,
 )
-from ._stage_context import StageContext
 from .ids import HumanId, InputName
 from .parameters import ParameterModelRef
 from .references import ResolvedFileRef, SnapshotFileRef
@@ -343,13 +342,6 @@ class HttpRetrievalHandle:
 
 
 @dataclass(frozen=True)
-class DownloadContext(StageContext[parameters.Download]):
-    """Extend the stage context with verified HTTP retrieval handles."""
-
-    retrievals: Mapping[InputName, HttpRetrievalHandle]
-
-
-@dataclass(frozen=True)
 class HttpTransportDefinition(Generic[TransportParamsT]):
     """Store authoring metadata attached to one project transport callable."""
 
@@ -528,7 +520,7 @@ def resolve_transport(
     spec: HttpTransportSpec,
 ) -> ResolvedHttpTransport:
     """Validate source and executable identities before one transport runs."""
-    from ._parameter_validation import (  # Avoid a protocol initialization cycle.
+    from ._parameter_validation import (  # Avoid a transport-validation cycle.
         instantiate_parameters,
         verify_parameter_model_bytes,
     )
@@ -680,7 +672,7 @@ def invoke_transport(
     environment: Mapping[str, str] | None = None,
 ) -> HttpTransportResult:
     """Invoke the selected transport and enforce its returned body contract."""
-    from ._parameter_validation import (  # Avoid a protocol initialization cycle.
+    from ._parameter_validation import (  # Avoid a transport-validation cycle.
         instantiate_parameters,
     )
 

@@ -12,13 +12,13 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from .protocol import (
+from ._schema import (
     RESUME_STATE,
-    ArtifactLoaderRef,
     ArtifactName,
-    ResumeState,
-    RunSpec,
 )
+from .artifacts import ArtifactLoaderRef
+from .resume import ResumeState
+from .runs import RunSpec
 from .worker import ExecutionPolicy, WorkerRequest, execute_worker
 
 

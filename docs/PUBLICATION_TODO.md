@@ -803,15 +803,15 @@ checkout.
 
 ## Phase 14. Decompose the protocol
 
-- [ ] Move shared Pydantic foundations to `viper._schema`.
-- [ ] Move parameter categories and parameter references to
+- [x] Move shared Pydantic foundations to `viper._schema`.
+- [x] Move parameter categories and parameter references to
   `viper.parameters`.
-- [ ] Move stage, experiment, run, artifact, reference, metric, benchmark,
+- [x] Move stage, experiment, run, artifact, reference, metric, benchmark,
   HTTP, runtime, and resume entities into their approved owner modules.
-- [ ] Update each caller, schema test, fixture, example, and document in the
+- [x] Update each caller, schema test, fixture, example, and document in the
   same increment as its moved entities.
-- [ ] Delete `viper.protocol` after the last consumer moves.
-- [ ] Confirm that canonical serialized documents remain byte-stable for the
+- [x] Delete `viper.protocol` after the last consumer moves.
+- [x] Confirm that canonical serialized documents remain byte-stable for the
   maintained fixtures.
 
 **Acceptance gate:** a repository search returns zero `viper.protocol` imports;

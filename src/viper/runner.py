@@ -14,61 +14,56 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from .http import HttpRetrievalError, invoke_transport, resolve_transport
+from ._schema import RepoRelPath
+from .artifacts import ArtifactPointer
+from .experiments import ExperimentSpec
+from .http import (
+    HttpRetrievalError,
+    ResolvedHttpRetrieval,
+    invoke_transport,
+    resolve_transport,
+)
 from .ids import InputName, StageId
 from .journal import DurableJournal
 from .local_store import LocalArtifactStore, snapshot_file
 from .metric_execution import MetricExecutionError, execute_metric_process
-from .metrics import MeasurementSink, compare_metric_values
+from .metrics import (
+    FloatComparator,
+    MeasurementSink,
+    MetricSpec,
+    MetricVerificationReceipt,
+    ResolvedMetricDependency,
+    compare_metric_values,
+)
 from .paths import retrieval_body_path
 from .preflight import preflight_plan
-from .protocol import (
-    ArtifactPointer,
+from .references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedArtifactPointerRef,
+    ResolvedFileRef,
+    ResolvedGitFileRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    StageResultSnapshotRef,
+    StorageModel,
+)
+from .runs import (
     AttemptFailure,
     AttemptJournalRef,
     AttemptPurpose,
-    BaseSpec,
-    DownloadSpec,
-    EnvironmentSpec,
-    ExperimentSpec,
-    FloatComparator,
-    GCEEnvironmentSpec,
-    GCEHostContext,
-    GitFileRef,
-    HuggingFaceFileRef,
-    InternalSpec,
-    LocalStageResultSnapshotRef,
-    MetricSpec,
-    MetricVerificationReceipt,
-    RepoRelPath,
-    ResolvedArtifactPointerRef,
     ResolvedAttemptRef,
-    ResolvedBuildSpec,
-    ResolvedDownloadSpec,
-    ResolvedEmbedSpec,
-    ResolvedEvaluateSpec,
-    ResolvedFileRef,
-    ResolvedFutureInputRef,
-    ResolvedGCEEnvironment,
-    ResolvedGitFileRef,
-    ResolvedHttpRetrieval,
-    ResolvedInternalInputRef,
-    ResolvedLocalEnvironment,
-    ResolvedMetricDependency,
     ResolvedRun,
-    ResolvedRunSpecRef,
-    ResolvedSpec,
-    ResolvedStageInvocationRef,
-    ResolvedStageRef,
-    ResolvedStoredInputRef,
-    ResolvedTrainSpec,
     RunAttempt,
     RunSpec,
-    SnapshotFileRef,
-    StageInvocationReceipt,
-    StageResultSnapshotRef,
-    StorageModel,
-    StoredInputRef,
+)
+from .runtime import (
+    EnvironmentSpec,
+    GCEEnvironmentSpec,
+    GCEHostContext,
+    ResolvedGCEEnvironment,
+    ResolvedLocalEnvironment,
 )
 from .serialization import load_stage_spec, parse_yaml_bytes, serialize_document
 from .stage_execution import (
@@ -76,6 +71,24 @@ from .stage_execution import (
     StageProcessInterrupted,
     StageProcessResult,
     execute_stage_process,
+)
+from .stages import (
+    BaseSpec,
+    DownloadSpec,
+    InternalSpec,
+    ResolvedBuildSpec,
+    ResolvedDownloadSpec,
+    ResolvedEmbedSpec,
+    ResolvedEvaluateSpec,
+    ResolvedFutureInputRef,
+    ResolvedInternalInputRef,
+    ResolvedSpec,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
+    ResolvedStoredInputRef,
+    ResolvedTrainSpec,
+    StageInvocationReceipt,
+    StoredInputRef,
 )
 from .verifier import (
     VerificationError,

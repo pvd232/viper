@@ -21,8 +21,12 @@ from pydantic import (
     field_validator,
 )
 
+from .artifacts import (
+    ArtifactPointer,
+    ResolvedArtifact,
+)
 from .authoring import freeze_run_plan, load_run_plan_draft
-from .benchmark import BenchmarkExecutionError
+from .benchmark import BenchmarkExecutionError, BenchmarkResult
 from .benchmark import execute_benchmark as execute_benchmark_run
 from .ids import RunId, StageId
 from .inspection import (
@@ -39,18 +43,15 @@ from .inspection import plan_diff as compare_frozen_plans
 from .journal import AttemptState
 from .preflight import PreflightCheck, preflight_plan
 from .project_init import ProjectInitializationError, initialize_project
-from .protocol import (
-    ArtifactPointer,
-    BenchmarkResult,
-    ResolvedArtifact,
-    ResolvedRun,
-    RunSpec,
-    Spec,
-)
 from .runner import RunError
 from .runner import run as execute_run
+from .runs import (
+    ResolvedRun,
+    RunSpec,
+)
 from .serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
 from .stage_execution import StageExecutionError, execute_stage_process
+from .stages import Spec
 from .verifier import (
     StorageFetcher,
     VerificationError,

@@ -15,16 +15,18 @@ from viper._parameter_validation import (
     validate_stage_parameters,
     verify_parameter_model_bytes,
 )
-from viper.protocol import (
+from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
-    ArtifactPointerRef,
-    ParameterModelRef,
-    SingleFileArtifactSpec,
+)
+from viper.artifacts import SingleFileArtifactSpec
+from viper.parameters import ParameterModelRef
+from viper.references import ArtifactPointerRef
+from viper.serialization import serialize_document
+from viper.stages import (
     StoredInputRef,
     TrainSpec,
 )
-from viper.serialization import serialize_document
 
 
 def _model_file(tmp_path: Path) -> tuple[Path, bytes]:

@@ -11,20 +11,11 @@ from types import MappingProxyType
 from typing import Any
 
 from ._parameter_validation import instantiate_parameters
-from .http import DownloadContext, HttpRetrievalHandle
+from .experiments import ExperimentSpec
+from .http import HttpRetrievalHandle
 from .metrics import MeasurementSink, MetricHandle, bind_live_metric
 from .paths import retrieval_body_path
-from .protocol import (
-    DownloadSpec,
-    ExperimentSpec,
-    FutureInputRef,
-    InternalSpec,
-    ParameterizedSpec,
-    RunSpec,
-    StageContextBinding,
-    StageInvocationReceipt,
-    StoredInputRef,
-)
+from .runs import RunSpec
 from .runtime import (
     apply_reproducibility,
     autocast_context,
@@ -33,7 +24,19 @@ from .runtime import (
 )
 from .serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from .stage_execution import StageWorkerContext, StageWorkerResult
-from .stages import StageContext, load_stage_callable, stage_definition
+from .stages import (
+    DownloadContext,
+    DownloadSpec,
+    FutureInputRef,
+    InternalSpec,
+    ParameterizedSpec,
+    StageContext,
+    StageContextBinding,
+    StageInvocationReceipt,
+    StoredInputRef,
+    load_stage_callable,
+    stage_definition,
+)
 
 
 def _workspace_paths(

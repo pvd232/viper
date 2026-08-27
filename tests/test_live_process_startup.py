@@ -8,13 +8,11 @@ import pytest
 import torch
 
 from tests.fixtures import reproducibility
-from viper.protocol import (
+from viper.runtime import (
     CPUBackendContext,
     CPUComputeSpec,
     CUDABackendContext,
     CUDAComputeSpec,
-)
-from viper.runtime import (
     observe_local_execution,
     process_environment,
     select_cuda_device,

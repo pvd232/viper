@@ -7,8 +7,8 @@ import os
 from pathlib import Path
 
 from ._parameter_validation import ParameterValidationContext, validate_parameters
-from .protocol import ParameterizedSpec
 from .serialization import load_stage_spec
+from .stages import ParameterizedSpec
 
 
 def main() -> int:

@@ -14,22 +14,28 @@ from tests.fixtures import (
     python_environment,
 )
 from viper import parameters
-from viper.local_store import LocalArtifactStore
-from viper.paths import retrieval_body_path
-from viper.protocol import (
-    DownloadSpec,
+from viper.artifacts import (
+    ResolvedSingleFileArtifact,
+    SingleFileArtifactSpec,
+)
+from viper.http import (
     ObservedHttpResponse,
-    ParameterModelRef,
     ResolvedHttpRetrieval,
     ResolvedHttpTransport,
-    ResolvedSingleFileArtifact,
+)
+from viper.local_store import LocalArtifactStore
+from viper.parameters import ParameterModelRef
+from viper.paths import retrieval_body_path
+from viper.runs import (
     RunSpec,
     RunStageRef,
-    SingleFileArtifactSpec,
-    StageImplementationRef,
 )
 from viper.serialization import serialize_document
 from viper.stage_execution import execute_stage_process
+from viper.stages import (
+    DownloadSpec,
+    StageImplementationRef,
+)
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_download/runs/baseline/{RUN_ID}"

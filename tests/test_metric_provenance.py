@@ -13,7 +13,7 @@ from tests.test_verifier_acceptance import (
     sha256,
     yaml_bytes,
 )
-from viper.protocol import MetricVerificationReceipt
+from viper.metrics import MetricVerificationReceipt
 from viper.verifier import VerificationError, verify_run_result
 
 

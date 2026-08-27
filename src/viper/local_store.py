@@ -8,10 +8,10 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
-from .protocol import (
+from ._schema import RepoRelPath
+from .references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
-    RepoRelPath,
     ResolvedFileRef,
     SnapshotFileRef,
     StorageModel,

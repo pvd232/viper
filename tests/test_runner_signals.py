@@ -27,41 +27,53 @@ from tests.fixtures import (
     resume_state,
 )
 from viper import parameters
-from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
-from viper.journal import DurableJournal
-from viper.local_store import LocalArtifactStore
-from viper.preflight import preflight_plan
-from viper.protocol import (
+from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
+)
+from viper.artifacts import (
     ArtifactLoaderRef,
+    SingleFileArtifactSpec,
+    StageArtifactRef,
+)
+from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
+from viper.experiments import (
+    DownloadVariantStageParams,
+    ExperimentSpec,
+    ReplicateSpec,
+    TrainVariantStageParams,
+    VariantSpec,
+)
+from viper.journal import DurableJournal
+from viper.local_store import LocalArtifactStore
+from viper.parameters import ParameterModelRef
+from viper.preflight import preflight_plan
+from viper.references import (
+    GitFileRef,
+    GitSource,
+)
+from viper.runner import RunFetcher
+from viper.runner import run as execute_run
+from viper.runs import (
+    ResolvedRun,
+    RunSpec,
+)
+from viper.runtime import (
     CPUBackendContext,
     CPUComputeSpec,
     CUDABackendContext,
     CUDAComputeSpec,
-    DownloadSpec,
-    DownloadVariantStageParams,
-    ExperimentSpec,
-    FutureInputRef,
-    GitFileRef,
-    GitSource,
     LocalEnvironmentSpec,
-    ParameterModelRef,
-    ReplicateSpec,
-    ResolvedRun,
+)
+from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
+from viper.stages import (
+    DownloadSpec,
+    FutureInputRef,
     ResolvedStageInvocationRef,
-    RunSpec,
-    SingleFileArtifactSpec,
-    StageArtifactRef,
     StageImplementationRef,
     StageInvocationReceipt,
     TrainSpec,
-    TrainVariantStageParams,
-    VariantSpec,
 )
-from viper.runner import RunFetcher
-from viper.runner import run as execute_run
-from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
 from viper.verifier import (
     VerificationError,
     VerificationPolicy,

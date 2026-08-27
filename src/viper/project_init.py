@@ -124,7 +124,7 @@ def load(path: Path) -> bytes:
 
 from pathlib import Path
 
-from viper.protocol import (
+from viper.resume import (
     DataLoaderConfiguration,
     DataLoaderResumeState,
     LegacyNumPyRNGState,

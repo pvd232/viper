@@ -22,16 +22,16 @@ both named `viper`.
 | [implementation contracts](docs/contracts/README.md) | Defines each release claim from declaration through acceptance | Parameter delivery, HTTP retrieval, metrics, artifacts, attempts, benchmarks, cloud execution, and packaging |
 | [publication checklist](docs/PUBLICATION_TODO.md) | Tracks implementation and release work | Protocol, runner, package, and distribution tasks |
 | [versioning policy](docs/VERSIONING.md) | Separates software releases from serialized document schemas | Semantic package versions and document `schema_version` values |
-| [protocol](viper/protocol.py) | Defines the Pydantic models for the VIPER protocol | `RunSpec`, `ResolvedRun`, `Spec`, `ResolvedSpec`, `BenchmarkSpec` |
+| [run contracts](src/viper/runs.py) | Defines frozen run plans, durable attempts, and terminal run outcomes | `RunSpec`, `RunAttempt`, `ResolvedRun` |
 | [verifier](viper/verifier.py) | Retrieves referenced files and checks cross-record relationships | `verify_run_result()`, `verify_benchmark_result()` |
-| [training resume](viper/resume.py) | Captures, serializes, restores, and validates optimizer, generator, and stateful-loader state | `capture_resume_state()`, `restore_resume_state()` |
+| [training resume](src/viper/resume.py) | Captures, serializes, restores, and validates optimizer, generator, and stateful-loader state | `capture_resume_state()`, `restore_resume_state()` |
 | [plan authoring](viper/authoring.py) | Writes canonical experiment, variant, benchmark, stage, and frozen run-plan files | `freeze_run_plan()`, `write_experiment_spec()`, `write_variant_spec()` |
-| [stage execution](viper/stage_execution.py) | Invokes one canonical stage command and hashes every declared output file | `execute_stage_process()` |
+| [stage execution](src/viper/stage_execution.py) | Invokes one canonical stage command and hashes every declared output file | `execute_stage_process()` |
 | [current runner](viper/runner.py) | Executes and verifies a complete frozen run in the implemented trusted-host environment | `run()` |
 | [preflight](viper/preflight.py) | Checks the committed plan, source repository, environment kind, stage identities, code paths, plan relationships, and metric implementations | `preflight_local_plan()` |
 | [local storage](viper/local_store.py) | Publishes immutable stage snapshots and run files beneath `.viper/store` | `LocalArtifactStore` |
 | [installed command](viper/cli.py) | Exposes authoring, preflight, execution, validation, verification, and discovery | `viper preflight`, `viper run`, `viper verify-run` |
-| [serialization](viper/serialization.py) | Encodes protocol documents and parses duplicate-key-safe YAML | `serialize_document()`, `parse_yaml_bytes()`, `load_stage_spec()`, `load_resolved_stage()` |
+| [serialization](src/viper/serialization.py) | Encodes protocol documents and parses duplicate-key-safe YAML | `serialize_document()`, `parse_yaml_bytes()`, `load_stage_spec()`, `load_resolved_stage()` |
 | [examples](examples/) | Supplies a user-project extension tree and loadable protocol records | Project code plus download and build records |
 | [identifiers](viper/ids.py) | Defines run and human-readable identifier types | `RunId`, `HumanId` |
 | [inspection](viper/inspection.py) | Reads durable attempt state and compares frozen plans, verified runs, and lineage through stable machine-readable paths | `attempt_status()`, `plan_diff()`, `compare_runs()`, `lineage()` |
@@ -50,8 +50,9 @@ The focused model, verifier, and acceptance checks live in the
 
 ## Protocol and verification flow
 
-The [protocol models](viper/protocol.py) divide requested state from realized state. A
-`RunSpec` and its ordered stage specs form the frozen run plan. Each completed
+The [run contracts](src/viper/runs.py) and [stage contracts](src/viper/stages.py)
+divide requested state from realized state. A `RunSpec` and its ordered stage
+specs form the frozen run plan. Each completed
 stage publishes one `ResolvedStageRef` containing a resolved stage spec and all
 declared artifact files at one immutable snapshot.
 

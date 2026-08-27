@@ -18,7 +18,10 @@ inline annotations distributed with the installed `viper` package.
 | Module | Public responsibility |
 | --- | --- |
 | `viper.application` | Typed operations, requests, successes, failures, schema discovery, and capability discovery |
+| `viper.artifacts` | Artifact declarations, resolved artifacts, pointers, and loader identities |
 | `viper.authoring` | Canonical experiment, variant, benchmark, stage, and run-plan documents |
+| `viper.benchmark` | Benchmark specifications, execution, comparisons, and results |
+| `viper.experiments` | Factors, variants, replicates, and experiment specifications |
 | `viper.http` | Built-in HTTPX retrieval, project transport decorators, and typed transport contexts |
 | `viper.ids` | Validated identifier types |
 | `viper.inspection` | Deterministic attempt status, plan comparison, verified-run comparison, and lineage construction |
@@ -28,9 +31,11 @@ inline annotations distributed with the installed `viper` package.
 | `viper.metrics` | Decorated functions, stateful metrics, comparison, and measurement output |
 | `viper.parameters` | Public parameter categories for stages, metrics, and HTTP transports |
 | `viper.preflight` | Complete-plan checks for the active single-host environment |
-| `viper.protocol` | Authored and resolved protocol models |
+| `viper.references` | Hash-bound references to separately stored values |
 | `viper.resume` | Training resume-state capture, persistence, and restoration |
 | `viper.runner` | Complete trusted single-host run execution and publication |
+| `viper.runs` | Run plans, attempts, attempt references, and resolved runs |
+| `viper.runtime` | Environment, reproducibility, startup, and execution-context contracts |
 | `viper.serialization` | Duplicate-key-safe parsing and canonical document encoding |
 | `viper.stage_execution` | One controlled stage-process invocation on the active host |
 | `viper.stages` | Stage decorators, typed contexts, and direct Python execution |
@@ -44,7 +49,10 @@ inline annotations distributed with the installed `viper` package.
 
 ```python
 viper.application
+viper.artifacts
 viper.authoring
+viper.benchmark
+viper.experiments
 viper.http
 viper.ids
 viper.inspection
@@ -54,9 +62,11 @@ viper.materialization
 viper.metrics
 viper.parameters
 viper.preflight
-viper.protocol
+viper.references
 viper.resume
 viper.runner
+viper.runs
+viper.runtime
 viper.stage_execution
 viper.stages
 viper.worker
@@ -99,12 +109,12 @@ Import concrete classes and functions from their owning module. For example:
 
 ```python
 from viper.application import ValidateStageRequest, validate_stage
-from viper.protocol import RunSpec
+from viper.runs import RunSpec
 ```
 
 ## Project parameter models
 
-`viper.protocol.ParameterModelRef` identifies one project-owned Pydantic class
+`viper.parameters.ParameterModelRef` identifies one project-owned Pydantic class
 by repository-relative path, top-level symbol, SHA-256 digest, and byte count.
 Every `ParameterizedSpec` requires this reference. Download, build, embed,
 train, and evaluate specs inherit that contract.

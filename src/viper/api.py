@@ -12,9 +12,13 @@ from typing import Any
 from .application import RetryRequest, RetrySuccess, RunRequest, RunSuccess
 from .application import retry as application_retry
 from .application import run as application_run
-from .protocol import ParameterizedSpec, RunSpec
+from .runs import RunSpec
 from .serialization import load_stage_spec, parse_yaml_bytes
-from .stages import stage_definition, verify_stage_implementation_bytes
+from .stages import (
+    ParameterizedSpec,
+    stage_definition,
+    verify_stage_implementation_bytes,
+)
 
 
 class PythonRunError(RuntimeError):

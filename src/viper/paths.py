@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import cast
 
+from ._schema import RepoRelPath
 from .ids import InputName, StageId
-from .protocol import RepoRelPath, RunSpec
+from .runs import RunSpec
 
 
 def retrieval_body_path(

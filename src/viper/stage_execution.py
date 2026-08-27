@@ -19,30 +19,39 @@ from ._parameter_validation import (
     ParameterValidationError,
     validate_stage_parameters,
 )
-from .protocol import (
-    ArtifactName,
-    BaseSpec,
+from ._schema import ArtifactName
+from .artifacts import (
     BundleArtifactSpec,
-    ExecutionContext,
-    HttpRetrievalContextBinding,
-    ParameterizedSpec,
-    ParameterizedStageSpec,
-    ProcessStartupReceipt,
-    PythonEnvironmentSpec,
     ResolvedArtifact,
     ResolvedBundleArtifact,
     ResolvedBundleMember,
-    ResolvedHttpRetrieval,
     ResolvedSingleFileArtifact,
+    SingleFileArtifactSpec,
+)
+from .http import (
+    HttpRetrievalContextBinding,
+    ResolvedHttpRetrieval,
+)
+from .references import SnapshotFileRef
+from .runs import (
     RunSpec,
     RunStageRef,
-    SingleFileArtifactSpec,
-    SnapshotFileRef,
+)
+from .runtime import (
+    ExecutionContext,
+    ProcessStartupReceipt,
+    PythonEnvironmentSpec,
+    process_environment,
+    select_cuda_device,
+)
+from .serialization import document_digest
+from .stages import (
+    BaseSpec,
+    ParameterizedSpec,
+    ParameterizedStageSpec,
     StageContextBinding,
     StageInvocationReceipt,
 )
-from .runtime import process_environment, select_cuda_device
-from .serialization import document_digest
 
 
 class StageExecutionError(RuntimeError):

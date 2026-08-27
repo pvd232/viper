@@ -13,21 +13,25 @@ import pytest
 from pydantic import ValidationError
 
 from viper import parameters
-from viper.http import HttpRetrievalError, invoke_transport, resolve_transport
-from viper.protocol import (
+from viper.http import (
     BuiltinHttpTransportSpec,
     EnvironmentSecretRef,
     ExternalExecutableSpec,
     HttpRequestSpec,
+    HttpRetrievalError,
     HttpRetrievalPolicy,
     HttpTransportImplementationRef,
-    LocalFileRef,
     ObservedHttpResponse,
-    ParameterModelRef,
     ProjectHttpTransportSpec,
-    ResolvedFileRef,
     ResolvedHttpRetrieval,
     ResolvedHttpTransport,
+    invoke_transport,
+    resolve_transport,
+)
+from viper.parameters import ParameterModelRef
+from viper.references import (
+    LocalFileRef,
+    ResolvedFileRef,
 )
 
 
@@ -135,7 +139,7 @@ def conforming_transport(request: pytest.FixtureRequest) -> TransportFactory:
         b"from project.transport_params import ConformingTransportParameters\n"
         b"from viper import HttpTransportResult, http_transport\n"
         b"from viper.http import HttpRetrievalError\n"
-        b"from viper.protocol import ObservedHttpResponse\n\n"
+        b"from viper.http import ObservedHttpResponse\n\n"
         b"@http_transport(transport_id='conforming', "
         b"parameter_model=ConformingTransportParameters)\n"
         b"def transfer(context):\n"
@@ -462,7 +466,7 @@ def test_project_transport_receives_typed_parameters_and_exact_destination(
         b"import httpx\n"
         b"from project.transport_params import ProjectTransportParameters\n"
         b"from viper import HttpTransportResult, http_transport\n"
-        b"from viper.protocol import ObservedHttpResponse\n\n"
+        b"from viper.http import ObservedHttpResponse\n\n"
         b"@http_transport(transport_id='project_http', "
         b"parameter_model=ProjectTransportParameters)\n"
         b"def transfer(context):\n"
@@ -671,7 +675,7 @@ def test_project_transport_rejects_returned_path_escape(tmp_path: Path) -> None:
     implementation_raw = (
         b"from project.params import EscapeParameters\n"
         b"from viper import HttpTransportResult, http_transport\n"
-        b"from viper.protocol import ObservedHttpResponse\n\n"
+        b"from viper.http import ObservedHttpResponse\n\n"
         b"@http_transport(transport_id='escape', parameter_model=EscapeParameters)\n"
         b"def transfer(context):\n"
         b"    escaped = context.workspace.parent / 'escaped'\n"

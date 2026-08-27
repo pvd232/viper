@@ -34,8 +34,8 @@ The stage specifications fix the ordered operations. A `RunAttempt` describes
 one execution of that plan. Resolved stage files describe the environment,
 inputs, outputs, measurements, and invocation evidence observed during that
 attempt. `ResolvedRun` references the canonical attempt files and identifies
-the successful attempt when one exists. These types are defined in the
-[protocol models](../src/viper/protocol.py) and serialized through the
+the successful attempt when one exists. The [run](../src/viper/runs.py) and
+[stage](../src/viper/stages.py) modules define these types. VIPER serializes them through the
 [canonical document encoder](../src/viper/serialization.py).
 
 The separation between requested and observed values matters. A requested CUDA
@@ -427,8 +427,8 @@ only after verification succeeds.
    status and release gates.
 5. VIPER, [package release candidate](releases/0.1.0a1.md), commit and executed
    acceptance evidence.
-6. VIPER source, [protocol models](../src/viper/protocol.py), authored and resolved
-   document definitions.
+6. VIPER source, [run models](../src/viper/runs.py) and
+   [stage models](../src/viper/stages.py), authored and resolved document definitions.
 7. VIPER source, [plan authoring](../src/viper/authoring.py), canonical freezing and
    source-identity checks.
 8. VIPER source, [stage interface](../src/viper/stages.py) and

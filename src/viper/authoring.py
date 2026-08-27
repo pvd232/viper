@@ -20,27 +20,35 @@ from ._parameter_validation import (
     validate_stage_parameters,
     verify_parameter_model_bytes,
 )
-from .http import resolve_transport, validate_request_policy
-from .ids import ExperimentId, ReplicateId, RunId, StageId, VariantId
-from .protocol import (
+from ._schema import (
     BenchmarkId,
-    BenchmarkSpec,
-    DownloadSpec,
-    EnvironmentSpec,
-    ExperimentSpec,
-    GitSource,
-    ParameterizedSpec,
-    ProjectHttpTransportSpec,
-    ReproducibilitySpec,
     RNGSeed,
-    RunSpec,
-    RunStageRef,
-    Spec,
-    StageArtifactRef,
+)
+from .artifacts import StageArtifactRef
+from .benchmark import BenchmarkSpec
+from .experiments import (
+    ExperimentSpec,
     VariantSpec,
 )
+from .http import ProjectHttpTransportSpec, resolve_transport, validate_request_policy
+from .ids import ExperimentId, ReplicateId, RunId, StageId, VariantId
+from .references import GitSource
+from .runs import (
+    RunSpec,
+    RunStageRef,
+)
+from .runtime import (
+    EnvironmentSpec,
+    ReproducibilitySpec,
+)
 from .serialization import parse_yaml_bytes, serialize_document
-from .stages import StageDefinitionError, validate_stage_definition
+from .stages import (
+    DownloadSpec,
+    ParameterizedSpec,
+    Spec,
+    StageDefinitionError,
+    validate_stage_definition,
+)
 
 SPEC_ADAPTER = TypeAdapter(Spec)
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)

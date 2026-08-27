@@ -2,7 +2,10 @@
 
 from . import (
     application,
+    artifacts,
     authoring,
+    benchmark,
+    experiments,
     http,
     ids,
     inspection,
@@ -12,9 +15,11 @@ from . import (
     metrics,
     parameters,
     preflight,
-    protocol,
+    references,
     resume,
     runner,
+    runs,
+    runtime,
     stage_execution,
     stages,
     worker,
@@ -23,7 +28,10 @@ from . import (
 
 __all__ = [
     "application",
+    "artifacts",
     "authoring",
+    "benchmark",
+    "experiments",
     "http",
     "ids",
     "inspection",
@@ -33,9 +41,11 @@ __all__ = [
     "metrics",
     "parameters",
     "preflight",
-    "protocol",
+    "references",
     "runner",
     "resume",
+    "runs",
+    "runtime",
     "stage_execution",
     "stages",
     "worker",
@@ -44,13 +54,13 @@ __all__ = [
 
 from .api import retry, run
 from .http import (
-    DownloadContext,
     HttpRetrievalHandle,
     HttpTransportContext,
     HttpTransportResult,
     http_transport,
 )
 from .stages import (
+    DownloadContext,
     StageContext,
     build_stage,
     download_stage,

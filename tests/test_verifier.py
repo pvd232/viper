@@ -25,77 +25,91 @@ from tests.fixtures import (
     verification_policy,
 )
 from viper import parameters
-from viper.ids import InputName
-from viper.protocol import (
+from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
+    NonEmptyStr,
+)
+from viper.artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
-    ArtifactPointerRef,
-    AttemptFailure,
-    AttemptJournalRef,
+    ResolvedSingleFileArtifact,
+    SingleFileArtifactSpec,
+    StageArtifactRef,
+)
+from viper.benchmark import (
     BenchmarkSpec,
-    BuildSpec,
+    MetricCriterion,
+)
+from viper.experiments import (
     BuildVariantStageParams,
-    CPUBackendContext,
-    CPUComputeSpec,
-    CPUContext,
-    DataLoaderConfiguration,
-    EvaluateSpec,
     EvaluateVariantStageParams,
-    ExecutionContext,
     ExperimentSpec,
-    FutureInputRef,
-    GCEBootImageRef,
-    GCEEnvironmentSpec,
-    GCEHostContext,
+    ReplicateSpec,
+    TrainVariantStageParams,
+    VariantSpec,
+)
+from viper.ids import InputName
+from viper.references import (
+    ArtifactPointerRef,
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
-    InternalInputRef,
-    MetricCriterion,
+    ResolvedArtifactPointerRef,
+    ResolvedFileRef,
+    ResolvedGitFileRef,
+    ResolvedRunRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    StageResultSnapshotRef,
+)
+from viper.resume import DataLoaderConfiguration
+from viper.runs import (
+    AttemptFailure,
+    AttemptJournalRef,
+    ResolvedAttemptRef,
+    ResolvedRun,
+    RunAttempt,
+    RunSpec,
+    RunStageRef,
+)
+from viper.runtime import (
+    CPUBackendContext,
+    CPUComputeSpec,
+    CPUContext,
+    ExecutionContext,
+    GCEBootImageRef,
+    GCEEnvironmentSpec,
+    GCEHostContext,
     NativeLibraryContext,
     NativeThreadPoolContext,
-    NonEmptyStr,
     NumericalRuntimeContext,
     NumPyRandomnessSpec,
     ParallelismSpec,
     ProcessStartupReceipt,
-    ReplicateSpec,
     ReproducibilitySpec,
-    ResolvedArtifactPointerRef,
-    ResolvedAttemptRef,
-    ResolvedBuildSpec,
-    ResolvedFileRef,
-    ResolvedFutureInputRef,
     ResolvedGCEEnvironment,
-    ResolvedGitFileRef,
-    ResolvedRun,
-    ResolvedRunRef,
-    ResolvedRunSpecRef,
-    ResolvedSingleFileArtifact,
+    TorchDeterminismSpec,
+    TorchPrecisionSpec,
+    process_environment,
+)
+from viper.serialization import document_digest
+from viper.stages import (
+    BuildSpec,
+    EvaluateSpec,
+    FutureInputRef,
+    InternalInputRef,
+    ResolvedBuildSpec,
+    ResolvedFutureInputRef,
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     ResolvedStoredInputRef,
     ResolvedTrainSpec,
-    RunAttempt,
-    RunSpec,
-    RunStageRef,
-    SingleFileArtifactSpec,
-    SnapshotFileRef,
-    StageArtifactRef,
     StageContextBinding,
     StageInvocationReceipt,
-    StageResultSnapshotRef,
     StoredInputRef,
-    TorchDeterminismSpec,
-    TorchPrecisionSpec,
     TrainSpec,
-    TrainVariantStageParams,
-    VariantSpec,
 )
-from viper.runtime import process_environment
-from viper.serialization import document_digest
 from viper.verifier import (
     VerificationError,
     VerificationPolicy,
@@ -459,7 +473,7 @@ def resolved_environment(lock_raw: bytes) -> ResolvedGCEEnvironment:
 
 def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
     """Build the minimum valid CPU startup evidence for one test run."""
-    from viper.protocol import GeneratorInitializationReceipt
+    from viper.runtime import GeneratorInitializationReceipt
 
     generators = [
         GeneratorInitializationReceipt(

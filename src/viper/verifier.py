@@ -23,6 +23,17 @@ from ._parameter_validation import (
     ParameterValidationError,
     verify_parameter_model_bytes,
 )
+from ._schema import (
+    PARAMETERS,
+    PARAMETERS_INPUT,
+    PREDICTIONS,
+    RESUME_STATE,
+    RESUME_STATE_INPUT,
+    ArtifactName,
+    DataRole,
+    RepoRelPath,
+    repo_file_paths_overlap,
+)
 from .artifact_loaders import (
     ArtifactLoaderError,
     ArtifactValidationResult,
@@ -30,88 +41,97 @@ from .artifact_loaders import (
     materialized_loader_context,
     verify_artifact_loader_bytes,
 )
-from .http import HttpRetrievalError, validate_request_policy
-from .ids import InputName, StageId
-from .journal import parse_journal_bytes
-from .metrics import compare_metric_values
-from .paths import retrieval_body_path
-from .protocol import (
-    PARAMETERS,
-    PARAMETERS_INPUT,
-    PREDICTIONS,
-    RESUME_STATE,
-    RESUME_STATE_INPUT,
-    ArtifactName,
+from .artifacts import (
     ArtifactPointer,
     ArtifactSpec,
-    BaseSpec,
+    ResolvedArtifact,
+    ResolvedBundleArtifact,
+    ResolvedSingleFileArtifact,
+    StageArtifactRef,
+)
+from .benchmark import (
     BenchmarkResult,
     BenchmarkSpec,
-    BuildSpec,
+)
+from .experiments import (
+    ExperimentSpec,
+    VariantSpec,
+)
+from .http import (
+    HttpRetrievalContextBinding,
+    HttpRetrievalError,
+    ProjectHttpTransportSpec,
+    validate_request_policy,
+)
+from .ids import InputName, StageId
+from .journal import parse_journal_bytes
+from .metrics import (
+    FloatComparator,
+    Measurement,
+    MetricExecutionReceipt,
+    MetricVerificationReceipt,
+    ResolvedMetricDependency,
+    compare_metric_values,
+)
+from .paths import retrieval_body_path
+from .references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    StageResultSnapshotRef,
+    StorageModel,
+)
+from .runs import (
+    ResolvedAttemptRef,
+    ResolvedRun,
+    RunAttempt,
+    RunSpec,
+)
+from .runtime import (
     ComputeBackendContext,
     ComputeSpec,
     CPUBackendContext,
     CUDABackendContext,
-    DataRole,
-    DownloadSpec,
-    EmbedSpec,
     EnvironmentSpec,
-    EvaluateSpec,
     ExecutionContext,
-    ExperimentSpec,
-    FloatComparator,
-    FutureInputRef,
     GCEEnvironmentSpec,
     GCEHostContext,
-    GitFileRef,
-    HttpRetrievalContextBinding,
-    HuggingFaceFileRef,
-    InternalSpec,
-    LocalFileRef,
     LocalHostContext,
-    LocalStageResultSnapshotRef,
-    Measurement,
-    MetricExecutionReceipt,
-    MetricVerificationReceipt,
+    ResolvedEnvironment,
+    ResolvedGCEEnvironment,
+    process_environment,
+)
+from .serialization import document_digest, parse_yaml_bytes
+from .stages import (
+    BaseSpec,
+    BuildSpec,
+    DownloadSpec,
+    EmbedSpec,
+    EvaluateSpec,
+    FutureInputRef,
+    InternalSpec,
     ParameterizedSpec,
     ParameterizedStageSpec,
-    ProjectHttpTransportSpec,
-    RepoRelPath,
-    ResolvedArtifact,
-    ResolvedAttemptRef,
     ResolvedBaseSpec,
-    ResolvedBundleArtifact,
     ResolvedDownloadSpec,
-    ResolvedEnvironment,
-    ResolvedFileRef,
     ResolvedFutureInputRef,
-    ResolvedGCEEnvironment,
     ResolvedInternalSpec,
-    ResolvedMetricDependency,
-    ResolvedRun,
-    ResolvedRunSpecRef,
-    ResolvedSingleFileArtifact,
     ResolvedSpec,
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     ResolvedStoredInputRef,
-    RunAttempt,
-    RunSpec,
-    SnapshotFileRef,
     Spec,
-    StageArtifactRef,
     StageContextBinding,
+    StageDefinitionError,
     StageInvocationReceipt,
-    StageResultSnapshotRef,
-    StorageModel,
     StoredInputRef,
     TrainSpec,
-    VariantSpec,
-    repo_file_paths_overlap,
+    verify_stage_implementation_bytes,
 )
-from .runtime import process_environment
-from .serialization import document_digest, parse_yaml_bytes
-from .stages import StageDefinitionError, verify_stage_implementation_bytes
 
 StorageFetcher = Callable[[StorageModel], bytes]
 StageSnapshot = StageResultSnapshotRef | LocalStageResultSnapshotRef

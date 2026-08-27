@@ -7,6 +7,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from tests.fixtures import python_environment
+from viper.experiments import (
+    ExperimentSpec,
+    VariantSpec,
+)
 from viper.inspection import (
     InspectionError,
     attempt_status,
@@ -15,13 +19,13 @@ from viper.inspection import (
     plan_diff,
 )
 from viper.journal import DurableJournal
-from viper.protocol import (
-    ExperimentSpec,
+from viper.references import (
     GitFileRef,
-    ResolvedRun,
     ResolvedRunSpecRef,
+)
+from viper.runs import (
+    ResolvedRun,
     RunSpec,
-    VariantSpec,
 )
 from viper.serialization import load_stage_spec, parse_yaml_bytes, serialize_document
 from viper.verifier import VerifiedRunPlan, VerifiedRunResult

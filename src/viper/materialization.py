@@ -6,7 +6,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .ids import InputName, StageId
-from .protocol import BaseSpec, FutureInputRef, InternalSpec
+from .stages import (
+    BaseSpec,
+    FutureInputRef,
+    InternalSpec,
+)
 
 
 class MaterializationError(RuntimeError):

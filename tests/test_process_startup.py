@@ -5,20 +5,21 @@ import json
 
 import pytest
 
-from viper.protocol import (
+from viper.resume import DataLoaderConfiguration
+from viper.runtime import (
     CPUBackendContext,
     CPUComputeSpec,
     CUDABackendContext,
     CUDAComputeSpec,
     CUDADeviceContext,
-    DataLoaderConfiguration,
     NumPyRandomnessSpec,
     ParallelismSpec,
     ReproducibilitySpec,
     TorchDeterminismSpec,
     TorchPrecisionSpec,
+    apply_reproducibility,
+    process_environment,
 )
-from viper.runtime import apply_reproducibility, process_environment
 from viper.verifier import VerificationError, _verify_startup_backend
 
 

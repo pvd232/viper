@@ -190,13 +190,38 @@ def _implemented_schema_findings(root: Path) -> tuple[int, list[AuditFinding]]:
     """Generate schemas for every implemented persisted or extension model."""
     sys.path.insert(0, str(root / "src"))
     try:
-        from viper import parameters, protocol
+        from viper import (
+            artifacts,
+            benchmark,
+            experiments,
+            http,
+            metrics,
+            parameters,
+            references,
+            resume,
+            runs,
+            runtime,
+            stages,
+        )
     finally:
         sys.path.pop(0)
 
     findings: list[AuditFinding] = []
     count = 0
-    for module in (parameters, protocol):
+    modules = (
+        artifacts,
+        benchmark,
+        experiments,
+        http,
+        metrics,
+        parameters,
+        references,
+        resume,
+        runs,
+        runtime,
+        stages,
+    )
+    for module in modules:
         for name, value in inspect.getmembers(module, inspect.isclass):
             if value.__module__ != module.__name__:
                 continue

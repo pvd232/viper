@@ -9,6 +9,11 @@ from tempfile import TemporaryDirectory
 import yaml
 
 from viper import parameters
+from viper._schema import (
+    PARAMETERS,
+    RESUME_STATE,
+)
+from viper.artifacts import ArtifactLoaderRef
 from viper.authoring import (
     RunPlanDraft,
     expand_http_url,
@@ -16,23 +21,24 @@ from viper.authoring import (
     write_experiment_spec,
     write_variant_spec,
 )
-from viper.protocol import (
-    PARAMETERS,
-    RESUME_STATE,
-    ArtifactLoaderRef,
+from viper.experiments import (
     ExperimentSpec,
     FactorSpec,
-    MetricImplementationRef,
-    MetricSpec,
-    ParameterModelRef,
     ReplicateSpec,
-    RunSpec,
-    StageImplementationRef,
-    TrainSpec,
     TrainVariantStageParams,
     VariantSpec,
 )
+from viper.metrics import (
+    MetricImplementationRef,
+    MetricSpec,
+)
+from viper.parameters import ParameterModelRef
+from viper.runs import RunSpec
 from viper.serialization import parse_yaml_bytes, serialize_document
+from viper.stages import (
+    StageImplementationRef,
+    TrainSpec,
+)
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_strand/runs/baseline/{RUN_ID}"

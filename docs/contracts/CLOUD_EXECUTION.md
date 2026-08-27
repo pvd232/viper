@@ -14,16 +14,16 @@ that each realized stage environment satisfies the effective
 
 ## Implemented path
 
-[`GCEEnvironmentSpec`](../../src/viper/protocol.py) fixes the requested host,
+[`GCEEnvironmentSpec`](../../src/viper/runtime.py) fixes the requested host,
 provisioning source, compute backend, lockfile, and installed Python
 environment. [`observe_execution()`](../../src/viper/runtime.py) selects the local
 or GCE observer from that effective environment. The GCE observer constructs
-[`GCEHostContext`](../../src/viper/protocol.py), the CPU context, the selected CPU or
+[`GCEHostContext`](../../src/viper/runtime.py), the CPU context, the selected CPU or
 CUDA backend context, and the numerical runtime context.
 
 [`run()`](../../src/viper/runner.py) resolves each stage's effective environment,
 launches the stage on the active host, and stores
-[`ResolvedGCEEnvironment`](../../src/viper/protocol.py) with the observed execution
+[`ResolvedGCEEnvironment`](../../src/viper/runtime.py) with the observed execution
 context. [`verify_run_result()`](../../src/viper/verifier.py) checks the complete
 requested, resolved, and observed relationship before returning success.
 

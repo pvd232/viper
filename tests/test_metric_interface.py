@@ -8,20 +8,18 @@ import pytest
 
 from viper import parameters
 from viper.metrics import (
+    FloatComparator,
     MeasurementSink,
     MetricContext,
+    MetricDependency,
     MetricError,
+    MetricImplementationRef,
+    MetricSpec,
     StatefulMetric,
     compare_metric_values,
     load_metric,
     metric,
     validate_metric_definition,
-)
-from viper.protocol import (
-    FloatComparator,
-    MetricDependency,
-    MetricImplementationRef,
-    MetricSpec,
 )
 
 

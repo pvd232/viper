@@ -8,9 +8,9 @@ import numpy as np
 import pytest
 
 from viper import StageContext, parameters, train_stage
-from viper.protocol import StageImplementationRef
 from viper.stages import (
     StageDefinitionError,
+    StageImplementationRef,
     load_stage_callable,
     stage_definition,
 )

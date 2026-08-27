@@ -7,12 +7,13 @@ import importlib.util
 import inspect
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Generic, Literal, TypeVar, cast
 
+import numpy as np
 from pydantic import AwareDatetime, Field, model_validator
 
 from . import parameters
@@ -33,16 +34,17 @@ from ._schema import (
     RepoRelPath,
     repo_file_paths_overlap,
 )
-from ._stage_context import StageContext
 from .artifacts import ArtifactSpec, ResolvedArtifact
 from .http import (
     HttpRequestSpec,
     HttpRetrievalContextBinding,
+    HttpRetrievalHandle,
     HttpRetrievalPolicy,
     HttpTransportSpec,
     ResolvedHttpRetrieval,
 )
 from .ids import HumanId, InputName, MetricId, RunId, StageId
+from .metrics import MetricHandle
 from .parameters import ParameterModelRef
 from .references import (
     ArtifactPointerRef,
@@ -61,6 +63,29 @@ from .runtime import (
     ResolvedEnvironment,
     ResolvedGCEEnvironment,
 )
+
+ParamsT = TypeVar("ParamsT", bound=parameters.ParameterSet)
+
+
+@dataclass(frozen=True)
+class StageContext(Generic[ParamsT]):
+    """Carry one validated project-stage invocation inside the controlled child."""
+
+    run_id: RunId
+    attempt_id: int
+    stage_id: StageId
+    params: ParamsT
+    inputs: Mapping[InputName, Path]
+    artifacts: Mapping[ArtifactName, Path]
+    metrics: Mapping[MetricId, MetricHandle]
+    numpy_generators: Mapping[HumanId, np.random.Generator]
+
+
+@dataclass(frozen=True)
+class DownloadContext(StageContext[parameters.Download]):
+    """Extend the stage context with verified HTTP retrieval handles."""
+
+    retrievals: Mapping[InputName, HttpRetrievalHandle]
 
 
 class StageImplementationRef(ProtocolModel):

@@ -10,7 +10,10 @@ from viper import application
 
 ROOT_MODULES = (
     "application",
+    "artifacts",
     "authoring",
+    "benchmark",
+    "experiments",
     "http",
     "ids",
     "inspection",
@@ -20,9 +23,11 @@ ROOT_MODULES = (
     "metrics",
     "parameters",
     "preflight",
-    "protocol",
+    "references",
     "runner",
     "resume",
+    "runs",
+    "runtime",
     "stage_execution",
     "stages",
     "worker",
@@ -48,7 +53,6 @@ ROOT_EXPORTS = (
 
 PUBLIC_MODULES = (
     *ROOT_MODULES,
-    "runtime",
     "serialization",
     "stage_worker",
     "verifier",
@@ -85,6 +89,7 @@ def test_parameter_categories_form_the_public_extension_namespace() -> None:
         "Evaluate",
         "HttpTransport",
         "Metric",
+        "ParameterModelRef",
         "Train",
     )
     assert issubclass(viper.parameters.Train, viper.parameters.ParameterSet)

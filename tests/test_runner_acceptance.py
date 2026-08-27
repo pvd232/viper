@@ -23,48 +23,62 @@ from tests.fixtures import (
 )
 from viper import parameters
 from viper import run as run_stage
+from viper._schema import (
+    PARAMETERS,
+    RESUME_STATE,
+)
 from viper.application import CompareRunsRequest, RunSuccess
 from viper.application import compare_runs as compare_runs_application
+from viper.artifacts import (
+    ArtifactLoaderRef,
+    SingleFileArtifactSpec,
+    StageArtifactRef,
+)
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
+from viper.experiments import (
+    DownloadVariantStageParams,
+    ExperimentSpec,
+    ReplicateSpec,
+    TrainVariantStageParams,
+    VariantSpec,
+)
 from viper.journal import DurableJournal
 from viper.local_store import LocalArtifactStore
 from viper.metric_execution import MetricWorkerResult
-from viper.protocol import (
-    PARAMETERS,
-    RESUME_STATE,
-    ArtifactLoaderRef,
-    CUDAComputeSpec,
-    DownloadSpec,
-    DownloadVariantStageParams,
-    ExperimentSpec,
+from viper.metrics import (
     FloatComparator,
-    FutureInputRef,
-    GCEEnvironmentSpec,
-    GitFileRef,
-    GitSource,
-    HuggingFaceFileRef,
-    LocalEnvironmentSpec,
     Measurement,
     MetricDependency,
     MetricImplementationRef,
     MetricSpec,
-    ParameterModelRef,
-    ReplicateSpec,
-    ResolvedRun,
-    RunSpec,
-    SingleFileArtifactSpec,
-    StageArtifactRef,
-    StageImplementationRef,
-    TrainSpec,
-    TrainVariantStageParams,
-    VariantSpec,
+)
+from viper.parameters import ParameterModelRef
+from viper.references import (
+    GitFileRef,
+    GitSource,
+    HuggingFaceFileRef,
 )
 from viper.runner import RunError, RunFetcher, execute_benchmark_confirmation
 from viper.runner import run as execute_run
-from viper.runtime import observe_gce_provisioning
+from viper.runs import (
+    ResolvedRun,
+    RunSpec,
+)
+from viper.runtime import (
+    CUDAComputeSpec,
+    GCEEnvironmentSpec,
+    LocalEnvironmentSpec,
+    observe_gce_provisioning,
+)
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stage_execution import StageExecutionError, execute_stage_process
-from viper.stages import load_stage_callable
+from viper.stages import (
+    DownloadSpec,
+    FutureInputRef,
+    StageImplementationRef,
+    TrainSpec,
+    load_stage_callable,
+)
 from viper.verifier import (
     VerificationError,
     VerificationPolicy,

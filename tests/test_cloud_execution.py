@@ -7,19 +7,19 @@ import platform
 import pytest
 from pydantic import ValidationError
 
-from viper.protocol import (
+from viper.references import (
+    GitFileRef,
+    ResolvedGitFileRef,
+)
+from viper.runtime import (
     CPUBackendContext,
     CPUComputeSpec,
     GCEBootImageRef,
     GCEEnvironmentSpec,
     GCEHostContext,
-    GitFileRef,
     PythonDistributionSpec,
     PythonEnvironmentSpec,
     ResolvedGCEEnvironment,
-    ResolvedGitFileRef,
-)
-from viper.runtime import (
     observe_gce_execution,
     observe_gce_provisioning,
     observe_python_environment,

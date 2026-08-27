@@ -19,6 +19,18 @@ from tests.fixtures import (
 from tests.test_runner_acceptance import REPOSITORY, _git
 from tests.test_runner_acceptance import http_source as runner_http_source
 from viper import parameters
+from viper._schema import (
+    PARAMETERS,
+    PREDICTIONS,
+    RESUME_STATE,
+    DataRole,
+)
+from viper.artifacts import (
+    ArtifactLoaderRef,
+    ArtifactPointer,
+    SingleFileArtifactSpec,
+    StageArtifactRef,
+)
 from viper.authoring import (
     RunPlanDraft,
     StageDraft,
@@ -27,53 +39,55 @@ from viper.authoring import (
     write_experiment_spec,
     write_variant_spec,
 )
-from viper.local_store import LocalArtifactStore
-from viper.project_init import initialize_project
-from viper.protocol import (
-    PARAMETERS,
-    PREDICTIONS,
-    RESUME_STATE,
-    ArtifactLoaderRef,
-    ArtifactPointer,
-    ArtifactPointerRef,
-    BaseSpec,
+from viper.benchmark import (
     BenchmarkResult,
     BenchmarkSpec,
-    BuildSpec,
+    MetricCriterion,
+)
+from viper.experiments import (
     BuildVariantStageParams,
-    CPUComputeSpec,
-    DataRole,
-    DownloadSpec,
     DownloadVariantStageParams,
-    EmbedSpec,
     EmbedVariantStageParams,
-    EvaluateSpec,
     EvaluateVariantStageParams,
     ExperimentSpec,
-    FloatComparator,
-    FutureInputRef,
-    GCEEnvironmentSpec,
-    GitFileRef,
-    GitSource,
-    LocalEnvironmentSpec,
-    MetricCriterion,
-    MetricDependency,
-    MetricImplementationRef,
-    MetricSpec,
-    ParameterModelRef,
     ReplicateSpec,
-    ResolvedRun,
-    ResolvedRunRef,
-    SingleFileArtifactSpec,
-    StageArtifactRef,
-    StageImplementationRef,
-    StoredInputRef,
-    TrainSpec,
     TrainVariantStageParams,
     VariantSpec,
 )
-from viper.runtime import observe_gce_provisioning
+from viper.local_store import LocalArtifactStore
+from viper.metrics import (
+    FloatComparator,
+    MetricDependency,
+    MetricImplementationRef,
+    MetricSpec,
+)
+from viper.parameters import ParameterModelRef
+from viper.project_init import initialize_project
+from viper.references import (
+    ArtifactPointerRef,
+    GitFileRef,
+    GitSource,
+    ResolvedRunRef,
+)
+from viper.runs import ResolvedRun
+from viper.runtime import (
+    CPUComputeSpec,
+    GCEEnvironmentSpec,
+    LocalEnvironmentSpec,
+    observe_gce_provisioning,
+)
 from viper.serialization import parse_yaml_bytes, serialize_document
+from viper.stages import (
+    BaseSpec,
+    BuildSpec,
+    DownloadSpec,
+    EmbedSpec,
+    EvaluateSpec,
+    FutureInputRef,
+    StageImplementationRef,
+    StoredInputRef,
+    TrainSpec,
+)
 
 ACQUISITION_RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAC"
 CANDIDATE_RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAD"

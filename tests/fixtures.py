@@ -3,32 +3,38 @@
 import hashlib
 
 from viper import parameters
-from viper.protocol import (
-    ArtifactLoaderRef,
+from viper._schema import DataRole
+from viper.artifacts import ArtifactLoaderRef
+from viper.http import (
     BuiltinHttpTransportSpec,
-    DataLoaderConfiguration,
-    DataLoaderResumeState,
-    DataRole,
-    FloatComparator,
     HttpRequestSpec,
     HttpRetrievalPolicy,
-    LegacyNumPyRNGState,
-    MainProcessRNGState,
+)
+from viper.metrics import (
+    FloatComparator,
     MetricDependency,
     MetricImplementationRef,
     MetricKind,
     MetricSpec,
+)
+from viper.parameters import ParameterModelRef
+from viper.resume import (
+    DataLoaderConfiguration,
+    DataLoaderResumeState,
+    LegacyNumPyRNGState,
+    MainProcessRNGState,
     NumPyRNGState,
-    ParameterModelRef,
     PCG64GeneratorState,
     PCG64InternalState,
-    PythonEnvironmentSpec,
     PythonRNGState,
-    ReproducibilitySpec,
     ResumeState,
-    StageImplementationRef,
 )
-from viper.runtime import observe_python_environment
+from viper.runtime import (
+    PythonEnvironmentSpec,
+    ReproducibilitySpec,
+    observe_python_environment,
+)
+from viper.stages import StageImplementationRef
 from viper.verifier import VerificationPolicy
 
 DEFAULT_ARTIFACT_LOADER_SOURCE = b"def load(path):\n    return path.read_bytes()\n"

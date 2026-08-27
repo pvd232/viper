@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from viper.local_store import LocalArtifactStore
-from viper.protocol import LocalFileRef
+from viper.references import LocalFileRef
 
 
 def test_local_store_publishes_and_retrieves_one_content_revision(
