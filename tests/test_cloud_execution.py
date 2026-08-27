@@ -24,7 +24,7 @@ from viper.runtime import (
     observe_gce_provisioning,
     observe_python_environment,
 )
-from viper.verifier import VerificationError, _verify_effective_environment
+from viper.verification import VerificationError, _verify_effective_environment
 
 REPOSITORY = "https://github.com/example/viper-project"
 

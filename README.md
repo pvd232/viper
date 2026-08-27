@@ -23,7 +23,7 @@ both named `viper`.
 | [publication checklist](docs/PUBLICATION_TODO.md) | Tracks implementation and release work | Protocol, runner, package, and distribution tasks |
 | [versioning policy](docs/VERSIONING.md) | Separates software releases from serialized document schemas | Semantic package versions and document `schema_version` values |
 | [run contracts](src/viper/runs.py) | Defines frozen run plans, durable attempts, and terminal run outcomes | `RunSpec`, `RunAttempt`, `ResolvedRun` |
-| [verifier](viper/verifier.py) | Retrieves referenced files and checks cross-record relationships | `verify_run_result()`, `verify_benchmark_result()` |
+| [verification](src/viper/verification.py) | Retrieves referenced files and checks cross-record relationships | `verify_run_result()`, `verify_benchmark_result()` |
 | [training resume](src/viper/resume.py) | Captures, serializes, restores, and validates optimizer, generator, and stateful-loader state | `capture_resume_state()`, `restore_resume_state()` |
 | [plan authoring](viper/authoring.py) | Writes canonical experiment, variant, benchmark, stage, and frozen run-plan files | `freeze_run_plan()`, `write_experiment_spec()`, `write_variant_spec()` |
 | [stage execution](src/viper/stage_execution.py) | Invokes one canonical stage command and hashes every declared output file | `execute_stage_process()` |
@@ -77,7 +77,7 @@ ResolvedStageRef.snapshot
       verify_run_result()
 ```
 
-The [verifier](viper/verifier.py) starts from `ResolvedRun.spec`, verifies the exact
+The [verification module](src/viper/verification.py) starts from `ResolvedRun.spec`, verifies the exact
 RunSpec bytes, loads experiment and variant records, retrieves every stage
 spec, and checks the realized environment, command, inputs, artifacts,
 measurements, logs, and terminal estimator. Artifact loaders are selected by

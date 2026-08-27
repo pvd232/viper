@@ -35,7 +35,7 @@ from viper.runtime import (
     observe_python_environment,
 )
 from viper.stages import StageImplementationRef
-from viper.verifier import VerificationPolicy
+from viper.verification import VerificationPolicy
 
 DEFAULT_ARTIFACT_LOADER_SOURCE = b"def load(path):\n    return path.read_bytes()\n"
 

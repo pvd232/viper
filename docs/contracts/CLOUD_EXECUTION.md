@@ -24,7 +24,7 @@ CUDA backend context, and the numerical runtime context.
 [`run()`](../../src/viper/runner.py) resolves each stage's effective environment,
 launches the stage on the active host, and stores
 [`ResolvedGCEEnvironment`](../../src/viper/runtime.py) with the observed execution
-context. [`verify_run_result()`](../../src/viper/verifier.py) checks the complete
+context. [`verify_run_result()`](../../src/viper/verification.py) checks the complete
 requested, resolved, and observed relationship before returning success.
 
 GCE supports two provisioning sources used by this project. A VM created from

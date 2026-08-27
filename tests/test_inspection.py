@@ -28,7 +28,7 @@ from viper.runs import (
     RunSpec,
 )
 from viper.serialization import load_stage_spec, parse_yaml_bytes, serialize_document
-from viper.verifier import VerifiedRunPlan, VerifiedRunResult
+from viper.verification import VerifiedRunPlan, VerifiedRunResult
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"

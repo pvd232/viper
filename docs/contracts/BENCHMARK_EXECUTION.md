@@ -12,7 +12,7 @@ rules.
 
 ## Implementation
 
-[`verify_benchmark_result()`](../../src/viper/verifier.py) verifies a supplied
+[`verify_benchmark_result()`](../../src/viper/verification.py) verifies a supplied
 confirmation attempt, estimator parity, prediction parity, metric criteria,
 and benchmark status. [`execute_benchmark()`](../../src/viper/benchmark.py) verifies
 the candidate, executes a new confirmation attempt, constructs every comparison

@@ -20,7 +20,7 @@ from viper.runtime import (
     apply_reproducibility,
     process_environment,
 )
-from viper.verifier import VerificationError, _verify_startup_backend
+from viper.verification import VerificationError, _verify_startup_backend
 
 
 def _controls() -> ReproducibilitySpec:

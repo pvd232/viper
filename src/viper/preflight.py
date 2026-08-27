@@ -46,7 +46,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
-from .verifier import (
+from .verification import (
     VerificationError,
     fetch_storage_bytes,
     verify_benchmark_spec,

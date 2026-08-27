@@ -36,8 +36,8 @@ TIER_BY_MODULE = {
     "test_serialization": "unit",
     "test_stage_invocation": "contract",
     "test_validation_architecture": "contract",
-    "test_verifier": "contract",
-    "test_verifier_acceptance": "integration",
+    "test_verification": "contract",
+    "test_verification_acceptance": "integration",
     "test_worker": "integration",
 }
 
@@ -73,8 +73,8 @@ DOMAIN_BY_MODULE = {
     "test_serialization": "domain_protocol",
     "test_stage_invocation": "domain_execution",
     "test_validation_architecture": "domain_protocol",
-    "test_verifier": "domain_verification",
-    "test_verifier_acceptance": "domain_verification",
+    "test_verification": "domain_verification",
+    "test_verification_acceptance": "domain_verification",
     "test_worker": "domain_execution",
 }
 

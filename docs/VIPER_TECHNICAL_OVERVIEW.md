@@ -225,7 +225,7 @@ restriction from training through benchmark use. During plan verification,
 VIPER rejects evaluation or benchmark inputs selected by a training stage. It
 also rejects an output whose role weakens the strongest restriction inherited
 from the stage's inputs. The exact checks appear in
-[verifier.py](../src/viper/verifier.py).
+[verification.py](../src/viper/verification.py).
 
 This rule makes leakage visible at the plan boundary. The project still assigns
 the initial scientific role when a source artifact first enters the provenance
@@ -277,7 +277,7 @@ plan as a new confirmation attempt. The benchmark compares the complete
 `parameters` and `predictions` artifact descriptions and applies its thresholds
 to independently recomputed metric values. [benchmark.py](../src/viper/benchmark.py)
 constructs the result; `verify_benchmark_result()` in
-[verifier.py](../src/viper/verifier.py) checks it.
+[verification.py](../src/viper/verification.py) checks it.
 
 ```text
 verified candidate attempt
@@ -322,7 +322,7 @@ the plan relationships, stage order, invocation identity, requested and
 observed environments, input lineage, artifact completeness, loader results,
 measurements, metric recomputation, attempt transitions, and selected estimator.
 Every reference is checked against its stored digest and byte count before its
-contents support a later claim. [verify_run_result()](../src/viper/verifier.py)
+contents support a later claim. [verify_run_result()](../src/viper/verification.py)
 returns the connected verified plan, attempts, successful stage results, and
 measurements.
 
@@ -437,7 +437,7 @@ only after verification succeeds.
 9. VIPER source, [project initialization](../src/viper/project_init.py), generated
    user-project source and tests.
 10. VIPER source, [complete-plan runner](../src/viper/runner.py) and
-   [verifier](../src/viper/verifier.py), attempt execution, publication, and
+   [verification](../src/viper/verification.py), attempt execution, publication, and
    verification.
 11. VIPER tests, [generated-project acceptance](../tests/test_generated_project_acceptance.py),
     installed-project acquisition, five-stage execution, benchmark, and

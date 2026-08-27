@@ -90,7 +90,7 @@ from .stages import (
     StageInvocationReceipt,
     StoredInputRef,
 )
-from .verifier import (
+from .verification import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,

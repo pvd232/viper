@@ -18,7 +18,7 @@ from .stages import (
     InternalSpec,
     StoredInputRef,
 )
-from .verifier import VerifiedRunResult
+from .verification import VerifiedRunResult
 
 
 class InspectionError(RuntimeError):

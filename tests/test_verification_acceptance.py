@@ -146,7 +146,7 @@ from viper.stages import (
     StoredInputRef,
     TrainSpec,
 )
-from viper.verifier import (
+from viper.verification import (
     VerificationError,
     verify_benchmark_result,
     verify_promoted_artifact,

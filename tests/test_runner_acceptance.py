@@ -79,7 +79,7 @@ from viper.stages import (
     TrainSpec,
     load_stage_callable,
 )
-from viper.verifier import (
+from viper.verification import (
     VerificationError,
     VerificationPolicy,
     read_attempt_reference,

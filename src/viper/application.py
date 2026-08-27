@@ -52,7 +52,7 @@ from .runs import (
 from .serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
 from .stage_execution import StageExecutionError, execute_stage_process
 from .stages import Spec
-from .verifier import (
+from .verification import (
     StorageFetcher,
     VerificationError,
     VerificationPolicy,

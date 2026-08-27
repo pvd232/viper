@@ -8,8 +8,8 @@ loaders, metric implementations, and exact training resume behavior.
 | File | Contract verified |
 |---|---|
 | [protocol tests](test_protocol.py) | Individual Pydantic models reject invalid fields, paths, identifiers, stage relationships, and checkpoint declarations. |
-| [verifier tests](test_verifier.py) | The verifier retrieves referenced bytes and enforces relationships among run plans, stages, inputs, artifacts, attempts, measurements, and benchmarks. |
-| [verifier acceptance tests](test_verifier_acceptance.py) | A complete synthetic provenance chain passes through the public verifier; targeted mutations prove that broken hashes, timing, snapshots, and lineage fail. |
+| [verifier tests](test_verification.py) | The verifier retrieves referenced bytes and enforces relationships among run plans, stages, inputs, artifacts, attempts, measurements, and benchmarks. |
+| [verifier acceptance tests](test_verification_acceptance.py) | A complete synthetic provenance chain passes through the public verifier; targeted mutations prove that broken hashes, timing, snapshots, and lineage fail. |
 | [authoring tests](test_authoring.py) | Canonical experiment, variant, stage, and run-plan files are written at identity-based paths, and each frozen stage reference matches the exact serialized bytes. |
 | [parameter-validation tests](test_parameter_validation.py) | Project Pydantic classes are byte-bound, loaded from a top-level symbol, checked against the correct parameter category, and invoked in a dedicated worker. |
 | [command tests](test_cli.py) | The installed command dispatches to the public validation surface and reports the validated protocol type. |
@@ -21,7 +21,7 @@ loaders, metric implementations, and exact training resume behavior.
 | [metric tests](test_metrics.py) | Metric implementations compute their declared values and reject nonfinite inputs. |
 | [shared fixtures](fixtures.py) | Independent test modules use shared builders to construct the same valid metric and resume records. |
 
-`test_verifier_acceptance.py` exercises the verifier with an in-memory document
+`test_verification_acceptance.py` exercises the verifier with an in-memory document
 store. `test_execution_acceptance.py` crosses the process boundary and inspects
 the files produced by a real stage command.
 

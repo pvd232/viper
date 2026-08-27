@@ -39,7 +39,7 @@ inline annotations distributed with the installed `viper` package.
 | `viper.serialization` | Duplicate-key-safe parsing and canonical document encoding |
 | `viper.stage_execution` | One controlled stage-process invocation on the active host |
 | `viper.stages` | Stage decorators, typed contexts, and direct Python execution |
-| `viper.verifier` | Run, benchmark, and promoted-artifact verification |
+| `viper.verification` | Run, benchmark, and promoted-artifact verification |
 | `viper.worker` | Project command execution through the selected backend |
 | `viper.workspace` | Bounded attempt directories and exclusive run ownership |
 

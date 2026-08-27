@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_verifier_acceptance import build_benchmark_fixture
+from tests.test_verification_acceptance import build_benchmark_fixture
 from viper.application import ExecuteBenchmarkRequest
 from viper.application import execute_benchmark as execute_benchmark_application
 from viper.benchmark import BenchmarkExecutionResult, BenchmarkSpec

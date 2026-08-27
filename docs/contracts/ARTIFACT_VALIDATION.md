@@ -13,8 +13,8 @@ evidence: representation identity, loadability, or reserved semantic validity.
 
 ## Implemented path
 
-[`verify_snapshot_artifact()`](../../src/viper/verifier.py) verifies every resolved
-file. [`load_verified_artifact()`](../../src/viper/verifier.py) invokes the declared
+[`verify_snapshot_artifact()`](../../src/viper/verification.py) verifies every resolved
+file. [`load_verified_artifact()`](../../src/viper/verification.py) invokes the declared
 loader and returns its value. The same function applies `ResumeState` validation
 only when the artifact name is `resume_state`.
 

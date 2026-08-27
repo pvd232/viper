@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from tests.test_verifier_acceptance import (
+from tests.test_verification_acceptance import (
     POLICY,
     build_complete_fixture,
     fetch_attempt,
@@ -14,7 +14,7 @@ from tests.test_verifier_acceptance import (
     yaml_bytes,
 )
 from viper.metrics import MetricVerificationReceipt
-from viper.verifier import VerificationError, verify_run_result
+from viper.verification import VerificationError, verify_run_result
 
 
 def test_recomputed_metric_requires_one_verification_receipt() -> None:

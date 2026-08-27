@@ -176,7 +176,7 @@ def execute_benchmark(
     from .local_store import LocalArtifactStore
     from .runner import RunFetcher, execute_benchmark_confirmation
     from .serialization import document_digest, parse_yaml_bytes, serialize_document
-    from .verifier import (
+    from .verification import (
         VerificationPolicy,
         verify_attempt_stages,
         verify_benchmark_result,
