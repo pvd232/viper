@@ -15,38 +15,416 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Annotated, Any, Literal, cast
 
 import numpy as np
 import torch
+from pydantic import Field, model_validator
 
-from .protocol import (
-    ComputeSpec,
-    CPUBackendContext,
-    CPUContext,
-    CUDABackendContext,
-    CUDAComputeSpec,
-    CUDADeviceContext,
-    EnvironmentSpec,
-    ExecutionContext,
-    GCEBootImageRef,
-    GCEEnvironmentSpec,
-    GCEHostContext,
-    GCEMachineImageRef,
-    GCEProvisioningRef,
-    GeneratorInitializationReceipt,
-    HostContext,
-    LocalHostContext,
-    NativeLibraryContext,
-    NativeThreadPoolContext,
-    NumericalRuntimeContext,
-    ProcessStartupReceipt,
-    PythonDistributionSpec,
-    PythonEnvironmentSpec,
-    ReproducibilitySpec,
+from ._schema import (
+    SHA256,
+    NonEmptyStr,
+    NormalizedDistributionName,
+    ProtocolModel,
     RNGSeed,
-    StartupVariable,
 )
+from .ids import HumanId
+from .references import GitFileRef, ResolvedGitFileRef
+
+
+class GCEBootImageRef(ProtocolModel):
+    """Select one immutable Google Compute Engine boot image."""
+
+    kind: Literal["boot_image"] = "boot_image"
+    project: NonEmptyStr
+    name: NonEmptyStr
+    id: NonEmptyStr
+
+
+class GCEMachineImageRef(ProtocolModel):
+    """Select one immutable Google Compute Engine machine image."""
+
+    kind: Literal["machine_image"] = "machine_image"
+    project: NonEmptyStr
+    name: NonEmptyStr
+    id: NonEmptyStr
+
+
+GCEProvisioningRef = Annotated[
+    GCEBootImageRef | GCEMachineImageRef,
+    Field(discriminator="kind"),
+]
+
+
+class PythonDistributionSpec(ProtocolModel):
+    """Fix one normalized installed Python distribution and version."""
+
+    name: NormalizedDistributionName
+    version: NonEmptyStr
+
+
+class PythonEnvironmentSpec(ProtocolModel):
+    """Fix the interpreter and installed distributions used by a stage."""
+
+    python_version: NonEmptyStr
+    distributions: tuple[PythonDistributionSpec, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_distribution_order(self) -> PythonEnvironmentSpec:
+        """Require one canonically ordered entry for each distribution name."""
+        names = tuple(distribution.name for distribution in self.distributions)
+        if names != tuple(sorted(names)):
+            raise ValueError("Python distributions must be sorted by name")
+        if len(set(names)) != len(names):
+            raise ValueError("Python distribution names must be unique")
+        return self
+
+
+class CPUComputeSpec(ProtocolModel):
+    """Request CPU execution for a stage."""
+
+    kind: Literal["cpu"] = "cpu"
+
+
+class CUDAComputeSpec(ProtocolModel):
+    """Request a specific CUDA device model and count."""
+
+    kind: Literal["cuda"] = "cuda"
+    model: NonEmptyStr
+    count: int = Field(ge=1)
+
+
+ComputeSpec = Annotated[
+    CPUComputeSpec | CUDAComputeSpec,
+    Field(discriminator="kind"),
+]
+
+
+class GCEEnvironmentSpec(ProtocolModel):
+    """Declare the requested Google Compute Engine environment."""
+
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: GitFileRef
+    python_environment: PythonEnvironmentSpec
+
+
+class ResolvedGCEEnvironment(ProtocolModel):
+    """Record the environment realized for one stage execution."""
+
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: ResolvedGitFileRef
+    python_environment: PythonEnvironmentSpec
+
+
+class LocalEnvironmentSpec(ProtocolModel):
+    """Declare a local development environment fixed by one lockfile."""
+
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: GitFileRef
+    python_environment: PythonEnvironmentSpec
+
+
+class ResolvedLocalEnvironment(ProtocolModel):
+    """Record the local development environment used by one stage."""
+
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: ResolvedGitFileRef
+    python_environment: PythonEnvironmentSpec
+
+
+EnvironmentSpec = Annotated[
+    GCEEnvironmentSpec | LocalEnvironmentSpec,
+    Field(discriminator="kind"),
+]
+
+
+ResolvedEnvironment = Annotated[
+    ResolvedGCEEnvironment | ResolvedLocalEnvironment,
+    Field(discriminator="kind"),
+]
+
+
+class DataLoaderConfiguration(ProtocolModel):
+    """Fix worker and prefetch behavior for the training DataLoader."""
+
+    workers: int = Field(ge=0)
+    prefetch_factor: int | None = Field(default=None, ge=1)
+    persistent_workers: bool = False
+    in_order: Literal[True] = True
+
+    @model_validator(mode="after")
+    def validate_worker_configuration(self) -> DataLoaderConfiguration:
+        """Enforce valid worker, prefetch, and persistence combinations."""
+        if self.workers == 0:
+            if self.prefetch_factor is not None:
+                raise ValueError("prefetch_factor requires workers > 0")
+            if self.persistent_workers:
+                raise ValueError("persistent_workers requires workers > 0")
+        elif self.prefetch_factor is None:
+            raise ValueError("prefetch_factor is required when workers > 0")
+
+        return self
+
+
+class NumPyRandomnessSpec(ProtocolModel):
+    """Named NumPy generators and legacy-global capture applied run-wide."""
+
+    generators: dict[HumanId, Literal["PCG64"]] = Field(default_factory=dict)
+    capture_legacy_global: bool = False
+
+
+class TorchDeterminismSpec(ProtocolModel):
+    """PyTorch, cuDNN, and cuBLAS determinism controls."""
+
+    deterministic_algorithms: bool
+    deterministic_warn_only: bool
+    cudnn_deterministic: bool
+    cudnn_benchmark: bool
+    cublas_workspace_config: Literal[":16:8", ":4096:8"] | None
+
+
+class TorchPrecisionSpec(ProtocolModel):
+    """PyTorch numerical-precision controls that can affect output values."""
+
+    float32_matmul_precision: Literal["highest", "high", "medium"]
+    cudnn_allow_tf32: bool
+
+    autocast_enabled: bool
+    autocast_dtype: Literal["float16", "bfloat16"] | None
+
+    @model_validator(mode="after")
+    def validate_autocast(self) -> TorchPrecisionSpec:
+        """Require an autocast dtype exactly when autocast is enabled."""
+        if self.autocast_enabled and self.autocast_dtype is None:
+            raise ValueError("autocast_dtype is required when autocast_enabled is true")
+
+        if not self.autocast_enabled and self.autocast_dtype is not None:
+            raise ValueError(
+                "autocast_dtype must be null when autocast_enabled is false"
+            )
+
+        return self
+
+
+class ParallelismSpec(ProtocolModel):
+    """Fix process, thread-pool, and DataLoader parallelism run-wide."""
+
+    process_count: int = Field(ge=1)
+    torch_intraop_threads: int = Field(ge=1)
+    torch_interop_threads: int = Field(ge=1)
+
+    dataloader: DataLoaderConfiguration
+
+
+class ReproducibilitySpec(ProtocolModel):
+    """Numerical controls applied to every stage in a run."""
+
+    determinism: TorchDeterminismSpec
+    precision: TorchPrecisionSpec
+    parallelism: ParallelismSpec
+    numpy_randomness: NumPyRandomnessSpec
+
+
+GeneratorFamily = Literal[
+    "python",
+    "numpy_generator",
+    "numpy_legacy",
+    "torch_cpu",
+    "torch_cuda",
+]
+
+
+class GeneratorInitializationReceipt(ProtocolModel):
+    """Identify one generator state immediately after seeded initialization."""
+
+    family: GeneratorFamily
+    seed: RNGSeed
+    name: HumanId | None = None
+    device_index: int | None = Field(default=None, ge=0)
+    state_sha256: SHA256
+
+    @model_validator(mode="after")
+    def validate_identity_fields(self) -> GeneratorInitializationReceipt:
+        """Match optional identity fields to their generator family."""
+        if (self.family == "numpy_generator") != (self.name is not None):
+            raise ValueError("name is required exactly for a named NumPy generator")
+        if (self.family == "torch_cuda") != (self.device_index is not None):
+            raise ValueError("device_index is required exactly for a CUDA generator")
+        return self
+
+
+StartupVariable = Literal[
+    "CUBLAS_WORKSPACE_CONFIG",
+    "CUDA_VISIBLE_DEVICES",
+    "MKL_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "PYTHONHASHSEED",
+]
+
+
+class ProcessStartupReceipt(ProtocolModel):
+    """Record the startup environment, applied controls, and seeded generators."""
+
+    environment: dict[StartupVariable, str]
+    reproducibility: ReproducibilitySpec
+    generators: tuple[GeneratorInitializationReceipt, ...]
+
+
+class GCEHostContext(ProtocolModel):
+    """Record the Google Compute Engine host observed at execution."""
+
+    provider: Literal["gce"] = "gce"
+
+    project_id: NonEmptyStr
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    zone: NonEmptyStr
+
+    guest_os_name: NonEmptyStr
+    guest_os_version: NonEmptyStr
+    kernel_release: NonEmptyStr
+
+
+class LocalHostContext(ProtocolModel):
+    """Record the operating system observed by a local development worker."""
+
+    provider: Literal["local"] = "local"
+    operating_system: NonEmptyStr
+    release: NonEmptyStr
+    architecture: NonEmptyStr
+
+
+HostContext = Annotated[
+    GCEHostContext | LocalHostContext,
+    Field(discriminator="provider"),
+]
+
+
+class CPUContext(ProtocolModel):
+    """Record the CPU available to the execution.
+
+    Instruction-set features can change numerical-library implementation
+    choices.
+    """
+
+    architecture: NonEmptyStr
+    model: NonEmptyStr
+    instruction_features: tuple[NonEmptyStr, ...] = Field(min_length=1)
+
+
+class CPUBackendContext(ProtocolModel):
+    """Records that PyTorch executed without a GPU backend."""
+
+    kind: Literal["cpu"] = "cpu"
+    device: Literal["cpu"] = "cpu"
+
+
+class CUDADeviceContext(ProtocolModel):
+    """Record one CUDA device observed at execution."""
+
+    ordinal: int = Field(ge=0)
+    model: NonEmptyStr
+
+    compute_capability_major: int = Field(ge=0)
+    compute_capability_minor: int = Field(ge=0)
+
+    memory_bytes: int = Field(gt=0)
+
+
+class CUDABackendContext(ProtocolModel):
+    """The CUDA backend and devices observed during execution."""
+
+    kind: Literal["cuda"] = "cuda"
+
+    gpu_devices: tuple[CUDADeviceContext, ...] = Field(min_length=1)
+
+    nvidia_driver_version: NonEmptyStr
+    pytorch_cuda_version: NonEmptyStr
+    cudnn_version: NonEmptyStr
+
+    @model_validator(mode="after")
+    def validate_unique_device_ordinals(self) -> CUDABackendContext:
+        """Require one record per CUDA device ordinal."""
+        ordinals = tuple(device.ordinal for device in self.gpu_devices)
+        if len(set(ordinals)) != len(ordinals):
+            raise ValueError("CUDA device ordinals must be unique")
+        return self
+
+
+ComputeBackendContext = Annotated[
+    CPUBackendContext | CUDABackendContext,
+    Field(discriminator="kind"),
+]
+
+
+class NativeLibraryContext(ProtocolModel):
+    """Record one native numerical library implementation and version."""
+
+    implementation: NonEmptyStr
+    version: NonEmptyStr
+
+
+class NativeThreadPoolContext(NativeLibraryContext):
+    """Record one native library and its active thread count."""
+
+    threads: int = Field(ge=1)
+
+
+class NumericalRuntimeContext(ProtocolModel):
+    """Record language, framework, and numerical-library versions."""
+
+    python_version: NonEmptyStr
+    pytorch_version: NonEmptyStr
+    numpy_version: NonEmptyStr
+
+    blas: NativeLibraryContext
+    lapack: NativeLibraryContext
+    native_thread_pools: tuple[NativeThreadPoolContext, ...]
+
+
+class RandomnessContext(ProtocolModel):
+    """Record the global seed applied to each supported generator family."""
+
+    python_seed: RNGSeed
+    numpy_seed: RNGSeed
+    torch_seed: RNGSeed
+    dataloader_seed: RNGSeed
+
+    @model_validator(mode="after")
+    def validate_shared_seed(self) -> RandomnessContext:
+        """Require every recorded generator family to use the global seed."""
+        seeds = {
+            self.python_seed,
+            self.numpy_seed,
+            self.torch_seed,
+            self.dataloader_seed,
+        }
+        if len(seeds) != 1:
+            raise ValueError("all recorded random-number generators must use one seed")
+        return self
+
+
+class ExecutionContext(ProtocolModel):
+    """Facts observed from the host and running process.
+
+    The GCE environment records the machine image and dependency lockfile
+    supplied to the execution. This class records the host and runtime
+    conditions under which it ran.
+    """
+
+    host: HostContext
+    cpu: CPUContext
+    backend: ComputeBackendContext
+    numerical_runtime: NumericalRuntimeContext
+
 
 _GCE_METADATA_ROOT = "http://metadata.google.internal/computeMetadata/v1"
 MetadataGetter = Callable[[str], str]
