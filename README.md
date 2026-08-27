@@ -3,13 +3,8 @@
 Run and verify reproducible ML experiments with machine-readable guardrails for
 agents.
 
-VIPER gives every ML experiment a fixed plan and a verifiable execution
-history. Before a run begins, it binds the source commit, stage implementations,
-parameters, inputs, runtime environment, and reproducibility controls. During
-execution, VIPER records the resolved inputs, produced artifacts, measurements,
-and runtime evidence for each stage. Verification checks those records against
-the frozen plan, tying every accepted result to the exact code, data, and
-execution that produced it.
+VIPER makes ML experiments reproducible and auditable. It freezes each
+experiment before execution, then records and verifies the resulting run.
 
 ## Install
 
