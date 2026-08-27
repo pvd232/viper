@@ -7,11 +7,11 @@ working agreements and load the user-scoped skills relevant to the active task.
 
 - Read `README.md`, `pyproject.toml`, and the nearest relevant documentation and
   tests before changing implementation behavior.
-- Treat package code, tests, examples, contracts, user documentation, and
-  release evidence as distinct artifacts. Relocate an artifact only when the
-  owning contract or approved execution checklist requires the move.
-- Keep public entities in the owner modules defined by
-  `docs/contracts/PACKAGE_RELEASE.md`.
+- Treat package code, tests, examples, user documentation, and release evidence
+  as distinct artifacts. Relocate an artifact only when its documented owner
+  changes.
+- Keep public entities in the domain modules listed in
+  `docs/reference/api.md`.
 - Keep serialized protocol fields and discriminators stable during Python
   module refactors.
 
@@ -21,8 +21,8 @@ working agreements and load the user-scoped skills relevant to the active task.
   package, test, schema, or validation commands.
 - Activate the Conda environment named `mantra` before running those commands.
 - Verify the active environment and Python interpreter once per shell session.
-- Reactivate `mantra` whenever a new shell session starts. Do not assume that
-  activation from an earlier shell persists.
+- Activate `mantra` at the start of every new shell. Environment activation is
+  session-scoped.
 
 ## Evidence and documentation
 
@@ -42,9 +42,9 @@ working agreements and load the user-scoped skills relevant to the active task.
 
 - Keep edits within the requested scope and preserve unrelated working-tree
   changes.
-- Do not modify generated caches, package metadata, or compiled artifacts as a
-  substitute for changing their source.
+- Change source files that own generated caches, package metadata, and compiled
+  artifacts.
 - Run targeted tests for changed behavior, followed by broader validation when
-  the change crosses modules or contracts.
-- Report exact commands and results. Do not claim that a renderer, link check,
-  test, or empirical validation passed unless it was executed or inspected.
+  the change crosses modules or protocol boundaries.
+- Base every renderer, link, test, and empirical pass claim on an executed or
+  inspected result. Report the exact command and result.

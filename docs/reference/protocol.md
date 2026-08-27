@@ -1,8 +1,7 @@
 # Foundational reproducibility formalism
 
-This document defines the VIPER 0.1 protocol target. The contract index records
-implementation status for each increment:
-[VIPER contracts](../contracts/README.md).
+This document defines the VIPER 0.1 protocol: its mathematical objects,
+serialized documents, state transitions, and verification relationships.
 
 ## Contents
 

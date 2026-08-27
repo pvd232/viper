@@ -36,15 +36,19 @@ class TrainParameters(viper.parameters.Train):
 
 @viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
+    weights_path = context.artifacts["parameters"]
     for _ in range(context.params.epochs):
         update_model(context.inputs["dataset"])
-    save_model(context.artifacts["parameters"])
+    save_weights(weights_path)
 ```
 
 `StageContext` provides the active run, attempt, and stage IDs; the validated
 parameter value; materialized input paths; writable artifact paths; live metric
 handles; and named NumPy generators. `DownloadContext` adds verified HTTP
 retrieval handles.
+
+The `parameters` artifact key is VIPER's required slot for trained model state.
+The project writes its weights to that slot through `weights_path`.
 
 ## Parameter categories
 

@@ -50,10 +50,10 @@ class TrainParameters(viper.parameters.Train):
 @viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
     dataset = context.inputs["dataset"]
-    parameters = context.artifacts["parameters"]
+    weights_path = context.artifacts["parameters"]
 
     model = fit(dataset, epochs=context.params.epochs)
-    save(model, parameters)
+    save_weights(model, weights_path)
 ```
 
 The decorator binds `train` to the training-stage category and
@@ -61,6 +61,8 @@ The decorator binds `train` to the training-stage category and
 validated parameters, materialized input paths, writable artifact paths, live
 metric handles, named NumPy generators, and active run identity. The
 [stage module](../../src/viper/stages.py) owns this interface.
+The `parameters` artifact key is VIPER's required slot for trained model state.
+The project uses `weights_path` as the local name for that destination.
 
 The project can use its ordinary Python entrypoint:
 
@@ -177,7 +179,8 @@ Each resolved file records its path, byte count, and SHA-256 digest.
 
 A training checkpoint contains two reserved artifacts:
 
-- `parameters` stores the trained model state.
+- `parameters` stores the trained model state, such as learned weights and
+  persistent buffers.
 - `resume_state` stores the optimizer, random-number-generator, and stateful
   DataLoader state required for exact continuation.
 
@@ -259,7 +262,7 @@ verified candidate attempt
 independent attempt from the same RunSpec
         |
         v
-parameters and predictions parity
+trained-model and predictions parity
         |
         v
 metric criteria
@@ -295,7 +298,8 @@ CPU, selected CUDA device, driver, PyTorch CUDA runtime, and cuDNN runtime.
 Version `0.1` supports one host process and one selected CUDA device per stage.
 Distributed execution requires a future contract for rank topology, per-rank
 evidence, collective-library configuration, and distributed checkpoint
-identity. See the [cloud execution contract](../contracts/CLOUD_EXECUTION.md).
+identity. The [runtime module](../../src/viper/runtime.py) defines the current
+host and compute evidence.
 
 Project-owned stage callables, transports, metrics, and artifact loaders execute
 as trusted code. VIPER verifies their source identity and controls their

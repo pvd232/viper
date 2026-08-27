@@ -52,15 +52,17 @@ class TrainParameters(viper.parameters.Train):
 @viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
     dataset = context.inputs["dataset"]
-    parameters = context.artifacts["parameters"]
+    weights_path = context.artifacts["parameters"]
 
     model = fit(dataset, epochs=context.params.epochs)
-    save(model, parameters)
+    save_weights(model, weights_path)
 ```
 
 VIPER validates the frozen parameter mapping through `TrainParameters` before
 calling `train`. The worker supplies the resulting object as `context.params`.
 It also supplies the materialized input path and the allocated artifact path.
+The `parameters` key names VIPER's required trained-model artifact.
+`weights_path` names that artifact's destination inside the project.
 
 ## Start a run from Python
 
@@ -142,8 +144,8 @@ viper execute-benchmark \
   --repository-root .
 ```
 
-The benchmark verifies the confirmation attempt, compares the declared
-`parameters` and `predictions` artifacts, and applies its metric thresholds.
+The benchmark verifies the confirmation attempt, compares the trained-model
+artifact and predictions, and applies its metric thresholds.
 
 ## Run on a GPU VM
 
@@ -154,8 +156,8 @@ Each stage records the observed host, CPU, selected CUDA device, driver,
 PyTorch CUDA runtime, and cuDNN runtime.
 
 Version `0.1` supports one host process and one selected CUDA device per stage.
-The [cloud execution contract](../contracts/CLOUD_EXECUTION.md) defines the
-requested and observed fields.
+The [execution-environment explanation](../explanation/how-viper-works.md#12-execution-environment-and-scope)
+defines the requested and observed fields.
 
 ## Continue reading
 

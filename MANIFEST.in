@@ -1,6 +1,5 @@
 prune src/viper_provenance.egg-info
 include docs/README.md
-recursive-include docs/contracts *.md
 recursive-include docs/development *.md
 recursive-include docs/explanation *.md
 recursive-include docs/reference *.md

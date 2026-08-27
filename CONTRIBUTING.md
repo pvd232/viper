@@ -25,9 +25,8 @@ Keep each public type or operation in the module that owns its domain. Add a
 docstring to every module, class, function, method, and test. Use inline comments
 to explain a non-obvious invariant, state transition, join, or safety boundary.
 
-Protocol changes require synchronized updates to the formal schema, relevant
-contract, implementation, verifier rule, and acceptance test. Run the contract
-audit before approving a cross-document change.
+Protocol changes require synchronized updates to the formal protocol,
+implementation, verifier rule, and acceptance test.
 
 ## Validate the change
 
@@ -59,5 +58,4 @@ marker, CI job, and live CUDA gate.
 Open a pull request from a focused branch. Describe the contract or behavior
 that changed and include the exact validation results. A release commit must
 pass the built-distribution, clean-installation, generated-project, and live
-hardware gates defined by the
-[package-release contract](docs/contracts/PACKAGE_RELEASE.md).
+hardware gates described in the [testing guide](docs/development/testing.md).

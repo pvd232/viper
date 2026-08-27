@@ -78,29 +78,24 @@ The marker declarations in `pyproject.toml` are authoritative.
 ## Continuous integration
 
 GitHub Actions starts with the fast Python 3.14 gate. A successful fast gate
-starts three independent jobs:
+starts four independent jobs:
 
 | Job | Required evidence |
 | --- | --- |
 | Integration | Every integration test under Python 3.14 |
 | Release candidate | Generated-project execution, distribution build, and installed-wheel smoke test under Python 3.14 |
 | Compatibility | Unit and contract tests plus build and wheel checks under Python 3.11, 3.12, and 3.13 |
+| Minimum Pydantic | Project-defined parameter subclasses under Pydantic 2.12.0 |
 
 The release commit must pass every job. A live hardware report then identifies
 the exact wheel installed on the designated CUDA host and records the resulting
 stage evidence.
 
-## Contract audit
+## Protocol validation
 
-The specification audit compares repeated protocol classes, compiles proposed
-model snippets, checks value lifecycles, and traces named verifier requirements
-into acceptance tests. Run its tests after changing a contract or protocol
-document:
+Run the protocol and validation-architecture tests after changing a serialized
+schema or verifier relationship:
 
 ```bash
-python -m pytest tests/test_contract_audit.py -q
+python -m pytest tests/test_protocol.py tests/test_validation_architecture.py -q
 ```
-
-The audit supports technical review. Approval still requires examining each
-claim-bearing value from its producer through its persisted representation and
-verifier reconstruction.

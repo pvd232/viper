@@ -47,10 +47,10 @@ class TrainParameters(viper.parameters.Train):
 @viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
     dataset: Path = context.inputs["dataset"]
-    output: Path = context.artifacts["parameters"]
+    weights_path: Path = context.artifacts["parameters"]
     run_training(
         dataset=dataset,
-        output=output,
+        weights_path=weights_path,
         epochs=context.params.epochs,
         learning_rate=context.params.learning_rate,
     )
@@ -59,6 +59,8 @@ def train(context: viper.StageContext[TrainParameters]) -> None:
 Freezing identifies `train`, `TrainParameters`, and their source files by
 repository-relative path, SHA-256 digest, and byte count. Execution constructs
 the validated `TrainParameters` value and passes it through `context.params`.
+The `parameters` artifact key is VIPER's required slot for trained model state;
+`weights_path` is the destination used by the project code.
 
 ## Run a frozen plan
 
@@ -146,7 +148,6 @@ python -m pytest tests/test_generated_project_acceptance.py -q -m release
 - [Python and CLI API](https://github.com/pvd232/viper/blob/main/docs/reference/api.md)
 - [How VIPER works](https://github.com/pvd232/viper/blob/main/docs/explanation/how-viper-works.md)
 - [Formal protocol](https://github.com/pvd232/viper/blob/main/docs/reference/protocol.md)
-- [Implementation contracts](https://github.com/pvd232/viper/blob/main/docs/contracts/README.md)
 - [Versioning](https://github.com/pvd232/viper/blob/main/docs/reference/versioning.md)
 - [Contributing](https://github.com/pvd232/viper/blob/main/CONTRIBUTING.md)
 
