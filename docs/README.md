@@ -23,4 +23,5 @@ Start with the task you need to complete.
 | --- | --- |
 | [Contributing guide](../CONTRIBUTING.md) | Set up the repository and submit a validated change |
 | [Testing guide](development/testing.md) | Select a test tier, domain, CI gate, or live CUDA check |
+| [0.1.0a2 release evidence](releases/0.1.0a2.md) | Inspect the current public distributions, registry attestations, clean installations, and NVIDIA L4 validation |
 | [0.1.0a1 release evidence](releases/0.1.0a1.md) | Inspect the first public distribution and live NVIDIA L4 validation |
