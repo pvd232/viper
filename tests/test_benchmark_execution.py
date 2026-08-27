@@ -48,7 +48,7 @@ def test_api_returns_the_verified_benchmark_result(
     result, _, _ = build_benchmark_fixture()
     result_path = tmp_path / "benchmark.result.yaml"
     monkeypatch.setattr(
-        "viper.api.execute_benchmark_run",
+        "viper._api.handlers.execute_benchmark_run",
         lambda *args, **kwargs: BenchmarkExecutionResult(
             result=result,
             result_path=result_path,

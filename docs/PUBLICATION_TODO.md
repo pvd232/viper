@@ -845,12 +845,16 @@ deletion commit for retired modules.
   and capability discovery to `viper.api`.
 - [x] Update the CLI and root package to call `viper.api`.
 - [x] Delete `viper.application` after its last consumer moves.
-- [ ] Inventory repeated coordinators, worker launchers, serializers, storage
+- [x] Inventory repeated coordinators, worker launchers, serializers, storage
   adapters, and validation helpers.
-- [ ] Delete dead code and merge exact-operation duplicates whose inputs,
+- [x] Delete dead code and merge exact-operation duplicates whose inputs,
   outputs, side effects, failure semantics, environment handling, signal
   handling, and persisted evidence match.
-- [ ] Preserve distinct contracts when any of those properties differ.
+- [x] Preserve distinct contracts when any of those properties differ.
+
+The inventory moved the typed operation handlers into `viper._api.handlers`.
+The worker launchers, serializers, and storage adapters have different failure
+or evidence contracts, so each retains its existing owner.
 
 **Acceptance gate:** one call path owns each public operation, all public JSON
 fixtures remain valid, and repository coverage equals or exceeds its recorded
