@@ -901,10 +901,7 @@ class YAMLLoadingTests(unittest.TestCase):
     def test_download_stage_fixture_loads(self) -> None:
         """Load the canonical download-stage parser fixture."""
         stage_path = (
-            Path(__file__).parents[1]
-            / "tests"
-            / "data"
-            / "download_stage.yaml"
+            Path(__file__).parents[1] / "tests" / "data" / "download_stage.yaml"
         )
 
         stage = load_stage_spec(stage_path)
