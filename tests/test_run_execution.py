@@ -527,7 +527,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             )
         return process
 
-    monkeypatch.setattr("viper.execution.execute_stage_process", fail_first_train)
+    monkeypatch.setattr(
+        "viper._execution.attempt.execute_stage_process",
+        fail_first_train,
+    )
     with pytest.raises(RunError, match="attempt 2 failed"):
         execute_run(root, frozen.files[-1])
     failed_run = ResolvedRun.model_validate(
@@ -551,7 +554,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert (root / RUN_ROOT / "attempts/1/resolved.yaml").is_file()
     assert (root / RUN_ROOT / "attempts/2/resolved.yaml").is_file()
 
-    monkeypatch.setattr("viper.execution.execute_stage_process", execute_stage_process)
+    monkeypatch.setattr(
+        "viper._execution.attempt.execute_stage_process",
+        execute_stage_process,
+    )
     result = execute_run(root, frozen.files[-1], retry=True)
 
     assert result.resolved_run.status == "succeeded"
