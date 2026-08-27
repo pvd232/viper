@@ -54,7 +54,6 @@ ROOT_EXPORTS = (
 PUBLIC_MODULES = (
     *ROOT_MODULES,
     "serialization",
-    "stage_worker",
     "verification",
 )
 

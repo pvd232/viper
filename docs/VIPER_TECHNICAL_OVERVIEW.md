@@ -172,7 +172,7 @@ runtime, NumPy runtime, and native numerical libraries. It returns those facts
 with a startup receipt that identifies the applied controls and initialized
 generators. The process path is implemented by
 [stage_execution.py](../src/viper/stage_execution.py),
-[stage_worker.py](../src/viper/stage_worker.py), and
+[_workers/stages.py](../src/viper/_workers/stages.py), and
 [runtime.py](../src/viper/runtime.py).
 
 ```text

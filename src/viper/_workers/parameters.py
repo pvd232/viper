@@ -6,9 +6,9 @@ import json
 import os
 from pathlib import Path
 
-from ._parameter_validation import ParameterValidationContext, validate_parameters
-from .serialization import load_stage_spec
-from .stages import ParameterizedSpec
+from .._parameter_validation import ParameterValidationContext, validate_parameters
+from ..serialization import load_stage_spec
+from ..stages import ParameterizedSpec
 
 
 def main() -> int:

@@ -1130,7 +1130,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
             execution_context=execution_context(),
             startup=startup_receipt(run),
             invocation=invocation,
-            command=("python", "-m", "viper.stage_worker"),
+            command=("python", "-m", "viper._workers.stages"),
             inputs={
                 "training_dataset": ResolvedStoredInputRef(
                     kind="stored",
@@ -2093,7 +2093,7 @@ class FutureInputVerificationTests(unittest.TestCase):
             execution_context=execution_context(),
             startup=startup_receipt(run),
             invocation=build_invocation,
-            command=("python", "-m", "viper.stage_worker"),
+            command=("python", "-m", "viper._workers.stages"),
             inputs={
                 "depmap": ResolvedStoredInputRef(
                     kind="stored",
@@ -2124,7 +2124,7 @@ class FutureInputVerificationTests(unittest.TestCase):
             execution_context=execution_context(),
             startup=startup_receipt(run),
             invocation=train_invocation,
-            command=("python", "-m", "viper.stage_worker"),
+            command=("python", "-m", "viper._workers.stages"),
             inputs={
                 "prior": ResolvedFutureInputRef(producer=producer_stage),
             },

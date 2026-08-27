@@ -17,7 +17,7 @@ stage's effective environment.
 
 [`execute_stage_process()`](../../src/viper/stage_execution.py) derives environment
 variables through `process_environment()` and supplies them when launching
-`viper.stage_worker`. [`stage_worker.main()`](../../src/viper/stage_worker.py) then
+`viper._workers.stages`. [`stages.main()`](../../src/viper/_workers/stages.py) then
 applies library controls before executing the project script.
 
 The public package supplies the decorated callable and

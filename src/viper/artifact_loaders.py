@@ -173,7 +173,7 @@ def execute_artifact_loader(
                 workspace_root=root,
                 working_directory=root,
                 context_path=context_path,
-                command=(sys.executable, "-m", "viper.artifact_worker"),
+                command=(sys.executable, "-m", "viper._workers.artifacts"),
                 environment={"PYTHONPATH": python_path},
                 policy=ExecutionPolicy(timeout_seconds=timeout_seconds),
             )

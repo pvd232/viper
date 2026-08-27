@@ -688,7 +688,7 @@ def verify_attempt_stages(
         expected_command = (
             "python",
             "-m",
-            "viper.stage_worker",
+            "viper._workers.stages",
         )
         if resolved_spec.command != expected_command:
             raise VerificationError(

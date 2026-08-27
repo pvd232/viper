@@ -137,7 +137,7 @@ def execute_metric_process(
     environment["VIPER_METRIC_CONTEXT_PATH"] = str(context_path)
 
     completed = subprocess.run(
-        (sys.executable, "-m", "viper.metric_worker"),
+        (sys.executable, "-m", "viper._workers.metrics"),
         cwd=root,
         env=environment,
         capture_output=True,

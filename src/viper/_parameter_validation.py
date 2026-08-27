@@ -151,7 +151,7 @@ def validate_stage_parameters(
                     command=(
                         sys.executable,
                         "-m",
-                        "viper._parameter_validation_worker",
+                        "viper._workers.parameters",
                     ),
                     environment={"PYTHONPATH": python_path},
                     policy=ExecutionPolicy(timeout_seconds=timeout_seconds),

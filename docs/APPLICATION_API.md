@@ -101,7 +101,7 @@ execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess
 | `timeout_seconds` | positive `float` or `None` | Process deadline |
 
 VIPER verifies the stage-spec bytes, applies the run controls through
-`viper.stage_worker`, invokes the frozen stage callable, and hashes every
+`viper._workers.stages`, invokes the frozen stage callable, and hashes every
 declared artifact file. The result contains `stage_id`, `command`, `artifacts`,
 `stdout`, and `stderr`.
 

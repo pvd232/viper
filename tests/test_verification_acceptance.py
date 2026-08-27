@@ -1072,7 +1072,7 @@ def publish_producer_run(
         execution_context=execution_context(),
         startup=startup_receipt(run),
         invocation=download_invocation,
-        command=("python", "-m", "viper.stage_worker"),
+        command=("python", "-m", "viper._workers.stages"),
         retrievals={"archive": archive_retrieval},
         artifacts={
             "dataset": add_single_artifact(
@@ -1124,7 +1124,7 @@ def publish_producer_run(
         execution_context=execution_context(),
         startup=startup_receipt(run),
         invocation=train_invocation,
-        command=("python", "-m", "viper.stage_worker"),
+        command=("python", "-m", "viper._workers.stages"),
         inputs={
             "training_dataset": ResolvedFutureInputRef(producer=download_stage),
         },
@@ -1485,7 +1485,7 @@ def build_complete_fixture(
         execution_context=execution_context(),
         startup=startup_receipt(run),
         invocation=build_invocation,
-        command=("python", "-m", "viper.stage_worker"),
+        command=("python", "-m", "viper._workers.stages"),
         inputs={
             "dataset": ResolvedStoredInputRef(
                 kind="stored", pointer=resolved_training_dataset_pointer
@@ -1520,7 +1520,7 @@ def build_complete_fixture(
         execution_context=execution_context(),
         startup=startup_receipt(run),
         invocation=train_invocation,
-        command=("python", "-m", "viper.stage_worker"),
+        command=("python", "-m", "viper._workers.stages"),
         inputs={"prior": ResolvedFutureInputRef(producer=build_stage)},
         artifacts={
             PARAMETERS: add_single_artifact(
@@ -1568,7 +1568,7 @@ def build_complete_fixture(
         execution_context=execution_context(),
         startup=startup_receipt(run),
         invocation=evaluate_invocation,
-        command=("python", "-m", "viper.stage_worker"),
+        command=("python", "-m", "viper._workers.stages"),
         inputs={
             "parameters": ResolvedFutureInputRef(producer=train_stage),
             "evaluation_dataset": ResolvedStoredInputRef(

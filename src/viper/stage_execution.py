@@ -289,7 +289,7 @@ def execute_stage_process(
             sorted(run.reproducibility.numpy_randomness.generators)
         ),
     )
-    command = ("python", "-m", "viper.stage_worker")
+    command = ("python", "-m", "viper._workers.stages")
     environment = os.environ.copy()
     effective_environment = stage_spec.environment or run.environment
     compute = effective_environment.compute

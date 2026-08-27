@@ -62,7 +62,7 @@ jobs:
           python -m pip install --force-reinstall --no-deps dist/*.whl
           python -I -c "import viper; assert all(getattr(viper, name) for name in viper.__all__)"
           python -I -c "from importlib import resources; import viper; assert resources.files(viper).joinpath('py.typed').is_file()"
-          python -I -c "import importlib; modules = ('application', 'authoring', 'http', 'ids', 'inspection', 'journal', 'local_store', 'materialization', 'metric_execution', 'metrics', 'parameters', 'preflight', 'project_init', 'protocol', 'resume', 'runner', 'runtime', 'serialization', 'stage_execution', 'stage_worker', 'stages', 'verifier', 'worker', 'workspace'); assert all(importlib.import_module(f'viper.{name}') for name in modules)"
+          python -I -c "import importlib; modules = ('application', 'artifacts', 'authoring', 'benchmark', 'execution', 'experiments', 'http', 'ids', 'inspection', 'journal', 'local_store', 'materialization', 'metrics', 'parameters', 'preflight', 'references', 'resume', 'runs', 'runtime', 'serialization', 'stage_execution', 'stages', 'verification', 'worker', 'workspace'); assert all(importlib.import_module(f'viper.{name}') for name in modules)"
           python -I -c "from viper import application; assert all(getattr(application, name) for name in application.__all__)"
           python -I -c "from viper.application import CapabilitiesRequest, get_capabilities; result = get_capabilities(CapabilitiesRequest()); assert 'run' in result.operations and 'init_project' in result.operations and 'RunSpec' in result.schemas"
           viper --json capabilities

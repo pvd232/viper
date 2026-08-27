@@ -14,7 +14,7 @@ parameter value, input paths, and artifact paths accepted for that stage.
 
 [`stage_execution.py`](../../src/viper/stage_execution.py) validates the exact
 parameter class before launch and constructs a stable `StageContextBinding`.
-[`stage_worker.py`](../../src/viper/stage_worker.py) validates the binding, creates
+[`_workers/stages.py`](../../src/viper/_workers/stages.py) validates the binding, creates
 the live `StageContext`, and calls the exact decorated function once. The
 attempt stores the resulting `StageInvocationReceipt`; completed stages
 reference that same receipt.

@@ -219,7 +219,7 @@ class StageExecutionAcceptanceTests(unittest.TestCase):
 
         self.assertEqual(
             result.command,
-            ("python", "-m", "viper.stage_worker"),
+            ("python", "-m", "viper._workers.stages"),
         )
         self.assertEqual(result.invocation.outcome, "succeeded")
         self.assertEqual(raw, response_body)
