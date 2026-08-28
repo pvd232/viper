@@ -1,107 +1,181 @@
 # Remote storage contract and execution checklist
 
-This document defines how VIPER copies a completed run to Hugging Face,
-recovers that run on another machine, and removes selected local copies.
-It is the execution authority for this feature.
+VIPER can copy a completed local run to Hugging Face, release selected local
+files, and restore the same run on another machine. This contract defines the
+required schema, commands, execution order, and checks.
 
 ## 1. Status
 
-**Contract status:** approved user workflow; implementation pending.
+**Contract status:** proposed schema revision; implementation pending.
 
-The formal protocol already defines `HuggingFaceFileRef` and permits
-`ResolvedFileRef.stored_at` to select a file at an exact Hugging Face commit.
-The verifier can retrieve and hash that file. The runner currently publishes
-every completed stage and attempt through `LocalArtifactStore`.
+VIPER already has the two file-reference types required by this feature:
 
-This contract adds remote synchronization around the completed local run. It
-leaves experiment execution and the existing artifact-pointer contract
-unchanged.
+- `LocalFileRef` identifies a file in the repository-local immutable store.
+- `HuggingFaceFileRef` identifies a file at an exact Hugging Face commit.
+
+`ResolvedFileRef` supplies the expected byte count and SHA-256 digest. The
+verifier already checks retrieved bytes against those values. The runner
+currently writes completed runs through `LocalArtifactStore`. Remote upload,
+retry, offload, and restore remain pending.
+
+This contract adds one persisted document, `RunSyncState`. Existing experiment
+documents and artifact pointers retain their current schemas.
 
 ## 2. Required claim
 
-When a project selects a Hugging Face destination, VIPER copies every file
-needed to restore and verify a terminal run, records the exact remote commit,
-and preserves each local file until the user explicitly offloads it.
+When a project configures a Hugging Face destination, VIPER copies every local
+file required to restore and verify a terminal run. VIPER records the exact
+remote commit and keeps the local files until the user runs `viper offload`.
 
-The claim covers delivery and retrieval. VIPER controls the upload, records the
-returned Hugging Face commit, downloads requested files from that commit, and
-checks their byte counts and SHA-256 digests. Provider durability lies outside
-this claim.
+The guarantee ends at byte identity. VIPER controls the upload and records the
+returned commit. On retrieval, VIPER checks every downloaded file against the
+byte count and SHA-256 digest already stored in the run.
 
 ## 3. Current gap
 
-The current implementation contains three pieces of the required path:
+The current implementation stops between local publication and remote
+retrieval:
 
 ```text
 LocalArtifactStore
--> publishes immutable local revisions
+-> writes immutable local files
 
 HuggingFaceFileRef
 -> identifies one file at an exact remote commit
 
 fetch_huggingface_file_bytes()
--> downloads that file for verification
+-> downloads and verifies that remote file
 ```
 
-The runner always constructs `LocalArtifactStore`. The connector ends there:
-the runner lacks an operation that copies the resulting revisions to Hugging
-Face, records the copy, retries an interrupted upload, or removes a
-synchronized local revision.
+The missing connector is a persisted value that joins one completed local run
+to the Hugging Face commit containing its files. Retry, restore, and local
+offload all require that exact remote revision.
 
-`ArtifactPointer` continues to select one named artifact from one run.
-`RunPublicationReceipt` will connect the run's local files to their remote
-copies. These objects serve different purposes:
+`ArtifactPointer` has a separate job. It selects one artifact for later use.
+The new sync document identifies the remote copy of one complete run.
+
+## 4. Schema changes
+
+### Existing schemas
+
+This feature keeps these persisted types unchanged:
 
 ```text
 ArtifactPointer
--> selects the artifact a later stage wants to use
-
-RunPublicationReceipt
--> states where VIPER copied the files supporting that run
+ResolvedRun
+ResolvedFileRef
+LocalFileRef
+HuggingFaceFileRef
+StorageRef
 ```
 
-## 4. User interface
+Each local file in the run remains identified by its existing reference. VIPER
+uses the local path, byte count, and SHA-256 digest already stored there.
 
-### Select remote storage
+### New runtime configuration
 
-The project selects one destination in `viper.toml`:
+`viper.toml` gains one optional setting:
 
 ```toml
 [storage]
 destination = "hf://peter/viper-runs"
 ```
 
-VIPER treats the repository as a Hugging Face dataset repository. VIPER uses
-the account configured by `hf auth login` or the `HF_TOKEN` environment
-variable. Tokens stay outside VIPER documents.
+The default value is `local`. The configuration selects where the current
+machine copies completed runs. It stays outside the frozen experiment plan
+because changing the storage destination leaves the experiment unchanged.
+VIPER treats an `hf://` destination as a Hugging Face dataset repository.
 
-The setting controls storage on the machine executing the run. The frozen plan
-continues describing the experiment; `viper.toml` describes where this machine
-saves the result afterward.
+### New persisted document
 
-The default destination is local storage.
+VIPER adds one schema named `RunSyncState`:
 
-### Run normally
+```python
+class RunSyncState(ProtocolModel):
+    schema_version: Literal[1] = 1
+    run: ResolvedRunRef
+    repository: NonEmptyStr
+    commit: GitCommit | None = None
+```
 
-The existing commands retain their current arguments:
+The document lives at:
+
+```text
+.viper/sync/<resolved_run_sha256>.yaml
+```
+
+One completed example is:
+
+```yaml
+schema_version: 1
+run:
+  kind: resolved_run
+  sha256: 5ab1d8...
+  bytes: 1842
+  stored_at:
+    kind: local
+    store: .viper/store
+    commit: 7f64c2...
+    path: experiments/example/runs/baseline/run-001/resolved.yaml
+repository: peter/viper-runs
+commit: c31a76...
+```
+
+The type name describes the document's stable role: it stores the current
+synchronization state for one terminal run. The type remains internal to the
+storage subsystem and is absent from the package-root imports.
+
+`RunSyncState` enforces these rules:
+
+```text
+run.stored_at is a LocalFileRef
+
+commit is null
+-> synchronization is pending
+
+commit contains a full remote commit hash
+-> synchronization is complete
+
+filename
+== .viper/sync/<run.sha256>.yaml
+```
+
+The run already contains each file's path, byte count, and digest. The sync
+document stores only the missing run-to-remote-commit relationship.
+
+Each field has one writer and one use:
+
+| Field | Writer | Consumer |
+| --- | --- | --- |
+| `schema_version` | Sync-state serializer | Sync-state loader |
+| `run` | Synchronization coordinator after local terminal publication | Closure traversal, identity checks, and offload |
+| `repository` | Synchronization coordinator from `[storage].destination` | Upload, retrieval, and restore |
+| `commit` | Synchronization coordinator after upload | Retrieval, restore, and the offload-completion check |
+
+## 5. User interface
+
+### Automatic synchronization
+
+The normal run command stays the same:
 
 ```bash
 viper run experiments/example/runs/baseline/run-001/spec.yaml \
   --repository-root .
 ```
 
-VIPER closes and verifies the run locally. VIPER then synchronizes the terminal
-run when `storage.destination` selects Hugging Face.
+After local verification succeeds, VIPER reads `[storage].destination`. A Hugging
+Face destination starts synchronization. The command prints the exact remote
+URI when the upload completes:
 
-A successful synchronization writes `publication.yaml` beside
-`resolved.yaml`. The receipt records the exact remote location. `resolved.yaml`
-continues describing the scientific run and its provenance relationships.
+```text
+hf://peter/viper-runs@<commit>/runs/<resolved-run-sha256>/resolved.yaml
+```
+
+An upload failure leaves the completed run and every local file in place. The
+command reports `storage_sync_pending` and prints the local `resolved.yaml`
+path.
 
 ### Retry synchronization
-
-An interrupted upload leaves the verified local run intact. VIPER records the
-pending synchronization and returns a distinct `storage_sync_pending` error.
-The message includes the path to `resolved.yaml`.
 
 Retry one run:
 
@@ -110,514 +184,417 @@ viper sync experiments/example/runs/baseline/run-001/resolved.yaml \
   --repository-root .
 ```
 
-Retry every pending run in the project:
+Retry every pending run:
 
 ```bash
 viper sync --all --repository-root .
 ```
 
-Re-running `viper sync` uses the same remote root and reuses the existing local
-file identities.
+`viper sync` reads the existing `RunSyncState`, rebuilds the same run closure,
+and uploads to the same remote root.
 
 ### Offload local files
 
-Offload one synchronized run:
+Preview one run:
 
 ```bash
 viper offload experiments/example/runs/baseline/run-001/resolved.yaml \
+  --dry-run \
   --repository-root .
 ```
 
-Offload every synchronized run:
+Offload every run whose sync state is complete:
 
 ```bash
 viper offload --all --repository-root .
 ```
 
-Preview the affected files:
-
-```bash
-viper offload --all --dry-run --repository-root .
-```
-
-Preserve selected working files with repeatable `--keep` patterns:
+Keep selected payload paths:
 
 ```bash
 viper offload --all \
   --keep "artifacts/checkpoints/**" \
-  --keep "runs/current/**" \
+  --keep "artifacts/models/final/**" \
   --repository-root .
 ```
 
-Each pattern matches a path relative to the project root. VIPER removes only
-files named by a completed `RunPublicationReceipt`. VIPER preserves
-`spec.yaml`, `resolved.yaml`, `publication.yaml`, attempt journals, and source
-files.
+Each `--keep` pattern matches a path relative to the project root. VIPER
+preserves terminal run documents, sync documents, attempt documents, journals,
+and source files. Offload removes synchronized artifact files and their local
+immutable-store copies.
 
-### Restore a remote run
+### Restore a run
 
-`viper sync` prints the immutable receipt URI after publication:
-
-```text
-hf://peter/viper-runs@<commit>/runs/run-001/<resolved-run-sha256>/publication.yaml
-```
-
-Restore the run on another machine:
+Restore from the URI printed by `viper run` or `viper sync`:
 
 ```bash
 viper restore \
-  "hf://peter/viper-runs@<commit>/runs/run-001/<digest>/publication.yaml" \
+  "hf://peter/viper-runs@<commit>/runs/<digest>/resolved.yaml" \
   --repository-root .
 ```
 
-`restore` downloads the receipt, recreates the recorded project-relative
-paths, checks every file, and leaves the run ready for `viper verify-run`.
+`viper restore` downloads `resolved.yaml`, follows its references, recreates
+the recorded repository-relative paths, and checks each restored file. It
+publishes the terminal document through `LocalArtifactStore` and reconstructs
+`RunSyncState` with the commit from the URI. The restored run is then ready for
+`viper verify-run`.
 
-## 5. Contract models
+Hugging Face accepts a full commit hash through the `revision` argument to
+`hf_hub_download()`. See the official
+[download guide](https://huggingface.co/docs/huggingface_hub/en/guides/download).
 
-`StorageSettings` represents the local `viper.toml` setting. It is runtime
-configuration, so it remains outside the formal provenance protocol.
+## 6. Run closure and remote layout
 
-```python
-@dataclass(frozen=True)
-class StorageSettings:
-    destination: str = "local"
-```
+### Run closure
 
-`PublishedFile` records one local path and its exact remote copy:
-
-```python
-class PublishedFile(ProtocolModel):
-    path: RepoRelPath
-    role: Literal["artifact", "immutable_store", "control"]
-    sha256: SHA256
-    bytes: int = Field(ge=0)
-    stored_at: HuggingFaceFileRef
-```
-
-The three `role` values form the offload policy:
-
-- `artifact` identifies a stage output at its declared project path.
-- `immutable_store` identifies a file beneath `.viper/store/<commit>/`.
-- `control` identifies a plan, terminal document, attempt document, journal,
-  measurement, log, or publication manifest.
-
-`RunPublicationReceipt` records one completed synchronization:
-
-```python
-class RunPublicationReceipt(ProtocolModel):
-    schema_version: Literal[1] = 1
-    run_id: RunId
-    resolved_run_path: RepoRelPath
-    resolved_run_sha256: SHA256
-    repository: NonEmptyStr
-    repo_type: Literal["dataset"] = "dataset"
-    files: tuple[PublishedFile, ...] = Field(min_length=1)
-    published_at: AwareDatetime
-```
-
-The receipt is valid when:
+The run closure is the finite set of local files required to restore and
+verify one terminal `ResolvedRun`. The synchronization coordinator constructs
+the closure by following these existing references:
 
 ```text
-PublishedFile.path values are unique and ordered
-
-sha256(local bytes at PublishedFile.path)
-== PublishedFile.sha256
-
-len(local bytes at PublishedFile.path)
-== PublishedFile.bytes
-
-PublishedFile.stored_at.repository
-== RunPublicationReceipt.repository
-
-PublishedFile.stored_at.repo_type
-== RunPublicationReceipt.repo_type
+terminal resolved.yaml
+-> ResolvedRun.attempts
+-> each RunAttempt
+-> resolved stage documents
+-> stage invocation receipts
+-> journals, logs, measurements, and metric-verification files
+-> each local stage snapshot
+-> every file in each resolved artifact
 ```
 
-Every `PublishedFile.stored_at` contains the full Hugging Face commit returned
-after the upload containing that file.
+The closure also contains each declared artifact path. VIPER takes those bytes
+from the verified immutable stage snapshot. Git and existing Hugging Face
+references remain at their current locations and stay outside the upload set.
 
-## 6. Execution
+Before synchronization, VIPER publishes terminal `resolved.yaml` through
+`LocalArtifactStore.resolved_files()`. That operation produces the
+`ResolvedRunRef` stored in `RunSyncState.run`.
 
-### Build the publication
+### Remote layout
 
-After VIPER writes terminal `resolved.yaml`, the synchronization coordinator
-performs this sequence:
+The remote root is derived from the terminal run digest:
 
 ```text
-resolved.yaml
--> traverse each referenced local immutable revision
--> add the run's control files and declared artifact paths
--> hash every selected local file
--> write one pending publication manifest
--> upload the selected files beneath a content-derived remote root
--> receive the immutable Hugging Face commit
--> construct RunPublicationReceipt
--> write publication.yaml locally
--> upload publication.yaml
--> mark the pending publication complete
+runs/<RunSyncState.run.sha256>/
 ```
 
-The remote root is:
+VIPER writes one bootstrap copy of the terminal document at:
 
 ```text
-runs/<run_id>/<resolved_run_sha256>/
+runs/<digest>/resolved.yaml
 ```
 
-The root prevents two different terminal results with the same `run_id` from
-sharing a path.
-
-The uploader sends repository-relative paths beneath that root. A local file at
+Every file in the run closure keeps its project-relative path beneath:
 
 ```text
-.viper/store/<local_commit>/experiments/example/artifacts/weights.bin
+runs/<digest>/files/<project-relative-path>
 ```
 
-is stored remotely at
+For example:
 
 ```text
-runs/run-001/<resolved_run_sha256>/files/
-.viper/store/<local_commit>/experiments/example/artifacts/weights.bin
+local
+.viper/store/<local-commit>/experiments/example/artifacts/weights.bin
+
+remote
+runs/<digest>/files/.viper/store/<local-commit>/
+experiments/example/artifacts/weights.bin
 ```
 
-The displayed lines join into one stored path.
+The displayed remote lines form one path. This deterministic mapping lets the
+retrieval layer derive a remote filename from an existing `LocalFileRef` and a
+`RunSyncState` containing a commit.
 
-Hugging Face's `upload_folder()` operation handles folder uploads and supports
-retry by re-running the upload. VIPER records the final commit returned by that
-operation. See [Hugging Face's upload guide](https://huggingface.co/docs/huggingface_hub/en/guides/upload).
+## 7. Execution
 
-### Record pending work
+### Start synchronization
 
-Before the first network request, VIPER writes:
+After VIPER writes and verifies terminal `resolved.yaml`, the synchronization
+coordinator performs this sequence:
 
 ```text
-.viper/publications/pending/<run_id>-<resolved_run_sha256>.yaml
+publish resolved.yaml in LocalArtifactStore
+-> construct ResolvedRunRef
+-> write RunSyncState(commit=None)
+-> traverse the run closure
+-> verify each selected local file against its existing reference
+-> stage the files under the deterministic remote layout
+-> upload the staged directory
+-> receive the final Hugging Face commit
+-> write RunSyncState(commit=<returned commit>)
 ```
 
-The pending document contains the destination, remote root, local file paths,
-byte counts, and digests. `viper sync` reads this document and repeats the same
-upload. Successful synchronization moves the document to:
+VIPER writes the pending document before the first network request. After the
+upload returns, VIPER atomically replaces that document with the completed
+value.
+
+Hugging Face's `upload_folder()` preserves the staged folder structure and
+returns commit information. Re-running an interrupted upload skips content
+already committed by the service. See the official
+[`upload_folder()` reference](https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api#huggingface_hub.HfApi.upload_folder).
+
+VIPER uses the account configured through `hf auth login` or `HF_TOKEN`.
+Authentication values stay outside VIPER documents. See Hugging Face's
+[authentication guide](https://huggingface.co/docs/huggingface_hub/en/quick-start#authentication).
+
+### Retrieve an offloaded file
+
+The retrieval coordinator receives `RunSyncState` for the run being verified
+or materialized. When a `LocalFileRef` is unavailable and the state contains a
+commit, the coordinator performs this lookup:
 
 ```text
-.viper/publications/complete/<run_id>-<resolved_run_sha256>.yaml
+RunSyncState.repository
++ RunSyncState.commit
++ runs/<run.sha256>/files/
++ LocalFileRef.store/<LocalFileRef.commit>/<LocalFileRef.path>
+-> exact Hugging Face file
 ```
 
-The completed document is the local `RunPublicationReceipt` index entry used by
-offload and restore.
+The coordinator downloads that file and applies the byte-count and SHA-256
+checks from the existing `ResolvedFileRef` or `SnapshotFileRef`.
 
-### Read an offloaded file
+`LocalArtifactStore.fetch()` keeps its current local-only contract. The
+run-aware retrieval coordinator owns the remote fallback because the
+`LocalFileRef` alone lacks the terminal run digest and remote commit.
 
-`LocalArtifactStore.fetch()` retains its current fast path. When the local file
-is absent, the store looks for a completed publication containing the exact
-repository-relative store path. VIPER downloads `PublishedFile.stored_at` and
-checks `PublishedFile.sha256` and `PublishedFile.bytes` before returning the
-bytes.
+### Offload local files
 
-The fallback preserves the existing `LocalFileRef` and `resolved.yaml`. The
-local reference identifies the same content-addressed path;
-`RunPublicationReceipt` supplies the alternate place from which VIPER can
-recover its bytes.
+`viper offload` first loads a `RunSyncState` containing a remote commit. It
+reconstructs the run closure, applies each `--keep` pattern, and presents the
+resulting paths during `--dry-run`.
 
-Hugging Face supports downloading one file at an exact commit through
-`hf_hub_download(..., revision=<commit>)`. See [Hugging Face's download guide](https://huggingface.co/docs/huggingface_hub/en/guides/download).
+The command removes selected working artifacts. It removes an immutable-store
+revision only when every regular file in that revision belongs to the selected
+closure and no `--keep` pattern preserves a member. This rule prevents a shared
+local revision from becoming incomplete.
 
-## 7. Persisted evidence
+Offload keeps the terminal `resolved.yaml`, its immutable local-store revision,
+and `RunSyncState` available. Those values provide the remote URI and the entry
+point for later retrieval.
 
-The feature writes two durable documents:
+## 8. Persisted evidence
+
+The feature adds one durable document:
 
 | Document | Writer | Purpose |
 | --- | --- | --- |
-| Pending publication | Synchronization coordinator | Preserve the exact upload after a network or process failure |
-| `RunPublicationReceipt` | Synchronization coordinator | Connect every eligible local file to its exact Hugging Face copy |
+| `.viper/sync/<resolved_run_sha256>.yaml` | Synchronization coordinator | Connect one local terminal run to one exact remote commit; a null commit marks pending synchronization |
 
-The remote repository stores the uploaded files and `publication.yaml` at
-exact commits. The local run remains complete when synchronization fails.
+The remote repository contains the run closure at the commit recorded by a
+`RunSyncState`. Restore receives the repository and commit through its URI,
+starts from the remote `resolved.yaml`, and recreates the local sync document.
 
-## 8. Verification rules
+## 9. Verification rules
 
 Each rule receives a stable error code.
 
 ### `storage.destination`
 
-`load_storage_settings()` accepts `local` or `hf://<owner>/<repository>`.
-VIPER rejects an empty repository name, URL query, fragment, embedded
-credentials, or additional `[storage]` keys.
+`load_storage_settings()` accepts `local` or `hf://<owner>/<repository>`. Empty
+repository names, query strings, fragments, embedded credentials, and unknown
+`[storage]` keys produce `storage_destination_invalid`.
 
-### `storage.publication.complete`
+### `storage.sync.identity`
 
-`viper offload` requires a completed `RunPublicationReceipt` for every selected
-run. A pending or missing receipt produces `storage_publication_incomplete` and
-preserves every local file.
+The sync-state filename must equal:
 
-### `storage.publication.identity`
+```text
+.viper/sync/<RunSyncState.run.sha256>.yaml
+```
 
-For every `PublishedFile`, the synchronizer requires the recorded byte count
-and digest to equal the local bytes selected for upload.
+VIPER retrieves `RunSyncState.run`, checks its byte count and digest, and parses
+the bytes as `ResolvedRun`. A mismatch produces `storage_sync_identity_mismatch`.
+
+### `storage.sync.state`
+
+`commit: null` marks pending synchronization. A full commit hash marks complete
+synchronization. Any other value produces `storage_sync_state_invalid`.
+
+### `storage.local.identity`
+
+Before upload, VIPER checks every local file against the existing byte count
+and SHA-256 digest in the run closure. A mismatch produces
+`storage_local_identity_mismatch` and leaves the sync state pending.
 
 ### `storage.remote.identity`
 
-After a remote file is downloaded, VIPER requires:
+After retrieval, VIPER compares the downloaded bytes with the existing file
+reference:
 
 ```text
-len(downloaded bytes) == PublishedFile.bytes
+len(downloaded bytes) == reference.bytes
 
-sha256(downloaded bytes) == PublishedFile.sha256
+sha256(downloaded bytes) == reference.sha256
 ```
 
 A mismatch produces `storage_remote_identity_mismatch`.
 
+### `storage.offload.complete`
+
+Offload requires `RunSyncState.commit` to contain a full commit hash. A null or
+missing commit produces `storage_sync_incomplete` and preserves every local
+file.
+
 ### `storage.offload.scope`
 
-`viper offload` selects files from completed receipts. The command removes
-files whose role is `artifact` or `immutable_store`. It preserves every
-`control` file and every path matched by `--keep`.
-
-The command removes a local immutable revision directory only when the receipt
-covers every regular file in that revision. A partial match leaves the complete
-revision in place.
+Offload removes only paths selected from the verified run closure. A complete
+immutable-store revision may be removed after every regular file in that
+revision passes the scope check. A partial revision remains intact.
 
 ### `storage.restore.path`
 
-`viper restore` resolves every destination beneath the selected repository
-root. Parent traversal, absolute paths, symbolic links, and overlapping file
-and directory targets produce `storage_restore_unsafe_path`.
+Restore resolves each destination beneath the selected repository root.
+Absolute paths, parent traversal, symbolic links, and overlapping file and
+directory targets produce `storage_restore_unsafe_path`.
 
-## 9. Propagation
+## 10. Propagation
 
 | Surface | Required change |
 | --- | --- |
 | Configuration | Load `[storage].destination` from repository-root `viper.toml`; default to `local` |
-| Types | Add `PublishedFile` and `RunPublicationReceipt` to `viper.storage` |
-| Runner | Start automatic synchronization after terminal local publication and verification |
-| Persistence | Write pending and completed publication documents beneath `.viper/publications/` |
-| Retrieval | Let `LocalArtifactStore.fetch()` recover a missing local file through a completed receipt |
-| Application API | Add typed `sync`, `offload`, and `restore` requests, successes, and failures |
-| CLI | Add `viper sync`, `viper offload`, and `viper restore` with JSON results and stable exit behavior |
-| Verification | Apply the identity, scope, and path rules defined above |
-| Protocol | Document `RunPublicationReceipt`; keep `ArtifactPointer`, `LocalFileRef`, and `ResolvedRun` unchanged |
-| Documentation | Explain configuration, automatic synchronization, retry, offload, and restore in the README and API reference |
+| Schema | Add the internal persisted `RunSyncState` schema and canonical sync-state path |
+| Local publication | Publish terminal `resolved.yaml` through `LocalArtifactStore` and return a `ResolvedRunRef` |
+| Closure traversal | Enumerate every local file reachable from the terminal run and its declared artifacts |
+| Remote upload | Upload the staged closure and return the final Hugging Face commit |
+| Runner | Start synchronization after terminal local verification |
+| Retrieval | Add a run-aware coordinator that resolves missing `LocalFileRef` bytes through `RunSyncState` |
+| Application API | Add typed `sync`, `offload`, and `restore` operations |
+| CLI | Add `viper sync`, `viper offload`, and `viper restore` with JSON results and stable exit codes |
+| Verification | Implement the seven named storage rules above |
+| Documentation | Explain configuration, retry, offload, restore, and the new sync document |
 
-## 10. Acceptance cases
+## 11. Acceptance cases
+
+Two focused integration cases close the contract.
 
 ### Complete remote lifecycle
 
-One focused integration case performs this sequence with a controlled fake Hub
-client:
+A controlled fake Hub client returns commit `c31a76...` for `run-001`:
 
 ```text
 run-001 completes and verifies locally
--> automatic synchronization uploads its required files
--> publication.yaml records exact remote commits
--> viper offload removes synchronized artifact and store files
--> verification fetches the missing bytes through publication.yaml
--> viper restore reconstructs the same paths in a clean directory
--> verify-run accepts the restored run
+-> automatic synchronization writes pending RunSyncState
+-> upload returns c31a76...
+-> RunSyncState becomes complete
+-> viper offload removes one synchronized artifact and its store copy
+-> verification retrieves the missing bytes from c31a76...
+-> the existing digest check accepts the bytes
 ```
 
-The test asserts byte-for-byte equality between the original files and the
-restored files.
+The test asserts that the local and retrieved bytes are identical and that the
+complete sync state contains the returned commit.
 
-### Interrupted publication
+### Interrupted synchronization
 
-The fake Hub client raises an upload error after VIPER writes the pending
-publication. The test requires:
+The fake Hub client raises an upload error after VIPER writes pending state:
 
 ```text
 resolved.yaml remains present
-local artifact and store files remain present
-viper offload rejects the run with storage_publication_incomplete
-viper sync retries the pending publication
-publication.yaml records the successful retry
+artifact and immutable-store files remain present
+RunSyncState remains pending
+viper offload returns storage_sync_incomplete
+viper sync retries the same run closure
+RunSyncState becomes complete after the retry
 ```
 
-These two cases establish the complete connector and its safety boundary.
-Existing verifier tests continue covering digest mismatch for individual
-`HuggingFaceFileRef` values.
+These cases cover the new connector. Existing verifier tests continue covering
+digest mismatches for individual `HuggingFaceFileRef` values.
 
-## 11. Master execution checklist
+## 12. Master execution checklist
 
 ### Terminal outcome
 
-The feature is complete when this user path succeeds:
+The feature is complete when this path succeeds:
 
 ```text
 [storage].destination = "hf://peter/viper-runs"
 -> viper run
--> automatic remote publication
+-> automatic synchronization
 -> viper offload --all --keep <pattern>
 -> verification retrieves an offloaded file
 -> viper restore on a clean machine
--> verify-run accepts the restored run
+-> viper verify-run accepts the restored run
 ```
 
-### Checklist semantics
+### Phase 1. Configuration and schema
 
-A checkbox closes after the named code exists and the phase's focused gate
-passes. Complete phases in order. Each commit boundary must leave the repository
-internally consistent.
+- [ ] Add `load_storage_settings()`.
+- [ ] Add `RunSyncState` under the private storage implementation.
+- [ ] Add canonical serialization and state-invariant tests.
+- [ ] Publish terminal `resolved.yaml` through `LocalArtifactStore`.
 
-### Coverage
+**Focused gate:** storage-settings and sync-state unit tests.
 
-| Work unit | Current state | Owning phase | Completion evidence |
-| --- | --- | --- | --- |
-| Existing local publication | Implemented | Baseline | `tests/test_storage.py` |
-| Existing remote retrieval | Implemented | Baseline | Hugging Face verifier tests |
-| Storage configuration | Pending | Phase 1 | Storage-settings tests |
-| Publication models | Pending | Phase 1 | Model and serialization tests |
-| Remote upload and receipt | Pending | Phase 2 | Synchronization integration test |
-| Automatic synchronization | Pending | Phase 3 | Run integration test |
-| Manual retry | Pending | Phase 3 | Interrupted-publication test |
-| Safe offload | Pending | Phase 4 | Offload scope assertions |
-| Remote fallback and restore | Pending | Phase 4 | Clean-directory restoration assertions |
-| Public API and documentation | Pending | Phase 5 | CLI/API tests and documentation checks |
+**Commit boundary:** configuration and the one new persisted schema.
 
-### Verified baseline
+### Phase 2. Run closure and synchronization
 
-- [x] `LocalArtifactStore.publish()` derives one content identity and writes an
-      immutable revision beneath `.viper/store/`.
-- [x] `ResolvedFileRef` records a byte count, SHA-256 digest, and one
-      `StorageRef`.
-- [x] `fetch_huggingface_file_bytes()` downloads a file at the commit stored in
-      `HuggingFaceFileRef`.
-- [x] `ArtifactPointer` selects one artifact from one resolved run.
-- [ ] The current environment lacks the project `.venv`; implementation gates
-      require the setup procedure in `CONTRIBUTING.md` before execution.
+- [ ] Implement deterministic run-closure traversal.
+- [ ] Verify every selected local file before upload.
+- [ ] Stage the closure under `runs/<digest>/files/`.
+- [ ] Write pending state before the upload request.
+- [ ] Upload through the Hugging Face client.
+- [ ] Record the final remote commit.
 
-### Phase 1. Configuration and documents
+**Focused gate:** complete remote lifecycle through the fake Hub client.
 
-**Depends on:** verified baseline.
-
-- [ ] Add `StorageSettings` and `load_storage_settings()` to
-      `viper.storage`.
-- [ ] Reject malformed destinations and unknown `[storage]` keys.
-- [ ] Add `PublishedFile` and `RunPublicationReceipt` with the invariants in
-      this contract.
-- [ ] Add canonical YAML serialization coverage for the receipt.
-
-**Acceptance gate**
-
-```bash
-python -m pytest tests/test_storage.py -q
-```
-
-**Commit boundary:** storage configuration and receipt models.
-
-### Phase 2. Remote publication
-
-**Depends on:** Phase 1.
-
-- [ ] Add one internal Hugging Face publisher that accepts the selected local
-      paths and returns exact `HuggingFaceFileRef` values.
-- [ ] Write the pending publication before the first upload request.
-- [ ] Write `publication.yaml` and the completed publication index after the
-      Hub returns the commit.
-- [ ] Keep authentication in the standard Hugging Face credential store or
-      `HF_TOKEN`.
-
-**Acceptance gate**
-
-```bash
-python -m pytest tests/test_storage_sync.py -q -k publication
-```
-
-**Commit boundary:** explicit synchronization produces one complete receipt.
+**Commit boundary:** explicit synchronization produces complete state.
 
 ### Phase 3. Automatic synchronization and retry
 
-**Depends on:** Phase 2.
-
-- [ ] Invoke synchronization after the runner writes the terminal local run.
-- [ ] Return `storage_sync_pending` with the completed run path when upload
-      fails.
+- [ ] Start synchronization after local terminal verification.
+- [ ] Preserve the successful local run when upload fails.
+- [ ] Report `storage_sync_pending` with the local run path.
 - [ ] Add `sync` to the application API and CLI.
-- [ ] Let `viper sync <resolved.yaml>` retry one pending publication.
-- [ ] Let `viper sync --all` retry every pending publication.
+- [ ] Support one-run and `--all` retry scopes.
 
-**Acceptance gate**
+**Focused gate:** interrupted synchronization and successful retry.
 
-```bash
-python -m pytest tests/test_storage_sync.py -q
-```
+**Commit boundary:** normal runs synchronize automatically and failed uploads
+resume through `viper sync`.
 
-**Commit boundary:** normal runs synchronize automatically and interrupted
-uploads resume while retaining completed stages.
+### Phase 4. Offload and retrieval
 
-### Phase 4. Offload, fallback, and restore
+- [ ] Add `offload` with one-run, `--all`, `--dry-run`, and repeatable `--keep`
+      scopes.
+- [ ] Require a recorded remote commit before deleting local payloads.
+- [ ] Preserve partial immutable-store revisions.
+- [ ] Add run-aware remote fallback to verification and input materialization.
+- [ ] Check every downloaded file with its existing reference.
 
-**Depends on:** Phase 3.
+**Focused gate:** offload one payload and retrieve it during verification.
 
-- [ ] Add `offload` to the application API and CLI with path or `--all` scope.
-- [ ] Add repeatable `--keep` patterns and `--dry-run` output.
-- [ ] Require a completed receipt before removing any selected file.
-- [ ] Preserve every control file and partially covered immutable revision.
-- [ ] Add remote fallback to `LocalArtifactStore.fetch()`.
-- [ ] Add `restore` to retrieve and validate one immutable publication URI.
+**Commit boundary:** synchronized payloads can leave local storage and return
+with the same bytes.
 
-**Acceptance gate**
+### Phase 5. Restore and public surface
 
-```bash
-python -m pytest tests/test_storage_offload.py -q
-```
+- [ ] Add `restore` for the immutable remote URI.
+- [ ] Restore the terminal document before traversing the remaining closure.
+- [ ] Reconstruct sync state with the commit from the immutable remote URI.
+- [ ] Recreate safe repository-relative paths.
+- [ ] Add `sync`, `offload`, and `restore` to capability and schema discovery.
+- [ ] Add concise CLI help and machine-readable results.
+- [ ] Update the README, API reference, and formal protocol.
 
-**Commit boundary:** synchronized runs can release local space and recover the
-same verified bytes.
+**Focused gate:** restore into a clean directory and run `viper verify-run`.
 
-### Phase 5. Public surface
-
-**Depends on:** Phase 4.
-
-- [ ] Add `sync`, `offload`, and `restore` to capability discovery and JSON
-      Schema discovery.
-- [ ] Add concise CLI help and machine-readable results for each operation.
-- [ ] Update `docs/reference/protocol.md` with `RunPublicationReceipt`.
-- [ ] Update `docs/reference/api.md`, the README, and the getting-started guide
-      with the commands defined here.
-- [ ] Update the `viper.storage` module description to cover local and remote
-      publication.
-
-**Acceptance gate**
-
-```bash
-python -m pytest tests/test_cli.py tests/test_application.py \
-  tests/test_documentation.py -q
-```
-
-**Commit boundary:** the installed interface and public documentation expose
-the completed storage workflow.
-
-### Integration gate
-
-```bash
-python -m pytest tests/test_storage.py tests/test_storage_sync.py \
-  tests/test_storage_offload.py tests/test_run_execution.py \
-  tests/test_cli.py tests/test_application.py -q
-```
-
-The integration gate covers the modules changed by this contract. The package
-release gate remains separate until this feature enters a release.
-
-### Owner action
-
-Peter supplies a Hugging Face dataset repository with write access and
-authenticates the test account before any optional live-Hub smoke test. The
-controlled fake client closes the implementation contract using local test
-credentials.
+**Commit boundary:** the installed interface exposes the complete workflow.
 
 ### Deferred work
 
-| Item | Concrete value | Scope basis |
-| --- | --- | --- |
-| Additional hosting providers | Use the same publication contract with another service | Hugging Face closes the approved user path |
-| Background upload daemon | Continue uploads after the initiating process exits | `viper sync` provides deterministic recovery |
-| Automatic deletion after synchronization | Free space as part of `viper sync` | Explicit `viper offload` preserves user control |
-| Provider durability monitoring | Alert when a remote repository becomes unavailable | Retrieval verifies files when VIPER uses them |
+| Item | Reason for deferral |
+| --- | --- |
+| Additional hosting providers | Hugging Face completes the approved first user path |
+| Background upload daemon | `viper sync` supplies explicit recovery |
+| Automatic deletion after synchronization | `viper offload` keeps deletion under user control |
+| Provider availability monitoring | Retrieval checks the provider when VIPER needs the bytes |
 
 ## Implementation sources
 
 - [Local store implementation](../../src/viper/storage.py)
-- [Storage reference models](../../src/viper/references.py)
-- [Run execution coordinator](../../src/viper/execution/_attempt.py)
+- [Storage reference schemas](../../src/viper/references.py)
+- [Run schema](../../src/viper/runs.py)
+- [Run publication code](../../src/viper/execution/_publication.py)
 - [Hugging Face retrieval](../../src/viper/_verification/storage.py)
-- [Artifact pointer contract](../../src/viper/artifacts.py)
-- Hugging Face, [Upload files to the Hub](https://huggingface.co/docs/huggingface_hub/en/guides/upload)
-- Hugging Face, [Download files from the Hub](https://huggingface.co/docs/huggingface_hub/en/guides/download)
