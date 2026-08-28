@@ -13,11 +13,11 @@ from typing import cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from . import parameters
-from .execution._process import ExecutionPolicy, WorkerRequest, execute_worker
-from .parameters import ParameterModelRef
-from .serialization import load_stage_spec
-from .stages import ParameterizedSpec
+from .. import parameters
+from ..execution._process import ExecutionPolicy, WorkerRequest, execute_worker
+from ..parameters import ParameterModelRef
+from ..serialization import load_stage_spec
+from ..stages import ParameterizedSpec
 
 
 class ParameterValidationError(RuntimeError):
@@ -122,7 +122,7 @@ def validate_stage_parameters(
 ) -> dict[str, JsonValue]:
     """Validate one stage in a separate trusted-local worker process."""
     root = repository_root.resolve()
-    package_root = str(Path(__file__).resolve().parents[1])
+    package_root = str(Path(__file__).resolve().parents[2])
     existing_python_path = os.environ.get("PYTHONPATH")
     python_path = (
         package_root

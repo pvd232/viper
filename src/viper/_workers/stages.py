@@ -10,7 +10,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from .._parameter_validation import instantiate_parameters
+from .._parameter._validation import instantiate_parameters
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalHandle

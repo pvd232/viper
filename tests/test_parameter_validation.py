@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from tests.fixtures import artifact_loader_ref, stage_implementation_ref
 from viper import parameters
-from viper._parameter_validation import (
+from viper._parameter._validation import (
     ParameterValidationError,
     load_parameter_model,
     validate_parameters,

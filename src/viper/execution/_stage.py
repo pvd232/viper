@@ -15,7 +15,7 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from .._parameter_validation import (
+from .._parameter._validation import (
     ParameterValidationError,
     validate_stage_parameters,
 )

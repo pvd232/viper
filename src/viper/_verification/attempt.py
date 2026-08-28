@@ -12,7 +12,7 @@ from typing import cast
 import yaml
 from pydantic import TypeAdapter
 
-from .._parameter_validation import (
+from .._parameter._validation import (
     ParameterValidationError,
     verify_parameter_model_bytes,
 )
