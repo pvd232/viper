@@ -749,6 +749,7 @@ FileInputDraft selecting one repository file
 
 RunArtifactDraft identifying one artifact in a completed run
 -> generated ArtifactPointer
+-> bind_run_destination(repository root, run ID, configured destination)
 -> publish_resolved_files(repository root, configured destination)
 -> ResolvedArtifactPointerRef with a self-locating StorageRef
 -> StoredInputRef
@@ -876,23 +877,24 @@ derives one metric list from their stage selections. The complete rules belong t
 constructors and shortened decorator names remain proposed until this contract
 is implemented.
 
-The run performs five operations:
+The example authors one candidate run and one benchmark. The candidate performs
+four stages:
 
 ```text
-download fixed training data, evaluation data, and a holdout split
+download fixed training data
 -> embed the training rows
--> embed the evaluation rows with the same projection
 -> train logistic regression on the training embeddings
--> evaluate the trained weights on the holdout rows
+-> evaluate the trained weights on test embeddings and a split from one
+   completed benchmark-data run
 ```
 
-The embed stages record reconstruction loss and embedding spread as
-diagnostics. They leave the optional objective unset. The training stage requires and
-records binary cross-entropy as its objective. It also records gradient norm.
+The embed stage records reconstruction loss and embedding spread as
+diagnostics. It leaves the optional objective unset. The training stage requires
+and records binary cross-entropy as its objective. It also records gradient norm.
 The evaluation stage requires independently recomputed binary cross-entropy as
 its objective and independently recomputes accuracy.
 
-Create these three files.
+Create this file.
 
 `served/training.csv`:
 
@@ -908,39 +910,22 @@ row_id,feature_a,feature_b,label
 7,1.6,1.5,1
 ```
 
-`served/evaluation.csv`:
-
-```csv
-row_id,feature_a,feature_b,label
-0,0.1,0.2,0
-1,0.5,0.4,0
-2,1.1,1.0,1
-3,1.5,1.4,1
-```
-
-`served/holdout.csv`:
-
-```csv
-row_id
-0
-1
-2
-3
-```
-
-Serve them from the repository root:
+Serve it from the repository root:
 
 ```bash
 python -m http.server 8000 --directory served
 ```
 
-The three requests freeze these byte identities:
+The request freezes this byte identity:
 
 | Input | Bytes | SHA-256 |
 | --- | ---: | --- |
 | `training_dataset` | 129 | `25421068ec05e0f6d703a2deb3472c186efb5301a2c6af75758370db4921b8b1` |
-| `evaluation_dataset` | 81 | `d67a81c2639f87edd931615ab619ccdf770955fd1d739d2eccf2c65a147bf974` |
-| `holdout_split` | 15 | `31fd8a6aa984b4ee0c4ce4f986ba3d644ff453354d04d49e3c20e1c42dc8b6ac` |
+
+The completed run at `BENCHMARK_DATA_RUN` already contains an `embed_test`
+artifact named `embeddings` and a `split_test` artifact named `holdout`. Those
+two prior-run artifacts become both the evaluation inputs and the benchmark's
+fixed test conditions.
 
 The complete authoring program is:
 
@@ -991,12 +976,13 @@ from viper.runtime import (
 
 REPOSITORY = "https://github.com/example/tiny-viper-model"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+BENCHMARK_DATA_RUN = Path(
+    "experiments/benchmark_data/runs/release/"
+    "01ARZ3NDEKTSV4RRFFQ69G5FAA/resolved.yaml"
+)
 
 TRAINING_DATASET_PATH = "artifacts/datasets/training_set/training.csv"
-EVALUATION_DATASET_PATH = "artifacts/datasets/evaluation_set/evaluation.csv"
-HOLDOUT_SPLIT_PATH = "artifacts/datasets/holdout_split/holdout.csv"
 TRAINING_EMBEDDINGS_PATH = "artifacts/models/training_embeddings/embeddings.csv"
-EVALUATION_EMBEDDINGS_PATH = "artifacts/models/evaluation_embeddings/embeddings.csv"
 WEIGHTS_PATH = "artifacts/models/logistic_regression/model.pt"
 STATE_PATH = "artifacts/models/logistic_regression/state.pt"
 PREDICTIONS_PATH = "artifacts/evaluations/holdout/preds.csv"
@@ -1110,24 +1096,6 @@ download = viper.download(
             ),
             expected_body_bytes=129,
         ),
-        "evaluation_dataset": HttpRequestSpec(
-            url="http://127.0.0.1:8000/evaluation.csv",
-            version="tiny-v1",
-            expected_body_sha256=(
-                "d67a81c2639f87edd931615ab619ccdf"
-                "770955fd1d739d2eccf2c65a147bf974"
-            ),
-            expected_body_bytes=81,
-        ),
-        "holdout_split": HttpRequestSpec(
-            url="http://127.0.0.1:8000/holdout.csv",
-            version="tiny-v1",
-            expected_body_sha256=(
-                "31fd8a6aa984b4ee0c4ce4f986ba3d6"
-                "44ff453354d04d49e3c20e1c42dc8b6ac"
-            ),
-            expected_body_bytes=15,
-        ),
     },
     transport=transport,
     policy=HttpRetrievalPolicy(
@@ -1144,16 +1112,6 @@ download = viper.download(
             path=TRAINING_DATASET_PATH,
             loader=load_dataset,
             data_role="training",
-        ),
-        "evaluation_dataset": viper.file_artifact(
-            path=EVALUATION_DATASET_PATH,
-            loader=load_dataset,
-            data_role="evaluation",
-        ),
-        "holdout_split": viper.file_artifact(
-            path=HOLDOUT_SPLIT_PATH,
-            loader=load_split,
-            data_role="evaluation",
         ),
     },
 )
@@ -1358,24 +1316,6 @@ training_embeddings = viper.stage(
     ),
 )
 
-evaluation_embeddings = viper.stage(
-    embed,
-    params=EMBED_PARAMS,
-    inputs={"dataset": download.artifacts["evaluation_dataset"]},
-    artifacts={
-        "embeddings": viper.file_artifact(
-            path=EVALUATION_EMBEDDINGS_PATH,
-            loader=load_embeddings,
-            data_role="evaluation",
-        ),
-    },
-    metrics=(
-        embedding_reconstruction_metric,
-        embedding_spread_metric,
-    ),
-)
-
-
 class TrainParams(viper.params.Train):
     epochs: int = Field(ge=1)
     batch_size: int = Field(ge=1)
@@ -1487,6 +1427,19 @@ training = viper.stage(
 )
 
 
+benchmark_test = viper.run_artifact(
+    resolved_run=BENCHMARK_DATA_RUN,
+    stage="embed_test",
+    artifact="embeddings",
+)
+
+benchmark_split = viper.run_artifact(
+    resolved_run=BENCHMARK_DATA_RUN,
+    stage="split_test",
+    artifact="holdout",
+)
+
+
 class EvaluateParams(viper.params.Evaluate):
     batch_size: int = Field(ge=1)
     decision_threshold: float = Field(gt=0.0, lt=1.0)
@@ -1495,7 +1448,7 @@ class EvaluateParams(viper.params.Evaluate):
 @viper.evaluate(params=EvaluateParams)
 def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
     rows = load_embeddings(context.inputs[Eval.TEST])
-    selected_rows = set(load_split(context.inputs["holdout_split"]))
+    selected_rows = set(load_split(context.inputs["holdout"]))
     selected = [
         row for row in rows if int(row["row_id"]) in selected_rows
     ]
@@ -1542,10 +1495,8 @@ evaluation = viper.stage(
     ),
     inputs={
         Eval.MODEL: training.artifacts[Train.MODEL],
-        Eval.TEST: (
-            evaluation_embeddings.artifacts["embeddings"]
-        ),
-        "holdout_split": download.artifacts["holdout_split"],
+        Eval.TEST: benchmark_test,
+        "holdout": benchmark_split,
     },
     artifacts={
         Eval.PREDS: viper.file_artifact(
@@ -1557,7 +1508,7 @@ evaluation = viper.stage(
     objective=viper.min(evaluation_loss_metric),
     metrics=(evaluation_accuracy_metric,),
     evaluation_id="holdout",
-    split_inputs=("holdout_split",),
+    split_inputs=("holdout",),
 )
 
 
@@ -1601,15 +1552,32 @@ reproducibility = ReproducibilitySpec(
 )
 
 
+regularization = viper.factor(levels=("none", "l2"))
+
+benchmark = viper.benchmark(
+    benchmark_id="tiny_holdout",
+    evaluation_id="holdout",
+    test=benchmark_test,
+    splits={"holdout": benchmark_split},
+    metrics=(evaluation_loss_metric, evaluation_accuracy_metric),
+    criteria=(
+        viper.at_most(evaluation_loss_metric, 0.35),
+        viper.at_least(evaluation_accuracy_metric, 0.75),
+    ),
+)
+
+
 experiment = viper.experiment(
     experiment_id="tiny_http",
+    factors={
+        "regularization": regularization,
+    },
     variants={
-        "baseline": viper.variant(
-            levels={},
+        "l2": viper.variant(
+            levels={"regularization": "l2"},
             stages={
                 "download": download,
                 "embed_training": training_embeddings,
-                "embed_evaluation": evaluation_embeddings,
                 "train": training,
                 "evaluate": evaluation,
             },
@@ -1625,15 +1593,83 @@ experiment = viper.experiment(
 plan = viper.plan(
     run_id=RUN_ID,
     experiment=experiment,
-    variant="baseline",
+    variant="l2",
     replicate="replicate_01",
+    benchmark=benchmark,
     source=source,
     environment=environment,
     reproducibility=reproducibility,
 )
 
-frozen = viper.freeze(plan)
+frozen = viper.freeze(plan, root=Path.cwd())
+
+run_result = viper.execution.run(
+    Path.cwd(),
+    Path(
+        f"experiments/tiny_http/runs/l2/{RUN_ID}/spec.yaml"
+    ),
+)
+
+benchmark_result = viper.execution.benchmark(
+    Path.cwd(),
+    run_result.resolved_run_path,
+    Path("benchmarks/tiny_holdout.spec.yaml"),
+)
 ```
+
+The public calls build one dependency graph in this order:
+
+| Public call | Value it creates | Next consumer |
+| --- | --- | --- |
+| `@viper.http_transport(...)` | Decorated transport implementation | `viper.transport()` |
+| `viper.transport(transfer)` | `CustomHttpTransportDraft` | `viper.download()` |
+| `viper.file_artifact(...)` | Artifact declaration with path, loader, and role | `viper.download()` or `viper.stage()` |
+| `viper.download(...)` | Runner-owned download `StageDraft` | `VariantDraft.stages` and `download.artifacts[...]` |
+| `@viper.metric(...)` | Decorated metric implementation | `viper.measure()` |
+| `viper.measure(...)` | Configured `MetricDraft` | Stage objective, stage metrics, and benchmark metrics |
+| `viper.min(...)` | Objective with improvement direction `min` | `viper.stage(objective=...)` |
+| `viper.at_most(...)` and `viper.at_least(...)` | Optional benchmark criteria | `viper.benchmark()` |
+| `@viper.embed(params=...)` | Decorated embed implementation and parameter class | `viper.stage()` |
+| `@viper.train(params=...)` | Decorated train implementation and parameter class | `viper.stage()` |
+| `@viper.evaluate(params=...)` | Decorated evaluation implementation and parameter class | `viper.stage()` |
+| `viper.stage(...)` | Project-owned `StageDraft` | Later artifact handles and `VariantDraft.stages` |
+| `viper.run_artifact(...)` | `RunArtifactDraft` selecting a completed artifact | Evaluation inputs and benchmark conditions |
+| `viper.factor(...)` | Allowed experimental levels | `viper.experiment()` |
+| `viper.variant(...)` | Ordered stage graph, selected levels, and estimator | `viper.experiment()` |
+| `viper.replicate(...)` | Seeded replicate declaration | `viper.experiment()` |
+| `viper.experiment(...)` | Factors, variants, replicates, and derived metrics | `viper.plan()` |
+| `viper.benchmark(...)` | Fixed test, splits, metrics, and optional criteria | `viper.plan()` |
+| `viper.plan(...)` | One selected variant, replicate, benchmark, and runtime contract | `viper.freeze()` |
+| `viper.freeze(...)` | Canonical experiment, benchmark, stage, and run files | `viper.execution.run()` |
+| `viper.execution.run(...)` | Verified terminal run and its immutable reference | `viper.execution.benchmark()` or later artifact selection |
+| `viper.execution.benchmark(...)` | Candidate and confirmation results under the frozen test conditions | Benchmark inspection and restore |
+
+The graph contains five distinct input edges:
+
+| Consuming input | Authored value | Frozen value |
+| --- | --- | --- |
+| `embed_training.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", producer_artifact="training_dataset")` |
+| `train.inputs["dataset"]` | `training_embeddings.artifacts["embeddings"]` | `FutureInputRef(producer_stage_id="embed_training", producer_artifact="embeddings")` |
+| `evaluate.inputs[Eval.MODEL]` | `training.artifacts[Train.MODEL]` | `FutureInputRef(producer_stage_id="train", producer_artifact=Train.MODEL)` |
+| `evaluate.inputs[Eval.TEST]` | `benchmark_test` | `StoredInputRef(pointer=<test pointer>)` |
+| `evaluate.inputs["holdout"]` | `benchmark_split` | `StoredInputRef(pointer=<split pointer>)` |
+
+The benchmark reuses the last two pointers:
+
+```text
+EvaluateSpec.inputs[Eval.TEST].pointer == BenchmarkSpec.test
+EvaluateSpec.inputs["holdout"].pointer == BenchmarkSpec.splits["holdout"]
+```
+
+`viper.freeze()` also binds the run's storage destination before publishing
+either generated pointer. Execution later loads the same binding before stage
+work.
+
+The success path above calls `viper.execution.run()` once. A failed attempt
+uses `viper.execution.retry()` with the same repository root and frozen run
+path. After a successful local or cloud publication, `viper restore` can
+recover every artifact or a selected list. The retry and restore contracts live
+in [`remote-storage.md`](remote-storage.md).
 
 Every parameter changes a runtime operation:
 
@@ -1656,8 +1692,8 @@ The metric lifecycle is:
 
 | Metric | Stage | Mode | Purpose |
 | --- | --- | --- | --- |
-| `embedding_reconstruction_loss` | Both embed stages | Live diagnostic | Measures information lost by the fixed projection. |
-| `embedding_spread` | Both embed stages | Live diagnostic | Detects a projection that collapses the rows to nearly one value. |
+| `embedding_reconstruction_loss` | Embed | Live diagnostic | Measures information lost by the fixed projection. |
+| `embedding_spread` | Embed | Live diagnostic | Detects a projection that collapses the rows to nearly one value. |
 | `training_loss` | Train | Live objective | Records binary cross-entropy after every epoch. |
 | `gradient_norm` | Train | Live diagnostic | Shows whether clipping or unstable updates dominate training. |
 | `evaluation_loss` | Evaluate | Recompute objective | Computes holdout binary cross-entropy from the persisted predictions. |
@@ -1665,7 +1701,8 @@ The metric lifecycle is:
 
 The stage code computes live metrics while it still has the batch or embedding
 values. Evaluation metrics run after `preds.csv` has been published. The
-metric worker reads that artifact through the declared `MetricDependency`.
+metric worker receives that artifact path through the declared
+`MetricDependency`.
 Verification runs the same metric implementation again and compares the two
 values with the frozen `FloatComparator`.
 
@@ -1673,20 +1710,14 @@ The complete runtime path is:
 
 ```text
 project_httpx transport
--> downloads and verifies three fixed HTTP bodies
--> publishes three download artifacts
+-> downloads and verifies training.csv
+-> publishes the training_dataset artifact
 
 embed_training
 -> reads training.csv
 -> applies centering, scaling, and projection
 -> records reconstruction loss and spread
 -> writes training embeddings
-
-embed_evaluation
--> reads evaluation.csv
--> applies the identical projection
--> records reconstruction loss and spread
--> writes evaluation embeddings
 
 train
 -> reads training embeddings
@@ -1695,21 +1726,27 @@ train
 -> writes model.pt and a real ResumeState
 
 evaluate
--> reads parameters, evaluation embeddings, and holdout row IDs
+-> reads the same-run model plus prior-run test embeddings and holdout row IDs
 -> writes probabilities and class predictions
 
 metric worker
 -> recomputes evaluation loss and accuracy from preds.csv
 -> writes measurements and metric-execution receipts
+
+benchmark executor
+-> reruns the candidate under the same test and split pointers
+-> records both verified metric values
+-> applies the optional loss and accuracy criteria
 ```
 
-`viper.freeze()` turns every artifact handle used as a stage input into a
-`FutureInputRef`. It also turns each `MetricDraft` into one byte-addressed
-`MetricSpec`. The frozen train objective selects `training_loss` with direction
-`min`. The frozen evaluation objective selects `evaluation_loss` with the same
-direction. The embed specs set `objective=None`; their two metrics remain
-diagnostics. The compiler derives the experiment metric registry from these
-stage selections.
+`viper.freeze()` turns each same-run artifact handle into `FutureInputRef`. It
+turns `benchmark_test` and `benchmark_split` into `StoredInputRef` once and
+reuses their pointer references in `BenchmarkSpec`. It also turns each
+`MetricDraft` into one byte-addressed `MetricSpec`. The frozen train objective
+selects `training_loss` with direction `min`. The frozen evaluation objective
+selects `evaluation_loss` with the same direction. The embed spec sets
+`objective=None`; its two metrics remain diagnostics. The compiler derives the
+experiment metric registry from these stage selections.
 
 ### Complete local-file and prior-run selections
 
@@ -1874,6 +1911,7 @@ RunArtifactDraft(
     stage_id="download",
     artifact_name="dataset",
 )
+-> bind the run destination before the first immutable publication
 -> load and verify that terminal ResolvedRun
 -> for Viper Cloud, reject any reachable LocalFileRef or
    LocalStageResultSnapshotRef
@@ -1900,6 +1938,10 @@ StoredInputRef.pointer
 
 `viper.freeze()` writes the pointer file. The verifier checks the pointer and
 the selected artifact. The training function reads the accepted artifact.
+
+The destination binding occurs before terminal or pointer publication. A later
+attempt loads that binding before stage work. Changing the configured
+destination produces `storage_destination_changed`.
 
 When `RunArtifactDraft.resolved_run` is a `Path`, `viper.freeze()` loads and
 checks the terminal run. For a Viper Cloud destination, it then checks the
@@ -1964,6 +2006,11 @@ defines parameter delivery, objective selection and direction, objective
 measurement evidence, derived experiment metric registries, benchmark metric
 results, and optional criteria. This contract applies those checks after it
 compiles stage inputs.
+
+The benchmark compiler resolves `BenchmarkDraft.test` and every split once. It
+writes those selections as `StoredInputRef` values in the evaluation stage and
+reuses their pointer references in `BenchmarkSpec.test` and
+`BenchmarkSpec.splits`.
 
 ### `input.source.exists`
 
@@ -2064,10 +2111,11 @@ overwrite rules, and review ownership.
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
 | Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and evaluate stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
-| Pointer writer | Serialize prior-run `ArtifactPointer` documents and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef` |
+| Pointer writer | Bind the run destination, serialize prior-run `ArtifactPointer` documents, and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef`, and execution uses the same destination |
 | Storage publication | Include local-root captures in consuming-stage snapshots; publish generated pointer files and terminal runs independently | Every record carries the enclosing snapshot or standalone storage reference required for retrieval |
 | Stage validators | Validate source existence, stage order, roles, and materialization paths | Invalid declarations fail during freezing |
-| Evaluation input validator | Accept external, same-run, or prior-run evaluation data and split references; validate the resolved data roles | The full example evaluates same-run downloaded and embedded data |
+| Evaluation input validator | Accept external, same-run, or prior-run evaluation data and split references; validate the resolved data roles | The full example uses `Eval.TEST` and shares its prior-run test and split drafts with the benchmark |
+| Benchmark input compiler | Compile `BenchmarkDraft.test` and splits once; reuse their `StoredInputRef.pointer` values in `BenchmarkSpec` | Candidate evaluation, confirmation evaluation, and benchmark evidence select identical data |
 | Runtime resolution | Reuse existing `FutureInputRef` and `StoredInputRef` materialization | `StageContext.inputs` receives the expected path |
 | Verification | Reuse `verify_promoted_artifact()` and existing file-identity checks | Tampered source run or artifact fails verification |
 | Persisted schema | Change `StoredInputRef.pointer` to `ResolvedArtifactPointerRef` and broaden that reference's storage location to `StorageRef` | Default pointers avoid a Git-commit cycle and remain remotely retrievable |
@@ -2109,7 +2157,7 @@ replacement:
 | Manual `MetricImplementationRef` construction in public examples | Replace | `viper.measure()` accepts the decorated metric and freezing records its exact source identity. |
 | Untyped extra values stored only in `MetricSpec.params` | Replace | A custom metric parameter class produces `MetricSpec.parameter_model`; the worker validates the values through that exact class. |
 | Package-owned parameter classes represented by an absent reference | Replace | Every frozen parameter class has a `ParameterModelRef`; `owner` selects the project or installed VIPER source root. |
-| Stored-only `EvaluateSpec.evaluation_dataset` and split validation | Replace | Freezing and preflight validate data roles after resolving any `InputRef` variant. |
+| Stored-only evaluation input at the retired `evaluation_dataset` key | Replace | `EvaluateSpec.inputs[Eval.TEST]` and named splits accept any `InputRef`; freezing and preflight validate the resolved data roles. |
 | Existing protocol YAML, CLI parsing, verifier reconstruction, tests, fixtures, and project scaffolding that construct the old shapes | Replace | Each consumer parses or constructs the target frozen and resolved models. |
 
 ## 10. Acceptance cases
@@ -2134,41 +2182,46 @@ it through `viper.file_input()`.
 freeze the run plan
 -> compiler writes ExternalInputRef into TrainSpec.inputs["dataset"]
 -> execute train
--> runner copies the source bytes to an attempt-owned input path
+-> runner derives captured_input_path(run, attempt, stage, input, source)
+-> runner atomically copies the source bytes to that path
 -> train receives that attempt-owned path
 -> runner verifies the captured file after training
 -> train-stage snapshot includes the captured file
 -> resolved train record contains ResolvedExternalInputRef
 ```
 
-The test asserts the captured SHA-256 digest and byte count, the attempt-owned
-path received by training, and local-root verification. Changing the snapshot
-bytes or invocation input path triggers `input.local_root_identity`.
+The test asserts the canonical capture path, captured SHA-256 digest and byte
+count, worker startup comparison, and local-root verification. Changing the
+snapshot bytes or invocation input path triggers `input.local_root_identity`.
+The check proves which path and bytes VIPER supplied. Project callable file
+access remains outside the observed boundary.
 
-### Complete same-run pipeline
+### Complete candidate and benchmark pipeline
 
-The acceptance fixture implements the full example. It defines three download
-artifacts, two embed stages, one train stage, one evaluate stage, and six
-configured metrics.
+The acceptance fixture implements the full example. It defines one download
+artifact, one embed stage, one train stage, one evaluate stage, two prior-run
+benchmark inputs, and six configured metrics.
 
 ```text
 freeze the run plan
--> plan mapping assigns all five stage IDs
--> compiler writes FutureInputRef for every same-run artifact edge
+-> plan mapping assigns all four stage IDs
+-> compiler writes three FutureInputRef values
+-> compiler writes two StoredInputRef values
+-> compiler reuses those pointer references in BenchmarkSpec.test and splits
 -> compiler writes six MetricSpec records
 -> compiler writes training_loss as the train objective
 -> compiler writes evaluation_loss as the evaluation objective
--> execute download, both embeds, train, and evaluate
+-> execute download, embed, train, and evaluate
 -> live handles record embedding and training measurements
 -> metric workers recompute evaluation loss and accuracy
 -> verify the run
 ```
 
 The test asserts every frozen producer stage and artifact name. It also asserts
-that both embed stages omit an objective, the train and evaluation objective
-IDs select their declared metrics, the parameter values reach their decorated
-callables, the live measurements exist, and the recomputed values pass their
-comparators.
+that the embed stage omits an objective, the train and evaluation objective IDs
+select their declared metrics, the evaluation and benchmark pointers match,
+the parameter values reach their decorated callables, the live measurements
+exist, and the recomputed values pass their comparators.
 
 ### Prior-run download and training
 
@@ -2261,8 +2314,11 @@ stage through either the built-in transport or one decorated custom transport.
       `LocalSource` and the declared data role.
 - [ ] Map each `StageDraftArtifactRef.producer` to its key in
       the selected `VariantDraft.stages` and construct `FutureInputRef`.
-- [ ] Copy local-root bytes to an attempt-owned input path, pass that path to
-      the worker, include it in the stage snapshot, and add the local-root
+- [ ] Add one `captured_input_path()` helper in `src/viper/paths.py`. Use it in
+      local materialization, stage-worker startup checks, and invocation
+      verification.
+- [ ] Atomically copy local-root bytes to that attempt-owned path, pass the path
+      to the worker, include it in the stage snapshot, and add the local-root
       verifier.
 - [ ] Preserve the existing `TrainSpec` and `InternalSpec` validators except
       for the explicit evaluation-input change below.
@@ -2282,6 +2338,8 @@ to training while the compiler owns the `ExternalInputRef` and
 - [ ] Implement and validate the full-digest generated-pointer path rule.
 - [ ] Load and verify the selected terminal `ResolvedRun`.
 - [ ] Construct `ArtifactPointer` from the selected run and artifact.
+- [ ] Call `bind_run_destination()` before publishing the first generated
+      terminal or pointer file for this run.
 - [ ] Serialize the pointer and publish it through
       `publish_resolved_files(root, destination, ...)`.
 - [ ] Construct `ResolvedArtifactPointerRef` and `StoredInputRef` for the
@@ -2298,6 +2356,9 @@ compiler-generated pointer.
       [`unified-metric-drafting.md`](unified-metric-drafting.md).
 - [ ] Derive one experiment metric registry from every variant's objectives and
       additional metrics.
+- [ ] Compile `BenchmarkDraft.test` and every split through the matching
+      evaluation-stage input, then reuse those pointer references in
+      `BenchmarkSpec`.
 - [ ] Use `MetricObjectiveDraft` in the train and evaluate examples. Keep the
       embed objective optional.
 - [ ] Add live embedding diagnostics, a live training objective and gradient

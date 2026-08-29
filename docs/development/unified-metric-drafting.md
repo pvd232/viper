@@ -989,7 +989,7 @@ class BenchmarkDraft(BaseModel):
 
     benchmark_id: BenchmarkId
     evaluation_id: EvaluationId
-    evaluation_dataset: RunArtifactDraft
+    test: RunArtifactDraft
     splits: dict[InputName, RunArtifactDraft] = Field(min_length=1)
     metrics: tuple[MetricDraft, ...] = Field(min_length=1)
     criteria: tuple[MetricCriterionDraft, ...] = ()
@@ -1009,7 +1009,7 @@ class BenchmarkSpec(ProtocolModel):
     schema_version: Literal[1] = 1
     benchmark_id: BenchmarkId
     evaluation_id: EvaluationId
-    evaluation_dataset: ResolvedArtifactPointerRef
+    test: ResolvedArtifactPointerRef
     splits: dict[InputName, ResolvedArtifactPointerRef] = Field(min_length=1)
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)
     criteria: tuple[MetricCriterion, ...] = ()
@@ -1076,7 +1076,7 @@ def benchmark(
     *,
     benchmark_id: BenchmarkId,
     evaluation_id: EvaluationId,
-    evaluation_dataset: RunArtifactDraft,
+    test: RunArtifactDraft,
     splits: dict[InputName, RunArtifactDraft],
     metrics: tuple[MetricDraft, ...],
     criteria: tuple[MetricCriterionDraft, ...] = (),
@@ -1086,6 +1086,21 @@ def benchmark(
 `RunPlanDraft.benchmark` carries the complete authoring object. Freezing writes
 `BenchmarkSpec` and writes `RunSpec.benchmark_id`. `BenchmarkResult.run` joins
 the reusable benchmark definition to one candidate run and its experiment.
+
+The evaluation stage and benchmark reuse the same draft objects:
+
+```text
+BenchmarkDraft.test
+== EvaluateSpecDraft.inputs[Eval.TEST]
+
+BenchmarkDraft.splits[name]
+== EvaluateSpecDraft.inputs[name]
+```
+
+Freezing resolves each `RunArtifactDraft` once. It writes the resulting
+`StoredInputRef` into the evaluation stage and reuses that input's
+`ResolvedArtifactPointerRef` in `BenchmarkSpec`. The candidate, confirmation
+execution, and benchmark record therefore share one test-data identity.
 
 ## 5. Execution
 
@@ -1139,6 +1154,28 @@ files. It constructs `MetricContext` with those paths and the validated metric
 parameters. It calls the metric function and writes one `Measurement` and one
 `MetricExecutionReceipt`.
 
+The dependency resolver reuses each file's published snapshot:
+
+```text
+MetricDependency selects a stage artifact
+-> use that stage's ResolvedStageRef.snapshot
+-> join it with the artifact's SnapshotFileRef
+-> construct ResolvedFileRef
+
+MetricDependency selects a stage input
+-> ExternalInputRef: use the consuming-stage snapshot
+-> FutureInputRef: use the producer-stage snapshot
+-> StoredInputRef: follow the pointer to the producer-stage snapshot
+-> join the selected snapshot with its SnapshotFileRef
+-> construct ResolvedFileRef
+```
+
+For a local snapshot, the derived reference is `LocalFileRef(commit, path)`.
+For Hugging Face or Viper Cloud, the derived reference carries the same
+repository or cloud revision and file path. `ResolvedMetricDependency.files`
+remains independently retrievable while each dependency payload is published
+once.
+
 Verification repeats that operation in a separate worker and writes
 `MetricVerificationReceipt` after applying `FloatComparator`.
 
@@ -1191,7 +1228,7 @@ BenchmarkMetricResult
 This evidence supports four claims:
 
 - the named metric used the frozen implementation and parameters;
-- the metric read the declared files;
+- the metric worker received paths whose files matched the declared identities;
 - independent recomputation reproduced each recorded value; and
 - the candidate and confirmation runs produced matching benchmark values.
 
@@ -1280,6 +1317,13 @@ Each entry repeats the selected stage ID, kind, and frozen parameters.
 `BenchmarkSpec.metric_ids` equals the metric IDs selected by the benchmark's
 evaluation stage. Every benchmark metric uses `mode="recompute"`.
 
+### `benchmark.input.identity`
+
+The evaluation stage uses `StoredInputRef` at `Eval.TEST` and at every name in
+`split_inputs`. `BenchmarkSpec.test` equals the pointer in
+`EvaluateSpec.inputs[Eval.TEST]`. Each `BenchmarkSpec.splits[name]` equals the
+pointer in `EvaluateSpec.inputs[name]`.
+
 ### `benchmark.metric.result`
 
 `BenchmarkResult.metrics` contains exactly one `BenchmarkMetricResult` for each
@@ -1363,6 +1407,33 @@ training = viper.stage(
     metrics=(gradient_norm_metric,),
 )
 
+benchmark_test = viper.run_artifact(
+    resolved_run=BENCHMARK_DATA_RUN,
+    stage="embed_test",
+    artifact="embeddings",
+)
+
+benchmark_split = viper.run_artifact(
+    resolved_run=BENCHMARK_DATA_RUN,
+    stage="split_test",
+    artifact="holdout",
+)
+
+evaluation = viper.stage(
+    evaluate,
+    params=EVALUATE_PARAMS,
+    inputs={
+        Eval.MODEL: training.artifacts[Train.MODEL],
+        Eval.TEST: benchmark_test,
+        "holdout": benchmark_split,
+    },
+    artifacts=EVALUATION_ARTIFACTS,
+    objective=viper.min(evaluation_loss_metric),
+    metrics=(evaluation_accuracy_metric,),
+    evaluation_id="holdout",
+    split_inputs=("holdout",),
+)
+
 experiment = viper.experiment(
     experiment_id="tiny_http",
     variants={
@@ -1371,7 +1442,6 @@ experiment = viper.experiment(
             stages={
                 "download": download,
                 "embed_training": training_embeddings,
-                "embed_evaluation": evaluation_embeddings,
                 "train": training,
                 "evaluate": evaluation,
             },
@@ -1383,29 +1453,22 @@ experiment = viper.experiment(
     },
 )
 
-benchmark_dataset = viper.run_artifact(
-    resolved_run=BENCHMARK_DATA_RUN,
-    stage="download",
-    artifact="evaluation_dataset",
-)
-
-benchmark_split = viper.run_artifact(
-    resolved_run=BENCHMARK_DATA_RUN,
-    stage="build",
-    artifact="holdout_split",
-)
-
 benchmark = viper.benchmark(
     benchmark_id="tiny_holdout",
     evaluation_id="holdout",
-    evaluation_dataset=benchmark_dataset,
-    splits={"holdout_split": benchmark_split},
+    test=benchmark_test,
+    splits={"holdout": benchmark_split},
     metrics=(evaluation_loss_metric, evaluation_accuracy_metric),
     criteria=(
         viper.at_least(evaluation_accuracy_metric, 0.90),
     ),
 )
 ```
+
+`viper.plan(benchmark=benchmark, ...)` attaches the benchmark to the candidate
+run. Freezing compiles `benchmark_test` and `benchmark_split` once, writes
+them as `StoredInputRef` values in the evaluation stage, and reuses their
+pointer references in `BenchmarkSpec.test` and `BenchmarkSpec.splits`.
 
 The test asserts:
 
@@ -1532,6 +1595,10 @@ with one compiler-derived metric registry.
 ### Phase 4. Benchmark metric results
 
 - [ ] Add `BenchmarkDraft` and its public constructor.
+- [ ] Name the fixed evaluation input `test` in `BenchmarkDraft`,
+      `BenchmarkSpec`, and `viper.benchmark()`.
+- [ ] Compile the benchmark's test and split drafts once; reuse the resulting
+      pointers in the evaluation stage and benchmark specification.
 - [ ] Split `BenchmarkSpec.metric_ids` from optional `criteria`.
 - [ ] Replace `MetricCriterionReceipt` with `BenchmarkMetricResult` and
       `MetricCriterionResult`.
@@ -1549,6 +1616,8 @@ evaluation conditions, with optional threshold judgments.
 - [ ] Parse every Python example.
 - [ ] Trace each metric value from draft through measurement and verification.
 - [ ] Trace each benchmark input from pointer through both executions.
+- [ ] Trace each recomputed metric dependency to its enclosing stage snapshot
+      and assert that one snapshot revision owns the payload.
 - [ ] Run metric, authoring, benchmark, protocol, verification, documentation,
       and generated-project tests selected from the final code diff.
 

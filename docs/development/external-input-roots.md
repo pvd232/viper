@@ -26,8 +26,9 @@ attempt-owned input file, supplies that file to the stage, and records it in
 
 **Contract status:** approved; implementation pending.
 
-**Required claim:** every path in `context.inputs` resolves to exact bytes whose
-entry into VIPER and selection by the consuming stage are both verifiable.
+**Required claim:** VIPER gives each stage a canonical input path. Before and
+after the stage process runs, the file at that path matches the byte identity
+recorded for the selected input. The invocation receipt records the same path.
 
 The active implementation leaves four connectors unfinished:
 
@@ -180,6 +181,31 @@ the user. `resolve_inputs()` reads that file once and writes the same bytes to
 an attempt-owned path under `.viper/workspaces`. The worker receives the
 attempt-owned path. `resolve_inputs()` writes that path, digest, and byte count
 to `ResolvedExternalInputRef.file` as a `SnapshotFileRef`.
+
+One pure path helper owns the attempt path:
+
+```python
+def captured_input_path(
+    *,
+    run_id: RunId,
+    attempt_id: int,
+    stage_id: StageId,
+    input_name: InputName,
+    source_path: RepoRelPath,
+) -> RepoRelPath: ...
+```
+
+The helper returns:
+
+```text
+.viper/workspaces/<run-id>/attempt-<attempt-id>/
+inputs/<stage-id>/<input-name><source-suffix>
+```
+
+`source_path` supplies the filename suffix and remains the provenance locator.
+The runner, stage worker, and invocation verifier call the same helper. The
+runner writes a temporary sibling file, flushes it, and atomically replaces the
+canonical path. The worker receives the canonical path after that move.
 
 After the worker exits, the executor hashes the attempt-owned file again. A
 change fails the stage. A successful stage publishes that file inside the same
@@ -524,9 +550,14 @@ policy, timing, stage snapshot, and file bytes.
 ```text
 stage snapshot bytes hash to resolved_external.file.sha256
 stage snapshot byte count equals resolved_external.file.bytes
+resolved_external.file.path equals captured_input_path(...)
 stage invocation input path equals resolved_external.file.path
 frozen source path remains recorded in resolved_external.source.path
 ```
+
+These checks prove that VIPER supplied the canonical captured file and that its
+bytes matched before and after stage execution. Project callable file access
+remains outside the observed boundary.
 
 ### Prior-run artifact
 
@@ -585,8 +616,9 @@ identity rule.
 | Resolved download schema | Keep runner environment, execution context, retrievals, artifacts, and completion on `ResolvedDownloadSpec`; move project invocation fields to `ResolvedParameterizedSpec`. |
 | External source model | Delete `HttpSource` and `ExternalInputSource`; type both local records with `source: LocalSource`. |
 | Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
-| Local root model | Delete `ExternalInputRef.path`; copy `ExternalInputRef.source.path` to an attempt-owned input path and record a `SnapshotFileRef`. |
-| Verification | Add local-root verification and the HTTP receipt-artifact identity rule. |
+| Local root model | Delete `ExternalInputRef.path`; derive one path with `captured_input_path()`, atomically copy `ExternalInputRef.source.path` there, and record a `SnapshotFileRef`. |
+| Worker startup | Reconstruct local capture paths with `captured_input_path()` and compare them with `StageContextBinding.inputs`. |
+| Verification | Reconstruct capture paths with the same helper, compare the invocation path with `ResolvedExternalInputRef.file.path`, and add the HTTP receipt-artifact identity rule. |
 | Authoring | Add `viper.file_input()` and `viper.run_artifact()`; convert local files, same-run handles, and prior-run drafts into `ExternalInputRef`, `FutureInputRef`, and `StoredInputRef`. |
 | Prior-run pointer schema | Change `StoredInputRef.pointer` to digest-bearing `ResolvedArtifactPointerRef`; let the pointer use any `StorageRef`. |
 | Storage publication | Include captured local roots in their consuming-stage snapshots. Publish generated pointer files separately at the configured local or Viper Cloud destination. |
@@ -623,9 +655,10 @@ snapshot reference.
    callable, and copy loops.
 2. Delete `HttpSource`, `ExternalInputSource`, and the duplicate HTTP branch in
    `resolve_inputs()`. Change both local `source` fields to `LocalSource`.
-3. Delete `ExternalInputRef.path`, copy `source.path` into the attempt workspace,
-   give that path to the worker, include it in the completed stage snapshot,
-   and add the local-root verifier.
+3. Delete `ExternalInputRef.path`. Add `captured_input_path()` and use it in the
+   runner, worker startup check, and invocation verifier. Atomically copy
+   `source.path` there, include the captured file in the completed stage
+   snapshot, and add the local-root verifier.
 4. Add `FileInputDraft`, `RunArtifactDraft`, and the three-way authoring
    compiler defined in
    [`automatic-input-resolution.md`](automatic-input-resolution.md).

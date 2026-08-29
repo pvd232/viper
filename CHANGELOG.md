@@ -1,13 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.1.0a2 — 2026-08-27
 
 - Export run and benchmark results and errors from `viper.execution`.
 - Normalize internal parameter, execution, verification, and application import
   paths.
-
-## 0.1.0a2 — 2026-08-27
-
 - Split the public protocol into domain-owned modules and remove the retired
   `viper.protocol`, `viper.runner`, and `viper.verifier` import paths.
 - Expose complete-plan operations as `viper.execution.run()`,

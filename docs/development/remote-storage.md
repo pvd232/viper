@@ -55,8 +55,10 @@ declared working file
 -> repeated SHA-256 and byte-count verification
 ```
 
-Both storage modes execute the same frozen run plan. The stages, parameters,
-inputs, artifact declarations, and working paths stay the same.
+Both storage modes preserve the same stage graph, parameters, artifact
+declarations, and working paths. A plan containing a generated prior-run
+pointer records that pointer's storage location during freezing, so freezing
+and execution use the same bound destination.
 
 ## 3. Current gap
 
@@ -239,6 +241,30 @@ Stage artifacts, HTTP response bodies, captured local inputs, and resolved stage
 documents use `SnapshotFileRef` because they belong to a completed stage
 snapshot. Frozen run and benchmark specifications use Git-backed references.
 Neither group appears in this standalone-file table.
+
+Recomputed metric dependencies reuse those stage snapshots. VIPER converts the
+selected `SnapshotFileRef` and its enclosing snapshot into a `ResolvedFileRef`:
+
+| Dependency file owner | Local destination | Viper Cloud destination |
+| --- | --- | --- |
+| Current-stage artifact or captured input | `LocalFileRef` with the current stage snapshot commit and selected path | `ViperCloudFileRef` with the current stage snapshot revision and selected path |
+| Earlier same-run stage artifact | `LocalFileRef` with the producer snapshot commit and selected path | `ViperCloudFileRef` with the producer snapshot revision and selected path |
+| Prior-run stored artifact | Existing producer `StorageRef` reached through `ArtifactPointer` | Existing producer `StorageRef` reached through `ArtifactPointer` |
+
+The conversion has one operation:
+
+```python
+def resolve_snapshot_file_ref(
+    snapshot: StageResultSnapshot,
+    file: SnapshotFileRef,
+) -> ResolvedFileRef:
+    ...
+```
+
+It copies `SnapshotFileRef.sha256` and `SnapshotFileRef.bytes` into the returned
+`ResolvedFileRef`. It combines the file path with the enclosing snapshot's
+storage address. It publishes zero bytes. A metric receipt can retrieve its
+dependency independently while the payload remains stored once.
 
 #### Example: captured local input
 
@@ -477,6 +503,13 @@ def publish_resolved_files(
     destination: StorageDestination,
     files: Mapping[RepoRelPath, PublicationSource],
 ) -> dict[RepoRelPath, ResolvedFileRef]: ...
+
+
+def bind_run_destination(
+    root: Path,
+    run_id: RunId,
+    destination: StorageDestination,
+) -> StorageDestination: ...
 ```
 
 The local publisher calls `LocalArtifactStore`. The cloud publisher uploads
@@ -507,6 +540,12 @@ Files outside a stage snapshot use `publish_resolved_files()`. The returned map
 uses each publication path as its key. Each value supplies `sha256`, `bytes`,
 and `stored_at`. The caller selects the result by path and constructs the exact
 reference named in the standalone-file table in section 5.1.
+
+`bind_run_destination()` atomically creates or loads the run-level destination
+record. `viper.freeze()` calls it before publishing a generated artifact
+pointer. Run execution calls it before stage work or any immutable publication.
+Both callers receive the stored destination and reject a different configured
+value with `storage_destination_changed`.
 
 ## 7. Stage execution
 
@@ -660,9 +699,17 @@ Before the first immutable publication, VIPER writes the parsed
 .viper/workspaces/<run-id>/storage-destination.json
 ```
 
-VIPER creates that run-level control file atomically. Every retry and later
-attempt loads it before stage work and compares it with the current
-configuration. A different value produces `storage_destination_changed`.
+`bind_run_destination()` creates that run-level control file atomically. The
+first immutable publisher owns the first call. A prior-run input may make
+`viper.freeze()` the first caller because freezing publishes its generated
+`ArtifactPointer`. A plan whose freeze step publishes zero immutable files
+binds the destination when execution begins.
+
+Every retry and later attempt loads the record before stage work and compares
+it with the current configuration. A different value produces
+`storage_destination_changed`. A frozen plan that embeds a generated pointer is
+already bound to that pointer's destination. Plans whose freeze step generates
+zero pointers retain destination choice until their first execution.
 
 ## 9. Local control and recovery evidence
 
@@ -752,6 +799,27 @@ The cloud revision identifies a sealed manifest. The manifest entry supplies
 the terminal file's path, SHA-256 digest, and byte count. VIPER constructs the
 `ResolvedRunRef` from that entry and requires the retrieved terminal file to
 match it before following the run.
+
+A local terminal path follows the same trust sequence. VIPER requires terminal
+`resolved.yaml` to be published as a one-file local revision. Restore validates
+the canonical repository-relative path, reads the working file, and computes
+the local content revision from `{terminal_path: terminal_bytes}`. It constructs
+this reference:
+
+```text
+ResolvedRunRef(
+    sha256=sha256(terminal_bytes),
+    bytes=len(terminal_bytes),
+    stored_at=LocalFileRef(
+        commit=<computed one-file revision>,
+        path=terminal_path,
+    ),
+)
+```
+
+Restore then fetches that `LocalFileRef` from `.viper/store` and requires the
+stored bytes to match. A changed working file computes a revision absent from
+the local store and fails before parsing.
 
 Restore accepts terminal runs with `status="succeeded"`. Omitting
 `--artifacts` selects every artifact from the successful attempt. Supplying
@@ -880,10 +948,11 @@ viper restore <run-reference> \
 | Attempt evidence | Publish invocation receipts, journals, measurements, metric-verification receipts, logs, and attempt documents through `publish_resolved_files()`. |
 | Benchmark result | Publish the completed result and return `BenchmarkExecutionResult.result_ref`. |
 | Terminal run | Publish terminal `resolved.yaml` and return `RunResult.resolved_run_ref`. |
-| Destination stability | Persist the first parsed destination in the run workspace and reject later changes before stage work. |
+| Destination stability | Call `bind_run_destination()` before the first immutable publication during freezing or execution; reject every later configured change. |
+| Metric dependencies | Derive `ResolvedMetricDependency.files` from each selected `SnapshotFileRef` and its enclosing stage snapshot; reuse that snapshot payload. |
 | Retrieval | Route Viper Cloud file and snapshot variants through the cloud client. |
 | Recovery | Retry transfer and seal against the same deterministic revision while the coordinator remains active; preserve working files for an ordinary run retry after process loss. |
-| CLI | Print the terminal run reference; add full and artifact-selected restore from a local terminal-run path or immutable Viper Cloud URI. |
+| CLI | Print the terminal run reference; derive the local immutable reference from a canonical one-file terminal publication; add full and artifact-selected restore from that local path or an immutable Viper Cloud URI. |
 | Verification | Apply existing path, digest, and byte-count rules to both destination variants. |
 
 ### 12.2 Removed design
@@ -996,12 +1065,32 @@ The first attempt writes the selected destination and publishes one immutable
 file. A retry changes `viper.toml`. VIPER emits
 `storage_destination_changed` before starting a stage or uploading a file.
 
+The freeze companion selects one prior-run artifact. Freezing binds the run
+destination before publishing the generated pointer. Changing the destination
+before execution also produces `storage_destination_changed`.
+
+### 13.7 Metric dependency reuse
+
+A recomputed evaluation metric depends on a prediction artifact in the
+evaluation-stage snapshot. The metric receipt contains a `ResolvedFileRef` with
+the same snapshot revision, path, SHA-256 digest, and byte count. The fake
+publisher observes zero uploads for dependency resolution.
+
+### 13.8 Local terminal restore identity
+
+A local run publishes terminal `resolved.yaml` as a one-file revision. Restore
+derives its `LocalFileRef`, fetches the immutable file, and restores one model
+artifact. Changing the working `resolved.yaml` makes the derived revision
+unavailable and stops restore before parsing.
+
 ## 14. Implementation order
 
 1. Add `SnapshotPublisher` and `publish_resolved_files()`. Use
    `LocalArtifactStore` for the first implementations.
 2. Change local stage and standalone publication to use those interfaces.
-3. Add destination parsing and exact configuration tests.
+3. Add destination parsing, `bind_run_destination()`, and exact configuration
+   tests. Call the binding before every freeze-time or execution-time
+   publication.
 4. Add Viper Cloud file and snapshot references, the snapshot-class rename,
    serialization tests, and union round-trip tests.
 5. Change cloud stage publication to pass paths and stream each payload.
@@ -1009,10 +1098,11 @@ file. A retry changes `viper.toml`. VIPER emits
 6. Route every file in the section 5.1 table through
    `publish_resolved_files()`. Return the terminal-run and benchmark-result
    references from their public result objects.
-7. Add cloud retrieval and apply existing identity checks.
+7. Derive metric dependency references from their enclosing snapshots. Add
+   cloud retrieval and apply existing identity checks.
 8. Add seal-failure recovery and deterministic retry.
-9. Persist the run-level destination binding. Add destination-stability and
-   cloud-graph-reachability checks.
+9. Route cloud publication through the destination binding already used by
+   freezing. Add destination-stability and cloud-graph-reachability checks.
 10. Add terminal-run restore through `ResolvedRunRef`.
 11. Remove every sync-state, closure-upload, offload, and remote-fallback design
    reference from the repository.

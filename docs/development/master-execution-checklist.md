@@ -155,8 +155,8 @@ reference, public API, CLI, and generated project.
 
 ### 4.1 Schema gate
 
-All 71 Python contract blocks parse. Repeated target classes have matching
-field names, types, and defaults.
+Every Python contract block parses. Repeated target classes have matching field
+names, types, and defaults.
 
 The review found and repaired these schema conflicts:
 
@@ -167,6 +167,11 @@ The review found and repaired these schema conflicts:
 | Built-in parameter classes lacked a byte-addressed `ParameterModelRef` | Add `ParameterModelRef.owner` and resolve the source under the project or installed VIPER package root. |
 | Local root evidence used a standalone file while the worker read a mutable source | Give the worker an attempt-owned copy and include it in the consuming-stage snapshot. |
 | `publish_resolved_files()` returned positional results | Return a map keyed by publication path. |
+| Removing `ExternalInputRef.path` removed the worker and verifier's canonical input path | Add `captured_input_path()` and use it in materialization, worker startup, and invocation verification. |
+| Metric dependencies were republished as standalone local files | Derive each `ResolvedFileRef` from the dependency's existing stage snapshot. |
+| Benchmark test data was separate from the evaluation-stage inputs | Compile `BenchmarkDraft.test` and splits once and reuse their pointers in both records. |
+| Freeze-time pointer publication preceded run destination binding | Bind the destination before the first immutable publication in freezing or execution. |
+| A local terminal path lacked its immutable `ResolvedRunRef` | Publish the terminal as a one-file revision and derive its local reference before parsing. |
 
 ### 4.2 Value-lifecycle gate
 
@@ -177,6 +182,7 @@ The review found and repaired these schema conflicts:
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
 | Prior-run artifact | `RunArtifactDraft` | Published `ArtifactPointer` plus `StoredInputRef` | `ResolvedStoredInputRef` | Materializer, lineage, and pointer verifier |
 | Metric | Decorated callable plus `MetricDraft` | `MetricSpec` | `Measurement` and, for recomputation, `MetricExecutionReceipt` | Metric verifier and benchmark |
+| Recomputed metric dependency | `MetricDependency` | `MetricSpec.dependencies` | `ResolvedMetricDependency` derived from an enclosing stage snapshot | Metric worker and receipt verifier |
 | Objective | `MetricObjectiveDraft` | `MetricObjectiveSpec` | Final objective measurement | Stage and experiment verifier |
 | Variant | `VariantDraft` | `VariantSpec` and selected stage specs | Selected run attempt | Experiment verifier |
 | Replicate | `ReplicateDraft` | `ReplicateSpec` and `RunSpec.seed` | Runtime RNG evidence | Run verifier |
@@ -222,15 +228,18 @@ Every new claim has a named rejection or acceptance boundary:
 | Claim | Detecting rule or acceptance case |
 | --- | --- |
 | HTTP receipt and artifact identify the same bytes | `download.receipt_artifact_identity` |
-| Worker read the captured local file | `input.local_root_identity` |
+| VIPER supplied the canonical captured local path and stable bytes | `input.local_root_identity` |
 | Same-run producer precedes consumer | `input.source.order` |
 | Prior-run pointer names verified provenance | `input.pointer.identity` and `input.pointer.provenance` |
 | Objective was measured | `metric.objective.evidence` |
 | Recomputed metric used the frozen class and values | `metric.recompute.invocation_binding` |
 | Variant levels match frozen stage parameters | `experiment.variant.parameters` |
 | Benchmark records and matches each selected metric | `benchmark.metric.result` and `benchmark.metric.match` |
+| Benchmark and evaluation use identical test and split pointers | `benchmark.input.identity` |
+| Freeze-time and execution-time publications use one destination | `storage.destination_stability` |
 | Cloud terminal graph is portable | `storage.graph_reachability` |
-| Restored bytes match published bytes | SHA-256 and byte-count checks before final move |
+| Local restore starts from an immutable terminal reference | Deterministic one-file terminal revision lookup |
+| Restored artifact bytes match published bytes | SHA-256 and byte-count checks before final move |
 
 ### 4.5 Propagation gate
 
@@ -245,10 +254,10 @@ Each contract has one case that must fail:
 | Contract | Counterexample |
 | --- | --- |
 | Download retrieval artifacts | The transport body changes after receipt validation and before snapshot publication. |
-| External input roots | The attempt-owned local input changes while the worker runs. |
-| Unified metric drafting | Two stages use one metric ID with different parameter values. |
-| Automatic input resolution | A same-run input selects an artifact from a later stage. |
-| Direct Viper Cloud publication | A cloud terminal run reaches one `LocalFileRef`. |
+| External input roots | The parent supplies a different workspace file than `captured_input_path()` or the captured file changes while the worker runs. |
+| Unified metric drafting | A metric dependency creates a second payload publication, two stages use one metric ID with different parameters, or benchmark test pointers differ from evaluation inputs. |
+| Automatic input resolution | A same-run input selects an artifact from a later stage, or freezing publishes a pointer before binding the run destination. |
+| Direct Viper Cloud publication | A cloud terminal run reaches one `LocalFileRef`, or local restore parses a changed working terminal file after immutable revision lookup fails. |
 | Module privacy | A second module imports a leading-underscore symbol. |
 
 ## 5. Dependency order
@@ -300,6 +309,8 @@ new publisher boundary. Cloud implementation begins in Phase 9.
       `LocalArtifactStore.snapshot()`.
 - [ ] Add `publish_resolved_files()` and return
       `dict[RepoRelPath, ResolvedFileRef]`.
+- [ ] Add `bind_run_destination(root, run_id, destination)` and persist the
+      first selected destination atomically before any immutable publication.
 - [ ] Add one local publisher factory or constructor used by the attempt
       executor.
 
@@ -308,8 +319,9 @@ new publisher boundary. Cloud implementation begins in Phase 9.
 
 **Hint 1:** Keep `LocalArtifactStore` unchanged. Wrap it.
 
-**Hint 2:** Keep publication routing separate from retrieval routing. This phase
-changes publication calls and preserves every current local reference.
+**Hint 2:** Keep publication routing separate from retrieval routing. Every
+freeze-time and execution-time publisher calls the same destination binding
+before its first write.
 
 </details>
 
@@ -439,10 +451,13 @@ through stage consumption. A change fails the stage.
 
 ### 9.2 Capture and custody
 
-- [ ] Add one `AttemptWorkspace` method that returns the capture path for
-      `stage_id` and `input_name`.
+- [ ] Add `captured_input_path()` to `src/viper/paths.py`. Derive the path from
+      run ID, attempt ID, stage ID, input name, and the source suffix.
+- [ ] Use the helper in `execution/_materialization.py`,
+      `_workers/stages.py`, and `_verification/attempt.py`.
 - [ ] Read the local source once.
-- [ ] Write it to that attempt-owned path with the synchronized file helper.
+- [ ] Write a temporary sibling file, flush it, and atomically replace the
+      canonical attempt-owned path.
 - [ ] Build `SnapshotFileRef` from the attempt-owned path.
 - [ ] Give that path to the worker.
 - [ ] After the worker exits, hash the path again.
@@ -464,12 +479,18 @@ the worker exits.
 input map, worker path map, and captured-file map. Keep the protocol record
 free of runtime-only `Path` objects.
 
+**Hint 4:** `ExternalInputRef.source.path` locates the user file. The worker
+receives the canonical capture path. The worker startup check and invocation
+verifier reconstruct that path with the shared helper.
+
 </details>
 
 ### 9.3 Focused proof
 
 - [ ] Extend `tests/test_run_execution.py:test_train_stage_captures_local_external_input`.
 - [ ] Add a test that changes the captured file during stage execution.
+- [ ] Add worker-startup and failed-stage receipt cases that reject a different
+      local capture path.
 - [ ] Add verifier acceptance and tamper cases.
 - [ ] Run:
 
@@ -520,6 +541,11 @@ parameter class and values reach the calculation in both modes.
 - [ ] Change `_workers/metrics.py` to load the frozen parameter class and build
       the same context for recomputation.
 - [ ] Compare production and verification parameter-model references.
+- [ ] Replace `_publish_metric_dependency()` with snapshot-reference
+      derivation. Join each selected `SnapshotFileRef` to its enclosing current,
+      producer, or pointer-selected stage snapshot.
+- [ ] Construct `ResolvedMetricDependency.files` from those snapshot locations
+      and reuse the existing dependency payload.
 
 <details>
 <summary>Hints</summary>
@@ -532,6 +558,10 @@ context because both need the same validated parameters and named paths.
 
 **Hint 3:** The built-in base model still gets a `ParameterModelRef` with
 `owner="viper"`, `path="parameters.py"`, and `symbol="Metric"`.
+
+**Hint 4:** An artifact dependency uses its stage snapshot. An external input
+uses the consuming-stage snapshot. A future input uses the producer snapshot.
+A stored input follows its pointer to the producer snapshot.
 
 </details>
 
@@ -552,6 +582,8 @@ context because both need the same validated parameters and named paths.
 
 - [ ] Expand `tests/test_metric_interface.py` for parameter delivery.
 - [ ] Expand `tests/test_metric_provenance.py` for parameter identity.
+- [ ] Assert that recomputed metric dependencies reuse existing snapshot
+      revisions and trigger zero additional payload publications.
 - [ ] Add objective cases to `tests/test_protocol.py` and
       `tests/test_verification.py`.
 - [ ] Run:
@@ -655,8 +687,7 @@ The plan mapping supplies stage IDs.
 ### 12.1 Draft graph
 
 - [ ] Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, and
-      `ExperimentDraft` to `src/viper/experiments.py` or a dedicated authoring
-      module re-exported there.
+      `ExperimentDraft` to `src/viper/experiments.py`.
 - [ ] Add `viper.factor()`, `viper.variant()`, `viper.replicate()`, and
       `viper.experiment()`.
 - [ ] Put `levels`, `stages`, and `estimator` on each `VariantDraft`.
@@ -735,6 +766,8 @@ the correct provenance edge.
 - [ ] Locate the selected resolved stage and artifact.
 - [ ] Build `ArtifactPointer` with the terminal run and selected artifact.
 - [ ] Serialize and publish the pointer through `publish_resolved_files()`.
+- [ ] Call `bind_run_destination()` before publishing a producer terminal file
+      or generated pointer. Execution must later load the same destination.
 - [ ] Store the returned `ResolvedArtifactPointerRef` in `StoredInputRef`.
 - [ ] Reject missing stages, missing artifacts, future producers, role mismatch,
       and a pointer whose producer graph is unreachable from cloud mode.
@@ -784,13 +817,17 @@ conditions. Thresholds remain optional.
 ### 14.1 Models and authoring
 
 - [ ] Add `BenchmarkDraft` and `viper.benchmark()`.
-- [ ] Accept a prior-run evaluation dataset and named split drafts.
+- [ ] Add `BenchmarkDraft.test` and accept one prior-run test artifact plus
+      named split drafts.
 - [ ] Add `BenchmarkSpec.metric_ids`.
 - [ ] Make `BenchmarkSpec.criteria` optional.
 - [ ] Add `BenchmarkMetricResult`.
 - [ ] Attach an optional `MetricCriterionResult` to each metric result.
 - [ ] Define status as `verified`, `passed`, or `failed` by the contract table.
 - [ ] Add the benchmark draft to `RunPlanDraft` and freeze it canonically.
+- [ ] Require the evaluation stage to use the same test and split drafts.
+- [ ] Compile each draft once. Reuse the resulting `StoredInputRef.pointer` in
+      `BenchmarkSpec.test` and `BenchmarkSpec.splits`.
 
 ### 14.2 Execution and verification
 
@@ -801,6 +838,8 @@ conditions. Thresholds remain optional.
 - [ ] Keep artifact parity as an independent requirement.
 - [ ] Update `_verification/plan.py`, `_verification/metrics.py`, and
       `verification.py` for the new result shape.
+- [ ] Add `benchmark.input.identity` for exact equality between evaluation
+      input pointers and benchmark pointers.
 
 ### 14.3 Focused proof
 
@@ -808,6 +847,8 @@ conditions. Thresholds remain optional.
       one verified benchmark whose criteria tuple is empty, one passed
       threshold, one failed threshold, and one metric mismatch.
 - [ ] Add freeze tests in `tests/test_authoring.py`.
+- [ ] Reject a benchmark whose test or split differs from the evaluation
+      stage's selected input.
 - [ ] Run:
 
 ```bash
@@ -860,13 +901,17 @@ publication remains the default.
 - [ ] Stage snapshots containing resolved stage documents, artifacts, HTTP
       bodies, and captured local inputs.
 
+Metric dependency resolution stays outside this publication list. It derives
+`ResolvedFileRef` values from the stage snapshots above and uploads zero bytes.
+
 ### 15.3 Retrieval and graph checks
 
 - [ ] Extend `RunFetcher` for `ViperCloudFileRef` and cloud stage snapshots.
 - [ ] Extend `_verification/storage.py` fetch and list dispatch.
 - [ ] Apply digest and byte-count checks after every cloud fetch.
-- [ ] Add run-level destination binding under `.viper/workspaces/<run-id>/`.
-- [ ] Reject a destination change before stage work.
+- [ ] Route cloud freezing and execution through the Phase 1 run-level
+      destination binding under `.viper/workspaces/<run-id>/`.
+- [ ] Reject a destination change before pointer publication or stage work.
 - [ ] Walk the terminal graph before cloud terminal publication.
 - [ ] Reject every reachable local immutable reference.
 - [ ] Add `resolved_run_ref` to `RunResult`.
@@ -921,7 +966,11 @@ authentication exchange, error mapping, and service-side seal semantics.
 ### 16.1 Restore engine
 
 - [ ] Add a parser for local terminal paths and immutable Viper Cloud run URIs.
-- [ ] Load and verify `ResolvedRunRef` before parsing `ResolvedRun`.
+- [ ] Publish local terminal `resolved.yaml` as a one-file revision.
+- [ ] For a local path, compute that deterministic revision, construct its
+      `ResolvedRunRef`, and fetch the matching `.viper/store` file.
+- [ ] Load and verify the resulting `ResolvedRunRef` before parsing
+      `ResolvedRun`.
 - [ ] Select the successful attempt.
 - [ ] Resolve selectors in `<stage-id>.<artifact-name>` form.
 - [ ] Expand bundle selectors to their members.
@@ -1037,26 +1086,26 @@ old contract.
 | `src/viper/authoring.py` | Replace YAML draft loading with graph compiler | 5–8 |
 | `src/viper/runs.py` | Input/pointer relationships and terminal cloud references | 7, 9 |
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
-| `src/viper/paths.py` | Remove separate retrieval body path | 2 |
+| `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
 | `src/viper/preflight.py` | Runner-owned download checks, owner-aware parameter refs, and compiled input order | 2, 4, 7 |
 | `src/viper/inspection.py` | Render renamed snapshot and result references | 2, 9 |
 | `src/viper/execution/_materialization.py` | Runner download output; local capture; stored materialization | 2, 3, 7 |
 | `src/viper/execution/_stage.py` | New keys; captured-input post-check | 3, 5 |
 | `src/viper/execution/_resolution.py` | New resolved hierarchy and objectives | 2, 4 |
 | `src/viper/execution/_attempt.py` | Publisher use; runner download; captures; cloud destination | 1–4, 9 |
-| `src/viper/execution/_metric.py` | Typed context and mandatory parameter ref | 4 |
+| `src/viper/execution/_metric.py` | Typed context, mandatory parameter ref, and metric dependency references derived from enclosing snapshots | 4 |
 | `src/viper/execution/_benchmark.py` | Complete metric-result loop | 8, 9 |
 | `src/viper/execution/_publication.py` | Destination-neutral independent files | 1, 9 |
 | `src/viper/execution/_recovery.py` | Destination-neutral failed-attempt closure | 1, 9 |
 | `src/viper/execution/_source.py` | Cloud file and snapshot routing | 9 |
 | `src/viper/execution/_run.py` | Return terminal refs; restore entry point | 9, 10 |
 | `src/viper/execution/results.py` | `resolved_run_ref` and benchmark `result_ref` | 9 |
-| `src/viper/_workers/stages.py` | Remove download; new keys; metric context | 2, 4, 5 |
+| `src/viper/_workers/stages.py` | Remove download; reconstruct captured local input paths; new keys; metric context | 2–5 |
 | `src/viper/_workers/metrics.py` | Load parameter ref and build metric context | 4 |
 | `src/viper/_workers/parameters.py` | Resolve owner-aware parameter-model references | 4 |
 | `src/viper/_workers/artifacts.py` | Consume concrete frozen artifact paths produced by the draft compiler | 5, 6 |
 | `src/viper/_parameter/validation.py` | Resolve project and VIPER owners | 4 |
-| `src/viper/_verification/attempt.py` | Download equality, local root, objective evidence | 2–4 |
+| `src/viper/_verification/attempt.py` | Download equality, canonical local capture path, local-root identity, and objective evidence | 2–4 |
 | `src/viper/_verification/plan.py` | Draft-derived graph, keys, objectives, pointers, benchmarks | 4–8 |
 | `src/viper/_verification/metrics.py` | Parameter binding and complete benchmark metrics | 4, 8 |
 | `src/viper/_verification/storage.py` | Cloud fetch, snapshot list, restore identity | 9, 10 |
@@ -1068,6 +1117,8 @@ old contract.
 | `src/viper/cli.py` | Python workflow command changes and restore arguments | 10, 11 |
 | `src/viper/project_init.py` | Replace every generated legacy pattern | 11 |
 | `src/viper/__init__.py` | Export new public API and remove retired names | 2, 4–10 |
+| `src/viper/py.typed` | Ship the package's PEP 561 typing marker | Complete |
+| `CHANGELOG.md` | Record the contract implementation under the active release | 11 |
 | `tests/fixtures.py` | Canonical target records and complete authored graph | All pending phases |
 | `tests/test_protocol.py` | Every schema, union, key, and validator | All pending phases |
 | `tests/test_authoring.py` | Draft constructors and compiler | 5–8 |
@@ -1115,9 +1166,10 @@ These items stay outside this implementation sequence:
 
 ## 20. Current position
 
-The contracts are complete enough to begin implementation. The first missing
-result is a local run that passes through `SnapshotPublisher` and
-`publish_resolved_files()` while preserving its stored bytes and references.
+All five implementation contracts pass the specification review gates and have
+owner approval. Implementation remains pending. The first missing result is a local run that
+passes through `SnapshotPublisher` and `publish_resolved_files()` while
+preserving its stored bytes and references.
 
 Once Phase 1 passes, the next pair-coding turn begins Phase 2 with the
 `BaseSpec` and `DownloadSpec` inheritance change.
