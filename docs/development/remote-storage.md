@@ -213,10 +213,60 @@ ResolvedFileRef.bytes
 ResolvedFileRef.stored_at = ViperCloudFileRef(...)
 ```
 
-VIPER stores some files outside stage snapshots. These files include invocation
-receipts, captured local inputs, generated artifact pointers, logs, metrics,
-attempt records, and the terminal run. Each file uses `ResolvedFileRef` with a
-`ViperCloudFileRef` in `stored_at`.
+VIPER bundles each completed stage record and its artifacts into a stage
+snapshot. VIPER publishes files that require independent retrieval as
+standalone files. These files include invocation receipts, captured local
+inputs, generated artifact pointers, logs, measurements, metric-verification
+receipts, attempt records, and the terminal run document.
+
+In cloud mode, each standalone file uses `ResolvedFileRef`. The `sha256` and
+`bytes` fields identify the expected content. The `stored_at` field contains a
+`ViperCloudFileRef` that identifies the cloud location.
+
+#### Example: captured local input
+
+This illustrative target-contract example captures
+`inputs/raw/dataset.csv` before a training stage reads it:
+
+```python
+resolved_input = ResolvedExternalInputRef(
+    source=LocalSource(
+        path="inputs/raw/dataset.csv",
+    ),
+    file=ResolvedFileRef(
+        sha256=dataset_sha256,
+        bytes=dataset_bytes,
+        stored_at=ViperCloudFileRef(
+            kind="viper_cloud",
+            owner="machina",
+            project="weekend_models",
+            revision=sealed_revision,
+            path="inputs/raw/dataset.csv",
+        ),
+    ),
+    data_role="training",
+)
+```
+
+VIPER follows the inner reference to retrieve the file. VIPER then checks the
+retrieved bytes against the outer reference:
+
+```text
+resolved_input.file.stored_at
+-> retrieve inputs/raw/dataset.csv from the named cloud revision
+
+resolved_input.file.sha256 + resolved_input.file.bytes
+-> verify the retrieved content
+```
+
+A model artifact produced by the training stage uses the snapshot-scoped
+route instead:
+
+```text
+ResolvedStageRef.snapshot
++ SnapshotFileRef(path=".../parameters.bin")
+-> retrieve parameters.bin from the completed stage snapshot
+```
 
 ### 5.2 Cloud stage snapshot
 
