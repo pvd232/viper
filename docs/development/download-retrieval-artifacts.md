@@ -26,8 +26,7 @@ selected artifact supplies the later stage's input bytes.
 
 ## 1. Status
 
-**Contract status:** audited retrieval-to-artifact contract; implementation
-pending.
+**Contract status:** approved; implementation pending.
 
 **Current:** `DownloadSpec.inputs` names HTTP requests, and
 `BaseSpec.artifacts` names files written by the download callable. The names
@@ -282,11 +281,7 @@ import viper
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
 
-RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-DATASET_PATH = (
-    "experiments/tiny_http/runs/baseline/"
-    f"{RUN_ID}/artifacts/datasets/training_set/dataset.csv"
-)
+DATASET_PATH = "artifacts/datasets/training_set/dataset.csv"
 
 
 def load_dataset(path: Path) -> list[dict[str, str]]:
@@ -332,9 +327,10 @@ assert download_spec.artifacts["dataset"].path == DATASET_PATH
 ```
 
 At freeze time, `DownloadSpecDraft` becomes the frozen `DownloadSpec` shown in
-section 4.1. At execution time, VIPER invokes the selected transport and
-publishes the verified body at `DATASET_PATH`. Project code delegates that
-publication to the runner.
+section 4.1. Freezing prefixes the selected run root and writes the concrete
+repository-relative path to `DownloadSpec.artifacts["dataset"].path`. At
+execution time, VIPER invokes the selected transport and publishes the verified
+body at that concrete path. Project code delegates publication to the runner.
 
 The complete custom-transport and model-run program lives in
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).

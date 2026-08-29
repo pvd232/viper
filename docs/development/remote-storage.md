@@ -7,13 +7,14 @@ Local publication writes the copies beneath `.viper/store`. Viper Cloud
 publication uploads them from their working paths. In cloud mode,
 `.viper/store` receives zero payload copies.
 
-The user still chooses each working path through `ArtifactSpec.path`. Storage
-configuration only chooses where VIPER publishes the immutable copy.
+The user chooses each run-relative working path through `ArtifactDraft.path`.
+Freezing prefixes the selected run root and writes the concrete
+`ArtifactSpec.path`. Storage configuration only chooses where VIPER publishes
+the immutable copy.
 
 ## 1. Status
 
-**Contract status:** proposed direct-publication contract; implementation
-pending.
+**Contract status:** approved; implementation pending.
 
 The current implementation writes every immutable copy through
 `LocalArtifactStore`. It uses two references:
@@ -37,10 +38,11 @@ The four storage-related contracts divide ownership as follows:
 ## 2. Required claim
 
 When a project selects Viper Cloud, VIPER uploads each completed stage directly
-from the files the stage wrote. A stage snapshot contains the resolved stage
-YAML and the stage's artifact files. `ResolvedStageRef.snapshot` stores the
-cloud location. Each `SnapshotFileRef` stores a path, SHA-256 digest, and byte
-count.
+from the files the stage wrote or consumed under runner custody. A stage
+snapshot contains the resolved stage YAML, stage artifacts, HTTP bodies, and
+captured local inputs owned by that stage. `ResolvedStageRef.snapshot` stores
+the cloud location. Each `SnapshotFileRef` stores a path, SHA-256 digest, and
+byte count.
 
 VIPER must be able to retrieve and check the same bytes later:
 
@@ -138,7 +140,8 @@ project:  weekend_models
 ```
 
 This value uploads immutable copies into the `machina/weekend_models` cloud
-project. Each `ArtifactSpec.path` still controls the working output path.
+project. Each frozen `ArtifactSpec.path` still controls the concrete working
+output path.
 
 An absent `[storage]` table has the same effect as `destination = "local"`.
 The single destination field replaces separate placement, mirror, sync, and
@@ -219,7 +222,6 @@ lives:
 | Standalone file | Owning field or reference | Local destination | Viper Cloud destination |
 | --- | --- | --- | --- |
 | Stage invocation receipt | `RunAttempt.invocations[]: ResolvedStageInvocationRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
-| Captured local input | `ResolvedExternalInputRef.file: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
 | Generated artifact pointer | `StoredInputRef.pointer: ResolvedArtifactPointerRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
 | Attempt journal | `RunAttempt.journal: AttemptJournalRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
 | Measurement | `RunAttempt.measurement_files[]: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
@@ -233,54 +235,42 @@ Each row uses a `ResolvedFileRef` subtype or field. Its `sha256` and `bytes`
 fields identify the expected content. Its `stored_at` field identifies the
 local-store file or Viper Cloud file that holds those bytes.
 
-Stage artifacts, HTTP response bodies, and resolved stage documents use
-`SnapshotFileRef` because they belong to a completed stage snapshot. Frozen run
-and benchmark specifications use Git-backed references. Neither group appears
-in this standalone-file table.
+Stage artifacts, HTTP response bodies, captured local inputs, and resolved stage
+documents use `SnapshotFileRef` because they belong to a completed stage
+snapshot. Frozen run and benchmark specifications use Git-backed references.
+Neither group appears in this standalone-file table.
 
 #### Example: captured local input
 
-This illustrative target-contract example captures
-`inputs/raw/dataset.csv` before a training stage reads it:
+VIPER copies `inputs/raw/dataset.csv` to an attempt-owned input path and gives
+that path to the training stage. The completed resolved train record stores:
 
 ```python
-resolved_input = ResolvedExternalInputRef(
-    source=LocalSource(
-        path="inputs/raw/dataset.csv",
-    ),
-    file=ResolvedFileRef(
+ResolvedExternalInputRef(
+    source=LocalSource(path="inputs/raw/dataset.csv"),
+    file=SnapshotFileRef(
+        path=(
+            ".viper/workspaces/<run-id>/attempt-<attempt-id>/inputs/"
+            "train/dataset/dataset.csv"
+        ),
         sha256=dataset_sha256,
         bytes=dataset_bytes,
-        stored_at=ViperCloudFileRef(
-            kind="viper_cloud",
-            owner="machina",
-            project="weekend_models",
-            revision=sealed_revision,
-            path="inputs/raw/dataset.csv",
-        ),
     ),
     data_role="training",
 )
 ```
 
-VIPER follows the inner reference to retrieve the file. VIPER then checks the
-retrieved bytes against the outer reference:
-
-```text
-resolved_input.file.stored_at
--> retrieve inputs/raw/dataset.csv from the named cloud revision
-
-resolved_input.file.sha256 + resolved_input.file.bytes
--> verify the retrieved content
-```
-
-A model artifact produced by the training stage uses the snapshot-scoped
-route instead:
+The local input uses the same snapshot-scoped retrieval rule as a model
+artifact:
 
 ```text
 ResolvedStageRef.snapshot
-+ SnapshotFileRef(path=".../parameters.bin")
--> retrieve parameters.bin from the completed stage snapshot
++ ResolvedExternalInputRef.file
+-> retrieve the captured input from the completed stage snapshot
+
+ResolvedStageRef.snapshot
++ ResolvedSingleFileArtifact.file
+-> retrieve a produced artifact from the completed stage snapshot
 ```
 
 ### 5.2 Cloud stage snapshot
@@ -415,6 +405,54 @@ Every source is paired with its repository-relative destination path. Before
 publication, VIPER checks that each `Path` remains beneath the repository
 root, names a regular file, and matches its resolved digest and byte count.
 
+The storage layer depends on this provider-neutral cloud client boundary:
+
+```python
+class ViperCloudClient(Protocol):
+    def upload(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        source: PublicationSource,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None: ...
+
+    def seal(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        files: tuple[SnapshotFileRef, ...],
+    ) -> None: ...
+
+    def fetch(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+    ) -> bytes: ...
+
+    def list_files(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+    ) -> tuple[RepoRelPath, ...]: ...
+```
+
+The client receives credentials when VIPER creates it from the active CLI
+session. The repository can implement and test publication against an in-memory
+client before the Viper Cloud service fixes its HTTP endpoint and token format.
+The production adapter remains blocked on that external API.
+
 ### 6.2 Publisher functions
 
 VIPER chooses a `SnapshotPublisher` from `StorageDestination`. The stage
@@ -427,7 +465,7 @@ class SnapshotPublisher(Protocol):
         *,
         resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
-        artifacts: Mapping[RepoRelPath, Path],
+        files: Mapping[RepoRelPath, Path],
     ) -> StageResultSnapshot: ...
 ```
 
@@ -438,7 +476,7 @@ def publish_resolved_files(
     root: Path,
     destination: StorageDestination,
     files: Mapping[RepoRelPath, PublicationSource],
-) -> tuple[ResolvedFileRef, ...]: ...
+) -> dict[RepoRelPath, ResolvedFileRef]: ...
 ```
 
 The local publisher calls `LocalArtifactStore`. The cloud publisher uploads
@@ -451,21 +489,23 @@ The stage executor uses this exact call:
 snapshot = snapshot_publisher.publish(
     resolved_stage_path=resolved_path,
     resolved_stage=resolved_raw,
-    artifacts=artifact_paths,
+    files=snapshot_paths,
 )
 ```
 
 `resolved_stage_path` supplies the repository-relative path of the completed
 stage document.
 `resolved_stage` supplies the serialized `resolved.yaml` bytes.
-`artifact_paths` maps each declared artifact path to the existing working
-`Path`. Before upload, the publisher parses `resolved_stage`, matches every
-artifact path to its `SnapshotFileRef`, and checks the source file's SHA-256
-digest and byte count. It then computes one manifest, uploads each unique path
-once, and returns the sealed snapshot reference.
+`snapshot_paths` maps each snapshot member path to its existing working `Path`.
+The map contains declared artifacts and captured local inputs. Before upload,
+the publisher parses `resolved_stage`, matches every member to its
+`SnapshotFileRef`, and checks the source file's SHA-256 digest and byte count.
+It then computes one manifest, uploads each unique path once, and returns the
+sealed snapshot reference.
 
-Files outside a stage snapshot use `publish_resolved_files()`. That function
-returns `sha256`, `bytes`, and `stored_at`. The caller constructs the exact
+Files outside a stage snapshot use `publish_resolved_files()`. The returned map
+uses each publication path as its key. Each value supplies `sha256`, `bytes`,
+and `stored_at`. The caller selects the result by path and constructs the exact
 reference named in the standalone-file table in section 5.1.
 
 ## 7. Stage execution
@@ -516,10 +556,6 @@ publication only changes where VIPER stores their shared snapshot.
 VIPER publishes these files when it creates them:
 
 ```text
-capture local external input
--> publish captured bytes through publish_resolved_files()
--> ResolvedExternalInputRef.file records the returned storage location
-
 generate ArtifactPointer for a prior-run selection
 -> publish pointer document through publish_resolved_files()
 -> StoredInputRef.pointer records the returned storage location
@@ -541,6 +577,10 @@ complete terminal ResolvedRun
 
 Stage invocation receipts use the same function when each stage process ends.
 `RunAttempt.invocations` records the returned `ResolvedStageInvocationRef`.
+
+Captured local inputs follow the stage-snapshot path instead. The runner copies
+the source to an attempt-owned input path, the stage reads that path, and the
+snapshot publisher stores the verified file with the consuming stage.
 
 Each resulting reference tells VIPER where to retrieve its file. Restore and
 verification follow those references.
@@ -586,9 +626,11 @@ ResolvedStageRef is absent
 attempt stops before dependent stages execute
 ```
 
-The next execution resumes publication from the same verified working paths.
-It reruns the stage only when those files are absent or fail their recorded
-identity checks.
+The publisher retries transfer and seal operations against the same
+deterministic revision while the coordinator remains active. Each retry reads
+the same verified working paths. If the coordinator exits, the ordinary run
+retry may execute the stage again. Resumable execution across coordinator
+processes belongs to a future contract.
 
 Standalone publication follows the same seal rule. VIPER writes each generated
 document to its canonical local control path before upload. Existing source
@@ -806,8 +848,8 @@ restore one artifact to a chosen file:
 
 ```bash
 viper restore <run-reference> \
-  --artifacts train.parameters \
-  --output recovered/parameters.bin
+  --artifacts train.model \
+  --output recovered/model.bin
 ```
 
 The user can restore several artifacts beneath one directory:
@@ -815,9 +857,9 @@ The user can restore several artifacts beneath one directory:
 ```bash
 viper restore <run-reference> \
   --artifacts \
-    train.parameters \
-    train.resume_state \
-    evaluate.predictions \
+    train.model \
+    train.state \
+    evaluate.preds \
   --output recovered/
 ```
 
@@ -833,14 +875,14 @@ viper restore <run-reference> \
 | Publication | Replace hard-coded local publication calls with `SnapshotPublisher.publish()` and `publish_resolved_files()`. |
 | Stage execution | Pass resolved-stage bytes and declared artifact paths to the snapshot publisher after artifact validation. |
 | Download execution | Publish the shared retrieval/artifact path once in the configured stage snapshot. |
-| Local roots | Publish captured bytes through `publish_resolved_files()`. |
+| Local roots | Copy each source to an attempt-owned input path, verify it after stage execution, and include its `SnapshotFileRef` in the consuming-stage snapshot. |
 | Pointer generation | Publish generated `ArtifactPointer` documents through `publish_resolved_files()`. |
 | Attempt evidence | Publish invocation receipts, journals, measurements, metric-verification receipts, logs, and attempt documents through `publish_resolved_files()`. |
 | Benchmark result | Publish the completed result and return `BenchmarkExecutionResult.result_ref`. |
 | Terminal run | Publish terminal `resolved.yaml` and return `RunResult.resolved_run_ref`. |
 | Destination stability | Persist the first parsed destination in the run workspace and reject later changes before stage work. |
 | Retrieval | Route Viper Cloud file and snapshot variants through the cloud client. |
-| Recovery | Resume an unsealed stage publication from verified working paths before rerunning the stage. |
+| Recovery | Retry transfer and seal against the same deterministic revision while the coordinator remains active; preserve working files for an ordinary run retry after process loss. |
 | CLI | Print the terminal run reference; add full and artifact-selected restore from a local terminal-run path or immutable Viper Cloud URI. |
 | Verification | Apply existing path, digest, and byte-count rules to both destination variants. |
 
@@ -852,7 +894,7 @@ Delete these proposed concepts from the implementation plan and documentation:
 | --- | --- |
 | `RunSyncState` | `ResolvedRunRef` locates the terminal run; every reachable reference locates its own evidence. |
 | `.viper/sync/` | `ResolvedRunRef` serves as the terminal restore handle. |
-| `viper sync` | Failed stage publication resumes during run retry. |
+| `viper sync` | The active publisher retries the deterministic revision; a later `viper retry` follows ordinary attempt execution. |
 | `viper offload` | Cloud mode bypasses local immutable payload publication from the start. |
 | Terminal-run closure upload | VIPER publishes each stage snapshot and separate file when it creates them. |
 | Remote fallback for missing `LocalFileRef` bytes | Cloud-published records contain `ViperCloudFileRef` directly. |
@@ -906,9 +948,9 @@ working artifacts remain available
 ResolvedStageRef remains absent
 journal records storage_seal_failed
 dependent stage does not start
-retry reuses the working paths
-retry seals the same deterministic revision
-attempt continues
+publisher retry reuses the working paths
+publisher retry seals the same deterministic revision
+the active attempt continues
 ```
 
 ### 13.4 Self-contained prior-run selection
@@ -941,7 +983,8 @@ One cloud-backed run emits every run-owned standalone file listed in section
 5.1. The test follows each owning field and requires its `stored_at` value to
 be a `ViperCloudFileRef`. It retrieves every file, checks its SHA-256 digest and
 byte count, and confirms that `.viper/store` contains none of those payload
-copies.
+copies. A companion stage-snapshot assertion retrieves one captured local input
+through `ResolvedExternalInputRef.file`.
 
 A benchmark companion covers the remaining row. It requires
 `BenchmarkExecutionResult.result_ref` to retrieve the same bytes parsed as
@@ -955,24 +998,25 @@ file. A retry changes `viper.toml`. VIPER emits
 
 ## 14. Implementation order
 
-1. Add destination parsing and exact configuration tests.
-2. Add Viper Cloud file and snapshot references, the snapshot-class rename,
+1. Add `SnapshotPublisher` and `publish_resolved_files()`. Use
+   `LocalArtifactStore` for the first implementations.
+2. Change local stage and standalone publication to use those interfaces.
+3. Add destination parsing and exact configuration tests.
+4. Add Viper Cloud file and snapshot references, the snapshot-class rename,
    serialization tests, and union round-trip tests.
-3. Add `SnapshotPublisher` and `publish_resolved_files()`. Use
-   `LocalArtifactStore` for the local implementations.
-4. Change stage publication to pass artifact paths and stream each payload.
+5. Change cloud stage publication to pass paths and stream each payload.
    Add the direct-cloud and local-compatibility cases.
-5. Route every file in the section 5.1 table through
+6. Route every file in the section 5.1 table through
    `publish_resolved_files()`. Return the terminal-run and benchmark-result
    references from their public result objects.
-6. Add cloud retrieval and apply existing identity checks.
-7. Add seal-failure recovery and deterministic retry.
-8. Persist the run-level destination binding. Add destination-stability and
+7. Add cloud retrieval and apply existing identity checks.
+8. Add seal-failure recovery and deterministic retry.
+9. Persist the run-level destination binding. Add destination-stability and
    cloud-graph-reachability checks.
-9. Add terminal-run restore through `ResolvedRunRef`.
-10. Remove every sync-state, closure-upload, offload, and remote-fallback design
+10. Add terminal-run restore through `ResolvedRunRef`.
+11. Remove every sync-state, closure-upload, offload, and remote-fallback design
    reference from the repository.
-11. Update the public README after the complete cloud acceptance path passes.
+12. Update the public README after the complete cloud acceptance path passes.
 
 ## 15. Invariants
 
@@ -981,7 +1025,7 @@ The implementation is complete when all of these statements hold:
 ```text
 one immutable publication has one configured destination
 
-user-declared artifact paths remain unchanged by storage placement
+frozen artifact paths remain unchanged by storage placement
 
 cloud-backed stage payloads bypass .viper/store
 

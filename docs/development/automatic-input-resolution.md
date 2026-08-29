@@ -7,8 +7,7 @@ contract will define explicit harness mode.
 
 ## 1. Status
 
-**Contract status:** audited authoring and freezing contract; implementation
-pending.
+**Contract status:** approved; implementation pending.
 
 **Current:** Project code defines stages with `@viper.download_stage`,
 `@viper.train_stage`, and a subclass of `viper.parameters.Train`. Each stage
@@ -176,15 +175,16 @@ The four project-owned stage decorators use `params=` for the parameter class:
 
 ```python
 from my_cool_model_acronym.training import train_model
+from pydantic import Field
 from viper.keys import Train
 
 class TrainParams(viper.params.Train):
-    epochs: int
-    batch_size: int
-    learning_rate: float
-    momentum: float
-    weight_decay: float
-    max_gradient_norm: float
+    epochs: int = Field(ge=1)
+    batch_size: int = Field(ge=1)
+    learning_rate: float = Field(gt=0.0)
+    momentum: float = Field(ge=0.0, lt=1.0)
+    weight_decay: float = Field(ge=0.0)
+    max_gradient_norm: float = Field(gt=0.0)
 
 
 @viper.train(params=TrainParams)
@@ -226,6 +226,29 @@ def http_transport(
 `viper.params` is the public alias for the existing parameter categories in
 `viper.parameters`. The persisted field remains `parameter_model` because it
 stores a `ParameterModelRef`, while the Python authoring keyword is `params`.
+The reference uses `owner="viper"` for a built-in base class and
+`owner="project"` for a project subclass. Its path is relative to that owner's
+source root.
+
+```python
+ParameterModelOwner = Literal["project", "viper"]
+PythonSourceRelPath = Annotated[
+    str,
+    AfterValidator(validate_repo_rel_path),
+    AfterValidator(validate_python_file_path),
+]
+
+
+class ParameterModelRef(ProtocolModel):
+    owner: ParameterModelOwner
+    path: PythonSourceRelPath
+    symbol: PythonSymbol
+    sha256: SHA256
+    bytes: int = Field(gt=0)
+```
+
+This replaces the current project-only meaning of `ParameterModelRef`. Stage,
+transport, and metric parameter references all use the same owner rule.
 
 ### Target artifact and transport drafts
 
@@ -250,6 +273,22 @@ metric function or stateful metric class
 byte count for each definition. The frozen YAML stores those records.
 
 ```python
+def validate_run_artifact_path(value: str) -> str:
+    path = validate_repo_rel_path(value)
+    parts = path.split("/")
+    if len(parts) < 3 or parts[0] != "artifacts":
+        raise ValueError(
+            "draft artifact path must begin with artifacts/<category>/<entity_id>"
+        )
+    return path
+
+
+RunArtifactPath = Annotated[
+    str,
+    AfterValidator(validate_run_artifact_path),
+]
+
+
 class SingleFileArtifactDraft(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -258,7 +297,7 @@ class SingleFileArtifactDraft(BaseModel):
     )
 
     kind: Literal["file"] = "file"
-    path: RepoRelPath
+    path: RunArtifactPath
     loader: Callable[[Path], object]
     data_role: DataRole
 
@@ -271,7 +310,7 @@ class BundleArtifactDraft(BaseModel):
     )
 
     kind: Literal["bundle"] = "bundle"
-    path: RepoRelPath
+    path: RunArtifactPath
     loader: Callable[[Path], object]
     data_role: DataRole
 
@@ -291,6 +330,19 @@ class CustomHttpTransportDraft:
 
 HttpTransportDraft = BuiltinHttpTransportSpec | CustomHttpTransportDraft
 ```
+
+`ArtifactDraft.path` is relative to the selected run root. For example,
+`artifacts/models/logistic_regression/model.pt` becomes:
+
+```text
+experiments/<experiment-id>/runs/<variant-id>/<run-id>/
+artifacts/models/logistic_regression/model.pt
+```
+
+The compiler writes that full repository-relative value to `ArtifactSpec.path`.
+The run-relative draft path lets one `VariantDraft` serve every declared
+replicate while preserving the user's chosen artifact category, entity ID,
+filename, and subdirectories.
 
 A custom transport can use VIPER's base settings. The user writes:
 
@@ -442,7 +494,7 @@ scores an objective can supply one.
 The compiler places `objective.metric.metric_id` first in the frozen
 `metric_ids` tuple, followed by the IDs in `metrics`. It rejects duplicate IDs.
 It freezes the metric ID and improvement direction as one
-`MetricObjectiveSpec`. The kind and mode rules come from
+`MetricObjectiveSpec`. The mode rules come from
 [`unified-metric-drafting.md`](unified-metric-drafting.md#7-verification).
 
 ### Target frozen download and resolved-stage models
@@ -539,7 +591,7 @@ keys fail target-model validation.
 `TrainSpec` and `EvaluateSpec` require `objective.metric_id` to appear in
 `metric_ids`. `EmbedSpec` applies the same check when `objective` is present.
 Run-plan verification loads the matching `MetricSpec` from `ExperimentSpec`
-and checks the objective kind, mode, and direction.
+and checks the objective mode and direction.
 
 This rule proves that the stage declared and measured an objective. An arbitrary
 project-owned training function can still update weights with a different
@@ -633,6 +685,7 @@ The active-to-target field changes are:
 | Train objective field absent | `TrainSpecDraft.objective: MetricObjectiveDraft` and `TrainSpec.objective: MetricObjectiveSpec` | Training records its primary metric and improvement direction. |
 | Evaluation objective field absent | `EvaluateSpecDraft.objective: MetricObjectiveDraft` and `EvaluateSpec.objective: MetricObjectiveSpec` | Evaluation records its primary recomputed metric and improvement direction. |
 | Embed objective field absent | Optional `MetricObjectiveDraft` and `MetricObjectiveSpec` fields | Optimizing embedding algorithms can name an objective; fixed encoders leave it unset. |
+| Public artifact draft paths | `ArtifactDraft.path: RunArtifactPath` | The compiler prefixes the selected run root and writes the concrete repository-relative `ArtifactSpec.path`. |
 | Repeated experiment identity on `RunPlanDraft` | `RunPlanDraft.experiment: ExperimentDraft` plus selected variant and replicate IDs | The experiment owns factors, variants, replicates, and derived metric definitions. |
 
 Explicit harness mode may accept an `ArtifactPointerRef` authored in Git. The
@@ -646,8 +699,9 @@ invocation checks with them. Download verification uses
 `ResolvedHttpRetrieval.transport`, the request-response rules, and the shared
 artifact-file identity.
 
-`StageDraft.spec.artifacts` contains the path, loader, and data role that will
-become `BaseSpec.artifacts`. `StageDraft.artifacts` returns opaque Python
+`StageDraft.spec.artifacts` contains the run-relative path, loader, and data
+role. The compiler prefixes the selected run root when it creates
+`BaseSpec.artifacts`. `StageDraft.artifacts` returns opaque Python
 handles that another draft can select as inputs. The public workflow uses the
 handle; `StageDraftArtifactRef` remains an authoring-layer type.
 
@@ -700,6 +754,14 @@ RunArtifactDraft identifying one artifact in a completed run
 -> StoredInputRef
 ```
 
+The compiler also derives every frozen artifact path:
+
+```text
+ArtifactDraft.path
++ experiments/<experiment-id>/runs/<variant-id>/<run-id>/
+-> ArtifactSpec.path
+```
+
 The input-map key supplies the consumer input name. The selected artifact
 declaration supplies its path and data role. The selected variant's stage key
 supplies the producer stage ID. The selected artifact name supplies the
@@ -719,7 +781,7 @@ The public constructors produce the draft models above:
 ```python
 def file_artifact(
     *,
-    path: RepoRelPath,
+    path: RunArtifactPath,
     loader: Callable[[Path], object],
     data_role: DataRole,
 ) -> SingleFileArtifactDraft: ...
@@ -929,32 +991,15 @@ from viper.runtime import (
 
 REPOSITORY = "https://github.com/example/tiny-viper-model"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-RUN_ROOT = f"experiments/tiny_http/runs/baseline/{RUN_ID}"
 
-TRAINING_DATASET_PATH = (
-    f"{RUN_ROOT}/artifacts/datasets/training_set/training.csv"
-)
-EVALUATION_DATASET_PATH = (
-    f"{RUN_ROOT}/artifacts/datasets/evaluation_set/evaluation.csv"
-)
-HOLDOUT_SPLIT_PATH = (
-    f"{RUN_ROOT}/artifacts/datasets/holdout_split/holdout.csv"
-)
-TRAINING_EMBEDDINGS_PATH = (
-    f"{RUN_ROOT}/artifacts/models/training_embeddings/embeddings.csv"
-)
-EVALUATION_EMBEDDINGS_PATH = (
-    f"{RUN_ROOT}/artifacts/models/evaluation_embeddings/embeddings.csv"
-)
-WEIGHTS_PATH = (
-    f"{RUN_ROOT}/artifacts/models/logistic_regression/parameters.pt"
-)
-RESUME_STATE_PATH = (
-    f"{RUN_ROOT}/artifacts/models/logistic_regression/resume_state.pt"
-)
-PREDICTIONS_PATH = (
-    f"{RUN_ROOT}/artifacts/evaluations/holdout/predictions.csv"
-)
+TRAINING_DATASET_PATH = "artifacts/datasets/training_set/training.csv"
+EVALUATION_DATASET_PATH = "artifacts/datasets/evaluation_set/evaluation.csv"
+HOLDOUT_SPLIT_PATH = "artifacts/datasets/holdout_split/holdout.csv"
+TRAINING_EMBEDDINGS_PATH = "artifacts/models/training_embeddings/embeddings.csv"
+EVALUATION_EMBEDDINGS_PATH = "artifacts/models/evaluation_embeddings/embeddings.csv"
+WEIGHTS_PATH = "artifacts/models/logistic_regression/model.pt"
+STATE_PATH = "artifacts/models/logistic_regression/state.pt"
+PREDICTIONS_PATH = "artifacts/evaluations/holdout/preds.csv"
 
 
 def current_commit() -> str:
@@ -1116,7 +1161,6 @@ download = viper.download(
 
 @viper.metric(
     metric_id="embedding_reconstruction_loss",
-    kind="diagnostic",
     mode="live",
 )
 def embedding_reconstruction_loss(
@@ -1128,7 +1172,6 @@ def embedding_reconstruction_loss(
 
 @viper.metric(
     metric_id="embedding_spread",
-    kind="diagnostic",
     mode="live",
 )
 def embedding_spread(
@@ -1141,7 +1184,6 @@ def embedding_spread(
 
 @viper.metric(
     metric_id="training_loss",
-    kind="training",
     mode="live",
 )
 def training_loss(
@@ -1153,7 +1195,6 @@ def training_loss(
 
 @viper.metric(
     metric_id="gradient_norm",
-    kind="diagnostic",
     mode="live",
 )
 def gradient_norm(
@@ -1169,7 +1210,6 @@ class LossMetricParams(viper.params.Metric):
 
 @viper.metric(
     metric_id="evaluation_loss",
-    kind="evaluation",
     mode="recompute",
 )
 def evaluation_loss(
@@ -1191,7 +1231,6 @@ def evaluation_loss(
 
 @viper.metric(
     metric_id="evaluation_accuracy",
-    kind="evaluation",
     mode="recompute",
 )
 def evaluation_accuracy(
@@ -1438,7 +1477,7 @@ training = viper.stage(
             data_role="training",
         ),
         Train.STATE: viper.file_artifact(
-            path=RESUME_STATE_PATH,
+            path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
@@ -1625,7 +1664,7 @@ The metric lifecycle is:
 | `evaluation_accuracy` | Evaluate | Recompute metric | Computes holdout classification accuracy from the same predictions. |
 
 The stage code computes live metrics while it still has the batch or embedding
-values. Evaluation metrics run after `predictions.csv` has been published. The
+values. Evaluation metrics run after `preds.csv` has been published. The
 metric worker reads that artifact through the declared `MetricDependency`.
 Verification runs the same metric implementation again and compares the two
 values with the frozen `FloatComparator`.
@@ -1653,14 +1692,14 @@ train
 -> reads training embeddings
 -> runs batched SGD for 40 epochs
 -> records training loss and gradient norm after every epoch
--> writes parameters.pt and a real ResumeState
+-> writes model.pt and a real ResumeState
 
 evaluate
 -> reads parameters, evaluation embeddings, and holdout row IDs
 -> writes probabilities and class predictions
 
 metric worker
--> recomputes evaluation loss and accuracy from predictions.csv
+-> recomputes evaluation loss and accuracy from preds.csv
 -> writes measurements and metric-execution receipts
 ```
 
@@ -1697,7 +1736,7 @@ local_training = viper.stage(
             data_role="training",
         ),
         Train.STATE: viper.file_artifact(
-            path=RESUME_STATE_PATH,
+            path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
@@ -1730,7 +1769,7 @@ prior_training = viper.stage(
             data_role="training",
         ),
         Train.STATE: viper.file_artifact(
-            path=RESUME_STATE_PATH,
+            path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
@@ -2020,12 +2059,13 @@ overwrite rules, and review ownership.
 | Download API | Add runner-owned `viper.download()` and remove the project download callable from the target contract | A download draft contains request, transport, policy, environment, metrics, and artifacts; project implementation and stage parameters belong to the other stage drafts |
 | Transport API | Make the `@viper.http_transport` parameter class and `viper.transport()` parameter instance optional | The example freezes and invokes `project_httpx` through the base transport parameters |
 | Artifact API | Add `viper.file_artifact()` and callable-backed artifact drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
+| Artifact paths | Accept run-relative `ArtifactDraft.path` values and prefix the selected run root during freezing | One variant graph can be reused across replicates while every frozen `ArtifactSpec.path` remains concrete |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `FileInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
 | Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and evaluate stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
 | Pointer writer | Serialize prior-run `ArtifactPointer` documents and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef` |
-| Storage publication | Publish local-root captures, generated pointer files, stage snapshots, and terminal runs at their creation boundaries | Every record carries the storage reference required for retrieval |
+| Storage publication | Include local-root captures in consuming-stage snapshots; publish generated pointer files and terminal runs independently | Every record carries the enclosing snapshot or standalone storage reference required for retrieval |
 | Stage validators | Validate source existence, stage order, roles, and materialization paths | Invalid declarations fail during freezing |
 | Evaluation input validator | Accept external, same-run, or prior-run evaluation data and split references; validate the resolved data roles | The full example evaluates same-run downloaded and embedded data |
 | Runtime resolution | Reuse existing `FutureInputRef` and `StoredInputRef` materialization | `StageContext.inputs` receives the expected path |
@@ -2064,9 +2104,11 @@ replacement:
 | Required `@viper.http_transport(parameter_model=...)` | Replace | `@viper.http_transport(params=...)` defaults to `viper.params.HttpTransport`. |
 | Required empty transport parameter instances | Delete | `viper.transport(transfer)` constructs the base parameter instance. |
 | Direct `SingleFileArtifactSpec` construction in public examples | Replace | `viper.file_artifact()` accepts the loader callable and freezing writes `ArtifactLoaderRef`. |
+| Full run paths repeated in every `ArtifactDraft` | Replace | Drafts use `RunArtifactPath`; freezing prefixes `experiments/<experiment-id>/runs/<variant-id>/<run-id>/`. |
 | Bare `metric_ids=` in Python stage authoring | Replace | `objective=` accepts `MetricObjectiveDraft`; `metrics=` accepts `MetricDraft` values; freezing writes the IDs. |
 | Manual `MetricImplementationRef` construction in public examples | Replace | `viper.measure()` accepts the decorated metric and freezing records its exact source identity. |
 | Untyped extra values stored only in `MetricSpec.params` | Replace | A custom metric parameter class produces `MetricSpec.parameter_model`; the worker validates the values through that exact class. |
+| Package-owned parameter classes represented by an absent reference | Replace | Every frozen parameter class has a `ParameterModelRef`; `owner` selects the project or installed VIPER source root. |
 | Stored-only `EvaluateSpec.evaluation_dataset` and split validation | Replace | Freezing and preflight validate data roles after resolving any `InputRef` variant. |
 | Existing protocol YAML, CLI parsing, verifier reconstruction, tests, fixtures, and project scaffolding that construct the old shapes | Replace | Each consumer parses or constructs the target frozen and resolved models. |
 
@@ -2079,6 +2121,10 @@ members. Freeze both stages and assert that their YAML maps contain `model`,
 `state`, `test`, and `preds`. Construct the same drafts with the replaced key
 values and assert that stage validation fails before freezing.
 
+Freeze the same variant with two replicate IDs and two run IDs. Assert that the
+draft artifact paths remain unchanged and each frozen `ArtifactSpec.path`
+contains its own selected run root.
+
 ### Local file and training
 
 The acceptance fixture creates `inputs/raw/training_embeddings.csv` and selects
@@ -2088,14 +2134,16 @@ it through `viper.file_input()`.
 freeze the run plan
 -> compiler writes ExternalInputRef into TrainSpec.inputs["dataset"]
 -> execute train
--> runner publishes the captured source bytes at the configured destination
--> train receives inputs/raw/training_embeddings.csv
+-> runner copies the source bytes to an attempt-owned input path
+-> train receives that attempt-owned path
+-> runner verifies the captured file after training
+-> train-stage snapshot includes the captured file
 -> resolved train record contains ResolvedExternalInputRef
 ```
 
-The test asserts the captured SHA-256 digest and byte count, the source path
-received by training, and local-root verification. Changing the captured store
-bytes triggers `input.local_root_identity`.
+The test asserts the captured SHA-256 digest and byte count, the attempt-owned
+path received by training, and local-root verification. Changing the snapshot
+bytes or invocation input path triggers `input.local_root_identity`.
 
 ### Complete same-run pipeline
 
@@ -2153,15 +2201,17 @@ the selection.
 
 Freezing a train draft with a missing `objective` fails
 `metric.objective.selection`. Freezing an evaluation draft whose objective uses
-`kind="training"` fails `metric.objective.role`. Removing the final
-`training_loss` measurement from an otherwise successful attempt fails
+`mode="live"` fails `metric.objective.role`. Removing the final `training_loss`
+measurement from an otherwise successful attempt fails
 `metric.objective.evidence`.
 
 ## 11. Implementation order
 
-This implementation starts after the runner-owned download and local-root
-increments defined by the first two contracts in the dependency order in
-[`external-input-roots.md`](external-input-roots.md#10-propagation-and-implementation-order).
+This implementation starts after the local publication boundary, runner-owned
+download, local-root capture, and metric runtime in the
+[`master execution checklist`](master-execution-checklist.md#5-dependency-order).
+This section groups the work owned by the automatic-input contract. The master
+checklist supplies the cross-contract commit order.
 
 ### Phase 1. Define the Python authoring models
 
@@ -2176,6 +2226,8 @@ increments defined by the first two contracts in the dependency order in
 - [ ] Expose one `StageDraftArtifactRef` per declared artifact through
       `StageDraft.artifacts`.
 - [ ] Add callable-backed artifact and transport drafts.
+- [ ] Add `RunArtifactPath` and prefix the selected run root when freezing
+      every `ArtifactDraft` into `ArtifactSpec`.
 - [ ] Consume the metric and experiment draft types defined by
       [`unified-metric-drafting.md`](unified-metric-drafting.md).
 - [ ] Add `FileInputDraft`, `RunArtifactDraft`, and the `StageInputDraft`
@@ -2209,8 +2261,9 @@ stage through either the built-in transport or one decorated custom transport.
       `LocalSource` and the declared data role.
 - [ ] Map each `StageDraftArtifactRef.producer` to its key in
       the selected `VariantDraft.stages` and construct `FutureInputRef`.
-- [ ] Capture local-root bytes, retain the selected source path, and add the
-      local-root verifier.
+- [ ] Copy local-root bytes to an attempt-owned input path, pass that path to
+      the worker, include it in the stage snapshot, and add the local-root
+      verifier.
 - [ ] Preserve the existing `TrainSpec` and `InternalSpec` validators except
       for the explicit evaluation-input change below.
 - [ ] Let evaluation datasets and split inputs use any `InputRef`; resolve the
@@ -2238,12 +2291,13 @@ to training while the compiler owns the `ExternalInputRef` and
 **Commit boundary:** a later run consumes a prior VIPER artifact through a
 compiler-generated pointer.
 
-### Phase 5. Integrate unified metric and experiment drafting
+### Phase 5. Complete metric and experiment integration
 
-- [ ] Complete Phases 1 through 3 of
-      [`unified-metric-drafting.md`](unified-metric-drafting.md#10-implementation-order).
-- [ ] Pass this contract's complete stage graph into the unified experiment
-      compiler.
+- [ ] Pass this contract's complete stage graph into the metric and experiment
+      compiler defined by
+      [`unified-metric-drafting.md`](unified-metric-drafting.md).
+- [ ] Derive one experiment metric registry from every variant's objectives and
+      additional metrics.
 - [ ] Use `MetricObjectiveDraft` in the train and evaluate examples. Keep the
       embed objective optional.
 - [ ] Add live embedding diagnostics, a live training objective and gradient

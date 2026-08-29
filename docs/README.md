@@ -23,7 +23,11 @@ Start with the task you need to complete.
 | --- | --- |
 | [Contributing guide](../CONTRIBUTING.md) | Set up the repository and submit a validated change |
 | [Testing guide](development/testing.md) | Select a test tier, domain, CI gate, or live CUDA check |
+| [Contract implementation guide](development/master-execution-checklist.md) | Build the approved contracts in dependency order with pair-coding hints and acceptance gates |
+| [Download retrieval contract](development/download-retrieval-artifacts.md) | Make each verified HTTP body the same-named stage artifact |
+| [External input roots contract](development/external-input-roots.md) | Capture local roots and connect HTTP artifacts to later consumers |
+| [Automatic input resolution contract](development/automatic-input-resolution.md) | Compile Python stage drafts and artifact selections into frozen plans |
 | [Unified metric drafting contract](development/unified-metric-drafting.md) | Implement metric, objective, experiment, and benchmark Python authoring |
-| [Remote storage contract](development/remote-storage.md) | Implement automatic synchronization, retry, offload, and restore |
+| [Direct Viper Cloud publication contract](development/remote-storage.md) | Publish immutable evidence locally or directly to Viper Cloud and restore artifacts |
 | [0.1.0a2 release evidence](releases/0.1.0a2.md) | Inspect the current public distributions, registry attestations, clean installations, and NVIDIA L4 validation |
 | [0.1.0a1 release evidence](releases/0.1.0a1.md) | Inspect the first public distribution and live NVIDIA L4 validation |

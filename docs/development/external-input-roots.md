@@ -18,12 +18,13 @@ enters VIPER through `ResolvedHttpRetrieval`, becomes the download stage's
 `SnapshotFileRef`.
 
 A local file follows the shorter route. Its bytes enter at the consuming-stage
-boundary through `ExternalInputRef`. VIPER captures the exact bytes in
-`ResolvedExternalInputRef` and supplies the selected path to the stage.
+boundary through `ExternalInputRef`. VIPER copies the selected bytes into an
+attempt-owned input file, supplies that file to the stage, and records it in
+`ResolvedExternalInputRef` as a member of the completed stage snapshot.
 
 ## 1. Status and decision
 
-**Contract status:** audited provenance contract; implementation pending.
+**Contract status:** approved; implementation pending.
 
 **Required claim:** every path in `context.inputs` resolves to exact bytes whose
 entry into VIPER and selection by the consuming stage are both verifiable.
@@ -94,9 +95,10 @@ The remaining records describe publication and selection:
   run.
 - `ExternalInputRef` declares the local root before execution.
 
-Both records identify where bytes entered VIPER. The artifact and input
-reference records prove publication and selection. Their shared file reference
-joins the root, publication, and selection claims.
+Both root records identify where bytes entered VIPER. On the HTTP route, the
+shared file reference joins the root receipt to the artifact. On the local
+route, `ResolvedExternalInputRef.file` identifies the attempt-owned input in
+the consuming-stage snapshot.
 
 ```mermaid
 flowchart LR
@@ -104,14 +106,16 @@ flowchart LR
     Service[/"HTTP service"/]
     LocalRoot["Local external root<br/>ResolvedExternalInputRef"]
     Retrieval["HTTP external root<br/>ResolvedHttpRetrieval"]
-    File[("One snapshot file<br/>path · SHA-256 · bytes")]
+    LocalFile[("Captured input snapshot file<br/>path · SHA-256 · bytes")]
+    File[("HTTP artifact snapshot file<br/>path · SHA-256 · bytes")]
     Artifact["Download-stage output<br/>ResolvedSingleFileArtifact"]
     SameRun["Same-run selection<br/>FutureInputRef"]
     PriorRun["Prior-run selection<br/>StoredInputRef"]
     Train["Training stage<br/>context.inputs"]
 
     Local -->|"ExternalInputRef selects"| LocalRoot
-    LocalRoot -->|"captured file path"| Train
+    LocalRoot -->|"file"| LocalFile
+    LocalFile -->|"attempt-owned input path"| Train
     Service -->|"DownloadSpec request"| Retrieval
     Retrieval -->|"body"| File
     Artifact -->|"file: same SnapshotFileRef"| File
@@ -122,7 +126,7 @@ flowchart LR
 
     class Local,Service external
     class LocalRoot,Retrieval root
-    class File evidence
+    class LocalFile,File evidence
     class Artifact artifact
     class SameRun,PriorRun reference
     class Train consumer
@@ -165,17 +169,22 @@ class ExternalInputRef(ProtocolModel):
 class ResolvedExternalInputRef(ProtocolModel):
     kind: Literal["external"] = "external"
     source: LocalSource
-    file: ResolvedFileRef
+    file: SnapshotFileRef
     data_role: DataRole
 ```
 
 `viper.file_input()` creates `FileInputDraft`. Freezing alone constructs the
 `ExternalInputRef` protocol record.
-`ExternalInputRef.source.path` is the one repository-relative path selected by
-the user and supplied to the worker. `resolve_inputs()` reads that path,
-publishes the observed bytes through `publish_resolved_files()` at the
-configured storage destination, and writes the returned `ResolvedFileRef` into
-`ResolvedExternalInputRef.file`.
+`ExternalInputRef.source.path` is the repository-relative source selected by
+the user. `resolve_inputs()` reads that file once and writes the same bytes to
+an attempt-owned path under `.viper/workspaces`. The worker receives the
+attempt-owned path. `resolve_inputs()` writes that path, digest, and byte count
+to `ResolvedExternalInputRef.file` as a `SnapshotFileRef`.
+
+After the worker exits, the executor hashes the attempt-owned file again. A
+change fails the stage. A successful stage publishes that file inside the same
+snapshot as its resolved stage document and artifacts. The enclosing
+`ResolvedStageRef.snapshot` supplies the storage location.
 The runner copies `ExternalInputRef.data_role` into
 `ResolvedExternalInputRef.data_role`.
 
@@ -217,9 +226,9 @@ The active-to-target field changes are exact:
 | `HttpSource` | Delete | HTTP declarations remain in `DownloadSpec.inputs`. |
 | `ExternalInputSource = LocalSource | HttpSource` | Delete | `ExternalInputRef.source` and `ResolvedExternalInputRef.source` use `LocalSource` directly. |
 | `ExternalInputRef.source: ExternalInputSource` | Replace | `ExternalInputRef.source: LocalSource` |
-| `ExternalInputRef.path` | Delete | The worker receives `ExternalInputRef.source.path`. |
+| `ExternalInputRef.path` | Delete | The runner chooses one attempt-owned input path and supplies it to the worker. |
 | `ResolvedExternalInputRef.source: ExternalInputSource` | Replace | `ResolvedExternalInputRef.source: LocalSource` |
-| `ResolvedExternalInputRef.file` | Retain | `resolve_inputs()` records the captured `ResolvedFileRef`. |
+| `ResolvedExternalInputRef.file: ResolvedFileRef` | Replace | `ResolvedExternalInputRef.file: SnapshotFileRef` identifies the attempt-owned input inside the completed consuming-stage snapshot. |
 | Both `data_role` fields | Retain | The resolved record copies the frozen declaration. |
 | Public `ExternalInputRef` construction | Replace | `viper.file_input()` returns `FileInputDraft`; freezing writes the protocol record. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | The compiler stores its generated pointer and writes `ResolvedArtifactPointerRef`. |
@@ -255,7 +264,7 @@ owners:
 
 | Route | Frozen declaration | Resolved root evidence | Later consumer |
 | --- | --- | --- | --- |
-| Local file | `InternalSpec.inputs[name]: ExternalInputRef` | `ResolvedInternalSpec.inputs[name]: ResolvedExternalInputRef` | The same internal stage receives `source.path`. |
+| Local file | `InternalSpec.inputs[name]: ExternalInputRef` | `ResolvedInternalSpec.inputs[name]: ResolvedExternalInputRef` | The same internal stage receives an attempt-owned copy of `source.path`. |
 | HTTP response | `DownloadSpec.inputs[name]: HttpRequestSpec` | `ResolvedDownloadSpec.retrievals[name]: ResolvedHttpRetrieval` | `FutureInputRef` selects the same-named artifact in the active run; `StoredInputRef` selects it from a completed run. |
 
 The local route constructs `ExternalInputRef` and
@@ -285,11 +294,7 @@ import viper
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
 
-DATASET_PATH = (
-    "experiments/tiny_http/runs/baseline/"
-    "01ARZ3NDEKTSV4RRFFQ69G5FAV/"
-    "artifacts/datasets/training_set/dataset.csv"
-)
+DATASET_PATH = "artifacts/datasets/training_set/dataset.csv"
 
 
 def load_dataset(path: Path) -> list[dict[str, str]]:
@@ -337,7 +342,8 @@ The executor performs this flow:
 inputs["dataset"]
 -> transport writes the response to bounded attempt scratch space
 -> executor verifies the expected digest and byte count
--> executor writes the body at artifacts["dataset"].path
+-> freezer prefixes the selected run root onto artifacts["dataset"].path
+-> executor writes the body at the frozen artifact path
 -> completed stage records one shared SnapshotFileRef
 ```
 
@@ -407,18 +413,20 @@ uses one user-selected repository-relative path:
 ```text
 local file selected through ExternalInputRef
 -> runner reads the exact bytes
--> configured storage publisher records an independently retrievable ResolvedFileRef
+-> runner writes an attempt-owned input file
 -> ResolvedExternalInputRef records the source and captured identity
--> stage receives the selected path through context.inputs
+-> stage receives the attempt-owned path through context.inputs
+-> runner checks the file again after the stage exits
+-> completed stage snapshot stores the file
 ```
 
 A local root begins outside VIPER's stage graph, so `ExternalInputRef` supplies
-the root declaration directly. The user chooses one source path. VIPER passes
-that same path to the worker after capturing its byte identity.
+the root declaration directly. The user chooses one source path. VIPER chooses
+the attempt-owned path and gives the worker the captured file.
 
-The missing verifier must fetch the captured `ResolvedFileRef`, recompute its
-SHA-256 digest and byte count, and confirm that the frozen local source is the
-path supplied to the consuming stage.
+The missing verifier must read `ResolvedExternalInputRef.file` from the
+enclosing stage snapshot, recompute its SHA-256 digest and byte count, and
+confirm that the stage invocation received the same attempt-owned path.
 
 ## 7. One user-facing input authoring flow
 
@@ -454,18 +462,21 @@ prior_run_dataset = viper.run_artifact(
 Each value can occupy the same input slot:
 
 ```python
+from viper.keys import Train
+
+
 training = viper.stage(
     train,
     params=TRAIN_PARAMS,
     inputs={"dataset": same_run_dataset},
     artifacts={
-        "parameters": viper.file_artifact(
+        Train.MODEL: viper.file_artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        "resume_state": viper.file_artifact(
-            path=RESUME_STATE_PATH,
+        Train.STATE: viper.file_artifact(
+            path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
@@ -511,9 +522,10 @@ policy, timing, stage snapshot, and file bytes.
 ### Local root
 
 ```text
-captured bytes hash to resolved_external.file.sha256
-captured byte count equals resolved_external.file.bytes
-resolved source path equals the path delivered to the stage
+stage snapshot bytes hash to resolved_external.file.sha256
+stage snapshot byte count equals resolved_external.file.bytes
+stage invocation input path equals resolved_external.file.path
+frozen source path remains recorded in resolved_external.source.path
 ```
 
 ### Prior-run artifact
@@ -545,9 +557,10 @@ run. A changed artifact digest triggers
 ### Local root
 
 A repository file containing `b"prior"` enters through `ExternalInputRef`.
-VIPER records its digest, byte count, and `ResolvedFileRef`, then supplies the
-same path to the train stage. `verify_run_result()` accepts the run. Changed
-stored bytes trigger `input.local_root_identity`.
+VIPER copies it to an attempt-owned input path, gives that path to the train
+stage, and stores the captured file in the completed train-stage snapshot.
+`verify_run_result()` accepts the run. Changed snapshot bytes or a different
+stage-invocation path trigger `input.local_root_identity`.
 
 ### Downloaded prior-run input
 
@@ -572,31 +585,37 @@ identity rule.
 | Resolved download schema | Keep runner environment, execution context, retrievals, artifacts, and completion on `ResolvedDownloadSpec`; move project invocation fields to `ResolvedParameterizedSpec`. |
 | External source model | Delete `HttpSource` and `ExternalInputSource`; type both local records with `source: LocalSource`. |
 | Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
-| Local root model | Delete `ExternalInputRef.path`; supply `ExternalInputRef.source.path` to the worker and retain the captured `ResolvedFileRef`. |
+| Local root model | Delete `ExternalInputRef.path`; copy `ExternalInputRef.source.path` to an attempt-owned input path and record a `SnapshotFileRef`. |
 | Verification | Add local-root verification and the HTTP receipt-artifact identity rule. |
 | Authoring | Add `viper.file_input()` and `viper.run_artifact()`; convert local files, same-run handles, and prior-run drafts into `ExternalInputRef`, `FutureInputRef`, and `StoredInputRef`. |
 | Prior-run pointer schema | Change `StoredInputRef.pointer` to digest-bearing `ResolvedArtifactPointerRef`; let the pointer use any `StorageRef`. |
-| Storage publication | Publish captured local roots and generated pointer files at the configured local or Viper Cloud destination; retain the returned self-locating reference. |
+| Storage publication | Include captured local roots in their consuming-stage snapshots. Publish generated pointer files separately at the configured local or Viper Cloud destination. |
 | Tests | Cover local roots, same-run downloaded inputs, prior-run downloaded inputs, tampered root bytes, and tampered artifacts. |
 | Legacy cleanup | Apply every delete, replace, and retain disposition in [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md); delete `HttpSource` and its tests here. |
 | Documentation | Update the protocol reference and generated project examples to teach executor-owned HTTP publication and automatic input selection. |
 
 Implementation order:
 
-The dependency order across the four contracts is:
+The authoritative order is in the
+[`master execution checklist`](master-execution-checklist.md#5-dependency-order).
+The relevant dependencies are:
 
 ```text
+remote-storage.md local publication boundary
+->
 download-retrieval-artifacts.md
 -> external-input-roots.md
+-> unified-metric-drafting.md
 -> automatic-input-resolution.md
--> remote-storage.md
+-> remote-storage.md cloud backend and restore
 ```
 
 The download increment establishes one HTTP path and one shared snapshot file.
 This increment removes the duplicate HTTP source and completes local-root
 verification. The authoring increment then compiles all three input routes.
-Direct publication records the selected storage destination in each resulting
-file or snapshot reference.
+The local publication boundary exists before these runtime changes. The full
+cloud backend later records the selected destination in each resulting file or
+snapshot reference.
 
 1. Complete the runner-owned request-to-artifact contract in
    [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md),
@@ -604,8 +623,9 @@ file or snapshot reference.
    callable, and copy loops.
 2. Delete `HttpSource`, `ExternalInputSource`, and the duplicate HTTP branch in
    `resolve_inputs()`. Change both local `source` fields to `LocalSource`.
-3. Delete `ExternalInputRef.path`, supply `source.path` to the worker, and add
-   the local-root verifier.
+3. Delete `ExternalInputRef.path`, copy `source.path` into the attempt workspace,
+   give that path to the worker, include it in the completed stage snapshot,
+   and add the local-root verifier.
 4. Add `FileInputDraft`, `RunArtifactDraft`, and the three-way authoring
    compiler defined in
    [`automatic-input-resolution.md`](automatic-input-resolution.md).
