@@ -1,10 +1,9 @@
 # Automatic artifact capture and input resolution
 
-VIPER should let a project keep its decorator-based stage definitions and
-typed parameter classes while VIPER creates the internal artifact references
-required to connect produced data to later stages. This contract defines the
-default workflow for one run and records the separate design boundary for a
-future explicit harness mode.
+Users write decorated stage functions and typed parameter classes. VIPER
+creates the references that connect one stage's output to another stage's
+input. This contract defines how VIPER creates those references. A later
+contract will define explicit harness mode.
 
 ## 1. Status
 
@@ -12,16 +11,15 @@ future explicit harness mode.
 pending.
 
 **Current:** Project code defines stages with `@viper.download_stage`,
-`@viper.train_stage`, and a subclass of `viper.parameters.Train`. The stage
-callable receives a `StageContext`; the callable reads materialized input paths
-from `context.inputs` and writes declared outputs through `context.artifacts`.
+`@viper.train_stage`, and a subclass of `viper.parameters.Train`. Each stage
+function receives a `StageContext`. The function reads input paths from
+`context.inputs` and writes files at the paths in `context.artifacts`.
 See [`README.md`](../../README.md#define-a-stage) and
 [`src/viper/stages.py`](../../src/viper/stages.py).
 
-**Current:** `DownloadSpec` accepts HTTP request inputs, while `TrainSpec`
-accepts an `InputRef` union containing `ExternalInputRef`, `StoredInputRef`, and
-`FutureInputRef`. The user-authored frozen stage specification therefore names
-the internal relationship between a training input and its source.
+**Current:** `DownloadSpec` accepts HTTP requests. `TrainSpec` accepts
+`ExternalInputRef`, `StoredInputRef`, or `FutureInputRef`. Users must choose and
+construct those internal reference objects themselves.
 See [`src/viper/stages.py`](../../src/viper/stages.py).
 
 **Proposed:** Four project-owned stage kinds use `@viper.build`,
@@ -30,17 +28,17 @@ See [`src/viper/stages.py`](../../src/viper/stages.py).
 one validated instance of that class. `viper.download()` creates the
 runner-owned HTTP stage directly.
 
-The plan's `stages` mapping assigns every stage ID. The authoring layer accepts
-`FileInputDraft`, an opaque same-run artifact handle, or `RunArtifactDraft` as
-a stage-input value. The compiler converts those drafts into
-`ExternalInputRef`, `FutureInputRef`, or `StoredInputRef`. A prior-run selection
-also produces an internally stored `ArtifactPointer`.
+The keys in `plan.stages` become the stage IDs. A user can pass a local file, an
+artifact from an earlier stage, or an artifact from an earlier run to
+`viper.stage()`. `viper.freeze()` converts that value into `ExternalInputRef`,
+`FutureInputRef`, or `StoredInputRef`. For an earlier run, VIPER also writes an
+`ArtifactPointer`.
 
-The proposal changes the Python authoring API and the frozen `DownloadSpec`
-owner. It keeps `StageContext`, artifact selection, and input materialization
-stable for the four project-owned stage kinds. The coordinated download
-contract makes `ResolvedHttpRetrieval.body` and the matching
-`ResolvedSingleFileArtifact.file` identify one snapshot file.
+This contract changes the Python API. It also makes VIPER execute
+`DownloadSpec`. The four project-owned stage types keep using `StageContext`.
+They also keep the same artifact and input paths. The download contract makes
+`ResolvedHttpRetrieval.body` equal the matching
+`ResolvedSingleFileArtifact.file`.
 
 [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md) owns that
 receipt-to-artifact identity rule.
@@ -51,16 +49,14 @@ input reference.
 
 ## 2. Required claim
 
-When a user declares a VIPER-produced dataset as the input to a decorated
-training stage, VIPER records the dataset's producing stage and exact artifact
-identity, selects the correct internal reference, and supplies the verified
-dataset path through `StageContext.inputs`.
+When a user passes a VIPER artifact into a training stage, VIPER records which
+stage produced it and which artifact the user chose. VIPER writes the required
+input reference. The training function receives the verified path through
+`StageContext.inputs`.
 
-The user writes the stage decorator, the typed parameter class, and the
-training function. VIPER writes the internal pointer or same-run reference
-during plan authoring and freezing. VIPER also executes every `DownloadSpec`;
-a project-owned transport handles requests that require project-specific HTTP
-behavior.
+The user writes the stage decorator, parameter class, and training function.
+`viper.freeze()` writes a same-run reference or pointer. VIPER executes each
+`DownloadSpec`. A custom transport handles any project-specific HTTP request.
 
 ## 3. Current gap
 
@@ -97,17 +93,14 @@ already present in the stage specification. Pointer-document construction
 belongs to the proposed authoring operation.
 [`src/viper/authoring.py`](../../src/viper/authoring.py)
 
-**Inspected:** The execution layer already follows a `StoredInputRef` pointer,
-calls `verify_promoted_artifact()`, materializes the verified files, and passes
-the resulting path to the stage context.
+**Inspected:** The executor follows `StoredInputRef.pointer` and calls
+`verify_promoted_artifact()`. It then places the verified files at the declared
+input path and passes that path to `StageContext`.
 [`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py)
 
-The missing connector is the authoring operation that takes a file-input draft,
-same-run artifact handle, or prior-run artifact draft and creates the internal
-reference consumed by the existing planner, verifier, and materializer.
-
-The current system therefore supports the runtime operation while exposing its
-protocol representation at the authoring boundary.
+VIPER can already execute all three reference types. Users still have to create
+the reference objects themselves. The proposed Python API accepts ordinary
+files and artifact handles. `viper.freeze()` creates the required reference.
 
 ## 4. Contract models
 
@@ -160,9 +153,21 @@ stores a `ParameterModelRef`, while the Python authoring keyword is `params`.
 
 ### Target artifact and transport drafts
 
-Python authoring receives loader and transport callables. Freezing converts
-those callables into the existing byte-addressed `ArtifactLoaderRef`,
-`HttpTransportImplementationRef`, and `ParameterModelRef` records.
+Users give VIPER three kinds of Python definitions:
+
+```text
+artifact loader function
+-> ArtifactLoaderRef
+
+HTTP transport function
+-> HttpTransportImplementationRef
+
+parameter class
+-> ParameterModelRef
+```
+
+`viper.freeze()` records the source file, Python symbol, SHA-256 digest, and
+byte count for each definition. The frozen YAML stores those records.
 
 ```python
 class SingleFileArtifactDraft(BaseModel):
@@ -207,18 +212,25 @@ class CustomHttpTransportDraft:
 HttpTransportDraft = BuiltinHttpTransportSpec | CustomHttpTransportDraft
 ```
 
-`@viper.http_transport(transport_id="project_httpx")` uses
-`viper.params.HttpTransport` when the callable completely defines the
-transport's behavior. A transport with meaningful frozen settings declares its parameter
-class through the decorator's `params=` argument and supplies one instance
-through `viper.transport(params=...)`. The complete example below exercises
-the ordinary custom-transport path with the base parameter class.
+A custom transport can use VIPER's base settings. The user writes:
+
+```python
+@viper.http_transport(transport_id="project_httpx")
+def transfer(context: viper.HttpTransportContext) -> viper.HttpTransportResult:
+    ...
+```
+
+VIPER uses `viper.params.HttpTransport` for that transport.
+
+A configurable transport defines its own parameter class. The decorator's
+`params=` argument receives the class. `viper.transport(params=...)` receives
+the values for one run.
 
 ### Target stage drafts
 
-The download draft contains requests, transport policy, and artifact
-declarations. VIPER executes each request through the selected transport. The other four drafts carry a
-decorated project callable and one concrete parameter instance.
+`DownloadSpecDraft` contains the requests, transport, policy, and artifact
+declarations. VIPER runs each request. The other four stage drafts contain one
+decorated project function and one parameter object.
 
 ```python
 @dataclass(frozen=True)
@@ -416,9 +428,9 @@ the selected transport, request, response, body identity, and timestamps.
 invocation receipt, and child-process command used by build, embed, train, and
 evaluate stages.
 
-Default prior-run compilation stores the generated pointer in the local
-immutable store. The frozen input therefore carries the pointer's digest, byte
-count, and storage location:
+When VIPER creates an `ArtifactPointer`, it publishes the pointer at the
+selected storage destination. The frozen input stores the pointer's SHA-256
+digest, byte count, and storage location:
 
 ```python
 class ResolvedArtifactPointerRef(ResolvedFileRef):
@@ -437,12 +449,11 @@ class ResolvedStoredInputRef(ProtocolModel):
     pointer: ResolvedArtifactPointerRef
 ```
 
-`ResolvedArtifactPointerRef.stored_at` retains the `StorageRef` type inherited
-from `ResolvedFileRef`. Compilation publishes the generated pointer through
-the configured storage destination. Local publication returns a
-`LocalFileRef`; direct cloud publication returns a `ViperCloudFileRef`. The
-`StoredInputRef` validator applies the canonical pointer-path rule to
-`pointer.stored_at.path` and retains the existing materialization-path checks.
+`ResolvedArtifactPointerRef.stored_at` is a `StorageRef`. Local publication
+stores a `LocalFileRef` there. Cloud publication stores a
+`ViperCloudFileRef`. The `StoredInputRef` validator checks
+`pointer.stored_at.path` against the required pointer path. It also checks the
+path where VIPER will place the selected artifact.
 
 The active-to-target field changes are:
 
@@ -1002,7 +1013,7 @@ The complete program uses the same-run handle
 `download.artifacts["dataset"]`. The other two input sources use the same
 `viper.stage()` call with a different value in its `inputs` map.
 
-A local repository file enters at the training-stage boundary:
+A stage can read a local repository file directly:
 
 ```python
 local_dataset = viper.file_input(
@@ -1117,7 +1128,7 @@ run.
 
 ### Same-run path
 
-The authoring layer performs this operation:
+`viper.freeze()` performs these steps:
 
 ```text
 StageDraftArtifactRef(producer=download, artifact_name="dataset")
@@ -1127,7 +1138,7 @@ StageDraftArtifactRef(producer=download, artifact_name="dataset")
 -> write the frozen TrainSpec
 ```
 
-The existing materialization layer then performs this operation:
+When the stage starts, VIPER performs these steps:
 
 ```text
 FutureInputRef
@@ -1143,8 +1154,7 @@ artifact path through `context.inputs["dataset"]`.
 
 ### Prior-run path
 
-When the source run completed earlier, the authoring layer performs this
-operation:
+For an artifact from an earlier run, `viper.freeze()` performs these steps:
 
 ```text
 RunArtifactDraft(
@@ -1166,7 +1176,7 @@ RunArtifactDraft(
 -> write the frozen TrainSpec
 ```
 
-The existing runtime then performs this operation:
+When the stage starts, VIPER performs these steps:
 
 ```text
 StoredInputRef.pointer
@@ -1177,14 +1187,13 @@ StoredInputRef.pointer
 -> pass the path through StageContext.inputs["dataset"]
 ```
 
-The authoring layer owns the generated pointer file. The verifier owns the
-decision to accept the selected artifact. The stage callable owns the model
-training operation.
+`viper.freeze()` writes the pointer file. The verifier checks the pointer and
+the selected artifact. The training function reads the accepted artifact.
 
-When `RunArtifactDraft.resolved_run` is a `Path`, the compiler loads the
-terminal document and publishes it through the configured destination to
-construct `ResolvedRunRef`. When the value is already a `ResolvedRunRef`, the
-compiler retrieves and verifies that exact document.
+When `RunArtifactDraft.resolved_run` is a `Path`, `viper.freeze()` loads that
+terminal run and publishes it at the selected storage destination. VIPER then
+creates `ResolvedRunRef`. When the user supplies `ResolvedRunRef`, VIPER loads
+and checks the file named by that reference.
 
 For a Viper Cloud destination, the compiler also checks the selected producer
 graph. Every reachable immutable reference must resolve through Viper Cloud,
@@ -1194,7 +1203,7 @@ avoids an implicit producer-run migration.
 
 ## 6. Persisted evidence
 
-The default mode preserves the existing durable evidence:
+The default mode writes these records:
 
 | Evidence | Writer | Consumer |
 | --- | --- | --- |
@@ -1216,29 +1225,27 @@ pointer_path
 = inputs/<category>/<entity_id>/<selection_name>.pointer.yaml
 ```
 
-For the input name `dataset`, artifact name `dataset`, and run digest
-`5ab1d80000000000000000000000000000000000000000000000000000000000`,
-the pointer path is:
+For an input and artifact both named `dataset`, the pointer path is:
 
 ```text
 inputs/datasets/training_set/
-dataset_dataset_5ab1d80000000000000000000000000000000000000000000000000000000000.pointer.yaml
+dataset_dataset_<resolved_run_sha256>.pointer.yaml
 ```
 
-The displayed lines form one path. A single-file artifact materializes beneath
-a sibling directory named `selection_name`, followed by the source filename.
-A bundle materializes at that sibling directory. The full run digest makes the
-path deterministic across machines and distinct across producer runs.
+The displayed lines form one path. VIPER replaces `<resolved_run_sha256>` with
+the 64-character value in `ResolvedRunRef.sha256`. A single-file artifact uses
+a sibling directory named `selection_name`, followed by the source filename. A
+bundle uses the sibling directory itself.
 
 ## 7. Verification
 
-The proposal preserves the existing verification boundary.
+The following checks cover each generated reference.
 
 ### `input.source.exists`
 
-The authoring layer finds the selected source stage and artifact in the active
-run plan or the selected completed prior run. A missing stage or artifact makes
-plan freezing fail before execution.
+`viper.freeze()` looks for the selected stage and artifact. It searches the
+current plan or the selected earlier run. A missing stage or artifact stops
+freezing.
 
 ### `input.source.order`
 
@@ -1275,7 +1282,7 @@ parameters, artifact declarations, input names, and stage code. VIPER controls
 download execution, the internal reference type, and the generated pointer
 document.
 
-The three user-facing paths are:
+Users can choose an input in three ways:
 
 ```text
 viper.file_input(path="inputs/raw/dataset.csv", data_role="training")
@@ -1529,20 +1536,19 @@ the internal protocol separately.
 **Proposed decision:** implement automatic pointer generation beneath the
 Python authoring API defined in this contract.
 
-The current runtime already owns artifact publication, pointer verification,
-and input materialization. The missing behavior sits in the authoring layer,
-which currently requires the user to select `FutureInputRef` or
-`StoredInputRef` directly.
+The runtime already publishes artifacts, checks pointers, and places input
+files where stages can read them. The proposed API adds the missing step:
+`viper.freeze()` chooses and writes `FutureInputRef` or `StoredInputRef` for the
+user.
 
-The implementation sequence defines the draft models, makes download
-runner-owned, compiles local and same-run inputs, then adds destination-aware
-pointer generation for prior-run inputs. Harness mode follows as a separate explicit
-promotion contract under the project-root `inputs/` directory.
+Implementation starts with the draft models and the runner-owned download
+stage. The next step handles local files and artifacts from the same run. The
+last step writes pointers for artifacts from earlier runs. A separate contract
+will define harness mode under the project-root `inputs/` directory.
 
-Direct publication follows [`remote-storage.md`](remote-storage.md). Generated
-pointers and captured roots publish when VIPER creates them; their
-`StorageRef` values route later retrieval. The authoring expressions and frozen
-input-reference choice remain stable across storage destinations.
+[`remote-storage.md`](remote-storage.md) defines where VIPER stores pointers and
+captured files. Each `StorageRef` tells VIPER where to retrieve its file. The
+same Python authoring API works with local storage and Viper Cloud.
 
 ## Implementation sources
 
