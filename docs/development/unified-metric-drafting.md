@@ -29,7 +29,7 @@ records only metrics that have thresholds. See
 [`src/viper/execution/_benchmark.py`](../../src/viper/execution/_benchmark.py).
 
 **Proposed:** `viper.measure()` creates one configured `MetricDraft`.
-`viper.minimize()` or `viper.maximize()` gives that metric an objective
+`viper.min()` or `viper.max()` gives that metric an objective
 direction. `viper.experiment()` defines factors, variants, and replicates while
 `viper.freeze()` derives the experiment's metric registry from the selected
 stages. `viper.benchmark()` fixes the evaluation data, splits, metrics, and
@@ -127,7 +127,7 @@ values that can change between experiments.
 ```python
 MetricKind = Literal["training", "evaluation", "diagnostic"]
 MetricMode = Literal["recompute", "live"]
-ObjectiveDirection = Literal["minimize", "maximize"]
+ObjectiveDirection = Literal["min", "max"]
 
 MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
 DecoratedMetricT = TypeVar(
@@ -137,11 +137,10 @@ DecoratedMetricT = TypeVar(
 
 
 @dataclass(frozen=True)
-class MetricDefinition(Generic[MetricParamsT]):
+class MetricDefinition:
     metric_id: MetricId
     kind: MetricKind
     mode: MetricMode
-    parameter_model: type[MetricParamsT]
 
 
 DecoratedMetric = Callable[..., float] | type[Any]
@@ -188,7 +187,6 @@ def metric(
     metric_id: MetricId,
     kind: MetricKind,
     mode: MetricMode,
-    params: type[MetricParamsT] = parameters.Metric,
 ) -> Callable[[DecoratedMetricT], DecoratedMetricT]: ...
 
 
@@ -201,10 +199,10 @@ def measure(
 ) -> MetricDraft: ...
 
 
-def minimize(metric: MetricDraft) -> MetricObjectiveDraft: ...
+def min(metric: MetricDraft) -> MetricObjectiveDraft: ...
 
 
-def maximize(metric: MetricDraft) -> MetricObjectiveDraft: ...
+def max(metric: MetricDraft) -> MetricObjectiveDraft: ...
 
 
 def at_least(metric: MetricDraft, threshold: float) -> MetricCriterionDraft: ...
@@ -218,7 +216,7 @@ The decorator metadata follows the existing implementation pattern:
 ```python
 def metric_definition(
     implementation: DecoratedMetric,
-) -> MetricDefinition[Any]: ...
+) -> MetricDefinition: ...
 ```
 
 ```text
@@ -228,19 +226,19 @@ def metric_definition(
 
 viper.measure(implementation, ...)
 -> call metric_definition(implementation)
--> validate params against MetricDefinition.parameter_model
 -> validate kind, mode, dependencies, and comparator
 -> return MetricDraft containing the implementation and configured values
 
 viper.freeze(plan)
 -> call metric_definition(MetricDraft.implementation)
+-> inspect type(MetricDraft.params)
 -> hash the implementation and custom parameter-model source
 -> write MetricSpec
 ```
 
 `viper.measure()` constructs `viper.params.Metric()` when the caller omits
-`params`. It rejects an instance whose exact class differs from the class
-selected by `@viper.metric`.
+`params`. A supplied instance must subclass `viper.params.Metric`. Freezing
+derives the parameter class from `type(MetricDraft.params)`.
 
 Recomputed metrics require at least one dependency and one comparator. Live
 metrics carry neither. Evaluation metrics use `mode="recompute"`.
@@ -262,8 +260,8 @@ two objects keep separate fields and separate consumers.
 | `VariantDraft` | One factor-level selection plus the complete stage graph and estimator for that selection |
 | `ReplicateDraft` | One repeated execution seed |
 
-The stage field is `objective`. A scalar field named `objective_metric_id`
-would hide the required direction. Diagnostics remain metrics, so the API uses
+The stage field is `objective`. Its `MetricObjectiveSpec` value carries the
+metric ID and direction together. Diagnostics remain metrics, so the API uses
 `MetricDraft(kind="diagnostic")` as their single authoring type.
 
 ### Diagnostics
@@ -293,7 +291,7 @@ training = viper.stage(
     params=TRAIN_PARAMS,
     inputs=TRAIN_INPUTS,
     artifacts=TRAIN_ARTIFACTS,
-    objective=viper.minimize(training_loss_metric),
+    objective=viper.min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -935,7 +933,7 @@ For each `MetricDraft`, `viper.freeze()` performs these operations:
 
 ```text
 call metric_definition(MetricDraft.implementation)
--> validate params against MetricDefinition.parameter_model
+-> inspect type(MetricDraft.params)
 -> hash implementation source
 -> hash a custom parameter-model source
 -> construct MetricSpec
@@ -1043,15 +1041,16 @@ differentiable objective interface to prove that relationship.
 ### `metric.definition.binding`
 
 `metric_definition()` retrieves the `MetricDefinition` attached to the loaded
-implementation. Its metric ID, kind, mode, and parameter class equal the values
-represented by `MetricSpec`. A project parameter class produces the exact
-`MetricSpec.parameter_model`; the package `viper.params.Metric` class produces
-`parameter_model=None`.
+implementation. Its metric ID, kind, and mode equal the values represented by
+`MetricSpec`.
 
-### `metric.draft.parameter_class`
+### `metric.draft.parameter_capture`
 
-The exact class of `MetricDraft.params` equals
-`MetricDefinition.parameter_model`. Freezing rejects a different class.
+`type(MetricDraft.params)` subclasses `viper.params.Metric`. A project subclass
+produces the exact `MetricSpec.parameter_model`; the package
+`viper.params.Metric` class produces `parameter_model=None`. The worker loads
+that frozen class and reconstructs the parameter instance from
+`MetricSpec.params`.
 
 ### `metric.live.parameter_delivery`
 
@@ -1144,10 +1143,10 @@ Section 4.
 
 | Surface | Change |
 | --- | --- |
-| Public metric API | Add typed metric decorators, preserve `MetricDefinition` attachment and retrieval, and add `viper.measure()`, `viper.minimize()`, `viper.maximize()`, `viper.at_least()`, and `viper.at_most()`. |
+| Public metric API | Add typed metric decorators, preserve `MetricDefinition` attachment and retrieval, and add `viper.measure()`, `viper.min()`, `viper.max()`, `viper.at_least()`, and `viper.at_most()`. |
 | Live metric runtime | Pass validated `MetricContext` through `MetricHandle`; functions receive it first and stateful classes receive it at construction. |
 | Metric protocol | Add `parameter_model` to `MetricSpec` and `MetricExecutionReceipt`. |
-| Metric verifier | Match `MetricDefinition.parameter_model` to `MetricSpec.parameter_model`; compare `parameter_model` across production and recomputation receipts. |
+| Metric verifier | Reconstruct metric parameters through `MetricSpec.parameter_model`; compare `parameter_model` across production and recomputation receipts. |
 | Stage drafts | Replace objective `MetricDraft` values with `MetricObjectiveDraft`. |
 | Stage protocol | Add `MetricObjectiveSpec` to embed, train, and evaluate specs. |
 | Experiment API | Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, `ExperimentDraft`, and public constructors. Each variant owns level labels, stages, and its estimator. Derive metrics from all variant stages. |
@@ -1165,10 +1164,9 @@ The superseded behavior has these dispositions:
 | Existing occurrence | Disposition |
 | --- | --- |
 | Undefined proposed `MetricDecorator` return type | Replace with `Callable[[DecoratedMetricT], DecoratedMetricT]`. |
-| Implicit `MetricDefinition` handoff | Preserve `__viper_metric__` attachment and `metric_definition()` retrieval; add `parameter_model` to the definition. |
+| Implicit `MetricDefinition` handoff | Preserve `__viper_metric__` attachment and `metric_definition()` retrieval for metric ID, kind, and mode. |
 | Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metric` and `viper.measure()`. |
 | Python stage authoring that accepts `metric_ids=` | Replace with `objective=` and `metrics=`. |
-| Proposed `objective_metric_id` fields in `automatic-input-resolution.md` | Replace with `MetricObjectiveSpec objective`. |
 | Proposed `LiveMetricContext` | Delete; `MetricContext` serves both modes. |
 | Live metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
 | Parameterless `StatefulMetric` subclasses | Replace constructors with `MetricContext`. |
@@ -1194,7 +1192,7 @@ training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": training_embeddings.artifacts["embeddings"]},
     artifacts=TRAIN_ARTIFACTS,
-    objective=viper.minimize(training_loss_metric),
+    objective=viper.min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 
@@ -1244,12 +1242,12 @@ benchmark = viper.benchmark(
 
 The test asserts:
 
-- `metric_definition(evaluation_loss).parameter_model` is `LossMetricParams`;
+- `type(evaluation_loss_metric.params)` is `LossMetricParams`;
 - the frozen evaluation-loss `MetricSpec.parameter_model` identifies that exact
   class;
 - `ExperimentSpec.metrics` contains each selected metric once;
-- the train objective is `training_loss` with direction `minimize`;
-- the evaluate objective is `evaluation_loss` with direction `minimize`;
+- the train objective is `training_loss` with direction `min`;
+- the evaluate objective is `evaluation_loss` with direction `min`;
 - live metric contexts contain the frozen parameter object;
 - production and recomputation receipts carry the same parameter-model
   reference as the frozen metric;
@@ -1311,10 +1309,11 @@ existing benchmark input-identity checks before execution.
 
 - [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
 - [ ] Add the public metric, objective, and criterion constructors.
-- [ ] Extend the existing `MetricDefinition` with `parameter_model`; preserve
-      `__viper_metric__` attachment and `metric_definition()` retrieval.
+- [ ] Preserve the existing `MetricDefinition` fields, `__viper_metric__`
+      attachment, and `metric_definition()` retrieval.
+- [ ] Derive the parameter class from `type(MetricDraft.params)`.
 - [ ] Add `parameter_model` to the frozen metric records.
-- [ ] Compare parameter-model references during metric definition and
+- [ ] Compare parameter-model references during parameter reconstruction and
       recomputation verification.
 - [ ] Make `MetricContext` generic.
 - [ ] Deliver `MetricContext` through live functions and stateful constructors.

@@ -1115,7 +1115,6 @@ class LossMetricParams(viper.params.Metric):
     metric_id="evaluation_loss",
     kind="evaluation",
     mode="recompute",
-    params=LossMetricParams,
 )
 def evaluation_loss(
     context: viper.MetricContext[LossMetricParams],
@@ -1388,7 +1387,7 @@ training = viper.stage(
             data_role="training",
         ),
     },
-    objective=viper.minimize(training_loss_metric),
+    objective=viper.min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 
@@ -1460,7 +1459,7 @@ evaluation = viper.stage(
             data_role="evaluation",
         ),
     },
-    objective=viper.minimize(evaluation_loss_metric),
+    objective=viper.min(evaluation_loss_metric),
     metrics=(evaluation_accuracy_metric,),
     evaluation_id="holdout",
     split_inputs=("holdout_split",),
@@ -1612,8 +1611,8 @@ metric worker
 `viper.freeze()` turns every artifact handle used as a stage input into a
 `FutureInputRef`. It also turns each `MetricDraft` into one byte-addressed
 `MetricSpec`. The frozen train objective selects `training_loss` with direction
-`minimize`. The frozen evaluation objective selects `evaluation_loss` with the
-same direction. The embed specs set `objective=None`; their two metrics remain
+`min`. The frozen evaluation objective selects `evaluation_loss` with the same
+direction. The embed specs set `objective=None`; their two metrics remain
 diagnostics. The compiler derives the experiment metric registry from these
 stage selections.
 
@@ -1647,7 +1646,7 @@ local_training = viper.stage(
             data_role="training",
         ),
     },
-    objective=viper.minimize(training_loss_metric),
+    objective=viper.min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -1680,7 +1679,7 @@ prior_training = viper.stage(
             data_role="training",
         ),
     },
-    objective=viper.minimize(training_loss_metric),
+    objective=viper.min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```

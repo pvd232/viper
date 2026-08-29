@@ -470,7 +470,7 @@ training = viper.stage(
             data_role="training",
         ),
     },
-    objective=viper.minimize(training_loss_metric),
+    objective=viper.min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
