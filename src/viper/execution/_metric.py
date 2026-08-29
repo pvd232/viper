@@ -33,7 +33,7 @@ from ..serialization import serialize_document
 from ..stages import BaseSpec
 from ..storage import LocalArtifactStore
 from ._errors import RunError
-from ._publication import _write_synchronized
+from ._publication import write_synchronized
 
 
 class MetricExecutionError(RuntimeError):
@@ -237,7 +237,7 @@ def _resolve_metric_dependencies(
     return tuple(resolved)
 
 
-def _run_after_stage_metrics(
+def run_after_stage_metrics(
     root: Path,
     run: RunSpec,
     stage_id: StageId,
@@ -342,7 +342,7 @@ def _run_after_stage_metrics(
             / f"attempts/{attempt_id}/metric_verification"
             / f"{stage_id}.{metric_id}.yaml"
         )
-        _write_synchronized(receipt_path, serialize_document(receipt))
+        write_synchronized(receipt_path, serialize_document(receipt))
         metric_verification_paths.append(receipt_path)
         if not passed:
             raise RunError(f"metric {metric_id!r} failed independent recomputation")

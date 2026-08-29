@@ -75,7 +75,7 @@ from .paths import (
 )
 from .storage import (
     StorageFetcher,
-    _artifact_revision_identity,
+    artifact_revision_identity,
     fetch_storage_bytes,
     load_verified_artifact,
     read_resolved_file,
@@ -769,7 +769,7 @@ def verify_attempt_files(
             *attempt.metric_verification_files,
             *attempt.log_files,
         )
-        if (identity := _artifact_revision_identity(reference.stored_at)) is not None
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
     }
     if len(attempt_file_snapshots) > 1:
         raise VerificationError(

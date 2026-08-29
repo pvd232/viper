@@ -24,7 +24,7 @@ from ..verification import (
 from ._errors import RunError
 
 
-def _git(repository_root: Path, *arguments: str) -> bytes:
+def run_git(repository_root: Path, *arguments: str) -> bytes:
     """Run one bounded Git query against the selected repository."""
     try:
         return subprocess.run(
@@ -55,7 +55,7 @@ class RunFetcher:
         if isinstance(location, GitFileRef):
             if str(location.repository) != self.source_repository:
                 return fetch_git_file_bytes(location)
-            return _git(
+            return run_git(
                 self.repository_root,
                 "show",
                 f"{location.commit}:{location.path}",
@@ -74,7 +74,7 @@ class RunFetcher:
         return self.store.list_snapshot_files(snapshot)
 
 
-def _resolved_git_file(
+def resolve_git_file(
     fetcher: RunFetcher,
     location: GitFileRef,
 ) -> ResolvedGitFileRef:

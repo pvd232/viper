@@ -528,7 +528,6 @@ OPERATIONS: tuple[OperationName, ...] = (
 )
 
 
-from ._api.handlers import _retry_request, _run_request
 from ._api.handlers import compare_runs as compare_runs
 from ._api.handlers import execute_benchmark as execute_benchmark
 from ._api.handlers import execute_stage as execute_stage
@@ -539,6 +538,7 @@ from ._api.handlers import init_project as init_project
 from ._api.handlers import lineage as lineage
 from ._api.handlers import plan_diff as plan_diff
 from ._api.handlers import preflight as preflight
+from ._api.handlers import retry_request, run_request
 from ._api.handlers import status as status
 from ._api.handlers import validate_resolved_stage as validate_resolved_stage
 from ._api.handlers import validate_run_spec as validate_run_spec
@@ -579,8 +579,8 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "freeze_run": freeze_run,
     "preflight": preflight,
     "execute_stage": execute_stage,
-    "run": _run_request,
-    "retry": _retry_request,
+    "run": run_request,
+    "retry": retry_request,
     "execute_benchmark": execute_benchmark,
     "plan_diff": plan_diff,
     "lineage": lineage,
@@ -744,7 +744,7 @@ def run(
     if definition.parameter_model.__name__ != stage.parameter_model.symbol:
         raise PythonRunError("launched parameter class differs from the plan")
 
-    return _run_request(
+    return run_request(
         RunRequest(
             run_spec=run_spec_path,
             repository_root=root,
@@ -765,7 +765,7 @@ def retry(
     selected = selected.resolve()
     if not selected.is_relative_to(root):
         raise PythonRunError("run specification is outside the repository root")
-    return _retry_request(
+    return retry_request(
         RetryRequest(
             run_spec=selected,
             repository_root=root,

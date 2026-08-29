@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ._attempt import _execute_attempt
+from ._attempt import execute_attempt
 from ._errors import RunError as RunError
 from ._results import ConfirmationRunResult as ConfirmationRunResult
 from ._results import RunResult as RunResult
@@ -19,7 +19,7 @@ def run(
     retry: bool = False,
 ) -> RunResult:
     """Execute one frozen plan and verify its terminal resolved run."""
-    result = _execute_attempt(
+    result = execute_attempt(
         repository_root,
         run_spec_path,
         timeout_seconds=timeout_seconds,
@@ -52,7 +52,7 @@ def execute_benchmark_confirmation(
     timeout_seconds: float | None = None,
 ) -> ConfirmationRunResult:
     """Execute one independent confirmation of a successful frozen run."""
-    result = _execute_attempt(
+    result = execute_attempt(
         repository_root,
         run_spec_path,
         timeout_seconds=timeout_seconds,

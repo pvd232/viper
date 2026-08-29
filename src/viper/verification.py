@@ -51,7 +51,7 @@ from ._verification.plan import verify_run_spec as verify_run_spec
 from ._verification.plan import verify_stage_plan as verify_stage_plan
 from ._verification.storage import StageSnapshot as StageSnapshot
 from ._verification.storage import StorageFetcher as StorageFetcher
-from ._verification.storage import _artifact_revision_identity, _snapshot_identity
+from ._verification.storage import artifact_revision_identity, snapshot_identity
 from ._verification.storage import fetch_git_file_bytes as fetch_git_file_bytes
 from ._verification.storage import (
     fetch_huggingface_file_bytes as fetch_huggingface_file_bytes,
@@ -134,7 +134,7 @@ def verify_run_result(
 
     for attempt in attempts:
         current_stage_result_snapshots = {
-            _snapshot_identity(stage.snapshot) for stage in attempt.resolved_stages
+            snapshot_identity(stage.snapshot) for stage in attempt.resolved_stages
         }
         if stage_result_snapshots & current_stage_result_snapshots:
             raise VerificationError(
@@ -150,7 +150,7 @@ def verify_run_result(
                 *attempt.metric_verification_files,
                 *attempt.log_files,
             )
-            if (identity := _artifact_revision_identity(reference.stored_at))
+            if (identity := artifact_revision_identity(reference.stored_at))
             is not None
         }
         if attempt_file_snapshots & current_attempt_file_snapshots:
@@ -652,12 +652,12 @@ def verify_benchmark_result(
         )
 
     original_snapshots = {
-        _snapshot_identity(stage.snapshot)
+        snapshot_identity(stage.snapshot)
         for attempt in verified_run.attempts
         for stage in attempt.resolved_stages
     }
     confirmation_snapshots = {
-        _snapshot_identity(stage.snapshot) for stage in confirmation.resolved_stages
+        snapshot_identity(stage.snapshot) for stage in confirmation.resolved_stages
     }
     if original_snapshots & confirmation_snapshots:
         raise VerificationError(
@@ -673,7 +673,7 @@ def verify_benchmark_result(
             *attempt.metric_verification_files,
             *attempt.log_files,
         )
-        if (identity := _artifact_revision_identity(reference.stored_at)) is not None
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
     }
     confirmation_attempt_file_snapshots = {
         identity
@@ -683,7 +683,7 @@ def verify_benchmark_result(
             *confirmation.metric_verification_files,
             *confirmation.log_files,
         )
-        if (identity := _artifact_revision_identity(reference.stored_at)) is not None
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
     }
     if original_attempt_file_snapshots & confirmation_attempt_file_snapshots:
         raise VerificationError(

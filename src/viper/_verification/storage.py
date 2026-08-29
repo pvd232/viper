@@ -379,7 +379,7 @@ def read_snapshot_file(
     return verify_resolved_file_bytes(resolved_reference, raw)
 
 
-def _snapshot_identity(
+def snapshot_identity(
     snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
 ) -> tuple[str, ...]:
     """Return a backend-qualified identity for one immutable stage snapshot."""
@@ -393,7 +393,7 @@ def _snapshot_identity(
     return (snapshot.kind, snapshot.store, snapshot.commit)
 
 
-def _artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None:
+def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None:
     """Return the immutable output revision containing one stored file."""
     if isinstance(location, HuggingFaceFileRef):
         return (

@@ -9,10 +9,10 @@ from ..journal import DurableJournal
 from ..runs import AttemptFailure, RunAttempt, RunSpec
 from ..serialization import parse_yaml_bytes
 from ..storage import LocalArtifactStore
-from ._publication import _publish_attempt_files, _write_attempt_document
+from ._publication import publish_attempt_files, write_attempt_document
 
 
-def _reconcile_abandoned_attempts(
+def reconcile_abandoned_attempts(
     root: Path,
     workspace_root: Path,
     run: RunSpec,
@@ -54,7 +54,7 @@ def _reconcile_abandoned_attempts(
             )
         else:
             lost_at = entries[-1].recorded_at
-        journal_reference, measurements, metric_receipts, logs = _publish_attempt_files(
+        journal_reference, measurements, metric_receipts, logs = publish_attempt_files(
             store,
             root,
             run_root,
@@ -83,6 +83,6 @@ def _reconcile_abandoned_attempts(
                 occurred_at=lost_at,
             ),
         )
-        _write_attempt_document(root, run_root, recovered_attempt, store)
+        write_attempt_document(root, run_root, recovered_attempt, store)
         recovered[attempt_id] = recovered_attempt
     return tuple(recovered[key] for key in sorted(recovered))

@@ -205,7 +205,7 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
     )
 
 
-def _run_request(request: RunRequest) -> RunSuccess:
+def run_request(request: RunRequest) -> RunSuccess:
     """Execute, publish, and verify one complete run on the active host."""
     try:
         result = execute_run(
@@ -250,7 +250,7 @@ def _run_request(request: RunRequest) -> RunSuccess:
     )
 
 
-def _retry_request(request: RetryRequest) -> RetrySuccess:
+def retry_request(request: RetryRequest) -> RetrySuccess:
     """Append one attempt to a failed frozen run and verify its terminal result."""
     try:
         result = execute_run(

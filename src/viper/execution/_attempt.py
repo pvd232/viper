@@ -43,19 +43,19 @@ from ..verification import (
 )
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
 from ._errors import RunError
-from ._materialization import _resolve_inputs, _retrieve_download_inputs
-from ._metric import MetricExecutionError, _run_after_stage_metrics
+from ._materialization import resolve_inputs, retrieve_download_inputs
+from ._metric import MetricExecutionError, run_after_stage_metrics
 from ._publication import (
-    _publish_attempt_files,
-    _publish_invocation_receipt,
-    _replace_synchronized,
-    _write_attempt_document,
-    _write_synchronized,
+    publish_attempt_files,
+    publish_invocation_receipt,
+    replace_synchronized,
+    write_attempt_document,
+    write_synchronized,
 )
-from ._recovery import _reconcile_abandoned_attempts
-from ._resolution import _resolved_environment, _resolved_stage
+from ._recovery import reconcile_abandoned_attempts
+from ._resolution import resolve_environment, resolve_stage
 from ._results import ConfirmationRunResult, RunResult
-from ._source import RunFetcher, _git, _resolved_git_file
+from ._source import RunFetcher, resolve_git_file, run_git
 from ._stage import (
     StageExecutionError,
     StageProcessInterrupted,
@@ -63,7 +63,7 @@ from ._stage import (
 )
 
 
-def _execute_attempt(
+def execute_attempt(
     repository_root: Path,
     run_spec_path: Path,
     *,
@@ -76,12 +76,12 @@ def _execute_attempt(
     run_path = run_spec_path.resolve()
     run_raw = run_path.read_bytes()
     run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
-    origin = _git(root, "remote", "get-url", "origin").decode().strip()
+    origin = run_git(root, "remote", "get-url", "origin").decode().strip()
     if origin != str(run.source.repository):
         raise RunError("Git origin differs from RunSpec.source.repository")
-    plan_commit = _git(root, "rev-parse", "HEAD").decode("ascii").strip()
+    plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
     relative_run_path = run_path.relative_to(root).as_posix()
-    if _git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
+    if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
         raise RunError("RunSpec bytes are absent from the current Git commit")
 
     store = LocalArtifactStore(root)
@@ -132,7 +132,7 @@ def _execute_attempt(
             for reference in previous_run.attempts
         )
     )
-    previous_attempts = _reconcile_abandoned_attempts(
+    previous_attempts = reconcile_abandoned_attempts(
         root,
         workspace_root,
         run,
@@ -174,7 +174,7 @@ def _execute_attempt(
         journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
         preflight = preflight_plan(root, run_path)
         preflight_path = workspace.control / "preflight.json"
-        _write_synchronized(
+        write_synchronized(
             preflight_path,
             f"{preflight.model_dump_json()}\n".encode(),
         )
@@ -202,7 +202,7 @@ def _execute_attempt(
                 commit=run.source.commit,
                 path=stage.implementation.path,
             )
-            source = _resolved_git_file(fetcher, source_location)
+            source = resolve_git_file(fetcher, source_location)
             if (root / stage.implementation.path).read_bytes() != fetcher(
                 source_location
             ):
@@ -212,7 +212,7 @@ def _execute_attempt(
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             input_paths: dict[str, Path] = {}
             if isinstance(stage, DownloadSpec):
-                resolved_retrievals, input_paths = _retrieve_download_inputs(
+                resolved_retrievals, input_paths = retrieve_download_inputs(
                     root,
                     workspace,
                     run,
@@ -221,7 +221,7 @@ def _execute_attempt(
                     store,
                 )
             elif isinstance(stage, InternalSpec):
-                resolved_inputs, input_paths = _resolve_inputs(
+                resolved_inputs, input_paths = resolve_inputs(
                     root,
                     workspace,
                     stage_reference.stage_id,
@@ -264,7 +264,7 @@ def _execute_attempt(
                         f"{stage_reference.stage_id}.yaml"
                     )
                     invocation_refs.append(
-                        _publish_invocation_receipt(
+                        publish_invocation_receipt(
                             store,
                             invocation_path,
                             exc.invocation,
@@ -290,17 +290,17 @@ def _execute_attempt(
                 f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
                 f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
             )
-            invocation_ref = _publish_invocation_receipt(
+            invocation_ref = publish_invocation_receipt(
                 store,
                 invocation_path,
                 process.invocation,
             )
             invocation_refs.append(invocation_ref)
             stage_completed = datetime.now(UTC)
-            resolved = _resolved_stage(
+            resolved = resolve_stage(
                 stage,
                 source=source,
-                environment=_resolved_environment(
+                environment=resolve_environment(
                     fetcher,
                     effective_environment,
                     process,
@@ -349,7 +349,7 @@ def _execute_attempt(
             )
             resolved_stage_refs.append(resolved_stage_ref)
             completed[stage_reference.stage_id] = resolved_stage_ref
-            _run_after_stage_metrics(
+            run_after_stage_metrics(
                 root,
                 run,
                 stage_reference.stage_id,
@@ -393,7 +393,7 @@ def _execute_attempt(
             measurement_references,
             metric_verification_references,
             log_references,
-        ) = _publish_attempt_files(
+        ) = publish_attempt_files(
             store,
             root,
             run_root,
@@ -423,7 +423,7 @@ def _execute_attempt(
             commit=plan_commit,
             path=relative_run_path,
         )
-        attempt_reference = _write_attempt_document(root, run_root, attempt, store)
+        attempt_reference = write_attempt_document(root, run_root, attempt, store)
         if purpose == "benchmark_confirmation":
             return ConfirmationRunResult(
                 attempt=attempt,
@@ -434,7 +434,7 @@ def _execute_attempt(
                 journal_path=journal.path,
             )
         attempt_references = tuple(
-            _write_attempt_document(root, run_root, value, store)
+            write_attempt_document(root, run_root, value, store)
             for value in previous_attempts
         ) + (attempt_reference,)
         resolved_run = ResolvedRun(
@@ -450,8 +450,8 @@ def _execute_attempt(
         )
         terminal_raw = serialize_document(resolved_run)
         verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
-        _replace_synchronized(terminal_path, terminal_raw)
-        _write_synchronized(workspace.terminal, terminal_raw)
+        replace_synchronized(terminal_path, terminal_raw)
+        write_synchronized(workspace.terminal, terminal_raw)
         return RunResult(
             resolved_run=resolved_run,
             resolved_run_path=terminal_path,
@@ -499,7 +499,7 @@ def _execute_attempt(
             measurement_references,
             metric_verification_references,
             log_references,
-        ) = _publish_attempt_files(
+        ) = publish_attempt_files(
             store,
             root,
             run_root,
@@ -534,7 +534,7 @@ def _execute_attempt(
             commit=plan_commit,
             path=relative_run_path,
         )
-        failed_attempt_reference = _write_attempt_document(
+        failed_attempt_reference = write_attempt_document(
             root,
             run_root,
             failed_attempt,
@@ -549,7 +549,7 @@ def _execute_attempt(
                 f"written to {failed_attempt_path}"
             ) from exc
         attempt_references = tuple(
-            _write_attempt_document(root, run_root, value, store)
+            write_attempt_document(root, run_root, value, store)
             for value in previous_attempts
         ) + (failed_attempt_reference,)
         failed_run = ResolvedRun(
@@ -564,8 +564,8 @@ def _execute_attempt(
             completed_at=datetime.now(UTC),
         )
         terminal_raw = serialize_document(failed_run)
-        _replace_synchronized(terminal_path, terminal_raw)
-        _replace_synchronized(workspace.terminal, terminal_raw)
+        replace_synchronized(terminal_path, terminal_raw)
+        replace_synchronized(workspace.terminal, terminal_raw)
         raise RunError(
             f"attempt {attempt_id} failed; evidence written to {terminal_path}"
         ) from exc

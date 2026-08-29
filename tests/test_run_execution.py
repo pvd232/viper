@@ -464,7 +464,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
 
     requests = []
     monkeypatch.setattr(
-        "viper.api._run_request",
+        "viper.api.run_request",
         lambda request: (
             requests.append(request)
             or RunSuccess(

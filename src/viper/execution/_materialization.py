@@ -101,7 +101,7 @@ def _http_transport_helper(
     return result
 
 
-def _resolve_inputs(
+def resolve_inputs(
     root: Path,
     workspace: AttemptWorkspace,
     stage_id: StageId,
@@ -184,7 +184,7 @@ def _resolve_inputs(
     return resolved, paths
 
 
-def _retrieve_download_inputs(
+def retrieve_download_inputs(
     root: Path,
     workspace: AttemptWorkspace,
     run: RunSpec,

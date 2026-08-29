@@ -26,11 +26,11 @@ from ..stages import (
     ResolvedTrainSpec,
 )
 from ._errors import RunError
-from ._source import RunFetcher, _resolved_git_file
+from ._source import RunFetcher, resolve_git_file
 from ._stage import StageProcessResult
 
 
-def _resolved_environment(
+def resolve_environment(
     fetcher: RunFetcher,
     environment: EnvironmentSpec,
     process: StageProcessResult,
@@ -44,17 +44,17 @@ def _resolved_environment(
             provisioning=host.provisioning,
             machine_type=host.machine_type,
             compute=environment.compute,
-            lockfile=_resolved_git_file(fetcher, environment.lockfile),
+            lockfile=resolve_git_file(fetcher, environment.lockfile),
             python_environment=process.python_environment,
         )
     return ResolvedLocalEnvironment(
         compute=environment.compute,
-        lockfile=_resolved_git_file(fetcher, environment.lockfile),
+        lockfile=resolve_git_file(fetcher, environment.lockfile),
         python_environment=process.python_environment,
     )
 
 
-def _resolved_stage(
+def resolve_stage(
     stage: BaseSpec,
     *,
     source: ResolvedGitFileRef,

@@ -16,7 +16,7 @@ from ..storage import LocalArtifactStore
 from ._errors import RunError
 
 
-def _write_synchronized(path: Path, raw: bytes) -> None:
+def write_synchronized(path: Path, raw: bytes) -> None:
     """Atomically write and synchronize one local control or terminal file."""
     if path.exists():
         if path.read_bytes() == raw:
@@ -39,7 +39,7 @@ def _write_synchronized(path: Path, raw: bytes) -> None:
             temporary_path.unlink()
 
 
-def _replace_synchronized(path: Path, raw: bytes) -> None:
+def replace_synchronized(path: Path, raw: bytes) -> None:
     """Atomically replace one mutable local head document and synchronize it."""
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -56,7 +56,7 @@ def _replace_synchronized(path: Path, raw: bytes) -> None:
         Path(temporary_name).unlink(missing_ok=True)
 
 
-def _publish_attempt_files(
+def publish_attempt_files(
     store: LocalArtifactStore,
     root: Path,
     run_root: str,
@@ -107,7 +107,7 @@ def _publish_attempt_files(
     )
 
 
-def _write_attempt_document(
+def write_attempt_document(
     root: Path,
     run_root: str,
     attempt: RunAttempt,
@@ -116,7 +116,7 @@ def _write_attempt_document(
     """Publish one canonical attempt document and return its immutable reference."""
     path = root / run_root / "attempts" / str(attempt.attempt_id) / "resolved.yaml"
     raw = serialize_document(attempt)
-    _write_synchronized(path, raw)
+    write_synchronized(path, raw)
     reference = store.resolved_files({path.relative_to(root).as_posix(): raw})[0]
     return ResolvedAttemptRef(
         sha256=reference.sha256,
@@ -125,7 +125,7 @@ def _write_attempt_document(
     )
 
 
-def _publish_invocation_receipt(
+def publish_invocation_receipt(
     store: LocalArtifactStore,
     path: str,
     receipt: StageInvocationReceipt,
