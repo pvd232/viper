@@ -6,6 +6,10 @@ VIPER must answer three separate questions about every input byte sequence:
 2. Which VIPER stage published the bytes as an artifact?
 3. How did the consuming stage select that artifact?
 
+“External input root” names a role in the provenance graph. The Python model
+assigns that role to existing records: `ResolvedExternalInputRef` for a local
+file and `ResolvedHttpRetrieval` for an HTTP response.
+
 `ResolvedExternalInputRef` records a local external input root.
 `ResolvedHttpRetrieval` records an HTTP external input root. One HTTP response
 enters VIPER through `ResolvedHttpRetrieval`, becomes the download stage's
@@ -116,7 +120,108 @@ flowchart LR
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 3. `DownloadSpec` still means "perform a network request"
+## 3. Exact contract models
+
+### 3.1 Local declaration and resolved record
+
+The target local-root contract uses these complete declarations:
+
+```python
+class LocalSource(ProtocolModel):
+    kind: Literal["local"] = "local"
+    path: RepoRelPath
+
+
+class ExternalInputRef(ProtocolModel):
+    kind: Literal["external"] = "external"
+    source: LocalSource
+    data_role: DataRole
+
+
+class ResolvedExternalInputRef(ProtocolModel):
+    kind: Literal["external"] = "external"
+    source: LocalSource
+    file: ResolvedFileRef
+    data_role: DataRole
+```
+
+`ExternalInputRef.source.path` is the one repository-relative path selected by
+the user and supplied to the worker. `resolve_inputs()` reads that path,
+publishes the observed bytes through `LocalArtifactStore.resolved_files()`, and
+writes the returned `ResolvedFileRef` into `ResolvedExternalInputRef.file`.
+The runner copies `ExternalInputRef.data_role` into
+`ResolvedExternalInputRef.data_role`.
+
+The existing input unions retain the local declaration and resolved record:
+
+```python
+InputRef = Annotated[
+    ExternalInputRef | StoredInputRef | FutureInputRef,
+    Field(discriminator="kind"),
+]
+
+ResolvedInputRef = Annotated[
+    ResolvedStoredInputRef | ResolvedFutureInputRef | ResolvedExternalInputRef,
+    Field(discriminator="kind"),
+]
+```
+
+The active-to-target field changes are exact:
+
+| Active model member | Target disposition | Target source of the value |
+| --- | --- | --- |
+| `HttpSource` | Delete | HTTP declarations remain in `DownloadSpec.inputs`. |
+| `ExternalInputSource = LocalSource | HttpSource` | Delete | `ExternalInputRef.source` and `ResolvedExternalInputRef.source` use `LocalSource` directly. |
+| `ExternalInputRef.source: ExternalInputSource` | Replace | `ExternalInputRef.source: LocalSource` |
+| `ExternalInputRef.path` | Delete | The worker receives `ExternalInputRef.source.path`. |
+| `ResolvedExternalInputRef.source: ExternalInputSource` | Replace | `ResolvedExternalInputRef.source: LocalSource` |
+| `ResolvedExternalInputRef.file` | Retain | `resolve_inputs()` records the captured `ResolvedFileRef`. |
+| Both `data_role` fields | Retain | The resolved record copies the frozen declaration. |
+
+### 3.2 HTTP root, artifact, and consumer edge
+
+The target HTTP route uses these existing classes with the following exact
+fields:
+
+```python
+class ResolvedHttpRetrieval(ProtocolModel):
+    input_name: InputName
+    request: HttpRequestSpec
+    transport: ResolvedHttpTransport
+    response: ObservedHttpResponse
+    body: SnapshotFileRef
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+
+
+class ResolvedSingleFileArtifact(ProtocolModel):
+    kind: Literal["file"] = "file"
+    file: SnapshotFileRef
+
+
+class FutureInputRef(ProtocolModel):
+    kind: Literal["future"] = "future"
+    producer_stage_id: StageId
+    producer_artifact: ArtifactName
+```
+
+The two routes place their declaration and resolved records in different
+owners:
+
+| Route | Frozen declaration | Resolved root evidence | Later consumer |
+| --- | --- | --- | --- |
+| Local file | `InternalSpec.inputs[name]: ExternalInputRef` | `ResolvedInternalSpec.inputs[name]: ResolvedExternalInputRef` | The same internal stage receives `source.path`. |
+| HTTP response | `DownloadSpec.inputs[name]: HttpRequestSpec` | `ResolvedDownloadSpec.retrievals[name]: ResolvedHttpRetrieval` | A later `InternalSpec.inputs[name]: FutureInputRef` selects the same-named `ResolvedSingleFileArtifact`. |
+
+The local route constructs `ExternalInputRef` and
+`ResolvedExternalInputRef`. The HTTP route constructs `ResolvedHttpRetrieval`,
+publishes `ResolvedSingleFileArtifact`, and gives a later stage
+`FutureInputRef`. On the HTTP route, `ResolvedHttpRetrieval` is the root record,
+`ResolvedSingleFileArtifact` is the publication record, and `FutureInputRef` is
+the selection record. The response bytes occupy all three graph roles through
+these three records.
+
+## 4. `DownloadSpec` still means "perform a network request"
 
 This contract preserves the job of `DownloadSpec`: freeze HTTP requests,
 choose a transport and policy, then have VIPER perform and record each network
@@ -171,7 +276,7 @@ the stage. Removing `HttpSource` preserves that rule. A future requirement for
 per-request policies or transports belongs in the `DownloadSpec` request
 schema, while the download executor remains the only network path.
 
-## 4. A downloaded body becomes an external root and a future input
+## 5. A downloaded body becomes an external root and a future input
 
 Consider one run with a `download` stage followed by a `train` stage.
 
@@ -180,8 +285,8 @@ Consider one run with a `download` stage followed by a `train` stage.
    event.
 3. The executor publishes the same bytes as
    `ResolvedDownloadSpec.artifacts["dataset"]`.
-4. The train stage selects `download.dataset`. Freezing writes the following
-   reference.
+4. `TrainSpec.inputs["dataset"]` stores the following reference. It names the
+   download stage and its `dataset` artifact.
 
 ```python
 FutureInputRef(
@@ -190,8 +295,9 @@ FutureInputRef(
 )
 ```
 
-5. `resolve_inputs()` follows the completed download stage, finds the declared
-   artifact path, and passes that path to `context.inputs["dataset"]`.
+5. `resolve_inputs()` uses that `FutureInputRef` to find the completed
+   download stage's `ResolvedSingleFileArtifact`. It passes the artifact's path
+   to `context.inputs["dataset"]`.
 
 The HTTP response is therefore an external provenance root and a produced
 artifact. `FutureInputRef` describes the later consumer edge. Both
@@ -202,7 +308,7 @@ This removes the previous arbitrary boundary. The executor publishes the
 download-stage body directly into the artifact graph. The successful HTTP
 request creates the receipt and the artifact together.
 
-## 5. Local roots enter at the consuming-stage boundary
+## 6. Local roots enter at the consuming-stage boundary
 
 A local file enters VIPER when a stage first selects it. The target local flow
 uses one user-selected repository-relative path:
@@ -223,7 +329,7 @@ The missing verifier must fetch the captured `ResolvedFileRef`, recompute its
 SHA-256 digest and byte count, and confirm that the frozen local source is the
 path supplied to the consuming stage.
 
-## 6. One user-facing input authoring flow
+## 7. One user-facing input authoring flow
 
 Users should select data. VIPER should choose the protocol reference from the
 data's provenance position:
@@ -242,7 +348,7 @@ edge. VIPER constructs `ArtifactPointer`, `FutureInputRef`, and
 The active `freeze_run_plan()` preserves explicitly authored references.
 Automatic selection and pointer generation remain implementation work.
 
-## 7. Verification rules
+## 8. Verification rules
 
 The verifier must establish the complete chain appropriate to each route.
 
@@ -272,7 +378,7 @@ The verifier follows `StoredInputRef` through its generated
 `ArtifactPointer`, terminal run, successful attempt, producer stage, and named
 artifact before materializing the file for the consumer.
 
-## 8. Acceptance cases
+## 9. Acceptance cases
 
 ### Downloaded same-run input
 
@@ -296,15 +402,15 @@ VIPER records its digest, byte count, and `ResolvedFileRef`, then supplies the
 same path to the train stage. `verify_run_result()` accepts the run. Changed
 stored bytes trigger `input.local_root_identity`.
 
-## 9. Propagation and implementation order
+## 10. Propagation and implementation order
 
 | Surface | Required change |
 | --- | --- |
 | Download schema | Require matching request and artifact keys and one `SingleFileArtifactSpec` per request. |
 | Download execution | Publish each verified response directly at its declared artifact path and record one shared `SnapshotFileRef`. |
-| External source model | Remove `HttpSource`; retain the local source declaration. |
+| External source model | Delete `HttpSource` and `ExternalInputSource`; type both local records with `source: LocalSource`. |
 | Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
-| Local root model | Use one source path and retain the captured `ResolvedFileRef`. |
+| Local root model | Delete `ExternalInputRef.path`; supply `ExternalInputRef.source.path` to the worker and retain the captured `ResolvedFileRef`. |
 | Verification | Add local-root verification and the HTTP receipt-artifact identity rule. |
 | Authoring | Convert a selected artifact into `FutureInputRef` or a generated pointer plus `StoredInputRef`. |
 | Tests | Cover local roots, same-run downloaded inputs, prior-run downloaded inputs, tampered root bytes, and tampered artifacts. |
@@ -316,15 +422,16 @@ Implementation order:
 1. Complete the request-to-artifact contract in
    [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md),
    including removal of legacy retrieval-body paths and copy loops.
-2. Remove `HttpSource` and the duplicate HTTP branch in `resolve_inputs()`.
-3. Reduce the local declaration to one selected path and add the local-root
-   verifier.
+2. Delete `HttpSource`, `ExternalInputSource`, and the duplicate HTTP branch in
+   `resolve_inputs()`. Change both local `source` fields to `LocalSource`.
+3. Delete `ExternalInputRef.path`, supply `source.path` to the worker, and add
+   the local-root verifier.
 4. Add the authoring operation that selects local data, same-run artifacts, or
    prior-run artifacts and writes the corresponding internal reference.
 5. Add end-to-end acceptance cases for all three routes and their tamper
    failures.
 
-## 10. Implementation grounding
+## 11. Implementation grounding
 
 The current repository already assigns each part of the target flow to a
 specific owner:
