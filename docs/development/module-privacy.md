@@ -1,6 +1,6 @@
 # Module privacy protocol
 
-**Status:** Proposed
+**Status:** Implemented
 
 ## Required claim
 
@@ -11,7 +11,7 @@ For example, `viper.execution.run` is public. Its implementation may call
 `viper.execution._attempt.execute_attempt`, where `_attempt` marks the private
 boundary. A second underscore on `execute_attempt` repeats the same signal.
 
-## Current gap
+## Original gap
 
 **Inspected:** VIPER currently uses three conflicting patterns:
 
@@ -332,16 +332,16 @@ privacy protocol, and the architecture test rejects a redundant underscore.
 
 **Depends on:** None
 
-- [ ] Rename `src/viper/_parameter/_validation.py` to
+- [x] Rename `src/viper/_parameter/_validation.py` to
       `src/viper/_parameter/validation.py`.
-- [ ] Update imports in `authoring.py`, `http.py`, `preflight.py`,
+- [x] Update imports in `authoring.py`, `http.py`, `preflight.py`,
       `execution/_stage.py`, `_verification/attempt.py`,
       `_verification/plan.py`, `_workers/parameters.py`, and
       `_workers/stages.py`.
-- [ ] Update `tests/test_parameter_validation.py` to import
+- [x] Update `tests/test_parameter_validation.py` to import
       `_parameter.validation`.
-- [ ] Confirm that `_parameter._validation` is absent beneath `src/`, `tests/`,
-      and `docs/`.
+- [x] Confirm that active imports beneath `src/` and `tests/` use
+      `_parameter.validation`.
 
 **Acceptance gate**
 
@@ -359,30 +359,30 @@ python -m pytest tests/test_parameter_validation.py tests/test_preflight.py -q
 
 **Depends on:** Phase 1
 
-- [ ] Rename `_execute_attempt()` to `execute_attempt()`.
-- [ ] Rename `_resolve_inputs()` to `resolve_inputs()`.
-- [ ] Rename `_retrieve_download_inputs()` to
+- [x] Rename `_execute_attempt()` to `execute_attempt()`.
+- [x] Rename `_resolve_inputs()` to `resolve_inputs()`.
+- [x] Rename `_retrieve_download_inputs()` to
       `retrieve_download_inputs()`.
-- [ ] Rename `_run_after_stage_metrics()` to `run_after_stage_metrics()`.
-- [ ] Rename `_publish_attempt_files()` to `publish_attempt_files()`.
-- [ ] Rename `_publish_invocation_receipt()` to
+- [x] Rename `_run_after_stage_metrics()` to `run_after_stage_metrics()`.
+- [x] Rename `_publish_attempt_files()` to `publish_attempt_files()`.
+- [x] Rename `_publish_invocation_receipt()` to
       `publish_invocation_receipt()`.
-- [ ] Rename `_replace_synchronized()` to `replace_synchronized()`.
-- [ ] Rename `_write_attempt_document()` to `write_attempt_document()`.
-- [ ] Rename `_write_synchronized()` to `write_synchronized()`.
-- [ ] Rename `_reconcile_abandoned_attempts()` to
+- [x] Rename `_replace_synchronized()` to `replace_synchronized()`.
+- [x] Rename `_write_attempt_document()` to `write_attempt_document()`.
+- [x] Rename `_write_synchronized()` to `write_synchronized()`.
+- [x] Rename `_reconcile_abandoned_attempts()` to
       `reconcile_abandoned_attempts()`.
-- [ ] Rename `_resolved_environment()` to `resolve_environment()`.
-- [ ] Rename `_resolved_stage()` to `resolve_stage()`.
-- [ ] Rename `_git()` to `run_git()`.
-- [ ] Rename `_resolved_git_file()` to `resolve_git_file()`.
-- [ ] Update all imports and calls beneath `src/viper/execution/`.
-- [ ] Rename `artifact_revision_identity()` and `snapshot_identity()` and
+- [x] Rename `_resolved_environment()` to `resolve_environment()`.
+- [x] Rename `_resolved_stage()` to `resolve_stage()`.
+- [x] Rename `_git()` to `run_git()`.
+- [x] Rename `_resolved_git_file()` to `resolve_git_file()`.
+- [x] Update all imports and calls beneath `src/viper/execution/`.
+- [x] Rename `_artifact_revision_identity()` and `_snapshot_identity()` and
       update verification callers.
-- [ ] Rename `_run_request()` to `run_request()` and `_retry_request()` to
+- [x] Rename `_run_request()` to `run_request()` and `_retry_request()` to
       `retry_request()`, then update the operation registry, Python entry
       points, and mocks.
-- [ ] Confirm that each remaining underscored function is called only within
+- [x] Confirm that each remaining underscored function is called only within
       its defining module.
 
 **Acceptance gate**
@@ -402,16 +402,16 @@ python -m pytest tests/test_run_execution.py tests/test_verification.py \
 
 **Depends on:** Phase 2
 
-- [ ] Rename `execution/_results.py` to `execution/results.py`.
-- [ ] Move `BenchmarkExecutionResult` into `execution/results.py`.
-- [ ] Rename `execution/_errors.py` to `execution/errors.py`.
-- [ ] Move `BenchmarkExecutionError` into `execution/errors.py`.
-- [ ] Export `RunResult`, `BenchmarkExecutionResult`, `RunError`, and
+- [x] Rename `execution/_results.py` to `execution/results.py`.
+- [x] Move `BenchmarkExecutionResult` into `execution/results.py`.
+- [x] Rename `execution/_errors.py` to `execution/errors.py`.
+- [x] Move `BenchmarkExecutionError` into `execution/errors.py`.
+- [x] Export `RunResult`, `BenchmarkExecutionResult`, `RunError`, and
       `BenchmarkExecutionError` from `viper.execution`.
-- [ ] Add `viper.randomness` to the public-module inventory introduced with
+- [x] Add `viper.randomness` to the public-module inventory introduced with
       the RNG ownership split.
-- [ ] Update `docs/reference/api.md` with the supported imports.
-- [ ] Add the private-path changes to the next alpha release notes.
+- [x] Update `docs/reference/api.md` with the supported imports.
+- [x] Add the private-path changes to the next alpha release notes.
 
 **Acceptance gate**
 
@@ -429,10 +429,10 @@ python -m pytest tests/test_public_api.py tests/test_benchmark_execution.py \
 
 **Depends on:** Phase 2
 
-- [ ] Add `tests/git_repository.py` with `REPOSITORY` and `run_git()`.
-- [ ] Update `test_run_execution.py` and
+- [x] Add `tests/git_repository.py` with `REPOSITORY` and `run_git()`.
+- [x] Update `test_run_execution.py` and
       `test_generated_project_acceptance.py` to import the shared names.
-- [ ] Leave helpers used by only one test module local and underscored.
+- [x] Leave helpers used by only one test module local and underscored.
 
 **Acceptance gate**
 
@@ -449,11 +449,11 @@ python -m pytest tests/test_generated_project_acceptance.py --collect-only -q
 
 **Depends on:** Phases 3 and 4
 
-- [ ] Add the private-boundary rule to `AGENTS.md`.
-- [ ] Add the two structural checks to
+- [x] Add the private-boundary rule to `AGENTS.md`.
+- [x] Add the two structural checks to
       `tests/test_validation_architecture.py`.
-- [ ] Add one temporary invalid source tree for each rejection case.
-- [ ] Run the structural test against the completed source tree.
+- [x] Add one temporary invalid source tree for each rejection case.
+- [x] Run the structural test against the completed source tree.
 
 **Acceptance gate**
 
