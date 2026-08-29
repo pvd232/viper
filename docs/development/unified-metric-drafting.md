@@ -264,6 +264,30 @@ The stage field is `objective`. Its `MetricObjectiveSpec` value carries the
 metric ID and direction together. Diagnostics remain metrics, so the API uses
 `MetricDraft(kind="diagnostic")` as their single authoring type.
 
+### Live and recomputed metrics
+
+`mode` determines when VIPER calculates a metric and which values the metric
+can use.
+
+| Mode | When VIPER calculates it | What the metric receives | Typical use |
+| --- | --- | --- | --- |
+| `live` | While the stage callable is running | Values held in memory and passed through `MetricHandle.record()` or `MetricHandle.update()` | Batch loss, gradient norm, memory use, and timing |
+| `recompute` | After the stage has persisted its inputs and artifacts | File paths selected by `MetricDependency` | Evaluation loss, accuracy, and other results derived from saved predictions and labels |
+
+A live metric records information that exists during execution. For example,
+the training function can pass one epoch's gradient norms to
+`context.metrics["gradient_norm"].record(...)`. VIPER calculates the scalar and
+appends a `Measurement` while the stage process is active.
+
+A recomputed metric reads persisted files in a separate metric process. For
+example, an evaluation metric can read saved predictions and evaluation labels,
+calculate accuracy, and store the result. The verifier runs the calculation
+again and uses `FloatComparator` to compare the two values.
+
+Use `live` when the required values exist only while the stage is running. Use
+`recompute` when persisted inputs and artifacts contain everything required for
+the calculation.
+
 ### Diagnostics
 
 A diagnostic is a `MetricDraft` with `kind="diagnostic"`. Its result explains a
