@@ -1,339 +1,340 @@
-# External inputs, download stages, and provenance roots
+# External input roots and artifact selection
 
-VIPER records where every training input entered the provenance graph. A local
-file enters through a local-file root. An HTTP response enters through a
-download stage and its `ResolvedHttpRetrieval` receipt. Later stages consume
-the artifacts produced from those roots through ordinary input references.
+VIPER must answer three separate questions about every input byte sequence:
 
-## 1. Status and scope
+1. Where did the bytes first enter the provenance graph?
+2. Which VIPER stage published the bytes as an artifact?
+3. How did the consuming stage select that artifact?
 
-**Contract status:** proposed revision. The active implementation contains a
-partial `ExternalInputRef` and `HttpSource` path. This document defines the
-target contract for replacing the duplicate HTTP path with the existing
-`DownloadSpec` and `ResolvedHttpRetrieval` model.
+One HTTP response answers all three questions in different records. It enters
+VIPER through `ResolvedHttpRetrieval`, becomes the download stage's
+`ResolvedSingleFileArtifact`, and reaches a later stage through
+`FutureInputRef` or `StoredInputRef`. The retrieval body and artifact share one
+`SnapshotFileRef`.
 
-This document answers one question: how does VIPER show where a model's input
-bytes came from while keeping the user's stage code focused on reading input
-paths and writing artifacts?
+A local file follows the shorter route. Its bytes enter at the consuming-stage
+boundary through `ExternalInputRef`. VIPER captures the exact bytes in
+`ResolvedExternalInputRef` and supplies the selected path to the stage.
 
-The scope covers local files, HTTP downloads, download artifacts, same-run
-inputs, and prior-run inputs. It leaves harness-mode commands, pointer naming,
-and remote storage configuration to their owning contracts.
+## 1. Status and decision
 
-## 2. The user-level model
+**Contract status:** proposed revision.
 
-A person training a model identifies data and writes training code. The
-training function receives a `Path` under `context.inputs`. The training
-function writes weights under `context.artifacts`.
+**Required claim:** every path in `context.inputs` resolves to exact bytes whose
+entry into VIPER and selection by the consuming stage are both verifiable.
 
-```python
-@viper.train_stage(parameter_model=TrainParameters)
-def train(context: viper.StageContext[TrainParameters]) -> None:
-    dataset = context.inputs["dataset"]
-    weights = context.artifacts["parameters"]
-    train_model(dataset, weights, context.params.epochs)
-```
+The active implementation leaves four connectors unfinished:
 
-Artifact-pointer files and earlier-run records remain internal. VIPER writes
-and follows them when an input selects a VIPER-produced artifact.
+- The download executor stores each HTTP body at a retrieval-only path.
+  Generated project code and execution fixtures then copy those bytes to a
+  separately declared artifact path.
+- `HttpSource` repeats the request, policy, transport, and retrieval operation
+  inside internal-stage input resolution.
+- `ResolvedExternalInputRef` captures a local file, while the verifier lacks a
+  local-root identity rule.
+- `freeze_run_plan()` preserves internal input references supplied by the
+  author. The authoring layer still lacks automatic selection and pointer
+  generation.
 
-An input can arrive by one of three routes:
+The target contract removes `HttpSource` and its HTTP branch from
+`resolve_inputs()`. `DownloadSpec` remains the sole HTTP acquisition path. A
+successful request automatically becomes the same-named single-file download
+artifact, and a later stage selects that artifact through the ordinary input
+reference model.
 
-| Route | Source of the bytes | Record that identifies the source |
+The pending work connects these existing owners into one user-facing input
+authoring flow and adds the missing local-root verifier. The flow uses the
+existing download path, and VIPER creates artifact-pointer files internally.
+
+## 2. One file can occupy three graph roles
+
+The roles belong to different dimensions of the provenance graph:
+
+| Question | HTTP record | Local-file record |
 | --- | --- | --- |
-| Local root | A regular file selected by the user | Proposed local-root record with a captured `ResolvedFileRef` |
-| Same-run artifact | An earlier stage in the active run | `FutureInputRef` and the producer stage's `ResolvedArtifact` |
-| Prior-run artifact | A completed stage in an earlier run | `StoredInputRef`, generated `ArtifactPointer`, and the selected `ResolvedArtifact` |
+| Where did the bytes enter VIPER? | `ResolvedHttpRetrieval` | `ResolvedExternalInputRef` |
+| Which stage published them? | `ResolvedSingleFileArtifact` owned by the download stage | Bytes enter at the consumer boundary |
+| How did this stage select them? | `FutureInputRef` or `StoredInputRef` | `ExternalInputRef` |
 
-After a `DownloadSpec` retrieves HTTP data, later stages use the same artifact
-routes as every other produced artifact.
+These records carry different facts:
 
-## 3. Provenance topology
+- `ResolvedHttpRetrieval` carries request, transport, response, body, and
+  timestamps.
+- `ResolvedSingleFileArtifact` gives the same body a named stage-output
+  identity.
+- `FutureInputRef` identifies the producer stage and artifact selected by a
+  later stage in the same run.
+- `StoredInputRef` identifies a promoted artifact selected from a completed
+  run.
+- `ExternalInputRef` declares a local source whose bytes enter at the consumer
+  boundary.
 
-The diagram shows stable records and responsibilities. A provenance root marks
-the point where bytes enter VIPER. A produced artifact has a producer stage.
+The records remain separate because each proves a different relationship.
+Their shared file reference joins them and preserves those relationships.
 
 ```mermaid
-flowchart TB
-    Local["User local file"]
-    Service["HTTP service"]
-    Capture["VIPER input capture<br/>local-root record"]
-    Download["HTTP receipt<br/>ResolvedHttpRetrieval"]
-    Artifact["Same body as artifact<br/>ResolvedSingleFileArtifact"]
-    Select["Input selection<br/>FutureInputRef or StoredInputRef"]
+flowchart LR
+    Local["Local file"]
+    Service[/"HTTP service"/]
+    LocalRoot["Local root evidence<br/>ResolvedExternalInputRef"]
+    Retrieval["HTTP root evidence<br/>ResolvedHttpRetrieval"]
+    File[("One snapshot file<br/>path · SHA-256 · bytes")]
+    Artifact["Download-stage output<br/>ResolvedSingleFileArtifact"]
+    SameRun["Same-run selection<br/>FutureInputRef"]
+    PriorRun["Prior-run selection<br/>StoredInputRef"]
     Train["Training stage<br/>context.inputs"]
-    Weights[("Model artifact<br/>weights")]
 
-    Local -->|"capture bytes"| Capture
-    Capture -->|"root input"| Train
-    Service -->|"HTTP request and response"| Download
-    Download -->|"same SnapshotFileRef"| Artifact
-    Artifact -->|"select for consumer"| Select
-    Select -->|"verified input path"| Train
-    Train -->|"writes and hashes"| Weights
+    Local -->|"ExternalInputRef selects"| LocalRoot
+    LocalRoot -->|"captured file path"| Train
+    Service -->|"DownloadSpec request"| Retrieval
+    Retrieval -->|"body"| File
+    Artifact -->|"file: same SnapshotFileRef"| File
+    Artifact -->|"selected by"| SameRun
+    Artifact -->|"promoted and selected by"| PriorRun
+    SameRun -->|"artifact path"| Train
+    PriorRun -->|"verified artifact path"| Train
 
+    class Local,Service external
+    class LocalRoot,Retrieval root
+    class File evidence
+    class Artifact artifact
+    class SameRun,PriorRun reference
+    class Train consumer
+
+    classDef external fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
+    classDef root fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    classDef evidence fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef artifact fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
+    classDef reference fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef consumer fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-`ResolvedHttpRetrieval` records the HTTP provenance-root event.
-`ResolvedSingleFileArtifact` exposes the same response body through VIPER's
-ordinary artifact interface. The two records share one `SnapshotFileRef` in the
-completed download-stage snapshot. The receipt retains request, transport,
-response, and timing evidence; the artifact participates in ordinary artifact
-selection.
+## 3. `DownloadSpec` still means "perform a network request"
 
-## 4. One HTTP acquisition contract
+This contract preserves the job of `DownloadSpec`: freeze HTTP requests,
+choose a transport and policy, then have VIPER perform and record each network
+exchange. The stage still downloads response bodies. Its responsibility ends
+with verified acquisition and publication.
 
-### 4.1 Current implementation
-
-`DownloadSpec` already owns the full HTTP request contract:
+The schema gains one mechanical rule: each request has one same-named
+single-file artifact.
 
 ```python
-class DownloadSpec(ParameterizedSpec):
-    inputs: dict[InputName, HttpRequestSpec]
-    transport: HttpTransportSpec
-    policy: HttpRetrievalPolicy
+DownloadSpec(
+    inputs={"dataset": HttpRequestSpec(...)},
+    artifacts={"dataset": SingleFileArtifactSpec(...)},
+    transport=...,
+    policy=...,
+    params=...,
+)
 ```
 
-The executor retrieves each declared request before the download worker runs.
-For each request it writes a `ResolvedHttpRetrieval` containing:
+The executor performs this flow:
 
 ```text
-request
-resolved transport
-observed response
-stored body reference
-start time
-completion time
+inputs["dataset"]
+-> transport writes the response to bounded attempt scratch space
+-> executor verifies the expected digest and byte count
+-> executor writes the body at artifacts["dataset"].path
+-> download callable receives the verified body at that path
+-> completed stage records one shared SnapshotFileRef
 ```
 
-`ResolvedHttpRetrieval` validates the body digest and byte count against the
-frozen `HttpRequestSpec`. `ResolvedDownloadSpec` then checks that each receipt
-matches the request name, request definition, and transport selected by the
-frozen `DownloadSpec`.
+The decorated download callable and typed `parameters.Download` contract stay
+in place. The callable may inspect the verified response and its metadata. The
+executor owns publication, so project code stops reading the response from one
+path and copying it to another.
 
-The active branch also defines `HttpSource` with `request`, `policy`, and
-`transport`, then repeats transport invocation inside `resolve_inputs()`. That
-path duplicates the existing HTTP declaration and execution machinery. It also
-currently drops the observed response, resolved transport, and timing after it
-reads the body.
-
-### 4.2 Proposed contract
-
-`DownloadSpec` remains the sole writer of HTTP retrieval evidence. The
-proposed contract removes `HttpSource` from `ExternalInputSource` and removes
-the HTTP branch from `resolve_inputs()`.
-
-[`download-retrieval-artifacts.md`](download-retrieval-artifacts.md) owns the
-request-to-artifact join: every successful HTTP request and its same-named
-single-file artifact share one `SnapshotFileRef` in the completed download-stage
-snapshot.
+The completed stage records two views of the same file:
 
 ```text
-HttpRequestSpec
--> DownloadSpec
--> ResolvedHttpRetrieval
--> declared download artifact
--> FutureInputRef or StoredInputRef
--> consuming stage
+resolved_download.retrievals["dataset"].body
+==
+resolved_download.artifacts["dataset"].file
 ```
 
-The same `ResolvedHttpRetrieval` supports two consumers:
+The retrieval view proves the network exchange. The artifact view lets every
+other stage use the response through the standard artifact interface. The
+detailed request-to-artifact schema, execution changes, failed-invocation
+binding, and legacy cleanup live in
+[`download-retrieval-artifacts.md`](download-retrieval-artifacts.md).
 
-| Consumer | Receives |
+`DownloadSpec` currently applies one transport and policy to all requests in
+the stage. Removing `HttpSource` preserves that rule. A future requirement for
+per-request policies or transports belongs in the `DownloadSpec` request
+schema, while the download executor remains the only network path.
+
+## 4. A downloaded body becomes an external root and a future input
+
+Consider one run with a `download` stage followed by a `train` stage.
+
+1. `DownloadSpec.inputs["dataset"]` declares the network request.
+2. The HTTP response enters VIPER. `ResolvedHttpRetrieval` records that root
+   event.
+3. The executor publishes the same bytes as
+   `ResolvedDownloadSpec.artifacts["dataset"]`.
+4. The train stage selects `download.dataset`. Freezing writes the following
+   reference.
+
+```python
+FutureInputRef(
+    producer_stage_id="download",
+    producer_artifact="dataset",
+)
+```
+
+5. `resolve_inputs()` follows the completed download stage, finds the declared
+   artifact path, and passes that path to `context.inputs["dataset"]`.
+
+The HTTP response is therefore an external provenance root and a produced
+artifact. `FutureInputRef` describes the later consumer edge. Both
+classifications remain true: the network supplied the bytes, and the download
+stage published them.
+
+This removes the previous arbitrary boundary. The executor publishes the
+download-stage body directly into the artifact graph. The successful HTTP
+request creates the receipt and the artifact together.
+
+## 5. Local roots enter at the consuming-stage boundary
+
+A local file enters VIPER when a stage first selects it. The target local flow
+uses one user-selected repository-relative path:
+
+```text
+local file selected through ExternalInputRef
+-> runner reads the exact bytes
+-> LocalArtifactStore records an independently retrievable ResolvedFileRef
+-> ResolvedExternalInputRef records the source and captured identity
+-> stage receives the selected path through context.inputs
+```
+
+A local root begins outside VIPER's stage graph, so `ExternalInputRef` supplies
+the root declaration directly. The user chooses one source path. VIPER passes
+that same path to the worker after capturing its byte identity.
+
+The missing verifier must fetch the captured `ResolvedFileRef`, recompute its
+SHA-256 digest and byte count, and confirm that the frozen local source is the
+path supplied to the consuming stage.
+
+## 6. One user-facing input authoring flow
+
+Users should select data. VIPER should choose the protocol reference from the
+data's provenance position:
+
+| Selected data | Internal record written at freeze time |
 | --- | --- |
-| Download worker | `DownloadContext.retrievals[input_name]`, including response metadata and the body path |
-| Provenance verifier | The request, resolved transport, response, body identity, and timing stored in `ResolvedDownloadSpec.retrievals[input_name]` |
+| Local file entering at the consuming-stage boundary | `ExternalInputRef` |
+| Artifact produced earlier in the active run | `FutureInputRef` |
+| Artifact produced in a completed run | Generated `ArtifactPointer` plus `StoredInputRef` |
 
-The train worker receives a selected download-artifact path through
-`context.inputs`. The preceding `DownloadSpec` performs the HTTP exchange and
-stores its receipt.
+This is the unification point. The training decorator still receives ordinary
+paths through `context.inputs`, while freezing writes the correct provenance
+edge. VIPER constructs `ArtifactPointer`, `FutureInputRef`, and
+`StoredInputRef` internally during the ordinary authoring flow.
 
-### 4.3 Per-request policy and transport
+The active `freeze_run_plan()` preserves explicitly authored references.
+Automatic selection and pointer generation remain implementation work.
 
-`HttpSource` places `policy` and `transport` beside each request. `DownloadSpec`
-currently applies one policy and one transport to its map of requests. A future
-need for different policies or transports within one download stage belongs in
-a `DownloadSpec` request descriptor. The executor still performs every HTTP
-request through the same download-stage receipt path.
+## 7. Verification rules
 
-## 5. Local files enter as roots
+The verifier must establish the complete chain appropriate to each route.
 
-A local file lacks an earlier VIPER producer. VIPER therefore captures the
-file's observed bytes at the input boundary and records a local provenance
-root.
-
-```text
-user-selected local file
--> read exact bytes
--> publish bytes through LocalArtifactStore
--> local-root record with ResolvedFileRef
--> supply the selected file path to the consuming stage
-```
-
-The proposed local-root record contains the selected source location and the
-captured `ResolvedFileRef`. The file reference supplies the SHA-256 digest,
-byte count, and immutable local-store location for the bytes actually read.
-
-The user supplies one local source path. The runner captures that file and
-passes the same path to `context.inputs`. The contract therefore avoids a
-second user-chosen materialization path and avoids copying a local input merely
-to satisfy the stage interface.
-
-The local root and the HTTP retrieval have the same graph role: each identifies
-bytes that entered before any VIPER producer stage. They use different receipts
-because one event reads a local file and the other performs an HTTP exchange.
-
-## 6. Produced artifacts and later inputs
-
-An artifact becomes a new graph node after a stage finishes and VIPER hashes
-the file or bundle declared by that stage. A `FutureInputRef` names the edge
-from that producer artifact to a later consumer in the same run. A
-`StoredInputRef` names the edge from an artifact in an earlier run to a later
-consumer.
-
-```text
-external root
--> producer stage
--> ResolvedArtifact
--> consumer input reference
--> consuming stage
-```
-
-The input reference determines how the consumer finds the artifact:
-
-| Consumer situation | Frozen input record | Resolution path |
-| --- | --- | --- |
-| Producer runs earlier in the active plan | `FutureInputRef` | Follow the completed producer stage in the active attempt |
-| Producer completed in an earlier run | `StoredInputRef` | Read the generated `ArtifactPointer`, verify the selected artifact, then materialize it |
-
-Both routes lead to a declared artifact. Neither route creates a new root.
-
-### Automatic input selection
-
-The proposed authoring layer accepts a user-level selection of a
-VIPER-produced artifact. Freezing chooses the internal record:
-
-```text
-selected artifact in this run
--> FutureInputRef
-
-selected artifact from a completed run
--> generate ArtifactPointer
--> StoredInputRef
-```
-
-The completed download stage publishes `ResolvedArtifact`. Pointer generation
-happens when a later plan selects that artifact. The active
-`freeze_run_plan()` implementation preserves authored input references.
-Automatic pointer creation remains pending.
-
-## 7. Worked HTTP training run
-
-**Proposed example.** A user downloads `dataset.h5ad`, then trains on the
-download artifact in the same run.
-
-1. The user declares a `DownloadSpec` request whose `HttpRequestSpec` fixes the
-   URL, request method, expected digest, expected byte count, headers, and
-   credential reference.
-2. VIPER resolves the declared HTTP transport, executes the request, records
-   the terminal response, and stores the body bytes.
-3. VIPER writes `ResolvedHttpRetrieval` into
-   `ResolvedDownloadSpec.retrievals["dataset"]` and a matching
-   `ResolvedSingleFileArtifact` into
-   `ResolvedDownloadSpec.artifacts["dataset"]`. Both records identify the
-   same snapshot file.
-4. The input authoring layer selects `download.dataset` for the train stage and
-   freezes a `FutureInputRef`.
-6. The train worker receives the artifact path through
-   `context.inputs["dataset"]` and writes its declared model artifact.
-
-The same dataset can enter a later run through a generated `ArtifactPointer`
-and `StoredInputRef`. The pointer identifies the completed producing run and
-the selected `dataset` artifact. The verifier follows that chain before the
-later train worker receives the artifact path.
-
-## 8. Verification contract
-
-### 8.1 HTTP retrieval
-
-`ResolvedHttpRetrieval` validates these equalities:
+### HTTP root selected in the same run
 
 ```text
 retrieval.body.sha256 == retrieval.request.expected_body_sha256
 retrieval.body.bytes  == retrieval.request.expected_body_bytes
+retrieval.body        == artifact.file
+FutureInputRef names the completed download stage and matching artifact
 ```
 
-`ResolvedDownloadSpec` validates that every retrieval name corresponds to a
-frozen `DownloadSpec.inputs` entry and that the stored request and transport
-match the frozen declaration.
+The verifier also checks the frozen request, selected transport, response
+policy, timing, stage snapshot, and file bytes.
 
-### 8.2 Local roots
+### Local root
 
-The proposed local-root verifier retrieves the root's `ResolvedFileRef`,
-checks the stored bytes against its SHA-256 and byte count, and confirms that
-the consuming stage received the selected local-file path.
+```text
+captured bytes hash to resolved_external.file.sha256
+captured byte count equals resolved_external.file.bytes
+resolved source path equals the path delivered to the stage
+```
 
-### 8.3 Produced artifacts
+### Prior-run artifact
 
-VIPER already hashes every declared artifact after the stage process exits.
-The existing artifact verifier follows a `StoredInputRef` through its
-`ArtifactPointer`, terminal run, successful attempt, selected stage, and
-declared artifact. Same-run verification follows `FutureInputRef` to its
-earlier producer stage.
+The verifier follows `StoredInputRef` through its generated
+`ArtifactPointer`, terminal run, successful attempt, producer stage, and named
+artifact before materializing the file for the consumer.
 
-## 9. Change impact
+## 8. Acceptance cases
 
-| Surface | Current partial branch | Proposed contract | Effect |
-| --- | --- | --- |
-| HTTP declaration | `DownloadSpec` and `HttpSource` both declare request, policy, and transport | `DownloadSpec` owns all HTTP declarations | One request schema and executor path |
-| HTTP evidence | `ResolvedHttpRetrieval` for download stages; incomplete `ResolvedExternalInputRef` for `HttpSource` | `ResolvedHttpRetrieval` remains the HTTP-root receipt | Response metadata, transport identity, timing, and body identity remain connected |
-| Internal input resolution | `resolve_inputs()` can run HTTP transport | `resolve_inputs()` handles local roots, future inputs, and stored inputs | HTTP acquisition stays in the download-stage executor |
-| Local input API | Partial `ExternalInputRef` contains source and materialization path | Local-root declaration contains one selected source path | The worker uses the selected local path after capture |
-| Same-run reuse | Explicit `FutureInputRef` | Authoring layer writes `FutureInputRef` from an artifact selection | User selects an artifact; the authoring layer writes protocol fields |
-| Prior-run reuse | Explicit `StoredInputRef` and pointer file | Authoring layer writes a generated pointer and `StoredInputRef` | User avoids pointer authoring |
-| Verification | HTTP verification lives in the download path; local-root verification remains absent | Add local-root verification and retain existing HTTP retrieval verification | Each root has a byte-identity check |
+### Downloaded same-run input
 
-## 10. Implementation order
+A controlled transport returns `b"prior"` for `inputs["prior"]`. The download
+executor publishes those bytes as `artifacts["prior"]`. The completed download
+stage satisfies:
 
-1. Replace the partial external-input contract with a local-root-only
-   declaration and resolved local-root record.
-2. Remove `HttpSource`, the HTTP branch in `resolve_inputs()`, and its partial
-   test surface.
-3. Add local-root verification: fetch the recorded `ResolvedFileRef`, check its
-   digest and byte count, and check the delivered path.
-4. Preserve `DownloadSpec` and `ResolvedHttpRetrieval` as the HTTP-root path.
-5. Implement the authoring operation that converts an artifact selection into
-   `FutureInputRef` or generated `StoredInputRef`.
-6. Add acceptance tests for a local root, a same-run download artifact, a
-   prior-run download artifact, and tampered root or artifact bytes.
+```text
+retrievals["prior"].body == artifacts["prior"].file
+```
 
-## 11. Invariants and limits
+The train stage selects that artifact through `FutureInputRef` and reads
+`b"prior"` from `context.inputs["prior"]`. `verify_run_result()` accepts the
+run. A changed artifact digest triggers
+`download.receipt_artifact_identity`.
 
-| Classification | Rule |
+### Local root
+
+A repository file containing `b"prior"` enters through `ExternalInputRef`.
+VIPER records its digest, byte count, and `ResolvedFileRef`, then supplies the
+same path to the train stage. `verify_run_result()` accepts the run. Changed
+stored bytes trigger `input.local_root_identity`.
+
+## 9. Propagation and implementation order
+
+| Surface | Required change |
 | --- | --- |
-| Preserved | A stage callable receives input paths through `context.inputs` and writes outputs through `context.artifacts`. |
-| Preserved | `DownloadSpec` records request, response, transport, timing, and body identity in `ResolvedHttpRetrieval`. |
-| Strengthened | Every local root gains a captured-file identity and an explicit verifier path. |
-| Changed | HTTP acquisition moves out of the internal-stage input union and back to `DownloadSpec`. |
-| Introduced | Authoring automatically converts an artifact selection into `FutureInputRef` or generated `StoredInputRef`. |
+| Download schema | Require matching request and artifact keys and one `SingleFileArtifactSpec` per request. |
+| Download execution | Publish each verified response directly at its declared artifact path and record one shared `SnapshotFileRef`. |
+| External source model | Remove `HttpSource`; retain the local source declaration. |
+| Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
+| Local root model | Use one source path and retain the captured `ResolvedFileRef`. |
+| Verification | Add local-root verification and the HTTP receipt-artifact identity rule. |
+| Authoring | Convert a selected artifact into `FutureInputRef` or a generated pointer plus `StoredInputRef`. |
+| Tests | Cover local roots, same-run downloaded inputs, prior-run downloaded inputs, tampered root bytes, and tampered artifacts. |
+| Legacy cleanup | Apply every delete, replace, and retain disposition in [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md); delete `HttpSource` and its tests here. |
+| Documentation | Update the protocol reference and generated project examples to teach executor-owned HTTP publication and automatic input selection. |
 
-The contract covers byte lineage. Dataset quality, license status, and semantic
-suitability belong to the user's data-governance process.
+Implementation order:
 
-## 12. Implementation grounding
+1. Complete the request-to-artifact contract in
+   [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md),
+   including removal of legacy retrieval-body paths and copy loops.
+2. Remove `HttpSource` and the duplicate HTTP branch in `resolve_inputs()`.
+3. Reduce the local declaration to one selected path and add the local-root
+   verifier.
+4. Add the authoring operation that selects local data, same-run artifacts, or
+   prior-run artifacts and writes the corresponding internal reference.
+5. Add end-to-end acceptance cases for all three routes and their tamper
+   failures.
 
-The current implementation already supplies these building blocks:
+## 10. Implementation grounding
+
+The current repository already assigns each part of the target flow to a
+specific owner:
 
 | Role | Current owner |
 | --- | --- |
-| HTTP request declaration | `viper.stages.DownloadSpec` |
-| HTTP receipt | `viper.http.ResolvedHttpRetrieval` |
-| HTTP body publication | `viper.execution._materialization.retrieve_download_inputs` |
-| Download-stage receipt validation | `viper.stages.ResolvedDownloadSpec` |
-| Stage-output identity | `viper.execution._stage._resolve_artifact` |
-| Same-run input edge | `viper.inputs.FutureInputRef` |
-| Prior-run input edge | `viper.inputs.StoredInputRef` and `viper.artifacts.ArtifactPointer` |
-| Local immutable bytes | `viper.storage.LocalArtifactStore.resolved_files` |
+| HTTP declaration | [`viper.stages.DownloadSpec`](../../src/viper/stages.py) |
+| HTTP root evidence | [`viper.http.ResolvedHttpRetrieval`](../../src/viper/http.py) |
+| HTTP execution | [`viper.execution._materialization.retrieve_download_inputs`](../../src/viper/execution/_materialization.py) |
+| Download-stage validation | [`viper.stages.ResolvedDownloadSpec`](../../src/viper/stages.py) |
+| Produced artifact identity | [`viper.execution._stage._resolve_artifact`](../../src/viper/execution/_stage.py) |
+| Local root declaration and evidence | [`viper.inputs.ExternalInputRef`](../../src/viper/inputs.py) and `ResolvedExternalInputRef` |
+| Same-run consumer edge | [`viper.inputs.FutureInputRef`](../../src/viper/inputs.py) |
+| Prior-run consumer edge | [`viper.inputs.StoredInputRef`](../../src/viper/inputs.py) and [`viper.artifacts.ArtifactPointer`](../../src/viper/artifacts.py) |
+| Input materialization | [`viper.execution._materialization.resolve_inputs`](../../src/viper/execution/_materialization.py) |
+| Immutable local evidence | [`viper.storage.LocalArtifactStore`](../../src/viper/storage.py) |
 
-The pending work connects these existing owners into one user-facing input
-authoring flow and adds the missing local-root verifier.
+The contract covers byte lineage and selection. Dataset quality, license
+status, and semantic suitability remain outside this verifier.
