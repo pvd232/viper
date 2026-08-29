@@ -9,7 +9,7 @@ from collections.abc import Mapping
 import yaml
 from pydantic import TypeAdapter
 
-from .._parameter._validation import (
+from .._parameter.validation import (
     ParameterValidationError,
     verify_parameter_model_bytes,
 )

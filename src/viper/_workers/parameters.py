@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from .._parameter._validation import (
+from .._parameter.validation import (
     ParameterValidationContext,
     validate_parameters,
 )

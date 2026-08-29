@@ -520,7 +520,7 @@ def resolve_transport(
     spec: HttpTransportSpec,
 ) -> ResolvedHttpTransport:
     """Validate source and executable identities before one transport runs."""
-    from ._parameter._validation import (  # Avoid a transport-validation cycle.
+    from ._parameter.validation import (  # Avoid a transport-validation cycle.
         instantiate_parameters,
         verify_parameter_model_bytes,
     )
@@ -672,7 +672,7 @@ def invoke_transport(
     environment: Mapping[str, str] | None = None,
 ) -> HttpTransportResult:
     """Invoke the selected transport and enforce its returned body contract."""
-    from ._parameter._validation import (  # Avoid a transport-validation cycle.
+    from ._parameter.validation import (  # Avoid a transport-validation cycle.
         instantiate_parameters,
     )
 

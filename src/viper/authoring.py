@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
 
-from ._parameter._validation import (
+from ._parameter.validation import (
     ParameterValidationError,
     validate_stage_parameters,
     verify_parameter_model_bytes,

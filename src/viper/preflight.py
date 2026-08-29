@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from ._parameter._validation import (
+from ._parameter.validation import (
     ParameterValidationError,
     validate_stage_parameters,
     verify_parameter_model_bytes,
