@@ -256,15 +256,15 @@ owners:
 | Route | Frozen declaration | Resolved root evidence | Later consumer |
 | --- | --- | --- | --- |
 | Local file | `InternalSpec.inputs[name]: ExternalInputRef` | `ResolvedInternalSpec.inputs[name]: ResolvedExternalInputRef` | The same internal stage receives `source.path`. |
-| HTTP response | `DownloadSpec.inputs[name]: HttpRequestSpec` | `ResolvedDownloadSpec.retrievals[name]: ResolvedHttpRetrieval` | A later `InternalSpec.inputs[name]: FutureInputRef` selects the same-named `ResolvedSingleFileArtifact`. |
+| HTTP response | `DownloadSpec.inputs[name]: HttpRequestSpec` | `ResolvedDownloadSpec.retrievals[name]: ResolvedHttpRetrieval` | `FutureInputRef` selects the same-named artifact in the active run; `StoredInputRef` selects it from a completed run. |
 
 The local route constructs `ExternalInputRef` and
 `ResolvedExternalInputRef`. The HTTP route constructs `ResolvedHttpRetrieval`,
-publishes `ResolvedSingleFileArtifact`, and gives a later stage
-`FutureInputRef`. On the HTTP route, `ResolvedHttpRetrieval` is the root record,
-`ResolvedSingleFileArtifact` is the publication record, and `FutureInputRef` is
-the selection record. The response bytes occupy all three graph roles through
-these three records.
+publishes `ResolvedSingleFileArtifact`, and gives a consumer `FutureInputRef` or
+`StoredInputRef`. On the HTTP route, `ResolvedHttpRetrieval` is the root record,
+`ResolvedSingleFileArtifact` is the publication record, and the input reference
+is the selection record. The response bytes occupy all three graph roles
+through these records.
 
 ## 4. `DownloadSpec` still means "perform a network request"
 
@@ -456,22 +456,29 @@ Each value can occupy the same input slot:
 ```python
 training = viper.stage(
     train,
-    params=TrainParams(epochs=3, learning_rate=0.1),
+    params=TRAIN_PARAMS,
     inputs={"dataset": same_run_dataset},
     artifacts={
         "parameters": viper.file_artifact(
-            path=PARAMETERS_PATH,
-            loader=load_parameters,
+            path=WEIGHTS_PATH,
+            loader=load_weights,
             data_role="training",
         ),
         "resume_state": viper.file_artifact(
             path=RESUME_STATE_PATH,
-            loader=load_resume_state,
+            loader=load_resume_state_artifact,
             data_role="training",
         ),
     },
+    objective=training_loss_metric,
+    metrics=(gradient_norm_metric,),
 )
 ```
+
+`TRAIN_PARAMS`, the two configured metrics, and the artifact loaders are defined
+in the
+[`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example)
+program. This section changes only the value assigned to `inputs["dataset"]`.
 
 Replacing `same_run_dataset` with `local_dataset` or `prior_run_dataset`
 changes the frozen input reference while preserving the decorated training

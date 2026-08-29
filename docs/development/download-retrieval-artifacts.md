@@ -336,8 +336,7 @@ section 4.1. At execution time, VIPER invokes the selected transport and
 publishes the verified body at `DATASET_PATH`. Project code delegates that
 publication to the runner.
 
-The complete custom-transport, download, training, and run-plan program lives
-in
+The complete custom-transport and model-run program lives in
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
 
 ## 5. Execution
