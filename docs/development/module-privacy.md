@@ -359,7 +359,23 @@ python -m pytest tests/test_parameter_validation.py tests/test_preflight.py -q
 
 **Depends on:** Phase 1
 
-- [ ] Rename every shared execution function listed in this document.
+- [ ] Rename `_execute_attempt()` to `execute_attempt()`.
+- [ ] Rename `_resolve_inputs()` to `resolve_inputs()`.
+- [ ] Rename `_retrieve_download_inputs()` to
+      `retrieve_download_inputs()`.
+- [ ] Rename `_run_after_stage_metrics()` to `run_after_stage_metrics()`.
+- [ ] Rename `_publish_attempt_files()` to `publish_attempt_files()`.
+- [ ] Rename `_publish_invocation_receipt()` to
+      `publish_invocation_receipt()`.
+- [ ] Rename `_replace_synchronized()` to `replace_synchronized()`.
+- [ ] Rename `_write_attempt_document()` to `write_attempt_document()`.
+- [ ] Rename `_write_synchronized()` to `write_synchronized()`.
+- [ ] Rename `_reconcile_abandoned_attempts()` to
+      `reconcile_abandoned_attempts()`.
+- [ ] Rename `_resolved_environment()` to `resolve_environment()`.
+- [ ] Rename `_resolved_stage()` to `resolve_stage()`.
+- [ ] Rename `_git()` to `run_git()`.
+- [ ] Rename `_resolved_git_file()` to `resolve_git_file()`.
 - [ ] Update all imports and calls beneath `src/viper/execution/`.
 - [ ] Rename `artifact_revision_identity()` and `snapshot_identity()` and
       update verification callers.
