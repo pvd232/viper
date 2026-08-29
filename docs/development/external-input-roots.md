@@ -6,8 +6,15 @@ VIPER must answer three separate questions about every input byte sequence:
 2. Which VIPER stage published the bytes as an artifact?
 3. How did the consuming stage select that artifact?
 
-One HTTP response answers all three questions in different records. It enters
-VIPER through `ResolvedHttpRetrieval`, becomes the download stage's
+The target graph defines one resolved root category:
+
+```python
+ExternalInputRoot = ResolvedExternalInputRef | ResolvedHttpRetrieval
+```
+
+`ResolvedExternalInputRef` is the local-file variant.
+`ResolvedHttpRetrieval` is the HTTP variant. One HTTP response enters VIPER as
+an `ExternalInputRoot`, becomes the download stage's
 `ResolvedSingleFileArtifact`, and reaches a later stage through
 `FutureInputRef` or `StoredInputRef`. The retrieval body and artifact share one
 `SnapshotFileRef`.
@@ -46,38 +53,43 @@ The pending work connects these existing owners into one user-facing input
 authoring flow and adds the missing local-root verifier. The flow uses the
 existing download path, and VIPER creates artifact-pointer files internally.
 
-## 2. One file can occupy three graph roles
+## 2. `ExternalInputRoot` has local and HTTP variants
 
 The roles belong to different dimensions of the provenance graph:
 
-| Question | HTTP record | Local-file record |
+| Question | HTTP `ExternalInputRoot` | Local `ExternalInputRoot` |
 | --- | --- | --- |
 | Where did the bytes enter VIPER? | `ResolvedHttpRetrieval` | `ResolvedExternalInputRef` |
 | Which stage published them? | `ResolvedSingleFileArtifact` owned by the download stage | Bytes enter at the consumer boundary |
 | How did this stage select them? | `FutureInputRef` or `StoredInputRef` | `ExternalInputRef` |
 
-These records carry different facts:
+The root variants carry source-specific evidence:
 
-- `ResolvedHttpRetrieval` carries request, transport, response, body, and
-  timestamps.
+- `ResolvedHttpRetrieval` is an `ExternalInputRoot` carrying request,
+  transport, response, body, and timestamps.
+- `ResolvedExternalInputRef` is an `ExternalInputRoot` carrying the selected
+  local source and captured file identity.
+
+The remaining records describe publication and selection:
+
 - `ResolvedSingleFileArtifact` gives the same body a named stage-output
   identity.
 - `FutureInputRef` identifies the producer stage and artifact selected by a
   later stage in the same run.
 - `StoredInputRef` identifies a promoted artifact selected from a completed
   run.
-- `ExternalInputRef` declares a local source whose bytes enter at the consumer
-  boundary.
+- `ExternalInputRef` declares the local root before execution.
 
-The records remain separate because each proves a different relationship.
-Their shared file reference joins them and preserves those relationships.
+`ExternalInputRoot` unifies the two entry receipts. The artifact and input
+reference records remain separate because each proves another relationship.
+Their shared file reference joins the root, publication, and selection claims.
 
 ```mermaid
 flowchart LR
     Local["Local file"]
     Service[/"HTTP service"/]
-    LocalRoot["Local root evidence<br/>ResolvedExternalInputRef"]
-    Retrieval["HTTP root evidence<br/>ResolvedHttpRetrieval"]
+    LocalRoot["Local external root<br/>ResolvedExternalInputRef"]
+    Retrieval["HTTP external root<br/>ResolvedHttpRetrieval"]
     File[("One snapshot file<br/>path · SHA-256 · bytes")]
     Artifact["Download-stage output<br/>ResolvedSingleFileArtifact"]
     SameRun["Same-run selection<br/>FutureInputRef"]
@@ -326,11 +338,11 @@ specific owner:
 | Role | Current owner |
 | --- | --- |
 | HTTP declaration | [`viper.stages.DownloadSpec`](../../src/viper/stages.py) |
-| HTTP root evidence | [`viper.http.ResolvedHttpRetrieval`](../../src/viper/http.py) |
+| HTTP `ExternalInputRoot` | [`viper.http.ResolvedHttpRetrieval`](../../src/viper/http.py) |
 | HTTP execution | [`viper.execution._materialization.retrieve_download_inputs`](../../src/viper/execution/_materialization.py) |
 | Download-stage validation | [`viper.stages.ResolvedDownloadSpec`](../../src/viper/stages.py) |
 | Produced artifact identity | [`viper.execution._stage._resolve_artifact`](../../src/viper/execution/_stage.py) |
-| Local root declaration and evidence | [`viper.inputs.ExternalInputRef`](../../src/viper/inputs.py) and `ResolvedExternalInputRef` |
+| Local `ExternalInputRoot` declaration and evidence | [`viper.inputs.ExternalInputRef`](../../src/viper/inputs.py) and `ResolvedExternalInputRef` |
 | Same-run consumer edge | [`viper.inputs.FutureInputRef`](../../src/viper/inputs.py) |
 | Prior-run consumer edge | [`viper.inputs.StoredInputRef`](../../src/viper/inputs.py) and [`viper.artifacts.ArtifactPointer`](../../src/viper/artifacts.py) |
 | Input materialization | [`viper.execution._materialization.resolve_inputs`](../../src/viper/execution/_materialization.py) |
