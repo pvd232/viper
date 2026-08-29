@@ -3,7 +3,7 @@
 Start with Phase 1. It preserves current local behavior while creating the
 publication boundary required by every later phase.
 
-This document is the build reference for VIPER's approved development
+This document is the build reference for VIPER's current development
 contracts. It explains the target system, records the cross-contract review,
 orders the implementation, and names every source, test, and documentation
 surface that must change.
@@ -40,17 +40,42 @@ run = viper.plan(
     experiment=experiment,
     variant="baseline",
     replicate="replicate_01",
+    stages={
+        "download": downloaded,
+        "train": training,
+    },
     source=source,
     environment=environment,
     reproducibility=reproducibility,
+    benchmark=benchmark,
 )
 
 frozen = viper.freeze(run)
-result = viper.run(frozen.run)
 ```
 
-`viper.freeze()` writes canonical YAML. Execution and verification consume that
-YAML. The Git commit records the Python authoring program that produced it.
+`viper.freeze()` writes canonical YAML and returns every generated path. The
+user reviews and commits those files. The resulting plan commit identifies the
+YAML that VIPER executes. `RunSpec.source.commit` separately identifies the
+project code and Python definitions used during freezing.
+
+```python
+if frozen.benchmark_spec_path is None:
+    raise RuntimeError("the frozen plan has no benchmark")
+
+run_result = viper.execution.run(
+    Path.cwd(),
+    frozen.run_spec_path,
+)
+
+benchmark_result = viper.execution.benchmark(
+    Path.cwd(),
+    run_result.resolved_run_path,
+    frozen.benchmark_spec_path,
+)
+```
+
+The execution calls begin after every path in `frozen.files` enters the plan
+commit.
 
 The same frozen run can publish immutable evidence locally or directly to
 Viper Cloud:
@@ -82,7 +107,7 @@ VIPER separates four jobs.
 ```mermaid
 flowchart LR
     Author["Python authoring"] -->|"viper.freeze"| Frozen["Canonical YAML"]
-    Frozen -->|"viper.run"| Runner["Attempt executor"]
+    Frozen -->|"viper.execution.run"| Runner["Attempt executor"]
     Local["Local file"] -->|"ExternalInputRef"| Runner
     HTTP["HTTP service"] -->|"DownloadSpec"| Runner
     Runner -->|"stage snapshots"| Storage[("Local store or Viper Cloud")]
@@ -149,6 +174,21 @@ The contracts share models. One contract owns each shared decision:
 | Artifact draft paths are relative to the selected run root | Automatic input resolution |
 | Immutable location comes from the configured destination | Direct Viper Cloud publication |
 | Generated YAML identity comes from the plan commit; project definitions come from the source commit | Frozen plan Git identity |
+
+### 3.1 Deterministic contract coverage
+
+Each pending contract declares stable requirement IDs with an owning phase and
+focused test. The matching phase contains one `implements` marker and one
+`verifies` marker for every ID. The baselines below bind this checklist to the
+exact reviewed contract bytes. A contract edit requires another checklist
+review and a new digest.
+
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=26e5d35c76068553bd767e3d3e110be83313ff48a4723fea130d12b25a592b85 -->
+<!-- contract-baseline: external-input-roots.md sha256=cc61a5658c783a35c5de7a78f8234248347b23cc80cd784c2e473f92db55113f -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=1ccc0f118115e78167c07d69f9dff79ada46b787b34f4a0a8ef9a4e2c32b570d -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=b8a0f3b1e82d3d78b8a7254ba0b9604a2ca9d83bdc5d4609a3589ed795388202 -->
+<!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
+<!-- contract-baseline: remote-storage.md sha256=b0f4bf4715cdcc90189c94c25364a86dc521870b86a7fba27bc3d392b94a7ee7 -->
 
 ## 4. Specification-system review
 
@@ -319,7 +359,7 @@ new publisher boundary. Cloud implementation begins in Phase 9.
       models. Runtime selection remains local in this phase.
 - [ ] Add `PublicationSource = bytes | Path`.
 - [ ] Add `SnapshotPublisher.publish()` with `resolved_stage_path`,
-      `resolved_stage`, and `files`.
+      `resolved_stage`, and `files`. <!-- implements: RSP-01 -->
 - [ ] Implement `LocalSnapshotPublisher` by reading validated paths and calling
       `LocalArtifactStore.snapshot()`.
 - [ ] Add `publish_resolved_files()` and return
@@ -343,6 +383,7 @@ before its first write.
 ### 7.2 Replace direct local calls
 
 - [ ] Change `execution/_attempt.py` to obtain a publisher once per attempt.
+      <!-- implements: RSP-02 -->
 - [ ] Replace the direct stage `store.snapshot()` call with
       `snapshot_publisher.publish()`.
 - [ ] Replace direct standalone `store.resolved_files()` calls in
@@ -369,10 +410,13 @@ publisher.
 - [ ] Extend `tests/test_storage.py` for destination parsing, union round trips,
       mapping-return publication, and local snapshot compatibility.
 - [ ] Update protocol fixtures in `tests/test_protocol.py`.
-- [ ] Run:
+- [ ] Run: <!-- verifies: RSP-01, RSP-02 -->
 
 ```bash
-python -m pytest tests/test_storage.py tests/test_protocol.py -q
+python -m pytest \
+  tests/test_storage.py \
+  tests/test_protocol.py \
+  tests/test_run_execution.py -q
 ```
 
 **Commit boundary:** `Add destination-neutral local publication`
@@ -391,7 +435,9 @@ single-file artifact. Both records identify one snapshot file.
 
 - [ ] Move `implementation` and `parameter_model` from `BaseSpec` to
       `ParameterizedSpec` in `src/viper/stages.py`.
-- [ ] Make `DownloadSpec` inherit `BaseSpec` directly.
+- [ ] Make `DownloadSpec` inherit `BaseSpec` directly and complete the
+      runner-owned frozen and resolved model hierarchy in Section 8.1.
+      <!-- implements: DRA-01 -->
 - [ ] Require equal `DownloadSpec.inputs` and `DownloadSpec.artifacts` keys.
 - [ ] Require every download artifact to be `SingleFileArtifactSpec`.
 - [ ] Move project invocation fields from `ResolvedBaseSpec` to
@@ -423,12 +469,15 @@ receipt and artifact.
 - [ ] Add `publish_download_body()`. Stream the transport file into a temporary
       artifact sibling, hash the bytes written, compare the frozen digest and
       byte count, then atomically replace the artifact path.
+      <!-- implements: DRA-03 -->
 - [ ] Remove the separate retrieval-body path from `src/viper/paths.py`.
 - [ ] Remove download worker invocation from `execution/_attempt.py`.
+      <!-- implements: DRA-02 -->
 - [ ] Construct `ResolvedDownloadSpec` in the runner after retrieval.
 - [ ] Publish the resolved stage document and each unique body path once.
 - [ ] Remove download handling from `_workers/stages.py`.
 - [ ] Add the HTTP receipt-artifact verifier in `_verification/attempt.py`.
+      <!-- implements: DRA-04 -->
 
 ### 8.3 Focused proof
 
@@ -438,14 +487,18 @@ receipt and artifact.
 - [ ] Add a same-byte-count body mutation between transport validation and
       artifact publication. Require `download.runner_custody` to reject it.
 - [ ] Remove callable-copy fixtures from `tests/fixtures.py` and generated
-      project tests.
-- [ ] Run:
+      project tests. Replace the generated download callable in
+      `src/viper/project_init.py` with `viper.download()` authoring.
+      <!-- implements: DRA-05 -->
+- [ ] Run: <!-- verifies: DRA-01, DRA-02, DRA-03, DRA-04, DRA-05 -->
 
 ```bash
 python -m pytest \
   tests/test_http_retrieval.py \
   tests/test_run_execution.py \
   tests/test_execution_acceptance.py \
+  tests/test_verification_acceptance.py \
+  tests/test_generated_project_acceptance.py \
   tests/test_protocol.py -q
 ```
 
@@ -463,6 +516,7 @@ through stage consumption. A change fails the stage.
 ### 9.1 Model cleanup
 
 - [ ] Delete `HttpSource` and `ExternalInputSource` from `src/viper/inputs.py`.
+      <!-- implements: EIR-01 -->
 - [ ] Set both local `source` fields to `LocalSource`.
 - [ ] Delete `ExternalInputRef.path`.
 - [ ] Change `ResolvedExternalInputRef.file` to `SnapshotFileRef`.
@@ -473,10 +527,12 @@ through stage consumption. A change fails the stage.
 
 - [ ] Reject a local source that is a symlink, resolves outside the repository,
       or has a file type other than regular before reading it.
+      <!-- implements: EIR-02 -->
 - [ ] Add `captured_input_path()` to `src/viper/paths.py`. Derive the path from
       run ID, attempt ID, stage ID, input name, and the source suffix.
 - [ ] Use the helper in `execution/_materialization.py`,
       `_workers/stages.py`, and `_verification/attempt.py`.
+      <!-- implements: EIR-03 -->
 - [ ] Read the local source once.
 - [ ] Write a temporary sibling file, flush it, and atomically replace the
       canonical attempt-owned path.
@@ -516,11 +572,12 @@ verifier reconstruct that path with the shared helper.
 - [ ] Add verifier acceptance and tamper cases.
 - [ ] Add an outside-repository symlink case for
       `input.local_source_boundary`.
-- [ ] Run:
+- [ ] Run: <!-- verifies: EIR-01, EIR-02, EIR-03 -->
 
 ```bash
 python -m pytest \
   tests/test_run_execution.py \
+  tests/test_protocol.py \
   tests/test_verification.py \
   tests/test_verification_acceptance.py -q
 ```
@@ -531,7 +588,8 @@ python -m pytest \
 
 **Depends on:** Phase 1.
 
-**Contract:** [Unified metric drafting](unified-metric-drafting.md)
+**Contracts:** [Unified metric drafting](unified-metric-drafting.md) and
+[direct Viper Cloud publication](remote-storage.md)
 
 **Outcome:** One configured metric can run live or after a stage. Its frozen
 parameter class and values reach the calculation in both modes.
@@ -549,10 +607,10 @@ parameter class and values reach the calculation in both modes.
 - [ ] Keep `MetricDefinition.metric_id` and `.mode`.
 - [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
 - [ ] Add `viper.measure()`, `viper.min()`, `viper.max()`, `viper.at_least()`,
-      and `viper.at_most()`.
+      and `viper.at_most()`. <!-- implements: UMD-01 -->
 - [ ] Derive the parameter class from `type(MetricDraft.params)`.
 - [ ] Write a mandatory `ParameterModelRef` to `MetricSpec` and
-      `MetricExecutionReceipt`.
+      `MetricExecutionReceipt`. <!-- implements: UMD-02 -->
 
 ### 10.2 Runtime delivery
 
@@ -571,6 +629,7 @@ parameter class and values reach the calculation in both modes.
 - [ ] Replace `_publish_metric_dependency()` with snapshot-reference
       derivation. Join each selected `SnapshotFileRef` to its enclosing current,
       producer, or pointer-selected stage snapshot.
+      <!-- implements: RSP-03 -->
 - [ ] Construct `ResolvedMetricDependency.files` from those snapshot locations
       and reuse the existing dependency payload.
 
@@ -594,7 +653,7 @@ A stored input follows its pointer to the producer snapshot.
 
 ### 10.3 Objectives and verification
 
-- [ ] Add `MetricObjectiveSpec`.
+- [ ] Add `MetricObjectiveSpec`. <!-- implements: UMD-03 -->
 - [ ] Add required objectives to `TrainSpec` and `EvaluateSpec`.
 - [ ] Add an optional objective to `EmbedSpec`.
 - [ ] Put the objective metric first in `metric_ids`.
@@ -615,7 +674,7 @@ A stored input follows its pointer to the producer snapshot.
       revisions and trigger zero additional payload publications.
 - [ ] Add objective cases to `tests/test_protocol.py` and
       `tests/test_verification.py`.
-- [ ] Run:
+- [ ] Run: <!-- verifies: UMD-01, UMD-02, UMD-03, RSP-03 -->
 
 ```bash
 python -m pytest \
@@ -638,7 +697,8 @@ writing stage YAML by hand.
 
 ### 11.1 Public names
 
-- [ ] Add `src/viper/keys.py`.
+- [ ] Add `src/viper/keys.py` and complete the `Train` and `Eval` public key
+      migration in Section 11.1. <!-- implements: AIR-01 -->
 - [ ] Define `Train.MODEL = "model"` and `Train.STATE = "state"`.
 - [ ] Define `Eval.MODEL = "model"`, `Eval.TEST = "test"`, and
       `Eval.PREDS = "preds"`.
@@ -657,12 +717,14 @@ writing stage YAML by hand.
 - [ ] Add `SingleFileArtifactDraft` and `BundleArtifactDraft`.
 - [ ] Add `viper.file_artifact()` and the bundle constructor.
 - [ ] Add `BuiltinHttpTransportSpec | CustomHttpTransportDraft` authoring.
+      <!-- implements: AIR-02 -->
 
 ### 11.3 Stage drafts
 
 - [ ] Replace `StageDraft(stage_id, spec_source)` with `StageDraft(spec)`.
 - [ ] Add `BaseSpecDraft`, `InternalSpecDraft`, `BuildSpecDraft`,
       `EmbedSpecDraft`, `TrainSpecDraft`, and `EvaluateSpecDraft`.
+      <!-- implements: AIR-03 -->
 - [ ] Add `objective` and `metrics` fields to the applicable stage drafts and
       compile them into `MetricObjectiveSpec` and `metric_ids`.
 - [ ] Add runner-owned `DownloadSpecDraft` and `viper.download()`.
@@ -692,7 +754,7 @@ for a second replicate must leave the draft unchanged.
 - [ ] Rewrite `tests/test_authoring.py` around Python drafts.
 - [ ] Add decorator and key tests to `tests/test_public_api.py`.
 - [ ] Add two-run path compilation to `tests/test_protocol.py`.
-- [ ] Run:
+- [ ] Run: <!-- verifies: AIR-01, AIR-02, AIR-03 -->
 
 ```bash
 python -m pytest \
@@ -718,6 +780,7 @@ The plan mapping supplies stage IDs.
 
 - [ ] Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, and
       `ExperimentDraft` to `src/viper/experiments.py`.
+      <!-- implements: UMD-04 -->
 - [ ] Add `viper.factor()`, `viper.variant()`, `viper.replicate()`, and
       `viper.experiment()`.
 - [ ] Put `levels`, `stages`, and `estimator` on each `VariantDraft`.
@@ -729,6 +792,7 @@ The plan mapping supplies stage IDs.
 ### 12.2 Compiler
 
 - [ ] Replace YAML-backed `freeze_run_plan()` input with `RunPlanDraft`.
+      <!-- implements: AIR-04 -->
 - [ ] Keep canonical serialization and exact-file writes.
 - [ ] Derive `RunSpec.experiment_id`, `variant_id`, `replicate_id`, and seed.
 - [ ] Derive stage IDs from `VariantDraft.stages` keys.
@@ -739,16 +803,19 @@ The plan mapping supplies stage IDs.
 - [ ] Keep each variant's estimator inside its own stage graph.
 - [ ] Return `FrozenPlanFiles` with the generated paths.
 - [ ] Include `run_spec_path`, `benchmark_spec_path`, and the complete `files`
-      manifest in `FrozenPlanFiles`.
+      manifest in `FrozenPlanFiles`. <!-- implements: FPG-01 -->
 - [ ] Require every generated file to enter a later Git plan commit before
       execution.
 - [ ] Establish `HEAD` as the plan commit during preflight. Load generated
       experiment, variant, benchmark, stage, and run documents from that
-      commit.
+      commit. <!-- implements: FPG-02 -->
 - [ ] Keep project callables, parameter classes, artifact loaders, transports,
       and metric implementations bound to `RunSpec.source.commit`.
+      <!-- implements: FPG-03 -->
 - [ ] Store the plan commit in `ResolvedRun.spec.stored_at` and use it during
-      terminal and benchmark verification.
+      terminal verification. <!-- implements: FPG-04 -->
+- [ ] Load and verify the selected `BenchmarkSpec` through the same plan commit
+      in `execution/_benchmark.py`. <!-- implements: FPG-05 -->
 
 <details>
 <summary>Hints</summary>
@@ -772,13 +839,16 @@ IDs. The two concrete artifact paths must differ.
 - [ ] Add two-replicate path isolation.
 - [ ] Add committed-plan success, uncommitted-plan rejection, changed-source
       rejection, and wrong-commit benchmark rejection.
-- [ ] Run:
+- [ ] Run: <!-- verifies: UMD-04, AIR-04, FPG-01, FPG-02, FPG-03, FPG-04, FPG-05 -->
 
 ```bash
 python -m pytest \
   tests/test_authoring.py \
   tests/test_protocol.py \
-  tests/test_preflight.py -q
+  tests/test_preflight.py \
+  tests/test_run_execution.py \
+  tests/test_verification.py \
+  tests/test_benchmark_execution.py -q
 ```
 
 **Commit boundary:** `Compile experiments and reusable variants`
@@ -797,6 +867,7 @@ the correct provenance edge.
 
 - [ ] Add `FileInputDraft` and `viper.file_input()`.
 - [ ] Add `RunArtifactDraft` and `viper.run_artifact()`.
+      <!-- implements: EIR-04 -->
 - [ ] Define `StageInputDraft = FileInputDraft | StageDraftArtifactRef |
       RunArtifactDraft`.
 - [ ] Accept `StageInputDraft` in internal stage drafts.
@@ -812,6 +883,7 @@ the correct provenance edge.
 - [ ] Call `bind_run_destination()` before publishing a producer terminal file
       or generated pointer. Execution must later load the same destination.
 - [ ] Store the returned `ResolvedArtifactPointerRef` in `StoredInputRef`.
+      <!-- implements: AIR-05 -->
 - [ ] Reject missing stages, missing artifacts, future producers, role mismatch,
       and a pointer whose producer graph is unreachable from cloud mode.
 - [ ] Update `ResolvedInternalSpec` validation for the new pointer reference.
@@ -836,7 +908,7 @@ mode. The ordinary API accepts drafts.
 - [ ] Add stage-order and missing-artifact rejections.
 - [ ] Extend `tests/test_run_execution.py` through actual materialization.
 - [ ] Extend pointer and lineage verification tests.
-- [ ] Run:
+- [ ] Run: <!-- verifies: EIR-04, AIR-05 -->
 
 ```bash
 python -m pytest \
@@ -860,6 +932,7 @@ conditions. Thresholds remain optional.
 ### 14.1 Models and authoring
 
 - [ ] Add `BenchmarkDraft` and `viper.benchmark()`.
+      <!-- implements: UMD-05 -->
 - [ ] Add `BenchmarkDraft.test` and accept one prior-run test artifact plus
       named split drafts.
 - [ ] Add `BenchmarkSpec.metric_ids`.
@@ -892,7 +965,7 @@ conditions. Thresholds remain optional.
 - [ ] Add freeze tests in `tests/test_authoring.py`.
 - [ ] Reject a benchmark whose test or split differs from the evaluation
       stage's selected input.
-- [ ] Run:
+- [ ] Run: <!-- verifies: UMD-05 -->
 
 ```bash
 python -m pytest \
@@ -920,7 +993,7 @@ publication remains the default.
       `HuggingFaceStageResultSnapshotRef`.
 - [ ] Expand `StorageRef` and `StageResultSnapshot` unions.
 - [ ] Add the `ViperCloudClient` protocol with `upload`, `seal`, `fetch`, and
-      `list_files`.
+      `list_files`. <!-- implements: RSP-04 -->
 - [ ] Add an in-memory client for contract tests.
 - [ ] Add `ViperCloudSnapshotPublisher`.
 - [ ] Compute the existing deterministic revision from paths, digests, and
@@ -942,7 +1015,7 @@ publication remains the default.
 - [ ] Terminal resolved run.
 - [ ] Benchmark result.
 - [ ] Stage snapshots containing resolved stage documents, artifacts, HTTP
-      bodies, and captured local inputs.
+      bodies, and captured local inputs. <!-- implements: RSP-05 -->
 
 Metric dependency resolution stays outside this publication list. It derives
 `ResolvedFileRef` values from the stage snapshots above and uploads zero bytes.
@@ -957,6 +1030,7 @@ Metric dependency resolution stays outside this publication list. It derives
 - [ ] Reject a destination change before pointer publication or stage work.
 - [ ] Walk the terminal graph before cloud terminal publication.
 - [ ] Reject every reachable local immutable reference.
+      <!-- implements: RSP-06 -->
 - [ ] Add `resolved_run_ref` to `RunResult`.
 - [ ] Add `result_ref` to `BenchmarkExecutionResult`.
 
@@ -982,7 +1056,7 @@ cross-process stage resumption belongs to a future contract.
 - [ ] Add direct-cloud run cases to `tests/test_execution_acceptance.py`.
 - [ ] Add standalone evidence coverage.
 - [ ] Add graph reachability and destination-change rejection cases.
-- [ ] Run:
+- [ ] Run: <!-- verifies: RSP-04, RSP-05, RSP-06 -->
 
 ```bash
 python -m pytest \
@@ -1009,6 +1083,8 @@ authentication exchange, error mapping, and service-side seal semantics.
 ### 16.1 Restore engine
 
 - [ ] Add a parser for local terminal paths and immutable Viper Cloud run URIs.
+      Complete the retrieval, validation, and atomic-write sequence in Section
+      16.1. <!-- implements: RSP-07 -->
 - [ ] Publish local terminal `resolved.yaml` as a one-file revision.
 - [ ] For a local path, compute that deterministic revision, construct its
       `ResolvedRunRef`, and fetch the matching `.viper/store` file.
@@ -1027,7 +1103,7 @@ authentication exchange, error mapping, and service-side seal semantics.
 ### 16.2 Public interface
 
 - [ ] Add `ArtifactRestoreSelector`, `RestoredFile`, `RestoredArtifact`, and
-      `RestoreResult`.
+      `RestoreResult`. <!-- implements: RSP-08 -->
 - [ ] Add `LocalRunPath`, `ViperCloudRunReference`, and the discriminated
       `RestoreRequestReference` union for the serialized typed API.
 - [ ] Add `viper.execution.restore()` and export its result type.
@@ -1048,7 +1124,7 @@ authentication exchange, error mapping, and service-side seal semantics.
 - [ ] Cover all, one file, one bundle, and a list.
 - [ ] Cover exact existing output and conflicting output.
 - [ ] Cover a tampered remote object.
-- [ ] Run:
+- [ ] Run: <!-- verifies: RSP-07, RSP-08 -->
 
 ```bash
 python -m pytest tests/test_storage.py tests/test_cli.py tests/test_api.py -q
@@ -1090,9 +1166,12 @@ package executes.
 - [ ] Update `docs/README.md` and release evidence.
 - [ ] Remove all retired sync, offload, `HttpSource`, download callable,
       `MetricKind`, and old key references.
+      <!-- implements: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
 
 ### 17.3 Full validation
 
+- [ ] Run `tests/test_documentation.py` after the contract and public-document
+      cleanup. <!-- verifies: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
 - [ ] Run the protocol/documentation gate.
 - [ ] Run `make check`.
 - [ ] Run `make check-integration`.
@@ -1166,7 +1245,7 @@ old contract.
 | `src/viper/_api/__init__.py` | Export the restore operation models and handler | 10 |
 | `src/viper/_api/handlers.py` | Compile drafts, return refs, restore handler | 5–10 |
 | `src/viper/cli.py` | Python workflow command changes and restore arguments | 10, 11 |
-| `src/viper/project_init.py` | Replace every generated legacy pattern | 11 |
+| `src/viper/project_init.py` | Replace the generated download callable in Phase 2 and every remaining legacy pattern in Phase 11 | 2, 11 |
 | `src/viper/__init__.py` | Export new public API and remove retired names | 2, 4–10 |
 | `src/viper/py.typed` | Ship the package's PEP 561 typing marker | Complete |
 | `CHANGELOG.md` | Record the contract implementation under the active release | 11 |
@@ -1196,7 +1275,7 @@ old contract.
 | `tests/test_worker.py` | Project-stage worker after download removal and context changes | 2, 4, 5 |
 | `tests/test_resume.py` | `Train.STATE` input and artifact names | 5 |
 | `tests/test_process_startup.py` | Owner-aware parameter source checks | 4 |
-| `tests/test_documentation.py` | Schema mirrors, links, examples, operations | 11 |
+| `tests/test_documentation.py` | Schema mirrors, links, examples, operations, and deterministic contract-to-checklist coverage | 11 |
 | `docs/development/frozen-plan-git-identity.md` | Source/plan commit contract and acceptance cases | 6 |
 | `docs/reference/protocol.md` | Exact final serialized contract | 11 |
 | `docs/reference/api.md` | Exact final Python and CLI interface | 11 |

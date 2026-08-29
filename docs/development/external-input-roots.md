@@ -26,6 +26,16 @@ attempt-owned input file, supplies that file to the stage, and records it in
 
 **Contract status:** draft after system review; owner review pending.
 
+These requirements bind the contract to the master checklist:
+
+| ID | Implementation obligation |
+| --- | --- |
+| EIR-01 <!-- contract-requirement: EIR-01 phase=3 test=tests/test_protocol.py --> | Remove `HttpSource`; keep `ExternalInputRef` and `ResolvedExternalInputRef` specific to local roots. |
+| EIR-02 <!-- contract-requirement: EIR-02 phase=3 test=tests/test_run_execution.py --> | Validate the local source boundary and create one attempt-owned captured input. |
+| EIR-03 <!-- contract-requirement: EIR-03 phase=3 test=tests/test_verification_acceptance.py --> | Give the worker the captured path and verify its identity before and after execution. |
+| EIR-04 <!-- contract-requirement: EIR-04 phase=7 test=tests/test_authoring.py --> | Compile local, same-run, and prior-run authoring values into their exact input references and pointers. |
+| EIR-05 <!-- contract-requirement: EIR-05 phase=11 test=tests/test_documentation.py --> | Remove the retired HTTP-input branch and publish the final input model in public documentation. |
+
 **Required claim:** VIPER gives each stage a canonical input path. Before and
 after the stage process runs, the file at that path matches the byte identity
 recorded for the selected input. The invocation receipt records the same path.

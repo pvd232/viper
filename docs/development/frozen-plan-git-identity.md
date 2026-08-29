@@ -5,6 +5,16 @@
 **Contract status:** draft from specification-system review; owner review
 pending.
 
+These requirements bind the contract to the master checklist:
+
+| ID | Implementation obligation |
+| --- | --- |
+| FPG-01 <!-- contract-requirement: FPG-01 phase=6 test=tests/test_authoring.py --> | Return every generated path, including named run and benchmark paths, from `viper.freeze()`. |
+| FPG-02 <!-- contract-requirement: FPG-02 phase=6 test=tests/test_preflight.py --> | Establish `HEAD` as the plan commit and require every generated plan document to exist there. |
+| FPG-03 <!-- contract-requirement: FPG-03 phase=6 test=tests/test_preflight.py --> | Keep project callables and Python definitions bound to `RunSpec.source.commit`. |
+| FPG-04 <!-- contract-requirement: FPG-04 phase=6 test=tests/test_verification.py --> | Persist the plan commit in `ResolvedRun.spec` and use it during terminal verification. |
+| FPG-05 <!-- contract-requirement: FPG-05 phase=6 test=tests/test_benchmark_execution.py --> | Load and verify the selected benchmark through the candidate run's plan commit. |
+
 The current runner requires the frozen run document to exist in Git before
 execution. It calls the current `HEAD` the plan commit and stores that commit
 in `ResolvedRun.spec`. Terminal verification already uses that reference for

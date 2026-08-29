@@ -16,6 +16,20 @@ the immutable copy.
 
 **Contract status:** draft after system review; owner review pending.
 
+These requirements bind the contract to the master checklist:
+
+| ID | Implementation obligation |
+| --- | --- |
+| RSP-01 <!-- contract-requirement: RSP-01 phase=1 test=tests/test_storage.py --> | Add destination-neutral stage and standalone publication with local implementations. |
+| RSP-02 <!-- contract-requirement: RSP-02 phase=1 test=tests/test_run_execution.py --> | Route current local publication through the new interfaces and bind one destination per run. |
+| RSP-03 <!-- contract-requirement: RSP-03 phase=4 test=tests/test_metric_provenance.py --> | Derive metric dependency references from existing stage snapshots and publish zero duplicate payloads. |
+| RSP-04 <!-- contract-requirement: RSP-04 phase=9 test=tests/test_storage.py --> | Add Viper Cloud references, the cloud client, atomic sealing, and retry behavior. |
+| RSP-05 <!-- contract-requirement: RSP-05 phase=9 test=tests/test_execution_acceptance.py --> | Publish every stage snapshot and standalone evidence file directly to the selected destination. |
+| RSP-06 <!-- contract-requirement: RSP-06 phase=9 test=tests/test_verification_acceptance.py --> | Retrieve cloud evidence, verify byte identity, reject local references in cloud graphs, and return terminal handles. |
+| RSP-07 <!-- contract-requirement: RSP-07 phase=10 test=tests/test_storage.py --> | Restore all or selected artifacts through verified temporary files and atomic final writes. |
+| RSP-08 <!-- contract-requirement: RSP-08 phase=10 test=tests/test_api.py --> | Expose one restore result through Python, typed API, and CLI surfaces. |
+| RSP-09 <!-- contract-requirement: RSP-09 phase=11 test=tests/test_documentation.py --> | Remove retired sync and mirroring concepts and publish the final storage workflow. |
+
 The current implementation writes every immutable copy through
 `LocalArtifactStore`. It uses two references:
 

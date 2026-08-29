@@ -16,6 +16,17 @@ and run documents.
 
 **Contract status:** draft after system review; owner review pending.
 
+These requirements bind the contract to the master checklist:
+
+| ID | Implementation obligation |
+| --- | --- |
+| UMD-01 <!-- contract-requirement: UMD-01 phase=4 test=tests/test_metric_interface.py --> | Add metric drafts, objective drafts, criterion drafts, and their public constructors. |
+| UMD-02 <!-- contract-requirement: UMD-02 phase=4 test=tests/test_metric_provenance.py --> | Deliver frozen parameter classes and values to live and recomputed metrics while reusing existing dependency snapshots. |
+| UMD-03 <!-- contract-requirement: UMD-03 phase=4 test=tests/test_verification.py --> | Persist objective identity and direction and enforce stage-specific objective rules. |
+| UMD-04 <!-- contract-requirement: UMD-04 phase=6 test=tests/test_authoring.py --> | Add experiment, factor, variant, and replicate drafting with a derived metric registry. |
+| UMD-05 <!-- contract-requirement: UMD-05 phase=8 test=tests/test_benchmark_execution.py --> | Record every benchmark metric under fixed inputs and apply optional criteria. |
+| UMD-06 <!-- contract-requirement: UMD-06 phase=11 test=tests/test_documentation.py --> | Remove retired metric shapes and publish the final metric, experiment, and benchmark API. |
+
 **Current:** `@viper.metric` attaches `metric_id`, `kind`, and `mode` to a
 function or stateful class. `MetricSpec` stores the exact implementation,
 parameter values, dependencies, and recomputation comparator. Project code or

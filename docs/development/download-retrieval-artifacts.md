@@ -28,6 +28,17 @@ selected artifact supplies the later stage's input bytes.
 
 **Contract status:** draft after system review; owner review pending.
 
+These requirements bind the contract to the master checklist:
+
+| ID | Implementation obligation |
+| --- | --- |
+| DRA-01 <!-- contract-requirement: DRA-01 phase=2 test=tests/test_protocol.py --> | Replace the frozen and resolved download models with the runner-owned hierarchy and shared-file schema. |
+| DRA-02 <!-- contract-requirement: DRA-02 phase=2 test=tests/test_run_execution.py --> | Execute successful downloads in the attempt process and remove the project download worker. |
+| DRA-03 <!-- contract-requirement: DRA-03 phase=2 test=tests/test_execution_acceptance.py --> | Copy and hash the transport body into the declared artifact path before snapshot publication. |
+| DRA-04 <!-- contract-requirement: DRA-04 phase=2 test=tests/test_verification_acceptance.py --> | Verify runner custody and exact receipt-artifact file equality. |
+| DRA-05 <!-- contract-requirement: DRA-05 phase=2 test=tests/test_generated_project_acceptance.py --> | Remove the retired callable-copy path from fixtures, generated scaffolding, and execution tests. |
+| DRA-06 <!-- contract-requirement: DRA-06 phase=11 test=tests/test_documentation.py --> | Remove the retired callable-copy path from protocol and public documentation. |
+
 **Current:** `DownloadSpec.inputs` names HTTP requests, and
 `BaseSpec.artifacts` names files written by the download callable. The names
 and paths vary independently. [`DownloadSpec`](../../src/viper/stages.py) and

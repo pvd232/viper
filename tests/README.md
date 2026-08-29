@@ -8,7 +8,7 @@ loaders, metric implementations, and exact training resume behavior.
 | File | Contract verified |
 |---|---|
 | [protocol tests](test_protocol.py) | Individual Pydantic models reject invalid fields, paths, identifiers, stage relationships, and checkpoint declarations. |
-| [documentation tests](test_documentation.py) | The formal protocol, API table, links, release metadata, and example vocabulary match the package source. |
+| [documentation tests](test_documentation.py) | The formal protocol, API table, links, release metadata, examples, and contract-to-checklist mappings stay aligned. |
 | [verifier tests](test_verification.py) | The verifier retrieves referenced bytes and enforces relationships among run plans, stages, inputs, artifacts, attempts, measurements, and benchmarks. |
 | [verifier acceptance tests](test_verification_acceptance.py) | A complete synthetic provenance chain passes through the public verifier; targeted mutations prove that broken hashes, timing, snapshots, and lineage fail. |
 | [authoring tests](test_authoring.py) | Canonical experiment, variant, stage, and run-plan files are written at identity-based paths, and each frozen stage reference matches the exact serialized bytes. |

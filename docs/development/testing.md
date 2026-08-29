@@ -120,3 +120,10 @@ python -m pytest \
 reference with its defining source class. It also checks type aliases, local
 links, API operation names, CLI command names, release metadata, and multiline
 math fences.
+
+The same module keeps the pending implementation contracts tied to the
+[master execution checklist](master-execution-checklist.md). Every contract
+requirement must name its phase and observing test. The checklist must contain
+one implementation task and one test gate for that requirement in the same
+phase. The check also rejects missing test modules and contract edits whose
+pinned digest differs from the reviewed digest in the checklist.

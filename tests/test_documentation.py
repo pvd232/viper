@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import re
 import tomllib
+from collections import Counter
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -18,6 +20,35 @@ TRAINING_GUIDES = (
     API_REFERENCE,
     ROOT / "docs/tutorials/getting-started.md",
     ROOT / "docs/explanation/how-viper-works.md",
+)
+
+MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
+IMPLEMENTATION_CONTRACTS = (
+    ROOT / "docs/development/download-retrieval-artifacts.md",
+    ROOT / "docs/development/external-input-roots.md",
+    ROOT / "docs/development/unified-metric-drafting.md",
+    ROOT / "docs/development/automatic-input-resolution.md",
+    ROOT / "docs/development/frozen-plan-git-identity.md",
+    ROOT / "docs/development/remote-storage.md",
+)
+
+_CONTRACT_REQUIREMENT = re.compile(
+    r"^\| (?P<label>[A-Z]{3}-\d{2}) "
+    r"<!-- contract-requirement: (?P<requirement>[A-Z]{3}-\d{2}) "
+    r"phase=(?P<phase>\d+) test=(?P<test>tests/[a-z0-9_/]+\.py) -->",
+    re.MULTILINE,
+)
+_CHECKLIST_MAPPING = re.compile(
+    r"<!-- (?P<role>implements|verifies): (?P<requirements>[A-Z0-9, -]+) -->"
+)
+_CONTRACT_BASELINE = re.compile(
+    r"<!-- contract-baseline: (?P<name>[a-z0-9-]+\.md) "
+    r"sha256=(?P<sha256>[0-9a-f]{64}) -->"
+)
+_PHASE_HEADING = re.compile(r"^## \d+\. Phase (?P<phase>\d+)\b.*$", re.MULTILINE)
+_CHECKBOX_BLOCK = re.compile(
+    r"^- \[ \] .*?(?=^- \[ \] |^### |^## |\Z)",
+    re.MULTILINE | re.DOTALL,
 )
 
 PUBLIC_MARKDOWN = (
@@ -272,6 +303,103 @@ def test_public_markdown_links_resolve() -> None:
                     )
 
     assert failures == []
+
+
+def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
+    """Bind every pending contract requirement to one plan phase and test."""
+    declarations: dict[str, tuple[Path, int, Path]] = {}
+    declaration_counts: Counter[str] = Counter()
+    for contract in IMPLEMENTATION_CONTRACTS:
+        matches = tuple(_CONTRACT_REQUIREMENT.finditer(contract.read_text()))
+        assert matches, f"{contract.relative_to(ROOT)} declares no requirements"
+        for match in matches:
+            requirement = match.group("requirement")
+            assert match.group("label") == requirement
+            test_path = ROOT / match.group("test")
+            declaration_counts[requirement] += 1
+            declarations[requirement] = (
+                contract,
+                int(match.group("phase")),
+                test_path,
+            )
+
+    assert all(count == 1 for count in declaration_counts.values())
+
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    baselines = {
+        match.group("name"): match.group("sha256")
+        for match in _CONTRACT_BASELINE.finditer(checklist)
+    }
+    assert set(baselines) == {contract.name for contract in IMPLEMENTATION_CONTRACTS}
+    for contract in IMPLEMENTATION_CONTRACTS:
+        assert hashlib.sha256(contract.read_bytes()).hexdigest() == baselines[
+            contract.name
+        ]
+
+    phase_matches = tuple(_PHASE_HEADING.finditer(checklist))
+    assert len(phase_matches) == 11
+    mappings: dict[str, dict[str, list[tuple[int, str]]]] = {
+        "implements": {},
+        "verifies": {},
+    }
+    phase_text: dict[int, str] = {}
+    for index, phase_match in enumerate(phase_matches):
+        phase = int(phase_match.group("phase"))
+        end = (
+            phase_matches[index + 1].start()
+            if index + 1 < len(phase_matches)
+            else len(checklist)
+        )
+        section = checklist[phase_match.start() : end]
+        phase_text[phase] = section
+        for checkbox in _CHECKBOX_BLOCK.finditer(section):
+            block = checkbox.group(0)
+            for marker in _CHECKLIST_MAPPING.finditer(block):
+                role = marker.group("role")
+                requirements = tuple(
+                    value.strip()
+                    for value in marker.group("requirements").split(",")
+                )
+                for requirement in requirements:
+                    mappings[role].setdefault(requirement, []).append((phase, block))
+
+    assert set(phase_text) == set(range(1, 12))
+
+    declared = set(declarations)
+    assert set(mappings["implements"]) == declared
+    assert set(mappings["verifies"]) == declared
+
+    for requirement, (contract, expected_phase, test_path) in declarations.items():
+        implementation = mappings["implements"][requirement]
+        verification = mappings["verifies"][requirement]
+        assert len(implementation) == 1, requirement
+        assert len(verification) == 1, requirement
+        assert implementation[0][0] == expected_phase, requirement
+        assert verification[0][0] == expected_phase, requirement
+        assert test_path.is_file(), test_path.relative_to(ROOT)
+        assert test_path.relative_to(ROOT).as_posix() in verification[0][1], requirement
+
+        owner_section = phase_text[expected_phase]
+        assert (
+            re.search(
+                rf"\({re.escape(contract.name)}(?:#[^)]+)?\)",
+                owner_section,
+            )
+            or "**Contracts:** All." in owner_section
+        ), requirement
+
+
+def test_master_checklist_names_existing_test_modules() -> None:
+    """Require every test module named by the implementation plan to exist."""
+    named_tests = set(
+        re.findall(
+            r"tests/[a-z0-9_/]+\.py",
+            MASTER_EXECUTION_CHECKLIST.read_text(),
+        )
+    )
+
+    assert named_tests
+    assert {name for name in named_tests if not (ROOT / name).is_file()} == set()
 
 
 def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
