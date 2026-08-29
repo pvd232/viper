@@ -196,8 +196,7 @@ The active-to-target field changes are exact:
 
 ### 3.2 HTTP root, artifact, and consumer edge
 
-The target HTTP route uses these existing classes with the following exact
-fields:
+The target HTTP route uses these classes with the following target fields:
 
 ```python
 class ResolvedHttpRetrieval(ProtocolModel):
@@ -253,7 +252,6 @@ DownloadSpec(
     artifacts={"dataset": SingleFileArtifactSpec(...)},
     transport=...,
     policy=...,
-    params=...,
 )
 ```
 
@@ -264,14 +262,14 @@ inputs["dataset"]
 -> transport writes the response to bounded attempt scratch space
 -> executor verifies the expected digest and byte count
 -> executor writes the body at artifacts["dataset"].path
--> download callable receives the verified body at that path
 -> completed stage records one shared SnapshotFileRef
 ```
 
-The decorated download callable and typed `parameters.Download` contract stay
-in place. The callable may inspect the verified response and its metadata. The
-executor owns publication, so project code stops reading the response from one
-path and copying it to another.
+`DownloadSpec` is runner-owned. It contains the request, transport, policy,
+environment override, metric IDs, and artifacts. Build, embed, train, and
+evaluate retain decorated project callables and typed parameters. A
+project-owned HTTP transport remains available through
+`@viper.http_transport` for project-specific transfer behavior.
 
 The completed stage records two views of the same file:
 
@@ -283,8 +281,8 @@ resolved_download.artifacts["dataset"].file
 
 The retrieval view proves the network exchange. The artifact view lets every
 other stage use the response through the standard artifact interface. The
-detailed request-to-artifact schema, execution changes, failed-invocation
-binding, and legacy cleanup live in
+detailed request-to-artifact schema, runner-owned resolved-stage fields,
+execution changes, and legacy cleanup live in
 [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md).
 
 `DownloadSpec` currently applies one transport and policy to all requests in
@@ -425,6 +423,8 @@ stored bytes trigger `input.local_root_identity`.
 | --- | --- |
 | Download schema | Require matching request and artifact keys and one `SingleFileArtifactSpec` per request. |
 | Download execution | Publish each verified response directly at its declared artifact path and record one shared `SnapshotFileRef`. |
+| Download ownership | Delete the project download callable, `DownloadContext`, and `parameters.Download`; execute retrieval and publication in the attempt process. |
+| Resolved download schema | Keep runner environment, execution context, retrievals, artifacts, and completion on `ResolvedDownloadSpec`; move project invocation fields to `ResolvedParameterizedSpec`. |
 | External source model | Delete `HttpSource` and `ExternalInputSource`; type both local records with `source: LocalSource`. |
 | Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
 | Local root model | Delete `ExternalInputRef.path`; supply `ExternalInputRef.source.path` to the worker and retain the captured `ResolvedFileRef`. |
@@ -436,9 +436,10 @@ stored bytes trigger `input.local_root_identity`.
 
 Implementation order:
 
-1. Complete the request-to-artifact contract in
+1. Complete the runner-owned request-to-artifact contract in
    [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md),
-   including removal of legacy retrieval-body paths and copy loops.
+   including removal of legacy retrieval-body paths, the project download
+   callable, and copy loops.
 2. Delete `HttpSource`, `ExternalInputSource`, and the duplicate HTTP branch in
    `resolve_inputs()`. Change both local `source` fields to `LocalSource`.
 3. Delete `ExternalInputRef.path`, supply `source.path` to the worker, and add
