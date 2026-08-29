@@ -215,13 +215,30 @@ ResolvedFileRef.stored_at = ViperCloudFileRef(...)
 
 VIPER bundles each completed stage record and its artifacts into a stage
 snapshot. VIPER publishes files that require independent retrieval as
-standalone files. These files include invocation receipts, captured local
-inputs, generated artifact pointers, logs, measurements, metric-verification
-receipts, attempt records, and the terminal run document.
+standalone files. The configured storage destination controls where each file
+lives:
 
-In cloud mode, each standalone file uses `ResolvedFileRef`. The `sha256` and
-`bytes` fields identify the expected content. The `stored_at` field contains a
-`ViperCloudFileRef` that identifies the cloud location.
+| Standalone file | Owning field or reference | Local destination | Viper Cloud destination |
+| --- | --- | --- | --- |
+| Stage invocation receipt | `RunAttempt.invocations[]: ResolvedStageInvocationRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Captured local input | `ResolvedExternalInputRef.file: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Generated artifact pointer | `StoredInputRef.pointer: ResolvedArtifactPointerRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Attempt journal | `RunAttempt.journal: AttemptJournalRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Measurement | `RunAttempt.measurement_files[]: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Metric-verification receipt | `RunAttempt.metric_verification_files[]: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Stage log | `RunAttempt.log_files[]: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Attempt record | `ResolvedRun.attempts[]: ResolvedAttemptRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Benchmark result | `ArtifactPointer.benchmark_result: ResolvedBenchmarkResultRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Terminal run document | `RunResult.resolved_run_ref: ResolvedRunRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+
+Each row uses a `ResolvedFileRef` subtype or field. Its `sha256` and `bytes`
+fields identify the expected content. Its `stored_at` field identifies the
+local-store file or Viper Cloud file that holds those bytes.
+
+Stage artifacts, HTTP response bodies, and resolved stage documents use
+`SnapshotFileRef` because they belong to a completed stage snapshot. Frozen run
+and benchmark specifications use Git-backed references. Neither group appears
+in this standalone-file table.
 
 #### Example: captured local input
 
