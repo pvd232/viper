@@ -520,7 +520,7 @@ FileInputDraft selecting one repository file
 
 RunArtifactDraft identifying one artifact in a completed run
 -> generated ArtifactPointer
--> publish_resolved_files(configured destination)
+-> publish_resolved_files(repository root, configured destination)
 -> ResolvedArtifactPointerRef with a self-locating StorageRef
 -> StoredInputRef
 ```
@@ -1112,7 +1112,7 @@ source run is a completed prior run
        artifact=<producer stage and artifact name>,
    )
 -> serialize_document(pointer)
--> publish_resolved_files(destination, {pointer_path: pointer_bytes})
+-> publish_resolved_files(root, destination, {pointer_path: pointer_bytes})
 -> ResolvedArtifactPointerRef
 -> StoredInputRef
 ```
@@ -1166,7 +1166,9 @@ RunArtifactDraft(
     artifact_name="dataset",
 )
 -> load and verify that terminal ResolvedRun
--> publish resolved.yaml through publish_resolved_files(destination, ...)
+-> for Viper Cloud, reject any reachable LocalFileRef or
+   LocalStageResultSnapshotRef
+-> publish resolved.yaml through publish_resolved_files(root, destination, ...)
 -> construct the exact ResolvedRunRef
 -> select the declared artifact
 -> construct ArtifactPointer
@@ -1190,16 +1192,17 @@ StoredInputRef.pointer
 `viper.freeze()` writes the pointer file. The verifier checks the pointer and
 the selected artifact. The training function reads the accepted artifact.
 
-When `RunArtifactDraft.resolved_run` is a `Path`, `viper.freeze()` loads that
-terminal run and publishes it at the selected storage destination. VIPER then
-creates `ResolvedRunRef`. When the user supplies `ResolvedRunRef`, VIPER loads
-and checks the file named by that reference.
+When `RunArtifactDraft.resolved_run` is a `Path`, `viper.freeze()` loads and
+checks the terminal run. For a Viper Cloud destination, it then checks the
+producer graph before publishing the terminal document. Every reachable
+immutable reference must resolve through Viper Cloud, Hugging Face, or Git.
+Reaching a `LocalFileRef` or `LocalStageResultSnapshotRef` produces
+`storage_graph_unreachable` before pointer publication. Producer migration
+remains a separate command that the user runs before freezing.
 
-For a Viper Cloud destination, the compiler also checks the selected producer
-graph. Every reachable immutable reference must resolve through Viper Cloud,
-Hugging Face, or Git. Reaching a `LocalFileRef` produces
-`storage_graph_unreachable`. This rejection keeps the consumer portable and
-avoids an implicit producer-run migration.
+After that check passes, VIPER publishes the terminal document at the selected
+destination and creates `ResolvedRunRef`. When the user supplies an existing
+`ResolvedRunRef`, VIPER loads and checks the file named by that reference.
 
 ## 6. Persisted evidence
 
@@ -1503,7 +1506,7 @@ to training while the compiler owns the `ExternalInputRef` and
 - [ ] Load and verify the selected terminal `ResolvedRun`.
 - [ ] Construct `ArtifactPointer` from the selected run and artifact.
 - [ ] Serialize the pointer and publish it through
-      `publish_resolved_files(destination, ...)`.
+      `publish_resolved_files(root, destination, ...)`.
 - [ ] Construct `ResolvedArtifactPointerRef` and `StoredInputRef` for the
       consumer.
 - [ ] Add the prior-run acceptance case and targeted rejection.

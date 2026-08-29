@@ -201,7 +201,7 @@ class ViperCloudFileRef(ProtocolModel):
 ```python
 class ResolvedFileRef(ProtocolModel):
     sha256: SHA256
-    bytes: int
+    bytes: int = Field(ge=0)
     stored_at: StorageRef
 ```
 
@@ -228,7 +228,7 @@ lives:
 | Metric-verification receipt | `RunAttempt.metric_verification_files[]: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
 | Stage log | `RunAttempt.log_files[]: ResolvedFileRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
 | Attempt record | `ResolvedRun.attempts[]: ResolvedAttemptRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
-| Benchmark result | `ArtifactPointer.benchmark_result: ResolvedBenchmarkResultRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
+| Benchmark result | `BenchmarkExecutionResult.result_ref: ResolvedBenchmarkResultRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
 | Terminal run document | `RunResult.resolved_run_ref: ResolvedRunRef` | `stored_at: LocalFileRef` | `stored_at: ViperCloudFileRef` |
 
 Each row uses a `ResolvedFileRef` subtype or field. Its `sha256` and `bytes`
@@ -333,7 +333,7 @@ StorageRef = Annotated[
 class SnapshotFileRef(ProtocolModel):
     path: RepoRelPath
     sha256: SHA256
-    bytes: int
+    bytes: int = Field(ge=0)
 ```
 
 `SnapshotFileRef.path` names a file inside
@@ -361,6 +361,8 @@ class ResolvedRunRef(ResolvedFileRef):
 
 ```python
 class RunResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     resolved_run: ResolvedRun
     resolved_run_ref: ResolvedRunRef
     resolved_run_path: Path
@@ -370,6 +372,32 @@ class RunResult(BaseModel):
 In cloud mode, `resolved_run_ref.stored_at` is a `ViperCloudFileRef`. The CLI
 uses that reference to print a restore URI. The terminal run contains the
 references needed to find the rest of the run.
+
+### 5.5 Benchmark result handle
+
+When a benchmark finishes, VIPER publishes its result document as a standalone
+file. `ResolvedBenchmarkResultRef` points to that file:
+
+```python
+class ResolvedBenchmarkResultRef(ResolvedFileRef):
+    kind: Literal["benchmark_result"] = "benchmark_result"
+```
+
+`BenchmarkExecutionResult` returns the reference with the parsed result and its
+local control path:
+
+```python
+class BenchmarkExecutionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    result: BenchmarkResult
+    result_ref: ResolvedBenchmarkResultRef
+    result_path: Path
+```
+
+An `ArtifactPointer` for a benchmarked estimator copies this exact reference
+into `benchmark_result`. The pointer therefore reaches the same immutable
+benchmark result that the benchmark command returned.
 
 ## 6. Publication interface
 
@@ -399,6 +427,7 @@ class SnapshotPublisher(Protocol):
     def publish(
         self,
         *,
+        resolved_stage_path: RepoRelPath,
         resolved_stage: bytes,
         artifacts: Mapping[RepoRelPath, Path],
     ) -> StageResultSnapshot: ...
@@ -408,6 +437,7 @@ Files outside stage snapshots use a separate function:
 
 ```python
 def publish_resolved_files(
+    root: Path,
     destination: StorageDestination,
     files: Mapping[RepoRelPath, PublicationSource],
 ) -> tuple[ResolvedFileRef, ...]: ...
@@ -421,20 +451,24 @@ The stage executor uses this exact call:
 
 ```python
 snapshot = snapshot_publisher.publish(
+    resolved_stage_path=resolved_path,
     resolved_stage=resolved_raw,
     artifacts=artifact_paths,
 )
 ```
 
+`resolved_stage_path` supplies the repository-relative path of the completed
+stage document.
 `resolved_stage` supplies the serialized `resolved.yaml` bytes.
 `artifact_paths` maps each declared artifact path to the existing working
-`Path`. The publisher computes one manifest, uploads each unique path once,
-and returns the sealed snapshot reference.
+`Path`. Before upload, the publisher parses `resolved_stage`, matches every
+artifact path to its `SnapshotFileRef`, and checks the source file's SHA-256
+digest and byte count. It then computes one manifest, uploads each unique path
+once, and returns the sealed snapshot reference.
 
 Files outside a stage snapshot use `publish_resolved_files()`. That function
-returns `sha256`, `bytes`, and `stored_at`. The caller places those values in
-`ResolvedStageInvocationRef`, `ResolvedExternalInputRef.file`,
-`ResolvedArtifactPointerRef`, or `ResolvedRunRef`.
+returns `sha256`, `bytes`, and `stored_at`. The caller constructs the exact
+reference named in the standalone-file table in section 5.1.
 
 ## 7. Stage execution
 
@@ -492,10 +526,23 @@ generate ArtifactPointer for a prior-run selection
 -> publish pointer document through publish_resolved_files()
 -> StoredInputRef.pointer records the returned storage location
 
+finish an attempt
+-> publish journal, measurements, metric-verification receipts, and logs
+   through one publish_resolved_files() call
+-> publish the RunAttempt document through publish_resolved_files()
+-> ResolvedRun.attempts records the returned ResolvedAttemptRef
+
+finish a benchmark
+-> publish the BenchmarkResult document through publish_resolved_files()
+-> BenchmarkExecutionResult.result_ref records the returned storage location
+
 complete terminal ResolvedRun
 -> publish resolved.yaml through publish_resolved_files()
 -> RunResult.resolved_run_ref records the returned storage location
 ```
+
+Stage invocation receipts use the same function when each stage process ends.
+`RunAttempt.invocations` records the returned `ResolvedStageInvocationRef`.
 
 Each resulting reference tells VIPER where to retrieve its file. Restore and
 verification follow those references.
@@ -504,9 +551,21 @@ verification follow those references.
 
 ### 8.1 Deterministic revision
 
-VIPER sorts the snapshot paths. For each path, the manifest stores the SHA-256
-digest and byte count. VIPER hashes that manifest. The manifest digest becomes
-the revision and retry key.
+VIPER uses the revision algorithm already implemented by
+`LocalArtifactStore._content_commit()`. It sorts files by repository-relative
+path. For each file, it hashes this exact sequence:
+
+```text
+8-byte big-endian path length
+UTF-8 path bytes
+8-byte big-endian file length
+32 raw SHA-256 digest bytes for the file
+```
+
+The revision is the SHA-256 digest of every framed entry concatenated in sorted
+path order. Viper Cloud uses the same algorithm. Existing local revision IDs
+therefore remain stable. Stage snapshots and standalone-file batches both use
+this rule.
 
 Publishing the same manifest again targets the same revision. A retry can skip
 objects the service already accepted.
@@ -533,6 +592,12 @@ The next execution resumes publication from the same verified working paths.
 It reruns the stage only when those files are absent or fail their recorded
 identity checks.
 
+Standalone publication follows the same seal rule. VIPER writes each generated
+document to its canonical local control path before upload. Existing source
+files remain at their working paths. VIPER creates the corresponding
+`ResolvedFileRef` only after the cloud revision is sealed. A retry republishes
+the same verified path. The existing document bytes remain fixed.
+
 The stable failure codes are:
 
 | Code | Condition |
@@ -548,10 +613,16 @@ The stable failure codes are:
 
 ### 8.4 Destination stability
 
-The first immutable publication for a run fixes its storage destination. Every
-retry and later attempt uses the same destination. Changing `viper.toml` during
-that run produces `storage_destination_changed` before VIPER starts new stage
-work.
+Before the first immutable publication, VIPER writes the parsed
+`StorageDestination` to:
+
+```text
+.viper/workspaces/<run-id>/storage-destination.json
+```
+
+VIPER creates that run-level control file atomically. Every retry and later
+attempt loads it before stage work and compares it with the current
+configuration. A different value produces `storage_destination_changed`.
 
 ## 9. Local control and recovery evidence
 
@@ -559,6 +630,7 @@ VIPER keeps these working files on the machine running the attempt:
 
 ```text
 .viper/workspaces/<run-id>/<attempt-id>/
+.viper/workspaces/<run-id>/storage-destination.json
 .viper/journals/<run-id>/<attempt-id>.jsonl
 canonical terminal resolved.yaml at the run path
 user-declared artifact paths
@@ -765,7 +837,10 @@ viper restore <run-reference> \
 | Download execution | Publish the shared retrieval/artifact path once in the configured stage snapshot. |
 | Local roots | Publish captured bytes through `publish_resolved_files()`. |
 | Pointer generation | Publish generated `ArtifactPointer` documents through `publish_resolved_files()`. |
+| Attempt evidence | Publish invocation receipts, journals, measurements, metric-verification receipts, logs, and attempt documents through `publish_resolved_files()`. |
+| Benchmark result | Publish the completed result and return `BenchmarkExecutionResult.result_ref`. |
 | Terminal run | Publish terminal `resolved.yaml` and return `RunResult.resolved_run_ref`. |
+| Destination stability | Persist the first parsed destination in the run workspace and reject later changes before stage work. |
 | Retrieval | Route Viper Cloud file and snapshot variants through the cloud client. |
 | Recovery | Resume an unsealed stage publication from verified working paths before rerunning the stage. |
 | CLI | Print the terminal run reference; add full and artifact-selected restore from a local terminal-run path or immutable Viper Cloud URI. |
@@ -862,6 +937,24 @@ The rejection companion selects a producer whose terminal graph contains a
 `LocalFileRef` while the consumer uses Viper Cloud. Freezing produces
 `storage_graph_unreachable` before it writes the consumer pointer.
 
+### 13.5 Standalone cloud evidence
+
+One cloud-backed run emits every run-owned standalone file listed in section
+5.1. The test follows each owning field and requires its `stored_at` value to
+be a `ViperCloudFileRef`. It retrieves every file, checks its SHA-256 digest and
+byte count, and confirms that `.viper/store` contains none of those payload
+copies.
+
+A benchmark companion covers the remaining row. It requires
+`BenchmarkExecutionResult.result_ref` to retrieve the same bytes parsed as
+`BenchmarkExecutionResult.result`.
+
+### 13.6 Destination change
+
+The first attempt writes the selected destination and publishes one immutable
+file. A retry changes `viper.toml`. VIPER emits
+`storage_destination_changed` before starting a stage or uploading a file.
+
 ## 14. Implementation order
 
 1. Add destination parsing and exact configuration tests.
@@ -871,11 +964,13 @@ The rejection companion selects a producer whose terminal graph contains a
    `LocalArtifactStore` for the local implementations.
 4. Change stage publication to pass artifact paths and stream each payload.
    Add the direct-cloud and local-compatibility cases.
-5. Route local roots, generated pointers, invocations, attempts, logs, metrics,
-   and terminal runs through `publish_resolved_files()`.
+5. Route every file in the section 5.1 table through
+   `publish_resolved_files()`. Return the terminal-run and benchmark-result
+   references from their public result objects.
 6. Add cloud retrieval and apply existing identity checks.
 7. Add seal-failure recovery and deterministic retry.
-8. Add destination-stability and cloud-graph-reachability checks.
+8. Persist the run-level destination binding. Add destination-stability and
+   cloud-graph-reachability checks.
 9. Add terminal-run restore through `ResolvedRunRef`.
 10. Remove every sync-state, closure-upload, offload, and remote-fallback design
    reference from the repository.
@@ -900,6 +995,8 @@ ResolvedFileRef.stored_at identifies independently published evidence
 
 ResolvedRunRef identifies the terminal run and starts restore
 
+ResolvedBenchmarkResultRef identifies the published benchmark result
+
 every persisted reference contains enough information to route retrieval
 
 a Viper Cloud terminal graph reaches zero machine-local immutable references
@@ -909,6 +1006,8 @@ every retrieved file passes its persisted SHA-256 and byte-count checks
 a stage becomes complete after its snapshot is sealed and ResolvedStageRef exists
 
 a failed seal preserves the working files required for retry
+
+the first immutable publication fixes the run's destination before stage work
 ```
 
 ## Implementation sources
