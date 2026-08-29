@@ -58,8 +58,8 @@ flowchart TB
     Local["User local file"]
     Service["HTTP service"]
     Capture["VIPER input capture<br/>local-root record"]
-    Download["Download stage<br/>ResolvedHttpRetrieval"]
-    Artifact["Declared artifact<br/>ResolvedArtifact"]
+    Download["HTTP receipt<br/>ResolvedHttpRetrieval"]
+    Artifact["Same body as artifact<br/>ResolvedSingleFileArtifact"]
     Select["Input selection<br/>FutureInputRef or StoredInputRef"]
     Train["Training stage<br/>context.inputs"]
     Weights[("Model artifact<br/>weights")]
@@ -67,28 +67,19 @@ flowchart TB
     Local -->|"capture bytes"| Capture
     Capture -->|"root input"| Train
     Service -->|"HTTP request and response"| Download
-    Download -->|"stage output"| Artifact
+    Download -->|"same SnapshotFileRef"| Artifact
     Artifact -->|"select for consumer"| Select
     Select -->|"verified input path"| Train
     Train -->|"writes and hashes"| Weights
 
-    class Local,Service external
-    class Capture,Download,Select application
-    class Artifact,Weights data
-    class Train worker
-
-    classDef external fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
-    classDef application fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
-    classDef data fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
-    classDef worker fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
-    linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-`ResolvedHttpRetrieval` is an HTTP provenance root because the response body
-entered VIPER from the network. `ResolvedArtifact` is a produced node because
-the download stage wrote it. The two records may contain identical bytes when a
-download stage copies a response body into an artifact. They still describe two
-different events: receiving bytes from a server and publishing a stage output.
+`ResolvedHttpRetrieval` records the HTTP provenance-root event.
+`ResolvedSingleFileArtifact` exposes the same response body through VIPER's
+ordinary artifact interface. The two records share one `SnapshotFileRef` in the
+completed download-stage snapshot. The receipt retains request, transport,
+response, and timing evidence; the artifact participates in ordinary artifact
+selection.
 
 ## 4. One HTTP acquisition contract
 
@@ -131,6 +122,11 @@ reads the body.
 `DownloadSpec` remains the sole writer of HTTP retrieval evidence. The
 proposed contract removes `HttpSource` from `ExternalInputSource` and removes
 the HTTP branch from `resolve_inputs()`.
+
+[`download-retrieval-artifacts.md`](download-retrieval-artifacts.md) owns the
+request-to-artifact join: every successful HTTP request and its same-named
+single-file artifact share one `SnapshotFileRef` in the completed download-stage
+snapshot.
 
 ```text
 HttpRequestSpec
@@ -241,20 +237,20 @@ download artifact in the same run.
    credential reference.
 2. VIPER resolves the declared HTTP transport, executes the request, records
    the terminal response, and stores the body bytes.
-3. VIPER writes `ResolvedHttpRetrieval` into `ResolvedDownloadSpec.retrievals`.
-   That receipt records the network-root evidence for `dataset.h5ad`.
-4. The download worker receives the retrieved body through
-   `DownloadContext.retrievals["dataset"]` and writes its declared
-   `training_dataset` artifact.
-5. The input authoring layer selects `download.training_dataset` for the train
-   stage and freezes a `FutureInputRef`.
+3. VIPER writes `ResolvedHttpRetrieval` into
+   `ResolvedDownloadSpec.retrievals["dataset"]` and a matching
+   `ResolvedSingleFileArtifact` into
+   `ResolvedDownloadSpec.artifacts["dataset"]`. Both records identify the
+   same snapshot file.
+4. The input authoring layer selects `download.dataset` for the train stage and
+   freezes a `FutureInputRef`.
 6. The train worker receives the artifact path through
    `context.inputs["dataset"]` and writes its declared model artifact.
 
 The same dataset can enter a later run through a generated `ArtifactPointer`
 and `StoredInputRef`. The pointer identifies the completed producing run and
-the selected `training_dataset` artifact. The verifier follows that chain
-before the later train worker receives the artifact path.
+the selected `dataset` artifact. The verifier follows that chain before the
+later train worker receives the artifact path.
 
 ## 8. Verification contract
 
