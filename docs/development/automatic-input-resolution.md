@@ -116,6 +116,8 @@ protocol representation at the authoring boundary.
 The four project-owned stage decorators use `params=` for the parameter class:
 
 ```python
+from my_cool_model_acronym.training import train_model
+
 class TrainParams(viper.params.Train):
     epochs: int
     learning_rate: float
@@ -196,13 +198,13 @@ ArtifactDraft = Annotated[
 
 
 @dataclass(frozen=True)
-class ProjectHttpTransportDraft:
+class CustomHttpTransportDraft:
     implementation: HttpTransportCallable[Any]
     params: parameters.HttpTransport
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
 
-HttpTransportDraft = BuiltinHttpTransportSpec | ProjectHttpTransportDraft
+HttpTransportDraft = BuiltinHttpTransportSpec | CustomHttpTransportDraft
 ```
 
 `@viper.http_transport(transport_id="project_httpx")` uses
@@ -235,7 +237,7 @@ class FileInputDraft(BaseModel):
 class RunArtifactDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    resolved_run: Path
+    resolved_run: Path | ResolvedRunRef
     stage_id: StageId
     artifact_name: ArtifactName
 
@@ -436,8 +438,9 @@ class ResolvedStoredInputRef(ProtocolModel):
 ```
 
 `ResolvedArtifactPointerRef.stored_at` retains the `StorageRef` type inherited
-from `ResolvedFileRef`. Default compilation writes a `LocalFileRef`; restored
-or explicitly published pointers may use another `StorageRef` variant. The
+from `ResolvedFileRef`. Compilation publishes the generated pointer through
+the configured storage destination. Local publication returns a
+`LocalFileRef`; direct cloud publication returns a `ViperCloudFileRef`. The
 `StoredInputRef` validator applies the canonical pointer-path rule to
 `pointer.stored_at.path` and retains the existing materialization-path checks.
 
@@ -446,7 +449,7 @@ The active-to-target field changes are:
 | Active field | Target field | Reason |
 | --- | --- | --- |
 | `StoredInputRef.pointer: ArtifactPointerRef` | `StoredInputRef.pointer: ResolvedArtifactPointerRef` | Automatic freezing needs an exact pointer reference before a Git commit exists. |
-| `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Inherited `ResolvedFileRef.stored_at: StorageRef` | The generated pointer may live in the local immutable store and later resolve through remote storage. |
+| `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Inherited `ResolvedFileRef.stored_at: StorageRef` | The generated pointer records the local or cloud destination that received its immutable bytes. |
 | `ResolvedStoredInputRef.pointer: ResolvedArtifactPointerRef` | Retain | The resolved stage records the exact pointer selected by the frozen input. |
 
 Explicit harness mode may accept an `ArtifactPointerRef` authored in Git. The
@@ -506,7 +509,8 @@ FileInputDraft selecting one repository file
 
 RunArtifactDraft identifying one artifact in a completed run
 -> generated ArtifactPointer
--> ResolvedArtifactPointerRef stored in LocalArtifactStore
+-> publish_resolved_files(configured destination)
+-> ResolvedArtifactPointerRef with a self-locating StorageRef
 -> StoredInputRef
 ```
 
@@ -536,7 +540,7 @@ def file_input(
 
 def run_artifact(
     *,
-    resolved_run: Path,
+    resolved_run: Path | ResolvedRunRef,
     stage: StageId,
     artifact: ArtifactName,
 ) -> RunArtifactDraft: ...
@@ -547,7 +551,7 @@ def transport(
     *,
     params: parameters.HttpTransport | None = None,
     executables: tuple[ExternalExecutableSpec, ...] = (),
-) -> ProjectHttpTransportDraft: ...
+) -> CustomHttpTransportDraft: ...
 
 
 def download(
@@ -1097,7 +1101,7 @@ source run is a completed prior run
        artifact=<producer stage and artifact name>,
    )
 -> serialize_document(pointer)
--> LocalArtifactStore.resolved_files({pointer_path: pointer_bytes})
+-> publish_resolved_files(destination, {pointer_path: pointer_bytes})
 -> ResolvedArtifactPointerRef
 -> StoredInputRef
 ```
@@ -1152,11 +1156,11 @@ RunArtifactDraft(
     artifact_name="dataset",
 )
 -> load and verify that terminal ResolvedRun
--> publish resolved.yaml through LocalArtifactStore
+-> publish resolved.yaml through publish_resolved_files(destination, ...)
 -> construct the exact ResolvedRunRef
 -> select the declared artifact
 -> construct ArtifactPointer
--> serialize and publish the pointer through LocalArtifactStore
+-> serialize and publish the pointer through publish_resolved_files()
 -> construct ResolvedArtifactPointerRef
 -> construct StoredInputRef with the generated pointer and materialization path
 -> write the frozen TrainSpec
@@ -1176,6 +1180,17 @@ StoredInputRef.pointer
 The authoring layer owns the generated pointer file. The verifier owns the
 decision to accept the selected artifact. The stage callable owns the model
 training operation.
+
+When `RunArtifactDraft.resolved_run` is a `Path`, the compiler loads the
+terminal document and publishes it through the configured destination to
+construct `ResolvedRunRef`. When the value is already a `ResolvedRunRef`, the
+compiler retrieves and verifies that exact document.
+
+For a Viper Cloud destination, the compiler also checks the selected producer
+graph. Every reachable immutable reference must resolve through Viper Cloud,
+Hugging Face, or Git. Reaching a `LocalFileRef` produces
+`storage_graph_unreachable`. This rejection keeps the consumer portable and
+avoids an implicit producer-run migration.
 
 ## 6. Persisted evidence
 
@@ -1314,8 +1329,8 @@ overwrite rules, and review ownership.
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `FileInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Plan model | Change `RunPlanDraft.stages` from a tuple to `dict[StageId, StageDraft]` | Plan keys become the only source of stage IDs |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef` | Frozen specs contain the correct internal reference |
-| Pointer writer | Serialize prior-run `ArtifactPointer` documents and publish them through `LocalArtifactStore` | `StoredInputRef.pointer` carries the resulting digest-bearing reference |
-| Remote closure | Include local-root captures, generated pointer files, and producer-run evidence reached through pointers | A synchronized consumer run remains verifiable after local offload |
+| Pointer writer | Serialize prior-run `ArtifactPointer` documents and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef` |
+| Storage publication | Publish local-root captures, generated pointer files, stage snapshots, and terminal runs at their creation boundaries | Every record carries the storage reference required for retrieval |
 | Stage validators | Validate source existence, stage order, roles, and materialization paths | Invalid declarations fail during freezing |
 | Runtime resolution | Reuse existing `FutureInputRef` and `StoredInputRef` materialization | `StageContext.inputs` receives the expected path |
 | Verification | Reuse `verify_promoted_artifact()` and existing file-identity checks | Tampered source run or artifact fails verification |
@@ -1364,7 +1379,7 @@ The acceptance fixture creates `inputs/raw/dataset.csv` and selects it through
 freeze the run plan
 -> compiler writes ExternalInputRef into TrainSpec.inputs["dataset"]
 -> execute train
--> runner captures the source bytes in LocalArtifactStore
+-> runner publishes the captured source bytes at the configured destination
 -> train receives inputs/raw/dataset.csv
 -> resolved train record contains ResolvedExternalInputRef
 ```
@@ -1450,7 +1465,7 @@ complete.
 
 - [ ] Make `viper.download()` construct `DownloadSpecDraft` directly.
 - [ ] Select `BuiltinHttpTransportSpec()` when the author omits `transport=`.
-- [ ] Convert a `ProjectHttpTransportDraft` into the existing frozen transport
+- [ ] Convert a `CustomHttpTransportDraft` into the existing frozen transport
       records when the author supplies a custom transport.
 - [ ] Replace generated project download callables with `viper.download()`.
 
@@ -1480,7 +1495,8 @@ to training while the compiler owns the `ExternalInputRef` and
 - [ ] Implement and validate the full-digest generated-pointer path rule.
 - [ ] Load and verify the selected terminal `ResolvedRun`.
 - [ ] Construct `ArtifactPointer` from the selected run and artifact.
-- [ ] Serialize the pointer and publish it through `LocalArtifactStore`.
+- [ ] Serialize the pointer and publish it through
+      `publish_resolved_files(destination, ...)`.
 - [ ] Construct `ResolvedArtifactPointerRef` and `StoredInputRef` for the
       consumer.
 - [ ] Add the prior-run acceptance case and targeted rejection.
@@ -1519,13 +1535,14 @@ which currently requires the user to select `FutureInputRef` or
 `StoredInputRef` directly.
 
 The implementation sequence defines the draft models, makes download
-runner-owned, compiles local and same-run inputs, then adds local-store pointer
-generation for prior-run inputs. Harness mode follows as a separate explicit
+runner-owned, compiles local and same-run inputs, then adds destination-aware
+pointer generation for prior-run inputs. Harness mode follows as a separate explicit
 promotion contract under the project-root `inputs/` directory.
 
-Remote synchronization follows the transitive pointer and local-root closure
-defined in [`remote-storage.md`](remote-storage.md). The authoring expressions
-and frozen input-reference choice remain stable across storage destinations.
+Direct publication follows [`remote-storage.md`](remote-storage.md). Generated
+pointers and captured roots publish when VIPER creates them; their
+`StorageRef` values route later retrieval. The authoring expressions and frozen
+input-reference choice remain stable across storage destinations.
 
 ## Implementation sources
 

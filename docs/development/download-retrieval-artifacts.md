@@ -370,8 +370,9 @@ fixtures delete the download callable and its read-and-write loop.
 
 `_attempt.py` currently adds retrieval files and artifact files to one
 `snapshot_files` dictionary before calling `LocalArtifactStore.snapshot()`.
-Under this contract, both paths use the same dictionary key. The snapshot holds
-one durable copy of the response body.
+Under this contract, both views use the same dictionary key. The
+destination-aware snapshot publisher receives that path once and returns the
+local or Viper Cloud snapshot reference.
 
 ## 6. Persisted evidence
 
@@ -466,7 +467,7 @@ the shared `SnapshotFileRef`.
 | Resolved stage | `ResolvedDownloadSpec` carries project source, startup, invocation, and command fields through `ResolvedBaseSpec` | Those fields move to `ResolvedParameterizedSpec`; download retains runner environment, execution context, retrievals, artifacts, and completion | Resolved evidence matches the runtime owner |
 | Fixtures and examples | Request names and artifact names may differ | Each download fixture uses the same name in both maps | Tests state the new public rule |
 | Documentation | External roots describes the HTTP receipt and later artifact | External roots links to this contract | One owner for the schema and execution detail |
-| Remote storage | The run closure reaches the download artifact through the stage snapshot | Synchronization uploads the shared snapshot file once | Receipt and artifact remain joined after restore |
+| Storage publication | Local publication writes the completed stage snapshot through `LocalArtifactStore` | The destination-aware publisher writes the shared snapshot file once to local storage or Viper Cloud | Receipt and artifact remain joined at either destination |
 
 ### 8.1 Legacy cleanup
 
@@ -490,7 +491,7 @@ path.
 | Generated-project acceptance coverage | Replace | Assert that generated authoring uses `viper.download()` and execution publishes each response artifact. |
 | `docs/reference/protocol.md` models and execution prose | Replace | Document runner-owned download, the shared successful `SnapshotFileRef`, and the executor-owned artifact write. |
 | `HttpTransportContext.workspace`, its bounded `destination`, and transport-level body tests | Retain | The attempt workspace remains the safety boundary for an in-progress transfer. |
-| `LocalArtifactStore.resolved_files()` and its non-download callers | Retain | Local external roots, metrics, run records, and other independently stored files still require self-contained `ResolvedFileRef` publication. |
+| `LocalArtifactStore.resolved_files()` and its non-download callers | Replace at the orchestration boundary | Route independent files through `publish_resolved_files()`; the local implementation continues to delegate to `LocalArtifactStore`. |
 | `DownloadSpec.implementation`, `download_stage`, `parameters.Download`, and download `StageInvocationReceipt` fixtures | Delete | `viper.download()` creates a runner-owned `DownloadSpec`; `ResolvedHttpRetrieval` supplies request execution evidence. |
 | `BaseSpec.implementation` | Move | `ParameterizedSpec.implementation` owns project-callable stages. |
 | `ResolvedBaseSpec.source`, `startup`, `invocation`, and `command` | Move | `ResolvedParameterizedSpec` owns project-callable execution evidence. |
@@ -569,8 +570,8 @@ stage because the retrieval-body and artifact-file references differ.
    authoring in [`src/viper/project_init.py`](../../src/viper/project_init.py)
    and the protocol reference. Link
    [`external-input-roots.md`](external-input-roots.md) to this contract and
-   include the shared snapshot member in the transitive closure defined by
-   [`remote-storage.md`](remote-storage.md).
+   route the shared snapshot member through the destination-aware publisher
+   defined by [`remote-storage.md`](remote-storage.md).
 
 ## 11. Invariants
 

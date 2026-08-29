@@ -173,8 +173,9 @@ class ResolvedExternalInputRef(ProtocolModel):
 `ExternalInputRef` protocol record.
 `ExternalInputRef.source.path` is the one repository-relative path selected by
 the user and supplied to the worker. `resolve_inputs()` reads that path,
-publishes the observed bytes through `LocalArtifactStore.resolved_files()`, and
-writes the returned `ResolvedFileRef` into `ResolvedExternalInputRef.file`.
+publishes the observed bytes through `publish_resolved_files()` at the
+configured storage destination, and writes the returned `ResolvedFileRef` into
+`ResolvedExternalInputRef.file`.
 The runner copies `ExternalInputRef.data_role` into
 `ResolvedExternalInputRef.data_role`.
 
@@ -406,7 +407,7 @@ uses one user-selected repository-relative path:
 ```text
 local file selected through ExternalInputRef
 -> runner reads the exact bytes
--> LocalArtifactStore records an independently retrievable ResolvedFileRef
+-> configured storage publisher records an independently retrievable ResolvedFileRef
 -> ResolvedExternalInputRef records the source and captured identity
 -> stage receives the selected path through context.inputs
 ```
@@ -514,7 +515,7 @@ The verifier retrieves the digest-bearing `StoredInputRef.pointer`, parses its
 generated `ArtifactPointer`, and follows the pointer through the terminal run,
 successful attempt, producer stage, and named artifact before materializing
 the file for the consumer. The pointer bytes may reside in the local immutable
-store, Git, or synchronized remote storage; their SHA-256 digest and byte count
+store, Git, Hugging Face, or Viper Cloud; their SHA-256 digest and byte count
 remain part of `ResolvedArtifactPointerRef`.
 
 ## 9. Acceptance cases
@@ -568,7 +569,7 @@ identity rule.
 | Verification | Add local-root verification and the HTTP receipt-artifact identity rule. |
 | Authoring | Add `viper.file_input()` and `viper.run_artifact()`; convert local files, same-run handles, and prior-run drafts into `ExternalInputRef`, `FutureInputRef`, and `StoredInputRef`. |
 | Prior-run pointer schema | Change `StoredInputRef.pointer` to digest-bearing `ResolvedArtifactPointerRef`; let the pointer use any `StorageRef`. |
-| Remote storage | Include captured local-root files, generated pointer files, and the producer runs reached through those pointers in the transitive verification closure. |
+| Storage publication | Publish captured local roots and generated pointer files at the configured local or Viper Cloud destination; retain the returned self-locating reference. |
 | Tests | Cover local roots, same-run downloaded inputs, prior-run downloaded inputs, tampered root bytes, and tampered artifacts. |
 | Legacy cleanup | Apply every delete, replace, and retain disposition in [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md); delete `HttpSource` and its tests here. |
 | Documentation | Update the protocol reference and generated project examples to teach executor-owned HTTP publication and automatic input selection. |
@@ -587,7 +588,8 @@ download-retrieval-artifacts.md
 The download increment establishes one HTTP path and one shared snapshot file.
 This increment removes the duplicate HTTP source and completes local-root
 verification. The authoring increment then compiles all three input routes.
-Remote synchronization follows the resulting references transitively.
+Direct publication records the selected storage destination in each resulting
+file or snapshot reference.
 
 1. Complete the runner-owned request-to-artifact contract in
    [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md),
@@ -600,8 +602,8 @@ Remote synchronization follows the resulting references transitively.
 4. Add `FileInputDraft`, `RunArtifactDraft`, and the three-way authoring
    compiler defined in
    [`automatic-input-resolution.md`](automatic-input-resolution.md).
-5. Change the stored-pointer schema and implement deterministic local-store
-   pointer publication for prior-run selections.
+5. Change the stored-pointer schema and implement deterministic,
+   destination-aware pointer publication for prior-run selections.
 6. Add end-to-end acceptance cases for all three routes and their tamper
    failures.
 
@@ -621,7 +623,7 @@ specific owner:
 | Same-run consumer edge | [`viper.inputs.FutureInputRef`](../../src/viper/inputs.py) |
 | Prior-run consumer edge | [`viper.inputs.StoredInputRef`](../../src/viper/inputs.py) and [`viper.artifacts.ArtifactPointer`](../../src/viper/artifacts.py) |
 | Input materialization | [`viper.execution._materialization.resolve_inputs`](../../src/viper/execution/_materialization.py) |
-| Immutable local evidence | [`viper.storage.LocalArtifactStore`](../../src/viper/storage.py) |
+| Immutable evidence publication | [`viper.storage.LocalArtifactStore`](../../src/viper/storage.py) and the destination-aware interface in [`remote-storage.md`](remote-storage.md) |
 
 The contract covers byte lineage and selection. Dataset quality, license
 status, and semantic suitability remain outside this verifier.
