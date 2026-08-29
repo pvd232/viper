@@ -325,9 +325,9 @@ while leaving `objective=None`.
 A diagnostic can use `mode="live"` when the stage already holds the required
 values. It can use `mode="recompute"` when the calculation reads persisted
 inputs or artifacts. Train stages accept training and diagnostic metrics.
-Evaluate stages accept evaluation metrics. Build, embed, and download stages
-accept diagnostic metrics. The optional embed objective selects a diagnostic
-metric because `MetricKind` assigns embedding measurements to `diagnostic`.
+Evaluate stages accept evaluation metrics. Build and download stages accept
+diagnostic metrics. Embed stages accept diagnostic metrics and may designate
+one live diagnostic metric as their optional objective.
 
 ### One context for live and recomputed metrics
 
