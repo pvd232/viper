@@ -810,9 +810,96 @@ The experiment constructor accepts factors, variants, and replicates. The
 compiler derives its metric registry from the stages, which gives each metric
 one authoring location.
 
-The factor levels and variant stages appear together at authoring time:
+The factor levels and variant stages appear together at authoring time. This
+example continues the
+[`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example)
+program. It reuses that program's `train`, `TrainParams`, artifact loaders,
+metric drafts, `source`, `environment`, and `reproducibility` objects. The two
+training stages read the same checked-in
+`inputs/training_embeddings.csv` file. The code below defines every
+variant-specific stage and every run value it uses.
 
 ```python
+baseline_training = viper.stage(
+    train,
+    params=TrainParams(
+        epochs=40,
+        batch_size=4,
+        learning_rate=0.15,
+        momentum=0.9,
+        weight_decay=0.001,
+        max_gradient_norm=1.0,
+    ),
+    inputs={
+        "dataset": viper.file_input(
+            path="inputs/training_embeddings.csv",
+            data_role="training",
+        ),
+    },
+    artifacts={
+        "parameters": viper.file_artifact(
+            path=(
+                "experiments/tiny_http/runs/baseline/"
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV/artifacts/models/"
+                "logistic_regression/parameters.pt"
+            ),
+            loader=load_weights,
+            data_role="training",
+        ),
+        "resume_state": viper.file_artifact(
+            path=(
+                "experiments/tiny_http/runs/baseline/"
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV/artifacts/models/"
+                "logistic_regression/resume_state.pt"
+            ),
+            loader=load_resume_state_artifact,
+            data_role="training",
+        ),
+    },
+    objective=viper.min(training_loss_metric),
+    metrics=(gradient_norm_metric,),
+)
+
+high_rate_training = viper.stage(
+    train,
+    params=TrainParams(
+        epochs=40,
+        batch_size=4,
+        learning_rate=0.30,
+        momentum=0.9,
+        weight_decay=0.001,
+        max_gradient_norm=1.0,
+    ),
+    inputs={
+        "dataset": viper.file_input(
+            path="inputs/training_embeddings.csv",
+            data_role="training",
+        ),
+    },
+    artifacts={
+        "parameters": viper.file_artifact(
+            path=(
+                "experiments/tiny_http/runs/high_learning_rate/"
+                "01ARZ3NDEKTSV4RRFFQ69G5FAW/artifacts/models/"
+                "logistic_regression/parameters.pt"
+            ),
+            loader=load_weights,
+            data_role="training",
+        ),
+        "resume_state": viper.file_artifact(
+            path=(
+                "experiments/tiny_http/runs/high_learning_rate/"
+                "01ARZ3NDEKTSV4RRFFQ69G5FAW/artifacts/models/"
+                "logistic_regression/resume_state.pt"
+            ),
+            loader=load_resume_state_artifact,
+            data_role="training",
+        ),
+    },
+    objective=viper.min(training_loss_metric),
+    metrics=(gradient_norm_metric,),
+)
+
 experiment = viper.experiment(
     experiment_id="tiny_http",
     factors={
@@ -823,27 +910,40 @@ experiment = viper.experiment(
     variants={
         "baseline": viper.variant(
             levels={"learning_rate": "baseline"},
-            stages=BASELINE_STAGES,
+            stages={
+                "train": baseline_training,
+            },
             estimator=baseline_training.artifacts["parameters"],
         ),
         "high_learning_rate": viper.variant(
             levels={"learning_rate": "high"},
-            stages=HIGH_RATE_STAGES,
+            stages={
+                "train": high_rate_training,
+            },
             estimator=high_rate_training.artifacts["parameters"],
         ),
     },
     replicates={
-        "seed_7": viper.replicate(seed=7),
-        "seed_19": viper.replicate(seed=19),
+        "replicate_01": viper.replicate(seed=7),
     },
 )
 
 
 baseline_plan = viper.plan(
-    run_id=BASELINE_RUN_ID,
+    run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
     experiment=experiment,
     variant="baseline",
-    replicate="seed_7",
+    replicate="replicate_01",
+    source=source,
+    environment=environment,
+    reproducibility=reproducibility,
+)
+
+high_rate_plan = viper.plan(
+    run_id="01ARZ3NDEKTSV4RRFFQ69G5FAW",
+    experiment=experiment,
+    variant="high_learning_rate",
+    replicate="replicate_01",
     source=source,
     environment=environment,
     reproducibility=reproducibility,
