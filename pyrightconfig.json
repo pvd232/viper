@@ -7,7 +7,9 @@
     "exclude": [
         "archive"
     ],
-    "pythonVersion": "3.11",
+    "pythonVersion": "3.14",
+    "venvPath": "/Users/machina/miniconda3/envs",
+    "venv": "mantra",
     "typeCheckingMode": "standard",
     "extraPaths": [
         "src",

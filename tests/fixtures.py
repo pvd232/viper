@@ -18,15 +18,17 @@ from viper.metrics import (
     MetricSpec,
 )
 from viper.parameters import ParameterModelRef
-from viper.resume import (
-    DataLoaderConfiguration,
-    DataLoaderResumeState,
+from viper.randomness import (
     LegacyNumPyRNGState,
     MainProcessRNGState,
     NumPyRNGState,
     PCG64GeneratorState,
     PCG64InternalState,
     PythonRNGState,
+)
+from viper.resume import (
+    DataLoaderConfiguration,
+    DataLoaderResumeState,
     ResumeState,
 )
 from viper.runtime import (

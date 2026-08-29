@@ -2514,8 +2514,8 @@ HttpTransportSpec = Annotated[
 ]
 
 
-InternalInputRef = Annotated[
-    StoredInputRef | FutureInputRef,
+InputRef = Annotated[
+    ExternalInputRef | StoredInputRef | FutureInputRef,
     Field(discriminator="kind"),
 ]
 ```
@@ -2622,7 +2622,7 @@ class DownloadContext(StageContext[viper.parameters.Download]):
 
 
 class InternalSpec(ParameterizedSpec):
-    inputs: dict[InputName, InternalInputRef] = Field(min_length=1)
+    inputs: dict[InputName, InputRef] = Field(min_length=1)
 
 
 class BuildSpec(InternalSpec):
@@ -2733,7 +2733,7 @@ only `training` and `validation` inputs.
 ### Resolved stage inputs
 
 ```python
-ResolvedInternalInputRef = Annotated[
+ResolvedInputRef = Annotated[
     ResolvedStoredInputRef | ResolvedFutureInputRef,
     Field(discriminator="kind"),
 ]
@@ -2775,7 +2775,7 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
 
 class ResolvedInternalSpec(ResolvedBaseSpec):
     spec: InternalSpec
-    inputs: dict[InputName, ResolvedInternalInputRef]
+    inputs: dict[InputName, ResolvedInputRef]
 
 
 class ResolvedBuildSpec(ResolvedInternalSpec):

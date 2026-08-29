@@ -14,6 +14,7 @@ from .._parameter._validation import instantiate_parameters
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalHandle
+from ..inputs import FutureInputRef, StoredInputRef
 from ..metrics import MeasurementSink, MetricHandle, bind_live_metric
 from ..paths import retrieval_body_path
 from ..runs import RunSpec
@@ -27,13 +28,11 @@ from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from ..stages import (
     DownloadContext,
     DownloadSpec,
-    FutureInputRef,
     InternalSpec,
     ParameterizedSpec,
     StageContext,
     StageContextBinding,
     StageInvocationReceipt,
-    StoredInputRef,
     load_stage_callable,
     stage_definition,
 )

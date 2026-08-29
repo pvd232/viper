@@ -15,17 +15,12 @@ from ._schema import (
     DataRole,
     RepoRelPath,
 )
-from ._verification.attempt import (
-    _verify_effective_environment as _verify_effective_environment,
-)
-from ._verification.attempt import _verify_startup_backend as _verify_startup_backend
 from ._verification.attempt import verify_attempt_files as verify_attempt_files
 from ._verification.attempt import verify_attempt_journal as verify_attempt_journal
 from ._verification.attempt import verify_attempt_stages as verify_attempt_stages
 from ._verification.attempt import (
     verify_measurement_stage_times as verify_measurement_stage_times,
 )
-from ._verification.attempt import verify_resolved_stages as verify_resolved_stages
 from ._verification.metrics import (
     verify_recomputed_metrics as verify_recomputed_metrics,
 )
@@ -90,6 +85,12 @@ from .benchmark import (
     BenchmarkSpec,
 )
 from .ids import InputName, StageId
+from .inputs import (
+    FutureInputRef,
+    ResolvedFutureInputRef,
+    ResolvedStoredInputRef,
+    StoredInputRef,
+)
 from .metrics import (
     Measurement,
     MetricVerificationReceipt,
@@ -106,13 +107,9 @@ from .runs import (
 from .serialization import document_digest, parse_yaml_bytes
 from .stages import (
     EvaluateSpec,
-    FutureInputRef,
     InternalSpec,
     ResolvedBaseSpec,
-    ResolvedFutureInputRef,
     ResolvedInternalSpec,
-    ResolvedStoredInputRef,
-    StoredInputRef,
     TrainSpec,
 )
 
@@ -466,41 +463,6 @@ def verify_stored_inputs(
             verified_inputs[stage_id] = stage_inputs
 
     return verified_inputs
-
-
-def verify_future_inputs(
-    resolved_run: ResolvedRun,
-    run: RunSpec,
-    resolved_stages: Mapping[StageId, ResolvedBaseSpec],
-    *,
-    fetcher: StorageFetcher | None = None,
-) -> dict[StageId, dict[InputName, VerifiedInput]]:
-    """Verify future inputs selected by the successful run attempt."""
-    if resolved_run.status != "succeeded":
-        raise VerificationError("future-input verification requires a succeeded run")
-
-    attempts = verify_run_attempt_references(
-        resolved_run,
-        run,
-        fetcher=fetcher,
-    )
-    successful_attempt = next(
-        (
-            attempt
-            for attempt in attempts
-            if attempt.attempt_id == resolved_run.successful_attempt_id
-        ),
-        None,
-    )
-    if successful_attempt is None or successful_attempt.status != "succeeded":
-        raise VerificationError("successful attempt could not be identified")
-
-    return verify_attempt_future_inputs(
-        successful_attempt,
-        run,
-        resolved_stages,
-        fetcher=fetcher,
-    )
 
 
 def verify_attempt_future_inputs(

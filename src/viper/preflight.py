@@ -22,6 +22,7 @@ from .http import (
     validate_request_policy,
 )
 from .ids import StageId
+from .inputs import FutureInputRef
 from .metrics import MetricError, validate_metric_definition
 from .references import (
     GitFileRef,
@@ -39,7 +40,6 @@ from .serialization import load_stage_spec, parse_yaml_bytes
 from .stages import (
     BaseSpec,
     DownloadSpec,
-    FutureInputRef,
     InternalSpec,
     ParameterizedSpec,
     StageDefinitionError,

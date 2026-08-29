@@ -10,14 +10,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from .ids import RunId
+from .inputs import FutureInputRef, StoredInputRef
 from .journal import ATTEMPT_STATE_TRANSITIONS, AttemptState, DurableJournal
 from .runs import RunSpec
 from .serialization import load_stage_spec, parse_yaml_bytes
-from .stages import (
-    FutureInputRef,
-    InternalSpec,
-    StoredInputRef,
-)
+from .stages import InternalSpec
 from .verification import VerifiedRunResult
 
 

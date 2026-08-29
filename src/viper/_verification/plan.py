@@ -17,6 +17,7 @@ from .._schema import PARAMETERS_INPUT, DataRole, RepoRelPath, repo_file_paths_o
 from ..benchmark import BenchmarkSpec
 from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import InputName, StageId
+from ..inputs import FutureInputRef, StoredInputRef
 from ..references import GitFileRef, ResolvedFileRef, ResolvedRunSpecRef
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import parse_yaml_bytes
@@ -26,12 +27,10 @@ from ..stages import (
     DownloadSpec,
     EmbedSpec,
     EvaluateSpec,
-    FutureInputRef,
     InternalSpec,
     ParameterizedSpec,
     Spec,
     StageDefinitionError,
-    StoredInputRef,
     TrainSpec,
     verify_stage_implementation_bytes,
 )

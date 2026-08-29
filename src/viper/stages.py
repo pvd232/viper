@@ -26,7 +26,6 @@ from ._schema import (
     RESUME_STATE_INPUT,
     SHA256,
     ArtifactName,
-    DataRole,
     EvaluationId,
     ProtocolModel,
     PythonRepoRelPath,
@@ -44,15 +43,12 @@ from .http import (
     ResolvedHttpRetrieval,
 )
 from .ids import HumanId, InputName, MetricId, RunId, StageId
+from .inputs import InputRef, ResolvedInputRef
 from .metrics import MetricHandle
 from .parameters import ParameterModelRef
 from .references import (
-    ArtifactPointerRef,
-    ResolvedArtifactPointerRef,
-    ResolvedFileRef,
     ResolvedGitFileRef,
-    SnapshotFileRef,
-    StageResultSnapshot,
+    ResolvedStageInvocationRef,
 )
 from .runtime import (
     EnvironmentSpec,
@@ -131,60 +127,6 @@ class StageInvocationReceipt(ProtocolModel):
         if self.completed_at <= self.started_at:
             raise ValueError("invocation completion must be after invocation start")
         return self
-
-
-class ResolvedStageInvocationRef(ResolvedFileRef):
-    """Identify one immutable stage-invocation receipt."""
-
-    kind: Literal["stage_invocation"] = "stage_invocation"
-
-
-class ResolvedStageRef(ProtocolModel):
-    """Binds one completed stage to its immutable stage-result snapshot."""
-
-    stage_id: StageId
-    snapshot: StageResultSnapshot
-    resolved_spec: SnapshotFileRef
-
-
-class StoredInputRef(ProtocolModel):
-    """A promoted artifact selected before the run begins."""
-
-    kind: Literal["stored"] = "stored"
-    pointer: ArtifactPointerRef
-    path: RepoRelPath
-    data_role: DataRole
-
-    @model_validator(mode="after")
-    def validate_materialization_path(self) -> StoredInputRef:
-        """Keep materialized input bytes within their promoted-input scope."""
-        pointer_scope = self.pointer.path.split("/")[:3]
-        materialization_parts = self.path.split("/")
-        if (
-            len(materialization_parts) < 3
-            or materialization_parts[:3] != pointer_scope
-            or repo_file_paths_overlap(self.path, self.pointer.path)
-            or materialization_parts[-1].endswith(".pointer.yaml")
-        ):
-            raise ValueError(
-                "stored input path must use the pointer's category and entity ID "
-                "and must not use or overlap a pointer-file path"
-            )
-        return self
-
-
-class FutureInputRef(ProtocolModel):
-    """One named artifact produced by an earlier stage in the same run."""
-
-    kind: Literal["future"] = "future"
-    producer_stage_id: StageId
-    producer_artifact: ArtifactName
-
-
-InternalInputRef = Annotated[
-    StoredInputRef | FutureInputRef,
-    Field(discriminator="kind"),
-]
 
 
 class BaseSpec(ProtocolModel):
@@ -279,7 +221,7 @@ class DownloadSpec(ParameterizedSpec):
 class InternalSpec(ParameterizedSpec):
     """Request a stage that consumes stored or prior-stage artifacts."""
 
-    inputs: dict[InputName, InternalInputRef] = Field(min_length=1)
+    inputs: dict[InputName, InputRef] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_local_path_collisions(self) -> InternalSpec:
@@ -442,6 +384,12 @@ class EvaluateSpec(InternalSpec):
         if model_input.kind == "future":
             if model_input.producer_artifact != PARAMETERS:
                 raise ValueError("same-run evaluation must consume parameters")
+        elif model_input.kind == "external":
+            if model_input.data_role not in {"training", "validation"}:
+                raise ValueError(
+                    "external evaluation parameters data_role must be training or "
+                    "validation"
+                )
         else:
             if model_input.pointer.path.split("/")[1] != "models":
                 raise ValueError("stored evaluation model must use inputs/models")
@@ -477,26 +425,6 @@ ParameterizedStageSpec = DownloadSpec | BuildSpec | EmbedSpec | TrainSpec | Eval
 
 Spec = Annotated[
     ParameterizedStageSpec,
-    Field(discriminator="kind"),
-]
-
-
-class ResolvedStoredInputRef(ProtocolModel):
-    """Bind a stored stage input to its verified pointer file."""
-
-    kind: Literal["stored"] = "stored"
-    pointer: ResolvedArtifactPointerRef
-
-
-class ResolvedFutureInputRef(ProtocolModel):
-    """Bind a future input to its completed producer stage."""
-
-    kind: Literal["future"] = "future"
-    producer: ResolvedStageRef
-
-
-ResolvedInternalInputRef = Annotated[
-    ResolvedStoredInputRef | ResolvedFutureInputRef,
     Field(discriminator="kind"),
 ]
 
@@ -675,7 +603,7 @@ class ResolvedInternalSpec(ResolvedBaseSpec):
     """Record an operation that consumes previously produced artifacts."""
 
     spec: InternalSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-    inputs: dict[InputName, ResolvedInternalInputRef]
+    inputs: dict[InputName, ResolvedInputRef]
 
     @model_validator(mode="after")
     def validate_internal_inputs(self) -> ResolvedInternalSpec:

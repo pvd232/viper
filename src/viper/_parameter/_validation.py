@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from .. import parameters
 from ..execution._process import ExecutionPolicy, WorkerRequest, execute_worker
 from ..parameters import ParameterModelRef
-from ..serialization import load_stage_spec
 from ..stages import ParameterizedSpec
 
 
@@ -173,21 +172,3 @@ def validate_stage_parameters(
         return cast(dict[str, JsonValue], value)
 
 
-def validate_loaded_stage_parameters(
-    repository_root: Path,
-    stage_spec_path: Path,
-    *,
-    timeout_seconds: float | None = None,
-) -> dict[str, JsonValue]:
-    """Load one stage specification and validate its selected parameter class."""
-    stage = load_stage_spec(stage_spec_path)
-    if not isinstance(stage, ParameterizedSpec):
-        raise ParameterValidationError(
-            "parameter validation requires a parameterized stage"
-        )
-    return validate_stage_parameters(
-        repository_root,
-        stage_spec_path,
-        stage,
-        timeout_seconds=timeout_seconds,
-    )

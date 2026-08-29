@@ -1,0 +1,595 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1200 570"
+   role="img"
+   aria-labelledby="title description"
+   version="1.1"
+   id="svg26"
+   sodipodi:docname="viper-workflow.svg"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <sodipodi:namedview
+     id="namedview26"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="5.1733333"
+     inkscape:cx="534.9549"
+     inkscape:cy="320.00644"
+     inkscape:window-width="1920"
+     inkscape:window-height="1080"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg26" />
+  <title
+     id="title">How a VIPER run works</title>
+  <desc
+     id="description">Project code and an experiment draft become a frozen plan. VIPER checks and executes that plan, records its outputs, and verifies the result.</desc>
+  <defs
+     id="defs1">
+    <filter
+       id="shadow"
+       x="-0.0045454545"
+       y="-0.0045454545"
+       width="1.0090909"
+       height="1.0090909">
+      <feDropShadow
+         dx="0"
+         dy="5"
+         stdDeviation="7"
+         flood-color="#020617"
+         flood-opacity="0.22" />
+    </filter>
+    <marker
+       id="arrow"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0 0 L 10 5 L 0 10 z"
+         fill="#94a3b8"
+         id="path1" />
+    </marker>
+    <style
+       id="style1">
+      .panel { filter: url(#shadow); stroke-width: 2; }
+      .phase { fill: #ffffff; font: 700 14px ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.12em; }
+      .phase-title { fill: #ffffff; font: 700 17px ui-sans-serif, system-ui, sans-serif; }
+      .node { stroke-width: 1.5; }
+      .label { fill: #ffffff; font: 600 17px ui-sans-serif, system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .edge { fill: none; stroke: #94a3b8; stroke-width: 2.5; marker-end: url(#arrow); }
+    </style>
+    <marker
+       id="arrow-9"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-5" />
+    </marker>
+    <marker
+       id="arrow-6"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-1" />
+    </marker>
+    <marker
+       id="arrow-6-0"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-1-8" />
+    </marker>
+    <marker
+       id="arrow-6-0-0"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-1-8-5" />
+    </marker>
+    <marker
+       id="arrow-6-0-00"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-1-8-8" />
+    </marker>
+    <marker
+       id="arrow-1"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-6" />
+    </marker>
+    <marker
+       id="arrow-0"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-7" />
+    </marker>
+    <marker
+       id="arrow-6-0-00-8"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-1-8-8-0" />
+    </marker>
+    <marker
+       id="arrow-6-0-00-8-0"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-1-8-8-0-0" />
+    </marker>
+    <marker
+       id="arrow-2"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-3" />
+    </marker>
+    <marker
+       id="arrow-2-8"
+       viewBox="0 0 10 10"
+       refX="9"
+       refY="5"
+       markerWidth="7"
+       markerHeight="7"
+       orient="auto-start-reverse">
+      <path
+         d="M 0,0 10,5 0,10 Z"
+         fill="#94a3b8"
+         id="path1-3-0" />
+    </marker>
+  </defs>
+  <rect
+     class="panel"
+     x="20"
+     y="25"
+     width="360"
+     height="220"
+     rx="22"
+     fill="#082f49"
+     stroke="#22d3ee"
+     id="rect1" />
+  <rect
+     class="node"
+     x="50"
+     y="82"
+     width="125"
+     height="48"
+     rx="12"
+     fill="#164e63"
+     stroke="#67e8f9"
+     id="rect2" />
+  <text
+     class="label"
+     x="112.5"
+     y="106"
+     id="text2">Stage code</text>
+  <rect
+     class="node"
+     x="215"
+     y="82"
+     width="125"
+     height="48"
+     rx="12"
+     fill="#312e81"
+     stroke="#a5b4fc"
+     id="rect3" />
+  <text
+     class="label"
+     x="277.5"
+     y="106"
+     id="text3">Git commit</text>
+  <rect
+     class="node"
+     x="50"
+     y="162"
+     width="125"
+     height="48"
+     rx="12"
+     fill="#164e63"
+     stroke="#67e8f9"
+     id="rect4" />
+  <text
+     class="label"
+     x="112.5"
+     y="186"
+     id="text4">draft.yaml</text>
+  <rect
+     class="node"
+     x="215"
+     y="162"
+     width="125"
+     height="48"
+     rx="12"
+     fill="#312e81"
+     stroke="#a5b4fc"
+     id="rect5" />
+  <text
+     class="label"
+     x="277.5"
+     y="186"
+     id="text5">freeze-run</text>
+  <path
+     class="edge"
+     d="M175 106 H215"
+     id="path5" />
+  <path
+     class="edge"
+     d="m 380,138 h 47.73652"
+     id="path5-0"
+     style="fill:none;stroke:#94a3b8;stroke-width:2.73108;marker-end:url(#arrow-6)" />
+  <path
+     class="edge"
+     d="m 625.2256,138.32977 h 48.9758"
+     id="path5-0-9"
+     style="fill:none;stroke:#94a3b8;stroke-width:2.76631;marker-end:url(#arrow-6-0)" />
+  <path
+     class="edge"
+     d="M175 186 H215"
+     id="path6" />
+  <path
+     class="edge"
+     d="M278 130 V155"
+     id="path7" />
+  <rect
+     class="panel"
+     x="400"
+     y="25"
+     width="220"
+     height="220"
+     rx="22"
+     fill="#1e1b4b"
+     stroke="#818cf8"
+     id="rect7"
+     transform="matrix(0.8812747,0,0,1.0005544,78.073827,-0.07483988)" />
+  <text
+     class="phase-title"
+     x="450.19678"
+     y="55.231472"
+     id="text7"
+     style="font-style:normal;font-variant:normal;font-weight:700;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">Freeze Run Plan</text>
+  <text
+     class="phase-title"
+     x="50.200005"
+     y="53.372097"
+     id="text7-3"
+     style="font-style:normal;font-variant:normal;font-weight:700;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif;fill:#ffffff">Prepare</text>
+  <rect
+     class="node"
+     x="452.37314"
+     y="113.7909"
+     width="150.30153"
+     height="48.418205"
+     rx="14.028144"
+     fill="#3730a3"
+     stroke="#a5b4fc"
+     id="rect8" />
+  <text
+     class="label"
+     x="527.83521"
+     y="136.50337"
+     id="text8"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">spec.yaml</text>
+  <rect
+     class="panel"
+     x="650"
+     y="25"
+     width="530"
+     height="220"
+     rx="22"
+     fill="#3b0764"
+     stroke="#c084fc"
+     id="rect9"
+     style="display:inline"
+     transform="matrix(0.83446808,0,0,1.0007831,135.79733,-0.10571351)" />
+  <g
+     id="g41"
+     transform="translate(21.029163,-0.77319588)">
+    <rect
+       class="node"
+       x="915.69806"
+       y="181.68944"
+       width="150.0338"
+       height="43.430298"
+       rx="12.002705"
+       fill="#854d0e"
+       stroke="#fde68a"
+       id="rect12" />
+    <text
+       class="label"
+       x="990.69708"
+       y="204.34135"
+       id="text12"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">Artifacts</text>
+    <rect
+       class="node"
+       x="757.37592"
+       y="181.68944"
+       width="150.0338"
+       height="43.430298"
+       rx="12.002705"
+       fill="#854d0e"
+       stroke="#fde68a"
+       id="rect13" />
+    <text
+       class="label"
+       x="832.41058"
+       y="202.71855"
+       id="text13"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">resolved.yaml</text>
+  </g>
+  <path
+     class="edge"
+     d="M 761.38043,116.03754 C 769.60614,84.020687 849.15778,90.003766 879.98175,90.061859"
+     id="path14"
+     sodipodi:nodetypes="cc" />
+  <path
+     class="edge"
+     d="m 885.50725,110.13811 c -20.81497,54.716 -18.41635,48.0386 -26.64492,69.81164"
+     id="path14-3"
+     sodipodi:nodetypes="cc"
+     style="fill:none;stroke:#94a3b8;stroke-width:2.38266;marker-end:url(#arrow-2)" />
+  <path
+     class="edge"
+     d="m 975.24583,109.62064 c 12.19188,24.25813 30.06887,58.54367 36.49827,71.2956"
+     id="path14-3-0"
+     sodipodi:nodetypes="cc"
+     style="fill:none;stroke:#94a3b8;stroke-width:2.38266;marker-end:url(#arrow-2-8)" />
+  <rect
+     class="node"
+     x="701.35364"
+     y="116.03754"
+     width="120.05357"
+     height="43.924931"
+     rx="12.005358"
+     fill="#6b21a8"
+     stroke="#d8b4fe"
+     id="rect10" />
+  <text
+     class="label"
+     x="760.63849"
+     y="138.08301"
+     id="text10"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">preflight</text>
+  <rect
+     class="node"
+     x="879.98175"
+     y="68.099396"
+     width="100.04465"
+     height="43.924931"
+     rx="12.005358"
+     fill="#6b21a8"
+     stroke="#d8b4fe"
+     id="rect11" />
+  <text
+     class="label"
+     x="930.07324"
+     y="91.068542"
+     id="text11"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">run</text>
+  <rect
+     class="panel"
+     x="147.1134"
+     y="310.36084"
+     width="980"
+     height="235"
+     rx="22"
+     fill="#052e16"
+     stroke="#4ade80"
+     id="rect16"
+     transform="matrix(1.118629,0,0,0.99951163,-141.19252,0.20896198)" />
+  <path
+     class="edge"
+     d="m 527.52391,160.31671 2e-5,186.59957"
+     id="path5-0-9-7"
+     style="fill:none;stroke:#94a3b8;stroke-width:2.48758;marker-end:url(#arrow-6-0-00)"
+     sodipodi:nodetypes="cc" />
+  <path
+     class="edge"
+     d="M 853.42199,224.34654 C 840.72482,283.63451 652.5385,338.79556 604.22258,353.85851"
+     id="path5-0-9-7-3"
+     style="fill:none;stroke:#94a3b8;stroke-width:2.50076;marker-end:url(#arrow-6-0-00-8)"
+     sodipodi:nodetypes="cc" />
+  <path
+     class="edge"
+     d="m 1011.7441,224.34654 c 0.3876,86.07169 -217.82527,147.0529 -409.22017,146.6668"
+     id="path5-0-9-7-3-0"
+     style="fill:none;stroke:#94a3b8;stroke-width:2.50076;marker-end:url(#arrow-6-0-00-8-0)"
+     sodipodi:nodetypes="cc" />
+  <text
+     class="phase-title"
+     x="50.768604"
+     y="346.03439"
+     id="text7-3-2"
+     style="font-style:normal;font-variant:normal;font-weight:700;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif;fill:#ffffff">Verify</text>
+  <text
+     class="phase"
+     x="1503.9175"
+     y="365.46393"
+     id="text16"
+     style="font-style:normal;font-variant:normal;font-weight:700;font-stretch:normal;font-size:14px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">VERIFY</text>
+  <g
+     id="g30"
+     transform="translate(-90.736293,-13.961741)"
+     style="display:inline">
+    <rect
+       class="node"
+       x="257.73196"
+       y="481.4433"
+       width="170"
+       height="44"
+       rx="12"
+       fill="#334155"
+       stroke="#cbd5e1"
+       id="rect21" />
+    <text
+       class="label"
+       x="342.59085"
+       y="503.37274"
+       id="text21"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">Compare runs</text>
+  </g>
+  <g
+     id="g29"
+     transform="translate(-90.736293,-77.429962)">
+    <rect
+       class="node"
+       x="257.73196"
+       y="426.4433"
+       width="170"
+       height="44"
+       rx="12"
+       fill="#334155"
+       stroke="#cbd5e1"
+       id="rect20" />
+    <text
+       class="label"
+       x="342.29202"
+       y="448.4848"
+       id="text20"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">Lineage</text>
+  </g>
+  <rect
+     class="node"
+     x="452.47321"
+     y="349.33646"
+     width="150.10143"
+     height="44.993912"
+     rx="12.008114"
+     fill="#166534"
+     stroke="#86efac"
+     id="rect18"
+     style="display:inline" />
+  <text
+     class="label"
+     x="516.4201"
+     y="380.23364"
+     id="text18"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif;stroke-width:0.979155"
+     transform="scale(1.0215015,0.97895108)">verify-run</text>
+  <rect
+     class="node"
+     x="451.31482"
+     y="469.17484"
+     width="152.41817"
+     height="42.932983"
+     rx="10.45153"
+     fill="#166534"
+     stroke="#86efac"
+     id="rect19" />
+  <text
+     class="label"
+     x="527.52393"
+     y="492.35129"
+     id="text19"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif">Verified result</text>
+  <path
+     class="edge"
+     d="m 527.52534,395.47253 0.5449,71.23512"
+     id="path22"
+     sodipodi:nodetypes="cc" />
+  <path
+     class="edge"
+     d="M 451.31482,490.64131 C 395.46793,490.49488 408.1769,490.4822 339.31526,489.48156"
+     id="path23"
+     style="display:inline"
+     sodipodi:nodetypes="cc" />
+  <path
+     class="edge"
+     d="M 451.31482,490.64131 C 417.25585,490.54211 412.26317,371.35177 338.54206,370.82004"
+     id="path24"
+     sodipodi:nodetypes="cc" />
+  <metadata
+     id="metadata29">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>How a VIPER run works</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <text
+     class="phase-title"
+     x="695.6189"
+     y="53.372097"
+     id="text7-0"
+     style="font-style:normal;font-variant:normal;font-weight:700;font-stretch:normal;font-size:17px;line-height:normal;font-family:ui-sans-serif, system-ui, sans-serif;fill:#ffffff">Execute</text>
+</svg>

@@ -6,7 +6,8 @@ from datetime import datetime
 
 from ..http import ResolvedHttpRetrieval
 from ..ids import InputName
-from ..references import ResolvedGitFileRef
+from ..inputs import ResolvedInputRef
+from ..references import ResolvedGitFileRef, ResolvedStageInvocationRef
 from ..runtime import (
     EnvironmentSpec,
     GCEEnvironmentSpec,
@@ -21,9 +22,7 @@ from ..stages import (
     ResolvedDownloadSpec,
     ResolvedEmbedSpec,
     ResolvedEvaluateSpec,
-    ResolvedInternalInputRef,
     ResolvedSpec,
-    ResolvedStageInvocationRef,
     ResolvedTrainSpec,
 )
 from ._errors import RunError
@@ -62,7 +61,7 @@ def _resolved_stage(
     environment: ResolvedLocalEnvironment | ResolvedGCEEnvironment,
     process: StageProcessResult,
     invocation: ResolvedStageInvocationRef,
-    inputs: dict[InputName, ResolvedInternalInputRef] | None,
+    inputs: dict[InputName, ResolvedInputRef] | None,
     retrievals: dict[InputName, ResolvedHttpRetrieval] | None,
     completed_at: datetime,
 ) -> ResolvedSpec:

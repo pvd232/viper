@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field, HttpUrl, model_validator
 
 from ._schema import SHA256, GitCommit, NonEmptyStr, ProtocolModel, RepoRelPath
+from .ids import StageId
 
 
 class GitSource(ProtocolModel):
@@ -59,15 +60,6 @@ class HuggingFaceFileRef(ProtocolModel):
     repo_type: Literal["model", "dataset", "space"]
 
 
-class StageResultSnapshotRef(ProtocolModel):
-    """The immutable repository revision containing one completed stage."""
-
-    kind: Literal["huggingface"] = "huggingface"
-    repository: NonEmptyStr
-    commit: GitCommit
-    repo_type: Literal["model", "dataset", "space"]
-
-
 class LocalFileRef(ProtocolModel):
     """A file in one immutable revision of a repository-local VIPER store."""
 
@@ -83,6 +75,15 @@ class LocalStageResultSnapshotRef(ProtocolModel):
     kind: Literal["local"] = "local"
     store: RepoRelPath = ".viper/store"
     commit: SHA256
+
+
+class StageResultSnapshotRef(ProtocolModel):
+    """The immutable repository revision containing one completed stage."""
+
+    kind: Literal["huggingface"] = "huggingface"
+    repository: NonEmptyStr
+    commit: GitCommit
+    repo_type: Literal["model", "dataset", "space"]
 
 
 StageResultSnapshot = Annotated[
@@ -118,6 +119,20 @@ class ResolvedGitFileRef(ResolvedFileRef):
     """Identify an exact file stored at an immutable Git revision."""
 
     stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class ResolvedStageRef(ProtocolModel):
+    """Binds one completed stage to its immutable stage-result snapshot."""
+
+    stage_id: StageId
+    snapshot: StageResultSnapshot
+    resolved_spec: SnapshotFileRef
+
+
+class ResolvedStageInvocationRef(ResolvedFileRef):
+    """Identify one immutable stage-invocation receipt."""
+
+    kind: Literal["stage_invocation"] = "stage_invocation"
 
 
 class ResolvedArtifactPointerRef(ResolvedFileRef):
@@ -160,6 +175,8 @@ __all__ = [
     "HuggingFaceFileRef",
     "LocalFileRef",
     "LocalStageResultSnapshotRef",
+    "ResolvedStageRef",
+    "ResolvedStageInvocationRef",
     "ResolvedArtifactPointerRef",
     "ResolvedBenchmarkResultRef",
     "ResolvedBenchmarkSpecRef",

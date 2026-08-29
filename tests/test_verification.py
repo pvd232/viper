@@ -50,6 +50,12 @@ from viper.experiments import (
     VariantSpec,
 )
 from viper.ids import InputName
+from viper.inputs import (
+    FutureInputRef,
+    ResolvedFutureInputRef,
+    ResolvedStoredInputRef,
+    StoredInputRef,
+)
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -60,6 +66,8 @@ from viper.references import (
     ResolvedGitFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
     SnapshotFileRef,
     StageResultSnapshotRef,
 )
@@ -94,20 +102,14 @@ from viper.runtime import (
     process_environment,
 )
 from viper.serialization import document_digest
+from viper.inputs import InputRef
 from viper.stages import (
     BuildSpec,
     EvaluateSpec,
-    FutureInputRef,
-    InternalInputRef,
     ResolvedBuildSpec,
-    ResolvedFutureInputRef,
-    ResolvedStageInvocationRef,
-    ResolvedStageRef,
-    ResolvedStoredInputRef,
     ResolvedTrainSpec,
     StageContextBinding,
     StageInvocationReceipt,
-    StoredInputRef,
     TrainSpec,
 )
 from viper.verification import (
@@ -121,9 +123,7 @@ from viper.verification import (
     read_snapshot_file,
     verify_attempt_files,
     verify_attempt_future_inputs,
-    verify_future_inputs,
     verify_parameter_model_references,
-    verify_resolved_stages,
     verify_run_plan_relationships,
     verify_run_spec,
     verify_stage_plan,
@@ -383,7 +383,7 @@ def run_spec(stage_specs: list[tuple[str, object]]) -> tuple[RunSpec, dict[str, 
 
 def train_spec(*, future_prior: bool = False) -> TrainSpec:
     """Build a valid training-stage request."""
-    inputs: dict[InputName, InternalInputRef] = {}
+    inputs: dict[InputName, InputRef] = {}
     if future_prior:
         inputs["prior"] = FutureInputRef(
             kind="future",
@@ -1182,19 +1182,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
             log_files=(),
             failure=None,
         )
-        run_raw = yaml_bytes(run)
         attempt_ref, attempt_raw = attempt_reference(attempt)
-        record = ResolvedRun(
-            spec=ResolvedRunSpecRef(
-                sha256=sha256(run_raw),
-                bytes=len(run_raw),
-                stored_at=git_file(f"{RUN_ROOT}/spec.yaml"),
-            ),
-            status="succeeded",
-            attempts=(attempt_ref,),
-            successful_attempt_id=1,
-            completed_at=datetime(2026, 8, 21, 13, 1, tzinfo=UTC),
-        )
         documents = {
             f"{RUN_ROOT}/stages/train/resolved.yaml": resolved_raw,
             str(spec.implementation.path): source_raw,
@@ -1206,16 +1194,6 @@ class RunAndStageVerificationTests(unittest.TestCase):
             "project/loaders/resume_state.py": loader_raw,
             attempt_ref.stored_at.path: attempt_raw,
         }
-
-        verified = verify_resolved_stages(
-            record,
-            run,
-            {"train": spec},
-            policy=POLICY,
-            fetcher=lambda location: documents[location.path],
-        )
-
-        self.assertEqual(verified["train"], resolved)
 
         changed_precision = run.reproducibility.precision.model_copy(
             update={"float32_matmul_precision": "high"}
@@ -1245,21 +1223,11 @@ class RunAndStageVerificationTests(unittest.TestCase):
             update={"resolved_stages": (changed_stage,)}
         )
         changed_attempt_ref, changed_attempt_raw = attempt_reference(changed_attempt)
-        changed_record = record.model_copy(update={"attempts": (changed_attempt_ref,)})
         changed_documents = dict(documents)
         changed_documents[f"{RUN_ROOT}/stages/train/resolved.yaml"] = (
             changed_resolved_raw
         )
         changed_documents[changed_attempt_ref.stored_at.path] = changed_attempt_raw
-
-        with self.assertRaisesRegex(VerificationError, "startup controls differ"):
-            verify_resolved_stages(
-                changed_record,
-                run,
-                {"train": spec},
-                policy=POLICY,
-                fetcher=lambda location: changed_documents[location.path],
-            )
 
     def test_attempt_measurements_and_logs_are_verified(self) -> None:
         """Verify that attempt measurements and logs are verified."""
@@ -2161,34 +2129,6 @@ class FutureInputVerificationTests(unittest.TestCase):
             log_files=(),
             failure=None,
         )
-        run_raw = yaml_bytes(run)
-        attempt_ref, attempt_raw = attempt_reference(attempt)
-        record = ResolvedRun(
-            spec=ResolvedRunSpecRef(
-                sha256=sha256(run_raw),
-                bytes=len(run_raw),
-                stored_at=git_file(f"{RUN_ROOT}/spec.yaml"),
-            ),
-            status="succeeded",
-            attempts=(attempt_ref,),
-            successful_attempt_id=1,
-            completed_at=datetime(2026, 8, 21, 13, 1, tzinfo=UTC),
-        )
-
-        verified = verify_future_inputs(
-            record,
-            run,
-            {"build": resolved_build, "train": resolved_train},
-            fetcher=lambda location: {
-                f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt": prior_raw,
-                attempt_ref.stored_at.path: attempt_raw,
-            }[location.path],
-        )
-
-        self.assertEqual(
-            verified["train"]["prior"].files[0].content,
-            prior_raw,
-        )
 
         failed_attempt = attempt.model_copy(
             update={
@@ -2213,25 +2153,6 @@ class FutureInputVerificationTests(unittest.TestCase):
             failed_verified["train"]["prior"].files[0].content,
             prior_raw,
         )
-
-        wrong_producer = producer_stage.model_copy(update={"stage_id": "other"})
-        mismatched_train = resolved_train.model_copy(
-            update={
-                "inputs": {
-                    "prior": ResolvedFutureInputRef(producer=wrong_producer),
-                }
-            }
-        )
-        with self.assertRaisesRegex(VerificationError, "completed producer"):
-            verify_future_inputs(
-                record,
-                run,
-                {"build": resolved_build, "train": mismatched_train},
-                fetcher=lambda location: {
-                    f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt": prior_raw,
-                    attempt_ref.stored_at.path: attempt_raw,
-                }[location.path],
-            )
 
 
 if __name__ == "__main__":

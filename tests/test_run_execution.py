@@ -49,6 +49,7 @@ from viper.experiments import (
     TrainVariantStageParams,
     VariantSpec,
 )
+from viper.inputs import FutureInputRef
 from viper.journal import DurableJournal
 from viper.metrics import (
     FloatComparator,
@@ -76,7 +77,6 @@ from viper.runtime import (
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     DownloadSpec,
-    FutureInputRef,
     StageImplementationRef,
     TrainSpec,
     load_stage_callable,

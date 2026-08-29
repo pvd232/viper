@@ -20,11 +20,11 @@ from viper._schema import (
     RESUME_STATE,
 )
 from viper.artifacts import SingleFileArtifactSpec
+from viper.inputs import StoredInputRef
 from viper.parameters import ParameterModelRef
 from viper.references import ArtifactPointerRef
 from viper.serialization import serialize_document
 from viper.stages import (
-    StoredInputRef,
     TrainSpec,
 )
 

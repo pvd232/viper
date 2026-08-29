@@ -369,28 +369,6 @@ class NumericalRuntimeContext(ProtocolModel):
     native_thread_pools: tuple[NativeThreadPoolContext, ...]
 
 
-class RandomnessContext(ProtocolModel):
-    """Record the global seed applied to each supported generator family."""
-
-    python_seed: RNGSeed
-    numpy_seed: RNGSeed
-    torch_seed: RNGSeed
-    dataloader_seed: RNGSeed
-
-    @model_validator(mode="after")
-    def validate_shared_seed(self) -> RandomnessContext:
-        """Require every recorded generator family to use the global seed."""
-        seeds = {
-            self.python_seed,
-            self.numpy_seed,
-            self.torch_seed,
-            self.dataloader_seed,
-        }
-        if len(seeds) != 1:
-            raise ValueError("all recorded random-number generators must use one seed")
-        return self
-
-
 class ExecutionContext(ProtocolModel):
     """Facts observed from the host and running process.
 

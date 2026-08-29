@@ -160,7 +160,7 @@ and [stage worker](../../src/viper/_workers/stages.py) implement this boundary.
 An internal input comes from a promoted artifact or an earlier stage in the
 same run. VIPER verifies the producing evidence before materializing the input
 at the path fixed by the consuming stage. The
-[materialization module](../../src/viper/materialization.py) performs that
+[materialization module](../../src/viper/execution/_materialization.py) performs that
 operation.
 
 Every input and output has a data-use role. Training stages can consume
@@ -191,8 +191,9 @@ A training checkpoint contains two reserved artifacts:
   DataLoader state required for exact continuation.
 
 The [artifact module](../../src/viper/artifacts.py) defines artifact identity.
-The [resume module](../../src/viper/resume.py) captures and restores training
-state.
+The [randomness module](../../src/viper/randomness.py) captures and restores
+generator state. The [resume module](../../src/viper/resume.py) combines that
+state with optimizer and DataLoader state so training can continue exactly.
 
 VIPER publishes stage snapshots and attempt documents beneath the local
 content-addressed store. `ResolvedRun` references each canonical attempt file

@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from viper._verification.attempt import _verify_startup_backend
 from viper.resume import DataLoaderConfiguration
 from viper.runtime import (
     CPUBackendContext,
@@ -20,7 +21,7 @@ from viper.runtime import (
     apply_reproducibility,
     process_environment,
 )
-from viper.verification import VerificationError, _verify_startup_backend
+from viper.verification import VerificationError
 
 
 def _controls() -> ReproducibilitySpec:

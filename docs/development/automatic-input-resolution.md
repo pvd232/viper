@@ -15,14 +15,14 @@ pending.
 `@viper.train_stage`, and a subclass of `viper.parameters.Train`. The stage
 callable receives a `StageContext`; the callable reads materialized input paths
 from `context.inputs` and writes declared outputs through `context.artifacts`.
-See [`README.md`](../../README.md#Define-a-stage) and
-[`src/viper/stages.py`](../../src/viper/stages.py:60).
+See [`README.md`](../../README.md#define-a-stage) and
+[`src/viper/stages.py`](../../src/viper/stages.py).
 
 **Current:** `DownloadSpec` accepts HTTP request inputs, while `TrainSpec`
-accepts an `InternalInputRef` union containing `StoredInputRef` and
+accepts an `InputRef` union containing `ExternalInputRef`, `StoredInputRef`, and
 `FutureInputRef`. The user-authored frozen stage specification therefore names
 the internal relationship between a training input and its source.
-See [`src/viper/stages.py`](../../src/viper/stages.py:269).
+See [`src/viper/stages.py`](../../src/viper/stages.py).
 
 **Proposed:** The user keeps the decorator and typed-parameter workflow. The
 authoring layer accepts a project-level artifact input declaration and converts
@@ -66,22 +66,22 @@ DownloadSpec.artifacts["training_dataset"]
 
 **Inspected:** `FutureInputRef` carries `producer_stage_id` and
 `producer_artifact` for an earlier stage in the same run.
-[`src/viper/stages.py`](../../src/viper/stages.py:176)
+[`src/viper/stages.py`](../../src/viper/stages.py)
 
 **Inspected:** `StoredInputRef` carries an `ArtifactPointerRef`, a
 materialization path, and a data role for an artifact from a completed run.
-[`src/viper/stages.py`](../../src/viper/stages.py:150)
+[`src/viper/stages.py`](../../src/viper/stages.py)
 
 **Inspected:** `freeze_run_plan()` validates authored stage specifications and
 writes frozen stage and run files. It currently preserves the input reference
 already present in the stage specification. Pointer-document construction
 belongs to the proposed authoring operation.
-[`src/viper/authoring.py`](../../src/viper/authoring.py:225)
+[`src/viper/authoring.py`](../../src/viper/authoring.py)
 
 **Inspected:** The execution layer already follows a `StoredInputRef` pointer,
 calls `verify_promoted_artifact()`, materializes the verified files, and passes
 the resulting path to the stage context.
-[`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py:97)
+[`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py)
 
 The missing connector is the authoring operation that takes a user-level
 artifact input declaration and creates the internal reference consumed by the
@@ -274,7 +274,7 @@ declared producer stage and artifact name.
 successful attempt, selected stage, loaded stage specification, and declared
 artifact files. It rejects a missing stage, undeclared artifact, invalid run,
 or failed required benchmark.
-See [`src/viper/verification.py`](../../src/viper/verification.py:234).
+See [`src/viper/verification.py`](../../src/viper/verification.py).
 
 ### `input.bytes`
 
@@ -456,4 +456,4 @@ promotion contract under the project-root `inputs/` directory.
 - [Pointer and artifact verification](../../src/viper/verification.py)
 - [Input materialization](../../src/viper/execution/_materialization.py)
 - [Pointer acceptance construction](../../tests/test_generated_project_acceptance.py)
-- [Public stage example](../../README.md#Define-a-stage)
+- [Public stage example](../../README.md#define-a-stage)

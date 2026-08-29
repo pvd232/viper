@@ -47,12 +47,14 @@ from viper.experiments import (
     TrainVariantStageParams,
     VariantSpec,
 )
+from viper.inputs import FutureInputRef
 from viper.journal import DurableJournal
 from viper.parameters import ParameterModelRef
 from viper.preflight import preflight_plan
 from viper.references import (
     GitFileRef,
     GitSource,
+    ResolvedStageInvocationRef,
 )
 from viper.runs import (
     ResolvedRun,
@@ -68,8 +70,6 @@ from viper.runtime import (
 from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
 from viper.stages import (
     DownloadSpec,
-    FutureInputRef,
-    ResolvedStageInvocationRef,
     StageImplementationRef,
     StageInvocationReceipt,
     TrainSpec,

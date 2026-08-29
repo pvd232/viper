@@ -33,13 +33,13 @@ from ..references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
+    ResolvedStageRef,
     SnapshotFileRef,
     StageResultSnapshotRef,
     StorageModel,
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
-from ..stages import ResolvedStageRef
 from .models import (
     VerificationError,
     VerificationPolicy,

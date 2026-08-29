@@ -13,11 +13,13 @@ from torch.optim import Adam
 from torch.utils.data import TensorDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
-from viper.resume import (
+from viper.randomness import (
     capture_main_process_rng,
+    restore_main_process_rng,
+)
+from viper.resume import (
     capture_resume_state,
     load_resume_state,
-    restore_main_process_rng,
     restore_resume_state,
     save_resume_state,
 )

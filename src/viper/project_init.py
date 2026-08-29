@@ -41,10 +41,11 @@ Run the focused project tests:
 python -m pytest -q
 ```
 
-The files under `experiments/` and `benchmarks/` hold authored protocol
-documents. Their implementation references use repository-relative paths, so
-the package can be renamed or moved beneath another source directory before a
-run is frozen.
+After replacing the stage templates, commit the project and write an experiment
+draft under `experiments/`. The draft selects the stages and files for one run.
+`viper freeze-run` turns that draft into the exact plan used for execution.
+
+Benchmark specifications belong under `benchmarks/`.
 """,
         "pyproject.toml": f'''[build-system]
 requires = ["setuptools>=75"]
@@ -124,15 +125,17 @@ def load(path: Path) -> bytes:
 
 from pathlib import Path
 
-from viper.resume import (
-    DataLoaderConfiguration,
-    DataLoaderResumeState,
+from viper.randomness import (
     LegacyNumPyRNGState,
     MainProcessRNGState,
     NumPyRNGState,
     PCG64GeneratorState,
     PCG64InternalState,
     PythonRNGState,
+)
+from viper.resume import (
+    DataLoaderConfiguration,
+    DataLoaderResumeState,
     ResumeState,
 )
 

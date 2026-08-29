@@ -260,7 +260,8 @@ Public types and functions have one owner:
 | `viper.benchmark` | Benchmark specifications, comparisons, and results |
 | `viper.http` | Requests, transports, retrievals, and HTTP execution context |
 | `viper.runtime` | Environments, startup controls, and observed execution context |
-| `viper.resume` | Optimizer, generator, DataLoader, and resume-state contracts |
+| `viper.randomness` | Python, NumPy, and PyTorch generator-state contracts |
+| `viper.resume` | Optimizer, DataLoader, and combined resume-state contracts |
 | `viper.execution` | Run, retry, and benchmark operations |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |

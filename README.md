@@ -4,9 +4,12 @@ Run and verify reproducible ML experiments with machine-readable guardrails for
 agents.
 
 VIPER fixes an experiment before it runs and ties each result to the code and
-data that produced it. Artifacts keep the same verifiable structure in a local
-store or remote repository, so a run preserves its provenance as it moves
-between machines.
+data that produced it. VIPER verifies files stored locally or in an immutable
+Hugging Face repository.
+
+## How a run works
+
+![Project code and an experiment draft become a frozen plan. VIPER executes the plan, records its outputs, and verifies the result.](docs/assets/viper-workflow.svg)
 
 ## Install
 
@@ -16,20 +19,17 @@ VIPER requires Python 3.11 or newer.
 python -m pip install viper-provenance
 ```
 
-The distribution installs the `viper` Python package and the `viper` command.
-
 ## Create a project
 
 ```bash
 viper init my-project --package my_project
 cd my-project
-python -m pip install -e ".[test]"
-python -m pytest -q
 ```
 
-The generated project contains one decorated function for each stage kind. The
-project owns those functions, its parameter classes, its metrics, and its
-artifact loaders.
+The generated project includes templates for each VIPER stage. Replace them with your own functions, parameters, metrics, and artifact loaders.
+
+After defining the stages, commit the project and create an experiment draft.
+The draft describes one run.
 
 ## Define a stage
 
@@ -48,90 +48,233 @@ class TrainParameters(viper.parameters.Train):
 @viper.train_stage(parameter_model=TrainParameters)
 def train(context: viper.StageContext[TrainParameters]) -> None:
     dataset: Path = context.inputs["dataset"]
-    weights_path: Path = context.artifacts["parameters"]
+    weights_to_output: Path = context.artifacts["parameters"]
     train_model(
-        dataset_path=dataset,
-        weights_path=weights_path,
+        dataset=dataset,
+        weights=weights_to_output,
         epochs=context.params.epochs,
         learning_rate=context.params.learning_rate,
     )
 ```
 
-Freezing identifies `train`, `TrainParameters`, and their source files by
-repository-relative path, SHA-256 digest, and byte count. Execution constructs
-the validated `TrainParameters` value and passes it through `context.params`.
-`train_model` belongs to the project, and the frozen source commit fixes the
-module that defines it.
+## Commit the project
 
-The `parameters` artifact key is VIPER's required slot for trained model state;
-`weights_path` is the destination used by the project code.
+Commit the project before freezing the experiment. VIPER checks the experiment code against this commit, giving each run an exact code version that can be retrieved and verified later.
 
-## Run a frozen plan
+## Freeze the experiment
 
-Commit the project source before freezing the plan.
+The draft is an editable YAML file that tells VIPER what to run. Its top-level
+fields are:
+
+| Field | Purpose |
+| --- | --- |
+| `schema_version` | Selects the draft format. |
+| `run_id` | Names this run. |
+| `experiment_id` | Selects the experiment. |
+| `variant_id` | Selects the model or settings being tested. |
+| `replicate_id` | Selects the experimental replicate. |
+| `benchmark_id` | Selects an optional benchmark. |
+| `seed` | Sets the run-wide random seed. |
+| `source` | Identifies the Git repository and commit. |
+| `environment` | Describes the required Python and compute environment. |
+| `reproducibility` | Sets the numerical controls applied during execution. |
+| `stages` | Lists the stage specifications in execution order. |
+| `estimator` | Selects the trained-model artifact produced by the run. |
+
+Freeze the draft with:
 
 ```bash
-viper freeze-run path/to/draft.yaml --repository-root .
-viper preflight path/to/run/spec.yaml --repository-root .
-viper run path/to/run/spec.yaml --repository-root .
+viper freeze-run experiments/example/draft.yaml --repository-root .
 ```
 
-A project can start the same coordinator from its Python entrypoint:
+For `experiment_id: example`, `variant_id: baseline`, and `run_id: run-001`,
+VIPER creates:
+
+```text
+experiments/example/runs/baseline/run-001/spec.yaml
+```
+
+Use this generated `spec.yaml` for `preflight` and `run`.
+
+## Check the experiment
+
+`preflight` checks whether the current machine has the code, inputs, and
+environment required by the frozen plan.
+
+```bash
+viper preflight experiments/example/runs/baseline/run-001/spec.yaml \
+  --repository-root .
+```
+
+## Run the experiment
+
+After freezing and checking the experiment, start the complete run through the
+VIPER command or your project's Python entrypoint. Both options use the same
+frozen plan and produce the same output files.
+
+### Run with `viper`
+
+Use the VIPER command when starting the experiment from a terminal, script, or
+automated workflow:
+
+```bash
+viper run experiments/example/runs/baseline/run-001/spec.yaml \
+  --repository-root .
+```
+
+The first argument selects the frozen run plan. `--repository-root .` tells
+VIPER that the current folder is the project root.
+
+### Run with `python`
+
+Use your Python training script when `python train.py` is already the normal
+way you start training.
+
+Add this entrypoint to `train.py`:
 
 ```python
+from pathlib import Path
+
+import viper
+from my_project.training import train_model
+
+
+class TrainParameters(viper.parameters.Train):
+    epochs: int
+    learning_rate: float
+
+
+@viper.train_stage(parameter_model=TrainParameters)
+def train(context: viper.StageContext[TrainParameters]) -> None:
+    dataset: Path = context.inputs["dataset"]
+    weights_to_output: Path = context.artifacts["parameters"]
+    train_model(
+        dataset=dataset,
+        weights=weights_to_output,
+        epochs=context.params.epochs,
+        learning_rate=context.params.learning_rate,
+    )
+
 if __name__ == "__main__":
     viper.run(train)
 ```
 
+Then run:
+
 ```bash
 python train.py \
-  --run path/to/run/spec.yaml \
+  --run experiments/example/runs/baseline/run-001/spec.yaml \
   --stage train \
   --repository-root .
 ```
 
-Both entrypoints execute inside the selected host. The same commands work in a
-local terminal and in a terminal connected to a provisioned VM.
+The Python entrypoint works as follows:
 
-## Inspect the result
+```text
+Python starts train.py
+→ train.py passes the decorated train function to VIPER
+→ --stage train selects the matching stage from the frozen plan
+→ VIPER confirms that the function matches the recorded stage
+→ VIPER executes the complete run
+```
+
+The run plan can contain several stages. `train.py` starts the complete run,
+including every stage in the frozen plan.
+
+The command arguments have these meanings:
+
+- `--run` selects the frozen `spec.yaml`.
+- `--stage` selects the stage that owns the Python entrypoint.
+- `--repository-root` identifies the project’s root folder.
+
+## Verify the result
+
+A successful run writes `resolved.yaml` beside the frozen plan:
+
+```text
+experiments/example/runs/baseline/run-001/resolved.yaml
+```
+
+This file identifies the completed attempt and the files produced by each
+stage. Verify it with:
 
 ```bash
-viper --json verify-run path/to/resolved.yaml \
-  --trust-source https://github.com/example/project
-viper --json lineage path/to/resolved.yaml \
-  --trust-source https://github.com/example/project
-viper --json compare-runs left.yaml right.yaml \
+viper verify-run \
+  experiments/example/runs/baseline/run-001/resolved.yaml \
   --trust-source https://github.com/example/project
 ```
 
-`verify-run` starts from `ResolvedRun`, retrieves every hash-bound dependency,
-checks the frozen plan, validates each attempt, and returns the accepted stage
-and measurement summary. JSON mode emits one document with a stable operation
-name and error code.
+Set `--trust-source` to your experiment's Git repository. VIPER uses that
+repository to verify the committed code.
+
+VIPER reads the references in `resolved.yaml`, retrieves the frozen plan and run
+files, and checks every file against its recorded byte count and SHA-256
+digest. It also confirms that the stages, artifacts, and measurements belong to
+the same experiment. Training runs once. Verification checks the stored files
+and recomputes each metric whose specification requires it.
+
+`viper run` performs this check before reporting success. `verify-run` lets you
+repeat it later or on another machine.
+
+### View the run's lineage
+
+Lineage shows how stages consumed inputs and produced artifacts and
+measurements:
+
+```bash
+viper --json lineage \
+  experiments/example/runs/baseline/run-001/resolved.yaml \
+  --trust-source https://github.com/example/project
+```
+
+The JSON result contains the graph's nodes and the relationships between them.
+
+### Compare two runs
+
+`compare-runs` reports differences between two verified runs:
+
+```bash
+viper --json compare-runs \
+  path/to/first/resolved.yaml \
+  path/to/second/resolved.yaml \
+  --trust-source https://github.com/example/project
+```
+
+Place `--json` before any VIPER command when an agent or program needs a
+structured result.
 
 ## What VIPER verifies
 
-For one terminal run, VIPER checks the following chain:
+Suppose `run-001` uses commit `abc123`, trains on `dataset.csv`, and produces
+`weights.pt`.
 
 ```text
-RunSpec
-  -> exact stage specifications
-  -> typed stage invocations
-  -> resolved inputs and artifacts
-  -> measurements and metric recomputation
-  -> canonical attempt files
-  -> ResolvedRun
+Frozen plan                         Completed run
+spec.yaml                           resolved.yaml
+├── commit: abc123                  ├── completed stages
+├── input: dataset.csv              ├── artifact: weights.pt
+└── stage: train                    └── recorded measurements
+          \                          /
+           └────── verify-run ──────┘
+                         │
+                         ▼
+                 Verified result
 ```
 
-Each file reference carries a path, byte count, and SHA-256 digest. Each stage
-invocation carries the selected implementation and a serializable binding for
-the values delivered to the callable. Runtime evidence describes the host,
-compute backend, Python environment, and applied reproducibility controls.
+VIPER checks that the completed run matches the frozen plan. It verifies each
+referenced file using its path, byte count, and SHA-256 digest. It also checks
+that every stage, artifact, and measurement belongs to the same run.
 
-An evaluation measures one candidate. A benchmark applies one evaluation
-definition across candidates and requires an independently executed
-confirmation. `viper execute-benchmark` produces that confirmation and verifies
-artifact parity plus the declared metric criteria.
+When a metric requires recomputation, VIPER calculates it again from the
+verified files and compares the result with the recorded value. Training runs
+once; verification repeats the selected metric calculation.
+
+### Evaluations and benchmarks
+
+An evaluation scores the predictions from one run. A benchmark fixes the
+dataset, splits, metrics, and thresholds used to judge separate runs.
+`viper execute-benchmark` executes the selected frozen plan independently,
+then checks artifact parity and the benchmark's metric criteria.
 
 ## Documentation
 
@@ -141,32 +284,6 @@ artifact parity plus the declared metric criteria.
 - [Formal protocol](https://github.com/pvd232/viper/blob/main/docs/reference/protocol.md)
 - [Versioning](https://github.com/pvd232/viper/blob/main/docs/reference/versioning.md)
 - [Contributing](https://github.com/pvd232/viper/blob/main/CONTRIBUTING.md)
-
-## Development
-
-Create an isolated environment for the checkout:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --editable ".[test,release]"
-```
-
-The final command installs VIPER from the current directory. Editable mode
-keeps Python imports pointed at this checkout. `[test,release]` adds the two
-optional dependency groups declared in `pyproject.toml`.
-
-Run the repository checks inside that environment:
-
-```bash
-make check
-make check-integration
-make check-release
-```
-
-The [testing guide](https://github.com/pvd232/viper/blob/main/docs/development/testing.md)
-defines the cost tiers, domain
-markers, CI jobs, installed-wheel checks, and live CUDA gate.
 
 ## License
 

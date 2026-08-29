@@ -24,6 +24,7 @@ from viper._schema import (
 )
 from viper.artifacts import ResolvedBundleArtifact
 from viper.experiments import VariantSpec
+from viper.inputs import ExternalInputRef, FutureInputRef, LocalSource
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
@@ -41,7 +42,6 @@ from viper.runtime import (
 from viper.serialization import load_stage_spec
 from viper.stages import (
     EvaluateSpec,
-    FutureInputRef,
     TrainSpec,
 )
 
@@ -756,6 +756,25 @@ class EvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "inputs/benchmarks"):
             EvaluateSpec.model_validate(payload)
 
+        payload["inputs"]["split"] = stored_input(
+            "inputs/benchmarks/replogle/split.json",
+            "inputs/benchmarks/replogle/split.pointer.yaml",
+            "evaluation",
+        )
+        payload["inputs"]["parameters"] = ExternalInputRef(
+            source=LocalSource(path="inputs/raw/parameters.safetensors"),
+            path="inputs/models/strand/parameters.safetensors",
+            data_role="training",
+        ).model_dump(mode="json")
+        EvaluateSpec.model_validate(payload)
+
+        payload["inputs"]["parameters"]["data_role"] = "evaluation"
+        with self.assertRaisesRegex(
+            ValidationError,
+            "external evaluation parameters data_role",
+        ):
+            EvaluateSpec.model_validate(payload)
+
     def test_evaluation_rejects_training_checkpoint_outputs(self) -> None:
         """Verify that evaluation rejects training checkpoint outputs."""
         payload = {
@@ -937,6 +956,20 @@ class YAMLLoadingTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "mapping keys must be scalar"):
                 load_stage_spec(path)
+
+class ExternalInputRootTests(unittest.TestCase):
+    """Test provenance boundary class ."""
+
+    def test_external_input_spec_core(self) -> None:
+        """Verify class construction works ."""
+        input_spec = ExternalInputRef(
+            source=LocalSource(path="inputs/raw/training.h5ad"),
+            path="inputs/datasets/training.h5ad",
+            data_role="training",
+        )
+        assert input_spec.kind == "external"
+        assert input_spec.source.kind == "local"
+        assert input_spec.path == "inputs/datasets/training.h5ad"
 
 
 if __name__ == "__main__":

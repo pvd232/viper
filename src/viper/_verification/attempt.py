@@ -25,6 +25,7 @@ from ..http import (
     validate_request_policy,
 )
 from ..ids import InputName, StageId
+from ..inputs import FutureInputRef
 from ..journal import parse_journal_bytes
 from ..metrics import Measurement
 from ..paths import retrieval_body_path
@@ -33,10 +34,11 @@ from ..references import (
     HuggingFaceFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
+    ResolvedStageInvocationRef,
     SnapshotFileRef,
     StageResultSnapshotRef,
 )
-from ..runs import ResolvedRun, RunAttempt, RunSpec
+from ..runs import RunAttempt, RunSpec
 from ..runtime import (
     ComputeBackendContext,
     ComputeSpec,
@@ -62,10 +64,8 @@ from ..stages import (
     ResolvedBaseSpec,
     ResolvedDownloadSpec,
     ResolvedSpec,
-    ResolvedStageInvocationRef,
     StageContextBinding,
     StageInvocationReceipt,
-    StoredInputRef,
 )
 from .models import VerificationError, VerificationPolicy
 from .paths import (
@@ -80,7 +80,6 @@ from .storage import (
     load_verified_artifact,
     read_resolved_file,
     read_snapshot_file,
-    verify_run_attempt_references,
     verify_snapshot_artifact,
 )
 
@@ -110,11 +109,12 @@ def _logical_input_paths(
         return {}
     paths: dict[InputName, RepoRelPath] = {}
     for name, reference in stage.inputs.items():
-        if isinstance(reference, StoredInputRef):
+        if isinstance(reference, FutureInputRef):
+            producer = stage_specs[reference.producer_stage_id]
+            paths[name] = producer.artifacts[reference.producer_artifact].path
+        else:
             paths[name] = reference.path
-            continue
-        producer = stage_specs[reference.producer_stage_id]
-        paths[name] = producer.artifacts[reference.producer_artifact].path
+
     return paths
 
 
@@ -731,44 +731,6 @@ def verify_attempt_stages(
         )
 
     return verified_stages
-
-
-def verify_resolved_stages(
-    resolved_run: ResolvedRun,
-    run: RunSpec,
-    stage_specs: Mapping[StageId, BaseSpec],
-    *,
-    policy: VerificationPolicy,
-    fetcher: StorageFetcher | None = None,
-) -> dict[StageId, ResolvedBaseSpec]:
-    """Verify the complete stage sequence retained by a successful run."""
-    if resolved_run.status != "succeeded":
-        raise VerificationError("resolved-stage verification requires a succeeded run")
-
-    attempts = verify_run_attempt_references(
-        resolved_run,
-        run,
-        fetcher=fetcher,
-    )
-    successful_attempt = next(
-        (
-            attempt
-            for attempt in attempts
-            if attempt.attempt_id == resolved_run.successful_attempt_id
-        ),
-        None,
-    )
-    if successful_attempt is None or successful_attempt.status != "succeeded":
-        raise VerificationError("successful attempt could not be identified")
-
-    return verify_attempt_stages(
-        successful_attempt,
-        run,
-        stage_specs,
-        require_complete=True,
-        policy=policy,
-        fetcher=fetcher,
-    )
 
 
 def verify_attempt_journal(

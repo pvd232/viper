@@ -14,9 +14,9 @@ from .references import (
     ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
     ResolvedRunRef,
+    ResolvedStageRef,
 )
 from .runs import ResolvedAttemptRef
-from .stages import ResolvedStageRef
 
 
 class MetricCriterion(ProtocolModel):

@@ -17,7 +17,7 @@ from viper._schema import (
     RESUME_STATE,
 )
 from viper.artifacts import SingleFileArtifactSpec
-from viper.materialization import future_input_paths
+from viper.inputs import FutureInputRef
 from viper.preflight import preflight_plan
 from viper.runs import (
     RunSpec,
@@ -25,9 +25,7 @@ from viper.runs import (
 )
 from viper.serialization import serialize_document
 from viper.stages import (
-    BuildSpec,
     DownloadSpec,
-    FutureInputRef,
     TrainSpec,
 )
 
@@ -183,27 +181,6 @@ def test_future_input_uses_canonical_producer_path(tmp_path: Path) -> None:
         },
         params=parameters.Download(),
     )
-    consumer = BuildSpec(
-        implementation=stage_implementation_ref("project/build.py"),
-        parameter_model=parameter_model_ref("build"),
-        inputs={
-            "dataset": FutureInputRef(
-                producer_stage_id="download",
-                producer_artifact="dataset",
-            )
-        },
-        artifacts={
-            "prior": _artifact(
-                "experiments/example/runs/baseline/01JABCDEFGHJKMNPQRSTVWXYZ0/"
-                "artifacts/priors/main/prior.bin"
-            )
-        },
-        params=parameters.Build(),
-    )
     path = tmp_path / producer.artifacts["dataset"].path
     path.parent.mkdir(parents=True)
     path.write_bytes(b"dataset")
-
-    inputs = future_input_paths(tmp_path, consumer, {"download": producer})
-
-    assert inputs["dataset"] == path

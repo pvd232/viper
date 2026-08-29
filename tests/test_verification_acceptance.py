@@ -69,6 +69,12 @@ from viper.http import (
     ResolvedHttpRetrieval,
     ResolvedHttpTransport,
 )
+from viper.inputs import (
+    FutureInputRef,
+    ResolvedFutureInputRef,
+    ResolvedStoredInputRef,
+    StoredInputRef,
+)
 from viper.metrics import (
     Measurement,
     MetricExecutionReceipt,
@@ -90,6 +96,7 @@ from viper.references import (
     ResolvedGitFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
+    ResolvedStageRef,
     SnapshotFileRef,
     StageResultSnapshotRef,
     StorageModel,
@@ -131,19 +138,14 @@ from viper.stages import (
     BuildSpec,
     DownloadSpec,
     EvaluateSpec,
-    FutureInputRef,
     ParameterizedStageSpec,
     ResolvedBuildSpec,
     ResolvedDownloadSpec,
     ResolvedEvaluateSpec,
-    ResolvedFutureInputRef,
     ResolvedStageInvocationRef,
-    ResolvedStageRef,
-    ResolvedStoredInputRef,
     ResolvedTrainSpec,
     StageContextBinding,
     StageInvocationReceipt,
-    StoredInputRef,
     TrainSpec,
 )
 from viper.verification import (

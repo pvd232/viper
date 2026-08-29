@@ -8,13 +8,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..journal import DurableJournal
-from ..references import ResolvedFileRef
+from ..references import ResolvedFileRef, ResolvedStageInvocationRef
 from ..runs import AttemptJournalRef, ResolvedAttemptRef, RunAttempt
 from ..serialization import serialize_document
-from ..stages import (
-    ResolvedStageInvocationRef,
-    StageInvocationReceipt,
-)
+from ..stages import StageInvocationReceipt
 from ..storage import LocalArtifactStore
 from ._errors import RunError
 

@@ -13,20 +13,20 @@ pending.
 **Current:** `DownloadSpec` declares HTTP requests through `HttpRequestSpec`.
 The download worker retrieves each response, stores the response body through
 `LocalArtifactStore`, and constructs `ResolvedHttpRetrieval`.
-See [`src/viper/stages.py`](../../src/viper/stages.py:269) and
-[`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py:120).
+See [`src/viper/stages.py`](../../src/viper/stages.py) and
+[`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py).
 
 **Current:** A stage artifact becomes a `ResolvedArtifact` after the stage
 process finishes. VIPER reads each declared artifact file or bundle member,
 computes its byte count and SHA-256 digest, and places the result in the
 resolved stage record.
-See [`src/viper/execution/_stage.py`](../../src/viper/execution/_stage.py:169).
+See [`src/viper/execution/_stage.py`](../../src/viper/execution/_stage.py).
 
 **Current:** Internal stages accept `FutureInputRef` for an earlier stage in
 the active run and `StoredInputRef` for a promoted artifact from a completed
 run. The current input union contains `StoredInputRef` and `FutureInputRef`; an
 external-root branch belongs to the proposed contract.
-See [`src/viper/stages.py`](../../src/viper/stages.py:150).
+See [`src/viper/stages.py`](../../src/viper/stages.py).
 
 **Proposed:** VIPER treats every value entering through a VIPER-owned input
 boundary as a provenance root when the value enters before any VIPER producer.
@@ -69,21 +69,21 @@ HttpRequestSpec
 
 **Inspected:** `HttpRequestSpec` freezes the method, URL, expected body digest,
 expected body byte count, headers, and credential reference.
-[`src/viper/http.py`](../../src/viper/http.py:83)
+[`src/viper/http.py`](../../src/viper/http.py)
 
 **Inspected:** `ResolvedHttpRetrieval` binds the request, resolved transport,
 observed response, and `ResolvedFileRef` for the stored body. Its validator
 compares the body digest and byte count with the frozen request.
-[`src/viper/http.py`](../../src/viper/http.py:255)
+[`src/viper/http.py`](../../src/viper/http.py)
 
 **Inspected:** `_retrieve_download_inputs()` creates `ResolvedHttpRetrieval`
 after reading the transport body and publishing it through
 `LocalArtifactStore.resolved_files()`.
-[`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py:132)
+[`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py)
 
 **Inspected:** `_resolve_artifact()` creates `ResolvedSingleFileArtifact` or
 `ResolvedBundleArtifact` for every artifact declared by any stage.
-[`src/viper/execution/_stage.py`](../../src/viper/execution/_stage.py:169)
+[`src/viper/execution/_stage.py`](../../src/viper/execution/_stage.py)
 
 **Inspected:** `ResolvedHttpRetrieval` and `ResolvedArtifact` record related
 facts with separate roles. The retrieval record describes an HTTP operation;
@@ -127,7 +127,7 @@ response verification.
 **Proposed:** Define the persisted root record:
 
 ```python
-class ExternalInputRoot(ProtocolModel):
+class ResolvedExternalInputRef(ProtocolModel):
     schema_version: Literal[1] = 1
     input_name: InputName
     source: ExternalInputSource
@@ -135,7 +135,7 @@ class ExternalInputRoot(ProtocolModel):
     data_role: DataRole
 ```
 
-`ExternalInputRoot` belongs to the resolved consuming stage or its attempt
+`ResolvedExternalInputRef` belongs to the resolved consuming stage or its attempt
 record. The runtime constructs it after it has captured and hashed the bytes.
 The verifier consumes `files` to check delivery. The source-specific evidence
 remains attached to `source`: HTTP roots retain `ResolvedHttpRetrieval`, and
@@ -143,8 +143,8 @@ local roots retain the captured `ResolvedFileRef`.
 
 The final placement of the source-specific reference requires one schema
 choice. The smallest compatible option stores an HTTP retrieval reference
-beside `ExternalInputRoot` in the resolved download record and stores a local
-file reference directly in `ExternalInputRoot.files`.
+beside `ResolvedExternalInputRef` in the resolved download record and stores a local
+file reference directly in `ResolvedExternalInputRef.files`.
 
 ### Resolved stage connection
 
@@ -153,8 +153,8 @@ the input operation:
 
 ```python
 class ResolvedInternalSpec(ResolvedBaseSpec):
-    inputs: dict[InputName, ResolvedInternalInputRef]
-    external_inputs: dict[InputName, ExternalInputRoot] = Field(
+    inputs: dict[InputName, ResolvedInputRef]
+    external_inputs: dict[InputName, ResolvedExternalInputRef] = Field(
         default_factory=dict
     )
 ```
@@ -185,7 +185,7 @@ LocalExternalSource.path
 -> read the exact file bytes
 -> compute byte count and SHA-256
 -> publish the captured bytes through LocalArtifactStore
--> construct ExternalInputRoot
+-> construct ResolvedExternalInputRef
 -> materialize the captured bytes at the stage input path
 -> pass the path through StageContext.inputs[input_name]
 ```
@@ -204,12 +204,12 @@ HttpExternalSource.request
 -> verify expected body digest and byte count
 -> publish body through LocalArtifactStore
 -> construct ResolvedHttpRetrieval
--> construct ExternalInputRoot from the stored body reference
+-> construct ResolvedExternalInputRef from the stored body reference
 -> pass the body path through StageContext.inputs[input_name]
 ```
 
 `HttpRequestSpec` remains the frozen request contract. `ResolvedHttpRetrieval`
-remains the HTTP execution receipt. `ExternalInputRoot` supplies the common
+remains the HTTP execution receipt. `ResolvedExternalInputRef` supplies the common
 provenance-graph role.
 
 ### Produced artifact connection
@@ -241,7 +241,7 @@ records:
 | `HttpRequestSpec` | Run-plan authoring | HTTP transport and retrieval validator |
 | `ResolvedHttpRetrieval` | Download executor | Download-stage verifier and resolved stage record |
 | Local `ResolvedFileRef` | External-input capture operation | Root verifier and materializer |
-| `ExternalInputRoot` | Input capture owner | Input verifier and lineage inspection |
+| `ResolvedExternalInputRef` | Input capture owner | Input verifier and lineage inspection |
 | `ResolvedArtifact` | Stage executor after declared output exists | Artifact verifier and later `ArtifactPointer` |
 
 The root record must identify the exact captured bytes. A local source path
@@ -323,10 +323,10 @@ explicitly published pointers.
 
 | Surface | Required statement |
 | --- | --- |
-| Type | Add `ExternalInputSource` and `ExternalInputRoot` with one source-specific branch for local files and one for HTTP requests |
+| Type | Add `ExternalInputSource` and `ResolvedExternalInputRef` with one source-specific branch for local files and one for HTTP requests |
 | Authoring | Accept an external input declaration through the existing decorated-stage and typed-parameter workflow |
 | Freeze | Bind the declaration to the consuming stage and write the selected source identity into the frozen plan |
-| Runtime | Read or retrieve the source, hash the observed bytes, and construct `ExternalInputRoot` |
+| Runtime | Read or retrieve the source, hash the observed bytes, and construct `ResolvedExternalInputRef` |
 | Persistence | Store the root record and its exact file references beneath the consuming run record |
 | HTTP retrieval | Reuse `HttpRequestSpec` and `ResolvedHttpRetrieval` for request and response evidence |
 | Artifact capture | Continue constructing `ResolvedArtifact` for every declared stage output |
@@ -346,7 +346,7 @@ stage.
 ```text
 freeze input declaration
 -> execute capture
--> publish local bytes and create ExternalInputRoot
+-> publish local bytes and create ResolvedExternalInputRef
 -> materialize data/input.h5ad for train(context)
 -> train writes declared model artifact
 -> resolved stage contains root evidence and ResolvedArtifact
@@ -363,7 +363,7 @@ fake transport response.
 ```text
 execute HttpRequestSpec
 -> construct ResolvedHttpRetrieval
--> construct ExternalInputRoot from retrieval.body
+-> construct ResolvedExternalInputRef from retrieval.body
 -> materialize the response body for train(context)
 -> verify the body against the frozen request identity
 ```
@@ -387,7 +387,7 @@ model through the existing stored-input path.
 The test asserts this chain:
 
 ```text
-ExternalInputRoot
+ResolvedExternalInputRef
 -> resolved training stage
 -> ResolvedArtifact
 -> ArtifactPointer
@@ -399,7 +399,7 @@ ExternalInputRoot
 ### Phase 1. Define the root evidence
 
 - [ ] Add `ExternalInputSource` variants.
-- [ ] Add `ExternalInputRoot` and its canonical persisted path.
+- [ ] Add `ResolvedExternalInputRef` and its canonical persisted path.
 - [ ] Decide whether source-specific references live inside the root record or
       beside the resolved stage record.
 - [ ] Add model and serialization tests.

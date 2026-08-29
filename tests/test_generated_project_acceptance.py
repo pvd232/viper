@@ -54,6 +54,7 @@ from viper.experiments import (
     TrainVariantStageParams,
     VariantSpec,
 )
+from viper.inputs import FutureInputRef, StoredInputRef
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
@@ -82,9 +83,7 @@ from viper.stages import (
     DownloadSpec,
     EmbedSpec,
     EvaluateSpec,
-    FutureInputRef,
     StageImplementationRef,
-    StoredInputRef,
     TrainSpec,
 )
 from viper.storage import LocalArtifactStore

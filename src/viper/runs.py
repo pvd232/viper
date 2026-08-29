@@ -22,10 +22,11 @@ from .references import (
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
     ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
     StageResultSnapshotRef,
 )
 from .runtime import EnvironmentSpec, ReproducibilitySpec
-from .stages import ResolvedStageInvocationRef, ResolvedStageRef
 
 AttemptStatus = Literal[
     "succeeded",

@@ -11,11 +11,14 @@ from typing import Literal
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
+from ..inputs import ResolvedInputRef
 from ..journal import DurableJournal
 from ..preflight import preflight_plan
 from ..references import (
     GitFileRef,
     ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
     SnapshotFileRef,
 )
 from ..runs import (
@@ -30,9 +33,6 @@ from ..stages import (
     BaseSpec,
     DownloadSpec,
     InternalSpec,
-    ResolvedInternalInputRef,
-    ResolvedStageInvocationRef,
-    ResolvedStageRef,
 )
 from ..storage import LocalArtifactStore, snapshot_file
 from ..verification import (
@@ -208,7 +208,7 @@ def _execute_attempt(
             ):
                 raise RunError("stage source differs from the frozen source")
 
-            resolved_inputs: dict[InputName, ResolvedInternalInputRef] | None = None
+            resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             input_paths: dict[str, Path] = {}
             if isinstance(stage, DownloadSpec):
@@ -223,11 +223,14 @@ def _execute_attempt(
             elif isinstance(stage, InternalSpec):
                 resolved_inputs, input_paths = _resolve_inputs(
                     root,
+                    workspace,
+                    stage_reference.stage_id,
                     stage,
                     completed,
                     loaded_stages,
                     fetcher,
                     policy,
+                    store,
                 )
 
             journal.append(
