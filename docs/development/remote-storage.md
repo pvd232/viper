@@ -612,28 +612,68 @@ separate step before freezing the consumer.
 
 ### 10.4 Restore
 
-The run command returns and prints the terminal `ResolvedRunRef`. Its cloud
-form can be represented as:
+The run command returns and prints the terminal `ResolvedRunRef`. The
+`viper restore` command accepts a local terminal-run path or this cloud form:
 
 ```text
 viper://machina/weekend_models@<revision>/<path-to-resolved.yaml>
 ```
 
+The cloud revision identifies a sealed manifest. The manifest entry supplies
+the terminal file's path, SHA-256 digest, and byte count. VIPER constructs the
+`ResolvedRunRef` from that entry and requires the retrieved terminal file to
+match it before following the run.
+
+Restore accepts terminal runs with `status="succeeded"`. Omitting
+`--artifacts` selects every artifact from the successful attempt. Supplying
+`--artifacts` selects one or more values in this form:
+
+```text
+<stage-id>.<artifact-name>
+```
+
+The period is unambiguous because `StageId` and `ArtifactName` exclude periods.
+A bundle selector restores every member of that bundle.
+
+The output rules are:
+
+| Selection | `--output` meaning |
+| --- | --- |
+| All artifacts | Directory beneath which VIPER recreates declared repository-relative paths |
+| One single-file artifact | Exact output file |
+| One bundle artifact | Directory containing the restored bundle |
+| Several artifacts | Directory beneath which VIPER recreates declared repository-relative paths |
+
+Omitting `--output` restores each selected artifact to its declared path beneath
+`--repository-root`. VIPER requires every selected destination path to be
+unique and nonoverlapping. A conflicting selection fails before retrieval.
+
 Restore performs this sequence:
 
 ```text
-parse immutable terminal-run URI
+parse terminal-run path or immutable URI
 -> retrieve terminal resolved.yaml
 -> check ResolvedRunRef digest and byte count
 -> parse ResolvedRun
 -> follow attempt, stage, snapshot, input, and artifact references
--> retrieve each selected file from the backend named by its reference
--> recreate requested repository-relative working paths
--> verify every retrieved file
+-> resolve the successful attempt and selected artifacts
+-> validate every destination path and existing file
+-> retrieve selected files into temporary paths
+-> verify every SHA-256 digest and byte count
+-> move each verified file into place
 ```
 
+An absent destination receives the restored file. A destination containing the
+expected bytes remains in place and is reported as already restored. A
+destination containing different bytes fails the operation before VIPER writes
+any file. Each final move is atomic.
+
+Restore parses records, follows references, retrieves bytes, and checks file
+identity. Stage callables, artifact loaders, and metric implementations remain
+unexecuted.
+
 Restore starts from `ResolvedRunRef`; the terminal run and all reachable
-references carry their own locations.
+references carry their own storage locations.
 
 ## 11. Public workflow
 
@@ -674,6 +714,26 @@ viper restore \
   --repository-root restored-project
 ```
 
+The command above restores every artifact to its declared path. The user can
+restore one artifact to a chosen file:
+
+```bash
+viper restore <run-reference> \
+  --artifacts train.parameters \
+  --output recovered/parameters.bin
+```
+
+The user can restore several artifacts beneath one directory:
+
+```bash
+viper restore <run-reference> \
+  --artifacts \
+    train.parameters \
+    train.resume_state \
+    evaluate.predictions \
+  --output recovered/
+```
+
 ## 12. Propagation and legacy cleanup
 
 ### 12.1 Required changes
@@ -691,7 +751,7 @@ viper restore \
 | Terminal run | Publish terminal `resolved.yaml` and return `RunResult.resolved_run_ref`. |
 | Retrieval | Route Viper Cloud file and snapshot variants through the cloud client. |
 | Recovery | Resume an unsealed stage publication from verified working paths before rerunning the stage. |
-| CLI | Print the terminal run reference and add restore from an immutable Viper Cloud URI. |
+| CLI | Print the terminal run reference; add full and artifact-selected restore from a local terminal-run path or immutable Viper Cloud URI. |
 | Verification | Apply existing path, digest, and byte-count rules to both destination variants. |
 
 ### 12.2 Removed design
