@@ -130,6 +130,10 @@ MetricMode = Literal["recompute", "live"]
 ObjectiveDirection = Literal["minimize", "maximize"]
 
 MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
+DecoratedMetricT = TypeVar(
+    "DecoratedMetricT",
+    bound=Callable[..., float] | type[Any],
+)
 
 
 @dataclass(frozen=True)
@@ -185,7 +189,7 @@ def metric(
     kind: MetricKind,
     mode: MetricMode,
     params: type[MetricParamsT] = parameters.Metric,
-) -> MetricDecorator[MetricParamsT]: ...
+) -> Callable[[DecoratedMetricT], DecoratedMetricT]: ...
 
 
 def measure(
@@ -207,6 +211,31 @@ def at_least(metric: MetricDraft, threshold: float) -> MetricCriterionDraft: ...
 
 
 def at_most(metric: MetricDraft, threshold: float) -> MetricCriterionDraft: ...
+```
+
+The decorator metadata follows the existing implementation pattern:
+
+```python
+def metric_definition(
+    implementation: DecoratedMetric,
+) -> MetricDefinition[Any]: ...
+```
+
+```text
+@viper.metric(...)
+-> construct MetricDefinition
+-> attach it to the function or class as __viper_metric__
+
+viper.measure(implementation, ...)
+-> call metric_definition(implementation)
+-> validate params against MetricDefinition.parameter_model
+-> validate kind, mode, dependencies, and comparator
+-> return MetricDraft containing the implementation and configured values
+
+viper.freeze(plan)
+-> call metric_definition(MetricDraft.implementation)
+-> hash the implementation and custom parameter-model source
+-> write MetricSpec
 ```
 
 `viper.measure()` constructs `viper.params.Metric()` when the caller omits
@@ -685,6 +714,39 @@ class ExperimentSpec(ProtocolModel):
     metrics: tuple[MetricSpec, ...]
 
 
+class BuildVariantStageParams(ProtocolModel):
+    kind: Literal["build"] = "build"
+    stage_id: StageId
+    params: parameters.Build
+
+
+class EmbedVariantStageParams(ProtocolModel):
+    kind: Literal["embed"] = "embed"
+    stage_id: StageId
+    params: parameters.Embed
+
+
+class TrainVariantStageParams(ProtocolModel):
+    kind: Literal["train"] = "train"
+    stage_id: StageId
+    params: parameters.Train
+
+
+class EvaluateVariantStageParams(ProtocolModel):
+    kind: Literal["evaluate"] = "evaluate"
+    stage_id: StageId
+    params: parameters.Evaluate
+
+
+VariantStageParams = Annotated[
+    BuildVariantStageParams
+    | EmbedVariantStageParams
+    | TrainVariantStageParams
+    | EvaluateVariantStageParams,
+    Field(discriminator="kind"),
+]
+
+
 class VariantSpec(ProtocolModel):
     schema_version: Literal[1] = 1
     experiment_id: ExperimentId
@@ -692,6 +754,10 @@ class VariantSpec(ProtocolModel):
     levels: dict[FactorId, LevelId]
     stage_params: tuple[VariantStageParams, ...] = Field(min_length=1)
 ```
+
+`DownloadVariantStageParams` leaves the union because the runner-owned
+`DownloadSpec` stores request, policy, and transport settings directly. Variant
+parameter records cover project-owned stage parameter objects.
 
 Freezing the first plan for a variant fixes that variant's complete stage
 parameters. A later plan using the same experiment and variant must produce the
@@ -868,7 +934,7 @@ the reusable benchmark definition to one candidate run and its experiment.
 For each `MetricDraft`, `viper.freeze()` performs these operations:
 
 ```text
-load @viper.metric metadata
+call metric_definition(MetricDraft.implementation)
 -> validate params against MetricDefinition.parameter_model
 -> hash implementation source
 -> hash a custom parameter-model source
@@ -974,6 +1040,14 @@ differentiable objective interface to prove that relationship.
 
 ## 7. Verification
 
+### `metric.definition.binding`
+
+`metric_definition()` retrieves the `MetricDefinition` attached to the loaded
+implementation. Its metric ID, kind, mode, and parameter class equal the values
+represented by `MetricSpec`. A project parameter class produces the exact
+`MetricSpec.parameter_model`; the package `viper.params.Metric` class produces
+`parameter_model=None`.
+
 ### `metric.draft.parameter_class`
 
 The exact class of `MetricDraft.params` equals
@@ -984,6 +1058,13 @@ The exact class of `MetricDraft.params` equals
 The stage worker validates `MetricSpec.params` through the frozen parameter
 class. The `MetricContext.params` object supplied by `MetricHandle` equals that
 validated object.
+
+### `metric.recompute.invocation_binding`
+
+The production and recomputation `MetricExecutionReceipt` records carry equal
+`implementation`, `parameter_model`, `params`, and `dependencies` fields. Their
+`parameter_model` fields also equal `MetricSpec.parameter_model`. A mismatch
+fails metric verification.
 
 ### `metric.objective.selection`
 
@@ -1014,6 +1095,22 @@ verification.
 `RunPlanDraft.variant` and `RunPlanDraft.replicate` exist in the selected
 `ExperimentDraft`. The selected variant has one declared level for every factor,
 and every level belongs to that factor.
+
+### `experiment.variant.graph`
+
+Every `StageDraftArtifactRef` used by a variant names a producer in that same
+variant's `stages` mapping. The producer appears before its consumer. The
+variant estimator names an artifact from one train stage in the same mapping.
+Freezing writes that stage and artifact to `RunSpec.estimator`.
+
+The frozen verifier confirms that every `FutureInputRef` names an earlier run
+stage and that `RunSpec.estimator` names a declared artifact from a train stage.
+
+### `experiment.variant.parameters`
+
+`VariantSpec.stage_params` contains one entry for every build, embed, train, and
+evaluate stage in the selected variant. It contains zero download entries.
+Each entry repeats the selected stage ID, kind, and frozen parameters.
 
 ### `benchmark.metric.selection`
 
@@ -1047,15 +1144,17 @@ Section 4.
 
 | Surface | Change |
 | --- | --- |
-| Public metric API | Add typed metric decorators, `viper.measure()`, `viper.minimize()`, `viper.maximize()`, `viper.at_least()`, and `viper.at_most()`. |
+| Public metric API | Add typed metric decorators, preserve `MetricDefinition` attachment and retrieval, and add `viper.measure()`, `viper.minimize()`, `viper.maximize()`, `viper.at_least()`, and `viper.at_most()`. |
 | Live metric runtime | Pass validated `MetricContext` through `MetricHandle`; functions receive it first and stateful classes receive it at construction. |
 | Metric protocol | Add `parameter_model` to `MetricSpec` and `MetricExecutionReceipt`. |
+| Metric verifier | Match `MetricDefinition.parameter_model` to `MetricSpec.parameter_model`; compare `parameter_model` across production and recomputation receipts. |
 | Stage drafts | Replace objective `MetricDraft` values with `MetricObjectiveDraft`. |
 | Stage protocol | Add `MetricObjectiveSpec` to embed, train, and evaluate specs. |
 | Experiment API | Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, `ExperimentDraft`, and public constructors. Each variant owns level labels, stages, and its estimator. Derive metrics from all variant stages. |
+| Experiment protocol | Remove `DownloadVariantStageParams` from `VariantStageParams`; derive entries from build, embed, train, and evaluate stages. |
 | Run-plan API | Replace repeated experiment, variant, replicate, seed, stages, and estimator values with `ExperimentDraft` plus selected variant and replicate IDs. |
 | Benchmark API | Add `BenchmarkDraft`; separate selected metrics from optional criteria. |
-| Benchmark protocol | Add `experiment_id`, `metric_ids`, and `criteria`; replace criterion-only metric receipts with `BenchmarkMetricResult`. |
+| Benchmark protocol | Add `metric_ids` and `criteria`; replace criterion-only metric receipts with `BenchmarkMetricResult`. |
 | Benchmark executor | Iterate `metric_ids`, store every verified result, and apply criteria by metric ID when present. |
 | Verifier | Add the named metric, objective, experiment, and benchmark checks in Section 7. |
 | Generated project | Replace manual `MetricSpec`, `ExperimentSpec`, `VariantSpec`, and `BenchmarkSpec` construction with the public draft API. |
@@ -1065,6 +1164,8 @@ The superseded behavior has these dispositions:
 
 | Existing occurrence | Disposition |
 | --- | --- |
+| Undefined proposed `MetricDecorator` return type | Replace with `Callable[[DecoratedMetricT], DecoratedMetricT]`. |
+| Implicit `MetricDefinition` handoff | Preserve `__viper_metric__` attachment and `metric_definition()` retrieval; add `parameter_model` to the definition. |
 | Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metric` and `viper.measure()`. |
 | Python stage authoring that accepts `metric_ids=` | Replace with `objective=` and `metrics=`. |
 | Proposed `objective_metric_id` fields in `automatic-input-resolution.md` | Replace with `MetricObjectiveSpec objective`. |
@@ -1072,6 +1173,7 @@ The superseded behavior has these dispositions:
 | Live metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
 | Parameterless `StatefulMetric` subclasses | Replace constructors with `MetricContext`. |
 | Manual `ExperimentSpec` and `VariantSpec` construction in public examples | Replace with `viper.experiment()`, `viper.variant()`, and `viper.replicate()`. |
+| `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete with `parameters.Download`; derive variant parameters from project-owned stages. |
 | `BenchmarkSpec.metrics: tuple[MetricCriterion, ...]` | Replace with `metric_ids` and optional `criteria`. |
 | `MetricCriterionReceipt` | Delete after `BenchmarkMetricResult` and `MetricCriterionResult` cover recorded values and optional criteria. |
 | Benchmark fixtures that require one threshold per metric | Replace with one criterion-free result case and one threshold case. |
@@ -1142,10 +1244,15 @@ benchmark = viper.benchmark(
 
 The test asserts:
 
+- `metric_definition(evaluation_loss).parameter_model` is `LossMetricParams`;
+- the frozen evaluation-loss `MetricSpec.parameter_model` identifies that exact
+  class;
 - `ExperimentSpec.metrics` contains each selected metric once;
 - the train objective is `training_loss` with direction `minimize`;
 - the evaluate objective is `evaluation_loss` with direction `minimize`;
 - live metric contexts contain the frozen parameter object;
+- production and recomputation receipts carry the same parameter-model
+  reference as the frozen metric;
 - candidate and confirmation metric receipts verify;
 - `BenchmarkResult.metrics` contains loss and accuracy;
 - the loss result uses `criterion=None`;
@@ -1162,6 +1269,7 @@ in Section 4. The acceptance test asserts:
 - the high-rate `VariantSpec.levels` selects `high`;
 - each `VariantSpec.stage_params` contains the concrete training parameters
   from its own `VariantDraft.stages` mapping;
+- each `VariantSpec.stage_params` excludes the runner-owned download stage;
 - each run uses the stage graph and estimator from its selected variant; and
 - selecting `seed_7` writes seed `7`, while selecting `seed_19` writes seed
   `19`.
@@ -1170,10 +1278,20 @@ Changing the selected level label while retaining the old stage parameters
 creates a different `VariantSpec` and fails the existing variant identity
 check for that variant ID.
 
+Selecting an artifact or estimator from another variant fails
+`experiment.variant.graph`.
+
+Adding `DownloadVariantStageParams` fails `experiment.variant.parameters`.
+
 ### Targeted rejections
 
 Changing a live metric parameter after freezing fails
 `metric.live.parameter_delivery`.
+
+Removing the metric decorator metadata fails `metric.definition.binding`.
+
+Changing the parameter-model reference in one recomputation receipt fails
+`metric.recompute.invocation_binding`.
 
 Removing the training objective measurement from an otherwise successful stage
 fails `metric.objective.evidence`.
@@ -1193,7 +1311,11 @@ existing benchmark input-identity checks before execution.
 
 - [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
 - [ ] Add the public metric, objective, and criterion constructors.
+- [ ] Extend the existing `MetricDefinition` with `parameter_model`; preserve
+      `__viper_metric__` attachment and `metric_definition()` retrieval.
 - [ ] Add `parameter_model` to the frozen metric records.
+- [ ] Compare parameter-model references during metric definition and
+      recomputation verification.
 - [ ] Make `MetricContext` generic.
 - [ ] Deliver `MetricContext` through live functions and stateful constructors.
 - [ ] Add focused decorator, draft, and live-parameter tests.
@@ -1218,6 +1340,10 @@ its improvement direction.
 - [ ] Change `RunPlanDraft` to select one experiment draft, variant, and
       replicate.
 - [ ] Make each variant own its level labels, stage graph, and estimator.
+- [ ] Validate same-variant artifact handles, stage order, and estimator
+      ownership before freezing.
+- [ ] Remove `DownloadVariantStageParams` from `VariantStageParams` and update
+      variant-parameter verification.
 - [ ] Derive seed, experiment records, selected stage graph, variant
       parameters, estimator, and metric registry.
 - [ ] Reject duplicate experiment declarations and conflicting metric specs.

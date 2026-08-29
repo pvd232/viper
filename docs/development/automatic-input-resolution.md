@@ -624,6 +624,10 @@ variant's `stages` mapping in insertion order. For each
 `producer`. That key becomes `StageArtifactRef.stage_id` and then
 `FutureInputRef.producer_stage_id`.
 
+The compiler applies that ownership rule to every variant. It also requires
+each variant's estimator to select an artifact from a train stage in the same
+variant. Cross-variant artifact handles and estimators stop freezing.
+
 The authoring compiler derives frozen input records from the selected values:
 
 ```text
@@ -1962,6 +1966,7 @@ overwrite rules, and review ownership.
 | Artifact API | Add `viper.file_artifact()` and callable-backed artifact drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `FileInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
+| Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and evaluate stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
 | Pointer writer | Serialize prior-run `ArtifactPointer` documents and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef` |
 | Storage publication | Publish local-root captures, generated pointer files, stage snapshots, and terminal runs at their creation boundaries | Every record carries the storage reference required for retrieval |
@@ -1986,6 +1991,7 @@ replacement:
 | `download_stage()` and generated `@viper.download_stage` callables | Delete | `viper.download()` constructs the runner-owned draft. |
 | `DownloadContext` and `HttpRetrievalHandle` | Delete | The runner consumes `HttpTransportResult` and writes `ResolvedHttpRetrieval`. |
 | `parameters.Download` | Delete | Runner-owned `DownloadSpec` uses request, policy, and transport fields. |
+| `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete | Variant parameters cover project-owned build, embed, train, and evaluate stages. |
 | `StageContextBinding.retrievals` and `HttpRetrievalContextBinding` | Delete | The runner consumes retrieval results directly. |
 | `execute_stage_process(..., retrievals=...)` | Replace | `_execute_attempt()` invokes the transport and resolves download artifacts directly. |
 | `BaseSpec.implementation` | Move | `ParameterizedSpec.implementation` owns project-stage source identity. |
@@ -2098,6 +2104,10 @@ increments defined by the first two contracts in the dependency order in
 - [ ] Replace `StageDraft.spec_source` with `StageDraft.spec`.
 - [ ] Remove `StageDraft.stage_id`; add `VariantDraft.stages` as
       `dict[StageId, StageDraft]` and put the variant estimator beside it.
+- [ ] Validate that every artifact handle and estimator belongs to its own
+      variant stage mapping.
+- [ ] Remove `DownloadVariantStageParams` from the frozen variant-parameter
+      union.
 - [ ] Define the complete `StageSpecDraft` variants for the five stage kinds.
 - [ ] Expose one `StageDraftArtifactRef` per declared artifact through
       `StageDraft.artifacts`.
