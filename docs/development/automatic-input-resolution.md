@@ -145,14 +145,14 @@ from enum import StrEnum
 
 
 class Train(StrEnum):
-    PARAMETERS = "parameters"
-    RESUME_STATE = "resume_state"
+    MODEL = "model"
+    STATE = "state"
 
 
 class Eval(StrEnum):
-    PARAMETERS = "parameters"
-    EVALUATION_DATASET = "evaluation_dataset"
-    PREDICTIONS = "predictions"
+    MODEL = "model"
+    TEST = "test"
+    PREDS = "preds"
 ```
 
 The public import is:
@@ -164,8 +164,8 @@ from viper.keys import Eval, Train
 `Train` and `Eval` belong to the stage contracts that require these names.
 The surrounding `inputs` or `artifacts` map states whether the stage reads or
 writes the named value. Pydantic converts each `StrEnum` member to its string
-value, so frozen YAML continues to store `parameters`, `resume_state`,
-`evaluation_dataset`, and `predictions` as ordinary map keys.
+value, so frozen YAML stores `model`, `state`, `test`, and `preds` as ordinary
+map keys.
 
 Project-defined keys remain strings or project-owned `StrEnum` members. For
 example, `dataset` remains a project-defined training input name.
@@ -190,7 +190,7 @@ class TrainParams(viper.params.Train):
 @viper.train(params=TrainParams)
 def train(context: viper.StageContext[TrainParams]) -> None:
     dataset = context.inputs["dataset"]
-    parameters = context.artifacts[Train.PARAMETERS]
+    parameters = context.artifacts[Train.MODEL]
     train_model(
         dataset,
         parameters,
@@ -516,6 +516,26 @@ reserved-name, and artifact-overlap checks. The implementation-path collision
 check moves to `ParameterizedSpec`, the class that owns `implementation`.
 `DownloadSpec` drops `parameter_model` and `params`.
 
+The target stage validators use the enum values after Pydantic converts them to
+strings:
+
+```text
+TrainSpec.artifacts
+-> requires model and state
+
+TrainSpec.inputs
+-> accepts model and state together for checkpoint continuation
+
+EvaluateSpec.inputs
+-> requires model and test
+
+EvaluateSpec.artifacts
+-> requires preds
+```
+
+The old `parameters`, `resume_state`, `evaluation_dataset`, and `predictions`
+keys fail target-model validation.
+
 `TrainSpec` and `EvaluateSpec` require `objective.metric_id` to appear in
 `metric_ids`. `EmbedSpec` applies the same check when `objective` is present.
 Run-plan verification loads the matching `MetricSpec` from `ExperimentSpec`
@@ -530,7 +550,7 @@ example uses binary cross-entropy for both the optimizer loss and the reported
 training objective.
 
 The target `EvaluateSpec` accepts `ExternalInputRef`, `FutureInputRef`, or
-`StoredInputRef` for `evaluation_dataset` and every named split. Freezing and
+`StoredInputRef` for `Eval.TEST` and every named split. Freezing and
 preflight resolve each reference to its artifact declaration and require an
 `evaluation` or `benchmark` data role. This replaces the active validator that
 requires stored inputs solely because they were authored as pointers.
@@ -1156,7 +1176,7 @@ def evaluation_loss(
     context: viper.MetricContext[LossMetricParams],
 ) -> float:
     params = context.params
-    rows = load_predictions(context.artifacts[Eval.PREDICTIONS])
+    rows = load_predictions(context.artifacts[Eval.PREDS])
     losses = []
     for row in rows:
         label = float(row["label"])
@@ -1177,7 +1197,7 @@ def evaluation_loss(
 def evaluation_accuracy(
     context: viper.MetricContext[viper.params.Metric],
 ) -> float:
-    rows = load_predictions(context.artifacts[Eval.PREDICTIONS])
+    rows = load_predictions(context.artifacts[Eval.PREDS])
     correct = sum(
         int(row["prediction"]) == int(row["label"])
         for row in rows
@@ -1194,7 +1214,7 @@ gradient_norm_metric = viper.measure(gradient_norm)
 
 prediction_dependency = MetricDependency(
     source="artifact",
-    name=Eval.PREDICTIONS,
+    name=Eval.PREDS,
     required_data_role="evaluation",
 )
 evaluation_loss_metric = viper.measure(
@@ -1382,7 +1402,7 @@ def train(context: viper.StageContext[TrainParams]) -> None:
             epoch=epoch,
         )
 
-    weights_path = context.artifacts[Train.PARAMETERS]
+    weights_path = context.artifacts[Train.MODEL]
     weights_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), weights_path)
 
@@ -1393,7 +1413,7 @@ def train(context: viper.StageContext[TrainParams]) -> None:
         capture_legacy_global=True,
     )
     save_resume_state(
-        context.artifacts[Train.RESUME_STATE],
+        context.artifacts[Train.STATE],
         resume_state,
     )
 
@@ -1412,12 +1432,12 @@ training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": training_embeddings.artifacts["embeddings"]},
     artifacts={
-        Train.PARAMETERS: viper.file_artifact(
+        Train.MODEL: viper.file_artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.RESUME_STATE: viper.file_artifact(
+        Train.STATE: viper.file_artifact(
             path=RESUME_STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
@@ -1435,14 +1455,14 @@ class EvaluateParams(viper.params.Evaluate):
 
 @viper.evaluate(params=EvaluateParams)
 def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
-    rows = load_embeddings(context.inputs[Eval.EVALUATION_DATASET])
+    rows = load_embeddings(context.inputs[Eval.TEST])
     selected_rows = set(load_split(context.inputs["holdout_split"]))
     selected = [
         row for row in rows if int(row["row_id"]) in selected_rows
     ]
 
     model = nn.Linear(in_features=1, out_features=1)
-    model.load_state_dict(load_weights(context.inputs[Eval.PARAMETERS]))
+    model.load_state_dict(load_weights(context.inputs[Eval.MODEL]))
     model.eval()
 
     predictions: list[tuple[int, int, float, int]] = []
@@ -1465,7 +1485,7 @@ def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
                     )
                 )
 
-    output = context.artifacts[Eval.PREDICTIONS]
+    output = context.artifacts[Eval.PREDS]
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", newline="", encoding="utf-8") as destination:
         writer = csv.writer(destination)
@@ -1482,14 +1502,14 @@ evaluation = viper.stage(
         decision_threshold=0.5,
     ),
     inputs={
-        Eval.PARAMETERS: training.artifacts[Train.PARAMETERS],
-        Eval.EVALUATION_DATASET: (
+        Eval.MODEL: training.artifacts[Train.MODEL],
+        Eval.TEST: (
             evaluation_embeddings.artifacts["embeddings"]
         ),
         "holdout_split": download.artifacts["holdout_split"],
     },
     artifacts={
-        Eval.PREDICTIONS: viper.file_artifact(
+        Eval.PREDS: viper.file_artifact(
             path=PREDICTIONS_PATH,
             loader=load_predictions,
             data_role="evaluation",
@@ -1554,7 +1574,7 @@ experiment = viper.experiment(
                 "train": training,
                 "evaluate": evaluation,
             },
-            estimator=training.artifacts[Train.PARAMETERS],
+            estimator=training.artifacts[Train.MODEL],
         ),
     },
     replicates={
@@ -1671,12 +1691,12 @@ local_training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": local_embeddings},
     artifacts={
-        Train.PARAMETERS: viper.file_artifact(
+        Train.MODEL: viper.file_artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.RESUME_STATE: viper.file_artifact(
+        Train.STATE: viper.file_artifact(
             path=RESUME_STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
@@ -1704,12 +1724,12 @@ prior_training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": prior_embeddings},
     artifacts={
-        Train.PARAMETERS: viper.file_artifact(
+        Train.MODEL: viper.file_artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.RESUME_STATE: viper.file_artifact(
+        Train.STATE: viper.file_artifact(
             path=RESUME_STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
@@ -2034,7 +2054,7 @@ replacement:
 | `ResolvedBaseSpec.source`, `startup`, `invocation`, and `command` | Move | `ResolvedParameterizedSpec` owns project-stage process evidence. |
 | Download-stage `StageInvocationReceipt` fixtures | Delete | Successful requests use `ResolvedHttpRetrieval`; failed download attempts use the attempt journal and raised error. |
 | `@viper.build_stage`, `@viper.embed_stage`, `@viper.train_stage`, and `@viper.evaluate_stage` | Replace | `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.evaluate` use `params=`. |
-| Private `PARAMETERS`, `RESUME_STATE`, `PARAMETERS_INPUT`, `RESUME_STATE_INPUT`, `EVALUATION_DATASET_INPUT`, and `PREDICTIONS` constants | Replace | `viper.keys.Train` and `viper.keys.Eval` own the protocol-required Python keys; serialized values stay unchanged. |
+| Private `PARAMETERS`, `RESUME_STATE`, `PARAMETERS_INPUT`, `RESUME_STATE_INPUT`, `EVALUATION_DATASET_INPUT`, and `PREDICTIONS` constants | Replace | `viper.keys.Train` and `viper.keys.Eval` replace the old constants and rename the frozen map keys to `model`, `state`, `test`, and `preds`. |
 | `StageDraft.stage_id` and tuple-valued `RunPlanDraft.stages` | Replace | `VariantDraft.stages` mapping keys own stage IDs. |
 | Direct `ExternalInputRef` construction in public authoring | Replace | `viper.file_input()` creates `FileInputDraft`; freezing writes `ExternalInputRef`. |
 | Proposed prior-run construction through `RunArtifactRef` | Replace | `viper.run_artifact()` creates `RunArtifactDraft`; freezing verifies the completed run and writes the pointer. |
@@ -2051,6 +2071,13 @@ replacement:
 | Existing protocol YAML, CLI parsing, verifier reconstruction, tests, fixtures, and project scaffolding that construct the old shapes | Replace | Each consumer parses or constructs the target frozen and resolved models. |
 
 ## 10. Acceptance cases
+
+### Protocol-owned stage keys
+
+Construct one train draft and one evaluation draft with `Train` and `Eval`
+members. Freeze both stages and assert that their YAML maps contain `model`,
+`state`, `test`, and `preds`. Construct the same drafts with the replaced key
+values and assert that stage validation fails before freezing.
 
 ### Local file and training
 
