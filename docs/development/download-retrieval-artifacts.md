@@ -26,7 +26,7 @@ selected artifact supplies the later stage's input bytes.
 
 ## 1. Status
 
-**Contract status:** proposed schema and execution revision; implementation
+**Contract status:** audited retrieval-to-artifact contract; implementation
 pending.
 
 **Current:** `DownloadSpec.inputs` names HTTP requests, and
@@ -197,6 +197,30 @@ key missing from `inputs`, or a bundle artifact fails validation.
 `SnapshotFileRef`. The file reference gives the retrieval receipt its path,
 SHA-256 digest, and byte count inside the completed `ResolvedStageRef.snapshot`.
 
+The complete target records are:
+
+```python
+class SnapshotFileRef(ProtocolModel):
+    path: RepoRelPath
+    sha256: SHA256
+    bytes: int = Field(ge=0)
+
+
+class ResolvedHttpRetrieval(ProtocolModel):
+    input_name: InputName
+    request: HttpRequestSpec
+    transport: ResolvedHttpTransport
+    response: ObservedHttpResponse
+    body: SnapshotFileRef
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+
+
+class ResolvedSingleFileArtifact(ProtocolModel):
+    kind: Literal["file"] = "file"
+    file: SnapshotFileRef
+```
+
 `ResolvedDownloadSpec` retains two maps with different jobs:
 
 ```python
@@ -237,6 +261,84 @@ download record retains `environment`, `execution_context`, `artifacts`, and
 `completed_at`. Each `ResolvedHttpRetrieval` supplies request, transport,
 response, body, and timing evidence. See
 [`automatic-input-resolution.md`](automatic-input-resolution.md#target-frozen-download-and-resolved-stage-models).
+
+### 4.4 Complete public authoring example
+
+This program declares one request and its same-named dataset artifact. Omitting
+`transport=` selects VIPER's built-in HTTPX transport. The file served at the
+URL contains these exact 22 bytes:
+
+```csv
+feature,label
+1,0
+2,1
+```
+
+```python
+import csv
+from pathlib import Path
+
+import viper
+from viper.http import HttpRequestSpec, HttpRetrievalPolicy
+
+
+RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+DATASET_PATH = (
+    "experiments/tiny_http/runs/baseline/"
+    f"{RUN_ID}/artifacts/datasets/training_set/dataset.csv"
+)
+
+
+def load_dataset(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as source:
+        return list(csv.DictReader(source))
+
+
+download = viper.download(
+    inputs={
+        "dataset": HttpRequestSpec(
+            url="http://127.0.0.1:8000/dataset.csv",
+            version="tiny-v1",
+            expected_body_sha256=(
+                "81801ff05409c3cddb57bffa4a856673"
+                "06fa92cd48a8437a9aa937f750a7d7c6"
+            ),
+            expected_body_bytes=22,
+        ),
+    },
+    policy=HttpRetrievalPolicy(
+        allowed_schemes=frozenset({"http"}),
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        allowed_ports=frozenset({8000}),
+        accepted_statuses=frozenset({200}),
+        max_redirects=0,
+        max_body_bytes=1024,
+        timeout_seconds=10.0,
+    ),
+    artifacts={
+        "dataset": viper.file_artifact(
+            path=DATASET_PATH,
+            loader=load_dataset,
+            data_role="training",
+        ),
+    },
+)
+
+download_spec = download.spec
+assert isinstance(download_spec, viper.DownloadSpecDraft)
+assert set(download_spec.inputs) == {"dataset"}
+assert set(download_spec.artifacts) == {"dataset"}
+assert download_spec.artifacts["dataset"].path == DATASET_PATH
+```
+
+At freeze time, `DownloadSpecDraft` becomes the frozen `DownloadSpec` shown in
+section 4.1. At execution time, VIPER invokes the selected transport and
+publishes the verified body at `DATASET_PATH`. Project code delegates that
+publication to the runner.
+
+The complete custom-transport, download, training, and run-plan program lives
+in
+[`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
 
 ## 5. Execution
 
@@ -364,6 +466,7 @@ the shared `SnapshotFileRef`.
 | Resolved stage | `ResolvedDownloadSpec` carries project source, startup, invocation, and command fields through `ResolvedBaseSpec` | Those fields move to `ResolvedParameterizedSpec`; download retains runner environment, execution context, retrievals, artifacts, and completion | Resolved evidence matches the runtime owner |
 | Fixtures and examples | Request names and artifact names may differ | Each download fixture uses the same name in both maps | Tests state the new public rule |
 | Documentation | External roots describes the HTTP receipt and later artifact | External roots links to this contract | One owner for the schema and execution detail |
+| Remote storage | The run closure reaches the download artifact through the stage snapshot | Synchronization uploads the shared snapshot file once | Receipt and artifact remain joined after restore |
 
 ### 8.1 Legacy cleanup
 
@@ -465,7 +568,9 @@ stage because the retrieval-body and artifact-file references differ.
 7. Replace generated download-stage scaffolding with `viper.download()`
    authoring in [`src/viper/project_init.py`](../../src/viper/project_init.py)
    and the protocol reference. Link
-   [`external-input-roots.md`](external-input-roots.md) to this contract.
+   [`external-input-roots.md`](external-input-roots.md) to this contract and
+   include the shared snapshot member in the transitive closure defined by
+   [`remote-storage.md`](remote-storage.md).
 
 ## 11. Invariants
 

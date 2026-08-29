@@ -145,37 +145,36 @@ that `execute_attempt()` is shared inside the private execution implementation.
 
 The input is the `RunResult` returned by `execution.run()`.
 
-**Current:** `RunResult` is defined in
-[`execution/_results.py`](../../src/viper/execution/_results.py), even though
-the module docstring calls it public. `BenchmarkExecutionResult` is defined in
-[`execution/_benchmark.py`](../../src/viper/execution/_benchmark.py), which is
-also private.
+**Original state:** `RunResult` was defined in `execution/_results.py`, even
+though the module docstring called it public. `BenchmarkExecutionResult` was
+defined in `execution/_benchmark.py`, which was also private.
 
-**Proposed:** Rename `_results.py` to `results.py`, move
-`BenchmarkExecutionResult` into that module, and export both result types from
-`viper.execution`:
+**Implemented:** [`execution/results.py`](../../src/viper/execution/results.py)
+now owns `RunResult` and `BenchmarkExecutionResult`. The implementation renamed
+`_results.py` to `results.py`, moved `BenchmarkExecutionResult` into that
+module, and exported both result types from `viper.execution`:
 
 ```python
 from viper.execution import BenchmarkExecutionResult, RunResult
 ```
 
-Move `RunError` and `BenchmarkExecutionError` into
-`viper.execution.errors`, then export both exceptions from `viper.execution`.
-Callers can inspect returned values and catch execution errors through supported
-import paths.
+`RunError` and `BenchmarkExecutionError` now live in
+[`viper.execution.errors`](../../src/viper/execution/errors.py), and
+`viper.execution` exports both exceptions. Callers inspect returned values and
+catch execution errors through supported import paths.
 
 ## Exact changes
 
 ### Package and module paths
 
-| Current | Proposed | Required updates |
+| Original path | Implemented path | Required updates |
 | --- | --- | --- |
 | `viper/_parameter/_validation.py` | `viper/_parameter/validation.py` | Update imports in authoring, HTTP, preflight, execution, verification, workers, and parameter tests. |
 | `viper/execution/_results.py` | `viper/execution/results.py` | Update execution imports and export `RunResult` and `BenchmarkExecutionResult` from `viper.execution`. |
 | `viper/execution/_errors.py` | `viper/execution/errors.py` | Update execution and API imports and export `RunError` and `BenchmarkExecutionError` from `viper.execution`. |
 
-`BenchmarkExecutionResult` moves from `execution/_benchmark.py` to
-`execution/results.py`. `BenchmarkExecutionError` moves from
+`BenchmarkExecutionResult` moved from `execution/_benchmark.py` to
+`execution/results.py`. `BenchmarkExecutionError` moved from
 `execution/_benchmark.py` to `execution/errors.py`.
 
 ### Shared execution functions

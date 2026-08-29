@@ -23,7 +23,7 @@ boundary through `ExternalInputRef`. VIPER captures the exact bytes in
 
 ## 1. Status and decision
 
-**Contract status:** proposed revision.
+**Contract status:** audited provenance contract; implementation pending.
 
 **Required claim:** every path in `context.inputs` resolves to exact bytes whose
 entry into VIPER and selection by the consuming stage are both verifiable.
@@ -140,9 +140,17 @@ flowchart LR
 
 ### 3.1 Local declaration and resolved record
 
-The target local-root contract uses these complete declarations:
+The public authoring draft and target local-root records use these complete
+declarations:
 
 ```python
+class FileInputDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: RepoRelPath
+    data_role: DataRole
+
+
 class LocalSource(ProtocolModel):
     kind: Literal["local"] = "local"
     path: RepoRelPath
@@ -161,6 +169,8 @@ class ResolvedExternalInputRef(ProtocolModel):
     data_role: DataRole
 ```
 
+`viper.file_input()` creates `FileInputDraft`. Freezing alone constructs the
+`ExternalInputRef` protocol record.
 `ExternalInputRef.source.path` is the one repository-relative path selected by
 the user and supplied to the worker. `resolve_inputs()` reads that path,
 publishes the observed bytes through `LocalArtifactStore.resolved_files()`, and
@@ -168,9 +178,26 @@ writes the returned `ResolvedFileRef` into `ResolvedExternalInputRef.file`.
 The runner copies `ExternalInputRef.data_role` into
 `ResolvedExternalInputRef.data_role`.
 
-The existing input unions retain the local declaration and resolved record:
+The target input unions retain the local declaration and resolved record. The
+prior-run branch carries an exact pointer-file identity:
 
 ```python
+class ResolvedArtifactPointerRef(ResolvedFileRef):
+    kind: Literal["artifact_pointer"] = "artifact_pointer"
+
+
+class StoredInputRef(ProtocolModel):
+    kind: Literal["stored"] = "stored"
+    pointer: ResolvedArtifactPointerRef
+    path: RepoRelPath
+    data_role: DataRole
+
+
+class ResolvedStoredInputRef(ProtocolModel):
+    kind: Literal["stored"] = "stored"
+    pointer: ResolvedArtifactPointerRef
+
+
 InputRef = Annotated[
     ExternalInputRef | StoredInputRef | FutureInputRef,
     Field(discriminator="kind"),
@@ -193,6 +220,8 @@ The active-to-target field changes are exact:
 | `ResolvedExternalInputRef.source: ExternalInputSource` | Replace | `ResolvedExternalInputRef.source: LocalSource` |
 | `ResolvedExternalInputRef.file` | Retain | `resolve_inputs()` records the captured `ResolvedFileRef`. |
 | Both `data_role` fields | Retain | The resolved record copies the frozen declaration. |
+| Public `ExternalInputRef` construction | Replace | `viper.file_input()` returns `FileInputDraft`; freezing writes the protocol record. |
+| `StoredInputRef.pointer: ArtifactPointerRef` | Replace | The compiler stores its generated pointer and writes `ResolvedArtifactPointerRef`. |
 
 ### 3.2 HTTP root, artifact, and consumer edge
 
@@ -244,16 +273,62 @@ exchange. The stage still downloads response bodies. Its responsibility ends
 with verified acquisition and publication.
 
 The schema gains one mechanical rule: each request has one same-named
-single-file artifact.
+single-file artifact. This complete authoring example uses the built-in HTTPX
+transport selected by the default `transport=None` argument:
 
 ```python
-DownloadSpec(
-    inputs={"dataset": HttpRequestSpec(...)},
-    artifacts={"dataset": SingleFileArtifactSpec(...)},
-    transport=...,
-    policy=...,
+import csv
+from pathlib import Path
+
+import viper
+from viper.http import HttpRequestSpec, HttpRetrievalPolicy
+
+
+DATASET_PATH = (
+    "experiments/tiny_http/runs/baseline/"
+    "01ARZ3NDEKTSV4RRFFQ69G5FAV/"
+    "artifacts/datasets/training_set/dataset.csv"
+)
+
+
+def load_dataset(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as source:
+        return list(csv.DictReader(source))
+
+
+download = viper.download(
+    inputs={
+        "dataset": HttpRequestSpec(
+            url="http://127.0.0.1:8000/dataset.csv",
+            version="tiny-v1",
+            expected_body_sha256=(
+                "81801ff05409c3cddb57bffa4a856673"
+                "06fa92cd48a8437a9aa937f750a7d7c6"
+            ),
+            expected_body_bytes=22,
+        ),
+    },
+    policy=HttpRetrievalPolicy(
+        allowed_schemes=frozenset({"http"}),
+        allowed_hosts=frozenset({"127.0.0.1"}),
+        allowed_ports=frozenset({8000}),
+        accepted_statuses=frozenset({200}),
+        max_redirects=0,
+        max_body_bytes=1024,
+        timeout_seconds=10.0,
+    ),
+    artifacts={
+        "dataset": viper.file_artifact(
+            path=DATASET_PATH,
+            loader=load_dataset,
+            data_role="training",
+        ),
+    },
 )
 ```
+
+The custom-transport version appears in the complete program in
+[`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
 
 The executor performs this flow:
 
@@ -346,14 +421,60 @@ path supplied to the consuming stage.
 
 ## 7. One user-facing input authoring flow
 
-Users should select data. VIPER should choose the protocol reference from the
-data's provenance position:
+Users select data through three Python values. VIPER chooses the frozen
+protocol reference from the data's provenance position:
 
-| Selected data | Internal record written at freeze time |
-| --- | --- |
-| Local file entering at the consuming-stage boundary | `ExternalInputRef` |
-| Artifact produced earlier in the active run | `FutureInputRef` |
-| Artifact produced in a completed run | Generated `ArtifactPointer` plus `StoredInputRef` |
+| Selected data | Public Python expression | Frozen record |
+| --- | --- | --- |
+| Local file entering at the consuming-stage boundary | `viper.file_input(...)` | `ExternalInputRef` |
+| Artifact produced earlier in the active run | `download.artifacts["dataset"]` | `FutureInputRef` |
+| Artifact produced in a completed run | `viper.run_artifact(...)` | Generated `ArtifactPointer` plus `StoredInputRef` |
+
+The three complete selections are:
+
+```python
+local_dataset = viper.file_input(
+    path="inputs/raw/dataset.csv",
+    data_role="training",
+)
+
+same_run_dataset = download.artifacts["dataset"]
+
+prior_run_dataset = viper.run_artifact(
+    resolved_run=Path(
+        "experiments/tiny_http/runs/baseline/"
+        "01ARZ3NDEKTSV4RRFFQ69G5FAA/resolved.yaml"
+    ),
+    stage="download",
+    artifact="dataset",
+)
+```
+
+Each value can occupy the same input slot:
+
+```python
+training = viper.stage(
+    train,
+    params=TrainParams(epochs=3, learning_rate=0.1),
+    inputs={"dataset": same_run_dataset},
+    artifacts={
+        "parameters": viper.file_artifact(
+            path=PARAMETERS_PATH,
+            loader=load_parameters,
+            data_role="training",
+        ),
+        "resume_state": viper.file_artifact(
+            path=RESUME_STATE_PATH,
+            loader=load_resume_state,
+            data_role="training",
+        ),
+    },
+)
+```
+
+Replacing `same_run_dataset` with `local_dataset` or `prior_run_dataset`
+changes the frozen input reference while preserving the decorated training
+function and the `context.inputs["dataset"]` path interface.
 
 This is the unification point. The training decorator still receives ordinary
 paths through `context.inputs`, while freezing writes the correct provenance
@@ -389,9 +510,12 @@ resolved source path equals the path delivered to the stage
 
 ### Prior-run artifact
 
-The verifier follows `StoredInputRef` through its generated
-`ArtifactPointer`, terminal run, successful attempt, producer stage, and named
-artifact before materializing the file for the consumer.
+The verifier retrieves the digest-bearing `StoredInputRef.pointer`, parses its
+generated `ArtifactPointer`, and follows the pointer through the terminal run,
+successful attempt, producer stage, and named artifact before materializing
+the file for the consumer. The pointer bytes may reside in the local immutable
+store, Git, or synchronized remote storage; their SHA-256 digest and byte count
+remain part of `ResolvedArtifactPointerRef`.
 
 ## 9. Acceptance cases
 
@@ -417,6 +541,19 @@ VIPER records its digest, byte count, and `ResolvedFileRef`, then supplies the
 same path to the train stage. `verify_run_result()` accepts the run. Changed
 stored bytes trigger `input.local_root_identity`.
 
+### Downloaded prior-run input
+
+A completed producer run publishes `download.artifacts["prior"]`. A second
+plan selects it through `viper.run_artifact()`. Freezing publishes one
+digest-bearing pointer and writes `StoredInputRef` into the training spec.
+`verify_promoted_artifact()` follows the pointer to the producer run's
+`ResolvedHttpRetrieval`, shared `ResolvedSingleFileArtifact`, and snapshot
+file. The train stage reads `b"prior"` from `context.inputs["prior"]`.
+
+Changing the pointer's artifact name triggers `input.pointer.provenance`.
+Changing the selected producer snapshot bytes triggers the existing artifact
+identity rule.
+
 ## 10. Propagation and implementation order
 
 | Surface | Required change |
@@ -429,12 +566,28 @@ stored bytes trigger `input.local_root_identity`.
 | Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
 | Local root model | Delete `ExternalInputRef.path`; supply `ExternalInputRef.source.path` to the worker and retain the captured `ResolvedFileRef`. |
 | Verification | Add local-root verification and the HTTP receipt-artifact identity rule. |
-| Authoring | Convert a selected artifact into `FutureInputRef` or a generated pointer plus `StoredInputRef`. |
+| Authoring | Add `viper.file_input()` and `viper.run_artifact()`; convert local files, same-run handles, and prior-run drafts into `ExternalInputRef`, `FutureInputRef`, and `StoredInputRef`. |
+| Prior-run pointer schema | Change `StoredInputRef.pointer` to digest-bearing `ResolvedArtifactPointerRef`; let the pointer use any `StorageRef`. |
+| Remote storage | Include captured local-root files, generated pointer files, and the producer runs reached through those pointers in the transitive verification closure. |
 | Tests | Cover local roots, same-run downloaded inputs, prior-run downloaded inputs, tampered root bytes, and tampered artifacts. |
 | Legacy cleanup | Apply every delete, replace, and retain disposition in [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md); delete `HttpSource` and its tests here. |
 | Documentation | Update the protocol reference and generated project examples to teach executor-owned HTTP publication and automatic input selection. |
 
 Implementation order:
+
+The dependency order across the four contracts is:
+
+```text
+download-retrieval-artifacts.md
+-> external-input-roots.md
+-> automatic-input-resolution.md
+-> remote-storage.md
+```
+
+The download increment establishes one HTTP path and one shared snapshot file.
+This increment removes the duplicate HTTP source and completes local-root
+verification. The authoring increment then compiles all three input routes.
+Remote synchronization follows the resulting references transitively.
 
 1. Complete the runner-owned request-to-artifact contract in
    [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md),
@@ -444,9 +597,12 @@ Implementation order:
    `resolve_inputs()`. Change both local `source` fields to `LocalSource`.
 3. Delete `ExternalInputRef.path`, supply `source.path` to the worker, and add
    the local-root verifier.
-4. Add the authoring operation that selects local data, same-run artifacts, or
-   prior-run artifacts and writes the corresponding internal reference.
-5. Add end-to-end acceptance cases for all three routes and their tamper
+4. Add `FileInputDraft`, `RunArtifactDraft`, and the three-way authoring
+   compiler defined in
+   [`automatic-input-resolution.md`](automatic-input-resolution.md).
+5. Change the stored-pointer schema and implement deterministic local-store
+   pointer publication for prior-run selections.
+6. Add end-to-end acceptance cases for all three routes and their tamper
    failures.
 
 ## 11. Implementation grounding

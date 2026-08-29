@@ -2734,7 +2734,7 @@ only `training` and `validation` inputs.
 
 ```python
 ResolvedInputRef = Annotated[
-    ResolvedStoredInputRef | ResolvedFutureInputRef,
+    ResolvedStoredInputRef | ResolvedFutureInputRef | ResolvedExternalInputRef,
     Field(discriminator="kind"),
 ]
 ```
@@ -2742,7 +2742,8 @@ ResolvedInputRef = Annotated[
 The resolved input-name set equals the planned input-name set. Each resolved
 input has the same discriminated kind as its planned input. Section 14 defines
 the pointer equality for stored inputs and the producer equality for same-run
-inputs.
+inputs. Section 14 also defines the captured source and file identity for
+external inputs.
 
 ### Resolved stage specifications
 
