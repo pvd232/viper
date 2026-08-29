@@ -55,6 +55,22 @@ existing download path, and VIPER creates artifact-pointer files internally.
 
 The roles belong to different dimensions of the provenance graph:
 
+For a same-run HTTP input named `dataset`, this contract assigns each role to
+one exact record or field:
+
+| Role | Exact record or field | Claim |
+| --- | --- | --- |
+| External-input-root record | `ResolvedDownloadSpec.retrievals["dataset"]: ResolvedHttpRetrieval` | VIPER performed the request through the recorded transport and received the recorded response. |
+| Root payload | `ResolvedHttpRetrieval.body: SnapshotFileRef` | The HTTP response body has this path, SHA-256 digest, and byte count in the completed download-stage snapshot. |
+| Artifact view | `ResolvedDownloadSpec.artifacts["dataset"]: ResolvedSingleFileArtifact` | The download stage published those bytes as its named `dataset` output. |
+| Consumer selector | `TrainSpec.inputs["dataset"]: FutureInputRef` | The training stage selects the download stage's `dataset` artifact. |
+| Identity join | `retrievals["dataset"].body == artifacts["dataset"].file` | The root payload and artifact view identify the same snapshot file. |
+
+The artifact supplies the input bytes. `FutureInputRef` is the `InputRef` value
+that selects that artifact for the later stage. Promotion preserves the same
+root and artifact records; a later run selects the promoted artifact through
+`StoredInputRef`.
+
 | Question | HTTP external input root | Local external input root |
 | --- | --- | --- |
 | Where did the bytes enter VIPER? | `ResolvedHttpRetrieval` | `ResolvedExternalInputRef` |
@@ -283,8 +299,9 @@ Consider one run with a `download` stage followed by a `train` stage.
 1. `DownloadSpec.inputs["dataset"]` declares the network request.
 2. The HTTP response enters VIPER. `ResolvedHttpRetrieval` records that root
    event.
-3. The executor publishes the same bytes as
-   `ResolvedDownloadSpec.artifacts["dataset"]`.
+3. The executor writes a `ResolvedSingleFileArtifact` at
+   `ResolvedDownloadSpec.artifacts["dataset"]`. Its `file` equals
+   `ResolvedHttpRetrieval.body`.
 4. `TrainSpec.inputs["dataset"]` stores the following reference. It names the
    download stage and its `dataset` artifact.
 

@@ -6,6 +6,24 @@ HTTP exchange. `ResolvedSingleFileArtifact` exposes the retrieved body to
 ordinary artifact consumers. Both records identify one file in the completed
 download-stage snapshot.
 
+The same response bytes occupy three provenance roles:
+
+```text
+external-input-root record
+-> ResolvedDownloadSpec.retrievals[name]: ResolvedHttpRetrieval
+
+artifact view
+-> ResolvedDownloadSpec.artifacts[name]: ResolvedSingleFileArtifact
+
+same-run consumer selector
+-> InternalSpec.inputs[name]: FutureInputRef
+```
+
+`ResolvedDownloadSpec.retrievals[name].body ==
+ResolvedDownloadSpec.artifacts[name].file` joins the root record to the
+artifact view. `FutureInputRef` names the download stage and artifact; the
+selected artifact supplies the later stage's input bytes.
+
 ## 1. Status
 
 **Contract status:** proposed schema and execution revision; implementation

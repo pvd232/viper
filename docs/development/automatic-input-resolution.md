@@ -30,7 +30,9 @@ that declaration into `FutureInputRef` for a same-run source or `StoredInputRef`
 plus an internally written `ArtifactPointer` for a completed prior run.
 
 The proposal changes the authoring boundary. It keeps the runtime context,
-artifact schemas, verification rules, and physical storage contract stable.
+artifact selection, and materialization behavior stable. The coordinated
+download contract changes how the HTTP receipt and download artifact share one
+snapshot file; this contract consumes that artifact after publication.
 
 ## 2. Required claim
 
@@ -137,6 +139,24 @@ record and the authoring declaration is the user's selection.
 
 ### Existing internal results
 
+For a downloaded same-run input, the coordinated target assigns distinct roles
+before the authoring compiler creates the consumer reference:
+
+```text
+ResolvedDownloadSpec.retrievals["training_dataset"]
+-> ResolvedHttpRetrieval: external-input-root record
+
+ResolvedDownloadSpec.artifacts["training_dataset"]
+-> ResolvedSingleFileArtifact: artifact view
+
+TrainSpec.inputs["dataset"]
+-> FutureInputRef: consumer selector
+```
+
+The HTTP receipt body and artifact file identify the same `SnapshotFileRef`.
+The compiler writes `FutureInputRef`; the selected
+`ResolvedSingleFileArtifact` supplies the path and bytes used by training.
+
 The compiler produces the existing types:
 
 ```text
@@ -182,9 +202,8 @@ The existing materialization layer then performs this operation:
 ```text
 FutureInputRef
 -> find the completed download stage
--> read the declared training_dataset artifact
--> use its resolved files
--> write the consumer path
+-> find training_dataset in the download stage specification
+-> read the artifact's declared path
 -> pass that path through StageContext.inputs["dataset"]
 ```
 
