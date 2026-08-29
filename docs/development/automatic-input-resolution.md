@@ -25,9 +25,10 @@ the internal relationship between a training input and its source.
 See [`src/viper/stages.py`](../../src/viper/stages.py).
 
 **Proposed:** The user keeps the decorator and typed-parameter workflow. The
-authoring layer accepts a project-level artifact input declaration and converts
-that declaration into `FutureInputRef` for a same-run source or `StoredInputRef`
-plus an internally written `ArtifactPointer` for a completed prior run.
+authoring layer accepts `StageArtifactRef` or `RunArtifactRef` as a stage-input
+value. The compiler converts that handle into `FutureInputRef` for a same-run
+source or `StoredInputRef` plus an internally written `ArtifactPointer` for a
+completed prior run.
 
 The proposal changes the authoring boundary. It keeps the runtime context,
 artifact selection, and materialization behavior stable. The coordinated
@@ -68,11 +69,11 @@ DownloadSpec.artifacts["training_dataset"]
 
 **Inspected:** `FutureInputRef` carries `producer_stage_id` and
 `producer_artifact` for an earlier stage in the same run.
-[`src/viper/stages.py`](../../src/viper/stages.py)
+[`src/viper/inputs.py`](../../src/viper/inputs.py)
 
 **Inspected:** `StoredInputRef` carries an `ArtifactPointerRef`, a
 materialization path, and a data role for an artifact from a completed run.
-[`src/viper/stages.py`](../../src/viper/stages.py)
+[`src/viper/inputs.py`](../../src/viper/inputs.py)
 
 **Inspected:** `freeze_run_plan()` validates authored stage specifications and
 writes frozen stage and run files. It currently preserves the input reference
@@ -85,9 +86,9 @@ calls `verify_promoted_artifact()`, materializes the verified files, and passes
 the resulting path to the stage context.
 [`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py)
 
-The missing connector is the authoring operation that takes a user-level
-artifact input declaration and creates the internal reference consumed by the
-existing planner, verifier, and materializer.
+The missing connector is the authoring operation that takes a
+`StageArtifactRef` or `RunArtifactRef` and creates the internal reference
+consumed by the existing planner, verifier, and materializer.
 
 The current system therefore supports the runtime operation while exposing its
 protocol representation at the authoring boundary.
@@ -115,27 +116,121 @@ def train(context: viper.StageContext[TrainParameters]) -> None:
 binds the callable to the `train` stage kind and parameter model. The executor
 continues to pass a `Path` through `context.inputs["dataset"]`.
 
-### Proposed authoring input
+### Proposed Python authoring model
 
-**Proposed:** Add one authoring-level input declaration whose purpose is to
-select a produced artifact while keeping the persisted pointer format inside
-VIPER.
+Python authoring accepts artifact handles. The compiler constructs
+`FutureInputRef`, `StoredInputRef`, and `ArtifactPointer` from those handles.
 
-The declaration carries these values:
+The existing `StageArtifactRef` identifies one artifact declared by one stage:
 
-```text
-input name       -> the key exposed through context.inputs
-source run       -> current run or one completed prior run
-producer stage   -> the stage that declared the artifact
-producer artifact -> the declared artifact name
-path             -> the path where the consumer receives the bytes
-data role        -> the role expected by the consumer
+```python
+class StageArtifactRef(ProtocolModel):
+    stage_id: StageId
+    artifact_name: ArtifactName
 ```
 
-The exact serialized name and syntax for this authoring-level declaration are
-an implementation decision. The declaration must remain separate from
-`ArtifactPointer`, because `ArtifactPointer` is the persisted verification
-record and the authoring declaration is the user's selection.
+A prior-run selection adds the completed run containing that artifact:
+
+```python
+class RunArtifactRef(ProtocolModel):
+    run: ResolvedRunRef
+    artifact: StageArtifactRef
+```
+
+The authoring input union is:
+
+```python
+ArtifactInput = StageArtifactRef | RunArtifactRef
+```
+
+`StageDraft` contains the editable stage declaration and exposes a
+`StageArtifactRef` for every declared artifact:
+
+```python
+class StageDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stage_id: StageId
+    spec: StageSpecDraft
+
+    @property
+    def artifacts(self) -> dict[ArtifactName, StageArtifactRef]:
+        return {
+            name: StageArtifactRef(
+                stage_id=self.stage_id,
+                artifact_name=name,
+            )
+            for name in self.spec.artifacts
+        }
+```
+
+The two `artifacts` attributes serve separate roles:
+
+```text
+StageDraft.spec.artifacts
+-> artifact declarations supplied to viper.stage(...)
+-> paths, loaders, and data roles
+-> frozen as BaseSpec.artifacts
+
+StageDraft.artifacts
+-> generated StageArtifactRef handles
+-> selected as inputs to other stages
+-> never written directly into frozen YAML
+```
+
+For example:
+
+```python
+class DownloadParameters(viper.parameters.Download):
+    pass
+
+
+@viper.download_stage(parameter_model=DownloadParameters)
+def download(context: viper.DownloadContext) -> None:
+    """Inspect HTTP responses after VIPER publishes their artifact files."""
+
+
+download_stage = viper.stage(
+    download,
+    stage_id="download",
+    params=DownloadParameters(),
+    inputs={"dataset": viper.HttpRequestSpec(...)},
+    transport=viper.HttpTransportSpec(...),
+    policy=viper.HttpRetrievalPolicy(...),
+    artifacts={
+        "dataset": viper.SingleFileArtifactSpec(...),
+    },
+)
+
+dataset = download_stage.artifacts["dataset"]
+
+train_stage = viper.stage(
+    train,
+    stage_id="train",
+    params=TrainParameters(epochs=3),
+    inputs={"dataset": dataset},
+    artifacts={
+        "parameters": viper.SingleFileArtifactSpec(...),
+        "resume_state": viper.SingleFileArtifactSpec(...),
+    },
+)
+```
+
+The authoring compiler derives the frozen input from the selected handle:
+
+```text
+StageArtifactRef from the active RunPlanDraft
+-> FutureInputRef
+
+RunArtifactRef identifying a completed run
+-> generated ArtifactPointer
+-> StoredInputRef
+```
+
+The input-map key supplies the consumer input name. The selected artifact
+declaration supplies its path and data role. The artifact handle supplies the
+producer stage and artifact name. The compiler derives each value from its
+single authoring owner.
 
 ### Existing internal results
 
@@ -176,8 +271,8 @@ source run is a completed prior run
 ```
 
 `ArtifactPointer` remains the persisted record that joins a prior completed
-run to one declared artifact. The user-facing declaration selects the source;
-the compiler owns pointer construction and publication.
+run to one declared artifact. `RunArtifactRef` selects that source during
+Python authoring; the compiler owns pointer construction and publication.
 
 ## 5. Execution
 
@@ -189,9 +284,7 @@ run.
 The authoring layer performs this operation:
 
 ```text
-user's artifact input declaration
--> identify source stage download
--> identify source artifact training_dataset
+StageArtifactRef(stage_id="download", artifact_name="training_dataset")
 -> confirm download precedes train in the run plan
 -> construct FutureInputRef
 -> write the frozen TrainSpec
@@ -217,10 +310,9 @@ When the source run completed earlier, the authoring layer performs this
 operation:
 
 ```text
-user's artifact input declaration
--> identify the completed source run
--> load and verify its terminal ResolvedRun
--> select download.training_dataset
+RunArtifactRef(run=<terminal ResolvedRunRef>, artifact=<StageArtifactRef>)
+-> load and verify the terminal ResolvedRun
+-> select the declared artifact
 -> construct ArtifactPointer
 -> write the pointer under the internal project input area
 -> construct StoredInputRef pointing at that generated pointer
@@ -342,8 +434,8 @@ overwrite rules, and review ownership.
 | Surface | Required change | Acceptance condition |
 | --- | --- | --- |
 | Public stage API | Preserve `@viper.*_stage`, `TypedParameters`, and `StageContext` | Existing README stage code remains valid |
-| Authoring model | Add the user-level produced-artifact input declaration | A declaration identifies source run, stage, artifact, path, and role |
-| `freeze_run_plan()` | Resolve each declaration to `FutureInputRef` or generated `StoredInputRef` | Frozen specs contain the correct internal reference |
+| Authoring model | Add `StageSpecDraft`, `RunArtifactRef`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a same-run or prior-run artifact handle |
+| `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef` | Frozen specs contain the correct internal reference |
 | Pointer writer | Serialize and publish prior-run `ArtifactPointer` documents | Pointer bytes are deterministic and canonical |
 | Stage validators | Validate source existence, stage order, roles, and materialization paths | Invalid declarations fail during freezing |
 | Runtime resolution | Reuse existing `FutureInputRef` and `StoredInputRef` materialization | `StageContext.inputs` receives the expected path |
@@ -392,31 +484,33 @@ and that the resolved training input records the generated pointer reference.
 
 ### Targeted rejection
 
-Change the source artifact name after the input declaration has been frozen.
-The verifier must reject the input under `input.pointer.provenance` because the
-selected producer stage declares a different artifact set.
+After freezing a prior-run input, change
+`ArtifactPointer.artifact.artifact_name` to a name absent from the selected
+producer stage. The verifier must reject the input under
+`input.pointer.provenance`.
 
-This rejection severs the connector under review: the user-level input
-selection resolves to an artifact name absent from the declared producer
-stage, so the verifier rejects the selection.
+This rejection severs the connector under review: the generated pointer names
+an artifact absent from the declared producer stage, so the verifier rejects
+the selection.
 
 ## 11. Implementation order
 
-### Phase 1. Define the authoring declaration
+### Phase 1. Define the Python authoring models
 
-- [ ] Choose the serialized user-level input shape.
-- [ ] Add the model and its source-run, producer-stage, producer-artifact, path,
-      and data-role fields.
-- [ ] Add validation for source existence and same-run stage order.
+- [ ] Replace `StageDraft.spec_source` with `StageDraft.spec`.
+- [ ] Define the complete `StageSpecDraft` variants for the five stage kinds.
+- [ ] Expose one `StageArtifactRef` per declared artifact through
+      `StageDraft.artifacts`.
+- [ ] Add `RunArtifactRef` and the `ArtifactInput` authoring union.
 - [ ] Add focused model tests.
 
-**Commit boundary:** the new declaration parses and rejects invalid source
-selections. Existing `FutureInputRef` and `StoredInputRef` behavior remains
-unchanged.
+**Commit boundary:** Python constructs a complete run-plan draft and selects
+same-run or prior-run artifacts. The compiler constructs the frozen `InputRef`
+models.
 
 ### Phase 2. Compile same-run inputs
 
-- [ ] Add the compiler operation that maps a same-run declaration to
+- [ ] Add the compiler operation that maps a same-run `StageArtifactRef` to
       `FutureInputRef`.
 - [ ] Preserve the existing `TrainSpec` and `InternalSpec` validators.
 - [ ] Add the same-run download-to-training acceptance case.
@@ -459,8 +553,8 @@ the internal protocol separately.
 existing decorator and typed-parameter authoring model.
 
 The current runtime already owns artifact publication, pointer verification,
-and input materialization. The missing behavior sits in the authoring layer:
-the layer that currently requires the user to select `FutureInputRef` or
+and input materialization. The missing behavior sits in the authoring layer,
+which currently requires the user to select `FutureInputRef` or
 `StoredInputRef` directly.
 
 The first implementation should cover same-run resolution, then prior-run
