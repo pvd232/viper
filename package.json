@@ -1,0 +1,10 @@
+{
+  "name": "viper-docs-tooling",
+  "private": true,
+  "scripts": {
+    "mermaid": "mmdc"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "11.16.0"
+  }
+}
