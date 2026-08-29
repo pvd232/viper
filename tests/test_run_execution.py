@@ -49,7 +49,12 @@ from viper.experiments import (
     TrainVariantStageParams,
     VariantSpec,
 )
-from viper.inputs import FutureInputRef
+from viper.inputs import (
+    ExternalInputRef,
+    FutureInputRef,
+    LocalSource,
+    ResolvedExternalInputRef,
+)
 from viper.journal import DurableJournal
 from viper.metrics import (
     FloatComparator,
@@ -77,6 +82,7 @@ from viper.runtime import (
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     DownloadSpec,
+    ResolvedTrainSpec,
     StageImplementationRef,
     TrainSpec,
     load_stage_callable,
@@ -452,19 +458,18 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     run_git(root, "commit", "--quiet", "-m", "plan")
 
     requests = []
-    monkeypatch.setattr(
-        "viper.api.run_request",
-        lambda request: (
-            requests.append(request)
-            or RunSuccess(
-                run_id=RUN_ID,
-                attempt_id=1,
-                resolved_attempt=root / RUN_ROOT / "attempts/1/resolved.yaml",
-                resolved_run=root / RUN_ROOT / "resolved.yaml",
-                journal=root / ".viper" / "attempt.jsonl",
-            )
-        ),
-    )
+
+    def fake_run_request(request):
+        requests.append(request)
+        return RunSuccess(
+            run_id=RUN_ID,
+            attempt_id=1,
+            resolved_attempt=root / RUN_ROOT / "attempts/1/resolved.yaml",
+            resolved_run=root / RUN_ROOT / "resolved.yaml",
+            journal=root / ".viper" / "attempt.jsonl",
+        )
+
+    monkeypatch.setattr("viper.api.run_request", fake_run_request)
     train_callable = load_stage_callable(
         root / train.implementation.path,
         train.implementation,
@@ -502,29 +507,29 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         recorded_at=datetime.now(UTC),
     )
 
-    first_train_call = True
-
     def fail_first_train(*args, **kwargs):
-        """Return real child evidence, then simulate one transient train failure."""
-        nonlocal first_train_call
+        """Return real child evidence, then simulate one transient train failure ."""
         process = execute_stage_process(*args, **kwargs)
         stage_reference = args[2]
-        if stage_reference.stage_id == "train" and first_train_call:
-            first_train_call = False
+
+        if stage_reference.stage_id == "train":
             raise StageExecutionError(
                 "transient train failure",
                 invocation=process.invocation.model_copy(update={"outcome": "failed"}),
                 stdout=process.stdout,
                 stderr=b"transient train failure\n",
             )
+
         return process
 
     monkeypatch.setattr(
         "viper.execution._attempt.execute_stage_process",
         fail_first_train,
     )
+
     with pytest.raises(RunError, match="attempt 2 failed"):
         execute_run(root, frozen.files[-1])
+
     failed_run = ResolvedRun.model_validate(
         parse_yaml_bytes((root / RUN_ROOT / "resolved.yaml").read_bytes())
     )
@@ -659,3 +664,250 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             ),
             fetcher=RunFetcher(root, store, REPOSITORY),
         )
+
+
+def test_train_stage_captures_local_external_input(
+    tmp_path: Path,
+) -> None:
+    """Execute source-frozen stages through immutable local publication."""
+    root = tmp_path / "project"
+    root.mkdir()
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
+
+    train_params = parameters.Train.model_validate(
+        {"epochs": 1, "batch_size": 1, "learning_rate": 0.1}
+    )
+    metric_source = (
+        b"from viper.metrics import metric\n\n"
+        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
+        b'mode="recompute")\n'
+        b"def compute(context):\n"
+        b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
+    )
+    live_metric_source = (
+        b"from viper.metrics import StatefulMetric, metric\n\n"
+        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b"class EpochMean(StatefulMetric):\n"
+        b"    def __init__(self):\n"
+        b"        self.values = []\n"
+        b"    def update(self, value):\n"
+        b"        self.values.append(float(value))\n"
+        b"    def compute(self):\n"
+        b"        return sum(self.values) / len(self.values)\n"
+    )
+    parameter_bytes = MetricSpec(
+        metric_id="parameter_bytes",
+        kind="diagnostic",
+        implementation=MetricImplementationRef(
+            path="project/metrics/parameter_bytes.py",
+            symbol="compute",
+            sha256=hashlib.sha256(metric_source).hexdigest(),
+            bytes=len(metric_source),
+        ),
+        params=parameters.Metric(),
+        mode="recompute",
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name=PARAMETERS,
+                required_data_role="training",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+    epoch_mean = MetricSpec(
+        metric_id="epoch_mean",
+        kind="training",
+        implementation=MetricImplementationRef(
+            path="project/metrics/epoch_mean.py",
+            symbol="EpochMean",
+            sha256=hashlib.sha256(live_metric_source).hexdigest(),
+            bytes=len(live_metric_source),
+        ),
+        params=parameters.Metric(),
+        mode="live",
+    )
+    experiment = ExperimentSpec(
+        experiment_id="example",
+        factors=(),
+        variant_ids=("baseline",),
+        replicates=(ReplicateSpec(replicate_id="r1", seed=7),),
+        metrics=(parameter_bytes, epoch_mean),
+    )
+    variant = VariantSpec(
+        experiment_id="example",
+        variant_id="baseline",
+        levels={},
+        stage_params=(TrainVariantStageParams(stage_id="train", params=train_params),),
+    )
+    source_files = {
+        "environment.yml": b"name: viper-test\n",
+        "project/loaders/bytes_file.py": (
+            b"def load(path):\n    return path.read_bytes()\n"
+        ),
+        "project/loaders/resume_state.py": (
+            "def load(path):\n"
+            f"    return {resume_state().model_dump(mode='python')!r}\n"
+        ).encode(),
+        "project/metrics/parameter_bytes.py": metric_source,
+        "project/metrics/epoch_mean.py": live_metric_source,
+        "project/parameters/train.py": (
+            b"from pydantic import Field\n"
+            b"from viper import parameters\n\n"
+            b"class TinyTrainParameters(parameters.Train):\n"
+            b"    epochs: int = Field(gt=0)\n"
+            b"    batch_size: int = Field(gt=0)\n"
+            b"    learning_rate: float = Field(gt=0)\n"
+        ),
+        "jobs/train.py": (
+            b"from project.parameters.train import TinyTrainParameters\n"
+            b"from viper import train_stage\n\n"
+            b"@train_stage(parameter_model=TinyTrainParameters)\n"
+            b"def train(context):\n"
+            b"    assert context.params.epochs == 1\n"
+            b"    assert context.params.batch_size == 1\n"
+            b"    assert context.params.learning_rate == 0.1\n"
+            b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
+            b"    context.artifacts['parameters'].parent.mkdir(\n"
+            b"        parents=True, exist_ok=True\n"
+            b"    )\n"
+            b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
+            b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            b"    live_metric = context.metrics['epoch_mean']\n"
+            b"    live_metric.update(1.0)\n"
+            b"    live_metric.update(3.0)\n"
+            b"    live_metric.record(epoch=0, step=1)\n"
+        ),
+        "inputs/raw/prior.bin": b"prior",
+        "experiments/example/spec.yaml": serialize_document(experiment),
+        "experiments/example/variants/baseline.spec.yaml": serialize_document(variant),
+    }
+    for relative_path, raw in source_files.items():
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "source")
+    source_commit = run_git(root, "rev-parse", "HEAD")
+
+    source = GitSource.model_validate(
+        {"repository": REPOSITORY, "commit": source_commit}
+    )
+    lockfile = GitFileRef.model_validate(
+        {
+            "repository": REPOSITORY,
+            "commit": source_commit,
+            "path": "environment.yml",
+        }
+    )
+    if os.environ.get("VIPER_LIVE_GCE") == "1":
+        environment = GCEEnvironmentSpec(
+            provisioning=observe_gce_provisioning(),
+            machine_type="g2-standard-12",
+            compute=CUDAComputeSpec(model="NVIDIA L4", count=1),
+            lockfile=lockfile,
+            python_environment=python_environment(),
+        )
+    else:
+        environment = LocalEnvironmentSpec(
+            lockfile=lockfile,
+            python_environment=python_environment(),
+        )
+
+    train = TrainSpec(
+        implementation=StageImplementationRef(
+            path="jobs/train.py",
+            symbol="train",
+            sha256=hashlib.sha256(source_files["jobs/train.py"]).hexdigest(),
+            bytes=len(source_files["jobs/train.py"]),
+        ),
+        parameter_model=ParameterModelRef(
+            path="project/parameters/train.py",
+            symbol="TinyTrainParameters",
+            sha256=hashlib.sha256(
+                source_files["project/parameters/train.py"]
+            ).hexdigest(),
+            bytes=len(source_files["project/parameters/train.py"]),
+        ),
+        metric_ids=("parameter_bytes", "epoch_mean"),
+        inputs={
+            "prior": ExternalInputRef(
+                source=LocalSource(path="inputs/raw/prior.bin"),
+                path="inputs/datasets/tiny/prior.bin",
+                data_role="training",
+            )
+        },
+        params=train_params,
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
+                loader=ArtifactLoaderRef(
+                    path="project/loaders/bytes_file.py",
+                    symbol="load",
+                    sha256=hashlib.sha256(
+                        source_files["project/loaders/bytes_file.py"]
+                    ).hexdigest(),
+                    bytes=len(source_files["project/loaders/bytes_file.py"]),
+                ),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                path=f"{RUN_ROOT}/artifacts/models/tiny/resume_state.bin",
+                loader=ArtifactLoaderRef(
+                    path="project/loaders/resume_state.py",
+                    symbol="load",
+                    sha256=hashlib.sha256(
+                        source_files["project/loaders/resume_state.py"]
+                    ).hexdigest(),
+                    bytes=len(source_files["project/loaders/resume_state.py"]),
+                ),
+                data_role="training",
+            ),
+        },
+    )
+    draft_root = tmp_path / "drafts"
+    draft_root.mkdir()
+    train_draft = draft_root / "train.yaml"
+    train_draft.write_bytes(serialize_document(train))
+    frozen = freeze_run_plan(
+        root,
+        RunPlanDraft(
+            run_id=RUN_ID,
+            experiment_id="example",
+            variant_id="baseline",
+            replicate_id="r1",
+            seed=7,
+            source=source,
+            environment=environment,
+            reproducibility=reproducibility(),
+            stages=(StageDraft(stage_id="train", spec_source=train_draft),),
+            estimator=StageArtifactRef(
+                stage_id="train",
+                artifact_name=PARAMETERS,
+            ),
+        ),
+    )
+    run_git(root, "add", "experiments/example/runs")
+    run_git(root, "commit", "--quiet", "-m", "plan")
+
+    result = execute_run(root, frozen.files[-1])
+
+    assert result.resolved_run.status == "succeeded"
+    assert (root / "inputs/datasets/tiny/prior.bin").read_bytes() == b"prior"
+
+    store = LocalArtifactStore(root)
+    verified = verify_run_result(
+        result.resolved_run,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, store, REPOSITORY),
+    )
+
+    resolved_train = verified.resolved_stages["train"]
+    assert isinstance(resolved_train, ResolvedTrainSpec)
+    resolved_input = resolved_train.inputs["prior"]
+
+    assert isinstance(resolved_input, ResolvedExternalInputRef)
+    assert store.fetch(resolved_input.file.stored_at) == b"prior"

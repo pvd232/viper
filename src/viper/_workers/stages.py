@@ -14,7 +14,7 @@ from .._parameter.validation import instantiate_parameters
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalHandle
-from ..inputs import FutureInputRef, StoredInputRef
+from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
 from ..metrics import MeasurementSink, MetricHandle, bind_live_metric
 from ..paths import retrieval_body_path
 from ..runs import RunSpec
@@ -86,6 +86,8 @@ def _planned_stage_context(
             elif isinstance(candidate, InternalSpec):
                 for name, input_reference in candidate.inputs.items():
                     if isinstance(input_reference, StoredInputRef):
+                        expected_inputs[name] = str(input_reference.path)
+                    elif isinstance(input_reference, ExternalInputRef):
                         expected_inputs[name] = str(input_reference.path)
                     elif isinstance(input_reference, FutureInputRef):
                         producer = loaded[input_reference.producer_stage_id]

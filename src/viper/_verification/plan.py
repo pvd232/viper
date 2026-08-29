@@ -17,7 +17,7 @@ from .._schema import PARAMETERS_INPUT, DataRole, RepoRelPath, repo_file_paths_o
 from ..benchmark import BenchmarkSpec
 from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import InputName, StageId
-from ..inputs import FutureInputRef, StoredInputRef
+from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
 from ..references import GitFileRef, ResolvedFileRef, ResolvedRunSpecRef
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import parse_yaml_bytes
@@ -124,6 +124,9 @@ def _stage_input_roles(
     input_roles: dict[InputName, DataRole] = {}
     for input_name, input_ref in stage.inputs.items():
         if isinstance(input_ref, StoredInputRef):
+            input_roles[input_name] = input_ref.data_role
+            continue
+        if isinstance(input_ref, ExternalInputRef):
             input_roles[input_name] = input_ref.data_role
             continue
 

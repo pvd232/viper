@@ -479,16 +479,6 @@ python -m pytest tests/test_parameter_validation.py tests/test_preflight.py \
   tests/test_public_api.py tests/test_validation_architecture.py -q
 ```
 
-## Deferred work
-
-The following changes address separate questions and stay outside this
-refactor:
-
-- removing deprecated public aliases such as `serialize_record()`;
-- splitting the types currently owned by `_schema.py`;
-- consolidating test-local helpers used by one test module only; and
-- changing any persisted provenance schema or verifier rule.
-
 ## Verdict
 
 Implement the refactor in the five phases above. The change gives each private
