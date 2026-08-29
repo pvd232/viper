@@ -608,6 +608,11 @@ def plan(
 def freeze(plan: RunPlanDraft, *, root: Path = Path.cwd()) -> FrozenPlanFiles: ...
 ```
 
+`viper.stage()` replaces hand-written stage YAML during authoring. It returns a
+`StageDraft` that describes one future stage: the decorated function, parameter
+values, inputs, and artifact declarations. `viper.freeze()` later writes the
+canonical YAML. The run command executes the frozen stage.
+
 `viper.stage()` reads the stage kind and parameter class attached by the
 decorator. It rejects a `params` instance whose class differs from the
 decorator's class. `viper.download()` constructs `DownloadSpecDraft` directly
