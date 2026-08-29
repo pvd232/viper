@@ -172,6 +172,26 @@ request, resolved transport, observed response, and timestamps. The inherited
 `artifacts` map gives the same body the standard artifact interface used by
 later stages and artifact pointers.
 
+### 4.3 Stage invocation binding
+
+`SnapshotFileRef` belongs only to the completed stage record. The invocation
+receipt records the HTTP body directly in `HttpRetrievalContextBinding`:
+
+```python
+class HttpRetrievalContextBinding(ProtocolModel):
+    response: ObservedHttpResponse
+    body_path: RepoRelPath
+    body_sha256: SHA256
+    body_bytes: int = Field(ge=0)
+```
+
+`HttpRetrievalContextBinding` associates the observed HTTP response with the
+exact file supplied to the download invocation. The binding remains valid for
+a failed invocation independently of any completed stage snapshot. A
+successful invocation later records the same path, digest, and byte count in
+`ResolvedHttpRetrieval.body` and `ResolvedSingleFileArtifact.file` as one
+`SnapshotFileRef`.
+
 ## 5. Execution
 
 The executor owns the retrieval body from the transport result through the
@@ -182,11 +202,12 @@ DownloadSpec.inputs["prior"]
     -> HTTP transport retrieves b"prior"
     -> executor checks the frozen request policy
     -> executor writes b"prior" at spec.artifacts["prior"].path
-    -> executor creates SnapshotFileRef(path, sha256, bytes)
-    -> ResolvedHttpRetrieval.body receives that reference
+    -> HttpRetrievalContextBinding records body_path, body_sha256, and body_bytes
     -> DownloadContext.retrievals["prior"].body receives that path
     -> context.artifacts["prior"] receives that same path
     -> execute_stage_process() hashes the declared artifact
+    -> executor creates SnapshotFileRef(path, sha256, bytes)
+    -> ResolvedHttpRetrieval.body receives that reference
     -> ResolvedDownloadSpec validates reference equality
     -> stage snapshot stores the path once
 ```
@@ -197,10 +218,24 @@ creates `SnapshotFileRef` directly from the declared artifact path and verified
 response bytes. It stops calling `LocalArtifactStore.resolved_files()` for the
 retrieval body.
 
-The download callable continues to receive `DownloadContext.retrievals` and
-`context.artifacts`. Existing copy-style callables read and rewrite the same
-bytes at the same path. The final `ResolvedDownloadSpec` validator rejects a
-callable that changes the response body after the executor writes it.
+The executor now performs the write that publishes the HTTP body as the
+declared artifact. The download callable continues to receive
+`DownloadContext.retrievals` and `context.artifacts`. Both maps expose the same
+path. The executor owns publication, and the callable may read the verified
+file. Generated project code and execution fixtures remove the existing
+read-and-write loop. Existing download callables that perform that loop must be
+changed; this contract changes their source interface. The generated callable
+becomes:
+
+```python
+@download_stage(parameter_model=DownloadParameters)
+def download(context) -> None:
+    """Run after VIPER publishes each verified HTTP body."""
+```
+
+The final `ResolvedDownloadSpec` validator rejects a callable that changes the
+response body. Byte verification treats leaving the file untouched and
+rewriting the same bytes identically. The contract guarantees byte identity.
 
 `_attempt.py` currently adds retrieval files and artifact files to one
 `snapshot_files` dictionary before calling `LocalArtifactStore.snapshot()`.
@@ -279,10 +314,15 @@ retrievals[name].body.bytes  == artifacts[name].file.bytes
 
 ### 7.3 Delivery rule
 
-The stage-invocation verifier reconstructs `StageContextBinding`. For a
-download stage, `StageContextBinding.retrievals[name].body` and
-`StageContextBinding.artifacts[name]` use the same repository-relative path.
-The verifier then checks the invocation receipt against that binding.
+The download worker reconstructs `HttpRetrievalHandle.body` from
+`StageContextBinding.retrievals[name].body_path`. Before invoking the project
+callable, the worker hashes the file and checks `body_sha256` and `body_bytes`.
+It also requires `body_path` to equal
+`StageContextBinding.artifacts[name]`.
+
+The stage-invocation verifier reconstructs the complete `StageContextBinding`
+from the resolved download stage and compares it with the binding stored in the
+invocation receipt.
 [`_verify_stage_invocation`](../../src/viper/_verification/attempt.py) owns the
 binding comparison.
 
@@ -293,10 +333,10 @@ binding comparison.
 | Frozen stage schema | Request and artifact keys vary independently | Keys match one-for-one and every download artifact is a single file | One HTTP body receives one artifact name |
 | Retrieval receipt | `body: ResolvedFileRef` points to a local-store retrieval path | `body: SnapshotFileRef` points to the declared artifact path | Receipt and artifact reference one snapshot file |
 | Retrieval runtime | `retrieve_download_inputs()` publishes a retrieval-body revision and materializes its canonical path | Executor materializes the verified response at `spec.artifacts[name].path` | One durable payload path |
-| Worker binding | Retrieval body path and artifact path can differ | Both bindings use the declared artifact path | Download callable sees one file through both handles |
+| Worker binding | `HttpRetrievalContextBinding.body: SnapshotFileRef` requires an enclosing completed snapshot, while failed invocation receipts persist independently | `HttpRetrievalContextBinding` stores `body_path`, `body_sha256`, and `body_bytes` directly | Invocation evidence remains valid independently of a stage snapshot |
 | Stage snapshot | Retrieval and artifact loops use different keys | Both loops use the same key | `snapshot_files` stores one body entry |
 | Verification | HTTP body and artifact verification run independently | `download.receipt_artifact_identity` joins the two records | Verifier proves one HTTP body became the named artifact |
-| User stage file | Default download function copies a retrieval body to an artifact path | Existing function reads and writes one shared path | Existing code remains executable; generated scaffold can remove the redundant copy |
+| User stage file | Default download function copies a retrieval body to an artifact path | Generated function and fixtures remove the copy loop | Existing copy-style callables require a source change |
 | Fixtures and examples | Request names and artifact names may differ | Each download fixture uses the same name in both maps | Tests state the new public rule |
 | Documentation | External roots describes the HTTP receipt and later artifact | External roots links to this contract | One owner for the schema and execution detail |
 
@@ -324,7 +364,8 @@ The test asserts:
 ```text
 resolved.retrievals["prior"].body == resolved.artifacts["prior"].file
 snapshot contains the declared artifact path once
-stage invocation binds retrievals["prior"].body.path == artifacts["prior"].path
+stage invocation binds retrievals["prior"].body_path == artifacts["prior"]
+stage invocation binds the retrieved body's exact SHA-256 and byte count
 ```
 
 ### Rejection: artifact file changes after retrieval
@@ -342,20 +383,25 @@ stage because the retrieval-body and artifact-file references differ.
    missing key, an extra key, and a bundle artifact.
 2. Change `ResolvedHttpRetrieval.body` to `SnapshotFileRef`. Add the
    `ResolvedDownloadSpec` receipt-artifact identity validator and model tests.
-3. Change `retrieve_download_inputs()` to materialize at the declared artifact
-   path and return `SnapshotFileRef` values. Update worker-context binding and
+3. Change `retrieve_download_inputs()` to write at the declared artifact path
+   and return the verified retrieval values needed by execution. Replace
+   `HttpRetrievalContextBinding.body: SnapshotFileRef` with `body_path`,
+   `body_sha256`, and `body_bytes`. Update worker-context construction and
    stage-snapshot collection in
    [`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py),
    [`src/viper/execution/_stage.py`](../../src/viper/execution/_stage.py), and
    [`src/viper/execution/_attempt.py`](../../src/viper/execution/_attempt.py).
+   Update live-handle reconstruction and startup byte checks in
+   [`src/viper/_workers/stages.py`](../../src/viper/_workers/stages.py).
 4. Update `_verify_stage_invocation()` and `_verify_download_retrievals()` in
    [`src/viper/_verification/attempt.py`](../../src/viper/_verification/attempt.py)
    to read and compare the shared snapshot reference.
 5. Replace the existing download fixtures whose request and artifact names
-   differ. Add the success and rejection cases in `tests/test_run_execution.py`,
+   differ, and remove every retrieval-body-to-artifact copy loop. Add the
+   success and rejection cases in `tests/test_run_execution.py`,
    `tests/test_execution_acceptance.py`, and
    `tests/test_verification_acceptance.py`.
-6. Update generated download-stage scaffolding in
+6. Remove the copy loop from generated download-stage scaffolding in
    [`src/viper/project_init.py`](../../src/viper/project_init.py) and the
    protocol reference. Link
    [`external-input-roots.md`](external-input-roots.md) to this contract.
@@ -368,5 +414,6 @@ stage because the retrieval-body and artifact-file references differ.
 | Preserved | A later stage selects a download artifact through `FutureInputRef` or `StoredInputRef`. | Same-run and prior-run input verification tests |
 | Changed | Download stages accept matching request and artifact keys with one single-file artifact per request. | `DownloadSpec` validator tests |
 | Changed | Retrieval bodies move from standalone `ResolvedFileRef` values to `SnapshotFileRef` values. | Resolved-document parser and verifier tests |
+| Changed | Failed invocation receipts record the HTTP body path and byte identity independently of `SnapshotFileRef`. | Stage-invocation binding model and verifier tests |
 | Introduced | Retrieval receipt and resolved artifact share one exact `SnapshotFileRef`. | `download.receipt_artifact_identity` acceptance and rejection tests |
 | Strengthened | The attempt verifier proves that the controlled download callable received the same path that appears in the retrieval receipt and artifact record. | Stage-invocation binding assertion |
