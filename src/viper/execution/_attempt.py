@@ -42,7 +42,6 @@ from ..verification import (
     verify_run_result,
 )
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
-from ._errors import RunError
 from ._materialization import resolve_inputs, retrieve_download_inputs
 from ._metric import MetricExecutionError, run_after_stage_metrics
 from ._publication import (
@@ -54,13 +53,14 @@ from ._publication import (
 )
 from ._recovery import reconcile_abandoned_attempts
 from ._resolution import resolve_environment, resolve_stage
-from ._results import ConfirmationRunResult, RunResult
 from ._source import RunFetcher, resolve_git_file, run_git
 from ._stage import (
     StageExecutionError,
     StageProcessInterrupted,
     execute_stage_process,
 )
+from .errors import RunError
+from .results import ConfirmationRunResult, RunResult
 
 
 def execute_attempt(

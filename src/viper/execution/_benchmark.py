@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict
-
 from .._schema import PREDICTIONS
 from ..artifacts import StageArtifactRef
 from ..benchmark import (
@@ -28,22 +26,11 @@ from ..references import (
 )
 from ..runs import ResolvedRun, RunAttempt
 from ..stages import EvaluateSpec
+from .errors import BenchmarkExecutionError
+from .results import BenchmarkExecutionResult
 
 if TYPE_CHECKING:
     from ..storage import LocalArtifactStore
-
-
-class BenchmarkExecutionError(RuntimeError):
-    """Report a benchmark request, execution, or publication failure."""
-
-
-class BenchmarkExecutionResult(BaseModel):
-    """Return one verified benchmark result and its canonical local path."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    result: BenchmarkResult
-    result_path: Path
 
 
 def _write_new(path: Path, raw: bytes) -> None:

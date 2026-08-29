@@ -13,7 +13,7 @@ from ..runs import AttemptJournalRef, ResolvedAttemptRef, RunAttempt
 from ..serialization import serialize_document
 from ..stages import StageInvocationReceipt
 from ..storage import LocalArtifactStore
-from ._errors import RunError
+from .errors import RunError
 
 
 def write_synchronized(path: Path, raw: bytes) -> None:

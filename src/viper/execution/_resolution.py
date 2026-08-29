@@ -25,9 +25,9 @@ from ..stages import (
     ResolvedSpec,
     ResolvedTrainSpec,
 )
-from ._errors import RunError
 from ._source import RunFetcher, resolve_git_file
 from ._stage import StageProcessResult
+from .errors import RunError
 
 
 def resolve_environment(

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from ..benchmark import BenchmarkResult
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
 
 
@@ -26,3 +27,15 @@ class ConfirmationRunResult(BaseModel):
     attempt_reference: ResolvedAttemptRef
     attempt_path: Path
     journal_path: Path
+
+
+class BenchmarkExecutionResult(BaseModel):
+    """Return one verified benchmark result and its canonical local path."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    result: BenchmarkResult
+    result_path: Path
+
+
+__all__ = ["BenchmarkExecutionResult", "RunResult"]

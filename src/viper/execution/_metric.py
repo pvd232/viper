@@ -32,8 +32,8 @@ from ..runtime import process_environment, select_cuda_device
 from ..serialization import serialize_document
 from ..stages import BaseSpec
 from ..storage import LocalArtifactStore
-from ._errors import RunError
 from ._publication import write_synchronized
+from .errors import RunError
 
 
 class MetricExecutionError(RuntimeError):

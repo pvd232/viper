@@ -106,6 +106,12 @@ execution namespace:
 
 ```python
 from viper import execution
+from viper.execution import (
+    BenchmarkExecutionError,
+    BenchmarkExecutionResult,
+    RunError,
+    RunResult,
+)
 
 run_result = execution.run(repository_root, run_spec_path)
 retry_result = execution.retry(repository_root, run_spec_path)
@@ -115,6 +121,10 @@ benchmark_result = execution.benchmark(
     benchmark_spec_path,
 )
 ```
+
+`run()` and `retry()` return `RunResult`. `benchmark()` returns
+`BenchmarkExecutionResult`. Callers can catch `RunError` and
+`BenchmarkExecutionError` through the same namespace.
 
 ## Typed operations
 

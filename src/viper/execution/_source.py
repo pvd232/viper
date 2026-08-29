@@ -21,7 +21,7 @@ from ..verification import (
     fetch_huggingface_file_bytes,
     list_huggingface_snapshot_files,
 )
-from ._errors import RunError
+from .errors import RunError
 
 
 def run_git(repository_root: Path, *arguments: str) -> bytes:

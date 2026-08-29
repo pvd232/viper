@@ -56,11 +56,10 @@ from ..api import (
 from ..artifacts import ArtifactPointer
 from ..authoring import freeze_run_plan, load_run_plan_draft
 from ..benchmark import BenchmarkResult
-from ..execution._benchmark import BenchmarkExecutionError
 from ..execution._benchmark import benchmark as execute_benchmark_run
-from ..execution._errors import RunError
 from ..execution._run import run as execute_run
 from ..execution._stage import StageExecutionError, execute_stage_process
+from ..execution.errors import BenchmarkExecutionError, RunError
 from ..inspection import InspectionError
 from ..inspection import attempt_status as inspect_attempt_status
 from ..inspection import compare_runs as compare_verified_runs

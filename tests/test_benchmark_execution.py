@@ -8,7 +8,7 @@ from tests.test_verification_acceptance import build_benchmark_fixture
 from viper.api import ExecuteBenchmarkRequest
 from viper.api import execute_benchmark as execute_benchmark_application
 from viper.benchmark import BenchmarkSpec
-from viper.execution._benchmark import BenchmarkExecutionResult
+from viper.execution import BenchmarkExecutionResult
 from viper.references import (
     LocalFileRef,
     ResolvedBenchmarkResultRef,

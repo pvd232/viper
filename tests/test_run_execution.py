@@ -35,9 +35,9 @@ from viper.artifacts import (
     StageArtifactRef,
 )
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
+from viper.execution import RunError
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
-from viper.execution._errors import RunError
 from viper.execution._metric import MetricWorkerResult
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._source import RunFetcher

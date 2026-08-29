@@ -17,6 +17,7 @@ PUBLIC_MODULES = (
     "http",
     "metrics",
     "parameters",
+    "randomness",
     "references",
     "resume",
     "runs",
@@ -58,8 +59,18 @@ def test_every_public_module_imports() -> None:
 
 
 def test_execution_namespace_uses_operation_names_once() -> None:
-    """Expose run, retry, and benchmark beneath their execution namespace."""
-    assert tuple(execution.__all__) == ("benchmark", "retry", "run")
+    """Expose execution operations and their public result and error types."""
+    assert tuple(execution.__all__) == (
+        "BenchmarkExecutionError",
+        "BenchmarkExecutionResult",
+        "RunError",
+        "RunResult",
+        "benchmark",
+        "retry",
+        "run",
+    )
+    assert issubclass(execution.BenchmarkExecutionError, RuntimeError)
+    assert issubclass(execution.RunError, RuntimeError)
     assert callable(execution.run)
     assert callable(execution.retry)
     assert callable(execution.benchmark)
