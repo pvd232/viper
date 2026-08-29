@@ -6,7 +6,6 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
-from warnings import warn
 
 import yaml
 from pydantic import BaseModel, TypeAdapter
@@ -73,16 +72,6 @@ def document_digest(document: BaseModel) -> str:
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
-
-
-def serialize_record(record: BaseModel) -> bytes:
-    """Serialize a protocol document through the deprecated 0.1 alias."""
-    warn(
-        "serialize_record() is deprecated; use serialize_document()",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return serialize_document(record)
 
 
 def parse_yaml_bytes(raw: bytes) -> Any:
