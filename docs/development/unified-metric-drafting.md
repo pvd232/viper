@@ -837,7 +837,7 @@ baseline_training = viper.stage(
         ),
     },
     artifacts={
-        "parameters": viper.file_artifact(
+        Train.PARAMETERS: viper.file_artifact(
             path=(
                 "experiments/tiny_http/runs/baseline/"
                 "01ARZ3NDEKTSV4RRFFQ69G5FAV/artifacts/models/"
@@ -846,7 +846,7 @@ baseline_training = viper.stage(
             loader=load_weights,
             data_role="training",
         ),
-        "resume_state": viper.file_artifact(
+        Train.RESUME_STATE: viper.file_artifact(
             path=(
                 "experiments/tiny_http/runs/baseline/"
                 "01ARZ3NDEKTSV4RRFFQ69G5FAV/artifacts/models/"
@@ -877,7 +877,7 @@ high_rate_training = viper.stage(
         ),
     },
     artifacts={
-        "parameters": viper.file_artifact(
+        Train.PARAMETERS: viper.file_artifact(
             path=(
                 "experiments/tiny_http/runs/high_learning_rate/"
                 "01ARZ3NDEKTSV4RRFFQ69G5FAW/artifacts/models/"
@@ -886,7 +886,7 @@ high_rate_training = viper.stage(
             loader=load_weights,
             data_role="training",
         ),
-        "resume_state": viper.file_artifact(
+        Train.RESUME_STATE: viper.file_artifact(
             path=(
                 "experiments/tiny_http/runs/high_learning_rate/"
                 "01ARZ3NDEKTSV4RRFFQ69G5FAW/artifacts/models/"
@@ -913,14 +913,14 @@ experiment = viper.experiment(
             stages={
                 "train": baseline_training,
             },
-            estimator=baseline_training.artifacts["parameters"],
+            estimator=baseline_training.artifacts[Train.PARAMETERS],
         ),
         "high_learning_rate": viper.variant(
             levels={"learning_rate": "high"},
             stages={
                 "train": high_rate_training,
             },
-            estimator=high_rate_training.artifacts["parameters"],
+            estimator=high_rate_training.artifacts[Train.PARAMETERS],
         ),
     },
     replicates={
@@ -1355,7 +1355,7 @@ experiment = viper.experiment(
                 "train": training,
                 "evaluate": evaluation,
             },
-            estimator=training.artifacts["parameters"],
+            estimator=training.artifacts[Train.PARAMETERS],
         ),
     },
     replicates={
