@@ -364,6 +364,7 @@ path.
 | `HttpTransportContext.workspace`, its bounded `destination`, and transport-level body tests | Retain | The attempt workspace remains the safety boundary for an in-progress transfer. |
 | `LocalArtifactStore.resolved_files()` and its non-download callers | Retain | Local external roots, metrics, run records, and other independently stored files still require self-contained `ResolvedFileRef` publication. |
 | `DownloadContext.retrievals` and `StageContext.artifacts` | Retain | The retrieval map supplies response metadata and the body path; the artifact map supplies the ordinary stage-artifact interface. Their paths must match. |
+| `DownloadSpec.implementation`, `download_stage`, and `parameters.Download` | Retain | Preserve the decorated, typed stage contract. The callable runs after executor publication and may inspect the verified body while preserving its byte identity. |
 
 ## 9. Acceptance case
 
