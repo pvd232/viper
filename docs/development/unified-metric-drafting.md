@@ -1,0 +1,1253 @@
+# Unified metric, experiment, and benchmark drafting
+
+Users define each metric calculation once. They configure that calculation for
+an experiment, select it from stages, and apply optional benchmark criteria to
+the verified result. VIPER writes the exact metric, experiment, stage, and
+benchmark records required by execution and verification.
+
+This contract owns metric drafting, objective direction, experiment assembly,
+and benchmark authoring. The complete model-run example remains in
+[`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
+
+## 1. Status
+
+**Contract status:** proposed authoring and protocol change; implementation
+pending.
+
+**Current:** `@viper.metric` attaches `metric_id`, `kind`, and `mode` to a
+function or stateful class. `MetricSpec` stores the exact implementation,
+parameter values, dependencies, and recomputation comparator. Project code or
+fixtures construct `MetricSpec` directly. Stages select metrics through bare
+`metric_ids`. See [`src/viper/metrics.py`](../../src/viper/metrics.py),
+[`src/viper/stages.py`](../../src/viper/stages.py), and
+[`src/viper/experiments.py`](../../src/viper/experiments.py).
+
+**Current:** `ExperimentSpec.metrics` stores complete `MetricSpec` records.
+`BenchmarkSpec.metrics` stores `MetricCriterion` records. The benchmark executor
+records only metrics that have thresholds. See
+[`src/viper/benchmark.py`](../../src/viper/benchmark.py) and
+[`src/viper/execution/_benchmark.py`](../../src/viper/execution/_benchmark.py).
+
+**Proposed:** `viper.measure()` creates one configured `MetricDraft`.
+`viper.minimize()` or `viper.maximize()` gives that metric an objective
+direction. `viper.experiment()` defines factors, variants, and replicates while
+`viper.freeze()` derives the experiment's metric registry from the selected
+stages. `viper.benchmark()` fixes the evaluation data, splits, metrics, and
+optional criteria.
+
+The benchmark model follows four observations from primary sources:
+
+- MLPerf defines a benchmark, a run, a run result, and a benchmark result as
+  separate entities. Its quality threshold belongs to one particular
+  time-to-train procedure. [MLPerf Training Benchmark](https://arxiv.org/abs/1910.01500)
+  and [MLPerf Training rules](https://github.com/mlcommons/training_policies/blob/master/training_rules.adoc)
+- GLUE defines a benchmark through fixed tasks, datasets, metrics, and an
+  evaluation platform. Its diagnostic set supplies additional analysis beyond
+  one leaderboard score. [GLUE](https://aclanthology.org/W18-5446/)
+- Changing the selected benchmark tasks can change the relative ranking of
+  methods. A stored result therefore needs the exact benchmark identity and
+  evaluation inputs. [The Benchmark Lottery](https://arxiv.org/abs/2107.07002)
+- A best score alone omits the model-selection work that produced it. VIPER's
+  run and experiment records retain the selected parameters, seeds, and run
+  evidence beside the benchmark result. [Show Your Work](https://aclanthology.org/D19-1224/)
+
+The project-specific conclusion is direct: `BenchmarkResult` is the primary
+record. A threshold criterion is an optional interpretation of one recorded
+metric result.
+
+## 2. Required claim
+
+When a user selects a configured metric as a stage objective, diagnostic, or
+benchmark measurement, VIPER freezes one exact `MetricSpec`, delivers its
+validated parameters to the metric implementation, records each produced
+value, and verifies every recomputed value from its declared files.
+
+When a user freezes an experiment, VIPER derives `ExperimentSpec.metrics` from
+the metrics reachable through the experiment's stage drafts.
+`viper.experiment()` therefore lists factors, variants, and replicates once.
+
+When a user runs a benchmark, VIPER records the exact evaluation dataset,
+splits, metric values, candidate evidence, and confirmation evidence. Optional
+criteria add pass or fail judgments. VIPER stores every selected metric result
+before it evaluates those criteria.
+
+## 3. Current gap
+
+Hold this evaluation fixed:
+
+```text
+evaluate one model on holdout.csv
+-> write predictions.csv
+-> compute evaluation_loss and evaluation_accuracy
+-> confirm the run independently
+-> record both verified metric values
+-> require accuracy >= 0.90 when the user supplied that criterion
+```
+
+The current metric authoring path is:
+
+```text
+decorated metric function
+-> user constructs MetricImplementationRef
+-> user constructs MetricSpec
+-> user inserts MetricSpec into ExperimentSpec.metrics
+-> user copies metric_id into EvaluateSpec.metric_ids
+```
+
+The current benchmark path is:
+
+```text
+BenchmarkSpec.metrics
+-> tuple[MetricCriterion, ...]
+-> benchmark executor iterates criteria
+-> BenchmarkResult.metrics contains criterion receipts only
+```
+
+Three connectors are missing.
+
+First, Python authoring lacks an object that carries one decorated metric
+together with its parameter values, dependencies, and recomputation comparator.
+
+Second, a live metric can declare custom parameters in the proposed draft. The
+current `MetricHandle` calls a function with only the arguments supplied to
+`record()` and constructs a stateful metric with zero arguments. The frozen
+parameter object remains disconnected from both implementations.
+
+Third, `BenchmarkSpec.metrics` makes every recorded benchmark metric carry a
+threshold. The executor requires `ge` or `le` before it can record a verified
+score.
+
+## 4. Contract models
+
+### Metric definition and configuration
+
+The decorator defines stable metric metadata. `viper.measure()` supplies the
+values that can change between experiments.
+
+```python
+MetricKind = Literal["training", "evaluation", "diagnostic"]
+MetricMode = Literal["recompute", "live"]
+ObjectiveDirection = Literal["minimize", "maximize"]
+
+MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
+
+
+@dataclass(frozen=True)
+class MetricDefinition(Generic[MetricParamsT]):
+    metric_id: MetricId
+    kind: MetricKind
+    mode: MetricMode
+    parameter_model: type[MetricParamsT]
+
+
+DecoratedMetric = Callable[..., float] | type[Any]
+
+
+class MetricDraft(BaseModel):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+    )
+
+    implementation: DecoratedMetric
+    params: parameters.Metric
+    dependencies: tuple[MetricDependency, ...] = ()
+    comparator: FloatComparator | None = None
+
+
+class MetricObjectiveDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metric: MetricDraft
+    direction: ObjectiveDirection
+
+
+class MetricCriterionDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metric: MetricDraft
+    comparison: Literal["ge", "le"]
+    threshold: float = Field(allow_inf_nan=False)
+```
+
+`MetricDraft` is one configured calculation. `MetricObjectiveDraft` states how
+an objective should improve. `MetricCriterionDraft` states one optional
+threshold applied by a benchmark. These objects share one `MetricDraft` and its
+implementation and parameter values.
+
+The public constructors are:
+
+```python
+def metric(
+    *,
+    metric_id: MetricId,
+    kind: MetricKind,
+    mode: MetricMode,
+    params: type[MetricParamsT] = parameters.Metric,
+) -> MetricDecorator[MetricParamsT]: ...
+
+
+def measure(
+    implementation: DecoratedMetric,
+    *,
+    params: parameters.Metric | None = None,
+    dependencies: tuple[MetricDependency, ...] = (),
+    comparator: FloatComparator | None = None,
+) -> MetricDraft: ...
+
+
+def minimize(metric: MetricDraft) -> MetricObjectiveDraft: ...
+
+
+def maximize(metric: MetricDraft) -> MetricObjectiveDraft: ...
+
+
+def at_least(metric: MetricDraft, threshold: float) -> MetricCriterionDraft: ...
+
+
+def at_most(metric: MetricDraft, threshold: float) -> MetricCriterionDraft: ...
+```
+
+`viper.measure()` constructs `viper.params.Metric()` when the caller omits
+`params`. It rejects an instance whose exact class differs from the class
+selected by `@viper.metric`.
+
+Recomputed metrics require at least one dependency and one comparator. Live
+metrics carry neither. Evaluation metrics use `mode="recompute"`.
+
+`FloatComparator` compares one recorded value with independent recomputation.
+`MetricCriterionDraft` compares a verified benchmark value with a target. The
+two objects keep separate fields and separate consumers.
+
+### Naming decisions
+
+| Name | Stable role |
+| --- | --- |
+| `MetricDraft` | One configured calculation before freezing |
+| `MetricObjectiveDraft` | One metric plus its desired direction of improvement |
+| `MetricCriterionDraft` | One metric plus one optional benchmark threshold |
+| `MetricObjectiveSpec` | The frozen metric-and-direction pair stored on a stage |
+| `diagnostic` | A `MetricKind` used for explanatory stage measurements |
+| `FactorDraft` | One experimental dimension and its permitted level IDs |
+| `VariantDraft` | One factor-level selection plus the complete stage graph and estimator for that selection |
+| `ReplicateDraft` | One repeated execution seed |
+
+The stage field is `objective`. A scalar field named `objective_metric_id`
+would hide the required direction. Diagnostics remain metrics, so the API uses
+`MetricDraft(kind="diagnostic")` as their single authoring type.
+
+### Diagnostics
+
+A diagnostic is a metric whose result explains a stage. The `objective` field
+separately names the primary training or evaluation metric. Diagnostics use the
+same decorator, draft, measurement, parameter, dependency, and verification
+types as other metrics:
+
+```python
+@viper.metric(
+    metric_id="gradient_norm",
+    kind="diagnostic",
+    mode="live",
+)
+def gradient_norm(
+    context: viper.MetricContext[viper.params.Metric],
+    batch_norms: list[float],
+) -> float:
+    return max(batch_norms)
+
+
+gradient_norm_metric = viper.measure(gradient_norm)
+
+training = viper.stage(
+    train,
+    params=TRAIN_PARAMS,
+    inputs=TRAIN_INPUTS,
+    artifacts=TRAIN_ARTIFACTS,
+    objective=viper.minimize(training_loss_metric),
+    metrics=(gradient_norm_metric,),
+)
+```
+
+`objective` identifies the primary metric and its direction. `metrics` selects
+additional measurements, including diagnostics. A fixed embedding stage can
+select `embedding_reconstruction_loss` and `embedding_spread` as diagnostics
+while leaving `objective=None`.
+
+A diagnostic can use `mode="live"` when the stage already holds the required
+values. It can use `mode="recompute"` when the calculation reads persisted
+inputs or artifacts. Train stages accept training and diagnostic metrics.
+Evaluate stages accept evaluation metrics. Build, embed, and download stages
+accept diagnostic metrics. The optional embed objective selects a diagnostic
+metric because `MetricKind` assigns embedding measurements to `diagnostic`.
+
+### One context for live and recomputed metrics
+
+Both metric modes receive the same typed `MetricContext`:
+
+```python
+class MetricContext(BaseModel, Generic[MetricParamsT]):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+    )
+
+    inputs: Mapping[str, Path] = Field(default_factory=dict)
+    artifacts: Mapping[str, Path] = Field(default_factory=dict)
+    params: MetricParamsT
+```
+
+A recomputed metric keeps its current context-first call:
+
+```python
+def evaluation_loss(
+    context: viper.MetricContext[LossMetricParams],
+) -> float:
+    ...
+```
+
+A stateless live metric receives the same context before the observations
+supplied to `record()`:
+
+```python
+def training_loss(
+    context: viper.MetricContext[viper.params.Metric],
+    batch_losses: list[float],
+) -> float:
+    ...
+```
+
+A stateful live metric receives the context once:
+
+```python
+class RunningAccuracy(
+    viper.StatefulMetric[AccuracyMetricParams]
+):
+    def __init__(
+        self,
+        context: viper.MetricContext[AccuracyMetricParams],
+    ) -> None:
+        self.params = context.params
+        self.correct = 0
+        self.total = 0
+
+    def update(self, predicted: int, expected: int) -> None:
+        self.correct += int(predicted == expected)
+        self.total += 1
+
+    def compute(self) -> float:
+        return self.correct / self.total
+```
+
+The live binding operation is:
+
+```text
+MetricSpec.parameter_model + MetricSpec.params
+-> validate and construct parameters.Metric subclass
+
+active stage input and artifact paths + validated metric params
+-> construct MetricContext
+
+bind_live_metric(..., context)
+-> MetricHandle retains MetricContext
+
+MetricHandle.record(*args, **kwargs)
+-> stateless implementation(context, *args, **kwargs)
+-> Measurement
+
+MetricHandle construction for StatefulMetric
+-> implementation(context)
+-> update(...)
+-> record()
+-> compute()
+-> Measurement
+```
+
+The target runtime interfaces are:
+
+```python
+class StatefulMetric(ABC, Generic[MetricParamsT]):
+    @abstractmethod
+    def __init__(self, context: MetricContext[MetricParamsT]) -> None: ...
+
+    @abstractmethod
+    def update(self, *args: Any, **kwargs: Any) -> None: ...
+
+    @abstractmethod
+    def compute(self) -> float: ...
+
+
+class MetricHandle:
+    def __init__(
+        self,
+        implementation: Callable[..., Any] | type[Any],
+        sink: MeasurementSink,
+        context: MetricContext[Any],
+    ) -> None: ...
+
+    def update(self, *args: Any, **kwargs: Any) -> None: ...
+
+    def record(
+        self,
+        *args: Any,
+        epoch: int | None = None,
+        step: int | None = None,
+        **kwargs: Any,
+    ) -> Measurement: ...
+
+
+def bind_live_metric(
+    repository_root: Path,
+    spec: MetricSpec,
+    sink: MeasurementSink,
+    context: MetricContext[Any],
+) -> MetricHandle: ...
+```
+
+One shared `MetricContext` gives both modes the same invocation context and
+parameter-delivery rule.
+
+The alternatives fail at a specific boundary:
+
+| Alternative | Benefit | Contract cost |
+| --- | --- | --- |
+| Pass `params=` to `MetricHandle.record()` | Small runtime edit | Stage code can supply values that differ from the frozen `MetricSpec.params`. |
+| Decorate a factory that returns a configured metric | Parameters stay inside the returned callable | The returned closure can capture unrecorded values, and its generated identity is harder to bind to one source symbol. |
+| Permit custom parameters only on `StatefulMetric` classes | Constructor delivery is simple | A stateless calculation must become a class solely to receive parameters. |
+| Store parameters on `MetricHandle.params` | Preserves the current metric function signature | Stage code must manually read and forward the values, so the metric invocation itself lacks a required parameter handoff. |
+| Add `LiveMetricContext` | Makes the mode visible in the type | It duplicates the role already carried by `MetricContext` and creates two parameter-delivery APIs. |
+
+### Frozen metric records
+
+`MetricSpec` adds the class that validated custom metric parameters:
+
+```python
+class MetricSpec(ProtocolModel):
+    schema_version: Literal[1] = 1
+    metric_id: MetricId
+    kind: MetricKind
+    implementation: MetricImplementationRef
+    parameter_model: ParameterModelRef | None = None
+    params: parameters.Metric
+    mode: MetricMode
+    dependencies: tuple[MetricDependency, ...] = ()
+    comparator: FloatComparator | None = None
+```
+
+`parameter_model=None` means the package-owned `viper.params.Metric` class
+validated the parameters. A project subclass produces one byte-addressed
+`ParameterModelRef`.
+
+Recomputed metric executions repeat the selected class and values:
+
+```python
+class MetricExecutionReceipt(ProtocolModel):
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    attempt_id: int = Field(ge=1)
+    metric_id: MetricId
+    stage_id: StageId
+    purpose: Literal["measurement", "verification"]
+    implementation: MetricImplementationRef
+    parameter_model: ParameterModelRef | None = None
+    params: parameters.Metric
+    dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
+    startup: ProcessStartupReceipt
+    execution_context: ExecutionContext
+    python_environment: PythonEnvironmentSpec
+    value: float = Field(allow_inf_nan=False)
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+    outcome: Literal["succeeded"] = "succeeded"
+```
+
+Live metrics run inside the controlled stage process. Their `Measurement`
+selects the stage and metric ID. The verifier follows that ID to `MetricSpec`
+and follows the resolved stage to the stage invocation receipt. The stage
+invocation receipt already covers a live calculation, so VIPER writes one
+process receipt.
+
+The frozen objective is one object because the metric identity and improvement
+direction have one consumer:
+
+```python
+class MetricObjectiveSpec(ProtocolModel):
+    metric_id: MetricId
+    direction: ObjectiveDirection
+```
+
+The field is named `objective`. Its value contains two facts: which metric is
+primary and how that metric should improve. `MetricObjectiveDraft` is the
+Python authoring form. `MetricObjectiveSpec` is the frozen protocol form. A
+diagnostic remains a `MetricDraft` with `kind="diagnostic"`, which keeps one
+metric authoring type.
+
+The target stage models are:
+
+```python
+class BaseSpec(ProtocolModel):
+    kind: str
+    schema_version: Literal[1] = 1
+    environment: EnvironmentSpec | None = None
+    metric_ids: tuple[MetricId, ...] = ()
+    artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
+
+
+class ParameterizedSpec(BaseSpec):
+    implementation: StageImplementationRef
+    parameter_model: ParameterModelRef
+
+
+class InternalSpec(ParameterizedSpec):
+    inputs: dict[InputName, InputRef] = Field(min_length=1)
+
+
+class BuildSpec(InternalSpec):
+    kind: Literal["build"] = "build"
+    params: parameters.Build
+
+
+class EmbedSpec(InternalSpec):
+    kind: Literal["embed"] = "embed"
+    objective: MetricObjectiveSpec | None = None
+    params: parameters.Embed
+
+
+class TrainSpec(InternalSpec):
+    kind: Literal["train"] = "train"
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    objective: MetricObjectiveSpec
+    params: parameters.Train
+
+
+class EvaluateSpec(InternalSpec):
+    kind: Literal["evaluate"] = "evaluate"
+    evaluation_id: EvaluationId
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    objective: MetricObjectiveSpec
+    split_inputs: tuple[InputName, ...] = Field(min_length=1)
+    params: parameters.Evaluate
+```
+
+The objective metric ID must occur in the same stage's `metric_ids`. A training
+objective uses a live training metric. An evaluation objective uses a
+recomputed evaluation metric. An optional embedding objective uses a live
+diagnostic metric.
+
+VIPER records objective direction for experiment comparison and agentic model
+selection. The runner continues to leave gradient updates and early stopping
+to project stage code.
+
+### Experiment drafts
+
+An experiment names factors, variants, and replicates. Its metric registry is
+derived from the stage graph of each frozen plan.
+
+```python
+class FactorDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    levels: tuple[LevelId, ...] = Field(min_length=2)
+
+
+class VariantDraft(BaseModel):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+    )
+
+    levels: dict[FactorId, LevelId]
+    stages: dict[StageId, StageDraft] = Field(min_length=1)
+    estimator: StageDraftArtifactRef
+
+
+class ReplicateDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    seed: RNGSeed
+
+
+class ExperimentDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    experiment_id: ExperimentId
+    factors: dict[FactorId, FactorDraft] = Field(default_factory=dict)
+    variants: dict[VariantId, VariantDraft] = Field(min_length=1)
+    replicates: dict[ReplicateId, ReplicateDraft] = Field(min_length=1)
+```
+
+`ExperimentDraft` omits `metrics`. Every configured metric must be selected by
+at least one stage in one declared variant. `viper.freeze()` walks every
+variant's stage objectives and metrics, produces one `MetricSpec` per metric ID,
+and writes those records into `ExperimentSpec.metrics`.
+
+The public constructors are:
+
+```python
+def factor(*, levels: tuple[LevelId, ...]) -> FactorDraft: ...
+
+
+def variant(
+    *,
+    levels: dict[FactorId, LevelId],
+    stages: dict[StageId, StageDraft],
+    estimator: StageDraftArtifactRef,
+) -> VariantDraft: ...
+
+
+def replicate(*, seed: RNGSeed) -> ReplicateDraft: ...
+
+
+def experiment(
+    *,
+    experiment_id: ExperimentId,
+    factors: dict[FactorId, FactorDraft] | None = None,
+    variants: dict[VariantId, VariantDraft],
+    replicates: dict[ReplicateId, ReplicateDraft],
+) -> ExperimentDraft: ...
+```
+
+The mapping keys carry all factor, variant, and replicate IDs. The draft values
+carry each entity's remaining fields.
+
+The run plan selects one declared variant and replicate:
+
+```python
+class RunPlanDraft(BaseModel):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+    )
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    experiment: ExperimentDraft
+    variant: VariantId
+    replicate: ReplicateId
+    benchmark: BenchmarkDraft | None = None
+    source: GitSource
+    environment: EnvironmentSpec
+    reproducibility: ReproducibilitySpec
+```
+
+`viper.freeze()` derives these persisted values:
+
+```text
+RunSpec.experiment_id
+<- RunPlanDraft.experiment.experiment_id
+
+RunSpec.variant_id
+<- RunPlanDraft.variant
+
+RunSpec.replicate_id
+<- RunPlanDraft.replicate
+
+RunSpec.seed
+<- RunPlanDraft.experiment.replicates[RunPlanDraft.replicate].seed
+
+ExperimentSpec.factors
+<- RunPlanDraft.experiment.factors
+
+ExperimentSpec.variant_ids
+<- RunPlanDraft.experiment.variants.keys()
+
+ExperimentSpec.replicates
+<- RunPlanDraft.experiment.replicates
+
+ExperimentSpec.metrics
+<- all MetricDraft values reachable from every ExperimentDraft variant
+
+VariantSpec.levels
+<- RunPlanDraft.experiment.variants[RunPlanDraft.variant].levels
+
+VariantSpec.stage_params
+<- parameterized stages in RunPlanDraft.experiment.variants[RunPlanDraft.variant]
+
+RunSpec.stages
+<- stage mapping in RunPlanDraft.experiment.variants[RunPlanDraft.variant]
+
+RunSpec.estimator
+<- estimator in RunPlanDraft.experiment.variants[RunPlanDraft.variant]
+```
+
+The persisted experiment and variant shapes remain:
+
+```python
+class ExperimentSpec(ProtocolModel):
+    schema_version: Literal[1] = 1
+    experiment_id: ExperimentId
+    factors: tuple[FactorSpec, ...]
+    variant_ids: tuple[VariantId, ...] = Field(min_length=1)
+    replicates: tuple[ReplicateSpec, ...] = Field(min_length=1)
+    metrics: tuple[MetricSpec, ...]
+
+
+class VariantSpec(ProtocolModel):
+    schema_version: Literal[1] = 1
+    experiment_id: ExperimentId
+    variant_id: VariantId
+    levels: dict[FactorId, LevelId]
+    stage_params: tuple[VariantStageParams, ...] = Field(min_length=1)
+```
+
+Freezing the first plan for a variant fixes that variant's complete stage
+parameters. A later plan using the same experiment and variant must produce the
+same `VariantSpec`. Different stage parameters require a different variant ID.
+
+The experiment constructor accepts factors, variants, and replicates. The
+compiler derives its metric registry from the stages, which gives each metric
+one authoring location.
+
+The factor levels and variant stages appear together at authoring time:
+
+```python
+experiment = viper.experiment(
+    experiment_id="tiny_http",
+    factors={
+        "learning_rate": viper.factor(
+            levels=("baseline", "high"),
+        ),
+    },
+    variants={
+        "baseline": viper.variant(
+            levels={"learning_rate": "baseline"},
+            stages=BASELINE_STAGES,
+            estimator=baseline_training.artifacts["parameters"],
+        ),
+        "high_learning_rate": viper.variant(
+            levels={"learning_rate": "high"},
+            stages=HIGH_RATE_STAGES,
+            estimator=high_rate_training.artifacts["parameters"],
+        ),
+    },
+    replicates={
+        "seed_7": viper.replicate(seed=7),
+        "seed_19": viper.replicate(seed=19),
+    },
+)
+
+
+baseline_plan = viper.plan(
+    run_id=BASELINE_RUN_ID,
+    experiment=experiment,
+    variant="baseline",
+    replicate="seed_7",
+    source=source,
+    environment=environment,
+    reproducibility=reproducibility,
+)
+```
+
+`FactorDraft.levels` names the experimental labels. The selected
+`VariantDraft.stages` contains the concrete parameter values associated with
+those labels. `VariantSpec` persists both the labels and the complete stage
+parameter records. VIPER checks their association by freezing them from the
+same `VariantDraft`. VIPER treats `high` as an opaque label and records the
+concrete parameter values from the variant's stages.
+
+### Benchmark drafts and frozen records
+
+A benchmark fixes the evaluation conditions and names every metric that the
+benchmark will record. Criteria select a subset of those metrics.
+
+```python
+class BenchmarkDraft(BaseModel):
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+    )
+
+    benchmark_id: BenchmarkId
+    evaluation_id: EvaluationId
+    evaluation_dataset: RunArtifactDraft
+    splits: dict[InputName, RunArtifactDraft] = Field(min_length=1)
+    metrics: tuple[MetricDraft, ...] = Field(min_length=1)
+    criteria: tuple[MetricCriterionDraft, ...] = ()
+    execution_count: Literal[2] = 2
+```
+
+The target persisted records are:
+
+```python
+class MetricCriterion(ProtocolModel):
+    metric_id: MetricId
+    comparison: Literal["ge", "le"]
+    threshold: float = Field(allow_inf_nan=False)
+
+
+class BenchmarkSpec(ProtocolModel):
+    schema_version: Literal[1] = 1
+    benchmark_id: BenchmarkId
+    evaluation_id: EvaluationId
+    evaluation_dataset: ResolvedArtifactPointerRef
+    splits: dict[InputName, ResolvedArtifactPointerRef] = Field(min_length=1)
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    criteria: tuple[MetricCriterion, ...] = ()
+    execution_count: Literal[2] = 2
+
+
+class MetricCriterionResult(ProtocolModel):
+    criterion: MetricCriterion
+    candidate_passed: bool
+    confirmation_passed: bool
+    passed: bool
+
+
+class BenchmarkMetricResult(ProtocolModel):
+    metric_id: MetricId
+    candidate_verification: ResolvedFileRef
+    confirmation_verification: ResolvedFileRef
+    candidate_value: float = Field(allow_inf_nan=False)
+    confirmation_value: float = Field(allow_inf_nan=False)
+    matched: bool
+    criterion: MetricCriterionResult | None = None
+
+
+class BenchmarkResult(ProtocolModel):
+    schema_version: Literal[1] = 1
+    benchmark: ResolvedBenchmarkSpecRef
+    run: ResolvedRunRef
+    confirmation: ResolvedAttemptRef
+    artifacts: tuple[ArtifactComparisonReceipt, ...] = Field(min_length=2)
+    metrics: tuple[BenchmarkMetricResult, ...] = Field(min_length=1)
+    status: Literal["verified", "passed", "failed"]
+    completed_at: AwareDatetime
+```
+
+`BenchmarkSpec.metric_ids` declares results to record. `BenchmarkSpec.criteria`
+declares optional thresholds. Every criterion metric ID must occur in
+`metric_ids`. Each metric ID and criterion metric ID is unique.
+
+`MetricCriterionResult.passed` equals
+`candidate_passed and confirmation_passed`. `BenchmarkMetricResult.matched`
+records the cross-execution comparison produced by the metric's frozen
+`FloatComparator`.
+
+`BenchmarkResult.status` follows these rules:
+
+```text
+artifact parity or metric matching fails
+-> failed
+
+all parity and matching checks pass, and criteria is empty
+-> verified
+
+all parity and matching checks pass, and every criterion passes
+-> passed
+
+all parity and matching checks pass, and one criterion fails
+-> failed
+```
+
+The public constructor is:
+
+```python
+def benchmark(
+    *,
+    benchmark_id: BenchmarkId,
+    evaluation_id: EvaluationId,
+    evaluation_dataset: RunArtifactDraft,
+    splits: dict[InputName, RunArtifactDraft],
+    metrics: tuple[MetricDraft, ...],
+    criteria: tuple[MetricCriterionDraft, ...] = (),
+) -> BenchmarkDraft: ...
+```
+
+`RunPlanDraft.benchmark` carries the complete authoring object. Freezing writes
+`BenchmarkSpec` and writes `RunSpec.benchmark_id`. `BenchmarkResult.run` joins
+the reusable benchmark definition to one candidate run and its experiment.
+
+## 5. Execution
+
+### Freezing metrics and objectives
+
+For each `MetricDraft`, `viper.freeze()` performs these operations:
+
+```text
+load @viper.metric metadata
+-> validate params against MetricDefinition.parameter_model
+-> hash implementation source
+-> hash a custom parameter-model source
+-> construct MetricSpec
+-> merge by metric_id into ExperimentSpec.metrics
+```
+
+Two drafts with one metric ID must produce identical `MetricSpec` records. A
+different implementation, parameter class, parameter value, dependency, mode,
+kind, or comparator stops freezing.
+
+For each `MetricObjectiveDraft`, the compiler writes one
+`MetricObjectiveSpec`. It places the objective metric ID first in the stage's
+`metric_ids`, followed by the IDs supplied through `metrics=`.
+
+### Executing live metrics
+
+The stage worker loads every selected live `MetricSpec`. It verifies the metric
+implementation bytes and custom parameter-model bytes. It validates
+`MetricSpec.params`, constructs one `MetricContext`, and binds one
+`MetricHandle`.
+
+Project code continues to use:
+
+```python
+context.metrics["training_loss"].record(
+    batch_losses,
+    epoch=epoch,
+)
+```
+
+`MetricHandle` adds its retained context before calling the metric function.
+The project passes observations through `record()`; the handle supplies the
+frozen parameters.
+
+### Executing recomputed metrics
+
+The metric worker resolves each `MetricDependency` to exact input or artifact
+files. It constructs `MetricContext` with those paths and the validated metric
+parameters. It calls the metric function and writes one `Measurement` and one
+`MetricExecutionReceipt`.
+
+Verification repeats that operation in a separate worker and writes
+`MetricVerificationReceipt` after applying `FloatComparator`.
+
+### Freezing experiments
+
+`viper.freeze()` validates every factor level, selected variant, replicate, and
+stage parameter set. It writes `ExperimentSpec`, the selected `VariantSpec`, all
+stage specs, and `RunSpec`.
+
+The writer merges metrics into an existing experiment by `metric_id`. It
+preserves identical records and rejects conflicting records. Stage selections
+remain the user's only metric list.
+
+### Executing benchmarks
+
+The benchmark executor verifies the candidate run, performs the independent
+confirmation execution, compares estimator and prediction artifacts, and loads
+the verification receipt for every `BenchmarkSpec.metric_ids` member.
+
+For each metric, it writes `BenchmarkMetricResult`. A matching criterion causes
+the executor to evaluate both candidate and confirmation values and attach
+`MetricCriterionResult`.
+
+## 6. Persisted evidence
+
+The successful example produces this evidence chain:
+
+```text
+ExperimentSpec.metrics["evaluation_accuracy"]
+-> exact implementation, params, dependencies, comparator
+
+EvaluateSpec.metric_ids
+-> selects evaluation_accuracy
+
+MetricVerificationReceipt from candidate
+-> candidate verified value
+
+MetricVerificationReceipt from confirmation
+-> confirmation verified value
+
+BenchmarkSpec.metric_ids
+-> requires both values in the benchmark result
+
+BenchmarkMetricResult
+-> stores both values and both receipt references
+-> stores cross-execution match
+-> optionally stores threshold outcome
+```
+
+This evidence supports four claims:
+
+- the named metric used the frozen implementation and parameters;
+- the metric read the declared files;
+- independent recomputation reproduced each recorded value; and
+- the candidate and confirmation runs produced matching benchmark values.
+
+An objective record proves selection, direction, and measurement. Gradient
+updates remain project-owned, so their relationship to the objective remains
+outside this contract. VIPER would need to own the optimizer step or provide a
+differentiable objective interface to prove that relationship.
+
+## 7. Verification
+
+### `metric.draft.parameter_class`
+
+The exact class of `MetricDraft.params` equals
+`MetricDefinition.parameter_model`. Freezing rejects a different class.
+
+### `metric.live.parameter_delivery`
+
+The stage worker validates `MetricSpec.params` through the frozen parameter
+class. The `MetricContext.params` object supplied by `MetricHandle` equals that
+validated object.
+
+### `metric.objective.selection`
+
+Every train and evaluate stage has one `MetricObjectiveSpec`. Embed stages may
+have one. `MetricObjectiveSpec.metric_id` occurs exactly once in the stage's
+`metric_ids`.
+
+### `metric.objective.role`
+
+A training objective selects `kind="training", mode="live"`. An evaluation
+objective selects `kind="evaluation", mode="recompute"`. An embedding
+objective selects `kind="diagnostic", mode="live"`.
+
+### `metric.objective.evidence`
+
+A successful stage contains at least one measurement for its objective metric.
+This rule proves that the stage recorded the objective. Measurement cadence
+remains project-owned.
+
+### `experiment.metric.registry`
+
+Every stage metric ID resolves to one `MetricSpec` in the selected
+`ExperimentSpec`. Reusing an ID with a different `MetricSpec` stops freezing and
+verification.
+
+### `experiment.selection`
+
+`RunPlanDraft.variant` and `RunPlanDraft.replicate` exist in the selected
+`ExperimentDraft`. The selected variant has one declared level for every factor,
+and every level belongs to that factor.
+
+### `benchmark.metric.selection`
+
+`BenchmarkSpec.metric_ids` equals the metric IDs selected by the benchmark's
+evaluation stage. Every metric uses `kind="evaluation", mode="recompute"`.
+
+### `benchmark.metric.result`
+
+`BenchmarkResult.metrics` contains exactly one `BenchmarkMetricResult` for each
+`BenchmarkSpec.metric_ids` member. Each stored value equals the recomputation
+value in its referenced `MetricVerificationReceipt`.
+
+### `benchmark.metric.match`
+
+The verifier applies the frozen metric comparator to the candidate and
+confirmation values. `BenchmarkMetricResult.matched` equals that result.
+
+### `benchmark.criterion.result`
+
+A metric result uses `criterion=None` when the benchmark selects the metric for
+recording alone. A populated nested criterion equals the unique frozen
+criterion and records the candidate, confirmation, and combined outcomes.
+
+### `benchmark.status`
+
+The verifier derives `BenchmarkResult.status` from artifact parity, metric
+matching, criterion presence, and criterion outcomes using the status rules in
+Section 4.
+
+## 8. Propagation and legacy cleanup
+
+| Surface | Change |
+| --- | --- |
+| Public metric API | Add typed metric decorators, `viper.measure()`, `viper.minimize()`, `viper.maximize()`, `viper.at_least()`, and `viper.at_most()`. |
+| Live metric runtime | Pass validated `MetricContext` through `MetricHandle`; functions receive it first and stateful classes receive it at construction. |
+| Metric protocol | Add `parameter_model` to `MetricSpec` and `MetricExecutionReceipt`. |
+| Stage drafts | Replace objective `MetricDraft` values with `MetricObjectiveDraft`. |
+| Stage protocol | Add `MetricObjectiveSpec` to embed, train, and evaluate specs. |
+| Experiment API | Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, `ExperimentDraft`, and public constructors. Each variant owns level labels, stages, and its estimator. Derive metrics from all variant stages. |
+| Run-plan API | Replace repeated experiment, variant, replicate, seed, stages, and estimator values with `ExperimentDraft` plus selected variant and replicate IDs. |
+| Benchmark API | Add `BenchmarkDraft`; separate selected metrics from optional criteria. |
+| Benchmark protocol | Add `experiment_id`, `metric_ids`, and `criteria`; replace criterion-only metric receipts with `BenchmarkMetricResult`. |
+| Benchmark executor | Iterate `metric_ids`, store every verified result, and apply criteria by metric ID when present. |
+| Verifier | Add the named metric, objective, experiment, and benchmark checks in Section 7. |
+| Generated project | Replace manual `MetricSpec`, `ExperimentSpec`, `VariantSpec`, and `BenchmarkSpec` construction with the public draft API. |
+| Documentation | Keep the complete model-run program in `automatic-input-resolution.md`; link its metric and experiment rules to this contract. |
+
+The superseded behavior has these dispositions:
+
+| Existing occurrence | Disposition |
+| --- | --- |
+| Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metric` and `viper.measure()`. |
+| Python stage authoring that accepts `metric_ids=` | Replace with `objective=` and `metrics=`. |
+| Proposed `objective_metric_id` fields in `automatic-input-resolution.md` | Replace with `MetricObjectiveSpec objective`. |
+| Proposed `LiveMetricContext` | Delete; `MetricContext` serves both modes. |
+| Live metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
+| Parameterless `StatefulMetric` subclasses | Replace constructors with `MetricContext`. |
+| Manual `ExperimentSpec` and `VariantSpec` construction in public examples | Replace with `viper.experiment()`, `viper.variant()`, and `viper.replicate()`. |
+| `BenchmarkSpec.metrics: tuple[MetricCriterion, ...]` | Replace with `metric_ids` and optional `criteria`. |
+| `MetricCriterionReceipt` | Delete after `BenchmarkMetricResult` and `MetricCriterionResult` cover recorded values and optional criteria. |
+| Benchmark fixtures that require one threshold per metric | Replace with one criterion-free result case and one threshold case. |
+
+## 9. Acceptance cases
+
+### Complete success
+
+The acceptance program defines two live embedding diagnostics, one live training
+objective, one live gradient diagnostic, one recomputed evaluation objective,
+and one recomputed evaluation accuracy metric.
+
+It creates:
+
+```python
+training = viper.stage(
+    train,
+    params=TRAIN_PARAMS,
+    inputs={"dataset": training_embeddings.artifacts["embeddings"]},
+    artifacts=TRAIN_ARTIFACTS,
+    objective=viper.minimize(training_loss_metric),
+    metrics=(gradient_norm_metric,),
+)
+
+experiment = viper.experiment(
+    experiment_id="tiny_http",
+    variants={
+        "baseline": viper.variant(
+            levels={},
+            stages={
+                "download": download,
+                "embed_training": training_embeddings,
+                "embed_evaluation": evaluation_embeddings,
+                "train": training,
+                "evaluate": evaluation,
+            },
+            estimator=training.artifacts["parameters"],
+        ),
+    },
+    replicates={
+        "replicate_01": viper.replicate(seed=7),
+    },
+)
+
+benchmark_dataset = viper.run_artifact(
+    resolved_run=BENCHMARK_DATA_RUN,
+    stage="download",
+    artifact="evaluation_dataset",
+)
+
+benchmark_split = viper.run_artifact(
+    resolved_run=BENCHMARK_DATA_RUN,
+    stage="build",
+    artifact="holdout_split",
+)
+
+benchmark = viper.benchmark(
+    benchmark_id="tiny_holdout",
+    evaluation_id="holdout",
+    evaluation_dataset=benchmark_dataset,
+    splits={"holdout_split": benchmark_split},
+    metrics=(evaluation_loss_metric, evaluation_accuracy_metric),
+    criteria=(
+        viper.at_least(evaluation_accuracy_metric, 0.90),
+    ),
+)
+```
+
+The test asserts:
+
+- `ExperimentSpec.metrics` contains each selected metric once;
+- the train objective is `training_loss` with direction `minimize`;
+- the evaluate objective is `evaluation_loss` with direction `minimize`;
+- live metric contexts contain the frozen parameter object;
+- candidate and confirmation metric receipts verify;
+- `BenchmarkResult.metrics` contains loss and accuracy;
+- the loss result uses `criterion=None`;
+- the accuracy result contains the `ge 0.90` criterion outcome; and
+- benchmark status follows parity, matching, and the accuracy criterion.
+
+### Factor, variant, and replicate selection
+
+Freeze the `baseline` and `high_learning_rate` plans from the experiment example
+in Section 4. The acceptance test asserts:
+
+- `FactorSpec(factor_id="learning_rate")` permits `baseline` and `high`;
+- the baseline `VariantSpec.levels` selects `baseline`;
+- the high-rate `VariantSpec.levels` selects `high`;
+- each `VariantSpec.stage_params` contains the concrete training parameters
+  from its own `VariantDraft.stages` mapping;
+- each run uses the stage graph and estimator from its selected variant; and
+- selecting `seed_7` writes seed `7`, while selecting `seed_19` writes seed
+  `19`.
+
+Changing the selected level label while retaining the old stage parameters
+creates a different `VariantSpec` and fails the existing variant identity
+check for that variant ID.
+
+### Targeted rejections
+
+Changing a live metric parameter after freezing fails
+`metric.live.parameter_delivery`.
+
+Removing the training objective measurement from an otherwise successful stage
+fails `metric.objective.evidence`.
+
+Reusing `evaluation_accuracy` with a different dependency fails
+`experiment.metric.registry`.
+
+Omitting `evaluation_loss` from `BenchmarkResult.metrics` fails
+`benchmark.metric.result`; its criterion remains `None`.
+
+Changing the holdout pointer while keeping the same benchmark ID fails the
+existing benchmark input-identity checks before execution.
+
+## 10. Implementation order
+
+### Phase 1. Metric drafts and typed contexts
+
+- [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
+- [ ] Add the public metric, objective, and criterion constructors.
+- [ ] Add `parameter_model` to the frozen metric records.
+- [ ] Make `MetricContext` generic.
+- [ ] Deliver `MetricContext` through live functions and stateful constructors.
+- [ ] Add focused decorator, draft, and live-parameter tests.
+
+**Commit boundary:** one configured live or recomputed metric receives its exact
+frozen parameter object.
+
+### Phase 2. Stage objectives
+
+- [ ] Add `MetricObjectiveDraft` to stage drafts.
+- [ ] Add `MetricObjectiveSpec` to frozen stage models.
+- [ ] Derive stage metric IDs from objective and additional metric drafts.
+- [ ] Verify objective kind, mode, direction, and measurement evidence.
+- [ ] Update the complete train and evaluate example.
+
+**Commit boundary:** train and evaluate stages identify a measured objective and
+its improvement direction.
+
+### Phase 3. Experiment authoring
+
+- [ ] Add factor, variant, replicate, and experiment drafts.
+- [ ] Change `RunPlanDraft` to select one experiment draft, variant, and
+      replicate.
+- [ ] Make each variant own its level labels, stage graph, and estimator.
+- [ ] Derive seed, experiment records, selected stage graph, variant
+      parameters, estimator, and metric registry.
+- [ ] Reject duplicate experiment declarations and conflicting metric specs.
+- [ ] Replace manual experiment construction in generated projects and examples.
+
+**Commit boundary:** Python authoring freezes one complete experiment and run
+with one compiler-derived metric registry.
+
+### Phase 4. Benchmark metric results
+
+- [ ] Add `BenchmarkDraft` and its public constructor.
+- [ ] Split `BenchmarkSpec.metric_ids` from optional `criteria`.
+- [ ] Replace `MetricCriterionReceipt` with `BenchmarkMetricResult` and
+      `MetricCriterionResult`.
+- [ ] Record every selected metric in candidate and confirmation executions.
+- [ ] Derive `verified`, `passed`, or `failed` status.
+- [ ] Update benchmark verification, fixtures, protocol documentation, API
+      examples, restore behavior, and generated scaffolding.
+
+**Commit boundary:** a benchmark records verified metric results under exact
+evaluation conditions, with optional threshold judgments.
+
+### Phase 5. System review
+
+- [ ] Compare every repeated target model mechanically.
+- [ ] Parse every Python example.
+- [ ] Trace each metric value from draft through measurement and verification.
+- [ ] Trace each benchmark input from pointer through both executions.
+- [ ] Run metric, authoring, benchmark, protocol, verification, documentation,
+      and generated-project tests selected from the final code diff.
+
+**Commit boundary:** the metric, experiment, stage, benchmark, verifier, and
+documentation surfaces describe one implemented contract.

@@ -67,9 +67,10 @@ input reference. The training function receives the verified path through
 `StageContext.inputs`.
 
 When the user authors training or evaluation, VIPER also requires one configured
-objective metric. Freezing writes its complete `MetricSpec`, includes its ID in
-the stage, and records that ID as `objective_metric_id`. The stage or metric
-worker then produces the corresponding measurement.
+objective. Freezing writes its complete `MetricSpec`, includes its ID in the
+stage, and writes one `MetricObjectiveSpec` containing the metric ID and
+improvement direction. The stage or metric worker then produces the
+corresponding measurement.
 
 The user writes the stage decorator, parameter class, and training function.
 `viper.freeze()` writes a same-run reference or pointer. VIPER executes each
@@ -128,9 +129,10 @@ decorated metric implementation
 -> training and evaluation carry an unidentified objective
 ```
 
-`MetricSpec.params` stores values alone. Stage parameters pair the same values
-with a `ParameterModelRef`. `MetricDraft`, `viper.measure()`, the metric
-`parameter_model` field, and `objective_metric_id` close these connectors.
+[`unified-metric-drafting.md`](unified-metric-drafting.md) owns the missing
+metric connector. It defines `MetricDraft`, typed metric parameter delivery,
+stage objectives, derived experiment metric registries, and benchmark metric
+results.
 
 ## 4. Contract models
 
@@ -269,125 +271,13 @@ A configurable transport defines its own parameter class. The decorator's
 `params=` argument receives the class. `viper.transport(params=...)` receives
 the values for one run.
 
-### Target metric drafts
+### Target metric and experiment drafts
 
-`@viper.metric` defines a reusable calculation. `viper.measure()` supplies the
-parameter values, dependencies, and comparison rule for one experiment. It
-returns a `MetricDraft`:
-
-```python
-DecoratedMetric = Callable[..., float] | type[StatefulMetric]
-
-
-class MetricDraft(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-    implementation: DecoratedMetric
-    params: parameters.Metric
-    dependencies: tuple[MetricDependency, ...] = ()
-    comparator: FloatComparator | None = None
-
-
-@dataclass(frozen=True)
-class MetricDefinition:
-    metric_id: MetricId
-    kind: MetricKind
-    mode: MetricMode
-    parameter_model: type[parameters.Metric]
-
-
-class MetricSpec(ProtocolModel):
-    schema_version: Literal[1] = 1
-    metric_id: MetricId
-    kind: MetricKind
-    implementation: MetricImplementationRef
-    parameter_model: ParameterModelRef | None = None
-    params: parameters.Metric
-    mode: MetricMode
-    dependencies: tuple[MetricDependency, ...] = ()
-    comparator: FloatComparator | None = None
-
-
-class MetricExecutionReceipt(ProtocolModel):
-    schema_version: Literal[1] = 1
-    run_id: RunId
-    attempt_id: int = Field(ge=1)
-    metric_id: MetricId
-    stage_id: StageId
-    purpose: Literal["measurement", "verification"]
-    implementation: MetricImplementationRef
-    parameter_model: ParameterModelRef | None = None
-    params: parameters.Metric
-    dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
-    startup: ProcessStartupReceipt
-    execution_context: ExecutionContext
-    python_environment: PythonEnvironmentSpec
-    value: float = Field(allow_inf_nan=False)
-    started_at: AwareDatetime
-    completed_at: AwareDatetime
-    outcome: Literal["succeeded"] = "succeeded"
-```
-
-The decorator owns `metric_id`, `kind`, `mode`, and the accepted parameter
-class. The draft owns the values that can vary between experiments. During
-freezing, VIPER reads the decorator metadata and writes the existing
-`MetricSpec` fields:
-
-```text
-MetricDraft.implementation
--> metric_id, kind, and mode from @viper.metric
--> path, symbol, SHA-256, and byte count from the source file
-
-MetricDraft.params
--> ParameterModelRef for a project subclass
--> MetricSpec.parameter_model and MetricSpec.params
-
-MetricDraft.dependencies
--> MetricSpec.dependencies
-
-MetricDraft.comparator
--> MetricSpec.comparator
-```
-
-The exact target signatures are:
-
-```python
-def metric(
-    *,
-    metric_id: MetricId,
-    kind: MetricKind,
-    mode: MetricMode,
-    params: type[MetricParamsT] = parameters.Metric,
-) -> MetricDecorator[MetricParamsT]: ...
-
-
-def measure(
-    implementation: DecoratedMetric,
-    *,
-    params: parameters.Metric | None = None,
-    dependencies: tuple[MetricDependency, ...] = (),
-    comparator: FloatComparator | None = None,
-) -> MetricDraft: ...
-```
-
-When `params` is absent, `viper.measure()` constructs
-`viper.params.Metric()`. It rejects a parameter instance whose class differs
-from the class selected by the decorator. It applies the current `MetricSpec`
-lifecycle rules before returning the draft: recomputed metrics require at least
-one dependency and a comparator; live metrics reject both; evaluation metrics
-use recompute mode.
-
-`parameter_model=None` means the metric uses the package-owned
-`viper.params.Metric` base class. A project subclass produces an exact
-`ParameterModelRef`. The metric worker verifies that class's file identity,
-loads it, validates `MetricSpec.params`, and supplies the resulting instance
-through `MetricContext.params`. The execution receipt repeats the selected
-parameter-model reference and values so measurement and verification workers
-can be compared directly.
+[`unified-metric-drafting.md`](unified-metric-drafting.md#4-contract-models)
+contains the complete `MetricDraft`, `MetricObjectiveDraft`, `MetricSpec`,
+`MetricContext`, `ExperimentDraft`, and benchmark declarations. This contract
+uses those models when a stage selects metrics or a run plan selects an
+experiment.
 
 ### Target stage drafts
 
@@ -456,20 +346,20 @@ class BuildSpecDraft(InternalSpecDraft):
 
 class EmbedSpecDraft(InternalSpecDraft):
     kind: Literal["embed"] = "embed"
-    objective: MetricDraft | None = None
+    objective: MetricObjectiveDraft | None = None
     params: parameters.Embed
 
 
 class TrainSpecDraft(InternalSpecDraft):
     kind: Literal["train"] = "train"
-    objective: MetricDraft
+    objective: MetricObjectiveDraft
     params: parameters.Train
 
 
 class EvaluateSpecDraft(InternalSpecDraft):
     kind: Literal["evaluate"] = "evaluate"
     evaluation_id: EvaluationId
-    objective: MetricDraft
+    objective: MetricObjectiveDraft
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
     params: parameters.Evaluate
 
@@ -514,12 +404,11 @@ the one-request-to-one-file rule.
 and leave the objective unset. An embedding implementation that optimizes or
 scores an objective can supply one.
 
-The compiler places the objective metric ID first in the frozen `metric_ids`
-tuple, followed by the IDs in `metrics`. It rejects duplicate IDs. A training
-objective must use `kind="training"` and `mode="live"`. An evaluation objective
-must use `kind="evaluation"` and `mode="recompute"`. An optional embedding
-objective uses `kind="diagnostic"`. Build and download drafts accept diagnostic
-metrics only.
+The compiler places `objective.metric.metric_id` first in the frozen
+`metric_ids` tuple, followed by the IDs in `metrics`. It rejects duplicate IDs.
+It freezes the metric ID and improvement direction as one
+`MetricObjectiveSpec`. The kind and mode rules come from
+[`unified-metric-drafting.md`](unified-metric-drafting.md#7-verification).
 
 ### Target frozen download and resolved-stage models
 
@@ -558,14 +447,14 @@ class BuildSpec(InternalSpec):
 
 class EmbedSpec(InternalSpec):
     kind: Literal["embed"] = "embed"
-    objective_metric_id: MetricId | None = None
+    objective: MetricObjectiveSpec | None = None
     params: parameters.Embed
 
 
 class TrainSpec(InternalSpec):
     kind: Literal["train"] = "train"
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)
-    objective_metric_id: MetricId
+    objective: MetricObjectiveSpec
     params: parameters.Train
 
 
@@ -573,7 +462,7 @@ class EvaluateSpec(InternalSpec):
     kind: Literal["evaluate"] = "evaluate"
     evaluation_id: EvaluationId
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)
-    objective_metric_id: MetricId
+    objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
     params: parameters.Evaluate
 
@@ -592,10 +481,10 @@ reserved-name, and artifact-overlap checks. The implementation-path collision
 check moves to `ParameterizedSpec`, the class that owns `implementation`.
 `DownloadSpec` drops `parameter_model` and `params`.
 
-`TrainSpec` and `EvaluateSpec` require their objective ID to appear in
-`metric_ids`. `EmbedSpec` applies the same check when
-`objective_metric_id` is present. Run-plan verification loads the matching
-`MetricSpec` from `ExperimentSpec` and checks the kind and mode rules above.
+`TrainSpec` and `EvaluateSpec` require `objective.metric_id` to appear in
+`metric_ids`. `EmbedSpec` applies the same check when `objective` is present.
+Run-plan verification loads the matching `MetricSpec` from `ExperimentSpec`
+and checks the objective kind, mode, and direction.
 
 This rule proves that the stage declared and measured an objective. An arbitrary
 project-owned training function can still update weights with a different
@@ -685,13 +574,11 @@ The active-to-target field changes are:
 | `StoredInputRef.pointer: ArtifactPointerRef` | `StoredInputRef.pointer: ResolvedArtifactPointerRef` | Automatic freezing needs an exact pointer reference before a Git commit exists. |
 | `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Inherited `ResolvedFileRef.stored_at: StorageRef` | The generated pointer records the local or cloud destination that received its immutable bytes. |
 | `ResolvedStoredInputRef.pointer: ResolvedArtifactPointerRef` | Retain | The resolved stage records the exact pointer selected by the frozen input. |
-| `BaseSpecDraft.metric_ids: tuple[MetricId, ...]` | `BaseSpecDraft.metrics: tuple[MetricDraft, ...]` | Python authoring carries the complete metric definition and removes the bare string from this layer. |
-| `MetricDefinition` contains ID, kind, and mode | Add `parameter_model: type[parameters.Metric]` | The decorator records the parameter class accepted by `viper.measure()`. |
-| `MetricSpec.parameter_model` absent | `MetricSpec.parameter_model: ParameterModelRef | None = None` | A custom metric parameter class receives the same byte-addressed identity and runtime validation as a stage parameter class. |
-| `MetricExecutionReceipt.parameter_model` absent | `MetricExecutionReceipt.parameter_model: ParameterModelRef | None = None` | The receipt identifies the class that validated the metric worker's parameters. |
-| Train objective field absent | `TrainSpecDraft.objective: MetricDraft` and `TrainSpec.objective_metric_id: MetricId` | Training identifies and records its declared optimization loss. |
-| Evaluation objective field absent | `EvaluateSpecDraft.objective: MetricDraft` and `EvaluateSpec.objective_metric_id: MetricId` | Evaluation identifies its primary independently recomputed loss. |
-| Embed objective field absent | `EmbedSpecDraft.objective: MetricDraft | None` and `EmbedSpec.objective_metric_id: MetricId | None` | Embedding algorithms can declare an objective; fixed encoders leave it unset. |
+| `BaseSpecDraft.metric_ids: tuple[MetricId, ...]` | `BaseSpecDraft.metrics: tuple[MetricDraft, ...]` | Python authoring carries the complete metric configuration and removes bare strings from this layer. |
+| Train objective field absent | `TrainSpecDraft.objective: MetricObjectiveDraft` and `TrainSpec.objective: MetricObjectiveSpec` | Training records its primary metric and improvement direction. |
+| Evaluation objective field absent | `EvaluateSpecDraft.objective: MetricObjectiveDraft` and `EvaluateSpec.objective: MetricObjectiveSpec` | Evaluation records its primary recomputed metric and improvement direction. |
+| Embed objective field absent | Optional `MetricObjectiveDraft` and `MetricObjectiveSpec` fields | Optimizing embedding algorithms can name an objective; fixed encoders leave it unset. |
+| Repeated experiment identity on `RunPlanDraft` | `RunPlanDraft.experiment: ExperimentDraft` plus selected variant and replicate IDs | The experiment owns factors, variants, replicates, and derived metric definitions. |
 
 Explicit harness mode may accept an `ArtifactPointerRef` authored in Git. The
 compiler retrieves that file, checks its bytes, and writes the resulting
@@ -721,19 +608,18 @@ class RunPlanDraft(BaseModel):
 
     schema_version: Literal[1] = 1
     run_id: RunId
-    experiment_id: ExperimentId
-    variant_id: VariantId
-    replicate_id: ReplicateId
-    benchmark_id: BenchmarkId | None = None
-    seed: RNGSeed
+    experiment: ExperimentDraft
+    variant: VariantId
+    replicate: ReplicateId
+    benchmark: BenchmarkDraft | None = None
     source: GitSource
     environment: EnvironmentSpec
     reproducibility: ReproducibilitySpec
-    stages: dict[StageId, StageDraft] = Field(min_length=1)
-    estimator: StageDraftArtifactRef
 ```
 
-The compiler walks `RunPlanDraft.stages` in insertion order. For each
+The compiler selects
+`RunPlanDraft.experiment.variants[RunPlanDraft.variant]` and walks that
+variant's `stages` mapping in insertion order. For each
 `StageDraftArtifactRef`, it finds the key whose `StageDraft` is the handle's
 `producer`. That key becomes `StageArtifactRef.stage_id` and then
 `FutureInputRef.producer_stage_id`.
@@ -741,7 +627,7 @@ The compiler walks `RunPlanDraft.stages` in insertion order. For each
 The authoring compiler derives frozen input records from the selected values:
 
 ```text
-StageDraftArtifactRef whose producer belongs to the active RunPlanDraft
+StageDraftArtifactRef whose producer belongs to the selected VariantDraft
 -> StageArtifactRef with the producer's plan key
 -> FutureInputRef
 
@@ -756,17 +642,16 @@ RunArtifactDraft identifying one artifact in a completed run
 ```
 
 The input-map key supplies the consumer input name. The selected artifact
-declaration supplies its path and data role. The plan key supplies the producer
-stage ID. The selected artifact name supplies the producer artifact.
+declaration supplies its path and data role. The selected variant's stage key
+supplies the producer stage ID. The selected artifact name supplies the
+producer artifact.
 
-The compiler also collects every `MetricDraft` reachable through
-`StageDraft.spec.objective` and `StageDraft.spec.metrics`. For a new experiment,
-it writes an `ExperimentSpec` with `factors=()`, the plan's variant and replicate,
-and the collected metric specifications. It writes a matching `VariantSpec`
-whose stage parameters come from the parameterized stage drafts. If those files
-already exist, freezing requires the selected variant, replicate, and stage
-parameters to agree. It adds a new metric ID or accepts an identical existing
-`MetricSpec`; it rejects a conflicting definition.
+The compiler collects every `MetricDraft` reachable through
+`StageDraft.spec.objective.metric` and `StageDraft.spec.metrics`. It writes the
+`ExperimentSpec` and selected `VariantSpec` defined by
+`RunPlanDraft.experiment`. It derives the selected seed from the replicate. The
+complete experiment merge rules belong to
+[`unified-metric-drafting.md`](unified-metric-drafting.md#experiment-drafts).
 
 ### Target public constructors
 
@@ -822,7 +707,7 @@ def stage(
     inputs: dict[InputName, StageInputDraft],
     artifacts: dict[ArtifactName, ArtifactDraft],
     environment: EnvironmentSpec | None = None,
-    objective: MetricDraft | None = None,
+    objective: MetricObjectiveDraft | None = None,
     metrics: tuple[MetricDraft, ...] = (),
     evaluation_id: EvaluationId | None = None,
     split_inputs: tuple[InputName, ...] = (),
@@ -832,16 +717,13 @@ def stage(
 def plan(
     *,
     run_id: RunId,
-    experiment_id: ExperimentId,
-    variant_id: VariantId,
-    replicate_id: ReplicateId,
-    benchmark_id: BenchmarkId | None = None,
-    seed: RNGSeed,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    benchmark: BenchmarkDraft | None = None,
     source: GitSource,
     environment: EnvironmentSpec,
     reproducibility: ReproducibilitySpec,
-    stages: dict[StageId, StageDraft],
-    estimator: StageDraftArtifactRef,
 ) -> RunPlanDraft: ...
 
 
@@ -860,13 +742,12 @@ because the runner owns download execution. A null authoring transport selects
 `BuiltinHttpTransportSpec()`; `DownloadSpecDraft.transport` always contains an
 explicit draft after construction.
 
-`viper.freeze()` gathers every objective and diagnostic metric selected by the
+`viper.freeze()` gathers every objective and additional metric selected by the
 stage drafts. It writes one `MetricSpec` per metric ID into the experiment
-record. Reusing one ID with a different implementation, parameter value,
-dependency, or comparator stops freezing. The compiler also writes each
-stage's `metric_ids` and `objective_metric_id` fields. A later experiment-
-authoring contract can add factors and multi-variant assembly while preserving
-this metric binding.
+record and one `MetricObjectiveSpec` into each stage that names an objective.
+`viper.experiment()` supplies factors, variants, and replicates. The compiler
+derives one metric list from their stage selections. The complete rules belong to
+[`unified-metric-drafting.md`](unified-metric-drafting.md).
 
 ### Complete proposed authoring example
 
@@ -1178,7 +1059,10 @@ download = viper.download(
     kind="diagnostic",
     mode="live",
 )
-def embedding_reconstruction_loss(values: list[float]) -> float:
+def embedding_reconstruction_loss(
+    context: viper.MetricContext[viper.params.Metric],
+    values: list[float],
+) -> float:
     return sum(values) / len(values)
 
 
@@ -1187,7 +1071,10 @@ def embedding_reconstruction_loss(values: list[float]) -> float:
     kind="diagnostic",
     mode="live",
 )
-def embedding_spread(values: list[float]) -> float:
+def embedding_spread(
+    context: viper.MetricContext[viper.params.Metric],
+    values: list[float],
+) -> float:
     mean = sum(values) / len(values)
     return sum((value - mean) ** 2 for value in values) / len(values)
 
@@ -1197,7 +1084,10 @@ def embedding_spread(values: list[float]) -> float:
     kind="training",
     mode="live",
 )
-def training_loss(batch_losses: list[float]) -> float:
+def training_loss(
+    context: viper.MetricContext[viper.params.Metric],
+    batch_losses: list[float],
+) -> float:
     return sum(batch_losses) / len(batch_losses)
 
 
@@ -1206,7 +1096,10 @@ def training_loss(batch_losses: list[float]) -> float:
     kind="diagnostic",
     mode="live",
 )
-def gradient_norm(batch_norms: list[float]) -> float:
+def gradient_norm(
+    context: viper.MetricContext[viper.params.Metric],
+    batch_norms: list[float],
+) -> float:
     return max(batch_norms)
 
 
@@ -1220,8 +1113,9 @@ class LossMetricParams(viper.params.Metric):
     mode="recompute",
     params=LossMetricParams,
 )
-def evaluation_loss(context: MetricContext) -> float:
-    assert isinstance(context.params, LossMetricParams)
+def evaluation_loss(
+    context: viper.MetricContext[LossMetricParams],
+) -> float:
     params = context.params
     rows = load_predictions(context.artifacts["predictions"])
     losses = []
@@ -1241,7 +1135,9 @@ def evaluation_loss(context: MetricContext) -> float:
     kind="evaluation",
     mode="recompute",
 )
-def evaluation_accuracy(context: MetricContext) -> float:
+def evaluation_accuracy(
+    context: viper.MetricContext[viper.params.Metric],
+) -> float:
     rows = load_predictions(context.artifacts["predictions"])
     correct = sum(
         int(row["prediction"]) == int(row["label"])
@@ -1488,7 +1384,7 @@ training = viper.stage(
             data_role="training",
         ),
     },
-    objective=training_loss_metric,
+    objective=viper.minimize(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 
@@ -1560,7 +1456,7 @@ evaluation = viper.stage(
             data_role="evaluation",
         ),
     },
-    objective=evaluation_loss_metric,
+    objective=viper.minimize(evaluation_loss_metric),
     metrics=(evaluation_accuracy_metric,),
     evaluation_id="holdout",
     split_inputs=("holdout_split",),
@@ -1607,23 +1503,35 @@ reproducibility = ReproducibilitySpec(
 )
 
 
+experiment = viper.experiment(
+    experiment_id="tiny_http",
+    variants={
+        "baseline": viper.variant(
+            levels={},
+            stages={
+                "download": download,
+                "embed_training": training_embeddings,
+                "embed_evaluation": evaluation_embeddings,
+                "train": training,
+                "evaluate": evaluation,
+            },
+            estimator=training.artifacts["parameters"],
+        ),
+    },
+    replicates={
+        "replicate_01": viper.replicate(seed=7),
+    },
+)
+
+
 plan = viper.plan(
     run_id=RUN_ID,
-    experiment_id="tiny_http",
-    variant_id="baseline",
-    replicate_id="replicate_01",
-    seed=7,
+    experiment=experiment,
+    variant="baseline",
+    replicate="replicate_01",
     source=source,
     environment=environment,
     reproducibility=reproducibility,
-    stages={
-        "download": download,
-        "embed_training": training_embeddings,
-        "embed_evaluation": evaluation_embeddings,
-        "train": training,
-        "evaluate": evaluation,
-    },
-    estimator=training.artifacts["parameters"],
 )
 
 frozen = viper.freeze(plan)
@@ -1698,11 +1606,12 @@ metric worker
 ```
 
 `viper.freeze()` turns every artifact handle used as a stage input into a
-`FutureInputRef`. It also
-turns each `MetricDraft` into one byte-addressed `MetricSpec`. The frozen train
-spec names `training_loss` as `objective_metric_id`. The frozen evaluation spec
-names `evaluation_loss`. The embed specs set `objective_metric_id=None`; their
-two metrics remain diagnostics.
+`FutureInputRef`. It also turns each `MetricDraft` into one byte-addressed
+`MetricSpec`. The frozen train objective selects `training_loss` with direction
+`minimize`. The frozen evaluation objective selects `evaluation_loss` with the
+same direction. The embed specs set `objective=None`; their two metrics remain
+diagnostics. The compiler derives the experiment metric registry from these
+stage selections.
 
 ### Complete local-file and prior-run selections
 
@@ -1734,7 +1643,7 @@ local_training = viper.stage(
             data_role="training",
         ),
     },
-    objective=training_loss_metric,
+    objective=viper.minimize(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -1767,7 +1676,7 @@ prior_training = viper.stage(
             data_role="training",
         ),
     },
-    objective=training_loss_metric,
+    objective=viper.minimize(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -1833,7 +1742,8 @@ stage publishes an artifact, and a later training stage selects it.
 
 ```text
 StageDraftArtifactRef(producer=download, artifact_name="dataset")
--> find producer key "download" in RunPlanDraft.stages
+-> select VariantDraft through RunPlanDraft.variant
+-> find producer key "download" in VariantDraft.stages
 -> confirm the "download" entry precedes the "train" entry
 -> construct FutureInputRef
 -> write the frozen TrainSpec
@@ -1918,7 +1828,7 @@ The default mode writes these records:
 | `ResolvedArtifactPointerRef` | Prior-run input compiler | Frozen `StoredInputRef` and resolved-stage publication |
 | `StoredInputRef` | Run-plan compiler | Input materialization and resolved-stage publication |
 | `MetricSpec` | Metric-draft compiler | Stage worker, metric worker, and verifier |
-| `objective_metric_id` | Stage-draft compiler | Plan verifier and objective-measurement verifier |
+| `MetricObjectiveSpec` | Stage-draft compiler | Plan verifier and objective-measurement verifier |
 | Live `Measurement` rows | Stage metric handle | Attempt verifier and run reader |
 | Recomputed metric receipts | Metric worker | Metric verifier and terminal run |
 
@@ -1949,38 +1859,13 @@ bundle uses the sibling directory itself.
 
 The following checks cover each generated reference.
 
-### `metric.objective.selection`
+### Metric, objective, experiment, and benchmark rules
 
-Every frozen `TrainSpec` and `EvaluateSpec` names one
-`objective_metric_id`, and that ID appears in the same stage's `metric_ids`.
-`EmbedSpec` applies the same rule only when it names an objective. A missing,
-duplicate, or unselected objective stops freezing and plan verification.
-
-### `metric.objective.role`
-
-The plan verifier loads the selected `MetricSpec`. A training objective requires
-`kind="training"` and `mode="live"`. An evaluation objective requires
-`kind="evaluation"` and `mode="recompute"`. An optional embedding objective
-requires `kind="diagnostic"`. The existing metric lifecycle validator still
-requires dependencies and a comparator for every recomputed metric.
-
-### `metric.objective.evidence`
-
-A successful stage contains at least one measurement for its objective. The
-training stage writes that measurement through `StageContext.metrics`. The
-evaluation metric worker writes it after the predictions artifact is complete.
-Evaluation verification recomputes the objective from the frozen dependencies
-and applies its comparator. A successful stage with a missing objective measurement
-fails verification.
-
-### `metric.parameters.identity`
-
-When `MetricSpec.parameter_model` is present, each metric worker checks the
-class file's SHA-256 digest and byte count, loads the recorded symbol, requires
-it to subclass `viper.params.Metric`, and validates `MetricSpec.params` through
-that class. The measurement and verification receipts must repeat the same
-parameter-model reference and values. A missing class, changed class file, or
-invalid value stops the worker.
+[`unified-metric-drafting.md`](unified-metric-drafting.md#7-verification)
+defines parameter delivery, objective selection and direction, objective
+measurement evidence, derived experiment metric registries, benchmark metric
+results, and optional criteria. This contract applies those checks after it
+compiles stage inputs.
 
 ### `input.source.exists`
 
@@ -2071,16 +1956,13 @@ overwrite rules, and review ownership.
 | --- | --- | --- |
 | Public stage API | Add `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.evaluate`; use `params=` for each parameter class; retain `StageContext` | The complete example constructs and freezes the plan through the target API |
 | Parameter namespace | Export `viper.params` as the concise public parameter namespace | `TrainParams` subclasses `viper.params.Train` |
-| Public metric API | Export `@viper.metric`, add `viper.measure()`, and add callable-backed `MetricDraft` | Freezing converts each configured metric into one exact `MetricSpec` |
-| Metric parameter identity | Add optional `parameter_model` to `MetricSpec` and `MetricExecutionReceipt`; verify and load project subclasses before metric execution | `LossMetricParams` is frozen by path, symbol, digest, and byte count and both metric workers receive the validated instance |
-| Objective API | Add `objective` to `viper.stage()`; require it for train and evaluate; keep it optional for embed | Frozen train and evaluation specs name an objective selected by `metric_ids` |
+| Metric, objective, and experiment API | Implement [`unified-metric-drafting.md`](unified-metric-drafting.md) | Stages receive configured metrics, objectives carry direction, and experiments derive one metric registry |
 | Download API | Add runner-owned `viper.download()` and remove the project download callable from the target contract | A download draft contains request, transport, policy, environment, metrics, and artifacts; project implementation and stage parameters belong to the other stage drafts |
 | Transport API | Make the `@viper.http_transport` parameter class and `viper.transport()` parameter instance optional | The example freezes and invokes `project_httpx` through the base transport parameters |
 | Artifact API | Add `viper.file_artifact()` and callable-backed artifact drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `FileInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
-| Plan model | Change `RunPlanDraft.stages` from a tuple to `dict[StageId, StageDraft]` | Plan keys become the only source of stage IDs |
-| `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; compile metric drafts and objective IDs | Frozen specs contain the correct internal references and metric selections |
-| Experiment writer | Merge every selected `MetricDraft` into `ExperimentSpec.metrics` by metric ID | Reusing an ID with a different implementation or configuration stops freezing |
+| Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
+| `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
 | Pointer writer | Serialize prior-run `ArtifactPointer` documents and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef` |
 | Storage publication | Publish local-root captures, generated pointer files, stage snapshots, and terminal runs at their creation boundaries | Every record carries the storage reference required for retrieval |
 | Stage validators | Validate source existence, stage order, roles, and materialization paths | Invalid declarations fail during freezing |
@@ -2110,7 +1992,7 @@ replacement:
 | `ResolvedBaseSpec.source`, `startup`, `invocation`, and `command` | Move | `ResolvedParameterizedSpec` owns project-stage process evidence. |
 | Download-stage `StageInvocationReceipt` fixtures | Delete | Successful requests use `ResolvedHttpRetrieval`; failed download attempts use the attempt journal and raised error. |
 | `@viper.build_stage`, `@viper.embed_stage`, `@viper.train_stage`, and `@viper.evaluate_stage` | Replace | `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.evaluate` use `params=`. |
-| `StageDraft.stage_id` and tuple-valued `RunPlanDraft.stages` | Replace | `RunPlanDraft.stages` mapping keys own stage IDs. |
+| `StageDraft.stage_id` and tuple-valued `RunPlanDraft.stages` | Replace | `VariantDraft.stages` mapping keys own stage IDs. |
 | Direct `ExternalInputRef` construction in public authoring | Replace | `viper.file_input()` creates `FileInputDraft`; freezing writes `ExternalInputRef`. |
 | Proposed prior-run construction through `RunArtifactRef` | Replace | `viper.run_artifact()` creates `RunArtifactDraft`; freezing verifies the completed run and writes the pointer. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | Use `ResolvedArtifactPointerRef` so the frozen input carries pointer byte identity and a local, Git, or remote storage location. |
@@ -2119,7 +2001,7 @@ replacement:
 | Required `@viper.http_transport(parameter_model=...)` | Replace | `@viper.http_transport(params=...)` defaults to `viper.params.HttpTransport`. |
 | Required empty transport parameter instances | Delete | `viper.transport(transfer)` constructs the base parameter instance. |
 | Direct `SingleFileArtifactSpec` construction in public examples | Replace | `viper.file_artifact()` accepts the loader callable and freezing writes `ArtifactLoaderRef`. |
-| Bare `metric_ids=` in Python stage authoring | Replace | `objective=` and `metrics=` accept `MetricDraft` values; freezing writes the IDs. |
+| Bare `metric_ids=` in Python stage authoring | Replace | `objective=` accepts `MetricObjectiveDraft`; `metrics=` accepts `MetricDraft` values; freezing writes the IDs. |
 | Manual `MetricImplementationRef` construction in public examples | Replace | `viper.measure()` accepts the decorated metric and freezing records its exact source identity. |
 | Untyped extra values stored only in `MetricSpec.params` | Replace | A custom metric parameter class produces `MetricSpec.parameter_model`; the worker validates the values through that exact class. |
 | Stored-only `EvaluateSpec.evaluation_dataset` and split validation | Replace | Freezing and preflight validate data roles after resolving any `InputRef` variant. |
@@ -2214,19 +2096,18 @@ increments defined by the first two contracts in the dependency order in
 ### Phase 1. Define the Python authoring models
 
 - [ ] Replace `StageDraft.spec_source` with `StageDraft.spec`.
-- [ ] Remove `StageDraft.stage_id`; change `RunPlanDraft.stages` to
-      `dict[StageId, StageDraft]`.
+- [ ] Remove `StageDraft.stage_id`; add `VariantDraft.stages` as
+      `dict[StageId, StageDraft]` and put the variant estimator beside it.
 - [ ] Define the complete `StageSpecDraft` variants for the five stage kinds.
 - [ ] Expose one `StageDraftArtifactRef` per declared artifact through
       `StageDraft.artifacts`.
 - [ ] Add callable-backed artifact and transport drafts.
-- [ ] Add callable-backed `MetricDraft` and the required train and evaluate
-      objective fields. Keep the embed objective optional.
+- [ ] Consume the metric and experiment draft types defined by
+      [`unified-metric-drafting.md`](unified-metric-drafting.md).
 - [ ] Add `FileInputDraft`, `RunArtifactDraft`, and the `StageInputDraft`
       authoring union.
-- [ ] Add `viper.params`, the shortened project-stage decorators, and the
-      `viper.metric()`, `viper.measure()`, `viper.stage()`, `viper.download()`,
-      `viper.transport()`,
+- [ ] Add `viper.params`, the shortened project-stage decorators,
+      `viper.stage()`, `viper.download()`, `viper.transport()`,
       `viper.file_artifact()`, `viper.file_input()`, `viper.run_artifact()`,
       `viper.plan()`, and `viper.freeze()` constructors.
 - [ ] Add focused model tests.
@@ -2251,7 +2132,7 @@ stage through either the built-in transport or one decorated custom transport.
 - [ ] Convert each `FileInputDraft` into `ExternalInputRef` with one
       `LocalSource` and the declared data role.
 - [ ] Map each `StageDraftArtifactRef.producer` to its key in
-      `RunPlanDraft.stages` and construct `FutureInputRef`.
+      the selected `VariantDraft.stages` and construct `FutureInputRef`.
 - [ ] Capture local-root bytes, retain the selected source path, and add the
       local-root verifier.
 - [ ] Preserve the existing `TrainSpec` and `InternalSpec` validators except
@@ -2281,27 +2162,20 @@ to training while the compiler owns the `ExternalInputRef` and
 **Commit boundary:** a later run consumes a prior VIPER artifact through a
 compiler-generated pointer.
 
-### Phase 5. Compile and verify metrics
+### Phase 5. Integrate unified metric and experiment drafting
 
-- [ ] Convert every selected `MetricDraft` into one exact `MetricSpec` and
-      merge it into the experiment record by metric ID.
-- [ ] Add `parameter_model` to `MetricSpec` and `MetricExecutionReceipt`; reuse
-      parameter-class identity checks and typed value validation in both metric
-      workers.
-- [ ] Derive frozen `metric_ids` from each stage's objective and diagnostic
-      metric drafts.
-- [ ] Add required `objective_metric_id` fields to `TrainSpec` and
-      `EvaluateSpec`; add the optional field to `EmbedSpec`.
-- [ ] Enforce objective selection, kind, mode, and measurement evidence.
+- [ ] Complete Phases 1 through 3 of
+      [`unified-metric-drafting.md`](unified-metric-drafting.md#10-implementation-order).
+- [ ] Pass this contract's complete stage graph into the unified experiment
+      compiler.
+- [ ] Use `MetricObjectiveDraft` in the train and evaluate examples. Keep the
+      embed objective optional.
 - [ ] Add live embedding diagnostics, a live training objective and gradient
       diagnostic, and recomputed evaluation loss and accuracy to the complete
       acceptance fixture.
-- [ ] Delete bare `metric_ids=` and manual `MetricImplementationRef`
-      construction from public authoring examples and generated scaffolding.
 
-**Commit boundary:** Python authoring freezes complete metric definitions,
-training and evaluation identify their objectives, and verification requires
-the objective evidence.
+**Commit boundary:** automatic input resolution and unified experiment drafting
+freeze one complete model run through the same Python authoring program.
 
 ### Phase 6. Update user documentation
 
