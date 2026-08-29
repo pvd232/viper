@@ -30,7 +30,7 @@ The four storage-related contracts divide ownership as follows:
 | Contract | Owned decision |
 | --- | --- |
 | [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md) | One successful HTTP body becomes the same-named single-file artifact through one shared `SnapshotFileRef`. |
-| [`external-input-roots.md`](external-input-roots.md) | Local files and HTTP response bodies can both enter VIPER as external-input roots. `ResolvedExternalInputRef` records the local-file route. `ResolvedHttpRetrieval` records the HTTP route. Later stages select their artifacts through `FutureInputRef` or `StoredInputRef`. |
+| [`external-input-roots.md`](external-input-roots.md) | Local files and HTTP responses use source-specific root records; later stages select artifacts through `FutureInputRef` or `StoredInputRef`. |
 | [`automatic-input-resolution.md`](automatic-input-resolution.md) | Python authoring compiles local files, same-run handles, and prior-run selections into frozen input references. |
 | This contract | Every immutable file and stage snapshot publishes directly to the configured local or Viper Cloud destination. |
 
@@ -177,9 +177,7 @@ class StorageSettings(BaseModel):
     )
 ```
 
-VIPER reads cloud credentials from the active CLI session. VIPER stores those
-credentials outside `viper.toml`, frozen plans, resolved records, logs, and
-cloud URIs.
+VIPER reads cloud credentials from the active CLI session.
 
 ## 5. Storage reference models
 
