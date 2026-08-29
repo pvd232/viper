@@ -52,6 +52,7 @@ from viper.experiments import (
 from viper.ids import InputName
 from viper.inputs import (
     FutureInputRef,
+    InputRef,
     ResolvedFutureInputRef,
     ResolvedStoredInputRef,
     StoredInputRef,
@@ -102,7 +103,6 @@ from viper.runtime import (
     process_environment,
 )
 from viper.serialization import document_digest
-from viper.inputs import InputRef
 from viper.stages import (
     BuildSpec,
     EvaluateSpec,
