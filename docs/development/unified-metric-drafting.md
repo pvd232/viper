@@ -8,10 +8,13 @@ benchmark records required by execution and verification.
 This contract owns metric drafting, objective direction, experiment assembly,
 and benchmark authoring. The complete model-run example remains in
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
+[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) owns the later Git
+commit that identifies the generated experiment, variant, benchmark, stage,
+and run documents.
 
 ## 1. Status
 
-**Contract status:** approved; implementation pending.
+**Contract status:** draft after system review; owner review pending.
 
 **Current:** `@viper.metric` attaches `metric_id`, `kind`, and `mode` to a
 function or stateful class. `MetricSpec` stores the exact implementation,
@@ -548,9 +551,26 @@ class MetricExecutionReceipt(ProtocolModel):
 
 Live metrics run inside the controlled stage process. Their `Measurement`
 selects the stage and metric ID. The verifier follows that ID to `MetricSpec`
-and follows the resolved stage to the stage invocation receipt. The stage
-invocation receipt already covers a live calculation, so VIPER writes one
-process receipt.
+and follows the resolved stage to the stage invocation receipt. One
+stage-process receipt covers the live metric binding:
+
+```text
+Measurement.metric_id
+-> StageInvocationReceipt.context.metric_ids
+-> frozen stage metric_ids
+-> ExperimentSpec.metrics[metric_id]
+-> MetricSpec.parameter_model + MetricSpec.params
+
+StageInvocationReceipt.context_digest
+-> exact StageContextBinding used by the successful stage process
+```
+
+The stage worker resolves every listed `MetricSpec`, validates its source and
+parameter model, constructs its `MetricContext`, and only then invokes the
+project stage. The successful `StageInvocationReceipt` records the exact
+context that selected those metric IDs. This join supports the claim that the
+controlled worker supplied the frozen metric binding. The stored `Measurement`
+rows establish each handle call that produced a value and its cadence.
 
 The frozen objective is one object because the metric identity and improvement
 direction have one consumer:
@@ -1257,7 +1277,10 @@ symbol, and reconstructs the instance from `MetricSpec.params`.
 
 The stage worker validates `MetricSpec.params` through the frozen parameter
 class. The `MetricContext.params` object supplied by `MetricHandle` equals that
-validated object.
+validated object. The verifier also requires
+`StageInvocationReceipt.context.metric_ids` to equal the frozen stage's
+`metric_ids`. Every live `Measurement.metric_id` must occur in that tuple and
+resolve to exactly one `MetricSpec` in `ExperimentSpec.metrics`.
 
 ### `metric.recompute.invocation_binding`
 
@@ -1366,6 +1389,7 @@ Section 4.
 | Benchmark protocol | Add `metric_ids` and `criteria`; replace criterion-only metric receipts with `BenchmarkMetricResult`. |
 | Benchmark executor | Iterate `metric_ids`, store every verified result, and apply criteria by metric ID when present. |
 | Verifier | Add the named metric, objective, experiment, and benchmark checks in Section 7. |
+| Tests | Add live invocation binding to [`tests/test_metric_interface.py`](../../tests/test_metric_interface.py) and [`tests/test_metric_provenance.py`](../../tests/test_metric_provenance.py); add tamper rejection to [`tests/test_verification_acceptance.py`](../../tests/test_verification_acceptance.py). |
 | Generated project | Replace manual `MetricSpec`, `ExperimentSpec`, `VariantSpec`, and `BenchmarkSpec` construction with the public draft API. |
 | Documentation | Keep the complete model-run program in `automatic-input-resolution.md`; link its metric and experiment rules to this contract. |
 
@@ -1479,6 +1503,8 @@ The test asserts:
 - the train objective is `training_loss` with direction `min`;
 - the evaluate objective is `evaluation_loss` with direction `min`;
 - live metric contexts contain the frozen parameter object;
+- the successful stage invocation context selects the same live metric IDs as
+  the frozen stage;
 - production and recomputation receipts carry the same parameter-model
   reference as the frozen metric;
 - candidate and confirmation metric receipts verify;
@@ -1518,6 +1544,9 @@ Adding `DownloadVariantStageParams` fails `experiment.variant.parameters`.
 Changing a live metric parameter after freezing fails
 `metric.live.parameter_delivery`.
 
+Changing `StageInvocationReceipt.context.metric_ids` while retaining the old
+measurement fails `metric.live.parameter_delivery`.
+
 Removing the metric decorator metadata fails `metric.definition.binding`.
 
 Changing the parameter-model reference in one recomputation receipt fails
@@ -1551,7 +1580,11 @@ existing benchmark input-identity checks before execution.
       recomputation verification.
 - [ ] Make `MetricContext` generic.
 - [ ] Deliver `MetricContext` through live functions and stateful constructors.
-- [ ] Add focused decorator, draft, and live-parameter tests.
+- [ ] Join live measurements to
+      `StageInvocationReceipt.context.metric_ids`, frozen stage `metric_ids`,
+      and `ExperimentSpec.metrics` during verification.
+- [ ] Add focused decorator, draft, live-parameter, and invocation-binding
+      tests.
 
 **Commit boundary:** one configured live or recomputed metric receives its exact
 frozen parameter object.

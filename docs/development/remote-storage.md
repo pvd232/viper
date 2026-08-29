@@ -14,7 +14,7 @@ the immutable copy.
 
 ## 1. Status
 
-**Contract status:** approved; implementation pending.
+**Contract status:** draft after system review; owner review pending.
 
 The current implementation writes every immutable copy through
 `LocalArtifactStore`. It uses two references:
@@ -33,6 +33,7 @@ The four storage-related contracts divide ownership as follows:
 | [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md) | One successful HTTP body becomes the same-named single-file artifact through one shared `SnapshotFileRef`. |
 | [`external-input-roots.md`](external-input-roots.md) | Local files and HTTP responses use source-specific root records; later stages select artifacts through `FutureInputRef` or `StoredInputRef`. |
 | [`automatic-input-resolution.md`](automatic-input-resolution.md) | Python authoring compiles local files, same-run handles, and prior-run selections into frozen input references. |
+| [`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) | Generated plan documents use a Git plan commit; project definitions use the earlier source commit. |
 | This contract | Every immutable file and stage snapshot publishes directly to the configured local or Viper Cloud destination. |
 
 ## 2. Required claim
@@ -872,6 +873,126 @@ unexecuted.
 Restore starts from `ResolvedRunRef`; the terminal run and all reachable
 references carry their own storage locations.
 
+The Python and typed-operation interfaces use these exact models:
+
+```python
+ViperCloudRunUri = Annotated[
+    str,
+    AfterValidator(validate_viper_cloud_run_uri),
+]
+
+
+class ArtifactRestoreSelector(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stage_id: StageId
+    artifact_name: ArtifactName
+
+
+class RestoredFile(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: Path
+    status: Literal["restored", "already_present"]
+
+
+class RestoredArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    selector: ArtifactRestoreSelector
+    files: tuple[RestoredFile, ...] = Field(min_length=1)
+
+
+class RestoreResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: ResolvedRunRef
+    artifacts: tuple[RestoredArtifact, ...] = Field(min_length=1)
+
+
+RestoreRunReference = Path | ViperCloudRunUri | ResolvedRunRef
+
+
+class LocalRunPath(APIModel):
+    kind: Literal["local_path"] = "local_path"
+    path: Path
+
+
+class ViperCloudRunReference(APIModel):
+    kind: Literal["viper_cloud_uri"] = "viper_cloud_uri"
+    uri: ViperCloudRunUri
+
+
+RestoreRequestReference = Annotated[
+    LocalRunPath | ViperCloudRunReference | ResolvedRunRef,
+    Field(discriminator="kind"),
+]
+```
+
+`validate_viper_cloud_run_uri()` accepts only the
+`viper://<owner>/<project>@<revision>/<terminal-path>` form defined above. The
+CLI parses each `<stage-id>.<artifact-name>` value into
+`ArtifactRestoreSelector` before calling the restore engine. The direct Python
+function accepts ordinary `Path` and URI values. The serialized typed request
+uses `RestoreRequestReference` to give each JSON value exactly one local-path,
+cloud-URI, or resolved-reference meaning.
+
+The direct execution function is:
+
+```python
+def restore(
+    repository_root: Path,
+    run_reference: RestoreRunReference,
+    *,
+    artifacts: tuple[ArtifactRestoreSelector, ...] = (),
+    output: Path | None = None,
+) -> RestoreResult: ...
+```
+
+The typed operation uses the same values:
+
+```python
+OperationName = Literal[
+    "validate_stage",
+    "validate_resolved_stage",
+    "validate_run_spec",
+    "freeze_run",
+    "preflight",
+    "execute_stage",
+    "run",
+    "retry",
+    "execute_benchmark",
+    "restore",
+    "plan_diff",
+    "lineage",
+    "status",
+    "compare_runs",
+    "verify_run",
+    "verify_benchmark",
+    "verify_pointer",
+    "get_schema",
+    "get_capabilities",
+    "init_project",
+]
+
+
+class RestoreRequest(APIModel):
+    run_reference: RestoreRequestReference
+    repository_root: Path
+    artifacts: tuple[ArtifactRestoreSelector, ...] = ()
+    output: Path | None = None
+
+
+class RestoreSuccess(SuccessModel):
+    operation: Literal["restore"] = "restore"
+    result: RestoreResult
+```
+
+`restore` joins `OperationName`, `REQUEST_REGISTRY`, `HANDLER_REGISTRY`, and the
+CLI operation table. The typed handler converts `LocalRunPath` or
+`ViperCloudRunReference` to the corresponding direct-function value. The
+direct function, typed handler, and CLI then call one restore engine.
+
 ## 11. Public workflow
 
 ### Local immutable publication
@@ -953,7 +1074,9 @@ viper restore <run-reference> \
 | Retrieval | Route Viper Cloud file and snapshot variants through the cloud client. |
 | Recovery | Retry transfer and seal against the same deterministic revision while the coordinator remains active; preserve working files for an ordinary run retry after process loss. |
 | CLI | Print the terminal run reference; derive the local immutable reference from a canonical one-file terminal publication; add full and artifact-selected restore from that local path or an immutable Viper Cloud URI. |
+| Python and typed API | Add `ArtifactRestoreSelector`, `RestoreResult`, `viper.execution.restore()`, the discriminated typed request references, `RestoreRequest`, and `RestoreSuccess`; route all three public surfaces through one restore engine. |
 | Verification | Apply existing path, digest, and byte-count rules to both destination variants. |
+| Tests | Cover publishers and restore in [`tests/test_storage.py`](../../tests/test_storage.py), execution in [`tests/test_run_execution.py`](../../tests/test_run_execution.py), public surfaces in [`tests/test_public_api.py`](../../tests/test_public_api.py) and [`tests/test_cli.py`](../../tests/test_cli.py), and tamper rejection in [`tests/test_verification_acceptance.py`](../../tests/test_verification_acceptance.py). |
 
 ### 12.2 Removed design
 
@@ -1083,6 +1206,11 @@ derives its `LocalFileRef`, fetches the immutable file, and restores one model
 artifact. Changing the working `resolved.yaml` makes the derived revision
 unavailable and stops restore before parsing.
 
+The typed-operation companion passes a list of two
+`ArtifactRestoreSelector` values. `RestoreSuccess.result` lists both artifacts
+and every output file. Repeating the operation marks each unchanged output as
+`already_present`.
+
 ## 14. Implementation order
 
 1. Add `SnapshotPublisher` and `publish_resolved_files()`. Use
@@ -1103,7 +1231,8 @@ unavailable and stops restore before parsing.
 8. Add seal-failure recovery and deterministic retry.
 9. Route cloud publication through the destination binding already used by
    freezing. Add destination-stability and cloud-graph-reachability checks.
-10. Add terminal-run restore through `ResolvedRunRef`.
+10. Add terminal-run restore through `ResolvedRunRef`, the direct Python
+    function, the typed operation, and the CLI.
 11. Remove every sync-state, closure-upload, offload, and remote-fallback design
    reference from the repository.
 12. Update the public README after the complete cloud acceptance path passes.

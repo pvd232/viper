@@ -26,7 +26,7 @@ selected artifact supplies the later stage's input bytes.
 
 ## 1. Status
 
-**Contract status:** approved; implementation pending.
+**Contract status:** draft after system review; owner review pending.
 
 **Current:** `DownloadSpec.inputs` names HTTP requests, and
 `BaseSpec.artifacts` names files written by the download callable. The names
@@ -353,10 +353,32 @@ DownloadSpec.inputs["prior"]
 ```
 
 `retrieve_download_inputs()` changes its output path from
-`retrieval_body_path(...)` to `stage.artifacts[input_name].path`. The function
-creates `SnapshotFileRef` directly from the declared artifact path and verified
-response bytes. It stops calling `LocalArtifactStore.resolved_files()` for the
-retrieval body.
+`retrieval_body_path(...)` to `stage.artifacts[input_name].path`. One helper
+owns the transfer from the transport destination to that artifact path:
+
+```python
+def publish_download_body(
+    *,
+    repository_root: Path,
+    source: Path,
+    destination: RepoRelPath,
+    expected_sha256: SHA256,
+    expected_bytes: int,
+) -> SnapshotFileRef: ...
+```
+
+The helper opens the transport body as a regular, nonsymlink file beneath the
+attempt workspace. It streams that file into a temporary sibling of the
+declared artifact path while calculating the SHA-256 digest and byte count of
+the bytes it writes. It compares those two values with the frozen request. It
+flushes the accepted file and atomically replaces the declared artifact path.
+It returns the `SnapshotFileRef` for that path. A failed comparison deletes the
+temporary file and leaves the declared artifact path absent.
+
+`retrieve_download_inputs()` stops calling
+`LocalArtifactStore.resolved_files()` for the retrieval body. The later stage
+snapshot publisher checks the artifact file against the returned
+`SnapshotFileRef` before publication.
 
 The executor performs the write that publishes the HTTP body as the declared
 artifact. It then resolves the declared artifact directly and constructs the
@@ -441,13 +463,17 @@ retrievals[name].body.bytes  == artifacts[name].file.bytes
 
 ### 7.3 Runner custody rule
 
+**Proposed rule: `download.runner_custody`.**
+
 `retrieve_download_inputs()` passes the attempt-workspace destination to the
 selected transport. `invoke_transport()` requires
 `HttpTransportResult.body.resolve()` to equal that destination, verifies the
 regular-file and symlink rules, checks the terminal response, and compares the
-body byte count and SHA-256 digest with `HttpRequestSpec`. The executor then
-writes those verified bytes at `DownloadSpec.artifacts[name].path` and creates
-the shared `SnapshotFileRef`.
+body byte count and SHA-256 digest with `HttpRequestSpec`.
+`publish_download_body()` then hashes the bytes it writes to the declared
+artifact path and repeats the frozen digest and byte-count checks. The shared
+`SnapshotFileRef` comes from that copy operation. The snapshot publisher checks
+the same identity once more before sealing the stage snapshot.
 
 ## 8. Propagation and change impact
 
@@ -455,7 +481,7 @@ the shared `SnapshotFileRef`.
 | --- | --- | --- | --- |
 | Frozen stage schema | Request and artifact keys vary independently | Keys match one-for-one and every download artifact is a single file | One HTTP body receives one artifact name |
 | Retrieval receipt | `body: ResolvedFileRef` points to a local-store retrieval path | `body: SnapshotFileRef` points to the declared artifact path | Receipt and artifact reference one snapshot file |
-| Retrieval runtime | `retrieve_download_inputs()` publishes a retrieval-body revision and materializes its canonical path | Executor materializes the verified response at `spec.artifacts[name].path` | One durable payload path |
+| Retrieval runtime | `retrieve_download_inputs()` publishes a retrieval-body revision and materializes its canonical path | `publish_download_body()` copies and hashes the transport body into `spec.artifacts[name].path` | The digest covers the bytes actually written at the artifact path |
 | Stage snapshot | Retrieval and artifact loops use different keys | Both loops use the same key | `snapshot_files` stores one body entry |
 | Verification | HTTP body and artifact verification run independently | `download.receipt_artifact_identity` joins the two records | Verifier proves one HTTP body became the named artifact |
 | Stage execution | Download launches a project worker after retrieval | The attempt process retrieves, verifies, publishes, and resolves the artifact | Download becomes a runner-owned stage |
@@ -518,12 +544,17 @@ snapshot contains the declared artifact path once
 retrieval body SHA-256 and byte count equal the frozen request
 ```
 
-### Rejection: artifact file changes after retrieval
+### Rejection: transport body changes before artifact publication
 
-The fixture uses the same frozen request and response body, then changes
-`resolved.artifacts["prior"].file.sha256` in the persisted resolved-stage
-document. `download.receipt_artifact_identity` rejects the resolved download
-stage because the retrieval-body and artifact-file references differ.
+The controlled transport first returns the expected `b"prior"` body. Before
+`publish_download_body()` copies it, the fixture replaces the transport file
+with `b"alter"`, which has the same byte count and a different digest.
+`download.runner_custody` rejects the copy, leaves the declared artifact path
+absent, and prevents stage-snapshot publication.
+
+A separate model test changes
+`resolved.artifacts["prior"].file.sha256` in a completed resolved-stage
+document. `download.receipt_artifact_identity` rejects that unequal reference.
 
 ## 10. Implementation order
 
@@ -536,9 +567,10 @@ stage because the retrieval-body and artifact-file references differ.
    `DownloadSpec.parameter_model` and `DownloadSpec.params`. Add
    `ResolvedParameterizedSpec`, then move `source`, `startup`, `invocation`,
    and `command` from `ResolvedBaseSpec` to that class.
-4. Change `retrieve_download_inputs()` to write at the declared artifact path
-   and return the verified retrieval values and resolved artifacts needed by
-   execution. Remove the helper's `store` parameter and duplicate
+4. Add `publish_download_body()` and make `retrieve_download_inputs()` use it
+   for every verified response. Return the verified retrieval values and
+   resolved artifacts needed by execution. Remove the helper's `store`
+   parameter and duplicate
    `LocalArtifactStore.resolved_files()` call. Delete
    `retrieval_body_path()` and replace every caller with the same-named artifact
    path. Update stage-snapshot collection in
@@ -556,7 +588,8 @@ stage because the retrieval-body and artifact-file references differ.
 6. Replace the existing download fixtures whose request and artifact names
    differ, and remove every retrieval-body-to-artifact copy loop. Remodel the
    verification-acceptance fixture as three same-named HTTP responses and
-   artifacts. Add the success and rejection cases in
+   artifacts. Add the success case, transport-body mutation case, and unequal
+   resolved-reference case in
    `tests/test_run_execution.py`, `tests/test_execution_acceptance.py`,
    `tests/test_execution_signals.py`, `tests/test_preflight.py`,
    `tests/test_generated_project_acceptance.py`, and

@@ -24,7 +24,7 @@ attempt-owned input file, supplies that file to the stage, and records it in
 
 ## 1. Status and decision
 
-**Contract status:** approved; implementation pending.
+**Contract status:** draft after system review; owner review pending.
 
 **Required claim:** VIPER gives each stage a canonical input path. Before and
 after the stage process runs, the file at that path matches the byte identity
@@ -206,6 +206,11 @@ inputs/<stage-id>/<input-name><source-suffix>
 The runner, stage worker, and invocation verifier call the same helper. The
 runner writes a temporary sibling file, flushes it, and atomically replaces the
 canonical path. The worker receives the canonical path after that move.
+
+Before reading the source, the runner resolves `root / source_path`. The
+resolved path must remain beneath the repository root. The source itself must
+be a regular, nonsymlink file. A lexical `RepoRelPath` that reaches another
+location through a symbolic link fails before VIPER reads any bytes.
 
 After the worker exits, the executor hashes the attempt-owned file again. A
 change fails the stage. A successful stage publishes that file inside the same
@@ -533,6 +538,21 @@ Automatic selection and pointer generation remain implementation work.
 
 The verifier must establish the complete chain appropriate to each route.
 
+### Local source boundary
+
+**Proposed rule: `input.local_source_boundary`.**
+
+Before capture, the runner requires:
+
+```text
+resolved source path is beneath the repository root
+source path is not a symbolic link
+source path names a regular file
+```
+
+This rule prevents a repository-relative declaration from reading bytes
+through a symbolic link to a file outside the repository.
+
 ### HTTP root selected in the same run
 
 ```text
@@ -593,6 +613,10 @@ stage, and stores the captured file in the completed train-stage snapshot.
 `verify_run_result()` accepts the run. Changed snapshot bytes or a different
 stage-invocation path trigger `input.local_root_identity`.
 
+A companion case makes `inputs/raw/prior.bin` a symbolic link to a file outside
+the repository. Capture fails under `input.local_source_boundary` before the
+runner reads or copies the target.
+
 ### Downloaded prior-run input
 
 A completed producer run publishes `download.artifacts["prior"]`. A second
@@ -616,13 +640,13 @@ identity rule.
 | Resolved download schema | Keep runner environment, execution context, retrievals, artifacts, and completion on `ResolvedDownloadSpec`; move project invocation fields to `ResolvedParameterizedSpec`. |
 | External source model | Delete `HttpSource` and `ExternalInputSource`; type both local records with `source: LocalSource`. |
 | Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
-| Local root model | Delete `ExternalInputRef.path`; derive one path with `captured_input_path()`, atomically copy `ExternalInputRef.source.path` there, and record a `SnapshotFileRef`. |
+| Local root model | Delete `ExternalInputRef.path`; reject symlinks and resolved paths outside the repository; derive one path with `captured_input_path()`, atomically copy `ExternalInputRef.source.path` there, and record a `SnapshotFileRef`. |
 | Worker startup | Reconstruct local capture paths with `captured_input_path()` and compare them with `StageContextBinding.inputs`. |
 | Verification | Reconstruct capture paths with the same helper, compare the invocation path with `ResolvedExternalInputRef.file.path`, and add the HTTP receipt-artifact identity rule. |
 | Authoring | Add `viper.file_input()` and `viper.run_artifact()`; convert local files, same-run handles, and prior-run drafts into `ExternalInputRef`, `FutureInputRef`, and `StoredInputRef`. |
 | Prior-run pointer schema | Change `StoredInputRef.pointer` to digest-bearing `ResolvedArtifactPointerRef`; let the pointer use any `StorageRef`. |
 | Storage publication | Include captured local roots in their consuming-stage snapshots. Publish generated pointer files separately at the configured local or Viper Cloud destination. |
-| Tests | Cover local roots, same-run downloaded inputs, prior-run downloaded inputs, tampered root bytes, and tampered artifacts. |
+| Tests | Cover local roots and source-boundary rejection in [`tests/test_run_execution.py`](../../tests/test_run_execution.py) and [`tests/test_execution_acceptance.py`](../../tests/test_execution_acceptance.py); cover same-run and prior-run downloaded inputs plus tampering in [`tests/test_verification_acceptance.py`](../../tests/test_verification_acceptance.py). |
 | Legacy cleanup | Apply every delete, replace, and retain disposition in [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md); delete `HttpSource` and its tests here. |
 | Documentation | Update the protocol reference and generated project examples to teach executor-owned HTTP publication and automatic input selection. |
 
@@ -656,16 +680,18 @@ snapshot reference.
 2. Delete `HttpSource`, `ExternalInputSource`, and the duplicate HTTP branch in
    `resolve_inputs()`. Change both local `source` fields to `LocalSource`.
 3. Delete `ExternalInputRef.path`. Add `captured_input_path()` and use it in the
-   runner, worker startup check, and invocation verifier. Atomically copy
-   `source.path` there, include the captured file in the completed stage
-   snapshot, and add the local-root verifier.
+   runner, worker startup check, and invocation verifier. Reject a source that
+   is a symlink, resolves outside the repository, or has a file type other than
+   regular.
+   Atomically copy `source.path` to the capture path, include the captured file
+   in the completed stage snapshot, and add the two local-input verifier rules.
 4. Add `FileInputDraft`, `RunArtifactDraft`, and the three-way authoring
    compiler defined in
    [`automatic-input-resolution.md`](automatic-input-resolution.md).
 5. Change the stored-pointer schema and implement deterministic,
    destination-aware pointer publication for prior-run selections.
-6. Add end-to-end acceptance cases for all three routes and their tamper
-   failures.
+6. Add end-to-end acceptance cases for all three routes, a local source-link
+   escape, and the route-specific tamper failures.
 
 ## 11. Implementation grounding
 

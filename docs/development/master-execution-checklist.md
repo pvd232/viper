@@ -129,11 +129,12 @@ FileInputDraft
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Download retrieval artifacts](download-retrieval-artifacts.md) | Approved; pending | Runner-owned downloads and the shared HTTP-body artifact |
-| [External input roots](external-input-roots.md) | Approved; pending | Local root capture, HTTP root evidence, and input-edge meaning |
-| [Unified metric drafting](unified-metric-drafting.md) | Approved; pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
-| [Automatic input resolution](automatic-input-resolution.md) | Approved; pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
-| [Direct Viper Cloud publication](remote-storage.md) | Approved; pending | Destination-neutral publication, cloud references, retrieval, and restore |
+| [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
+| [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
+| [Unified metric drafting](unified-metric-drafting.md) | Draft after audit | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
+| [Automatic input resolution](automatic-input-resolution.md) | Draft after audit | Python stage authoring and compilation of local, same-run, and prior-run inputs |
+| [Frozen plan Git identity](frozen-plan-git-identity.md) | Draft after audit | Separate source and generated-plan commits between freezing and execution |
+| [Direct Viper Cloud publication](remote-storage.md) | Draft after audit | Destination-neutral publication, cloud references, retrieval, and restore |
 
 The contracts share models. One contract owns each shared decision:
 
@@ -147,10 +148,11 @@ The contracts share models. One contract owns each shared decision:
 | Metric role comes from `objective=` or `metrics=` | Unified metric drafting |
 | Artifact draft paths are relative to the selected run root | Automatic input resolution |
 | Immutable location comes from the configured destination | Direct Viper Cloud publication |
+| Generated YAML identity comes from the plan commit; project definitions come from the source commit | Frozen plan Git identity |
 
 ## 4. Specification-system review
 
-The review compared all six contracts with the current source, tests, protocol
+The review compared all seven contracts with the current source, tests, protocol
 reference, public API, CLI, and generated project.
 
 ### 4.1 Schema gate
@@ -172,6 +174,11 @@ The review found and repaired these schema conflicts:
 | Benchmark test data was separate from the evaluation-stage inputs | Compile `BenchmarkDraft.test` and splits once and reuse their pointers in both records. |
 | Freeze-time pointer publication preceded run destination binding | Bind the destination before the first immutable publication in freezing or execution. |
 | A local terminal path lacked its immutable `ResolvedRunRef` | Publish the terminal as a one-file revision and derive its local reference before parsing. |
+| Download custody lacked an operation whose digest covered the bytes written at the artifact path | Add `publish_download_body()` and reject a transport-body change before publication. |
+| A repository-relative local input could escape through a symbolic link | Add `input.local_source_boundary` before capture. |
+| Live metric evidence left the receipt-to-`MetricSpec` join implicit | Join the measurement, invocation metric IDs, frozen stage, and experiment registry in `metric.live.parameter_delivery`. |
+| Python authoring generated plan files after the source commit, and execution searched that source commit for them | Add a separate plan commit and use it for generated documents. |
+| Restore CLI behavior lacked exact Python and typed-operation models | Add one selector, result, request, success, and direct execution interface. |
 
 ### 4.2 Value-lifecycle gate
 
@@ -189,6 +196,8 @@ The review found and repaired these schema conflicts:
 | Stage files | Artifact drafts and captured local inputs | `SnapshotFileRef` values | `StageResultSnapshot` | `RunFetcher`, verifier, restore |
 | Independent file | Generated document | Owning `ResolvedFileRef` subtype | `LocalFileRef` or `ViperCloudFileRef` | `RunFetcher`, verifier, restore |
 | Terminal run | `RunPlanDraft` | `RunSpec` | `ResolvedRun` plus `ResolvedRunRef` | Verify, benchmark, lineage, restore |
+| Generated plan files | `RunPlanDraft` | `FrozenPlanFiles.files` committed to Git | `ResolvedRun.spec: ResolvedRunSpecRef` with the plan commit | Preflight, run verifier, and benchmark executor |
+| Restore selection | Direct Python values, discriminated typed request references, or CLI strings | `RestoreRequest` | `RestoreResult` and restored files | Python caller, typed API caller, or CLI |
 
 Every row has one declaring input, one persisted identity, and one reader.
 
@@ -228,11 +237,14 @@ Every new claim has a named rejection or acceptance boundary:
 | Claim | Detecting rule or acceptance case |
 | --- | --- |
 | HTTP receipt and artifact identify the same bytes | `download.receipt_artifact_identity` |
+| The digest covers the HTTP bytes written at the artifact path | `download.runner_custody` |
 | VIPER supplied the canonical captured local path and stable bytes | `input.local_root_identity` |
+| A local declaration stays within the repository boundary | `input.local_source_boundary` |
 | Same-run producer precedes consumer | `input.source.order` |
 | Prior-run pointer names verified provenance | `input.pointer.identity` and `input.pointer.provenance` |
 | Objective was measured | `metric.objective.evidence` |
 | Recomputed metric used the frozen class and values | `metric.recompute.invocation_binding` |
+| A live measurement resolves through the successful invocation to one frozen metric binding | `metric.live.parameter_delivery` |
 | Variant levels match frozen stage parameters | `experiment.variant.parameters` |
 | Benchmark records and matches each selected metric | `benchmark.metric.result` and `benchmark.metric.match` |
 | Benchmark and evaluation use identical test and split pointers | `benchmark.input.identity` |
@@ -240,6 +252,8 @@ Every new claim has a named rejection or acceptance boundary:
 | Cloud terminal graph is portable | `storage.graph_reachability` |
 | Local restore starts from an immutable terminal reference | Deterministic one-file terminal revision lookup |
 | Restored artifact bytes match published bytes | SHA-256 and byte-count checks before final move |
+| Generated plan files and project source use their correct Git commits | `plan.git_identity`, `plan.document_identity`, `source.git_identity`, and `benchmark.plan_identity` |
+| Python, typed API, and CLI restore share one result contract | `RestoreResult` equality across all three entry points |
 
 ### 4.5 Propagation gate
 
@@ -253,11 +267,12 @@ Each contract has one case that must fail:
 
 | Contract | Counterexample |
 | --- | --- |
-| Download retrieval artifacts | The transport body changes after receipt validation and before snapshot publication. |
-| External input roots | The parent supplies a different workspace file than `captured_input_path()` or the captured file changes while the worker runs. |
-| Unified metric drafting | A metric dependency creates a second payload publication, two stages use one metric ID with different parameters, or benchmark test pointers differ from evaluation inputs. |
-| Automatic input resolution | A same-run input selects an artifact from a later stage, or freezing publishes a pointer before binding the run destination. |
-| Direct Viper Cloud publication | A cloud terminal run reaches one `LocalFileRef`, or local restore parses a changed working terminal file after immutable revision lookup fails. |
+| Download retrieval artifacts | The transport body changes after receipt validation and before artifact publication. |
+| External input roots | A local source path escapes through a symlink, the parent supplies a different workspace file than `captured_input_path()`, or the captured file changes while the worker runs. |
+| Unified metric drafting | A live receipt selects different metric IDs, a metric dependency creates a second payload publication, two stages use one metric ID with different parameters, or benchmark test pointers differ from evaluation inputs. |
+| Automatic input resolution | A same-run input selects an artifact from a later stage, freezing publishes a pointer before binding the run destination, or execution starts before generated files enter the plan commit. |
+| Frozen plan Git identity | The verifier loads a generated benchmark from the source commit; `benchmark.plan_identity` requires the plan commit. |
+| Direct Viper Cloud publication | A cloud terminal run reaches one `LocalFileRef`, local restore parses a changed working terminal file after immutable revision lookup fails, or the three restore surfaces return different file sets. |
 | Module privacy | A second module imports a leading-underscore symbol. |
 
 ## 5. Dependency order
@@ -405,6 +420,9 @@ receipt and artifact.
 
 - [ ] Change `execution/_materialization.py:retrieve_download_inputs()` to
       write each verified body directly at its frozen artifact path.
+- [ ] Add `publish_download_body()`. Stream the transport file into a temporary
+      artifact sibling, hash the bytes written, compare the frozen digest and
+      byte count, then atomically replace the artifact path.
 - [ ] Remove the separate retrieval-body path from `src/viper/paths.py`.
 - [ ] Remove download worker invocation from `execution/_attempt.py`.
 - [ ] Construct `ResolvedDownloadSpec` in the runner after retrieval.
@@ -417,6 +435,8 @@ receipt and artifact.
 - [ ] Update `tests/test_http_retrieval.py` for the shared file.
 - [ ] Update `tests/test_run_execution.py` for a runner-owned download.
 - [ ] Update `tests/test_execution_acceptance.py` for one snapshot copy.
+- [ ] Add a same-byte-count body mutation between transport validation and
+      artifact publication. Require `download.runner_custody` to reject it.
 - [ ] Remove callable-copy fixtures from `tests/fixtures.py` and generated
       project tests.
 - [ ] Run:
@@ -451,6 +471,8 @@ through stage consumption. A change fails the stage.
 
 ### 9.2 Capture and custody
 
+- [ ] Reject a local source that is a symlink, resolves outside the repository,
+      or has a file type other than regular before reading it.
 - [ ] Add `captured_input_path()` to `src/viper/paths.py`. Derive the path from
       run ID, attempt ID, stage ID, input name, and the source suffix.
 - [ ] Use the helper in `execution/_materialization.py`,
@@ -492,6 +514,8 @@ verifier reconstruct that path with the shared helper.
 - [ ] Add worker-startup and failed-stage receipt cases that reject a different
       local capture path.
 - [ ] Add verifier acceptance and tamper cases.
+- [ ] Add an outside-repository symlink case for
+      `input.local_source_boundary`.
 - [ ] Run:
 
 ```bash
@@ -541,6 +565,9 @@ parameter class and values reach the calculation in both modes.
 - [ ] Change `_workers/metrics.py` to load the frozen parameter class and build
       the same context for recomputation.
 - [ ] Compare production and verification parameter-model references.
+- [ ] Join each live measurement through
+      `StageInvocationReceipt.context.metric_ids`, the frozen stage
+      `metric_ids`, and `ExperimentSpec.metrics`.
 - [ ] Replace `_publish_metric_dependency()` with snapshot-reference
       derivation. Join each selected `SnapshotFileRef` to its enclosing current,
       producer, or pointer-selected stage snapshot.
@@ -582,6 +609,8 @@ A stored input follows its pointer to the producer snapshot.
 
 - [ ] Expand `tests/test_metric_interface.py` for parameter delivery.
 - [ ] Expand `tests/test_metric_provenance.py` for parameter identity.
+- [ ] Reject a successful invocation receipt whose metric IDs differ from the
+      frozen stage.
 - [ ] Assert that recomputed metric dependencies reuse existing snapshot
       revisions and trigger zero additional payload publications.
 - [ ] Add objective cases to `tests/test_protocol.py` and
@@ -679,7 +708,8 @@ python -m pytest \
 **Depends on:** Phase 5.
 
 **Contracts:** [Unified metric drafting](unified-metric-drafting.md),
-[automatic input resolution](automatic-input-resolution.md)
+[automatic input resolution](automatic-input-resolution.md), and
+[frozen plan Git identity](frozen-plan-git-identity.md)
 
 **Outcome:** One experiment owns reusable variant graphs and replicate seeds.
 The plan mapping supplies stage IDs.
@@ -708,6 +738,17 @@ The plan mapping supplies stage IDs.
 - [ ] Reject two configured calculations sharing one metric ID.
 - [ ] Keep each variant's estimator inside its own stage graph.
 - [ ] Return `FrozenPlanFiles` with the generated paths.
+- [ ] Include `run_spec_path`, `benchmark_spec_path`, and the complete `files`
+      manifest in `FrozenPlanFiles`.
+- [ ] Require every generated file to enter a later Git plan commit before
+      execution.
+- [ ] Establish `HEAD` as the plan commit during preflight. Load generated
+      experiment, variant, benchmark, stage, and run documents from that
+      commit.
+- [ ] Keep project callables, parameter classes, artifact loaders, transports,
+      and metric implementations bound to `RunSpec.source.commit`.
+- [ ] Store the plan commit in `ResolvedRun.spec.stored_at` and use it during
+      terminal and benchmark verification.
 
 <details>
 <summary>Hints</summary>
@@ -729,6 +770,8 @@ IDs. The two concrete artifact paths must differ.
       `tests/test_authoring.py`.
 - [ ] Add cross-variant metric collision and estimator rejection cases.
 - [ ] Add two-replicate path isolation.
+- [ ] Add committed-plan success, uncommitted-plan rejection, changed-source
+      rejection, and wrong-commit benchmark rejection.
 - [ ] Run:
 
 ```bash
@@ -983,13 +1026,21 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 ### 16.2 Public interface
 
+- [ ] Add `ArtifactRestoreSelector`, `RestoredFile`, `RestoredArtifact`, and
+      `RestoreResult`.
+- [ ] Add `LocalRunPath`, `ViperCloudRunReference`, and the discriminated
+      `RestoreRequestReference` union for the serialized typed API.
+- [ ] Add `viper.execution.restore()` and export its result type.
 - [ ] Add `viper restore <run-reference>` to `src/viper/cli.py`.
 - [ ] Parse `--artifacts` as one list of selectors.
 - [ ] Let `--output` name an exact file only for one single-file artifact.
 - [ ] Require `--output` to be a directory for all artifacts, a bundle, or a
       list.
-- [ ] Add the matching typed operation in `src/viper/api.py` and
+- [ ] Add `RestoreRequest`, `RestoreSuccess`, the `restore` operation name, and
+      matching registry and handler entries in `src/viper/api.py` and
       `_api/handlers.py`.
+- [ ] Route the Python function, typed handler, and CLI through one restore
+      engine and require equal `RestoreResult` file sets.
 
 ### 16.3 Focused proof
 
@@ -1087,26 +1138,26 @@ old contract.
 | `src/viper/runs.py` | Input/pointer relationships and terminal cloud references | 7, 9 |
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
 | `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
-| `src/viper/preflight.py` | Runner-owned download checks, owner-aware parameter refs, and compiled input order | 2, 4, 7 |
+| `src/viper/preflight.py` | Runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
 | `src/viper/inspection.py` | Render renamed snapshot and result references | 2, 9 |
 | `src/viper/execution/_materialization.py` | Runner download output; local capture; stored materialization | 2, 3, 7 |
 | `src/viper/execution/_stage.py` | New keys; captured-input post-check | 3, 5 |
 | `src/viper/execution/_resolution.py` | New resolved hierarchy and objectives | 2, 4 |
 | `src/viper/execution/_attempt.py` | Publisher use; runner download; captures; cloud destination | 1–4, 9 |
 | `src/viper/execution/_metric.py` | Typed context, mandatory parameter ref, and metric dependency references derived from enclosing snapshots | 4 |
-| `src/viper/execution/_benchmark.py` | Complete metric-result loop | 8, 9 |
+| `src/viper/execution/_benchmark.py` | Complete metric-result loop and benchmark lookup through the plan commit | 6, 8, 9 |
 | `src/viper/execution/_publication.py` | Destination-neutral independent files | 1, 9 |
 | `src/viper/execution/_recovery.py` | Destination-neutral failed-attempt closure | 1, 9 |
 | `src/viper/execution/_source.py` | Cloud file and snapshot routing | 9 |
 | `src/viper/execution/_run.py` | Return terminal refs; restore entry point | 9, 10 |
-| `src/viper/execution/results.py` | `resolved_run_ref` and benchmark `result_ref` | 9 |
+| `src/viper/execution/results.py` | `resolved_run_ref`, benchmark `result_ref`, and restore result models | 9, 10 |
 | `src/viper/_workers/stages.py` | Remove download; reconstruct captured local input paths; new keys; metric context | 2–5 |
 | `src/viper/_workers/metrics.py` | Load parameter ref and build metric context | 4 |
 | `src/viper/_workers/parameters.py` | Resolve owner-aware parameter-model references | 4 |
 | `src/viper/_workers/artifacts.py` | Consume concrete frozen artifact paths produced by the draft compiler | 5, 6 |
 | `src/viper/_parameter/validation.py` | Resolve project and VIPER owners | 4 |
 | `src/viper/_verification/attempt.py` | Download equality, canonical local capture path, local-root identity, and objective evidence | 2–4 |
-| `src/viper/_verification/plan.py` | Draft-derived graph, keys, objectives, pointers, benchmarks | 4–8 |
+| `src/viper/_verification/plan.py` | Draft-derived graph, plan/source commit separation, keys, objectives, pointers, benchmarks | 4–8 |
 | `src/viper/_verification/metrics.py` | Parameter binding and complete benchmark metrics | 4, 8 |
 | `src/viper/_verification/storage.py` | Cloud fetch, snapshot list, restore identity | 9, 10 |
 | `src/viper/verification.py` | Dispatch every new verifier rule | 2–10 |
@@ -1132,7 +1183,7 @@ old contract.
 | `tests/test_storage.py` | Publisher and retrieval backends | 1, 9, 10 |
 | `tests/test_verification.py` | All new verifier rules | 2–10 |
 | `tests/test_verification_acceptance.py` | Tamper and graph rejection cases | 2–10 |
-| `tests/test_preflight.py` | Frozen graph and source checks | 5–8 |
+| `tests/test_preflight.py` | Frozen graph, plan commit, and source commit checks | 5–8 |
 | `tests/test_public_api.py` | Exports, decorators, keys, constructors | 4–10 |
 | `tests/test_parameter_validation.py` | Project and installed-VIPER parameter-model owners | 4 |
 | `tests/test_inspection.py` | New stage and attempt reference shapes | 2, 9 |
@@ -1146,6 +1197,7 @@ old contract.
 | `tests/test_resume.py` | `Train.STATE` input and artifact names | 5 |
 | `tests/test_process_startup.py` | Owner-aware parameter source checks | 4 |
 | `tests/test_documentation.py` | Schema mirrors, links, examples, operations | 11 |
+| `docs/development/frozen-plan-git-identity.md` | Source/plan commit contract and acceptance cases | 6 |
 | `docs/reference/protocol.md` | Exact final serialized contract | 11 |
 | `docs/reference/api.md` | Exact final Python and CLI interface | 11 |
 | `docs/explanation/how-viper-works.md` | One causal execution | 11 |
@@ -1166,10 +1218,11 @@ These items stay outside this implementation sequence:
 
 ## 20. Current position
 
-All five implementation contracts pass the specification review gates and have
-owner approval. Implementation remains pending. The first missing result is a local run that
-passes through `SnapshotPublisher` and `publish_resolved_files()` while
-preserving its stored bytes and references.
+The latest system review returned all six pending implementation contracts to
+Draft. The new frozen-plan contract and five repaired contracts await owner
+review. Implementation remains pending. The first missing result is a local
+run that passes through `SnapshotPublisher` and `publish_resolved_files()`
+while preserving its stored bytes and references.
 
 Once Phase 1 passes, the next pair-coding turn begins Phase 2 with the
 `BaseSpec` and `DownloadSpec` inheritance change.

@@ -7,7 +7,7 @@ contract will define explicit harness mode.
 
 ## 1. Status
 
-**Contract status:** approved; implementation pending.
+**Contract status:** draft after system review; owner review pending.
 
 **Current:** Project code defines stages with `@viper.download_stage`,
 `@viper.train_stage`, and a subclass of `viper.parameters.Train`. Each stage
@@ -57,6 +57,8 @@ receipt-to-artifact identity rule.
 artifact, and consumer-edge roles of the resulting records. This contract owns
 the Python expression that selects the artifact and compiles the internal
 input reference.
+[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) owns the Git step
+between generated plan files and execution.
 
 ## 2. Required claim
 
@@ -74,6 +76,8 @@ corresponding measurement.
 The user writes the stage decorator, parameter class, and training function.
 `viper.freeze()` writes a same-run reference or pointer. VIPER executes each
 `DownloadSpec`. A custom transport handles any project-specific HTTP request.
+The user commits the generated plan files before execution. VIPER keeps that
+plan commit separate from the source commit that identifies project code.
 
 ## 3. Current gap
 
@@ -852,6 +856,23 @@ def plan(
 def freeze(plan: RunPlanDraft, *, root: Path = Path.cwd()) -> FrozenPlanFiles: ...
 ```
 
+The result exposes the paths consumed by later public operations:
+
+```python
+class FrozenPlanFiles(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: RunSpec
+    files: tuple[Path, ...] = Field(min_length=1)
+    run_spec_path: Path
+    benchmark_spec_path: Path | None = None
+```
+
+The complete plan-commit contract belongs to
+[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md). The user commits
+every path in `files` before execution. `run_spec_path` and a present
+`benchmark_spec_path` occur in that tuple.
+
 `viper.stage()` replaces hand-written stage YAML during authoring. It returns a
 `StageDraft` that describes one future stage: the decorated function, parameter
 values, inputs, and artifact declarations. `viper.freeze()` later writes the
@@ -1602,18 +1623,32 @@ plan = viper.plan(
 )
 
 frozen = viper.freeze(plan, root=Path.cwd())
+```
+
+`RunSpec.source.commit` identifies the project source inspected during
+freezing. The generated YAML files need their own later Git commit. Commit
+every path in `frozen.files` before execution:
+
+```bash
+git add experiments/ benchmarks/
+git commit -m "Freeze tiny HTTP run"
+```
+
+The run and benchmark calls consume the named paths returned by freezing:
+
+```python
+if frozen.benchmark_spec_path is None:
+    raise RuntimeError("the frozen plan has no benchmark")
 
 run_result = viper.execution.run(
     Path.cwd(),
-    Path(
-        f"experiments/tiny_http/runs/l2/{RUN_ID}/spec.yaml"
-    ),
+    frozen.run_spec_path,
 )
 
 benchmark_result = viper.execution.benchmark(
     Path.cwd(),
     run_result.resolved_run_path,
-    Path("benchmarks/tiny_holdout.spec.yaml"),
+    frozen.benchmark_spec_path,
 )
 ```
 
@@ -1640,7 +1675,8 @@ The public calls build one dependency graph in this order:
 | `viper.experiment(...)` | Factors, variants, replicates, and derived metrics | `viper.plan()` |
 | `viper.benchmark(...)` | Fixed test, splits, metrics, and optional criteria | `viper.plan()` |
 | `viper.plan(...)` | One selected variant, replicate, benchmark, and runtime contract | `viper.freeze()` |
-| `viper.freeze(...)` | Canonical experiment, benchmark, stage, and run files | `viper.execution.run()` |
+| `viper.freeze(...)` | Canonical experiment, benchmark, stage, and run files plus their named paths | Git plan commit |
+| Git plan commit | Immutable identity for every generated plan file | `viper.execution.run()` |
 | `viper.execution.run(...)` | Verified terminal run and its immutable reference | `viper.execution.benchmark()` or later artifact selection |
 | `viper.execution.benchmark(...)` | Candidate and confirmation results under the frozen test conditions | Benchmark inspection and restore |
 
@@ -1663,7 +1699,9 @@ EvaluateSpec.inputs["holdout"].pointer == BenchmarkSpec.splits["holdout"]
 
 `viper.freeze()` also binds the run's storage destination before publishing
 either generated pointer. Execution later loads the same binding before stage
-work.
+work. The plan commit and source commit remain separate: generated YAML comes
+from the plan commit, while decorated callables and other project definitions
+come from `RunSpec.source.commit`.
 
 The success path above calls `viper.execution.run()` once. A failed attempt
 uses `viper.execution.retry()` with the same repository root and frozen run
@@ -2043,6 +2081,13 @@ The materializer checks the resolved file identities already recorded for the
 artifact. The consumer receives the path only after the selected files pass
 those checks.
 
+### Frozen plan Git identity
+
+[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md#7-verification)
+defines `plan.git_identity`, `plan.document_identity`,
+`source.git_identity`, and `benchmark.plan_identity`. Those checks bind this
+contract's generated documents to the Git plan commit before execution.
+
 ## 8. Default mode and harness mode
 
 ### Default mode
@@ -2111,6 +2156,7 @@ overwrite rules, and review ownership.
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
 | Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and evaluate stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
+| Frozen plan result | Return `run_spec_path`, `benchmark_spec_path`, and the complete generated-file manifest | The user commits the exact files and later public calls consume those returned paths directly |
 | Pointer writer | Bind the run destination, serialize prior-run `ArtifactPointer` documents, and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef`, and execution uses the same destination |
 | Storage publication | Include local-root captures in consuming-stage snapshots; publish generated pointer files and terminal runs independently | Every record carries the enclosing snapshot or standalone storage reference required for retrieval |
 | Stage validators | Validate source existence, stage order, roles, and materialization paths | Invalid declarations fail during freezing |
@@ -2147,7 +2193,7 @@ replacement:
 | Direct `ExternalInputRef` construction in public authoring | Replace | `viper.file_input()` creates `FileInputDraft`; freezing writes `ExternalInputRef`. |
 | Proposed prior-run construction through `RunArtifactRef` | Replace | `viper.run_artifact()` creates `RunArtifactDraft`; freezing verifies the completed run and writes the pointer. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | Use `ResolvedArtifactPointerRef` so the frozen input carries pointer byte identity and a local, Git, or remote storage location. |
-| `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Replace | Inherit `StorageRef` from `ResolvedFileRef`; retain canonical pointer-path validation in `StoredInputRef`. |
+| `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Replace | Inherit `ResolvedFileRef`, whose `stored_at` field accepts `StorageRef`; retain canonical pointer-path validation in `StoredInputRef`. |
 | YAML `spec_source` authoring and generated draft-stage files | Replace | `StageDraft.spec` holds the Python-authored declaration until freezing writes canonical YAML. |
 | Required `@viper.http_transport(parameter_model=...)` | Replace | `@viper.http_transport(params=...)` defaults to `viper.params.HttpTransport`. |
 | Required empty transport parameter instances | Delete | `viper.transport(transfer)` constructs the base parameter instance. |
@@ -2204,6 +2250,7 @@ benchmark inputs, and six configured metrics.
 
 ```text
 freeze the run plan
+-> commit every FrozenPlanFiles.files path as the plan commit
 -> plan mapping assigns all four stage IDs
 -> compiler writes three FutureInputRef values
 -> compiler writes two StoredInputRef values
@@ -2222,6 +2269,11 @@ that the embed stage omits an objective, the train and evaluation objective IDs
 select their declared metrics, the evaluation and benchmark pointers match,
 the parameter values reach their decorated callables, the live measurements
 exist, and the recomputed values pass their comparators.
+
+The test also asserts that `RunSpec.source.commit` identifies the project
+source commit, `ResolvedRun.spec.stored_at.commit` identifies the later plan
+commit, and the benchmark executor reads `frozen.benchmark_spec_path` from that
+plan commit.
 
 ### Prior-run download and training
 
@@ -2292,6 +2344,8 @@ checklist supplies the cross-contract commit order.
 - [ ] Add `viper.keys.Train` and `viper.keys.Eval`; replace the private
       duplicate constants with enum members.
 - [ ] Add focused model tests.
+- [ ] Return the complete target `FrozenPlanFiles`, including
+      `run_spec_path` and `benchmark_spec_path`.
 
 **Commit boundary:** Python constructs a complete run-plan draft with local,
 same-run, or prior-run input selections. The compiler-facing draft models are
@@ -2375,6 +2429,8 @@ freeze one complete model run through the same Python authoring program.
 - [ ] Document plan-owned stage IDs and automatic input resolution in the
       getting-started guide.
 - [ ] Document pointer files as generated protocol evidence.
+- [ ] Document the required plan commit between `viper.freeze()` and
+      `viper.execution.run()`.
 - [ ] Add the harness-mode design as a separate proposed contract.
 
 **Commit boundary:** the public documentation describes the user workflow and
