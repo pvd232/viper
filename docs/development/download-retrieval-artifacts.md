@@ -340,6 +340,31 @@ binding comparison.
 | Fixtures and examples | Request names and artifact names may differ | Each download fixture uses the same name in both maps | Tests state the new public rule |
 | Documentation | External roots describes the HTTP receipt and later artifact | External roots links to this contract | One owner for the schema and execution detail |
 
+### 8.1 Legacy cleanup
+
+This contract retires the repository-level retrieval-body path. The transport
+still receives an attempt-workspace directory and writes its completed transfer
+there before the executor publishes the verified body at the declared artifact
+path.
+
+| Current occurrence | Disposition | Required replacement |
+| --- | --- | --- |
+| `viper.paths.retrieval_body_path()`, its imports, and the otherwise empty `viper.paths` module | Delete | Use `stage.artifacts[input_name].path` for the published body. Update the current-gap link when the module is removed. |
+| The `run` and `store` parameters and `LocalArtifactStore.resolved_files()` call in `retrieve_download_inputs()` | Delete | Publish the body once through the completed stage snapshot. Keep the attempt-workspace transfer file as execution scratch. |
+| `HttpRetrievalContextBinding.body: SnapshotFileRef` | Replace | Store `body_path`, `body_sha256`, and `body_bytes` directly in the invocation binding. |
+| Download path reconstruction in `viper._workers.stages` and `viper._verification.attempt` | Replace | Read the same-named artifact path and verify it against the invocation binding and completed snapshot. Remove the resulting unused `run` and `stage_id` parameters from `_logical_input_paths()` and the unused `stage_id` parameter from `_verify_download_retrievals()`. |
+| The generated download loop in `viper.project_init` | Delete | Generate the decorated download callable with publication owned by the executor. |
+| Copy loops and mismatched request/artifact names in `test_execution_acceptance.py`, `test_run_execution.py`, and `test_execution_signals.py` | Replace | Use one shared name and let the executor publish the response body. |
+| The `test_verification_acceptance.py` fixture that models one `archive` request and three unrelated artifacts | Replace | Declare three same-named requests and single-file artifacts because this fixture exercises artifact verification. |
+| Mismatched `remote` and `dataset` names in `test_preflight.py` | Replace | Give the request and artifact one shared name. |
+| Hard-coded `stages/<stage-id>/retrievals/<input-name>/body` assertions | Delete | Assert the declared artifact path and its single snapshot member. |
+| `ResolvedHttpRetrieval` model tests that construct `ResolvedFileRef` bodies | Replace | Construct `SnapshotFileRef` bodies at the declared artifact path and assert receipt-artifact equality. Keep transport scratch-file tests unchanged. |
+| Generated-project acceptance coverage | Replace | Assert that generated download source omits the copy loop and that execution still publishes each response artifact. |
+| `docs/reference/protocol.md` models and execution prose | Replace | Document the invocation binding fields, the shared successful `SnapshotFileRef`, and the executor-owned artifact write. |
+| `HttpTransportContext.workspace`, its bounded `destination`, and transport-level body tests | Retain | The attempt workspace remains the safety boundary for an in-progress transfer. |
+| `LocalArtifactStore.resolved_files()` and its non-download callers | Retain | Local external roots, metrics, run records, and other independently stored files still require self-contained `ResolvedFileRef` publication. |
+| `DownloadContext.retrievals` and `StageContext.artifacts` | Retain | The retrieval map supplies response metadata and the body path; the artifact map supplies the ordinary stage-artifact interface. Their paths must match. |
+
 ## 9. Acceptance case
 
 ### Success: one `prior` response becomes one `prior` artifact
@@ -386,8 +411,10 @@ stage because the retrieval-body and artifact-file references differ.
 3. Change `retrieve_download_inputs()` to write at the declared artifact path
    and return the verified retrieval values needed by execution. Replace
    `HttpRetrievalContextBinding.body: SnapshotFileRef` with `body_path`,
-   `body_sha256`, and `body_bytes`. Update worker-context construction and
-   stage-snapshot collection in
+   `body_sha256`, and `body_bytes`. Remove the helper's `store` parameter and
+   duplicate `LocalArtifactStore.resolved_files()` call. Delete
+   `retrieval_body_path()` and replace every caller with the same-named artifact
+   path. Update worker-context construction and stage-snapshot collection in
    [`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py),
    [`src/viper/execution/_stage.py`](../../src/viper/execution/_stage.py), and
    [`src/viper/execution/_attempt.py`](../../src/viper/execution/_attempt.py).
@@ -397,9 +424,12 @@ stage because the retrieval-body and artifact-file references differ.
    [`src/viper/_verification/attempt.py`](../../src/viper/_verification/attempt.py)
    to read and compare the shared snapshot reference.
 5. Replace the existing download fixtures whose request and artifact names
-   differ, and remove every retrieval-body-to-artifact copy loop. Add the
-   success and rejection cases in `tests/test_run_execution.py`,
-   `tests/test_execution_acceptance.py`, and
+   differ, and remove every retrieval-body-to-artifact copy loop. Remodel the
+   verification-acceptance fixture as three same-named HTTP responses and
+   artifacts. Add the success and rejection cases in
+   `tests/test_run_execution.py`, `tests/test_execution_acceptance.py`,
+   `tests/test_execution_signals.py`, `tests/test_preflight.py`,
+   `tests/test_generated_project_acceptance.py`, and
    `tests/test_verification_acceptance.py`.
 6. Remove the copy loop from generated download-stage scaffolding in
    [`src/viper/project_init.py`](../../src/viper/project_init.py) and the
