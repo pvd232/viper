@@ -14,6 +14,9 @@ working agreements and load the user-scoped skills relevant to the active task.
   `docs/reference/api.md`.
 - Keep serialized protocol fields and discriminators stable during Python
   module refactors.
+- Mark the first private package or module boundary with a leading underscore.
+  Give functions imported by another module normal names. Prefix functions
+  confined to one module with one underscore.
 
 ## Runtime environment
 
