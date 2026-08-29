@@ -1085,9 +1085,11 @@ call metric_definition(MetricDraft.implementation)
 -> merge by metric_id into ExperimentSpec.metrics
 ```
 
-Two drafts with one metric ID must produce identical `MetricSpec` records. A
-different implementation, parameter class, parameter value, dependency, mode,
-kind, or comparator stops freezing.
+When multiple stages select the same `metric_id`, freezing compiles each
+selected `MetricDraft` into a `MetricSpec` and compares the complete records.
+The implementation, parameter class, parameter values, dependencies, mode,
+kind, and comparator must match. A mismatch raises an error because each metric
+ID identifies exactly one metric definition.
 
 For each `MetricObjectiveDraft`, the compiler writes one
 `MetricObjectiveSpec`. It places the objective metric ID first in the stage's
