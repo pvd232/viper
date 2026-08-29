@@ -266,10 +266,13 @@ metric ID and direction together. Diagnostics remain metrics, so the API uses
 
 ### Diagnostics
 
-A diagnostic is a metric whose result explains a stage. The `objective` field
-separately names the primary training or evaluation metric. Diagnostics use the
-same decorator, draft, measurement, parameter, dependency, and verification
-types as other metrics:
+A diagnostic is a `MetricDraft` with `kind="diagnostic"`. Its result explains a
+stage. The `objective` field separately names the primary metric for a stage
+that declares one.
+
+A live diagnostic uses the stage's `Measurement` and invocation receipt. A
+recomputed diagnostic also uses declared dependencies, a comparator, and a
+`MetricVerificationReceipt`.
 
 ```python
 @viper.metric(
@@ -278,7 +281,7 @@ types as other metrics:
     mode="live",
 )
 def gradient_norm(
-    context: viper.MetricContext[viper.params.Metric],
+    _context: viper.MetricContext[viper.params.Metric],
     batch_norms: list[float],
 ) -> float:
     return max(batch_norms)
@@ -295,6 +298,24 @@ training = viper.stage(
     metrics=(gradient_norm_metric,),
 )
 ```
+
+Selection makes the diagnostic available through `StageContext.metrics`. The
+training function produces one diagnostic measurement after each epoch:
+
+```python
+context.metrics["training_loss"].record(
+    batch_losses,
+    epoch=epoch,
+)
+context.metrics["gradient_norm"].record(
+    batch_gradient_norms,
+    epoch=epoch,
+)
+```
+
+The complete training function computes `batch_losses` and
+`batch_gradient_norms` inside its optimizer loop in
+[`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
 
 `objective` identifies the primary metric and its direction. `metrics` selects
 additional measurements, including diagnostics. A fixed embedding stage can
