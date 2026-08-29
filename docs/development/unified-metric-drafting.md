@@ -483,9 +483,8 @@ class MetricSpec(ProtocolModel):
     comparator: FloatComparator | None = None
 ```
 
-`parameter_model=None` means the package-owned `viper.params.Metric` class
-validated the parameters. A project subclass produces one byte-addressed
-`ParameterModelRef`.
+`parameter_model=None` identifies `viper.params.Metric` as the parameter class.
+A project-defined subclass is stored as a byte-addressed `ParameterModelRef`.
 
 Recomputed metric executions repeat the selected class and values:
 
@@ -1067,11 +1066,11 @@ implementation. Its metric ID, kind, and mode equal the values represented by
 
 ### `metric.draft.parameter_capture`
 
-`type(MetricDraft.params)` subclasses `viper.params.Metric`. A project subclass
-produces the exact `MetricSpec.parameter_model`; the package
-`viper.params.Metric` class produces `parameter_model=None`. The worker loads
-that frozen class and reconstructs the parameter instance from
-`MetricSpec.params`.
+`type(MetricDraft.params)` subclasses `viper.params.Metric`. Freezing writes
+`parameter_model=None` for the base class. Freezing writes a
+`ParameterModelRef` for a project-defined subclass. The worker uses the base
+class directly or loads the referenced subclass, then reconstructs its instance
+from `MetricSpec.params`.
 
 ### `metric.live.parameter_delivery`
 
