@@ -6,15 +6,9 @@ VIPER must answer three separate questions about every input byte sequence:
 2. Which VIPER stage published the bytes as an artifact?
 3. How did the consuming stage select that artifact?
 
-The target graph defines one resolved root category:
-
-```python
-ExternalInputRoot = ResolvedExternalInputRef | ResolvedHttpRetrieval
-```
-
-`ResolvedExternalInputRef` is the local-file variant.
-`ResolvedHttpRetrieval` is the HTTP variant. One HTTP response enters VIPER as
-an `ExternalInputRoot`, becomes the download stage's
+`ResolvedExternalInputRef` records a local external input root.
+`ResolvedHttpRetrieval` records an HTTP external input root. One HTTP response
+enters VIPER through `ResolvedHttpRetrieval`, becomes the download stage's
 `ResolvedSingleFileArtifact`, and reaches a later stage through
 `FutureInputRef` or `StoredInputRef`. The retrieval body and artifact share one
 `SnapshotFileRef`.
@@ -53,11 +47,11 @@ The pending work connects these existing owners into one user-facing input
 authoring flow and adds the missing local-root verifier. The flow uses the
 existing download path, and VIPER creates artifact-pointer files internally.
 
-## 2. `ExternalInputRoot` has local and HTTP variants
+## 2. Local and HTTP roots use different evidence records
 
 The roles belong to different dimensions of the provenance graph:
 
-| Question | HTTP `ExternalInputRoot` | Local `ExternalInputRoot` |
+| Question | HTTP external input root | Local external input root |
 | --- | --- | --- |
 | Where did the bytes enter VIPER? | `ResolvedHttpRetrieval` | `ResolvedExternalInputRef` |
 | Which stage published them? | `ResolvedSingleFileArtifact` owned by the download stage | Bytes enter at the consumer boundary |
@@ -65,10 +59,10 @@ The roles belong to different dimensions of the provenance graph:
 
 The root variants carry source-specific evidence:
 
-- `ResolvedHttpRetrieval` is an `ExternalInputRoot` carrying request,
-  transport, response, body, and timestamps.
-- `ResolvedExternalInputRef` is an `ExternalInputRoot` carrying the selected
-  local source and captured file identity.
+- `ResolvedHttpRetrieval` records the HTTP request, transport, response, body,
+  and timestamps.
+- `ResolvedExternalInputRef` records the selected local source and captured
+  file identity.
 
 The remaining records describe publication and selection:
 
@@ -80,9 +74,9 @@ The remaining records describe publication and selection:
   run.
 - `ExternalInputRef` declares the local root before execution.
 
-`ExternalInputRoot` unifies the two entry receipts. The artifact and input
-reference records remain separate because each proves another relationship.
-Their shared file reference joins the root, publication, and selection claims.
+Both records identify where bytes entered VIPER. The artifact and input
+reference records prove publication and selection. Their shared file reference
+joins the root, publication, and selection claims.
 
 ```mermaid
 flowchart LR
@@ -338,11 +332,11 @@ specific owner:
 | Role | Current owner |
 | --- | --- |
 | HTTP declaration | [`viper.stages.DownloadSpec`](../../src/viper/stages.py) |
-| HTTP `ExternalInputRoot` | [`viper.http.ResolvedHttpRetrieval`](../../src/viper/http.py) |
+| HTTP external input root | [`viper.http.ResolvedHttpRetrieval`](../../src/viper/http.py) |
 | HTTP execution | [`viper.execution._materialization.retrieve_download_inputs`](../../src/viper/execution/_materialization.py) |
 | Download-stage validation | [`viper.stages.ResolvedDownloadSpec`](../../src/viper/stages.py) |
 | Produced artifact identity | [`viper.execution._stage._resolve_artifact`](../../src/viper/execution/_stage.py) |
-| Local `ExternalInputRoot` declaration and evidence | [`viper.inputs.ExternalInputRef`](../../src/viper/inputs.py) and `ResolvedExternalInputRef` |
+| Local external input root declaration and evidence | [`viper.inputs.ExternalInputRef`](../../src/viper/inputs.py) and `ResolvedExternalInputRef` |
 | Same-run consumer edge | [`viper.inputs.FutureInputRef`](../../src/viper/inputs.py) |
 | Prior-run consumer edge | [`viper.inputs.StoredInputRef`](../../src/viper/inputs.py) and [`viper.artifacts.ArtifactPointer`](../../src/viper/artifacts.py) |
 | Input materialization | [`viper.execution._materialization.resolve_inputs`](../../src/viper/execution/_materialization.py) |
