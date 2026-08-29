@@ -16,7 +16,7 @@ from tests.fixtures import (
     python_environment,
     reproducibility,
 )
-from tests.test_run_execution import REPOSITORY, _git
+from tests.git_repository import REPOSITORY, run_git
 from tests.test_run_execution import http_source as execution_http_source
 from viper import parameters
 from viper._schema import (
@@ -209,8 +209,8 @@ def _freeze(
             ),
         ),
     )
-    _git(root, "add", f"experiments/{experiment_id}/runs")
-    _git(root, "commit", "--quiet", "-m", f"freeze {experiment_id} plan")
+    run_git(root, "add", f"experiments/{experiment_id}/runs")
+    run_git(root, "commit", "--quiet", "-m", f"freeze {experiment_id} plan")
     return frozen.files[-1]
 
 
@@ -249,10 +249,10 @@ def test_generated_project_executes_five_stage_benchmark(
     """Run generated code through acquisition, training, and confirmation."""
     root = tmp_path / "generated"
     initialize_project(root, "sample_project")
-    _git(root, "init", "--quiet")
-    _git(root, "config", "user.email", "viper@example.com")
-    _git(root, "config", "user.name", "VIPER Test")
-    _git(root, "remote", "add", "origin", REPOSITORY)
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
     host, port = http_source
 
     download_params = parameters.Download.model_validate({"media_type": "text/plain"})
@@ -282,9 +282,9 @@ def test_generated_project_executes_five_stage_benchmark(
             ),
         ),
     )
-    _git(root, "add", ".")
-    _git(root, "commit", "--quiet", "-m", "generated acquisition source")
-    acquisition_source_commit = _git(root, "rev-parse", "HEAD")
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "generated acquisition source")
+    acquisition_source_commit = run_git(root, "rev-parse", "HEAD")
     acquisition_root = f"experiments/acquisition/runs/baseline/{ACQUISITION_RUN_ID}"
     acquisition_download = DownloadSpec(
         implementation=_stage_implementation(root, "download"),
@@ -401,9 +401,9 @@ def test_generated_project_executes_five_stage_benchmark(
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(serialize_document(pointer))
-    _git(root, "add", *pointer_documents)
-    _git(root, "commit", "--quiet", "-m", "promote benchmark inputs")
-    pointer_commit = _git(root, "rev-parse", "HEAD")
+    run_git(root, "add", *pointer_documents)
+    run_git(root, "commit", "--quiet", "-m", "promote benchmark inputs")
+    pointer_commit = run_git(root, "rev-parse", "HEAD")
     evaluation_pointer = _pointer_ref(pointer_commit, evaluation_pointer_path)
     split_pointer = _pointer_ref(pointer_commit, split_pointer_path)
 
@@ -479,9 +479,9 @@ def test_generated_project_executes_five_stage_benchmark(
             ),
         ),
     )
-    _git(root, "add", "experiments/starter", "benchmarks/starter.spec.yaml")
-    _git(root, "commit", "--quiet", "-m", "define benchmark candidate")
-    candidate_source_commit = _git(root, "rev-parse", "HEAD")
+    run_git(root, "add", "experiments/starter", "benchmarks/starter.spec.yaml")
+    run_git(root, "commit", "--quiet", "-m", "define benchmark candidate")
+    candidate_source_commit = run_git(root, "rev-parse", "HEAD")
     candidate_root = f"experiments/starter/runs/baseline/{CANDIDATE_RUN_ID}"
     candidate_download = DownloadSpec(
         implementation=_stage_implementation(root, "download"),

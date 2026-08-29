@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import subprocess
 import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -21,6 +20,7 @@ from tests.fixtures import (
     reproducibility,
     resume_state,
 )
+from tests.git_repository import REPOSITORY, run_git
 from viper import parameters
 from viper import run as run_stage
 from viper._schema import (
@@ -90,7 +90,6 @@ from viper.verification import (
 )
 from viper.workspace import AttemptWorkspace
 
-REPOSITORY = "https://github.com/example/viper-local-project"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
 
@@ -133,16 +132,6 @@ def http_source() -> Iterator[tuple[str, int]]:
         server.server_close()
 
 
-def _git(root: Path, *arguments: str) -> str:
-    """Run one successful Git command in the acceptance repository."""
-    return subprocess.run(
-        ("git", "-C", str(root), *arguments),
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-
-
 def test_local_fetcher_dispatches_hugging_face_inputs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -175,10 +164,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     """Execute source-frozen stages through immutable local publication."""
     root = tmp_path / "project"
     root.mkdir()
-    _git(root, "init", "--quiet")
-    _git(root, "config", "user.email", "viper@example.com")
-    _git(root, "config", "user.name", "VIPER Test")
-    _git(root, "remote", "add", "origin", REPOSITORY)
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
 
     train_params = parameters.Train.model_validate(
         {"epochs": 1, "batch_size": 1, "learning_rate": 0.1}
@@ -312,9 +301,9 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         path = root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw)
-    _git(root, "add", ".")
-    _git(root, "commit", "--quiet", "-m", "source")
-    source_commit = _git(root, "rev-parse", "HEAD")
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "source")
+    source_commit = run_git(root, "rev-parse", "HEAD")
 
     source = GitSource.model_validate(
         {"repository": REPOSITORY, "commit": source_commit}
@@ -459,8 +448,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             ),
         ),
     )
-    _git(root, "add", "experiments/example/runs")
-    _git(root, "commit", "--quiet", "-m", "plan")
+    run_git(root, "add", "experiments/example/runs")
+    run_git(root, "commit", "--quiet", "-m", "plan")
 
     requests = []
     monkeypatch.setattr(
