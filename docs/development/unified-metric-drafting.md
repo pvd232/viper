@@ -468,7 +468,7 @@ The alternatives fail at a specific boundary:
 
 ### Frozen metric records
 
-`MetricSpec` adds the class that validated custom metric parameters:
+`MetricSpec` records the parameter values and the class used to interpret them:
 
 ```python
 class MetricSpec(ProtocolModel):
@@ -483,8 +483,9 @@ class MetricSpec(ProtocolModel):
     comparator: FloatComparator | None = None
 ```
 
-`parameter_model=None` identifies `viper.params.Metric` as the parameter class.
-A project-defined subclass is stored as a byte-addressed `ParameterModelRef`.
+`parameter_model=None` selects the built-in `viper.params.Metric` class. For a
+project-defined subclass, `ParameterModelRef` records its source path, class
+name, SHA-256 digest, and byte count.
 
 Recomputed metric executions repeat the selected class and values:
 
