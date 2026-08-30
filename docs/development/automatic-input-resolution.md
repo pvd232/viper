@@ -202,6 +202,8 @@ class TrainParams(viper.params.Train):
     max_gradient_norm: float = Field(gt=0.0)
 
 
+# The decorated function owns model computation. VIPER supplies frozen
+# parameters, resolved input paths, output paths, metric handles, and RNGs.
 @viper.train(params=TrainParams)
 def train(context: viper.StageContext[TrainParams]) -> None:
     dataset = context.inputs["dataset"]
@@ -910,10 +912,11 @@ constructors and shortened decorator names remain proposed until this contract
 is implemented.
 
 The example authors one candidate run and one benchmark. The candidate performs
-four stages:
+five stages:
 
 ```text
 download fixed training data
+-> build a normalization profile from that data and a local feature schema
 -> embed the training rows
 -> train logistic regression on the training embeddings
 -> evaluate the trained weights on test embeddings and a split from one
@@ -942,6 +945,18 @@ row_id,feature_a,feature_b,label
 7,1.6,1.5,1
 ```
 
+Create the local schema selected by the build stage.
+
+`inputs/feature_schema.json`:
+
+```json
+{
+  "row_id": "row_id",
+  "features": ["feature_a", "feature_b"],
+  "label": "label"
+}
+```
+
 Serve it from the repository root:
 
 ```bash
@@ -959,12 +974,17 @@ artifact named `embeddings` and a `split_test` artifact named `holdout`. Those
 two prior-run artifacts become both the evaluation inputs and the benchmark's
 fixed test conditions.
 
-The complete authoring program is:
+The complete authoring program is heavily commented because each public call
+creates a value consumed by a later call. Read the comments in order to follow
+that dependency chain.
+
+<!-- complete-authoring-example: start -->
 
 ```python
 from __future__ import annotations
 
 import csv
+import json
 import math
 import subprocess
 from pathlib import Path
@@ -1006,6 +1026,8 @@ from viper.runtime import (
 )
 
 
+# Repository identity becomes RunSpec.source. The run ID selects one concrete
+# output root when viper.freeze() turns reusable drafts into frozen records.
 REPOSITORY = "https://github.com/example/tiny-viper-model"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 BENCHMARK_DATA_RUN = Path(
@@ -1013,13 +1035,18 @@ BENCHMARK_DATA_RUN = Path(
     "01ARZ3NDEKTSV4RRFFQ69G5FAA/resolved.yaml"
 )
 
+# Artifact draft paths are relative to the run root. Freezing places each path
+# beneath the selected experiment, variant, and run directory.
 TRAINING_DATASET_PATH = "artifacts/datasets/training_set/training.csv"
+NORMALIZATION_PATH = "artifacts/datasets/training_set/normalization.json"
 TRAINING_EMBEDDINGS_PATH = "artifacts/models/training_embeddings/embeddings.csv"
 WEIGHTS_PATH = "artifacts/models/logistic_regression/model.pt"
 STATE_PATH = "artifacts/models/logistic_regression/state.pt"
 PREDICTIONS_PATH = "artifacts/evaluations/holdout/preds.csv"
 
 
+# The source commit identifies the exact project definitions inspected during
+# freezing. The generated YAML receives a separate plan commit later.
 def current_commit() -> str:
     return subprocess.run(
         ("git", "rev-parse", "HEAD"),
@@ -1036,6 +1063,15 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 
 def load_dataset(path: Path) -> list[dict[str, str]]:
     return read_csv(path)
+
+
+# Freezing records each loader's byte-addressed identity. Execution and
+# verification call the loader on artifact files. Stages receive normal Paths.
+def load_json_object(path: Path) -> dict[str, object]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise TypeError("JSON artifact must contain an object")
+    return value
 
 
 def load_split(path: Path) -> tuple[int, ...]:
@@ -1061,6 +1097,8 @@ def load_predictions(path: Path) -> list[dict[str, str]]:
     return read_csv(path)
 
 
+# A custom transport owns network I/O. VIPER supplies the frozen request,
+# retrieval policy, credential, scratch destination, and base parameters.
 @viper.http_transport(transport_id="project_httpx")
 def transfer(
     context: viper.HttpTransportContext[viper.params.HttpTransport],
@@ -1114,9 +1152,14 @@ def transfer(
             )
 
 
+# viper.transport() captures the decorated function as a transport draft. This
+# example uses the package-owned empty parameter model because every transport
+# setting already comes from HttpRetrievalPolicy or the function body.
 transport = viper.transport(transfer)
 
 
+# viper.download() declares a runner-owned stage. The request key and artifact
+# key match, so one successful response becomes one named single-file artifact.
 download = viper.download(
     inputs={
         "training_dataset": HttpRequestSpec(
@@ -1149,6 +1192,8 @@ download = viper.download(
 )
 
 
+# Live metrics receive values from a running stage. Recomputed metrics read
+# published artifacts after the stage finishes.
 @viper.metric(
     metric_id="embedding_reconstruction_loss",
     mode="live",
@@ -1196,6 +1241,10 @@ def gradient_norm(
 
 class LossMetricParams(viper.params.Metric):
     epsilon: float = Field(gt=0.0, lt=0.5)
+    label_column: str = Field(min_length=1)
+    probability_column: str = Field(min_length=1)
+    positive_label: int
+    negative_label: int
 
 
 @viper.metric(
@@ -1209,8 +1258,15 @@ def evaluation_loss(
     rows = load_predictions(context.artifacts[Eval.PREDS])
     losses = []
     for row in rows:
-        label = float(row["label"])
-        probability = float(row["probability"])
+        observed_label = int(row[params.label_column])
+        if observed_label == params.positive_label:
+            label = 1.0
+        elif observed_label == params.negative_label:
+            label = 0.0
+        else:
+            raise ValueError("prediction contains an unknown label")
+
+        probability = float(row[params.probability_column])
         clipped = min(max(probability, params.epsilon), 1.0 - params.epsilon)
         losses.append(
             -label * math.log(clipped)
@@ -1234,6 +1290,8 @@ def evaluation_accuracy(
     return correct / len(rows)
 
 
+# viper.measure() supplies concrete parameters, dependencies, and comparison
+# rules. The resulting drafts can be reused by stages and benchmarks.
 embedding_reconstruction_metric = viper.measure(
     embedding_reconstruction_loss
 )
@@ -1248,7 +1306,13 @@ prediction_dependency = MetricDependency(
 )
 evaluation_loss_metric = viper.measure(
     evaluation_loss,
-    params=LossMetricParams(epsilon=1e-7),
+    params=LossMetricParams(
+        epsilon=1e-7,
+        label_column="label",
+        probability_column="probability",
+        positive_label=1,
+        negative_label=0,
+    ),
     dependencies=(prediction_dependency,),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
 )
@@ -1259,26 +1323,133 @@ evaluation_accuracy_metric = viper.measure(
 )
 
 
+# viper.file_input() declares bytes that already exist in the repository. The
+# build stage receives an attempt-owned capture of this file, while the
+# download artifact reaches the same stage through a same-run artifact handle.
+feature_schema = viper.file_input(
+    path="inputs/feature_schema.json",
+    data_role="training",
+)
+
+
+class BuildParams(viper.params.Build):
+    minimum_rows: int = Field(ge=2)
+    expected_feature_count: int = Field(ge=1)
+    standard_deviation_floor: float = Field(gt=0.0)
+    require_unique_row_ids: bool
+    allowed_labels: tuple[int, ...] = Field(min_length=2)
+
+
+# The build stage turns source data and a local schema into a reusable profile.
+# Each BuildParams field controls one validation or calculation below.
+@viper.build(params=BuildParams)
+def build_normalization(
+    context: viper.StageContext[BuildParams],
+) -> None:
+    rows = load_dataset(context.inputs["dataset"])
+    schema = load_json_object(context.inputs["schema"])
+    params = context.params
+
+    if len(rows) < params.minimum_rows:
+        raise ValueError("training data contains too few rows")
+
+    raw_features = schema.get("features")
+    if not isinstance(raw_features, list):
+        raise TypeError("feature schema must contain a feature list")
+    feature_names = tuple(str(name) for name in raw_features)
+    if len(feature_names) != params.expected_feature_count:
+        raise ValueError("feature schema has the wrong feature count")
+
+    row_id_column = str(schema["row_id"])
+    label_column = str(schema["label"])
+    row_ids = [int(row[row_id_column]) for row in rows]
+    if params.require_unique_row_ids and len(row_ids) != len(set(row_ids)):
+        raise ValueError("training row IDs must be unique")
+
+    allowed_labels = set(params.allowed_labels)
+    if any(int(row[label_column]) not in allowed_labels for row in rows):
+        raise ValueError("training data contains an unknown label")
+
+    means: dict[str, float] = {}
+    scales: dict[str, float] = {}
+    for feature_name in feature_names:
+        values = [float(row[feature_name]) for row in rows]
+        mean = sum(values) / len(values)
+        variance = sum((value - mean) ** 2 for value in values) / len(values)
+        means[feature_name] = mean
+        scales[feature_name] = max(
+            math.sqrt(variance),
+            params.standard_deviation_floor,
+        )
+
+    output = context.artifacts["normalization"]
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(
+            {
+                "features": feature_names,
+                "means": means,
+                "scales": scales,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+
+BUILD_PARAMS = BuildParams(
+    minimum_rows=8,
+    expected_feature_count=2,
+    standard_deviation_floor=1e-6,
+    require_unique_row_ids=True,
+    allowed_labels=(0, 1),
+)
+
+normalization = viper.stage(
+    build_normalization,
+    params=BUILD_PARAMS,
+    inputs={
+        "dataset": download.artifacts["training_dataset"],
+        "schema": feature_schema,
+    },
+    artifacts={
+        "normalization": viper.file_artifact(
+            path=NORMALIZATION_PATH,
+            loader=load_json_object,
+            data_role="training",
+        ),
+    },
+)
+
+
 class EmbedParams(viper.params.Embed):
-    feature_a_mean: float
-    feature_b_mean: float
-    feature_a_scale: float = Field(gt=0.0)
-    feature_b_scale: float = Field(gt=0.0)
     projection_a: float
     projection_b: float
+    projection_bias: float
+    minimum_projection_norm: float = Field(gt=0.0)
+    clip_magnitude: float = Field(gt=0.0)
+    output_decimals: int = Field(ge=1, le=12)
 
 
 @viper.embed(params=EmbedParams)
 def embed(context: viper.StageContext[EmbedParams]) -> None:
     rows = load_dataset(context.inputs["dataset"])
+    normalization_profile = load_json_object(
+        context.inputs["normalization"]
+    )
     params = context.params
+
+    means = normalization_profile["means"]
+    scales = normalization_profile["scales"]
+    if not isinstance(means, dict) or not isinstance(scales, dict):
+        raise TypeError("normalization artifact has invalid statistics")
 
     projection_norm = math.hypot(
         params.projection_a,
         params.projection_b,
     )
-    if projection_norm == 0.0:
-        raise ValueError("embedding projection must be nonzero")
+    if projection_norm < params.minimum_projection_norm:
+        raise ValueError("embedding projection norm is too small")
 
     unit_a = params.projection_a / projection_norm
     unit_b = params.projection_b / projection_norm
@@ -1287,13 +1458,19 @@ def embed(context: viper.StageContext[EmbedParams]) -> None:
 
     for row in rows:
         standardized_a = (
-            float(row["feature_a"]) - params.feature_a_mean
-        ) / params.feature_a_scale
+            float(row["feature_a"]) - float(means["feature_a"])
+        ) / float(scales["feature_a"])
         standardized_b = (
-            float(row["feature_b"]) - params.feature_b_mean
-        ) / params.feature_b_scale
+            float(row["feature_b"]) - float(means["feature_b"])
+        ) / float(scales["feature_b"])
 
-        value = standardized_a * unit_a + standardized_b * unit_b
+        value = (
+            standardized_a * unit_a
+            + standardized_b * unit_b
+            + params.projection_bias
+        )
+        value = max(-params.clip_magnitude, min(params.clip_magnitude, value))
+        value = round(value, params.output_decimals)
         reconstructed_a = value * unit_a
         reconstructed_b = value * unit_b
         reconstruction_errors.append(
@@ -1323,18 +1500,23 @@ def embed(context: viper.StageContext[EmbedParams]) -> None:
 
 
 EMBED_PARAMS = EmbedParams(
-    feature_a_mean=0.8,
-    feature_b_mean=0.7125,
-    feature_a_scale=0.6,
-    feature_b_scale=0.55,
     projection_a=0.8,
     projection_b=0.6,
+    projection_bias=0.0,
+    minimum_projection_norm=1e-6,
+    clip_magnitude=8.0,
+    output_decimals=8,
 )
 
+# The two input handles become two FutureInputRef records during freezing.
+# Both producer stages occur earlier in the same variant stage mapping.
 training_embeddings = viper.stage(
     embed,
     params=EMBED_PARAMS,
-    inputs={"dataset": download.artifacts["training_dataset"]},
+    inputs={
+        "dataset": download.artifacts["training_dataset"],
+        "normalization": normalization.artifacts["normalization"],
+    },
     artifacts={
         "embeddings": viper.file_artifact(
             path=TRAINING_EMBEDDINGS_PATH,
@@ -1357,6 +1539,8 @@ class TrainParams(viper.params.Train):
     max_gradient_norm: float = Field(gt=0.0)
 
 
+# The decorated function owns model computation. VIPER supplies frozen
+# parameters, resolved input paths, output paths, metric handles, and RNGs.
 @viper.train(params=TrainParams)
 def train(context: viper.StageContext[TrainParams]) -> None:
     rows = load_embeddings(context.inputs["dataset"])
@@ -1438,6 +1622,8 @@ TRAIN_PARAMS = TrainParams(
     max_gradient_norm=1.0,
 )
 
+# The same-run embeddings handle becomes FutureInputRef. Train.MODEL and
+# Train.STATE use protocol-owned keys because later stages understand them.
 training = viper.stage(
     train,
     params=TRAIN_PARAMS,
@@ -1459,6 +1645,9 @@ training = viper.stage(
 )
 
 
+# viper.run_artifact() selects immutable outputs from one completed data run.
+# Freezing publishes one pointer for each selection and reuses those pointers
+# in both the evaluation stage and the benchmark definition.
 benchmark_test = viper.run_artifact(
     resolved_run=BENCHMARK_DATA_RUN,
     stage="embed_test",
@@ -1475,10 +1664,17 @@ benchmark_split = viper.run_artifact(
 class EvaluateParams(viper.params.Evaluate):
     batch_size: int = Field(ge=1)
     decision_threshold: float = Field(gt=0.0, lt=1.0)
+    temperature: float = Field(gt=0.0)
+    probability_floor: float = Field(gt=0.0, lt=0.5)
+    positive_label: int
+    negative_label: int
 
 
 @viper.evaluate(params=EvaluateParams)
 def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
+    if context.params.positive_label == context.params.negative_label:
+        raise ValueError("evaluation labels must differ")
+
     rows = load_embeddings(context.inputs[Eval.TEST])
     selected_rows = set(load_split(context.inputs["holdout"]))
     selected = [
@@ -1497,7 +1693,11 @@ def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
                 [[float(row["embedding"])] for row in batch],
                 dtype=torch.float32,
             )
-            probabilities = torch.sigmoid(model(features).squeeze(1))
+            logits = model(features).squeeze(1) / context.params.temperature
+            probabilities = torch.sigmoid(logits).clamp(
+                min=context.params.probability_floor,
+                max=1.0 - context.params.probability_floor,
+            )
             for row, probability in zip(batch, probabilities, strict=True):
                 value = float(probability)
                 predictions.append(
@@ -1505,7 +1705,11 @@ def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
                         int(row["row_id"]),
                         int(row["label"]),
                         value,
-                        int(value >= context.params.decision_threshold),
+                        (
+                            context.params.positive_label
+                            if value >= context.params.decision_threshold
+                            else context.params.negative_label
+                        ),
                     )
                 )
 
@@ -1519,11 +1723,17 @@ def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
         writer.writerows(predictions)
 
 
+# The model handle is a same-run edge. The test and split handles are prior-run
+# edges. All three become normal paths in the evaluation StageContext.
 evaluation = viper.stage(
     evaluate,
     params=EvaluateParams(
         batch_size=2,
         decision_threshold=0.5,
+        temperature=1.0,
+        probability_floor=1e-7,
+        positive_label=1,
+        negative_label=0,
     ),
     inputs={
         Eval.MODEL: training.artifacts[Train.MODEL],
@@ -1544,6 +1754,8 @@ evaluation = viper.stage(
 )
 
 
+# Source, environment, and reproducibility records freeze the code and runtime
+# conditions that can change the produced bytes.
 source_commit = current_commit()
 source = GitSource(
     repository=REPOSITORY,
@@ -1586,6 +1798,9 @@ reproducibility = ReproducibilitySpec(
 
 regularization = viper.factor(levels=("none", "l2"))
 
+# The benchmark enters the plan below. Its test and split remain prior-run
+# artifacts because BenchmarkDraft fixes immutable evaluation conditions.
+# Criteria add pass/fail decisions without changing the recorded measurements.
 benchmark = viper.benchmark(
     benchmark_id="tiny_holdout",
     evaluation_id="holdout",
@@ -1599,6 +1814,8 @@ benchmark = viper.benchmark(
 )
 
 
+# The experiment owns reusable factors, variants, and seeded replicates. Stage
+# IDs come from the variant's mapping keys, so each StageDraft stays reusable.
 experiment = viper.experiment(
     experiment_id="tiny_http",
     factors={
@@ -1609,6 +1826,7 @@ experiment = viper.experiment(
             levels={"regularization": "l2"},
             stages={
                 "download": download,
+                "build_normalization": normalization,
                 "embed_training": training_embeddings,
                 "train": training,
                 "evaluate": evaluation,
@@ -1622,6 +1840,8 @@ experiment = viper.experiment(
 )
 
 
+# The plan selects one variant and replicate, then attaches the benchmark and
+# runtime contracts required for this concrete run.
 plan = viper.plan(
     run_id=RUN_ID,
     experiment=experiment,
@@ -1633,6 +1853,8 @@ plan = viper.plan(
     reproducibility=reproducibility,
 )
 
+# Freezing compiles Python drafts into canonical protocol files. The returned
+# manifest names every generated file that must enter the later plan commit.
 frozen = viper.freeze(plan, root=Path.cwd())
 ```
 
@@ -1663,6 +1885,8 @@ benchmark_result = viper.execution.benchmark(
 )
 ```
 
+<!-- complete-authoring-example: end -->
+
 The public calls build one dependency graph in this order:
 
 | Public call | Value it creates | Next consumer |
@@ -1670,11 +1894,13 @@ The public calls build one dependency graph in this order:
 | `@viper.http_transport(...)` | Decorated transport implementation | `viper.transport()` |
 | `viper.transport(transfer)` | `CustomHttpTransportDraft` | `viper.download()` |
 | `viper.file_artifact(...)` | Artifact declaration with path, loader, and role | `viper.download()` or `viper.stage()` |
+| `viper.file_input(...)` | Local-file input declaration | `viper.stage()` |
 | `viper.download(...)` | Runner-owned download `StageDraft` | `VariantDraft.stages` and `download.artifacts[...]` |
 | `@viper.metric(...)` | Decorated metric implementation | `viper.measure()` |
 | `viper.measure(...)` | Configured `MetricDraft` | Stage objective, stage metrics, and benchmark metrics |
 | `viper.min(...)` | Objective with improvement direction `min` | `viper.stage(objective=...)` |
 | `viper.at_most(...)` and `viper.at_least(...)` | Optional benchmark criteria | `viper.benchmark()` |
+| `@viper.build(params=...)` | Decorated build implementation and parameter class | `viper.stage()` |
 | `@viper.embed(params=...)` | Decorated embed implementation and parameter class | `viper.stage()` |
 | `@viper.train(params=...)` | Decorated train implementation and parameter class | `viper.stage()` |
 | `@viper.evaluate(params=...)` | Decorated evaluation implementation and parameter class | `viper.stage()` |
@@ -1691,11 +1917,14 @@ The public calls build one dependency graph in this order:
 | `viper.execution.run(...)` | Verified terminal run and its immutable reference | `viper.execution.benchmark()` or later artifact selection |
 | `viper.execution.benchmark(...)` | Candidate and confirmation results under the frozen test conditions | Benchmark inspection and restore |
 
-The graph contains five distinct input edges:
+The graph contains eight distinct input edges:
 
 | Consuming input | Authored value | Frozen value |
 | --- | --- | --- |
+| `build_normalization.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", producer_artifact="training_dataset")` |
+| `build_normalization.inputs["schema"]` | `feature_schema` | `ExternalInputRef(source=LocalSource(path="inputs/feature_schema.json"))` |
 | `embed_training.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", producer_artifact="training_dataset")` |
+| `embed_training.inputs["normalization"]` | `normalization.artifacts["normalization"]` | `FutureInputRef(producer_stage_id="build_normalization", producer_artifact="normalization")` |
 | `train.inputs["dataset"]` | `training_embeddings.artifacts["embeddings"]` | `FutureInputRef(producer_stage_id="embed_training", producer_artifact="embeddings")` |
 | `evaluate.inputs[Eval.MODEL]` | `training.artifacts[Train.MODEL]` | `FutureInputRef(producer_stage_id="train", producer_artifact=Train.MODEL)` |
 | `evaluate.inputs[Eval.TEST]` | `benchmark_test` | `StoredInputRef(pointer=<test pointer>)` |
@@ -1724,9 +1953,16 @@ Every parameter changes a runtime operation:
 
 | Parameter | Effect |
 | --- | --- |
-| `EmbedParams.feature_a_mean` and `feature_b_mean` | Center the two raw features before projection. |
-| `EmbedParams.feature_a_scale` and `feature_b_scale` | Scale the centered features. |
+| `BuildParams.minimum_rows` | Rejects a training dataset below the declared sample floor. |
+| `BuildParams.expected_feature_count` | Checks the local feature schema before calculating statistics. |
+| `BuildParams.standard_deviation_floor` | Keeps every normalization divisor above zero. |
+| `BuildParams.require_unique_row_ids` | Enables the duplicate-row-ID rejection. |
+| `BuildParams.allowed_labels` | Defines the accepted training labels. |
 | `EmbedParams.projection_a` and `projection_b` | Define the one-dimensional projection and reconstruction. |
+| `EmbedParams.projection_bias` | Shifts every projected value. |
+| `EmbedParams.minimum_projection_norm` | Rejects a projection vector whose norm is too small. |
+| `EmbedParams.clip_magnitude` | Bounds each projected value before persistence. |
+| `EmbedParams.output_decimals` | Sets the stored embedding precision. |
 | `TrainParams.epochs` | Controls the number of complete training passes. |
 | `TrainParams.batch_size` | Controls the number of examples in each optimizer step. |
 | `TrainParams.learning_rate` | Sets the SGD step size. |
@@ -1735,7 +1971,12 @@ Every parameter changes a runtime operation:
 | `TrainParams.max_gradient_norm` | Clips each batch gradient before the update. |
 | `EvaluateParams.batch_size` | Controls inference batch size. |
 | `EvaluateParams.decision_threshold` | Converts each predicted probability into a class. |
+| `EvaluateParams.temperature` | Scales model logits before the sigmoid. |
+| `EvaluateParams.probability_floor` | Bounds persisted probabilities away from zero and one. |
+| `EvaluateParams.positive_label` and `negative_label` | Define the class values written to `preds.csv`. |
 | `LossMetricParams.epsilon` | Bounds probabilities before recomputed logarithms. |
+| `LossMetricParams.label_column` and `probability_column` | Select the persisted columns used by recomputation. |
+| `LossMetricParams.positive_label` and `negative_label` | Convert persisted class values into binary-loss targets. |
 
 The metric lifecycle is:
 
@@ -1762,9 +2003,14 @@ project_httpx transport
 -> downloads and verifies training.csv
 -> publishes the training_dataset artifact
 
+build_normalization
+-> reads the downloaded training rows and captured local feature schema
+-> validates row IDs, labels, and feature count
+-> writes means and scales to normalization.json
+
 embed_training
--> reads training.csv
--> applies centering, scaling, and projection
+-> reads training.csv and normalization.json
+-> applies the persisted centering, scaling, and configured projection
 -> records reconstruction loss and spread
 -> writes training embeddings
 
@@ -1799,11 +2045,12 @@ experiment metric registry from these stage selections.
 
 ### Complete local-file and prior-run selections
 
-The complete program trains from the same-run handle
-`training_embeddings.artifacts["embeddings"]`. The other two input sources use
-the same `viper.stage()` call with a different value in its `inputs` map.
+The complete program uses every input route. `feature_schema` enters through
+`viper.file_input()`. The download, normalization, embeddings, and model enter
+later stages through same-run artifact handles. `benchmark_test` and
+`benchmark_split` enter through `viper.run_artifact()`.
 
-A stage can read a local repository file directly:
+The following alternative trains directly from a local embeddings file:
 
 ```python
 local_embeddings = viper.file_input(

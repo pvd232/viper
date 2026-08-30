@@ -15,6 +15,9 @@ from viper.api import OPERATIONS
 ROOT = Path(__file__).parents[1]
 PROTOCOL = ROOT / "docs/reference/protocol.md"
 API_REFERENCE = ROOT / "docs/reference/api.md"
+AUTOMATIC_INPUT_RESOLUTION = (
+    ROOT / "docs/development/automatic-input-resolution.md"
+)
 TRAINING_GUIDES = (
     ROOT / "README.md",
     API_REFERENCE,
@@ -27,7 +30,7 @@ IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/download-retrieval-artifacts.md",
     ROOT / "docs/development/external-input-roots.md",
     ROOT / "docs/development/unified-metric-drafting.md",
-    ROOT / "docs/development/automatic-input-resolution.md",
+    AUTOMATIC_INPUT_RESOLUTION,
     ROOT / "docs/development/frozen-plan-git-identity.md",
     ROOT / "docs/development/remote-storage.md",
 )
@@ -50,6 +53,60 @@ _CHECKBOX_BLOCK = re.compile(
     r"^- \[ \] .*?(?=^- \[ \] |^### |^## |\Z)",
     re.MULTILINE | re.DOTALL,
 )
+_COMPLETE_AUTHORING_EXAMPLE = re.compile(
+    r"<!-- complete-authoring-example: start -->"
+    r"(?P<body>.*?)"
+    r"<!-- complete-authoring-example: end -->",
+    re.DOTALL,
+)
+
+COMPLETE_EXAMPLE_PUBLIC_CALLS = {
+    "viper.at_least",
+    "viper.at_most",
+    "viper.benchmark",
+    "viper.build",
+    "viper.download",
+    "viper.embed",
+    "viper.evaluate",
+    "viper.execution.benchmark",
+    "viper.execution.run",
+    "viper.experiment",
+    "viper.factor",
+    "viper.file_artifact",
+    "viper.file_input",
+    "viper.freeze",
+    "viper.http_transport",
+    "viper.measure",
+    "viper.metric",
+    "viper.min",
+    "viper.plan",
+    "viper.replicate",
+    "viper.run_artifact",
+    "viper.stage",
+    "viper.train",
+    "viper.transport",
+    "viper.variant",
+}
+
+COMPLETE_EXAMPLE_COMMENT_TOPICS = {
+    "Repository identity",
+    "Freezing records each loader",
+    "custom transport owns network I/O",
+    "viper.download() declares a runner-owned stage",
+    "Live metrics receive values",
+    "viper.measure() supplies concrete parameters",
+    "viper.file_input() declares bytes",
+    "build stage turns source data",
+    "input handles become two FutureInputRef records",
+    "decorated function owns model computation",
+    "viper.run_artifact() selects immutable outputs",
+    "model handle is a same-run edge",
+    "Source, environment, and reproducibility records",
+    "benchmark enters the plan",
+    "experiment owns reusable factors",
+    "plan selects one variant",
+    "Freezing compiles Python drafts",
+}
 
 PUBLIC_MARKDOWN = (
     ROOT / "README.md",
@@ -109,6 +166,28 @@ PROTOCOL_ALIASES = {
 def _python_blocks(markdown: str) -> tuple[str, ...]:
     """Return every complete Python fence from one Markdown document."""
     return tuple(re.findall(r"```python\n(.*?)\n```", markdown, flags=re.DOTALL))
+
+
+def _dotted_name(node: ast.AST) -> str | None:
+    """Return one dotted Python name without evaluating it."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _dotted_name(node.value)
+        if parent is not None:
+            return f"{parent}.{node.attr}"
+    return None
+
+
+def _complete_authoring_blocks() -> tuple[str, ...]:
+    """Return the marked end-to-end authoring and execution blocks."""
+    match = _COMPLETE_AUTHORING_EXAMPLE.search(
+        AUTOMATIC_INPUT_RESOLUTION.read_text()
+    )
+    assert match is not None
+    blocks = _python_blocks(match.group("body"))
+    assert blocks
+    return blocks
 
 
 def _normalized(node: ast.AST | None) -> str | None:
@@ -273,6 +352,83 @@ def test_public_python_examples_are_syntactically_valid() -> None:
     for document in PUBLIC_MARKDOWN:
         for block in _python_blocks(document.read_text()):
             ast.parse(block, filename=str(document))
+
+
+def test_complete_authoring_example_covers_the_public_workflow() -> None:
+    """Require every public constructor in the complete workflow example."""
+    trees = tuple(
+        ast.parse(block, filename=str(AUTOMATIC_INPUT_RESOLUTION))
+        for block in _complete_authoring_blocks()
+    )
+    calls = {
+        name
+        for tree in trees
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        if (name := _dotted_name(node.func)) is not None
+    }
+
+    assert COMPLETE_EXAMPLE_PUBLIC_CALLS - calls == set()
+
+
+def test_complete_authoring_parameter_models_are_substantial_and_used() -> None:
+    """Require five used fields in every project-owned parameter model."""
+    trees = tuple(
+        ast.parse(block, filename=str(AUTOMATIC_INPUT_RESOLUTION))
+        for block in _complete_authoring_blocks()
+    )
+    parameter_classes = {
+        node.name: tuple(
+            statement.target.id
+            for statement in node.body
+            if isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+        )
+        for tree in trees
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+        if any(
+            (base_name := _dotted_name(base)) is not None
+            and base_name.startswith("viper.params.")
+            for base in node.bases
+        )
+    }
+    parameter_accesses = {
+        node.attr
+        for tree in trees
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        if _dotted_name(node.value) in {"params", "context.params"}
+    }
+
+    assert parameter_classes
+    assert {
+        name: fields
+        for name, fields in parameter_classes.items()
+        if len(fields) < 5
+    } == {}
+    assert {
+        name: sorted(set(fields) - parameter_accesses)
+        for name, fields in parameter_classes.items()
+        if set(fields) - parameter_accesses
+    } == {}
+
+
+def test_complete_authoring_example_comments_explain_each_handoff() -> None:
+    """Keep comments beside the public values and lifecycle boundaries."""
+    comments = "\n".join(
+        line.strip().removeprefix("#").strip()
+        for block in _complete_authoring_blocks()
+        for line in block.splitlines()
+        if line.lstrip().startswith("#")
+    )
+
+    assert len(comments.splitlines()) >= 30
+    assert {
+        topic
+        for topic in COMPLETE_EXAMPLE_COMMENT_TOPICS
+        if topic not in comments
+    } == set()
 
 
 def test_public_markdown_links_resolve() -> None:

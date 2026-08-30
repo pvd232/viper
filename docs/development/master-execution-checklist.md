@@ -186,7 +186,7 @@ review and a new digest.
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=26e5d35c76068553bd767e3d3e110be83313ff48a4723fea130d12b25a592b85 -->
 <!-- contract-baseline: external-input-roots.md sha256=cc61a5658c783a35c5de7a78f8234248347b23cc80cd784c2e473f92db55113f -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=1ccc0f118115e78167c07d69f9dff79ada46b787b34f4a0a8ef9a4e2c32b570d -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=b8a0f3b1e82d3d78b8a7254ba0b9604a2ca9d83bdc5d4609a3589ed795388202 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=bfde792d5d9eb4ba41950e491883ebabd20e22581c4a94e04a417849c7b3b578 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
 <!-- contract-baseline: remote-storage.md sha256=b0f4bf4715cdcc90189c94c25364a86dc521870b86a7fba27bc3d392b94a7ee7 -->
 

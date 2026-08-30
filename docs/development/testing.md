@@ -127,3 +127,8 @@ requirement must name its phase and observing test. The checklist must contain
 one implementation task and one test gate for that requirement in the same
 phase. The check also rejects missing test modules and contract edits whose
 pinned digest differs from the reviewed digest in the checklist.
+
+The automatic-input contract marks one complete public workflow. Documentation
+tests parse that example and require every planned public constructor. They
+also require at least five used fields in each project-owned parameter model
+and comments beside every major authoring and execution handoff.
