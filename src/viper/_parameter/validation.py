@@ -170,5 +170,3 @@ def validate_stage_parameters(
                 "parameter validation worker returned no mapping"
             )
         return cast(dict[str, JsonValue], value)
-
-

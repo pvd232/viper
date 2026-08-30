@@ -51,10 +51,22 @@ _CONTRACT_BASELINE = re.compile(
     r"sha256=(?P<sha256>[0-9a-f]{64}) -->"
 )
 _PHASE_HEADING = re.compile(r"^## \d+\. Phase (?P<phase>\d+)\b.*$", re.MULTILINE)
+_PHASE_CAPABILITY = re.compile(
+    r"<!-- phase-(?P<role>produces|consumes): "
+    r"(?P<symbols>[A-Za-z0-9_., ]+) -->"
+)
 _CHECKBOX_BLOCK = re.compile(
     r"^- \[ \] .*?(?=^- \[ \] |^### |^## |\Z)",
     re.MULTILINE | re.DOTALL,
 )
+_ORDERED_CAPABILITIES = {
+    "KnowledgeVector",
+    "RetrievalJudgment",
+    "StageReuseKey",
+    "viper.catalog",
+    "viper.execution.run_many",
+    "viper.expand",
+}
 _COMPLETE_AUTHORING_EXAMPLE = re.compile(
     r"<!-- complete-authoring-example: start -->"
     r"(?P<body>.*?)"
@@ -688,7 +700,7 @@ def test_public_python_examples_are_syntactically_valid() -> None:
     """Require every published Python fence to parse with supported syntax."""
     for document in PUBLIC_MARKDOWN:
         for block in _python_blocks(document.read_text()):
-            ast.parse(block, filename=str(document))
+            ast.parse(block, filename=str(document), feature_version=(3, 11))
 
 
 def test_complete_authoring_example_covers_the_public_workflow() -> None:
@@ -989,6 +1001,39 @@ def test_contract_propagation_paths_enter_the_code_change_ledger() -> None:
             missing[contract.name] = absent
 
     assert missing == {}
+
+
+def test_master_checklist_orders_capability_producers_before_consumers() -> None:
+    """Reject a phase that consumes a named capability before it exists."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    phases = tuple(_PHASE_HEADING.finditer(checklist))
+    events: dict[str, dict[str, list[tuple[int, int]]]] = {
+        "produces": {},
+        "consumes": {},
+    }
+
+    for index, phase_match in enumerate(phases):
+        phase = int(phase_match.group("phase"))
+        end = phases[index + 1].start() if index + 1 < len(phases) else len(checklist)
+        section = checklist[phase_match.start() : end]
+        for checkbox in _CHECKBOX_BLOCK.finditer(section):
+            for marker in _PHASE_CAPABILITY.finditer(checkbox.group(0)):
+                position = phase_match.start() + checkbox.start() + marker.start()
+                for symbol in marker.group("symbols").split(","):
+                    events[marker.group("role")].setdefault(symbol.strip(), []).append(
+                        (phase, position)
+                    )
+
+    assert _ORDERED_CAPABILITIES <= events["produces"].keys()
+    assert _ORDERED_CAPABILITIES <= events["consumes"].keys()
+
+    for symbol, consumers in events["consumes"].items():
+        producers = events["produces"].get(symbol, [])
+        assert len(producers) == 1, symbol
+        producer_phase, producer_position = producers[0]
+        for consumer_phase, consumer_position in consumers:
+            assert producer_phase <= consumer_phase, symbol
+            assert producer_position < consumer_position, symbol
 
 
 def test_terminal_release_gate_follows_every_implementation_phase() -> None:

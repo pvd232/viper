@@ -15,7 +15,7 @@ These requirements bind the contract to the master checklist:
 | --- | --- |
 | EKP-01 <!-- contract-requirement: EKP-01 phase=16 test=tests/test_protocol.py --> | Define a versioned primitive ontology and declared, inferred, and reviewed assignment records. |
 | EKP-02 <!-- contract-requirement: EKP-02 phase=16 test=tests/test_verification_acceptance.py --> | Record controlled modulations, paired effects, impact assessments, diagnostic signatures, and evidence-backed journal assertions as immutable files. |
-| EKP-03 <!-- contract-requirement: EKP-03 phase=17 test=tests/test_inspection.py --> | Rebuild exact graph and filter indexes plus one optional HNSW index for each declared vector view. |
+| EKP-03 <!-- contract-requirement: EKP-03 phase=17 test=tests/test_inspection.py --> | Add vector views, vectors, retrieval judgments, exact graph and filter indexes, and one optional HNSW index for each declared vector view. |
 | EKP-04 <!-- contract-requirement: EKP-04 phase=17 test=tests/test_api.py --> | Expose the same knowledge publication and search operations through Python, typed API, CLI, and MCP. |
 
 ## 2. Required claim
@@ -490,6 +490,10 @@ class RetrievalJudgment(ProtocolModel):
     reviewed_at: AwareDatetime
 ```
 
+Phase 17 defines `VectorViewSpec` and `KnowledgeVector` before it defines
+`RetrievalJudgment`. The judgment consumes two published vector references, so
+its verifier can load both vectors and compare their view identity.
+
 `values` must contain exactly `view.dimensions` finite values. A diagnostic
 view requires the same ordered metric IDs as its source signature. A journal
 view requires a `JournalAssertion` source and records the exact embedder in the
@@ -821,6 +825,12 @@ def knowledge(
 ) -> KnowledgeStore: ...
 ```
 
+Phase 16 first implements `KnowledgeRecordKind`, `KnowledgeRecord`, and
+`KnowledgeStore` through `JournalAssertion`. Phase 17 extends those three
+owners with `KnowledgeVector`, `RetrievalJudgment`, `publish_vector()`, and
+`publish_retrieval_judgment()` after both vector models exist. The code above
+shows the complete target API after both phases.
+
 `destination=None` loads the repository's current `StorageSettings`. An
 explicit destination overrides that setting for this store. Every published
 reference contains its own local or cloud location, so a later configuration
@@ -960,7 +970,7 @@ refresh tools. Execute mode routes them through the same typed handlers.
 | --- | --- |
 | `src/viper/knowledge.py` | Add every ontology, assignment, modulation, effect, impact, diagnostic, journal, vector, retrieval-judgment, and publication model. |
 | `src/viper/catalog.py` | Add verified knowledge rows, graph edges, exact queries, vector-view metadata, and HNSW rebuilds. |
-| `src/viper/verification.py` | Dispatch ontology, assignment, comparison, impact, signature, assertion, and vector verification. |
+| `src/viper/verification.py` | Dispatch ontology, assignment, comparison, impact, signature, assertion, vector, and retrieval-judgment verification. |
 | `src/viper/api.py` | Add typed publication and search request and success models. |
 | `src/viper/_api/handlers.py` | Route knowledge operations through `KnowledgeStore` and `Catalog`. |
 | `src/viper/cli.py` | Add `knowledge publish`, `knowledge search`, and `knowledge refresh` commands. |
@@ -987,12 +997,16 @@ Every vector carries its source record and view identity.
 
 1. Add ontology, targets, and assignment models.
 2. Add modulation, paired effect, impact, diagnostic, and journal models.
-3. Add canonical publication and verification for each record.
-4. Extend catalog refresh with exact rows and graph edges.
-5. Add vector views and exhaustive exact-distance search.
-6. Add one optional HNSW index per view and fixed-fixture recall tests.
-7. Add Python, typed API, CLI, and MCP publication and search surfaces.
-8. Run the terminal generated-project and full-system gate.
+3. Add canonical publication and verification through `JournalAssertion`.
+4. Extend catalog refresh with exact non-vector rows and graph edges.
+5. Add vector views and `KnowledgeVector`, then extend publication and
+   verification for vectors.
+6. Add `RetrievalJudgment` after `KnowledgeVector`, then extend publication,
+   verification, and exact retrieval-judgment queries.
+7. Add exhaustive exact-distance search.
+8. Add one optional HNSW index per view and fixed-fixture recall tests.
+9. Add Python, typed API, CLI, and MCP publication and search surfaces.
+10. Run the terminal generated-project and full-system gate.
 
 ## 16. Research boundary
 

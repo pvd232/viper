@@ -150,8 +150,7 @@ def verify_run_result(
                 *attempt.metric_verification_files,
                 *attempt.log_files,
             )
-            if (identity := artifact_revision_identity(reference.stored_at))
-            is not None
+            if (identity := artifact_revision_identity(reference.stored_at)) is not None
         }
         if attempt_file_snapshots & current_attempt_file_snapshots:
             raise VerificationError(

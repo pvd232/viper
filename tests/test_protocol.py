@@ -957,6 +957,7 @@ class YAMLLoadingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "mapping keys must be scalar"):
                 load_stage_spec(path)
 
+
 class ExternalInputRootTests(unittest.TestCase):
     """Test provenance boundary class ."""
 

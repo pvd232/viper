@@ -258,13 +258,13 @@ review and a new digest.
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=0fe8e4ae5b70dd2e8a1221808214d0ecba5f2fd2ebb50e71cc43fe77939b1679 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=c44200917d64cbf9bab4684b4a7c0cd1f1a2d3be46e8d1c2bae07134b41312ec -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
 <!-- contract-baseline: remote-storage.md sha256=02e4e2efae37fa133b2f015ad63df2debe9442ba304390769ec8cdce14873502 -->
 <!-- contract-baseline: experiment-expansion.md sha256=f72e4efd429ba206972934b6788a341d40f079e6e1f320af758ecf1c3942a3d1 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=7140dfa7f324ea70be4b3bc667ed499c2e2c15c5e8c8a6c24b211acc60582cff -->
-<!-- contract-baseline: stage-reuse.md sha256=54d557563c6ddf336073231408b94939d3d8a491d0faaa0608959f19039a9d56 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=a32a87eb160786d5c0bd42a09bd9817deb5b47d0cfcb4ec98e1dcba339c25952 -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=ba0ec52e28796795deda34e0d48fa2d00199600110147cb67d3b75e2d0ecca3f -->
+<!-- contract-baseline: stage-reuse.md sha256=74ed511429334a24599ccbed49a4ce7d688bc865fed7bb2b9843d55345d2ce87 -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=777d5c5befd48d9366e4a3a3a91df8bed370d5122a515895b750fc32735d7137 -->
 
 ## 4. Specification-system review
 
@@ -1369,8 +1369,8 @@ python -m pytest tests/test_storage.py tests/test_cli.py tests/test_api.py -q
 [frozen plan Git identity](frozen-plan-git-identity.md), and
 [direct Viper Cloud publication](remote-storage.md).
 
-**Outcome:** The generated project and README teach the same API that the
-package executes.
+**Outcome:** The generated project and README teach the single-run API through
+freeze, run, benchmark, and restore.
 
 ### 17.1 Generated project
 
@@ -1394,7 +1394,8 @@ package executes.
 - [ ] Update `docs/reference/api.md`.
 - [ ] Replace the public `viper.http` module entry with the package-root
       `viper.http` decorator and package-root HTTP types.
-- [ ] Update `docs/reference/protocol.md` with every final model and alias.
+- [ ] Update `docs/reference/protocol.md` with every model and alias
+      implemented through Phase 11.
 - [ ] Update `docs/reference/versioning.md` if alpha compatibility language
       changes.
 - [ ] Update `docs/README.md` and release evidence.
@@ -1436,6 +1437,7 @@ limit.
 ### 18.1 Deterministic expansion
 
 - [ ] Add `RunIdMap` and `viper.expand()` to `src/viper/authoring.py`.
+      <!-- phase-produces: viper.expand -->
       <!-- implements: EXP-01 -->
 - [ ] Preserve `ExperimentDraft.variants` order and
       `ExperimentDraft.replicates` order.
@@ -1483,6 +1485,7 @@ file writes after expansion returns.
       failure and mark every unstarted path as skipped.
 - [ ] Let already running calls finish.
 - [ ] Export `run_many()` and the result models from `viper.execution`.
+      <!-- phase-produces: viper.execution.run_many -->
 
 ### 18.3 Typed API and CLI
 
@@ -1538,7 +1541,7 @@ evidence and returns exact references with every result.
 - [ ] Add `RunQuery`, `ArtifactQuery`, `MeasurementQuery`, `BenchmarkQuery`,
       their page models, and `CatalogRefreshResult`.
 - [ ] Create schema-version 1 tables for sources, runs, stages, inputs,
-      artifacts, files, measurements, benchmarks, edges, and stage-reuse keys.
+      artifacts, files, measurements, benchmarks, and edges.
 - [ ] Extract normalized rows from one `VerifiedRunResult`.
 - [ ] Share lineage-node and edge extraction with `src/viper/inspection.py`.
 - [ ] Resolve discovered local terminal paths to immutable terminal references
@@ -1573,9 +1576,8 @@ storage and out of protocol records.
 - [ ] Add stable sort keys, a maximum page size of 500, and opaque cursors that
       bind the query and last sort key.
 - [ ] Add `Catalog.lineage()` through the existing verified lineage builder.
-- [ ] Add a private stage-reuse-key lookup that returns complete source
-      references and metric evidence for Phase 14.
 - [ ] Add `viper.catalog(root=...)` and export the public query and page models.
+      <!-- phase-produces: viper.catalog -->
 - [ ] Put numeric epoch and step values before null summaries and include the
       immutable measurement reference as the final tie breaker.
 - [ ] Add typed `catalog_refresh`, `search_runs`, `search_artifacts`,
@@ -1620,6 +1622,11 @@ stage invocation.
 - [ ] Add `StageReuseMode` to project-owned stage drafts and frozen specs.
 - [ ] Add `reuse=` to `viper.stage()` and default it to `"never"`.
 - [ ] Add `ReuseFileIdentity`, `ReuseInputIdentity`, and `StageReuseKey`.
+      <!-- phase-produces: StageReuseKey -->
+- [ ] Extend the version-1 catalog with the `stage_reuse_keys` table and a
+      private candidate lookup that returns the complete source references and
+      metric evidence.
+      <!-- phase-consumes: StageReuseKey, viper.catalog -->
 - [ ] Normalize artifact paths back to their run-relative draft paths and omit
       the policy field before hashing the stage spec.
 - [ ] Include the target stage ID in `StageReuseKey`.
@@ -1654,6 +1661,7 @@ delimiter format.
 
 - [ ] Query catalog candidates in completion-time order with run and attempt
       tie breakers.
+      <!-- phase-consumes: StageReuseKey, viper.catalog -->
 - [ ] Select only a source with
       `source_stage.completion.kind == "executed"`. Reused completions remain
       searchable and stay outside the candidate source set.
@@ -1839,12 +1847,11 @@ one model with nullable classifier, reviewer, and confidence fields.
       changed impact label.
 - [ ] Add `DiagnosticComponent` and `DiagnosticSignature`. Sort components and
       hash their canonical tuple.
-- [ ] Add `RetrievalJudgment` with exact query and candidate vector references,
-      aspect labels, a reviewed relevance score from zero through three, and
-      reviewer identity.
 - [ ] Add `JournalEvidence` and `JournalAssertion`. Enforce review-field states
       and require effect or impact evidence for an exclusion.
-- [ ] Add `KnowledgeStore`, `viper.knowledge()`, and typed publish methods.
+- [ ] Add `KnowledgeRecordKind`, `KnowledgeRecord`, and `KnowledgeStore`
+      through `JournalAssertion`; add `viper.knowledge()` and the corresponding
+      typed publish methods.
       Validate every referenced record, serialize canonical JSON, call
       `publish_resolved_files()`, and return `KnowledgePublicationResult`.
       <!-- implements: EKP-02 -->
@@ -1859,7 +1866,7 @@ one model with nullable classifier, reviewer, and confidence fields.
 - [ ] Load the repository `StorageSettings` when `destination=None`. Accept an
       explicit local or cloud destination for cross-run knowledge records and
       keep that location in every returned reference.
-- [ ] Add verifier dispatch for every published knowledge record. Failed
+- [ ] Add verifier dispatch for every Phase 16 knowledge record. Failed
       validation stops before immutable publication.
 
 <details>
@@ -1913,19 +1920,31 @@ as derived search aids outside the evidence and duplicate-rejection rules.
 
 ### 23.1 Exact graph and vector views
 
+- [ ] Add `DiagnosticVectorView`, `JournalVectorView`, `VectorViewSpec`, and
+      `KnowledgeVector` with exact source and dimension validation.
+      <!-- phase-produces: KnowledgeVector -->
+- [ ] Add `RetrievalJudgment` after `KnowledgeVector`. Validate its query and
+      candidate vector references, shared view identity, aspect labels,
+      reviewed relevance score, and reviewer identity.
+      <!-- phase-consumes: KnowledgeVector -->
+      <!-- phase-produces: RetrievalJudgment -->
+- [ ] Extend `KnowledgeRecordKind`, `KnowledgeRecord`, `KnowledgeStore`, and
+      verifier dispatch with `KnowledgeVector`, `RetrievalJudgment`,
+      `publish_vector()`, and `publish_retrieval_judgment()`.
+      <!-- phase-consumes: KnowledgeVector, RetrievalJudgment -->
 - [ ] Add verified ontology, primitive, assignment, modulation, effect, impact,
       diagnostic, journal, vector-view, vector, and retrieval-judgment tables
       to catalog refresh.
+      <!-- phase-consumes: KnowledgeVector, RetrievalJudgment -->
 - [ ] Add typed exact queries for primitive labels, assignment origin and
       review state, comparison context, metric, impact, evidence kind, and
       graph neighbors. Run these filters before vector search.
 - [ ] Add exact retrieval-judgment filters by vector view, aspect, relevance,
       and reviewer.
+      <!-- phase-consumes: RetrievalJudgment -->
 - [ ] Add every exact query, catalog row, page, and `KnowledgeCatalog` method
       declared by the contract. Bind each cursor to the query and final sort
       key.
-- [ ] Add `DiagnosticVectorView`, `JournalVectorView`, `VectorViewSpec`, and
-      `KnowledgeVector` with exact source and dimension validation.
 - [ ] Add exhaustive cosine-distance search with stable distance and immutable
       reference ordering.
 - [ ] Add `knowledge = ["usearch>=2.26,<3"]` as an optional dependency. Use
@@ -1969,6 +1988,17 @@ recorded result to that fixture and those index settings.
 
 ### 23.3 Focused proof
 
+- [ ] Add exact vector-view, vector, retrieval-judgment, union, and JSON
+      round-trip cases to `tests/test_protocol.py`. Sever each vector source
+      and each retrieval-judgment vector reference in
+      `tests/test_verification_acceptance.py`.
+
+```bash
+python -m pytest \
+  tests/test_protocol.py \
+  tests/test_verification_acceptance.py -q
+```
+
 - [ ] Delete and rebuild exact graph and HNSW files. Cover every exact filter,
       graph edge, view boundary, dimension error, stable ordering, exhaustive
       fallback, and fixed-fixture recall. <!-- verifies: EKP-03 -->
@@ -2002,6 +2032,12 @@ phase.
 
 ### 24.1 Generated-project integration
 
+- [ ] Publish the complete workflow in `README.md`, `docs/reference/api.md`,
+      `docs/reference/protocol.md`, `docs/explanation/how-viper-works.md`, and
+      `docs/tutorials/getting-started.md`. The example covers expansion,
+      bounded execution, catalog search, verified stage reuse, knowledge
+      publication, and MCP access.
+      <!-- phase-consumes: viper.expand, viper.execution.run_many, viper.catalog, StageReuseKey, KnowledgeVector, RetrievalJudgment -->
 - [ ] Extend the generated project with two variants and two replicates.
 - [ ] Freeze and execute the complete expansion with bounded concurrency and a
       positive child-process timeout.
@@ -2018,8 +2054,9 @@ phase.
 
 - [ ] Run `tests/test_documentation.py`. Require exact contract baselines,
       one implementation and verification marker per requirement, exact
-      repeated class fields, exact catalog query fields, and a terminal phase
-      after every implementation phase.
+      repeated class fields, exact catalog query fields, producer-before-
+      consumer ordering, and a terminal phase after every implementation
+      phase.
 - [ ] Run the focused tests for every changed source and contract surface.
 - [ ] Run the generated-project acceptance test from the source checkout.
 
@@ -2095,7 +2132,7 @@ old contract.
 | `src/viper/_verification/plan.py` | Draft-derived graph, plan/source commit separation, keys, objectives, pointers, benchmarks | 4–8 |
 | `src/viper/_verification/metrics.py` | Parameter binding, complete benchmark metrics, and reused source metric evidence | 4, 8, 14 |
 | `src/viper/_verification/storage.py` | Cloud fetch, snapshot list, restore identity | 9, 10 |
-| `src/viper/verification.py` | Dispatch every new verifier rule | 2–10, 13, 14, 16 |
+| `src/viper/verification.py` | Dispatch every new verifier rule | 2–10, 13, 14, 16–17 |
 | `src/viper/execution/__init__.py` | Export restore, batch execution, and updated result types | 9, 10, 12 |
 | `src/viper/api.py` | Python freeze inputs, result refs, restore, batch, catalog, knowledge, and MCP-owned operation schemas | 5–17 |
 | `src/viper/_api/__init__.py` | Export the restore operation models and handler | 10 |
@@ -2118,7 +2155,7 @@ old contract.
 | `tests/test_benchmark_execution.py` | Complete results and optional criteria | 8, 9 |
 | `tests/test_storage.py` | Publisher, retrieval, restore, and reused-snapshot backends | 1, 9, 10, 14 |
 | `tests/test_verification.py` | All new verifier rules | 2–10, 14 |
-| `tests/test_verification_acceptance.py` | Tamper, graph, catalog-source, reuse, and knowledge-record rejection cases | 2–10, 13, 14, 16 |
+| `tests/test_verification_acceptance.py` | Tamper, graph, catalog-source, reuse, and knowledge-record rejection cases | 2–10, 13, 14, 16–17 |
 | `tests/test_preflight.py` | Frozen graph, plan commit, and source commit checks | 5–8 |
 | `tests/test_public_api.py` | `viper.http`, removed transport exports, decorators, keys, constructors, and knowledge exports | 2, 4–10, 17 |
 | `tests/test_parameter_validation.py` | Project and installed-VIPER parameter-model owners | 4 |

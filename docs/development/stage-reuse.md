@@ -436,7 +436,7 @@ through ordinary execution.
 | `src/viper/stages.py` | Add `StageReuseMode`, frozen policy, completion union, and resolved hierarchy changes. |
 | `src/viper/references.py` | Add `ResolvedStageReuseRef`. |
 | `src/viper/runs.py` | Permit executed and reused completion evidence while retaining ordered stage completion. |
-| `src/viper/catalog.py` | Compute, index, and query canonical reuse keys. |
+| `src/viper/catalog.py` | Extend the version-1 catalog with reuse-key rows, then compute, index, and query canonical reuse keys. |
 | `src/viper/execution/_attempt.py` | Look up candidates before worker startup and fall back to execution. |
 | `src/viper/execution/_resolution.py` | Build executed or reused resolved project-stage records. |
 | `src/viper/execution/_publication.py` | Publish reuse receipts and remapped target snapshots. |
@@ -469,7 +469,8 @@ stores in place of another cache directory.
 ## 13. Implementation order
 
 1. Add the policy, key, receipt, file mapping, and completion models.
-2. Add canonical key construction and catalog indexing.
+2. Extend the version-1 catalog with the `stage_reuse_keys` table and private
+   candidate lookup, then add canonical key construction and indexing.
 3. Add candidate lookup and full source verification.
 4. Add local and cloud target-snapshot publication from source files.
 5. Add source metric-evidence linking.

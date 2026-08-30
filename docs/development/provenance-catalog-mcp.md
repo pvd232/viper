@@ -14,7 +14,7 @@ These requirements bind the contract to the master checklist:
 | ID | Implementation obligation |
 | --- | --- |
 | PCM-01 <!-- contract-requirement: PCM-01 phase=13 test=tests/test_inspection.py --> | Build and atomically refresh a local catalog from immutable VIPER evidence. |
-| PCM-02 <!-- contract-requirement: PCM-02 phase=13 test=tests/test_verification_acceptance.py --> | Search runs, artifacts, measurements, benchmarks, lineage edges, and stage-reuse keys while keeping immutable records authoritative. |
+| PCM-02 <!-- contract-requirement: PCM-02 phase=13 test=tests/test_verification_acceptance.py --> | Search runs, artifacts, measurements, benchmarks, and lineage edges while keeping immutable records authoritative. |
 | PCM-03 <!-- contract-requirement: PCM-03 phase=15 test=tests/test_api.py --> | Generate deterministic MCP tool schemas from VIPER's typed operation models and route calls through the same handlers. |
 | PCM-04 <!-- contract-requirement: PCM-04 phase=15 test=tests/test_cli.py --> | Ship a local stdio MCP command with read-only default access and explicit execution access. |
 
@@ -40,7 +40,6 @@ The catalog can answer these questions from verified evidence:
 - Which artifacts came from one source commit?
 - Which measurements belong to one metric, variant, dataset, or environment?
 - Which benchmark results evaluated one model artifact?
-- Which completed stage has one exact stage-reuse key?
 
 Every answer includes a `ResolvedRunRef` or another immutable reference that
 the caller can verify. The SQLite row itself proves nothing.
@@ -252,7 +251,6 @@ The database has these version-1 tables:
 | `measurements` | One measured metric value |
 | `benchmarks` | One benchmark result |
 | `edges` | One lineage relation |
-| `stage_reuse_keys` | One verified stage candidate indexed by its reuse key |
 
 `Catalog.refresh()` follows this procedure:
 
@@ -408,10 +406,11 @@ boundary.
 
 ## 9. Stage-reuse dependency
 
-[`stage-reuse.md`](stage-reuse.md) uses the `stage_reuse_keys` table to find
-candidate stages. The catalog stores the complete `StageReuseKey`, the
-candidate `ResolvedRunRef`, successful attempt reference, stage reference,
-metric evidence, and completion time.
+[`stage-reuse.md`](stage-reuse.md) extends the version-1 catalog in Phase 14
+after it defines `StageReuseKey`. That extension adds the `stage_reuse_keys`
+table and the private candidate lookup. Each row stores the complete
+`StageReuseKey`, the candidate `ResolvedRunRef`, successful attempt reference,
+stage reference, metric evidence, and completion time.
 
 The executor verifies the selected candidate again before reuse. A matching
 catalog row supplies a candidate. Full source verification grants permission
@@ -500,8 +499,11 @@ wrapper converts only the MCP result envelope.
 1. Add catalog models and version-1 SQLite schema.
 2. Extract rows from one verified run.
 3. Add atomic rebuild, concurrent-reader proof, pagination, null ordering, and exact queries.
-4. Add the stage-reuse lookup consumed by the next contract.
-5. Add catalog typed operations and CLI commands.
-6. Add the optional MCP dependency and stdio server.
-7. Generate tools from the typed operation registry.
-8. Add access-mode, schema-equality, structured-result, and path-boundary tests.
+4. Add catalog typed operations and CLI commands.
+5. Add the optional MCP dependency and stdio server.
+6. Generate tools from the typed operation registry.
+7. Add access-mode, schema-equality, structured-result, and path-boundary tests.
+
+The verified-stage-reuse contract adds reuse-key indexing and lookup in Phase
+14. The catalog contract supplies the database, refresh, and query machinery
+that extension uses.

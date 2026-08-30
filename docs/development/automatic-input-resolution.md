@@ -18,7 +18,7 @@ These requirements bind the contract to the master checklist:
 | AIR-03 <!-- contract-requirement: AIR-03 phase=5 test=tests/test_authoring.py --> | Replace YAML-backed stage drafts with Python `StageSpecDraft` models and artifact handles. |
 | AIR-04 <!-- contract-requirement: AIR-04 phase=6 test=tests/test_authoring.py --> | Compile experiment, variant, replicate, metric, stage, benchmark, and run documents from one plan. |
 | AIR-05 <!-- contract-requirement: AIR-05 phase=7 test=tests/test_verification_acceptance.py --> | Compile local, same-run, and prior-run inputs and publish prior-run pointers through the selected destination. |
-| AIR-06 <!-- contract-requirement: AIR-06 phase=11 test=tests/test_documentation.py --> | Remove retired authoring forms and publish the complete end-to-end Python workflow. |
+| AIR-06 <!-- contract-requirement: AIR-06 phase=11 test=tests/test_documentation.py --> | Remove retired authoring forms and publish the complete single-run Python workflow through freeze, run, benchmark, and restore. |
 
 **Current:** Project code defines stages with `@viper.download_stage`,
 `@viper.train_stage`, and a subclass of `viper.parameters.Train`. Each stage
@@ -2874,6 +2874,13 @@ download, local-root capture, and metric runtime in the
 [`master execution checklist`](master-execution-checklist.md#5-dependency-order).
 This section groups the work owned by the automatic-input contract. The master
 checklist supplies the cross-contract commit order.
+
+Phase 11 publishes the single-run workflow through `viper.freeze()`,
+`viper.execution.run()`, `viper.execution.benchmark()`, and restore. The
+complete target example also shows `viper.expand()`,
+`viper.execution.run_many()`, verified stage reuse, `viper.catalog()`, and the
+knowledge API. Their owning contracts implement those calls in Phases 12–17.
+Phase 18 publishes the combined workflow after those phases pass.
 
 ### Phase 1. Define the Python authoring models
 

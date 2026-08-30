@@ -42,7 +42,6 @@ class HttpSource(ProtocolModel):
     transport: HttpTransportSpec
 
 
-
 ExternalInputSource = Annotated[LocalSource | HttpSource, Field(discriminator="kind")]
 
 

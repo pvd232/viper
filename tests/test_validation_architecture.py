@@ -27,9 +27,7 @@ def _shared_private_symbols(source_root: Path) -> list[tuple[Path, int, str]]:
             if not isinstance(node, ast.ImportFrom):
                 continue
             for imported in node.names:
-                if imported.name.startswith("_") and not imported.name.startswith(
-                    "__"
-                ):
+                if imported.name.startswith("_") and not imported.name.startswith("__"):
                     violations.append(
                         (path.relative_to(source_root), node.lineno, imported.name)
                     )
@@ -66,9 +64,7 @@ def test_private_package_rejects_an_underscored_module(tmp_path: Path) -> None:
     module.parent.mkdir(parents=True)
     module.write_text("def launch():\n    return None\n", encoding="utf-8")
 
-    assert _redundant_private_modules(source_root) == [
-        Path("_runtime/_process.py")
-    ]
+    assert _redundant_private_modules(source_root) == [Path("_runtime/_process.py")]
 
 
 def test_cross_module_import_rejects_an_underscored_symbol(tmp_path: Path) -> None:
