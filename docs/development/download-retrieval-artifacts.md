@@ -322,7 +322,7 @@ download = viper.download(
         timeout_seconds=10.0,
     ),
     artifacts={
-        "dataset": viper.file_artifact(
+        "dataset": viper.artifact(
             path=DATASET_PATH,
             loader=load_dataset,
             data_role="training",

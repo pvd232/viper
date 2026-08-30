@@ -21,8 +21,8 @@ training = viper.stage(
     params=TrainParams(...),
     inputs={"dataset": downloaded.artifacts["dataset"]},
     artifacts={
-        Train.MODEL: viper.file_artifact(...),
-        Train.STATE: viper.file_artifact(...),
+        Train.MODEL: viper.artifact(...),
+        Train.STATE: viper.artifact(...),
     },
     objective=viper.min(training_loss),
     metrics=(gradient_norm,),
@@ -184,10 +184,10 @@ focused test. The matching phase contains one `implements` marker and one
 exact reviewed contract bytes. A contract edit requires another checklist
 review and a new digest.
 
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=bcea89d5cbc0b77a760aa40b8f1234b93d54662f2494dc6bc93a093b2b6ad420 -->
-<!-- contract-baseline: external-input-roots.md sha256=bff7878600cf7098a9e3455ccff2f7cb475aeae967934e4967c8784412a4d1f1 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=1ccc0f118115e78167c07d69f9dff79ada46b787b34f4a0a8ef9a4e2c32b570d -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=679ad0b2cdcd151692a8bd47c91760bd8d9250d97942aebead2ca9d7ddae2ce5 -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=ce7d3b9a7a8daf90448081afd46280f9f2ef4bdc0e091e025d99dd8a570ca0e1 -->
+<!-- contract-baseline: external-input-roots.md sha256=94b40fe6f0fbcfc06c850512b5dabfe746c7320b1994fdd81b07fde3ce33fe2c -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=3ea7fb6649d602fce02a1d0d9aeb7faded3362e922c4125d53eb41c2fb99b715 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=5f0b82ef53e240f9d7c5e85ec9a51b4d8e750582e575b117d027d19dffe18307 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
 <!-- contract-baseline: remote-storage.md sha256=5f7a7c483973f03cb434d9fdfbc63633a21bb7310c138d7ef4807cb8bf377e58 -->
 
@@ -748,7 +748,10 @@ writing stage YAML by hand.
       `viper.download(http=..., params=...)`; remove `viper.transport()`.
 - [ ] Add `RunArtifactPath` validation.
 - [ ] Add `SingleFileArtifactDraft` and `BundleArtifactDraft`.
-- [ ] Add `viper.file_artifact()` and the bundle constructor.
+- [ ] Add one `viper.artifact()` constructor. It returns a single-file draft by
+      default and a bundle draft when `kind="bundle"`.
+- [ ] Export `viper.artifact` from `src/viper/__init__.py`; omit a second public
+      constructor for either representation.
 - [ ] Add `BuiltinHttpImplementationSpec | CustomHttpDraft` authoring and
       compile it into `HttpImplementationSpec`.
       <!-- implements: AIR-02 -->
@@ -787,6 +790,9 @@ for a second replicate must leave the draft unchanged.
 
 - [ ] Rewrite `tests/test_authoring.py` around Python drafts.
 - [ ] Add decorator and key tests to `tests/test_public_api.py`.
+- [ ] Assert that `viper.artifact()` returns `SingleFileArtifactDraft`, that
+      `viper.artifact(kind="bundle")` returns `BundleArtifactDraft`, and that a
+      download draft rejects the bundle form.
 - [ ] Add two-run path compilation to `tests/test_protocol.py`.
 - [ ] Run: <!-- verifies: AIR-01, AIR-02, AIR-03 -->
 

@@ -72,7 +72,7 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.execution.run",
     "viper.experiment",
     "viper.factor",
-    "viper.file_artifact",
+    "viper.artifact",
     "viper.file_input",
     "viper.freeze",
     "viper.http",
@@ -88,6 +88,7 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
 }
 
 RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS = {
+    "viper.file_artifact",
     "viper.http_transport",
     "viper.transport",
 }
@@ -647,5 +648,6 @@ def test_current_docs_do_not_reference_retired_public_modules() -> None:
     assert "viper.protocol" not in text
     assert "viper.runner" not in text
     assert "viper.verifier" not in text
+    assert "viper.file_artifact" not in text
     assert "docs/contracts" not in text
     assert "PUBLICATION_TODO" not in text

@@ -886,12 +886,12 @@ baseline_training = viper.stage(
         ),
     },
     artifacts={
-        Train.MODEL: viper.file_artifact(
+        Train.MODEL: viper.artifact(
             path="artifacts/models/logistic_regression/model.pt",
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.file_artifact(
+        Train.STATE: viper.artifact(
             path="artifacts/models/logistic_regression/state.pt",
             loader=load_resume_state_artifact,
             data_role="training",
@@ -918,12 +918,12 @@ high_rate_training = viper.stage(
         ),
     },
     artifacts={
-        Train.MODEL: viper.file_artifact(
+        Train.MODEL: viper.artifact(
             path="artifacts/models/logistic_regression/model.pt",
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.file_artifact(
+        Train.STATE: viper.artifact(
             path="artifacts/models/logistic_regression/state.pt",
             loader=load_resume_state_artifact,
             data_role="training",

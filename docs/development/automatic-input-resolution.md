@@ -896,12 +896,13 @@ complete experiment merge rules belong to
 The public constructors produce the draft models above:
 
 ```python
-def file_artifact(
+def artifact(
     *,
     path: RunArtifactPath,
     loader: Callable[[Path], object],
     data_role: DataRole,
-) -> SingleFileArtifactDraft: ...
+    kind: Literal["file", "bundle"] = "file",
+) -> ArtifactDraft: ...
 
 
 def file_input(
@@ -960,6 +961,30 @@ def plan(
 
 def freeze(plan: RunPlanDraft, *, root: Path = Path.cwd()) -> FrozenPlanFiles: ...
 ```
+
+`viper.artifact()` declares one named stage output. Omitting `kind` returns a
+`SingleFileArtifactDraft`. Passing `kind="bundle"` returns a
+`BundleArtifactDraft` whose path names the bundle's directory root.
+
+```python
+model = viper.artifact(
+    path="artifacts/models/classifier/model.pt",
+    loader=load_weights,
+    data_role="training",
+)
+
+tokenizer = viper.artifact(
+    path="artifacts/models/classifier/tokenizer",
+    loader=load_tokenizer,
+    data_role="training",
+    kind="bundle",
+)
+```
+
+Both drafts carry the same authoring fields. Their `kind` value controls which
+frozen `ArtifactSpec` and resolved artifact type VIPER writes. A download stage
+accepts the single-file form because each HTTP response has one body. Project
+stages accept either form.
 
 The result exposes the paths consumed by later public operations:
 
@@ -1273,7 +1298,7 @@ download = viper.download(
         timeout_seconds=10.0,
     ),
     artifacts={
-        "training_dataset": viper.file_artifact(
+        "training_dataset": viper.artifact(
             path=TRAINING_DATASET_PATH,
             loader=load_dataset,
             data_role="training",
@@ -1503,7 +1528,7 @@ normalization = viper.stage(
         "schema": feature_schema,
     },
     artifacts={
-        "normalization": viper.file_artifact(
+        "normalization": viper.artifact(
             path=NORMALIZATION_PATH,
             loader=load_json_object,
             data_role="training",
@@ -1608,7 +1633,7 @@ training_embeddings = viper.stage(
         "normalization": normalization.artifacts["normalization"],
     },
     artifacts={
-        "embeddings": viper.file_artifact(
+        "embeddings": viper.artifact(
             path=TRAINING_EMBEDDINGS_PATH,
             loader=load_embeddings,
             data_role="training",
@@ -1719,12 +1744,12 @@ training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": training_embeddings.artifacts["embeddings"]},
     artifacts={
-        Train.MODEL: viper.file_artifact(
+        Train.MODEL: viper.artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.file_artifact(
+        Train.STATE: viper.artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
@@ -1831,7 +1856,7 @@ evaluation = viper.stage(
         "holdout": benchmark_split,
     },
     artifacts={
-        Eval.PREDS: viper.file_artifact(
+        Eval.PREDS: viper.artifact(
             path=PREDICTIONS_PATH,
             loader=load_predictions,
             data_role="evaluation",
@@ -1982,7 +2007,7 @@ The public calls build one dependency graph in this order:
 | Public call | Value it creates | Next consumer |
 | --- | --- | --- |
 | `@viper.http(...)` | Decorated HTTP implementation | `viper.download(http=...)` |
-| `viper.file_artifact(...)` | Artifact declaration with path, loader, and role | `viper.download()` or `viper.stage()` |
+| `viper.artifact(...)` | One file artifact by default, or one bundle when `kind="bundle"` | `viper.download()` or `viper.stage()` |
 | `viper.file_input(...)` | Local-file input declaration | `viper.stage()` |
 | `viper.download(...)` | Runner-owned download `StageDraft` | `VariantDraft.stages` and `download.artifacts[...]` |
 | `@viper.metric(...)` | Decorated metric implementation | `viper.measure()` |
@@ -2152,12 +2177,12 @@ local_training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": local_embeddings},
     artifacts={
-        Train.MODEL: viper.file_artifact(
+        Train.MODEL: viper.artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.file_artifact(
+        Train.STATE: viper.artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
@@ -2185,12 +2210,12 @@ prior_training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": prior_embeddings},
     artifacts={
-        Train.MODEL: viper.file_artifact(
+        Train.MODEL: viper.artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.file_artifact(
+        Train.STATE: viper.artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
@@ -2497,7 +2522,7 @@ overwrite rules, and review ownership.
 | Metric, objective, and experiment API | Implement [`unified-metric-drafting.md`](unified-metric-drafting.md) | Stages receive configured metrics, objectives carry direction, and experiments derive one metric registry |
 | Download API | Add runner-owned `viper.download()` and remove the project download callable from the target contract | A download draft contains request, HTTP implementation, policy, environment, metrics, and artifacts; project stage implementation and stage parameters belong to the other stage drafts |
 | HTTP API | Add `@viper.http(id=..., params=...)`; pass the decorated function and its optional parameter instance through `viper.download(http=..., params=...)` | The example freezes and invokes `project_httpx` through the base HTTP parameters |
-| Artifact API | Add `viper.file_artifact()` and callable-backed artifact drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
+| Artifact API | Add `viper.artifact()` and callable-backed file and bundle drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
 | Artifact paths | Accept run-relative `ArtifactDraft.path` values and prefix the selected run root during freezing | One variant graph can be reused across replicates while every frozen `ArtifactSpec.path` remains concrete |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `FileInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
@@ -2544,7 +2569,7 @@ replacement:
 | YAML `spec_source` authoring and generated draft-stage files | Replace | `StageDraft.spec` holds the Python-authored declaration until freezing writes canonical YAML. |
 | `@viper.http_transport(transport_id=..., parameter_model=...)` | Replace | `@viper.http(id=..., params=...)` defaults to `viper.params.Http`. |
 | `viper.transport()` and required empty transport parameter instances | Delete | `viper.download(http=request)` constructs the base `viper.params.Http` instance. |
-| Direct `SingleFileArtifactSpec` construction in public examples | Replace | `viper.file_artifact()` accepts the loader callable and freezing writes `ArtifactLoaderRef`. |
+| Direct `SingleFileArtifactSpec` or `BundleArtifactSpec` construction in public examples | Replace | `viper.artifact()` accepts the loader callable and optional `kind`; freezing writes `ArtifactLoaderRef`. |
 | Full run paths repeated in every `ArtifactDraft` | Replace | Drafts use `RunArtifactPath`; freezing prefixes `experiments/<experiment-id>/runs/<variant-id>/<run-id>/`. |
 | Bare `metric_ids=` in Python stage authoring | Replace | `objective=` accepts `MetricObjectiveDraft`; `metrics=` accepts `MetricDraft` values; freezing writes the IDs. |
 | Manual `MetricImplementationRef` construction in public examples | Replace | `viper.measure()` accepts the decorated metric and freezing records its exact source identity. |
@@ -2588,6 +2613,16 @@ count, worker startup comparison, and local-root verification. Changing the
 snapshot bytes or invocation input path triggers `input.local_root_identity`.
 The check proves which path and bytes VIPER supplied. Project callable file
 access remains outside the observed boundary.
+
+### Artifact constructor
+
+Construct `viper.artifact()` with the default `kind` and assert that it returns a
+`SingleFileArtifactDraft` with `kind == "file"`. Construct it with
+`kind="bundle"` and assert that it returns a `BundleArtifactDraft` with
+`kind == "bundle"`. Freeze both declarations and assert that the resulting
+`ArtifactSpec` values preserve the selected kind, path, loader identity, and
+data role. Pass the bundle declaration to `viper.download()` and assert that
+draft validation rejects it.
 
 ### Complete candidate and benchmark pipeline
 
@@ -2686,7 +2721,7 @@ checklist supplies the cross-contract commit order.
       authoring union.
 - [ ] Add `viper.params`, the shortened project-stage decorators,
       `viper.stage()`, `viper.download()`, `viper.http()`,
-      `viper.file_artifact()`, `viper.file_input()`, `viper.run_artifact()`,
+      `viper.artifact()`, `viper.file_input()`, `viper.run_artifact()`,
       `viper.plan()`, and `viper.freeze()` constructors.
 - [ ] Add `viper.keys.Train` and `viper.keys.Eval`; replace the private
       duplicate constants with enum members.

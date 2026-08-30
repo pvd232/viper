@@ -365,7 +365,7 @@ download = viper.download(
         timeout_seconds=10.0,
     ),
     artifacts={
-        "dataset": viper.file_artifact(
+        "dataset": viper.artifact(
             path=DATASET_PATH,
             loader=load_dataset,
             data_role="training",
@@ -511,12 +511,12 @@ training = viper.stage(
     params=TRAIN_PARAMS,
     inputs={"dataset": same_run_dataset},
     artifacts={
-        Train.MODEL: viper.file_artifact(
+        Train.MODEL: viper.artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.file_artifact(
+        Train.STATE: viper.artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
