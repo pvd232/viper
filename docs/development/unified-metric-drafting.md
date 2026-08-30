@@ -880,7 +880,7 @@ baseline_training = viper.stage(
         max_gradient_norm=1.0,
     ),
     inputs={
-        "dataset": viper.file_input(
+        "dataset": viper.input(
             path="inputs/training_embeddings.csv",
             data_role="training",
         ),
@@ -912,7 +912,7 @@ high_rate_training = viper.stage(
         max_gradient_norm=1.0,
     ),
     inputs={
-        "dataset": viper.file_input(
+        "dataset": viper.input(
             path="inputs/training_embeddings.csv",
             data_role="training",
         ),

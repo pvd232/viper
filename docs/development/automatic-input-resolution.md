@@ -905,7 +905,7 @@ def artifact(
 ) -> ArtifactDraft: ...
 
 
-def file_input(
+def input(
     *,
     path: RepoRelPath,
     data_role: DataRole,
@@ -985,6 +985,11 @@ Both drafts carry the same authoring fields. Their `kind` value controls which
 frozen `ArtifactSpec` and resolved artifact type VIPER writes. A download stage
 accepts the single-file form because each HTTP response has one body. Project
 stages accept either form.
+
+`viper.input()` declares one repository file whose bytes enter VIPER at the
+consuming stage. It returns `FileInputDraft`. Freezing converts that draft into
+`ExternalInputRef`. Same-run inputs use `stage.artifacts[name]`; prior-run
+inputs use `viper.run_artifact()`.
 
 The result exposes the paths consumed by later public operations:
 
@@ -1438,17 +1443,17 @@ evaluation_accuracy_metric = viper.measure(
 )
 
 
-# viper.file_input() declares bytes that already exist in the repository. The
+# viper.input() declares bytes that already exist in the repository. The
 # build stage receives an attempt-owned capture of this file, while the
 # download artifact reaches the same stage through a same-run artifact handle.
-feature_schema = viper.file_input(
+feature_schema = viper.input(
     path="inputs/feature_schema.json",
     data_role="training",
 )
 
 
 class BuildParams(viper.params.Build):
-    minimum_rows: int = Field(ge=2)
+    min_rows: int = Field(ge=2)
     expected_feature_count: int = Field(ge=1)
     standard_deviation_floor: float = Field(gt=0.0)
     require_unique_row_ids: bool
@@ -1465,7 +1470,7 @@ def build_normalization(
     schema = load_json_object(context.inputs["schema"])
     params = context.params
 
-    if len(rows) < params.minimum_rows:
+    if len(rows) < params.min_rows:
         raise ValueError("training data contains too few rows")
 
     raw_features = schema.get("features")
@@ -1513,7 +1518,7 @@ def build_normalization(
 
 
 BUILD_PARAMS = BuildParams(
-    minimum_rows=8,
+    min_rows=8,
     expected_feature_count=2,
     standard_deviation_floor=1e-6,
     require_unique_row_ids=True,
@@ -1538,10 +1543,10 @@ normalization = viper.stage(
 
 
 class EmbedParams(viper.params.Embed):
-    projection_a: float
-    projection_b: float
-    projection_bias: float
-    minimum_projection_norm: float = Field(gt=0.0)
+    proj_a: float
+    proj_b: float
+    proj_bias: float
+    min_proj_norm: float = Field(gt=0.0)
     clip_magnitude: float = Field(gt=0.0)
     output_decimals: int = Field(ge=1, le=12)
 
@@ -1559,15 +1564,15 @@ def embed(context: viper.StageContext[EmbedParams]) -> None:
     if not isinstance(means, dict) or not isinstance(scales, dict):
         raise TypeError("normalization artifact has invalid statistics")
 
-    projection_norm = math.hypot(
-        params.projection_a,
-        params.projection_b,
+    proj_norm = math.hypot(
+        params.proj_a,
+        params.proj_b,
     )
-    if projection_norm < params.minimum_projection_norm:
-        raise ValueError("embedding projection norm is too small")
+    if proj_norm < params.min_proj_norm:
+        raise ValueError("embedding proj norm is too small")
 
-    unit_a = params.projection_a / projection_norm
-    unit_b = params.projection_b / projection_norm
+    unit_a = params.proj_a / proj_norm
+    unit_b = params.proj_b / proj_norm
     embedded_rows: list[tuple[int, float, int]] = []
     reconstruction_errors: list[float] = []
 
@@ -1582,7 +1587,7 @@ def embed(context: viper.StageContext[EmbedParams]) -> None:
         value = (
             standardized_a * unit_a
             + standardized_b * unit_b
-            + params.projection_bias
+            + params.proj_bias
         )
         value = max(-params.clip_magnitude, min(params.clip_magnitude, value))
         value = round(value, params.output_decimals)
@@ -1615,10 +1620,10 @@ def embed(context: viper.StageContext[EmbedParams]) -> None:
 
 
 EMBED_PARAMS = EmbedParams(
-    projection_a=0.8,
-    projection_b=0.6,
-    projection_bias=0.0,
-    minimum_projection_norm=1e-6,
+    proj_a=0.8,
+    proj_b=0.6,
+    proj_bias=0.0,
+    min_proj_norm=1e-6,
     clip_magnitude=8.0,
     output_decimals=8,
 )
@@ -2008,7 +2013,7 @@ The public calls build one dependency graph in this order:
 | --- | --- | --- |
 | `@viper.http(...)` | Decorated HTTP implementation | `viper.download(http=...)` |
 | `viper.artifact(...)` | One file artifact by default, or one bundle when `kind="bundle"` | `viper.download()` or `viper.stage()` |
-| `viper.file_input(...)` | Local-file input declaration | `viper.stage()` |
+| `viper.input(...)` | Local input entering directly at the consuming stage | `viper.stage()` |
 | `viper.download(...)` | Runner-owned download `StageDraft` | `VariantDraft.stages` and `download.artifacts[...]` |
 | `@viper.metric(...)` | Decorated metric implementation | `viper.measure()` |
 | `viper.measure(...)` | Configured `MetricDraft` | Stage objective, stage metrics, and benchmark metrics |
@@ -2067,14 +2072,14 @@ Every parameter changes a runtime operation:
 
 | Parameter | Effect |
 | --- | --- |
-| `BuildParams.minimum_rows` | Rejects a training dataset below the declared sample floor. |
+| `BuildParams.min_rows` | Rejects a training dataset below the declared sample floor. |
 | `BuildParams.expected_feature_count` | Checks the local feature schema before calculating statistics. |
 | `BuildParams.standard_deviation_floor` | Keeps every normalization divisor above zero. |
 | `BuildParams.require_unique_row_ids` | Enables the duplicate-row-ID rejection. |
 | `BuildParams.allowed_labels` | Defines the accepted training labels. |
-| `EmbedParams.projection_a` and `projection_b` | Define the one-dimensional projection and reconstruction. |
-| `EmbedParams.projection_bias` | Shifts every projected value. |
-| `EmbedParams.minimum_projection_norm` | Rejects a projection vector whose norm is too small. |
+| `EmbedParams.proj_a` and `proj_b` | Define the one-dimensional projection and reconstruction. |
+| `EmbedParams.proj_bias` | Shifts every projected value. |
+| `EmbedParams.min_proj_norm` | Rejects a projection vector whose norm is too small. |
 | `EmbedParams.clip_magnitude` | Bounds each projected value before persistence. |
 | `EmbedParams.output_decimals` | Sets the stored embedding precision. |
 | `TrainParams.epochs` | Controls the number of complete training passes. |
@@ -2160,14 +2165,14 @@ experiment metric registry from these stage selections.
 ### Complete local-file and prior-run selections
 
 The complete program uses every input route. `feature_schema` enters through
-`viper.file_input()`. The download, normalization, embeddings, and model enter
+`viper.input()`. The download, normalization, embeddings, and model enter
 later stages through same-run artifact handles. `benchmark_test` and
 `benchmark_split` enter through `viper.run_artifact()`.
 
 The following alternative trains directly from a local embeddings file:
 
 ```python
-local_embeddings = viper.file_input(
+local_embeddings = viper.input(
     path="inputs/raw/training_embeddings.csv",
     data_role="training",
 )
@@ -2473,7 +2478,7 @@ document.
 Users can choose an input in three ways:
 
 ```text
-viper.file_input(path="inputs/raw/dataset.csv", data_role="training")
+viper.input(path="inputs/raw/dataset.csv", data_role="training")
 -> compiler writes ExternalInputRef
 -> context.inputs["dataset"]
 
@@ -2562,7 +2567,7 @@ replacement:
 | `@viper.build_stage`, `@viper.embed_stage`, `@viper.train_stage`, and `@viper.evaluate_stage` | Replace | `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.evaluate` use `params=`. |
 | Private `PARAMETERS`, `RESUME_STATE`, `PARAMETERS_INPUT`, `RESUME_STATE_INPUT`, `EVALUATION_DATASET_INPUT`, and `PREDICTIONS` constants | Replace | `viper.keys.Train` and `viper.keys.Eval` replace the old constants and rename the frozen map keys to `model`, `state`, `test`, and `preds`. |
 | `StageDraft.stage_id` and tuple-valued `RunPlanDraft.stages` | Replace | `VariantDraft.stages` mapping keys own stage IDs. |
-| Direct `ExternalInputRef` construction in public authoring | Replace | `viper.file_input()` creates `FileInputDraft`; freezing writes `ExternalInputRef`. |
+| Direct `ExternalInputRef` construction in public authoring | Replace | `viper.input()` creates `FileInputDraft`; freezing writes `ExternalInputRef`. |
 | Proposed prior-run construction through `RunArtifactRef` | Replace | `viper.run_artifact()` creates `RunArtifactDraft`; freezing verifies the completed run and writes the pointer. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | Use `ResolvedArtifactPointerRef` so the frozen input carries pointer byte identity and a local, Git, or remote storage location. |
 | `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Replace | Inherit `ResolvedFileRef`, whose `stored_at` field accepts `StorageRef`; retain canonical pointer-path validation in `StoredInputRef`. |
@@ -2594,7 +2599,10 @@ contains its own selected run root.
 ### Local file and training
 
 The acceptance fixture creates `inputs/raw/training_embeddings.csv` and selects
-it through `viper.file_input()`.
+it through `viper.input()`.
+
+The test first asserts that `viper.input(path=..., data_role=...)` returns a
+`FileInputDraft` carrying the same path and role.
 
 ```text
 freeze the run plan
@@ -2721,7 +2729,7 @@ checklist supplies the cross-contract commit order.
       authoring union.
 - [ ] Add `viper.params`, the shortened project-stage decorators,
       `viper.stage()`, `viper.download()`, `viper.http()`,
-      `viper.artifact()`, `viper.file_input()`, `viper.run_artifact()`,
+      `viper.artifact()`, `viper.input()`, `viper.run_artifact()`,
       `viper.plan()`, and `viper.freeze()` constructors.
 - [ ] Add `viper.keys.Train` and `viper.keys.Eval`; replace the private
       duplicate constants with enum members.

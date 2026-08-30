@@ -73,7 +73,7 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.experiment",
     "viper.factor",
     "viper.artifact",
-    "viper.file_input",
+    "viper.input",
     "viper.freeze",
     "viper.http",
     "viper.measure",
@@ -89,6 +89,7 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
 
 RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.file_artifact",
+    "viper.file_input",
     "viper.http_transport",
     "viper.transport",
 }
@@ -100,7 +101,7 @@ COMPLETE_EXAMPLE_COMMENT_TOPICS = {
     "viper.download() declares a runner-owned stage",
     "Live metrics receive values",
     "viper.measure() supplies concrete parameters",
-    "viper.file_input() declares bytes",
+    "viper.input() declares bytes",
     "build stage turns source data",
     "input handles become two FutureInputRef records",
     "decorated function owns model computation",
@@ -649,5 +650,6 @@ def test_current_docs_do_not_reference_retired_public_modules() -> None:
     assert "viper.runner" not in text
     assert "viper.verifier" not in text
     assert "viper.file_artifact" not in text
+    assert "viper.file_input" not in text
     assert "docs/contracts" not in text
     assert "PUBLICATION_TODO" not in text

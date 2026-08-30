@@ -185,9 +185,9 @@ exact reviewed contract bytes. A contract edit requires another checklist
 review and a new digest.
 
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=ce7d3b9a7a8daf90448081afd46280f9f2ef4bdc0e091e025d99dd8a570ca0e1 -->
-<!-- contract-baseline: external-input-roots.md sha256=94b40fe6f0fbcfc06c850512b5dabfe746c7320b1994fdd81b07fde3ce33fe2c -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=3ea7fb6649d602fce02a1d0d9aeb7faded3362e922c4125d53eb41c2fb99b715 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=5f0b82ef53e240f9d7c5e85ec9a51b4d8e750582e575b117d027d19dffe18307 -->
+<!-- contract-baseline: external-input-roots.md sha256=3316e1df492aae06f6df5f9205707a846d7f63abf27e9b155c4623e3b07a960e -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=caabcea0d8eaa1f0e82687d02f17ec3c8349bdd8b175768785abd9ea9beb1e8c -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=307bdfd1a52de1937102234e7a9a3703ec3869b965cd1cffe4f8a556ba5928b3 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
 <!-- contract-baseline: remote-storage.md sha256=5f7a7c483973f03cb434d9fdfbc63633a21bb7310c138d7ef4807cb8bf377e58 -->
 
@@ -905,11 +905,12 @@ the correct provenance edge.
 
 ### 13.1 Draft values
 
-- [ ] Add `FileInputDraft` and `viper.file_input()`.
+- [ ] Add `FileInputDraft` and one public `viper.input()` constructor.
 - [ ] Add `RunArtifactDraft` and `viper.run_artifact()`.
       <!-- implements: EIR-04 -->
 - [ ] Define `StageInputDraft = FileInputDraft | StageDraftArtifactRef |
       RunArtifactDraft`.
+- [ ] Export `viper.input` from `src/viper/__init__.py`.
 - [ ] Accept `StageInputDraft` in internal stage drafts.
 
 ### 13.2 Compilation
@@ -944,6 +945,8 @@ mode. The ordinary API accepts drafts.
 
 ### 13.3 Focused proof
 
+- [ ] Assert that `viper.input(path=..., data_role=...)` returns the expected
+      `FileInputDraft`.
 - [ ] Add local, same-run, and prior-run cases to `tests/test_authoring.py`.
 - [ ] Add stage-order and missing-artifact rejections.
 - [ ] Extend `tests/test_run_execution.py` through actual materialization.
