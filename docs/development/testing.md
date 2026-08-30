@@ -128,6 +128,39 @@ one implementation task and one test gate for that requirement in the same
 phase. The check also rejects missing test modules and contract edits whose
 pinned digest differs from the reviewed digest in the checklist.
 
+That is the current requirement-level check. Phase 0 implements the stricter
+[contract requirement traceability](contract-requirement-traceability.md)
+contract:
+
+```text
+requirement ID
+-> named verifier rule
+-> exact implementation file and symbol
+-> exact test file and test function
+```
+
+The requirement states the promised behavior. The verifier rule names the
+condition VIPER checks. The implementation symbol performs that check. The test
+supplies the accepted or rejected value. Each contract also carries populated
+success and rejection traces so a reviewer can inspect one real value at every
+step.
+
+Each contract-gap specification also carries three Mermaid flowcharts in its
+Current gap section: the inspected current DAG, the proposed-change DAG, and
+the integrated DAG. One marked worked example follows Section 4. The
+documentation test parses the Section 4 Python declarations and rejects a
+worked example that fails to construct one of those classes or call one of
+those declared operations. Mermaid rendering remains a separate visual check;
+the repository renderer must produce readable light and dark previews before
+review.
+
+The current parser remains the migration oracle until the canonical
+traceability graph produces the same phase and test coverage.
+
+Planned links name exact future symbols. Implemented links must resolve in the
+candidate source tree. Phase closure requires every link to use the implemented
+state.
+
 The automatic-input contract marks one complete public workflow. Documentation
 tests parse that example and require every planned public constructor. They
 also require at least five used fields in each project-owned parameter model

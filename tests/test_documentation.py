@@ -25,6 +25,7 @@ TRAINING_GUIDES = (
 
 MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
 IMPLEMENTATION_CONTRACTS = (
+    ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
     ROOT / "docs/development/system-impact-graph.md",
     ROOT / "docs/development/download-retrieval-artifacts.md",
@@ -37,6 +38,12 @@ IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/provenance-catalog-mcp.md",
     ROOT / "docs/development/stage-reuse.md",
     ROOT / "docs/development/experiment-knowledge-primitives.md",
+)
+
+PHASE_ZERO_CONTRACTS = (
+    ROOT / "docs/development/contract-requirement-traceability.md",
+    ROOT / "docs/development/project-data-root.md",
+    ROOT / "docs/development/system-impact-graph.md",
 )
 
 _CONTRACT_REQUIREMENT = re.compile(
@@ -74,6 +81,18 @@ _COMPLETE_AUTHORING_EXAMPLE = re.compile(
     r"(?P<body>.*?)"
     r"<!-- complete-authoring-example: end -->",
     re.DOTALL,
+)
+_CONTRACT_WORKED_EXAMPLE = re.compile(
+    r"<!-- contract-worked-example: start -->"
+    r"(?P<body>.*?)"
+    r"<!-- contract-worked-example: end -->",
+    re.DOTALL,
+)
+_PYTHON_FENCE = re.compile(r"```python\n(?P<body>.*?)\n```", re.DOTALL)
+_MERMAID_FENCE = re.compile(r"```mermaid\n(?P<body>.*?)\n```", re.DOTALL)
+_MERMAID_EDGE = re.compile(
+    r"^\s*(?P<source>[A-Za-z][A-Za-z0-9_]*)\s+-->"
+    r'(?:\|"[^"]+"\|)?\s*(?P<target>[A-Za-z][A-Za-z0-9_]*)\s*$'
 )
 
 COMPLETE_EXAMPLE_PUBLIC_CALLS = {
@@ -895,6 +914,141 @@ def test_public_markdown_links_resolve() -> None:
                     )
 
     assert failures == []
+
+
+def _numbered_contract_section(text: str, number: int) -> str:
+    """Return one numbered top-level section from a development contract."""
+    match = re.search(
+        rf"^## {number}\. [^\n]+\n(?P<body>.*?)(?=^## \d+\. |\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, number
+    return match.group("body")
+
+
+def test_phase_zero_contracts_show_three_dags_and_instantiate_models() -> None:
+    """Require each foundational contract to show and realize its full delta."""
+    failures: dict[str, list[str]] = {}
+
+    for contract in PHASE_ZERO_CONTRACTS:
+        text = contract.read_text()
+        current_gap = _numbered_contract_section(text, 3)
+        contract_models = _numbered_contract_section(text, 4)
+        errors: list[str] = []
+
+        for heading in (
+            "### Current DAG",
+            "### Proposed-change DAG",
+            "### Integrated DAG",
+        ):
+            if heading not in current_gap:
+                errors.append(f"missing {heading}")
+
+        diagrams = tuple(_MERMAID_FENCE.finditer(current_gap))
+        if len(diagrams) != 3:
+            errors.append(f"expected 3 Mermaid DAGs; found {len(diagrams)}")
+        for index, diagram in enumerate(diagrams, start=1):
+            diagram_body = diagram.group("body")
+            if not diagram_body.lstrip().startswith("flowchart"):
+                errors.append(f"diagram {index} is not a Mermaid flowchart")
+                continue
+
+            adjacency: dict[str, set[str]] = {}
+            for line in diagram_body.splitlines():
+                edge = _MERMAID_EDGE.match(line)
+                if edge is None:
+                    continue
+                adjacency.setdefault(edge.group("source"), set()).add(
+                    edge.group("target")
+                )
+            if not adjacency:
+                errors.append(f"diagram {index} has no parsed directed edges")
+                continue
+
+            visiting: set[str] = set()
+            visited: set[str] = set()
+
+            def visit(node: str) -> bool:
+                if node in visiting:
+                    return False
+                if node in visited:
+                    return True
+                visiting.add(node)
+                for target in adjacency.get(node, set()):
+                    if not visit(target):
+                        return False
+                visiting.remove(node)
+                visited.add(node)
+                return True
+
+            if not all(visit(node) for node in adjacency):
+                errors.append(f"diagram {index} contains a directed cycle")
+
+        examples = tuple(_CONTRACT_WORKED_EXAMPLE.finditer(contract_models))
+        if len(examples) != 1:
+            errors.append(f"expected 1 marked worked example; found {len(examples)}")
+            failures[contract.name] = errors
+            continue
+
+        declarations_text = contract_models[: examples[0].start()]
+        declaration_trees = [
+            ast.parse(match.group("body"))
+            for match in _PYTHON_FENCE.finditer(declarations_text)
+        ]
+        declared_classes = {
+            node.name
+            for tree in declaration_trees
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+        declared_functions = {
+            node.name
+            for tree in declaration_trees
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        declared_aliases = {
+            target.id
+            for tree in declaration_trees
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+
+        example_blocks = tuple(
+            match.group("body")
+            for match in _PYTHON_FENCE.finditer(examples[0].group("body"))
+        )
+        if not example_blocks:
+            errors.append("worked example has no Python block")
+            failures[contract.name] = errors
+            continue
+
+        example_tree = ast.parse("\n\n".join(example_blocks))
+        calls = {
+            node.func.id
+            for node in ast.walk(example_tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        used_names = {
+            node.id for node in ast.walk(example_tree) if isinstance(node, ast.Name)
+        }
+        missing_classes = sorted(declared_classes - calls)
+        missing_functions = sorted(declared_functions - calls)
+        missing_aliases = sorted(declared_aliases - used_names)
+        if missing_classes:
+            errors.append(f"models never constructed: {missing_classes}")
+        if missing_functions:
+            errors.append(f"operations never called: {missing_functions}")
+        if missing_aliases:
+            errors.append(f"aliases never realized: {missing_aliases}")
+
+        if errors:
+            failures[contract.name] = errors
+
+    assert failures == {}
 
 
 def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
