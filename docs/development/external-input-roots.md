@@ -159,7 +159,7 @@ The public authoring draft and target local-root records use these complete
 declarations:
 
 ```python
-class FileInputDraft(BaseModel):
+class ExternalInputDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: RepoRelPath
@@ -184,7 +184,7 @@ class ResolvedExternalInputRef(ProtocolModel):
     data_role: DataRole
 ```
 
-`viper.input()` creates `FileInputDraft`. Freezing alone constructs the
+`viper.input()` creates `ExternalInputDraft`. Freezing alone constructs the
 `ExternalInputRef` protocol record.
 `ExternalInputRef.source.path` is the repository-relative source selected by
 the user. `resolve_inputs()` reads that file once and writes the same bytes to
@@ -271,7 +271,7 @@ The active-to-target field changes are exact:
 | `ResolvedExternalInputRef.source: ExternalInputSource` | Replace | `ResolvedExternalInputRef.source: LocalSource` |
 | `ResolvedExternalInputRef.file: ResolvedFileRef` | Replace | `ResolvedExternalInputRef.file: SnapshotFileRef` identifies the attempt-owned input inside the completed consuming-stage snapshot. |
 | Both `data_role` fields | Retain | The resolved record copies the frozen declaration. |
-| Public `ExternalInputRef` construction | Replace | `viper.input()` returns `FileInputDraft`; freezing writes the protocol record. |
+| Public `ExternalInputRef` construction | Replace | `viper.input()` returns `ExternalInputDraft`; freezing writes the protocol record. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | The compiler stores its generated pointer and writes `ResolvedArtifactPointerRef`. |
 
 ### 3.2 HTTP root, artifact, and consumer edge
@@ -695,7 +695,7 @@ snapshot reference.
    regular.
    Atomically copy `source.path` to the capture path, include the captured file
    in the completed stage snapshot, and add the two local-input verifier rules.
-4. Add `FileInputDraft`, `RunArtifactDraft`, and the three-way authoring
+4. Add `ExternalInputDraft`, `RunArtifactDraft`, and the three-way authoring
    compiler defined in
    [`automatic-input-resolution.md`](automatic-input-resolution.md).
 5. Change the stored-pointer schema and implement deterministic,

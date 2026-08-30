@@ -494,7 +494,7 @@ class StageDraftArtifactRef:
     artifact_name: ArtifactName
 
 
-class FileInputDraft(BaseModel):
+class ExternalInputDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: RepoRelPath
@@ -509,7 +509,7 @@ class RunArtifactDraft(BaseModel):
     artifact_name: ArtifactName
 
 
-StageInputDraft = FileInputDraft | StageDraftArtifactRef | RunArtifactDraft
+StageInputDraft = ExternalInputDraft | StageDraftArtifactRef | RunArtifactDraft
 
 
 class BaseSpecDraft(BaseModel):
@@ -860,7 +860,7 @@ StageDraftArtifactRef whose producer belongs to the selected VariantDraft
 -> StageArtifactRef with the producer's plan key
 -> FutureInputRef
 
-FileInputDraft selecting one repository file
+ExternalInputDraft selecting one repository file
 -> ExternalInputRef
 
 RunArtifactDraft identifying one artifact in a completed run
@@ -909,7 +909,7 @@ def input(
     *,
     path: RepoRelPath,
     data_role: DataRole,
-) -> FileInputDraft: ...
+) -> ExternalInputDraft: ...
 
 
 def run_artifact(
@@ -987,8 +987,8 @@ accepts the single-file form because each HTTP response has one body. Project
 stages accept either form.
 
 `viper.input()` declares one repository file whose bytes enter VIPER at the
-consuming stage. It returns `FileInputDraft`. Freezing converts that draft into
-`ExternalInputRef`. Same-run inputs use `stage.artifacts[name]`; prior-run
+consuming stage. It returns `ExternalInputDraft`. Freezing converts that draft
+into `ExternalInputRef`. Same-run inputs use `stage.artifacts[name]`; prior-run
 inputs use `viper.run_artifact()`.
 
 The result exposes the paths consumed by later public operations:
@@ -2529,7 +2529,7 @@ overwrite rules, and review ownership.
 | HTTP API | Add `@viper.http(id=..., params=...)`; pass the decorated function and its optional parameter instance through `viper.download(http=..., params=...)` | The example freezes and invokes `project_httpx` through the base HTTP parameters |
 | Artifact API | Add `viper.artifact()` and callable-backed file and bundle drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
 | Artifact paths | Accept run-relative `ArtifactDraft.path` values and prefix the selected run root during freezing | One variant graph can be reused across replicates while every frozen `ArtifactSpec.path` remains concrete |
-| Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `FileInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
+| Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `ExternalInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
 | Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and evaluate stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
@@ -2567,7 +2567,7 @@ replacement:
 | `@viper.build_stage`, `@viper.embed_stage`, `@viper.train_stage`, and `@viper.evaluate_stage` | Replace | `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.evaluate` use `params=`. |
 | Private `PARAMETERS`, `RESUME_STATE`, `PARAMETERS_INPUT`, `RESUME_STATE_INPUT`, `EVALUATION_DATASET_INPUT`, and `PREDICTIONS` constants | Replace | `viper.keys.Train` and `viper.keys.Eval` replace the old constants and rename the frozen map keys to `model`, `state`, `test`, and `preds`. |
 | `StageDraft.stage_id` and tuple-valued `RunPlanDraft.stages` | Replace | `VariantDraft.stages` mapping keys own stage IDs. |
-| Direct `ExternalInputRef` construction in public authoring | Replace | `viper.input()` creates `FileInputDraft`; freezing writes `ExternalInputRef`. |
+| Direct `ExternalInputRef` construction in public authoring | Replace | `viper.input()` creates `ExternalInputDraft`; freezing writes `ExternalInputRef`. |
 | Proposed prior-run construction through `RunArtifactRef` | Replace | `viper.run_artifact()` creates `RunArtifactDraft`; freezing verifies the completed run and writes the pointer. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | Use `ResolvedArtifactPointerRef` so the frozen input carries pointer byte identity and a local, Git, or remote storage location. |
 | `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Replace | Inherit `ResolvedFileRef`, whose `stored_at` field accepts `StorageRef`; retain canonical pointer-path validation in `StoredInputRef`. |
@@ -2602,7 +2602,7 @@ The acceptance fixture creates `inputs/raw/training_embeddings.csv` and selects
 it through `viper.input()`.
 
 The test first asserts that `viper.input(path=..., data_role=...)` returns a
-`FileInputDraft` carrying the same path and role.
+`ExternalInputDraft` carrying the same path and role.
 
 ```text
 freeze the run plan
@@ -2725,7 +2725,7 @@ checklist supplies the cross-contract commit order.
       every `ArtifactDraft` into `ArtifactSpec`.
 - [ ] Consume the metric and experiment draft types defined by
       [`unified-metric-drafting.md`](unified-metric-drafting.md).
-- [ ] Add `FileInputDraft`, `RunArtifactDraft`, and the `StageInputDraft`
+- [ ] Add `ExternalInputDraft`, `RunArtifactDraft`, and the `StageInputDraft`
       authoring union.
 - [ ] Add `viper.params`, the shortened project-stage decorators,
       `viper.stage()`, `viper.download()`, `viper.http()`,
@@ -2755,7 +2755,7 @@ decorated with `@viper.http`.
 
 ### Phase 3. Compile local and same-run inputs
 
-- [ ] Convert each `FileInputDraft` into `ExternalInputRef` with one
+- [ ] Convert each `ExternalInputDraft` into `ExternalInputRef` with one
       `LocalSource` and the declared data role.
 - [ ] Map each `StageDraftArtifactRef.producer` to its key in
       the selected `VariantDraft.stages` and construct `FutureInputRef`.

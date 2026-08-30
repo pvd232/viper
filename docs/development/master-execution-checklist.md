@@ -141,7 +141,7 @@ HttpRequestSpec
 One local dataset crosses the shorter route:
 
 ```text
-FileInputDraft
+ExternalInputDraft
 -> ExternalInputRef records the selected source
 -> runner copies the bytes to an attempt-owned input path
 -> consuming stage reads that path
@@ -185,9 +185,9 @@ exact reviewed contract bytes. A contract edit requires another checklist
 review and a new digest.
 
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=ce7d3b9a7a8daf90448081afd46280f9f2ef4bdc0e091e025d99dd8a570ca0e1 -->
-<!-- contract-baseline: external-input-roots.md sha256=3316e1df492aae06f6df5f9205707a846d7f63abf27e9b155c4623e3b07a960e -->
+<!-- contract-baseline: external-input-roots.md sha256=f7785c08c85b7a6f3584420e1d45a815cf9b8c639e6c2be70a863413d90c5654 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=caabcea0d8eaa1f0e82687d02f17ec3c8349bdd8b175768785abd9ea9beb1e8c -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=307bdfd1a52de1937102234e7a9a3703ec3869b965cd1cffe4f8a556ba5928b3 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=56dfe4ba695857d59f9b7c768a54c74062926f24128f62c301e03079929bcab1 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
 <!-- contract-baseline: remote-storage.md sha256=5f7a7c483973f03cb434d9fdfbc63633a21bb7310c138d7ef4807cb8bf377e58 -->
 
@@ -226,7 +226,7 @@ The review found and repaired these schema conflicts:
 
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
-| Local dataset | `FileInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
+| Local dataset | `ExternalInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
 | HTTP dataset | `HttpRequestSpec` plus file artifact draft | `DownloadSpec` | `ResolvedHttpRetrieval` and `ResolvedSingleFileArtifact` sharing one file | Download verifier and later input compiler |
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
 | Prior-run artifact | `RunArtifactDraft` | Published `ArtifactPointer` plus `StoredInputRef` | `ResolvedStoredInputRef` | Materializer, lineage, and pointer verifier |
@@ -905,17 +905,17 @@ the correct provenance edge.
 
 ### 13.1 Draft values
 
-- [ ] Add `FileInputDraft` and one public `viper.input()` constructor.
+- [ ] Add `ExternalInputDraft` and one public `viper.input()` constructor.
 - [ ] Add `RunArtifactDraft` and `viper.run_artifact()`.
       <!-- implements: EIR-04 -->
-- [ ] Define `StageInputDraft = FileInputDraft | StageDraftArtifactRef |
+- [ ] Define `StageInputDraft = ExternalInputDraft | StageDraftArtifactRef |
       RunArtifactDraft`.
 - [ ] Export `viper.input` from `src/viper/__init__.py`.
 - [ ] Accept `StageInputDraft` in internal stage drafts.
 
 ### 13.2 Compilation
 
-- [ ] Compile `FileInputDraft` to `ExternalInputRef`.
+- [ ] Compile `ExternalInputDraft` to `ExternalInputRef`.
 - [ ] Compile a handle from an earlier selected stage to `FutureInputRef`.
 - [ ] Load and verify a completed `ResolvedRun` for `RunArtifactDraft`.
 - [ ] Locate the selected resolved stage and artifact.
@@ -946,7 +946,7 @@ mode. The ordinary API accepts drafts.
 ### 13.3 Focused proof
 
 - [ ] Assert that `viper.input(path=..., data_role=...)` returns the expected
-      `FileInputDraft`.
+      `ExternalInputDraft`.
 - [ ] Add local, same-run, and prior-run cases to `tests/test_authoring.py`.
 - [ ] Add stage-order and missing-artifact rejections.
 - [ ] Extend `tests/test_run_execution.py` through actual materialization.

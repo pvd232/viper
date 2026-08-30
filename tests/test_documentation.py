@@ -651,5 +651,6 @@ def test_current_docs_do_not_reference_retired_public_modules() -> None:
     assert "viper.verifier" not in text
     assert "viper.file_artifact" not in text
     assert "viper.file_input" not in text
+    assert "FileInputDraft" not in text
     assert "docs/contracts" not in text
     assert "PUBLICATION_TODO" not in text
