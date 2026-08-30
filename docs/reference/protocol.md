@@ -3752,6 +3752,7 @@ repository-relative paths.
 
 ```text
 repository/
+├── viper.toml
 ├── <user-owned files and directories>
 ├── inputs/
 │   ├── benchmarks/
@@ -3768,7 +3769,7 @@ repository/
 │           └── <selection_name>.pointer.yaml
 ├── benchmarks/
 │   └── <benchmark_id>.spec.yaml
-└── experiments/
+├── experiments/
     └── <experiment_id>/
         ├── spec.yaml
         ├── README.md
@@ -3815,7 +3816,25 @@ repository/
                     │   └── evaluations/
                     │       └── <evaluation_id>/
                     │           └── <prediction file or bundle>
+└── .viper/
+    ├── store/
+    ├── workspaces/
+    ├── journals/
+    ├── catalog.sqlite3
+    └── knowledge/
 ```
+
+`viper init ROOT` selects `repository/` in this diagram. `ROOT/viper.toml`
+marks the selected root. A later local command either receives `ROOT`
+explicitly or discovers the nearest parent containing that marker. The
+machine-specific absolute root remains local configuration outside frozen
+protocol records.
+
+The visible `inputs/`, `benchmarks/`, and `experiments/` paths hold authored
+records, resolved records, and working artifacts. `.viper/store` holds separate
+immutable local copies. Editing a working artifact makes the working tree
+differ from its published snapshot. Verification and restore use the immutable
+snapshot reference.
 
 Each `BaseSpec.implementation.path`, project
 `HttpTransportImplementationRef.path`, `MetricSpec.implementation.path`, and

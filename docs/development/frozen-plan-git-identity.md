@@ -139,7 +139,7 @@ The public freeze signature remains:
 def freeze(
     plan: RunPlanDraft,
     *,
-    root: Path = Path.cwd(),
+    root: Path | None = None,
 ) -> FrozenPlanFiles: ...
 ```
 

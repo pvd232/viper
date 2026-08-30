@@ -10,12 +10,18 @@ surface that must change.
 
 ## 1. Terminal outcome
 
-The work is complete when a user can write one Python experiment, expand its
-variants and replicates into concrete plans, freeze and run them, reuse an
+The work is complete when a user can initialize one project root, write one
+Python experiment, expand its variants and replicates into concrete plans,
+freeze and run them, reuse an
 eligible verified stage, verify and benchmark the results, search them through
 the provenance catalog, attach versioned scientific labels and controlled
 comparisons, search the resulting evidence graph through a local MCP server,
 and restore their artifacts.
+
+Before implementation begins, VIPER compiles the reviewed source and contract
+stack into a deterministic system impact graph. Every later phase closes only
+after its candidate diff reaches the implementation, verifier, test, contract,
+and checklist surfaces reported by that graph.
 
 The authoring program uses decorated stage and metric functions:
 
@@ -207,11 +213,27 @@ ExternalInputDraft
 -> ResolvedExternalInputRef identifies it inside the stage snapshot
 ```
 
+One development change crosses the review system like this:
+
+```text
+baseline source + fixed context
+-> canonical SystemGraph
+
+candidate source + same fixed context
+-> canonical SystemGraph
+
+typed graph delta
+-> reverse dependency closure
+-> affected implementation, verifier, test, contract, and checklist nodes
+```
+
 ## 3. Contract ownership
 
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
+| [Project data root](project-data-root.md) | Draft after audit | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
+| [Deterministic system impact graph](system-impact-graph.md) | Draft after audit | Fixed-context source compilation, dependency DAGs, graph deltas, and impact closure |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Draft after audit | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -228,6 +250,10 @@ The contracts share models. One contract owns each shared decision:
 
 | Shared decision | Owner |
 | --- | --- |
+| `viper init ROOT` selects the source, protocol, working-data, and local-state tree | Project data root |
+| `.viper/store` remains a separate immutable subtree beneath the selected root | Project data root |
+| Fixed external inputs and observed dynamic resolution define deterministic development impact | Deterministic system impact graph |
+| Typed dependency cycles condense into the unweighted DAG used for impact closure | Deterministic system impact graph |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
 | HTTP root is `ResolvedHttpRetrieval` | External input roots |
 | Custom HTTP execution uses `@viper.http(id=...)` and `DownloadSpec.http` | Automatic input resolution |
@@ -255,20 +281,22 @@ focused test. The matching phase contains one `implements` marker and one
 exact reviewed contract bytes. A contract edit requires another checklist
 review and a new digest.
 
+<!-- contract-baseline: project-data-root.md sha256=d3f8fcb5f6da18e36b0c5c662b0fb06e7ce849819c4154fa16dceaa9ae3e38eb -->
+<!-- contract-baseline: system-impact-graph.md sha256=88808e5c1eeb9fb9b4c52da7f4a81de71c2305d9aa27fc1a6953529dbb49b589 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=c44200917d64cbf9bab4684b4a7c0cd1f1a2d3be46e8d1c2bae07134b41312ec -->
-<!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
-<!-- contract-baseline: remote-storage.md sha256=02e4e2efae37fa133b2f015ad63df2debe9442ba304390769ec8cdce14873502 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=5d780c99b87c3472bb12c160e7e288112093435d9467b19c506bd1f648b92d35 -->
+<!-- contract-baseline: frozen-plan-git-identity.md sha256=64b7be56c45efc1eb0ca29778c4fe41a372210fd4761aa9ec8ca1669b846094a -->
+<!-- contract-baseline: remote-storage.md sha256=0487831f4ac301ee5499aa5723106a592b9f412fabcbc04612f99e31e40677b6 -->
 <!-- contract-baseline: experiment-expansion.md sha256=f72e4efd429ba206972934b6788a341d40f079e6e1f320af758ecf1c3942a3d1 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=ba0ec52e28796795deda34e0d48fa2d00199600110147cb67d3b75e2d0ecca3f -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=c13ac03bc75f2c80c4ddf49e2b5744f90b78d107cb6529159c2250da965268ae -->
 <!-- contract-baseline: stage-reuse.md sha256=74ed511429334a24599ccbed49a4ce7d688bc865fed7bb2b9843d55345d2ce87 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=777d5c5befd48d9366e4a3a3a91df8bed370d5122a515895b750fc32735d7137 -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=4b5809bde81d46456b62e5c8e541b7bb071c793ec6c022d01f0558b13c53d0d7 -->
 
 ## 4. Specification-system review
 
-The review compared all ten pending implementation contracts with the current
+The review compared all twelve pending implementation contracts with the current
 source, tests, protocol reference, public API, CLI, generated project, and
 research roadmap.
 
@@ -281,6 +309,8 @@ The review found and repaired these schema conflicts:
 
 | Conflict | Repair |
 | --- | --- |
+| `viper init` selected a target while later commands independently defaulted to `Path.cwd()` | Add a root marker and resolve one explicit or discovered project root at each public operation boundary. |
+| Separate architecture and documentation scans produced separate change-impact views | Compile one fixed-context typed system graph, condense cycles, and connect changes to requirements and tests. |
 | `MetricKind` mixed stage location with metric role | Remove it. `objective=` and `metrics=` record role; `MetricMode` records timing. |
 | `ArtifactDraft.path` contained one run ID inside a reusable variant | Make it relative to the selected run root. Freezing writes the full `ArtifactSpec.path`. |
 | Built-in parameter classes lacked a byte-addressed `ParameterModelRef` | Add `ParameterModelRef.owner` and resolve the source under the project or installed VIPER package root. |
@@ -312,6 +342,8 @@ The review found and repaired these schema conflicts:
 
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
+| Project root | `viper init ROOT` or explicit `root=` | Local `viper.toml` marker; absolute path omitted from protocol identity | One resolved absolute root per operation | Root resolver, path-boundary checks, local store, and every local consumer |
+| System impact | Two source revisions plus one `SystemContextManifest` | Canonical `SystemGraph`, `SystemCondensationDAG`, `SystemGraphDelta`, and `ImpactReport` files | Reverse dependency closure over changed graph nodes and edges | Strict graph verifier and specification-system review |
 | Local dataset | `ExternalInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
 | HTTP dataset | `HttpRequestSpec` plus file artifact draft | `DownloadSpec` | `ResolvedHttpRetrieval` and `ResolvedSingleFileArtifact` sharing one file | Download verifier and later input compiler |
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
@@ -393,6 +425,11 @@ Every new claim has a named rejection or acceptance boundary:
 
 | Claim | Detecting rule or acceptance case |
 | --- | --- |
+| Every local operation uses the initialized root | `project.root.marker`, `project.root.stability`, and explicit-root relocation acceptance |
+| Working artifacts remain separate from local immutable evidence | Publish, mutate the working artifact, and retrieve the original bytes through `LocalFileRef` |
+| Development impact uses equal external inputs | `system.context.identity` and `system.delta.context` |
+| Dynamic registrations remain observable outcomes | Remove one decorator and require the candidate graph to lose its `registers` edge |
+| Every contract requirement reaches code and a test | `system.requirement.coverage` and graph parity with the existing documentation oracle |
 | HTTP receipt and artifact identify the same bytes | `download.receipt_artifact_identity` |
 | The digest covers the HTTP bytes written at the artifact path | `download.runner_custody` |
 | VIPER supplied the canonical captured local path and stable bytes | `input.local_root_identity` |
@@ -432,6 +469,8 @@ Each contract has one case that must fail:
 
 | Contract | Counterexample |
 | --- | --- |
+| Project data root | A child-directory command uses `Path.cwd()` as a second root, or a symlink escapes the selected root before capture. |
+| Deterministic system impact graph | A candidate removes a decorator while the comparison incorrectly fixes the old registry output, or strict review proceeds with an unresolved environment input. |
 | Download retrieval artifacts | The HTTP result body changes after receipt validation and before artifact publication. |
 | External input roots | A local source path escapes through a symlink, the parent supplies a different workspace file than `captured_input_path()`, or the captured file changes while the worker runs. |
 | Unified metric drafting | A live receipt selects different metric IDs, a metric dependency creates a second payload publication, two stages use one metric ID with different parameters, or benchmark test pointers differ from evaluation inputs. |
@@ -447,6 +486,7 @@ Each contract has one case that must fail:
 ## 5. Dependency order
 
 ```text
+Phase 0 -> Phase 1
 Phase 1 -> Phase 2 -> Phase 3
 Phase 1 -> Phase 4
 Phase 2 + Phase 4 -> Phase 5 -> Phase 6
@@ -455,7 +495,9 @@ Phase 11 -> Phase 12 -> Phase 13 -> Phase 14 -> Phase 15
 Phase 15 -> Phase 16 -> Phase 17 -> Phase 18
 ```
 
-Phases 2 and 4 may occur on separate branches after Phase 1. The pair-coding
+Phase 0 establishes the root used by every later local path and the compiler
+used by every later impact review. Phases 2 and 4 may occur on separate branches
+after Phase 1. The pair-coding
 sequence in this document keeps one active branch and completes them in order.
 
 ## 6. Pair-coding protocol
@@ -474,7 +516,130 @@ Each pair-coding turn changes one bounded behavior. The user writes the code.
 Codex inspects the live file, explains the next edit, and chooses the next test
 from the observed result.
 
-## 7. Phase 1 — destination-neutral local publication
+## 7. Phase 0 — project root and deterministic system impact
+
+**Depends on:** Module-privacy work already implemented.
+
+**Contracts:** [Project data root](project-data-root.md) and
+[deterministic system impact graph](system-impact-graph.md)
+
+**Outcome:** `viper init ROOT` creates the complete protocol tree and every
+later local operation resolves that same root. VIPER can compile two source
+revisions under one fixed context, publish canonical dependency graphs, and
+return the exact affected requirements and observing tests before later phases
+change code.
+
+### 7.1 Project root
+
+- [ ] Add `ProjectSettings`, `ProjectRootError`, `find_project_root()`, and
+      `resolve_project_root()` in `src/viper/project.py`.
+      <!-- implements: PDR-01 -->
+- [ ] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
+      staged project scaffold in `src/viper/project_init.py`.
+- [ ] Route public default roots through `resolve_project_root()` and pass the
+      resolved value into internal operations exactly once.
+- [ ] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
+      as the root-selection operation. <!-- implements: PDR-04 -->
+- [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
+      at their protocol paths and preserve separate immutable copies.
+      <!-- implements: PDR-02 -->
+- [ ] Reject logical traversal and resolved symlink escapes before any local
+      read, write, capture, publication, or restore. <!-- implements: PDR-03 -->
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** The root is the directory containing `viper.toml`. Keep the absolute
+root path in runtime memory and outside the marker.
+
+**Hint 2:** Resolve the root at the public operation boundary. Internal helpers
+receive the resolved value. The public resolver owns parent search.
+
+**Hint 3:** Keep `.viper/store` separate from user-visible artifact paths. One
+working-file edit must leave the immutable copy retrievable.
+
+</details>
+
+### 7.2 System graph compiler
+
+- [ ] Add the exact context, node, edge, observation, unresolved-dependency,
+      graph, component-DAG, delta, and impact models to
+      `src/viper/system_graph.py`. <!-- implements: SIG-01 -->
+- [ ] Compile Python definitions, imports, calls, exports, protocol fields, API
+      and CLI registries, persisted documents, verifier rules, contract
+      requirements, checklist tasks, and tests into canonical typed edges.
+- [ ] Run observed discovery under `SystemContextManifest`. Hold external
+      inputs equal while recording imports, decorator registrations, registry
+      entries, reflection targets, and subprocess entrypoints produced by each
+      source revision. <!-- implements: SIG-02 -->
+- [ ] Reject unresolved dependencies in strict mode. Publish unresolved nodes
+      and `ImpactReport.complete=False` only in exploratory mode.
+- [ ] Collapse strongly connected components, retain crossing relation kinds,
+      and require the resulting component graph to be acyclic.
+- [ ] Compare canonical graphs and compute reverse impact closure from every
+      changed node and edge endpoint. <!-- implements: SIG-03 -->
+- [ ] Compile contract requirement, implementation task, and observing-test
+      edges. Compare graph coverage with the existing documentation oracle
+      before replacing that oracle. <!-- implements: SIG-04 -->
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** Fix Python, packages, variables, fixture files, command inputs, and
+external responses. Observe registry and dispatch outcomes from the code.
+
+**Hint 2:** Start with literal AST and registry shapes already parsed by
+`tests/test_validation_architecture.py` and `tests/test_documentation.py`.
+
+**Hint 3:** Keep relation types. The condensation DAG is unweighted; one
+component edge carries the sorted relation kinds crossing that pair.
+
+</details>
+
+### 7.3 Focused proof
+
+- [ ] In `tests/test_project_init.py`, initialize outside the current directory,
+      discover the root from a child directory, and assert the complete tree.
+      <!-- verifies: PDR-01 -->
+- [ ] In `tests/test_storage.py`, publish beneath the selected root, mutate the
+      working artifact, retrieve the original immutable bytes, and reject an
+      escaping store. <!-- verifies: PDR-02 -->
+- [ ] In `tests/test_validation_architecture.py`, reject a symlink escape and a
+      public operation that bypasses the shared root resolver.
+      <!-- verifies: PDR-03 -->
+- [ ] Compare root vocabulary and the protocol tree in
+      `tests/test_documentation.py`. <!-- verifies: PDR-04 -->
+- [ ] In `tests/test_validation_architecture.py`, compile the same source and
+      context twice; require identical graph and DAG bytes. Remove one
+      decorator and require the observed `registers` edge to disappear. Reject
+      one undeclared environment input in strict mode.
+      <!-- verifies: SIG-01, SIG-02 -->
+- [ ] In `tests/test_inspection.py`, change one protocol field and require the
+      typed delta and reverse closure to include storage, verification,
+      documentation, and test consumers. <!-- verifies: SIG-03 -->
+- [ ] In `tests/test_documentation.py`, require every contract requirement to
+      reach exactly one implementation task and at least one observing test in
+      both the graph and existing oracle. <!-- verifies: SIG-04 -->
+
+```bash
+python -m pytest \
+  tests/test_project_init.py \
+  tests/test_storage.py \
+  tests/test_validation_architecture.py \
+  tests/test_inspection.py \
+  tests/test_documentation.py -q
+```
+
+**Commit boundaries:**
+
+1. `Bind every local operation to one project root`
+2. `Compile deterministic system impact graphs`
+
+Every later phase begins by compiling its candidate source revision under the
+reviewed context manifest. Its focused test selection must contain every test
+reached by the resulting strict `ImpactReport`.
+
+## 8. Phase 1 — destination-neutral local publication
 
 **Depends on:** Module-privacy work already implemented.
 
@@ -483,7 +648,7 @@ from the observed result.
 **Outcome:** Current local runs produce the same bytes and references through a
 new publisher boundary. Cloud implementation begins in Phase 9.
 
-### 7.1 Local publication interface
+### 8.1 Local publication interface
 
 - [ ] Add `LocalStorageDestination`, `ViperCloudDestination`,
       `StorageDestination`, and `StorageSettings` as closed configuration
@@ -511,7 +676,7 @@ before its first write.
 
 </details>
 
-### 7.2 Replace direct local calls
+### 8.2 Replace direct local calls
 
 - [ ] Change `execution/_attempt.py` to obtain a publisher once per attempt.
       <!-- implements: RSP-02 -->
@@ -536,7 +701,7 @@ publisher.
 
 </details>
 
-### 7.3 Focused proof
+### 8.3 Focused proof
 
 - [ ] Extend `tests/test_storage.py` for destination parsing, union round trips,
       mapping-return publication, and local snapshot compatibility.
@@ -552,7 +717,7 @@ python -m pytest \
 
 **Commit boundary:** `Add destination-neutral local publication`
 
-## 8. Phase 2 — runner-owned download stages
+## 9. Phase 2 — runner-owned download stages
 
 **Depends on:** Phase 1.
 
@@ -562,7 +727,7 @@ python -m pytest \
 **Outcome:** A successful HTTP request produces one receipt and one same-named
 single-file artifact. Both records identify one snapshot file.
 
-### 8.1 Frozen and resolved models
+### 9.1 Frozen and resolved models
 
 - [ ] Rename `src/viper/http.py` to `src/viper/_http.py` so the package root can
       export the `viper.http` callable. Update every internal import to the
@@ -608,7 +773,7 @@ receipt and artifact.
 
 </details>
 
-### 8.2 Execution
+### 9.2 Execution
 
 - [ ] Rename `HttpTransportContext`, `HttpTransportResult`,
       `HttpTransportCallable`, and their definition and type-variable peers to
@@ -632,7 +797,7 @@ receipt and artifact.
 - [ ] Add the HTTP receipt-artifact verifier in `_verification/attempt.py`.
       <!-- implements: DRA-04 -->
 
-### 8.3 Focused proof
+### 9.3 Focused proof
 
 - [ ] Update `src/viper/__init__.py` and `__all__` to export `http`,
       `HttpRequestSpec`, `HttpRetrievalPolicy`, `ObservedHttpResponse`,
@@ -664,7 +829,7 @@ python -m pytest \
 
 **Commit boundary:** `Make download stages runner owned`
 
-## 9. Phase 3 — captured local external roots
+## 10. Phase 3 — captured local external roots
 
 **Depends on:** Phase 2.
 
@@ -673,7 +838,7 @@ python -m pytest \
 **Outcome:** A local input keeps one byte identity from provenance capture
 through stage consumption. A change fails the stage.
 
-### 9.1 Model cleanup
+### 10.1 Model cleanup
 
 - [ ] Delete `HttpSource` and `ExternalInputSource` from `src/viper/inputs.py`.
       <!-- implements: EIR-01 -->
@@ -683,7 +848,7 @@ through stage consumption. A change fails the stage.
 - [ ] Remove the HTTP branch and HTTP helper from
       `execution/_materialization.py:resolve_inputs()`.
 
-### 9.2 Capture and custody
+### 10.2 Capture and custody
 
 - [ ] Reject a local source that is a symlink, resolves outside the repository,
       or has a file type other than regular before reading it.
@@ -723,7 +888,7 @@ verifier reconstruct that path with the shared helper.
 
 </details>
 
-### 9.3 Focused proof
+### 10.3 Focused proof
 
 - [ ] Extend `tests/test_run_execution.py:test_train_stage_captures_local_external_input`.
 - [ ] Add a test that changes the captured file during stage execution.
@@ -744,7 +909,7 @@ python -m pytest \
 
 **Commit boundary:** `Bind local input bytes to stage custody`
 
-## 10. Phase 4 — unified metric runtime and protocol
+## 11. Phase 4 — unified metric runtime and protocol
 
 **Depends on:** Phase 1.
 
@@ -754,7 +919,7 @@ python -m pytest \
 **Outcome:** One configured metric can run live or after a stage. Its frozen
 parameter class and values reach the calculation in both modes.
 
-### 10.1 Definitions and drafts
+### 11.1 Definitions and drafts
 
 - [ ] Add `PythonSourceRelPath` and `ParameterModelOwner` to
       `src/viper/_schema.py`.
@@ -772,7 +937,7 @@ parameter class and values reach the calculation in both modes.
 - [ ] Write a mandatory `ParameterModelRef` to `MetricSpec` and
       `MetricExecutionReceipt`. <!-- implements: UMD-02 -->
 
-### 10.2 Runtime delivery
+### 11.2 Runtime delivery
 
 - [ ] Make `MetricContext` generic over `viper.params.Metric`.
 - [ ] Give it the validated parameter instance and existing dependency paths.
@@ -811,7 +976,7 @@ A stored input follows its pointer to the producer snapshot.
 
 </details>
 
-### 10.3 Objectives and verification
+### 11.3 Objectives and verification
 
 - [ ] Add `MetricObjectiveSpec`. <!-- implements: UMD-03 -->
 - [ ] Add required objectives to `TrainSpec` and `EvalSpec`.
@@ -824,7 +989,7 @@ A stored input follows its pointer to the producer snapshot.
 - [ ] Permit additional diagnostic metric IDs beside the objective in frozen
       stage specs. Phase 5 exposes them through `metrics=`.
 
-### 10.4 Focused proof
+### 11.4 Focused proof
 
 - [ ] Expand `tests/test_metric_interface.py` for parameter delivery.
 - [ ] Expand `tests/test_metric_provenance.py` for parameter identity.
@@ -846,7 +1011,7 @@ python -m pytest \
 
 **Commit boundary:** `Unify metric drafting and runtime context`
 
-## 11. Phase 5 — Python stage, artifact, and HTTP drafts
+## 12. Phase 5 — Python stage, artifact, and HTTP drafts
 
 **Depends on:** Phases 2 and 4.
 
@@ -855,7 +1020,7 @@ python -m pytest \
 **Outcome:** Users construct complete stage declarations in Python. They stop
 writing stage YAML by hand.
 
-### 11.1 Public names
+### 12.1 Public names
 
 - [ ] Add `src/viper/keys.py` and complete the `Train` and `Eval` public key
       migration in Section 11.1. <!-- implements: AIR-01 -->
@@ -883,7 +1048,7 @@ writing stage YAML by hand.
 - [ ] Delete the retired evaluation-stage names. English prose continues to
       use “evaluation” and the verb “evaluate.”
 
-### 11.2 `env` vocabulary
+### 12.2 `env` vocabulary
 
 - [ ] Rename `PythonEnvironmentSpec`, `GCEEnvironmentSpec`,
       `ResolvedGCEEnvironment`, `LocalEnvironmentSpec`,
@@ -912,7 +1077,7 @@ writing stage YAML by hand.
 - [ ] Delete the retired names. The alpha API exposes one spelling for each
       concept.
 
-### 11.3 Decorators and declarations
+### 12.3 Decorators and declarations
 
 - [ ] Add `@viper.build(params=...)`, `@viper.embed(params=...)`,
       `@viper.train(params=...)`, and `@viper.eval(params=...)`.
@@ -931,7 +1096,7 @@ writing stage YAML by hand.
       compile it into `HttpImplementationSpec`.
       <!-- implements: AIR-02 -->
 
-### 11.4 Stage drafts
+### 12.4 Stage drafts
 
 - [ ] Replace `StageDraft(stage_id, spec_source)` with `StageDraft(spec)`.
 - [ ] Add `BaseSpecDraft`, `InternalSpecDraft`, `BuildSpecDraft`,
@@ -961,7 +1126,7 @@ for a second replicate must leave the draft unchanged.
 
 </details>
 
-### 11.5 Focused proof
+### 12.5 Focused proof
 
 - [ ] Rewrite `tests/test_authoring.py` around Python drafts.
 - [ ] Add decorator and key tests to `tests/test_public_api.py`.
@@ -988,7 +1153,7 @@ python -m pytest \
 
 **Commit boundary:** `Add Python stage and artifact drafting`
 
-## 12. Phase 6 — experiments, variants, replicates, and freezing
+## 13. Phase 6 — experiments, variants, replicates, and freezing
 
 **Depends on:** Phase 5.
 
@@ -999,7 +1164,7 @@ python -m pytest \
 **Outcome:** One experiment owns reusable variant graphs and replicate seeds.
 The plan mapping supplies stage IDs.
 
-### 12.1 Draft graph
+### 13.1 Draft graph
 
 - [ ] Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, and
       `ExperimentDraft` to `src/viper/experiments.py`.
@@ -1012,7 +1177,7 @@ The plan mapping supplies stage IDs.
       replicate IDs.
 - [ ] Add `viper.plan()`.
 
-### 12.2 Compiler
+### 13.2 Compiler
 
 - [ ] Replace YAML-backed `freeze_run_plan()` input with `RunPlanDraft`.
       <!-- implements: AIR-04 -->
@@ -1054,7 +1219,7 @@ IDs. The two concrete artifact paths must differ.
 
 </details>
 
-### 12.3 Focused proof
+### 13.3 Focused proof
 
 - [ ] Add factor, level, variant, and replicate cases to
       `tests/test_authoring.py`.
@@ -1076,7 +1241,7 @@ python -m pytest \
 
 **Commit boundary:** `Compile experiments and reusable variants`
 
-## 13. Phase 7 — automatic input compilation
+## 14. Phase 7 — automatic input compilation
 
 **Depends on:** Phases 3 and 6.
 
@@ -1086,7 +1251,7 @@ python -m pytest \
 **Outcome:** The user assigns one Python value to an input slot. Freezing writes
 the correct provenance edge.
 
-### 13.1 Draft values
+### 14.1 Draft values
 
 - [ ] Add `ExternalInputDraft` and one public `viper.input()` constructor.
 - [ ] Add `RunArtifactDraft` and `viper.run_artifact()`.
@@ -1096,7 +1261,7 @@ the correct provenance edge.
 - [ ] Export `viper.input` from `src/viper/__init__.py`.
 - [ ] Accept `StageInputDraft` in internal stage drafts.
 
-### 13.2 Compilation
+### 14.2 Compilation
 
 - [ ] Compile `ExternalInputDraft` to `ExternalInputRef`.
 - [ ] Compile a handle from an earlier selected stage to `FutureInputRef`.
@@ -1126,7 +1291,7 @@ mode. The ordinary API accepts drafts.
 
 </details>
 
-### 13.3 Focused proof
+### 14.3 Focused proof
 
 - [ ] Assert that `viper.input(path=..., data_role=...)` returns the expected
       `ExternalInputDraft`.
@@ -1146,7 +1311,7 @@ python -m pytest \
 
 **Commit boundary:** `Compile artifact handles into provenance inputs`
 
-## 14. Phase 8 — benchmark drafting and complete results
+## 15. Phase 8 — benchmark drafting and complete results
 
 **Depends on:** Phase 7.
 
@@ -1155,7 +1320,7 @@ python -m pytest \
 **Outcome:** A benchmark records metric results under fixed data and split
 conditions. Thresholds remain optional.
 
-### 14.1 Models and authoring
+### 15.1 Models and authoring
 
 - [ ] Add `BenchmarkDraft` and `viper.benchmark()`.
       <!-- implements: UMD-05 -->
@@ -1171,7 +1336,7 @@ conditions. Thresholds remain optional.
 - [ ] Compile each draft once. Reuse the resulting `StoredInputRef.pointer` in
       `BenchmarkSpec.test` and `BenchmarkSpec.splits`.
 
-### 14.2 Execution and verification
+### 15.2 Execution and verification
 
 - [ ] Change `execution/_benchmark.py` to iterate all selected metric IDs.
 - [ ] Read candidate and confirmation verification receipts.
@@ -1183,7 +1348,7 @@ conditions. Thresholds remain optional.
 - [ ] Add `benchmark.input.identity` for exact equality between evaluation
       input pointers and benchmark pointers.
 
-### 14.3 Focused proof
+### 15.3 Focused proof
 
 - [ ] Expand `tests/test_benchmark_execution.py` with:
       one verified benchmark whose criteria tuple is empty, one passed
@@ -1202,7 +1367,7 @@ python -m pytest \
 
 **Commit boundary:** `Record complete benchmark metric results`
 
-## 15. Phase 9 — direct Viper Cloud publication
+## 16. Phase 9 — direct Viper Cloud publication
 
 **Depends on:** Phase 8.
 
@@ -1211,7 +1376,7 @@ python -m pytest \
 **Outcome:** Cloud-backed runs publish every immutable payload directly. Local
 publication remains the default.
 
-### 15.1 Client and publisher
+### 16.1 Client and publisher
 
 - [ ] Parse `[storage].destination`; an absent table selects local publication.
 - [ ] Add `ViperCloudFileRef` and `ViperCloudStageResultSnapshotRef`.
@@ -1229,7 +1394,7 @@ publication remains the default.
 - [ ] Add bounded transfer and seal retries against the same revision.
 - [ ] Create references only after seal succeeds.
 
-### 15.2 Route every immutable file
+### 16.2 Route every immutable file
 
 - [ ] Stage invocation receipts.
 - [ ] Generated artifact pointers.
@@ -1246,7 +1411,7 @@ publication remains the default.
 Metric dependency resolution stays outside this publication list. It derives
 `ResolvedFileRef` values from the stage snapshots above and uploads zero bytes.
 
-### 15.3 Retrieval and graph checks
+### 16.3 Retrieval and graph checks
 
 - [ ] Extend `RunFetcher` for `ViperCloudFileRef` and cloud stage snapshots.
 - [ ] Extend `_verification/storage.py` fetch and list dispatch.
@@ -1276,7 +1441,7 @@ cross-process stage resumption belongs to a future contract.
 
 </details>
 
-### 15.4 Focused proof
+### 16.4 Focused proof
 
 - [ ] Add cloud references and fake-service cases to `tests/test_storage.py`.
 - [ ] Add direct-cloud run cases to `tests/test_execution_acceptance.py`.
@@ -1298,7 +1463,7 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 **Commit boundary:** `Publish immutable evidence directly to Viper Cloud`
 
-## 16. Phase 10 — artifact restore
+## 17. Phase 10 — artifact restore
 
 **Depends on:** Phase 9.
 
@@ -1306,7 +1471,7 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 **Outcome:** The user can restore every artifact, one artifact, or a list.
 
-### 16.1 Restore engine
+### 17.1 Restore engine
 
 - [ ] Add a parser for local terminal paths and immutable Viper Cloud run URIs.
       Complete the retrieval, validation, and atomic-write sequence in Section
@@ -1326,7 +1491,7 @@ authentication exchange, error mapping, and service-side seal semantics.
 - [ ] Treat an existing exact file as already restored.
 - [ ] Reject an existing different file before writing any destination.
 
-### 16.2 Public interface
+### 17.2 Public interface
 
 - [ ] Add `ArtifactRestoreSelector`, `RestoredFile`, `RestoredArtifact`, and
       `RestoreResult`. <!-- implements: RSP-08 -->
@@ -1344,7 +1509,7 @@ authentication exchange, error mapping, and service-side seal semantics.
 - [ ] Route the Python function, typed handler, and CLI through one restore
       engine and require equal `RestoreResult` file sets.
 
-### 16.3 Focused proof
+### 17.3 Focused proof
 
 - [ ] Add local and cloud restore tests.
 - [ ] Cover all, one file, one bundle, and a list.
@@ -1358,7 +1523,7 @@ python -m pytest tests/test_storage.py tests/test_cli.py tests/test_api.py -q
 
 **Commit boundary:** `Restore complete runs and selected artifacts`
 
-## 17. Phase 11 — public workflow migration
+## 18. Phase 11 — public workflow migration
 
 **Depends on:** Phases 1–10.
 
@@ -1372,7 +1537,7 @@ python -m pytest tests/test_storage.py tests/test_cli.py tests/test_api.py -q
 **Outcome:** The generated project and README teach the single-run API through
 freeze, run, benchmark, and restore.
 
-### 17.1 Generated project
+### 18.1 Generated project
 
 - [ ] Rewrite `src/viper/project_init.py` around Python authoring.
 - [ ] Generate four project-owned stage decorators and one runner-owned
@@ -1386,7 +1551,7 @@ freeze, run, benchmark, and restore.
 - [ ] Make the generated project freeze, execute, verify, benchmark, and
       restore its example.
 
-### 17.2 Public documentation
+### 18.2 Public documentation
 
 - [ ] Replace manual YAML authoring in `README.md`.
 - [ ] Update `docs/tutorials/getting-started.md`.
@@ -1406,7 +1571,7 @@ freeze, run, benchmark, and restore.
       `MetricKind`, and old key references.
       <!-- implements: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
 
-### 17.3 Migration validation
+### 18.3 Migration validation
 
 - [ ] Run `tests/test_documentation.py` after the contract and public-document
       cleanup. <!-- verifies: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
@@ -1424,7 +1589,7 @@ python -m pytest \
 
 **Commit boundary:** `Publish the Python-authored VIPER workflow`
 
-## 18. Phase 12 — experiment expansion and bounded execution
+## 19. Phase 12 — experiment expansion and bounded execution
 
 **Depends on:** Phase 11.
 
@@ -1434,7 +1599,7 @@ python -m pytest \
 variant-replicate pair and executes those frozen plans with a fixed concurrency
 limit.
 
-### 18.1 Deterministic expansion
+### 19.1 Deterministic expansion
 
 - [ ] Add `RunIdMap` and `viper.expand()` to `src/viper/authoring.py`.
       <!-- phase-produces: viper.expand -->
@@ -1463,7 +1628,7 @@ file writes after expansion returns.
 
 </details>
 
-### 18.2 Bounded execution
+### 19.2 Bounded execution
 
 - [ ] Add `ExperimentRunStatus`, `ExperimentRunResult`, and
       `ExperimentExecutionResult` to `src/viper/execution/results.py`.
@@ -1487,7 +1652,7 @@ file writes after expansion returns.
 - [ ] Export `run_many()` and the result models from `viper.execution`.
       <!-- phase-produces: viper.execution.run_many -->
 
-### 18.3 Typed API and CLI
+### 19.3 Typed API and CLI
 
 - [ ] Add `RunManyRequest` and `RunManySuccess` to `src/viper/api.py`.
       <!-- implements: EXP-03 -->
@@ -1501,7 +1666,7 @@ file writes after expansion returns.
       CLI validation before execution.
 - [ ] Keep stdout deterministic through `result_json_bytes()`.
 
-### 18.4 Focused proof
+### 19.4 Focused proof
 
 - [ ] Add complete, filtered, missing-pair, extra-pair, duplicate-ID, and order
       cases to `tests/test_authoring.py`.
@@ -1524,7 +1689,7 @@ python -m pytest \
 
 **Commit boundary:** `Expand and execute complete experiments`
 
-## 19. Phase 13 — searchable provenance catalog
+## 20. Phase 13 — searchable provenance catalog
 
 **Depends on:** Phase 12.
 
@@ -1533,7 +1698,7 @@ python -m pytest \
 **Outcome:** VIPER rebuilds one searchable local database from immutable run
 evidence and returns exact references with every result.
 
-### 19.1 Catalog schema and extraction
+### 20.1 Catalog schema and extraction
 
 - [ ] Add `src/viper/catalog.py` with `CatalogRun`, `CatalogFile`,
       `CatalogArtifact`, `CatalogMeasurement`, `CatalogBenchmark`, and
@@ -1567,7 +1732,7 @@ storage and out of protocol records.
 
 </details>
 
-### 19.2 Exact queries
+### 20.2 Exact queries
 
 - [ ] Add `Catalog.runs()`, `Catalog.artifacts()`,
       `Catalog.measurements()`, and `Catalog.benchmarks()` with every contract
@@ -1584,7 +1749,7 @@ storage and out of protocol records.
       `search_measurements`, and `search_benchmarks` operations and matching
       CLI commands.
 
-### 19.3 Focused proof
+### 20.3 Focused proof
 
 - [ ] Add database deletion and rebuild equality to
       `tests/test_inspection.py`.
@@ -1607,7 +1772,7 @@ python -m pytest \
 
 **Commit boundary:** `Index and search verified provenance`
 
-## 20. Phase 14 — verified stage reuse
+## 21. Phase 14 — verified stage reuse
 
 **Depends on:** Phases 9 and 13.
 
@@ -1617,7 +1782,7 @@ python -m pytest \
 publish it under the target paths, and record selection separately from a new
 stage invocation.
 
-### 20.1 Models and canonical key
+### 21.1 Models and canonical key
 
 - [ ] Add `StageReuseMode` to project-owned stage drafts and frozen specs.
 - [ ] Add `reuse=` to `viper.stage()` and default it to `"never"`.
@@ -1657,7 +1822,7 @@ delimiter format.
 
 </details>
 
-### 20.2 Runtime reuse
+### 21.2 Runtime reuse
 
 - [ ] Query catalog candidates in completion-time order with run and attempt
       tie breakers.
@@ -1679,7 +1844,7 @@ delimiter format.
       resolution through the new target snapshot.
 - [ ] Ignore reuse during `benchmark_confirmation` attempts.
 
-### 20.3 Metrics, verification, and inspection
+### 21.3 Metrics, verification, and inspection
 
 - [ ] Link every source stage metric through `ReusedMetricEvidence`.
 - [ ] Preserve original measurement identity and expose
@@ -1693,7 +1858,7 @@ delimiter format.
 - [ ] Add `reuses` to lineage and include reuse fields in run comparison,
       status, typed API results, and catalog rows. <!-- implements: SRU-04 -->
 
-### 20.4 Focused proof
+### 21.4 Focused proof
 
 - [ ] Add model and invalid-state cases to `tests/test_protocol.py`.
 - [ ] Add worker-call-count hits, every key miss, invalid-catalog fallback,
@@ -1720,7 +1885,7 @@ python -m pytest \
 
 **Commit boundary:** `Reuse verified stage results with explicit evidence`
 
-## 21. Phase 15 — local MCP server
+## 22. Phase 15 — local MCP server
 
 **Depends on:** Phases 12–14.
 
@@ -1729,7 +1894,7 @@ python -m pytest \
 **Outcome:** A local MCP client can inspect and search VIPER by default. An
 explicit startup flag adds the existing execution operations.
 
-### 21.1 Dependency and server
+### 22.1 Dependency and server
 
 - [ ] Add `mcp = ["mcp>=2,<3"]` to project optional dependencies.
 - [ ] Add `src/viper/mcp.py` using the stable official Python SDK version 2.
@@ -1757,7 +1922,7 @@ operations and immutable-reference operations.
 
 </details>
 
-### 21.2 Access modes and CLI
+### 22.2 Access modes and CLI
 
 - [ ] Add `viper mcp --root <path> --access read|execute`.
       <!-- implements: PCM-04 -->
@@ -1770,7 +1935,7 @@ operations and immutable-reference operations.
 - [ ] Add MCP installation and client configuration to the README and API
       reference.
 
-### 21.3 Focused proof
+### 22.3 Focused proof
 
 - [ ] List tools twice and require equal order and schemas.
 - [ ] Compare every tool input schema with its API request schema.
@@ -1792,7 +1957,7 @@ python -m pytest \
 
 **Commit boundary:** `Expose VIPER through a typed local MCP server`
 
-## 22. Phase 16 — scientific evidence records
+## 23. Phase 16 — scientific evidence records
 
 **Depends on:** Phases 9, 13, and 15.
 
@@ -1803,7 +1968,7 @@ python -m pytest \
 controlled comparisons, diagnostic signatures, and evidence-backed journal
 assertions while preserving the immutable run records they cite.
 
-### 22.1 Ontology, targets, and assignments
+### 23.1 Ontology, targets, and assignments
 
 - [ ] Add `src/viper/knowledge.py` with the exact identifier aliases,
       `PrimitiveRef`, four `KnowledgeTarget` variants, `PrimitiveSpec`,
@@ -1830,7 +1995,7 @@ one model with nullable classifier, reviewer, and confidence fields.
 
 </details>
 
-### 22.2 Modulations, effects, diagnostics, and journals
+### 23.2 Modulations, effects, diagnostics, and journals
 
 - [ ] Add `PrimitiveChange`, `ComparisonContext`, `Modulation`,
       `PairedEffect`, and `EffectEstimate` with the exact contract fields.
@@ -1883,7 +2048,7 @@ embedder creates another vector and preserves the reviewed assertion.
 
 </details>
 
-### 22.3 Focused proof
+### 23.3 Focused proof
 
 - [ ] Add exact field, union, canonical-order, ontology graph, assignment
       history, and JSON round-trip tests. <!-- verifies: EKP-01 -->
@@ -1906,7 +2071,7 @@ python -m pytest tests/test_verification_acceptance.py -q
 
 **Commit boundary:** `Record verified experiment knowledge`
 
-## 23. Phase 17 — knowledge graph and agent search
+## 24. Phase 17 — knowledge graph and agent search
 
 **Depends on:** Phase 16.
 
@@ -1918,7 +2083,7 @@ python -m pytest tests/test_verification_acceptance.py -q
 Optional vector indexes rank nearby diagnostic patterns and journal assertions
 as derived search aids outside the evidence and duplicate-rejection rules.
 
-### 23.1 Exact graph and vector views
+### 24.1 Exact graph and vector views
 
 - [ ] Add `DiagnosticVectorView`, `JournalVectorView`, `VectorViewSpec`, and
       `KnowledgeVector` with exact source and dimension validation.
@@ -1969,7 +2134,7 @@ recorded result to that fixture and those index settings.
 
 </details>
 
-### 23.2 Python, API, CLI, and MCP
+### 24.2 Python, API, CLI, and MCP
 
 - [ ] Export `knowledge`, its protocol models, and its query and result models
       from `src/viper/__init__.py`.
@@ -1986,7 +2151,7 @@ recorded result to that fixture and those index settings.
       assigns a primitive, compares matched runs, records a journal assertion,
       refreshes the catalog, and retrieves its complete evidence chain.
 
-### 23.3 Focused proof
+### 24.3 Focused proof
 
 - [ ] Add exact vector-view, vector, retrieval-judgment, union, and JSON
       round-trip cases to `tests/test_protocol.py`. Sever each vector source
@@ -2020,7 +2185,7 @@ python -m pytest \
 
 **Commit boundary:** `Search experiment knowledge through every public surface`
 
-## 24. Phase 18 — terminal system and release gate
+## 25. Phase 18 — terminal system and release gate
 
 **Depends on:** Phases 1–17.
 
@@ -2030,7 +2195,7 @@ python -m pytest \
 stack, and every repository release check passes after the last implementation
 phase.
 
-### 24.1 Generated-project integration
+### 25.1 Generated-project integration
 
 - [ ] Publish the complete workflow in `README.md`, `docs/reference/api.md`,
       `docs/reference/protocol.md`, `docs/explanation/how-viper-works.md`, and
@@ -2050,7 +2215,7 @@ phase.
 - [ ] Call one read and one execute MCP operation through an in-process client.
 - [ ] Restore one selected artifact and the complete run. Compare every digest.
 
-### 24.2 Deterministic contract gate
+### 25.2 Deterministic contract gate
 
 - [ ] Run `tests/test_documentation.py`. Require exact contract baselines,
       one implementation and verification marker per requirement, exact
@@ -2060,7 +2225,7 @@ phase.
 - [ ] Run the focused tests for every changed source and contract surface.
 - [ ] Run the generated-project acceptance test from the source checkout.
 
-### 24.3 Full release proof
+### 25.3 Full release proof
 
 - [ ] Run `make check`.
 - [ ] Run `make check-integration`.
@@ -2082,18 +2247,20 @@ make check-release
 
 **Commit boundary:** `Complete the VIPER contract migration`
 
-## 25. Complete code-change ledger
+## 26. Complete code-change ledger
 
 This ledger prevents a local implementation from leaving another reader on the
 old contract.
 
 | Path | Required work | Phase |
 | --- | --- | --- |
+| `src/viper/project.py` | Project marker schema, root discovery, explicit-root validation, and path-boundary errors | 0 |
+| `src/viper/system_graph.py` | Fixed-context system compiler, typed graph, SCC condensation DAG, graph delta, and impact closure | 0 |
 | `src/viper/_schema.py` | New parameter-source path scalar; replace old stage-key constants | 4, 5 |
 | `src/viper/keys.py` | Add `Train` and `Eval` enums | 5 |
 | `src/viper/parameters.py` | Rename `HttpTransport` to `Http`; owner-aware `ParameterModelRef`; delete `Download`; public alias support | 2, 4 |
 | `src/viper/references.py` | Cloud refs, snapshot rename, reuse reference, union changes | 9, 14 |
-| `src/viper/storage.py` | Destinations, publishers, independent publication, cloud client, reused snapshot publication | 1, 9, 14 |
+| `src/viper/storage.py` | Project-root binding, destinations, publishers, independent publication, cloud client, reused snapshot publication | 0, 1, 9, 14 |
 | `src/viper/artifacts.py` | Drafts, run-relative paths, pointer compatibility | 5, 7 |
 | `src/viper/artifact_loaders.py` | Replace old fixed artifact keys in loader validation | 5 |
 | `src/viper/inputs.py` | Remove HTTP source; local snapshot ref; stored pointer change | 3, 7 |
@@ -2102,7 +2269,7 @@ old contract.
 | `src/viper/metrics.py` | Remove kind; drafts; context; parameter identity; objectives | 4 |
 | `src/viper/experiments.py` | Remove download params; add factor, variant, replicate, experiment drafts | 2, 6 |
 | `src/viper/benchmark.py` | Draft, metric IDs, optional criteria, complete results | 8 |
-| `src/viper/authoring.py` | Replace YAML draft loading with graph compiler; expand experiments into ordered plans | 5–8, 12 |
+| `src/viper/authoring.py` | Resolve the project root; replace YAML draft loading with graph compiler; expand experiments into ordered plans | 0, 5–8, 12 |
 | `src/viper/runs.py` | Input/pointer relationships, terminal cloud references, executed and reused stage completion | 7, 9, 14 |
 | `src/viper/catalog.py` | Rebuildable SQLite catalog, exact queries, lineage rows, stage-reuse lookup, knowledge graph, and vector-view indexes | 13, 14, 17 |
 | `src/viper/knowledge.py` | Ontology, assignments, modulations, effects, impacts, diagnostics, journals, vectors, and immutable publication | 16, 17 |
@@ -2110,17 +2277,17 @@ old contract.
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
 | `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
 | `src/viper/preflight.py` | Renamed HTTP implementation checks, runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
-| `src/viper/inspection.py` | Render renamed snapshot and result references; share catalog lineage extraction; expose reuse edges | 2, 9, 13, 14 |
+| `src/viper/inspection.py` | Compile and compare system graphs; render renamed snapshot and result references; share catalog lineage extraction; expose reuse edges | 0, 2, 9, 13, 14 |
 | `src/viper/execution/_materialization.py` | `invoke_http()` and runner download output; local capture; stored materialization | 2, 3, 7 |
 | `src/viper/execution/_stage.py` | New keys; captured-input post-check | 3, 5 |
 | `src/viper/execution/_resolution.py` | New resolved hierarchy, objectives, and executed or reused completion | 2, 4, 14 |
-| `src/viper/execution/_attempt.py` | Publisher use; runner download; captures; cloud destination; reuse lookup and fallback | 1–4, 9, 14 |
-| `src/viper/execution/_metric.py` | Typed context, mandatory parameter ref, metric dependency references, and reused metric evidence | 4, 14 |
+| `src/viper/execution/_attempt.py` | Resolved project root; publisher use; runner download; captures; cloud destination; reuse lookup and fallback | 0–4, 9, 14 |
+| `src/viper/execution/_metric.py` | Resolved project root, typed context, mandatory parameter ref, metric dependency references, and reused metric evidence | 0, 4, 14 |
 | `src/viper/execution/_benchmark.py` | Complete metric-result loop and benchmark lookup through the plan commit | 6, 8, 9 |
 | `src/viper/execution/_publication.py` | Destination-neutral independent files and reused snapshot publication | 1, 9, 14 |
 | `src/viper/execution/_recovery.py` | Destination-neutral failed-attempt closure | 1, 9 |
 | `src/viper/execution/_source.py` | Cloud file and snapshot routing | 9 |
-| `src/viper/execution/_run.py` | Return terminal refs; restore entry point | 9, 10 |
+| `src/viper/execution/_run.py` | Resolve the project root; return terminal refs; restore entry point | 0, 9, 10 |
 | `src/viper/execution/_batch.py` | Bounded multi-run scheduling and ordered aggregate results | 12 |
 | `src/viper/execution/results.py` | `resolved_run_ref`, benchmark `result_ref`, restore, and aggregate experiment results | 9, 10, 12 |
 | `src/viper/_workers/stages.py` | Remove download; reconstruct captured local input paths; new keys; metric context | 2–5 |
@@ -2131,16 +2298,16 @@ old contract.
 | `src/viper/_verification/attempt.py` | Renamed HTTP implementation verification, download equality, canonical local capture path, local-root identity, objective evidence, and stage-reuse receipts | 2–4, 14 |
 | `src/viper/_verification/plan.py` | Draft-derived graph, plan/source commit separation, keys, objectives, pointers, benchmarks | 4–8 |
 | `src/viper/_verification/metrics.py` | Parameter binding, complete benchmark metrics, and reused source metric evidence | 4, 8, 14 |
-| `src/viper/_verification/storage.py` | Cloud fetch, snapshot list, restore identity | 9, 10 |
+| `src/viper/_verification/storage.py` | Explicit project-root reconstruction, cloud fetch, snapshot list, and restore identity | 0, 9, 10 |
 | `src/viper/verification.py` | Dispatch every new verifier rule | 2–10, 13, 14, 16–17 |
 | `src/viper/execution/__init__.py` | Export restore, batch execution, and updated result types | 9, 10, 12 |
-| `src/viper/api.py` | Python freeze inputs, result refs, restore, batch, catalog, knowledge, and MCP-owned operation schemas | 5–17 |
+| `src/viper/api.py` | Root-aware developer graph operations, Python freeze inputs, result refs, restore, batch, catalog, knowledge, and MCP-owned operation schemas | 0, 5–17 |
 | `src/viper/_api/__init__.py` | Export the restore operation models and handler | 10 |
-| `src/viper/_api/handlers.py` | Compile drafts, return refs, restore, batch, catalog, and knowledge handlers | 5–17 |
-| `src/viper/cli.py` | Python workflow command changes, restore, batch, catalog, knowledge, and MCP commands | 10–17 |
-| `src/viper/project_init.py` | Replace the generated download callable in Phase 2, remove remaining legacy patterns in Phase 11, and add the terminal knowledge workflow in Phase 18 | 2, 11, 18 |
+| `src/viper/_api/handlers.py` | Resolve project roots; compile system graphs and drafts; return refs; restore, batch, catalog, and knowledge handlers | 0, 5–17 |
+| `src/viper/cli.py` | `--root`, system graph commands, Python workflow changes, restore, batch, catalog, knowledge, and MCP commands | 0, 10–17 |
+| `src/viper/project_init.py` | Add the root marker and complete protocol tree; replace the generated download callable; remove legacy patterns; add the terminal knowledge workflow | 0, 2, 11, 18 |
 | `src/viper/__init__.py` | Export `http`, `HttpContext`, `HttpResult`, expansion, catalog, knowledge, and result types; remove retired names | 2, 4–17 |
-| `pyproject.toml` | Add the optional MCP and knowledge dependency groups | 15, 17 |
+| `pyproject.toml` | Register system-graph tests and add the optional MCP and knowledge dependency groups | 0, 15, 17 |
 | `src/viper/py.typed` | Ship the package's PEP 561 typing marker | Complete |
 | `CHANGELOG.md` | Record the contract implementation under the active release | 11 |
 | `tests/fixtures.py` | Canonical HTTP names, target records, and complete authored graph | All pending phases |
@@ -2153,36 +2320,39 @@ old contract.
 | `tests/test_metric_interface.py` | Decorator, context, and live parameters | 4 |
 | `tests/test_metric_provenance.py` | Recomputed receipt identity | 4 |
 | `tests/test_benchmark_execution.py` | Complete results and optional criteria | 8, 9 |
-| `tests/test_storage.py` | Publisher, retrieval, restore, and reused-snapshot backends | 1, 9, 10, 14 |
+| `tests/test_storage.py` | Root-bound local storage, publisher, retrieval, restore, and reused-snapshot backends | 0, 1, 9, 10, 14 |
 | `tests/test_verification.py` | All new verifier rules | 2–10, 14 |
 | `tests/test_verification_acceptance.py` | Tamper, graph, catalog-source, reuse, and knowledge-record rejection cases | 2–10, 13, 14, 16–17 |
 | `tests/test_preflight.py` | Frozen graph, plan commit, and source commit checks | 5–8 |
 | `tests/test_public_api.py` | `viper.http`, removed transport exports, decorators, keys, constructors, and knowledge exports | 2, 4–10, 17 |
 | `tests/test_parameter_validation.py` | Project and installed-VIPER parameter-model owners | 4 |
-| `tests/test_inspection.py` | Stage and attempt references, catalog queries, reuse lineage, knowledge graph, and vector search | 2, 9, 13, 14, 17 |
+| `tests/test_inspection.py` | System graph delta and impact closure; stage and attempt references; catalog queries; reuse lineage; knowledge graph; vector search | 0, 2, 9, 13, 14, 17 |
 | `tests/test_api.py` | Typed operation, batch, catalog, knowledge, and MCP inputs and outputs | 5–17 |
 | `tests/test_api_json.py` | JSON shapes for result references and restore | 9, 10 |
 | `tests/test_cli.py` | Commands, JSON results, restore, batch, catalog, knowledge, and MCP syntax | 10–17 |
-| `tests/test_project_init.py` | Generated source layout | 11 |
+| `tests/test_project_init.py` | Root marker, discovery, complete protocol tree, rollback, and generated source layout | 0, 11 |
+| `tests/test_validation_architecture.py` | Fixed-context system compilation, observed dynamic edges, SCC DAGs, strict unresolved-input failure, and root-resolver boundaries | 0 |
 | `tests/test_generated_project_acceptance.py` | Installed public workflow and terminal contract-stack acceptance | 11, 18 |
 | `tests/test_stage_invocation.py` | New keys, objective context, and owner-aware parameter binding | 4, 5 |
 | `tests/test_worker.py` | Project-stage worker after download removal and context changes | 2, 4, 5 |
 | `tests/test_resume.py` | `Train.STATE` input and artifact names | 5 |
 | `tests/test_process_startup.py` | Owner-aware parameter source checks | 4 |
-| `tests/test_documentation.py` | Schema mirrors, links, examples, operations, exact contract models, and deterministic contract-to-checklist coverage | 11–18 |
+| `tests/test_documentation.py` | System-graph coverage parity, root vocabulary, schema mirrors, links, examples, operations, exact contract models, and deterministic contract-to-checklist coverage | 0, 11–18 |
+| `docs/development/project-data-root.md` | Root selection, discovery, path custody, verification, propagation, and acceptance cases | 0 |
+| `docs/development/system-impact-graph.md` | Fixed context, graph schema, compilation, delta, impact closure, verification, and acceptance cases | 0 |
 | `docs/development/experiment-expansion.md` | Expansion, aggregate execution, and acceptance cases | 12 |
 | `docs/development/provenance-catalog-mcp.md` | Catalog, MCP tools, access boundary, and acceptance cases | 13, 15 |
 | `docs/development/stage-reuse.md` | Reuse key, receipt, runtime, metric, storage, and verifier contract | 14 |
 | `docs/development/experiment-knowledge-primitives.md` | Ontology, controlled comparisons, diagnostics, journals, graph, vectors, and agent operations | 16, 17 |
 | `docs/development/research-memory-roadmap.md` | Active deterministic foundation and deferred learned research sequence | 16, 17, Deferred |
 | `docs/development/frozen-plan-git-identity.md` | Source/plan commit contract and acceptance cases | 6 |
-| `docs/reference/protocol.md` | Exact final serialized contract | 11, 16–18 |
+| `docs/reference/protocol.md` | Selected root and reserved tree plus the exact final serialized contract | 0, 11, 16–18 |
 | `docs/reference/api.md` | Exact final Python, CLI, catalog, knowledge, and MCP interface | 11–18 |
 | `docs/explanation/how-viper-works.md` | One causal execution with expansion, reuse, knowledge publication, and search | 11–18 |
 | `docs/tutorials/getting-started.md` | First public run, catalog query, and evidence-backed assertion | 11–18 |
 | `README.md` | Complete public example and local MCP setup | 11–18 |
 
-## 26. Deferred work
+## 27. Deferred work
 
 These items stay outside this implementation sequence:
 
@@ -2203,18 +2373,17 @@ These items stay outside this implementation sequence:
   policies, and continual-learning policies in
   [`research-memory-roadmap.md`](research-memory-roadmap.md).
 
-## 27. Current position
+## 28. Current position
 
-The latest system review places all ten implementation contracts in Draft.
+The latest system review places all twelve implementation contracts in Draft.
 The experiment-knowledge contract activates the deterministic foundation from
 the research-memory roadmap. Learned representations, literature ingestion,
 outcome models, acquisition, and continual learning remain deferred.
-Implementation remains pending. The first missing result is a local run that
-passes through `SnapshotPublisher` and `publish_resolved_files()` while
-preserving its stored bytes and references.
+Implementation remains pending. The first missing result is an initialized
+project whose marker, protocol tree, local store, and strict system impact graph
+pass the Phase 0 gate.
 
-Once Phase 1 passes, the next pair-coding turn begins Phase 2 with the
-`BaseSpec` and `DownloadSpec` inheritance change.
+Once Phase 0 passes, Phase 1 introduces destination-neutral local publication.
 
 ## Implementation sources
 

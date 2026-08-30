@@ -40,7 +40,7 @@ The current implementation writes every immutable copy through
 The cloud design keeps that split. It adds references that point to Viper
 Cloud. Each saved record tells VIPER where to retrieve its files.
 
-The four storage-related contracts divide ownership as follows:
+These storage-related contracts divide ownership as follows:
 
 | Contract | Owned decision |
 | --- | --- |
@@ -48,6 +48,7 @@ The four storage-related contracts divide ownership as follows:
 | [`external-input-roots.md`](external-input-roots.md) | Local files and HTTP responses use source-specific root records; later stages select artifacts through `FutureInputRef` or `StoredInputRef`. |
 | [`automatic-input-resolution.md`](automatic-input-resolution.md) | Python authoring compiles local files, same-run handles, and prior-run selections into frozen input references. |
 | [`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) | Generated plan documents use a Git plan commit; project definitions use the earlier source commit. |
+| [`project-data-root.md`](project-data-root.md) | `viper init ROOT` selects the root that contains the protocol tree and the separate local `.viper/store` subtree. |
 | This contract | Every immutable file and stage snapshot publishes directly to the configured local or Viper Cloud destination. |
 
 ## 2. Required claim
@@ -141,7 +142,9 @@ One field selects the immutable publication destination:
 destination = "local"
 ```
 
-`local` publishes immutable evidence beneath `.viper/store`.
+`local` publishes immutable evidence beneath `ROOT/.viper/store`, where `ROOT`
+is the explicit or discovered project root defined by
+[`project-data-root.md`](project-data-root.md).
 
 ```toml
 [storage]
@@ -163,6 +166,10 @@ output path.
 An absent `[storage]` table has the same effect as `destination = "local"`.
 The single destination field replaces separate placement, mirror, sync, and
 offload modes.
+
+`viper init ROOT` selects the protocol and working-data tree. The storage
+destination separately selects where VIPER publishes immutable copies of files
+from that tree.
 
 ### 4.2 Parsed configuration
 
@@ -756,7 +763,8 @@ user-declared artifact paths
 VIPER uses these files to run, diagnose, and retry the attempt. Persisted
 references point to the immutable copies.
 
-The local destination publishes immutable evidence beneath `.viper/store`.
+The local destination publishes immutable evidence beneath
+`ROOT/.viper/store`.
 The Viper Cloud destination publishes immutable evidence to the cloud and
 places zero payload copies beneath `.viper/store`. User-declared output files
 and attempt recovery files remain in place.
@@ -872,7 +880,7 @@ The output rules are:
 | Several artifacts | Directory beneath which VIPER recreates declared repository-relative paths |
 
 Omitting `--output` restores each selected artifact to its declared path beneath
-`--repository-root`. VIPER requires every selected destination path to be
+`--root`. VIPER requires every selected destination path to be
 unique and nonoverlapping. A conflicting selection fails before retrieval.
 
 Restore performs this sequence:
@@ -1033,7 +1041,7 @@ destination = "local"
 
 ```bash
 viper run experiments/tiny/runs/baseline/<run-id>/spec.yaml \
-  --repository-root .
+  --root .
 ```
 
 The command returns a `ResolvedRunRef` whose `stored_at` value is a
@@ -1048,7 +1056,7 @@ destination = "viper://machina/weekend_models"
 
 ```bash
 viper run experiments/tiny/runs/baseline/<run-id>/spec.yaml \
-  --repository-root .
+  --root .
 ```
 
 The stage writes its normal local output files. VIPER streams each completed
@@ -1058,7 +1066,7 @@ snapshot directly to Viper Cloud. The command returns a `ResolvedRunRef` whose
 ```bash
 viper restore \
   "viper://machina/weekend_models@<revision>/<path-to-resolved.yaml>" \
-  --repository-root restored-project
+  --root restored-project
 ```
 
 The command above restores every artifact to its declared path. The user can

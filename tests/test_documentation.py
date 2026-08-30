@@ -25,6 +25,8 @@ TRAINING_GUIDES = (
 
 MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
 IMPLEMENTATION_CONTRACTS = (
+    ROOT / "docs/development/project-data-root.md",
+    ROOT / "docs/development/system-impact-graph.md",
     ROOT / "docs/development/download-retrieval-artifacts.md",
     ROOT / "docs/development/external-input-roots.md",
     ROOT / "docs/development/unified-metric-drafting.md",
@@ -928,7 +930,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
         )
 
     phase_matches = tuple(_PHASE_HEADING.finditer(checklist))
-    assert len(phase_matches) == 18
+    assert len(phase_matches) == 19
     mappings: dict[str, dict[str, list[tuple[int, str]]]] = {
         "implements": {},
         "verifies": {},
@@ -953,7 +955,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
                 for requirement in requirements:
                     mappings[role].setdefault(requirement, []).append((phase, block))
 
-    assert set(phase_text) == set(range(1, 19))
+    assert set(phase_text) == set(range(0, 19))
 
     declared = set(declarations)
     assert set(mappings["implements"]) == declared

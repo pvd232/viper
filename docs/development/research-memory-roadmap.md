@@ -18,6 +18,11 @@ immutable run evidence
 -> MCP access to exact queries and operations
 ```
 
+[`system-impact-graph.md`](system-impact-graph.md) supports development of
+those layers. It compares VIPER source revisions and reports affected code,
+contracts, and tests. A separate experiment graph represents a user's frozen
+plans.
+
 [`experiment-knowledge-primitives.md`](experiment-knowledge-primitives.md)
 adds the fourth layer in Phases 16 and 17:
 
@@ -28,7 +33,7 @@ versioned ontology and assignments
 -> exact graph filters and optional vector indexes
 ```
 
-The learned work in Sections 7 and 8 begins after these four layers pass their
+The learned work in Sections 8 and 9 begins after these four layers pass their
 acceptance tests and produce reviewed training and evaluation records.
 
 ## 2. Intended use
@@ -60,7 +65,64 @@ The knowledge graph should preserve five separate layers:
 An agent can combine the layers in an answer. Storage and verification keep
 their authority separate.
 
-## 4. Experiment primitives
+## 4. Experiment structure graph
+
+VIPER should derive a canonical graph from each frozen experiment protocol.
+The compiler reads `RunSpec`, every referenced stage specification, artifact
+declarations, input references, metric definitions, environment identity, and
+reproducibility settings. The frozen protocol supplies the graph input.
+
+The graph needs typed nodes and edges:
+
+```text
+run
+├── contains -> stage
+├── selects -> variant and replicate
+└── uses -> environment and reproducibility settings
+
+stage
+├── consumes -> input root or prior artifact
+├── produces -> artifact
+├── measures -> metric
+└── optimizes -> objective
+```
+
+Comparison occurs in three steps:
+
+1. Exact protocol identity detects identical frozen plans.
+2. Typed, labeled graph isomorphism detects plans with the same structure after
+   irrelevant identifier renaming.
+3. A deterministic graph edit script lists added, removed, and changed nodes,
+   edges, fields, and byte-addressed definitions for plans that differ.
+
+The initial edit cost is unweighted. Each added, removed, or changed typed item
+counts once. The report keeps the complete edit list beside the count. The
+count measures structural distance. Controlled outcomes and diagnostics
+measure scientific impact.
+
+The graph edit becomes the observed change attached to a controlled
+modulation:
+
+```text
+baseline frozen graph + candidate frozen graph
+-> canonical correspondence
+-> exact graph edit
+-> matched diagnostic and objective changes
+-> primitive assignments that explain the scientific meaning
+```
+
+This adds evidence beneath the primitive ontology. The graph proves which
+protocol structure changed. Primitive assignments label that change as a model
+family, embedding topology, loss family, optimizer family, or another
+scientific concept. Diagnostic and outcome records show what happened after
+the change.
+
+The experiment graph requires a separate contract before implementation. That
+contract must define its exact node, edge, correspondence, edit, and verifier
+models. It must also define which identifier changes count as irrelevant and
+which fields remain part of experiment identity.
+
+## 5. Experiment primitives
 
 The first ontology should use a small set of versioned primitives. Each label
 needs a stable ID, definition, version, parent relationships, and examples.
@@ -99,7 +161,7 @@ reviewed
 This separation lets the system improve its classifiers while preserving the
 historical experiment record.
 
-## 5. Experiment modulations and impact
+## 6. Experiment modulations and impact
 
 An experiment modulation changes one or more primitives between comparable
 runs. The active primitive contract stores the changed fields, comparison
@@ -129,7 +191,7 @@ produce a different impact classification for the same modulation.
 Negative and null results remain first-class evidence. They support duplicate
 avoidance and bound search regions that already performed poorly.
 
-## 6. Non-duplicative search
+## 7. Non-duplicative search
 
 Search should reject an experiment as a duplicate only when its complete
 execution identity matches a prior verified run or when an explicit
@@ -154,7 +216,7 @@ rule evaluates enough comparable evidence. The rule must state its minimum
 replicate count, effect threshold, uncertainty limit, data scope, compute
 scope, and expiration or review condition.
 
-## 7. Literature ingestion
+## 8. Literature ingestion
 
 Literature records should preserve:
 
@@ -179,7 +241,7 @@ The ingestion pipeline should poll primary sources, deduplicate versions, run
 label classifiers, and queue uncertain assignments for review. A retrieval
 index can expose the paper text and graph neighborhood to an agent.
 
-## 8. Retrieval and continual learning
+## 9. Retrieval and continual learning
 
 The first agent memory should use retrieval over the catalog, ontology graph,
 derived findings, and literature records. Retrieval preserves citations and
@@ -201,7 +263,7 @@ retrieve exact relevant evidence
 -> train a domain-specific policy or classifier
 ```
 
-## 9. Planned interfaces
+## 10. Planned interfaces
 
 Phases 16 and 17 add graph and semantic queries through the same Python, CLI,
 and MCP surfaces:
@@ -217,21 +279,25 @@ record reviewed labels and finding policies
 Knowledge publication uses execute access. Search uses read access. Literature
 queries begin after the literature records have their own contract.
 
-## 10. Build sequence
+## 11. Build sequence
 
 ### Active in the current migration
 
-1. Define the versioned primitive ontology and exact assignment records.
-2. Define controlled `Modulation`, paired `EffectEstimate`, `ImpactPolicy`, and
+1. Finish an experiment-structure graph contract and add it to the master
+   checklist before implementation.
+2. Compile frozen plans into canonical typed graphs and deterministic edit
+   scripts.
+3. Define the versioned primitive ontology and exact assignment records.
+4. Define controlled `Modulation`, paired `EffectEstimate`, `ImpactPolicy`, and
    `ImpactAssessment` records.
-3. Extract deterministic `DiagnosticSignature` records.
-4. Add typed `JournalAssertion` records with immutable evidence links.
-5. Build exact filters and graph traversal.
-6. Keep diagnostic vectors and journal-text vectors in separate views.
-7. Add one optional HNSW index per vector view.
-8. Record reviewed retrieval judgments against exact query and candidate
+5. Extract deterministic `DiagnosticSignature` records.
+6. Add typed `JournalAssertion` records with immutable evidence links.
+7. Build exact filters and graph traversal.
+8. Keep diagnostic vectors and journal-text vectors in separate views.
+9. Add one optional HNSW index per vector view.
+10. Record reviewed retrieval judgments against exact query and candidate
    vectors.
-9. Expose publication and search through Python, typed API, CLI, and MCP.
+11. Expose publication and search through Python, typed API, CLI, and MCP.
 
 ### Deferred until reviewed evidence exists
 
@@ -247,7 +313,7 @@ queries begin after the literature records have their own contract.
 Each deferred step starts only after its contract names the immutable training
 set, held-out evaluation set, metric, baseline, and acceptance threshold.
 
-## 11. Remaining platform work
+## 12. Remaining platform work
 
 The following platform capabilities also remain outside the current migration:
 
@@ -265,7 +331,7 @@ The following platform capabilities also remain outside the current migration:
 These capabilities can consume the immutable records, catalog, and MCP layer.
 They preserve the evidence model defined by the current contracts.
 
-## 12. Research basis
+## 13. Research basis
 
 The [CoALA framework](https://arxiv.org/abs/2309.02427) separates agent memory
 into working, episodic, semantic, and procedural forms. VIPER's verified runs

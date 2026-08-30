@@ -820,7 +820,7 @@ class KnowledgeStore:
 
 def knowledge(
     *,
-    root: Path = Path.cwd(),
+    root: Path | None = None,
     destination: StorageDestination | None = None,
 ) -> KnowledgeStore: ...
 ```
