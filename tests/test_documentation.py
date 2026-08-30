@@ -33,6 +33,9 @@ IMPLEMENTATION_CONTRACTS = (
     AUTOMATIC_INPUT_RESOLUTION,
     ROOT / "docs/development/frozen-plan-git-identity.md",
     ROOT / "docs/development/remote-storage.md",
+    ROOT / "docs/development/experiment-expansion.md",
+    ROOT / "docs/development/provenance-catalog-mcp.md",
+    ROOT / "docs/development/stage-reuse.md",
 )
 
 _CONTRACT_REQUIREMENT = re.compile(
@@ -70,6 +73,8 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.eval",
     "viper.execution.benchmark",
     "viper.execution.run",
+    "viper.execution.run_many",
+    "viper.expand",
     "viper.experiment",
     "viper.factor",
     "viper.artifact",
@@ -85,6 +90,7 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.stage",
     "viper.train",
     "viper.variant",
+    "viper.catalog",
 }
 
 RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS = {
@@ -644,7 +650,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
         ]
 
     phase_matches = tuple(_PHASE_HEADING.finditer(checklist))
-    assert len(phase_matches) == 11
+    assert len(phase_matches) == 15
     mappings: dict[str, dict[str, list[tuple[int, str]]]] = {
         "implements": {},
         "verifies": {},
@@ -670,7 +676,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
                 for requirement in requirements:
                     mappings[role].setdefault(requirement, []).append((phase, block))
 
-    assert set(phase_text) == set(range(1, 12))
+    assert set(phase_text) == set(range(1, 16))
 
     declared = set(declarations)
     assert set(mappings["implements"]) == declared

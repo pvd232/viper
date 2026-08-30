@@ -508,6 +508,15 @@ class SnapshotPublisher(Protocol):
         resolved_stage: bytes,
         files: Mapping[RepoRelPath, Path],
     ) -> StageResultSnapshot: ...
+
+    def publish_reuse(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        source_snapshot: StageResultSnapshot,
+        files: tuple[ReusedStageFile, ...],
+    ) -> StageResultSnapshot: ...
 ```
 
 Files outside stage snapshots use a separate function:
@@ -530,6 +539,12 @@ def bind_run_destination(
 The local publisher calls `LocalArtifactStore`. The cloud publisher uploads
 each source and seals one revision. It returns `ViperCloudFileRef` for a
 separate file or `ViperCloudStageResultSnapshotRef` for a stage snapshot.
+
+`publish_reuse()` supports the opt-in contract in
+[`stage-reuse.md`](stage-reuse.md). The local publisher links or copies
+verified source-snapshot bytes into a new target revision. The cloud publisher
+seals a new target manifest over existing payload objects. Both paths publish
+the target `resolved.yaml` and return a new target snapshot identity.
 
 The stage executor uses this exact call:
 
@@ -1076,6 +1091,7 @@ viper restore <run-reference> \
 | File references | Add `ViperCloudFileRef` to `StorageRef`. |
 | Snapshot references | Add `ViperCloudStageResultSnapshotRef`; rename the Python Hugging Face snapshot class while preserving its serialized form. |
 | Publication | Replace hard-coded local publication calls with `SnapshotPublisher.publish()` and `publish_resolved_files()`. |
+| Stage reuse | Add `SnapshotPublisher.publish_reuse()` so a target stage receives a new snapshot while its callable remains uncalled. |
 | Stage execution | Pass resolved-stage bytes and declared artifact paths to the snapshot publisher after artifact validation. |
 | Download execution | Publish the shared retrieval/artifact path once in the configured stage snapshot. |
 | Local roots | Copy each source to an attempt-owned input path, verify it after stage execution, and include its `SnapshotFileRef` in the consuming-stage snapshot. |

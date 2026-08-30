@@ -10,8 +10,11 @@ surface that must change.
 
 ## 1. Terminal outcome
 
-The work is complete when a user can write one Python experiment, freeze it,
-run it, verify it, benchmark it, and restore its artifacts.
+The work is complete when a user can write one Python experiment, expand its
+variants and replicates into concrete plans, freeze and run them, reuse an
+eligible verified stage, verify and benchmark the results, search them through
+the provenance catalog, operate VIPER through a local MCP server, and restore
+their artifacts.
 
 The authoring program uses decorated stage and metric functions:
 
@@ -53,6 +56,26 @@ run = viper.plan(
 frozen = viper.freeze(run)
 ```
 
+The same experiment can produce every selected run:
+
+```python
+plans = viper.expand(
+    experiment,
+    run_ids={
+        "baseline": {
+            "replicate_01": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "replicate_02": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        },
+    },
+    benchmark=benchmark,
+    source=source,
+    env=env,
+    reproducibility=reproducibility,
+)
+
+frozen_runs = tuple(viper.freeze(plan) for plan in plans)
+```
+
 `viper.freeze()` writes canonical YAML and returns every generated path. The
 user reviews and commits those files. The resulting plan commit identifies the
 YAML that VIPER executes. `RunSpec.source.commit` separately identifies the
@@ -73,6 +96,26 @@ benchmark_result = viper.execution.benchmark(
     frozen.benchmark_spec_path,
 )
 ```
+
+After the plan commit, bounded execution and catalog search use the same
+single-run operations and immutable records:
+
+```python
+results = viper.execution.run_many(
+    Path.cwd(),
+    tuple(item.run_spec_path for item in frozen_runs),
+    max_concurrency=2,
+)
+
+catalog = viper.catalog(root=Path.cwd())
+catalog.refresh()
+losses = catalog.measurements(
+    viper.MeasurementQuery(metric_ids=("test_loss",))
+)
+```
+
+`viper mcp --root <project>` exposes verified inspection and catalog tools.
+`--access execute` adds run, retry, benchmark, batch-run, and restore tools.
 
 The execution calls begin after every path in `frozen.files` enters the plan
 commit.
@@ -160,6 +203,10 @@ ExternalInputDraft
 | [Automatic input resolution](automatic-input-resolution.md) | Draft after audit | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Draft after audit | Separate source and generated-plan commits between freezing and execution |
 | [Direct Viper Cloud publication](remote-storage.md) | Draft after audit | Destination-neutral publication, cloud references, retrieval, and restore |
+| [Experiment expansion](experiment-expansion.md) | Draft after audit | Deterministic variant-replicate expansion and bounded multi-run execution |
+| [Provenance catalog and MCP](provenance-catalog-mcp.md) | Draft after audit | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
+| [Verified stage reuse](stage-reuse.md) | Draft after audit | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
+| [Research memory roadmap](research-memory-roadmap.md) | Deferred | Scientific ontology, evidence graph, literature ingestion, retrieval, and continual learning |
 
 The contracts share models. One contract owns each shared decision:
 
@@ -175,6 +222,10 @@ The contracts share models. One contract owns each shared decision:
 | Artifact draft paths are relative to the selected run root | Automatic input resolution |
 | Immutable location comes from the configured destination | Direct Viper Cloud publication |
 | Generated YAML identity comes from the plan commit; project definitions come from the source commit | Frozen plan Git identity |
+| One experiment expands into ordinary `RunPlanDraft` values | Experiment expansion |
+| A skipped stage records `StageReuseReceipt` and a new target snapshot | Verified stage reuse |
+| Cross-run search rows remain derived from immutable references | Provenance catalog and MCP |
+| MCP tool schemas and calls reuse typed API models and handlers | Provenance catalog and MCP |
 
 ### 3.1 Deterministic contract coverage
 
@@ -184,17 +235,21 @@ focused test. The matching phase contains one `implements` marker and one
 exact reviewed contract bytes. A contract edit requires another checklist
 review and a new digest.
 
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=3de87a81ddc5e4dc7a9c180dd071141958d61304c8779d9832a6967098907e80 -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=b4e8c4b7ce884cb09cd2d1f2ce5c9e1bab7388268246a75e941123eba78861fa -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=28e6e83a4d41069c5d7e7bf3db2792b4f53b92a6401a1a5eb725080a4001d233 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=3d7159e9c82addf02f6fa90afda1ca544b991d231ea563b61f23880702374e9b -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=bdbc3a61425e9f0bd64189cc44ddf4eb91087ffc57630f7ee1d7dd7a7bd875ad -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=89a09e5e38ec75cb219df9548f5c4f6d22a7e4396053124be4cdb9fd3021c215 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
-<!-- contract-baseline: remote-storage.md sha256=5f7a7c483973f03cb434d9fdfbc63633a21bb7310c138d7ef4807cb8bf377e58 -->
+<!-- contract-baseline: remote-storage.md sha256=02e4e2efae37fa133b2f015ad63df2debe9442ba304390769ec8cdce14873502 -->
+<!-- contract-baseline: experiment-expansion.md sha256=ab9feaee05809000085319b01beefcdfdc842ad12c23cb429a5fd13c2e37590d -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=19f470ad18b7f570da9ba3f13f5fba3cd94a91fe1a03071ddb26583f16f6680b -->
+<!-- contract-baseline: stage-reuse.md sha256=94422de5a65f2f185fb9e3799db1cf0b828765048f181c1fae5d112c2fee6dd0 -->
 
 ## 4. Specification-system review
 
-The review compared all seven contracts with the current source, tests, protocol
-reference, public API, CLI, and generated project.
+The review compared all ten active contracts with the current source, tests,
+protocol reference, public API, CLI, and generated project. The research-memory
+roadmap remains outside the active contract set.
 
 ### 4.1 Schema gate
 
@@ -221,6 +276,11 @@ The review found and repaired these schema conflicts:
 | Live metric evidence left the receipt-to-`MetricSpec` join implicit | Join the measurement, invocation metric IDs, frozen stage, and experiment registry in `metric.live.parameter_delivery`. |
 | Python authoring generated plan files after the source commit, and execution searched that source commit for them | Add a separate plan commit and use it for generated documents. |
 | Restore CLI behavior lacked exact Python and typed-operation models | Add one selector, result, request, success, and direct execution interface. |
+| `ExperimentDraft` declared a run matrix while `viper.plan()` selected one pair | Add `viper.expand()` and keep `RunPlanDraft` as the single-run unit. |
+| Every resolved project stage required an invocation | Add executed and reused completion variants plus `StageReuseReceipt`. |
+| Stage reuse could select a digest from an untrusted cache | Derive candidates from the catalog and fully verify the source run before reuse. |
+| Cross-run inspection lacked a source-of-truth boundary | Make the catalog rebuildable and require an immutable source reference on every result. |
+| An MCP implementation could duplicate API models and handlers | Generate tool schemas from typed API models and route calls through `dispatch()`. |
 
 ### 4.2 Value-lifecycle gate
 
@@ -240,6 +300,10 @@ The review found and repaired these schema conflicts:
 | Terminal run | `RunPlanDraft` | `RunSpec` | `ResolvedRun` plus `ResolvedRunRef` | Verify, benchmark, lineage, restore |
 | Generated plan files | `RunPlanDraft` | `FrozenPlanFiles.files` committed to Git | `ResolvedRun.spec: ResolvedRunSpecRef` with the plan commit | Preflight, run verifier, and benchmark executor |
 | Restore selection | Direct Python values, discriminated typed request references, or CLI strings | `RestoreRequest` | `RestoreResult` and restored files | Python caller, typed API caller, or CLI |
+| Experiment expansion | `ExperimentDraft`, filters, and `RunIdMap` | Ordered `RunPlanDraft` values | `ExperimentExecutionResult` | Python, typed API, CLI, and catalog |
+| Stage reuse key | Frozen stage, resolved input files, effective environment, reproducibility, and selected metrics | `StageReuseKey` | `StageReuseReceipt` plus `ReusedStageCompletion` | Attempt verifier, lineage, comparison, and catalog |
+| Catalog row | Immutable run, artifact, measurement, benchmark, or reuse reference | Derived SQLite row | Ordered query result carrying the source reference | Python, CLI, MCP, and stage-reuse lookup |
+| MCP tool | Typed API request and success models | JSON Schema tool definition | `viper.api.dispatch()` result as structured content | MCP client |
 
 Every row has one declaring input, one persisted identity, and one reader.
 
@@ -261,6 +325,20 @@ downloaded bytes
 -> ResolvedHttpRetrieval root
 -> same-named ResolvedSingleFileArtifact
 -> FutureInputRef or StoredInputRef at a later consumer
+
+selected variants x selected replicates
+-> ordered RunPlanDraft values
+-> ordinary frozen and resolved runs
+
+reuse="verified" and matching StageReuseKey
+-> verified source run
+-> StageReuseReceipt
+-> new target stage snapshot
+
+immutable terminal references
+-> verified catalog rows
+-> exact search results
+-> typed API or MCP consumer
 ```
 
 Training requires a live objective. Evaluation requires a recomputed objective.
@@ -296,6 +374,10 @@ Every new claim has a named rejection or acceptance boundary:
 | Restored artifact bytes match published bytes | SHA-256 and byte-count checks before final move |
 | Generated plan files and project source use their correct Git commits | `plan.git_identity`, `plan.document_identity`, `source.git_identity`, and `benchmark.plan_identity` |
 | Python, typed API, and CLI restore share one result contract | `RestoreResult` equality across all three entry points |
+| Experiment expansion is deterministic | Exact pair coverage, unique run IDs, declaration order, and aggregate result order |
+| A reused stage matches its source | Reconstructed `StageReuseKey`, verified source run, file remapping equality, and source metric evidence |
+| A catalog result remains traceable | Every result carries the immutable source reference and rebuild equality holds after database deletion |
+| An MCP call preserves the owning operation | MCP input schema equals the request schema and structured content validates as the success model or `ViperFailure` |
 
 ### 4.5 Propagation gate
 
@@ -315,6 +397,9 @@ Each contract has one case that must fail:
 | Automatic input resolution | A same-run input selects an artifact from a later stage, freezing publishes a pointer before binding the run destination, or execution starts before generated files enter the plan commit. |
 | Frozen plan Git identity | The verifier loads a generated benchmark from the source commit; `benchmark.plan_identity` requires the plan commit. |
 | Direct Viper Cloud publication | A cloud terminal run reaches one `LocalFileRef`, local restore parses a changed working terminal file after immutable revision lookup fails, or the three restore surfaces return different file sets. |
+| Experiment expansion | A missing pair silently disappears, a duplicate run ID reaches freezing, or completion order changes the aggregate result order. |
+| Verified stage reuse | A catalog digest match skips execution after an input, environment, metric, source run, artifact file, or benchmark-confirmation relationship changed. |
+| Provenance catalog and MCP | A derived row loses its immutable source reference, a tampered run remains searchable as verified, or an MCP tool bypasses its typed API handler. |
 | Module privacy | A second module imports a leading-underscore symbol. |
 
 ## 5. Dependency order
@@ -324,6 +409,7 @@ Phase 1 -> Phase 2 -> Phase 3
 Phase 1 -> Phase 4
 Phase 2 + Phase 4 -> Phase 5 -> Phase 6
 Phase 3 + Phase 6 -> Phase 7 -> Phase 8 -> Phase 9 -> Phase 10 -> Phase 11
+Phase 11 -> Phase 12 -> Phase 13 -> Phase 14 -> Phase 15
 ```
 
 Phases 2 and 4 may occur on separate branches after Phase 1. The pair-coding
@@ -1296,7 +1382,343 @@ make check-release
 
 **Commit boundary:** `Publish the Python-authored VIPER workflow`
 
-## 18. Complete code-change ledger
+## 18. Phase 12 — experiment expansion and bounded execution
+
+**Depends on:** Phase 11.
+
+**Contract:** [Experiment expansion](experiment-expansion.md)
+
+**Outcome:** One experiment expands into an ordered run plan for every selected
+variant-replicate pair and executes those frozen plans with a fixed concurrency
+limit.
+
+### 18.1 Deterministic expansion
+
+- [ ] Add `RunIdMap` and `viper.expand()` to `src/viper/authoring.py`.
+      <!-- implements: EXP-01 -->
+- [ ] Preserve `ExperimentDraft.variants` order and
+      `ExperimentDraft.replicates` order.
+- [ ] Treat `variants` and `replicates` arguments as filters. Reject unknown or
+      repeated IDs.
+- [ ] Require `run_ids` to contain exactly the selected Cartesian product.
+- [ ] Reject one `RunId` assigned to two pairs.
+- [ ] Construct each item by calling the existing `viper.plan()` primitive.
+- [ ] Export `expand` from `src/viper/__init__.py`.
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** Start with two nested loops over the experiment mappings. Check
+membership in the optional filter sets inside those loops. Derive output order
+from the experiment mappings.
+
+**Hint 2:** Build the expected pair set before creating any plan. Compare it
+with the nested `run_ids` pair set and report missing and extra pairs together.
+
+**Hint 3:** The returned value is `tuple[RunPlanDraft, ...]`. Freezing owns all
+file writes after expansion returns.
+
+</details>
+
+### 18.2 Bounded execution
+
+- [ ] Add `ExperimentRunStatus`, `ExperimentRunResult`, and
+      `ExperimentExecutionResult` to `src/viper/execution/results.py`.
+- [ ] Enforce the succeeded, failed, and skipped field combinations with a
+      model validator.
+- [ ] Add `src/viper/execution/_batch.py` and call `execution.run()` once per
+      path. <!-- implements: EXP-02 -->
+- [ ] Limit active calls to `max_concurrency`.
+- [ ] Store each completed result by its input index. Return results in input
+      order, independent of completion order.
+- [ ] Convert each caught run failure into the same public `ViperFailure` shape
+      used by the typed API.
+- [ ] With `stop_on_failure=True`, stop submitting new paths after the first
+      failure and mark every unstarted path as skipped.
+- [ ] Let already running calls finish.
+- [ ] Export `run_many()` and the result models from `viper.execution`.
+
+### 18.3 Typed API and CLI
+
+- [ ] Add `RunManyRequest` and `RunManySuccess` to `src/viper/api.py`.
+      <!-- implements: EXP-03 -->
+- [ ] Add `run_many` to `OperationName`, `OPERATIONS`, the schema registry,
+      request registry, and handler registry.
+- [ ] Add the handler to `src/viper/_api/handlers.py` and return the same
+      `ExperimentExecutionResult` as the Python function.
+- [ ] Add `viper run-many` with an ordered list of run-spec paths,
+      `--max-concurrency`, `--timeout-seconds`, and `--stop-on-failure`.
+- [ ] Keep stdout deterministic through `result_json_bytes()`.
+
+### 18.4 Focused proof
+
+- [ ] Add complete, filtered, missing-pair, extra-pair, duplicate-ID, and order
+      cases to `tests/test_authoring.py`.
+- [ ] Add active-call counting, out-of-order completion, continuation, and stop
+      cases to `tests/test_run_execution.py`.
+- [ ] Compare Python, typed API, and CLI aggregate result shapes in
+      `tests/test_api.py` and `tests/test_cli.py`.
+- [ ] Run: <!-- verifies: EXP-01, EXP-02, EXP-03 -->
+
+```bash
+python -m pytest \
+  tests/test_authoring.py \
+  tests/test_run_execution.py \
+  tests/test_api.py \
+  tests/test_cli.py \
+  tests/test_public_api.py -q
+```
+
+**Commit boundary:** `Expand and execute complete experiments`
+
+## 19. Phase 13 — searchable provenance catalog
+
+**Depends on:** Phase 12.
+
+**Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
+
+**Outcome:** VIPER rebuilds one searchable local database from immutable run
+evidence and returns exact references with every result.
+
+### 19.1 Catalog schema and extraction
+
+- [ ] Add `src/viper/catalog.py` with `CatalogRun`, `CatalogFile`,
+      `CatalogArtifact`, `CatalogMeasurement`, `CatalogBenchmark`, and
+      `CatalogEdge`.
+- [ ] Add `RunQuery`, `ArtifactQuery`, `MeasurementQuery`, their page models,
+      and `CatalogRefreshResult`.
+- [ ] Create schema-version 1 tables for sources, runs, stages, inputs,
+      artifacts, files, measurements, benchmarks, edges, and stage-reuse keys.
+- [ ] Extract normalized rows from one `VerifiedRunResult`.
+- [ ] Share lineage-node and edge extraction with `src/viper/inspection.py`.
+- [ ] Resolve discovered local terminal paths to immutable terminal references
+      before parsing their contents.
+- [ ] Record an invalid source and exclude its derived rows.
+- [ ] Build the replacement database under `.viper/`, fsync it, and atomically
+      replace `.viper/catalog.sqlite3`. <!-- implements: PCM-01 -->
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** Keep SQLite rows flat. Store the immutable reference JSON and the
+columns used by exact filters. Rebuild richer Pydantic results at the query
+boundary.
+
+**Hint 2:** Build the complete replacement in one transaction. Readers should
+see the old catalog or the new catalog.
+
+**Hint 3:** The catalog is disposable. Keep catalog identifiers inside catalog
+storage and out of protocol records.
+
+</details>
+
+### 19.2 Exact queries
+
+- [ ] Add `Catalog.runs()`, `Catalog.artifacts()`, and
+      `Catalog.measurements()` with the contract filters.
+      <!-- implements: PCM-02 -->
+- [ ] Add stable sort keys, a maximum page size of 500, and opaque cursors that
+      bind the query and last sort key.
+- [ ] Add `Catalog.lineage()` through the existing verified lineage builder.
+- [ ] Add a private stage-reuse-key lookup that returns complete source
+      references and metric evidence for Phase 14.
+- [ ] Add `viper.catalog(root=...)` and export the public query and page models.
+- [ ] Add typed `catalog_refresh`, `search_runs`, `search_artifacts`, and
+      `search_measurements` operations and matching CLI commands.
+
+### 19.3 Focused proof
+
+- [ ] Add database deletion and rebuild equality to
+      `tests/test_inspection.py`.
+- [ ] Add deterministic order, pagination, every exact filter, and cursor-query
+      mismatch cases.
+- [ ] Add same-dataset cross-run and lowest-metric query fixtures.
+- [ ] Add invalid-source exclusion and immutable-reference assertions to
+      `tests/test_verification_acceptance.py`.
+- [ ] Run: <!-- verifies: PCM-01, PCM-02 -->
+
+```bash
+python -m pytest \
+  tests/test_inspection.py \
+  tests/test_verification_acceptance.py \
+  tests/test_api.py \
+  tests/test_cli.py -q
+```
+
+**Commit boundary:** `Index and search verified provenance`
+
+## 20. Phase 14 — verified stage reuse
+
+**Depends on:** Phases 9 and 13.
+
+**Contract:** [Verified stage reuse](stage-reuse.md)
+
+**Outcome:** An opted-in project stage can select a prior verified result,
+publish it under the target paths, and record selection separately from a new
+stage invocation.
+
+### 20.1 Models and canonical key
+
+- [ ] Add `StageReuseMode` to project-owned stage drafts and frozen specs.
+- [ ] Add `reuse=` to `viper.stage()` and default it to `"never"`.
+- [ ] Add `ReuseFileIdentity`, `ReuseInputIdentity`, and `StageReuseKey`.
+- [ ] Normalize artifact paths back to their run-relative draft paths and omit
+      the policy field before hashing the stage spec.
+- [ ] Include the target stage ID in `StageReuseKey`.
+- [ ] Resolve every input to sorted digest and byte-count identities.
+- [ ] Include the frozen run seed and hash the effective `env`, complete
+      reproducibility record, and complete selected `MetricSpec` records.
+- [ ] Add `ReusedStageFile`, `ReusedMetricEvidence`, `StageReuseReceipt`, and
+      `ResolvedStageReuseRef`.
+- [ ] Add `ExecutedStageCompletion`, `ReusedStageCompletion`, and the
+      discriminated `StageCompletion` union. <!-- implements: SRU-01 -->
+- [ ] Move project execution-only fields into `ExecutedStageCompletion` and
+      leave runner fields on `ResolvedExecutedSpec`.
+- [ ] Update `RunAttempt` so actual invocations correspond only to executed
+      completions.
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** Build the target key after input resolution and before the
+`running_stage` journal event. At that point every selected byte identity is
+available. Child-process startup follows candidate selection.
+
+**Hint 2:** Hash canonical serialized protocol models. Avoid a hand-built
+delimiter format.
+
+**Hint 3:** Keep source and target `SnapshotFileRef` values in each
+`ReusedStageFile`. Their paths differ; their digests and byte counts match.
+
+</details>
+
+### 20.2 Runtime reuse
+
+- [ ] Query catalog candidates in completion-time order with run and attempt
+      tie breakers.
+- [ ] Fully verify each selected source run before accepting the candidate.
+- [ ] Rebuild the source key and compare the complete model.
+- [ ] Fall back to ordinary execution after a stale, invalid, or absent hit.
+- [ ] Publish `StageReuseReceipt` through `publish_resolved_files()`.
+- [ ] Add `SnapshotPublisher.publish_reuse()` for local and cloud publishers.
+- [ ] Link immutable local files when possible and copy verified bytes as a
+      fallback.
+- [ ] Seal a cloud target manifest over existing payload objects.
+- [ ] Publish one new target snapshot containing target paths and target
+      `resolved.yaml`. <!-- implements: SRU-02 -->
+- [ ] Record `ReusedStageCompletion` and continue normal future-input
+      resolution through the new target snapshot.
+- [ ] Ignore reuse during `benchmark_confirmation` attempts.
+
+### 20.3 Metrics, verification, and inspection
+
+- [ ] Link every source stage metric through `ReusedMetricEvidence`.
+- [ ] Preserve original measurement identity and expose
+      `CatalogMeasurement.origin="reused"`.
+- [ ] Accept objective evidence through a verified reuse receipt while
+      preserving the source measurement identity.
+- [ ] Rebuild both source and target keys during verification.
+- [ ] Verify source-run success, source attempt, source stage, file membership,
+      target snapshot membership, artifact metadata, and metric coverage.
+      <!-- implements: SRU-03 -->
+- [ ] Add `reuses` to lineage and include reuse fields in run comparison,
+      status, typed API results, and catalog rows. <!-- implements: SRU-04 -->
+
+### 20.4 Focused proof
+
+- [ ] Add model and invalid-state cases to `tests/test_protocol.py`.
+- [ ] Add worker-call-count hits, every key miss, invalid-catalog fallback,
+      local remapping, and cloud manifest reuse to `tests/test_run_execution.py`
+      and `tests/test_storage.py`.
+- [ ] Sever every source, key, file, metric, and completion join in
+      `tests/test_verification_acceptance.py`.
+- [ ] Prove benchmark confirmation executes and publishes new snapshots.
+- [ ] Add lineage and comparison cases to `tests/test_inspection.py`.
+- [ ] Run: <!-- verifies: SRU-01, SRU-02, SRU-03, SRU-04 -->
+
+```bash
+python -m pytest \
+  tests/test_protocol.py \
+  tests/test_run_execution.py \
+  tests/test_storage.py \
+  tests/test_verification_acceptance.py \
+  tests/test_benchmark_execution.py \
+  tests/test_inspection.py -q
+```
+
+**Commit boundary:** `Reuse verified stage results with explicit evidence`
+
+## 21. Phase 15 — local MCP server
+
+**Depends on:** Phases 12–14.
+
+**Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
+
+**Outcome:** A local MCP client can inspect and search VIPER by default. An
+explicit startup flag adds the existing execution operations.
+
+### 21.1 Dependency and server
+
+- [ ] Add `mcp = ["mcp>=2,<3"]` to project optional dependencies.
+- [ ] Add `src/viper/mcp.py` using the stable official Python SDK version 2.
+- [ ] Generate one tool for each allowed typed API operation.
+- [ ] Use the API request model's JSON Schema as the tool input schema.
+- [ ] Use the success model's JSON Schema as the output schema.
+- [ ] Route tool calls through `viper.api.dispatch()` and return matching
+      structured content and JSON text. <!-- implements: PCM-03 -->
+- [ ] Sort the tool list by operation name.
+- [ ] Mark read tools as read-only and execution tools as state-changing.
+- [ ] Keep the repository root fixed at server startup and reject every path
+      that resolves outside it.
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** Build the tool registry from `REQUEST_REGISTRY`,
+`HANDLER_REGISTRY`, and an explicit access allowlist. Import the existing
+Pydantic request classes.
+
+**Hint 2:** Test with the SDK's in-process client before testing stdio framing.
+
+**Hint 3:** Python draft objects stay outside MCP. Expose frozen-path
+operations and immutable-reference operations.
+
+</details>
+
+### 21.2 Access modes and CLI
+
+- [ ] Add `viper mcp --root <path> --access read|execute`.
+      <!-- implements: PCM-04 -->
+- [ ] Default to `read`.
+- [ ] Expose the exact read and execution tool sets listed in the contract.
+- [ ] Write protocol messages only to stdout and logs only to stderr.
+- [ ] Keep Streamable HTTP outside this phase.
+- [ ] Add MCP installation and client configuration to the README and API
+      reference.
+
+### 21.3 Focused proof
+
+- [ ] List tools twice and require equal order and schemas.
+- [ ] Compare every tool input schema with its API request schema.
+- [ ] Validate every successful structured result with its success model.
+- [ ] Validate `ViperFailure` results and credential redaction.
+- [ ] Prove read mode omits execution tools.
+- [ ] Prove execute mode calls the same mocked handlers as typed API dispatch.
+- [ ] Prove a path outside the fixed root fails before the handler runs.
+- [ ] Exercise one stdio discovery, list, and call sequence.
+- [ ] Run: <!-- verifies: PCM-03, PCM-04 -->
+
+```bash
+python -m pytest \
+  tests/test_api.py \
+  tests/test_cli.py \
+  tests/test_public_api.py \
+  tests/test_documentation.py -q
+```
+
+**Commit boundary:** `Expose VIPER through a typed local MCP server`
+
+## 22. Complete code-change ledger
 
 This ledger prevents a local implementation from leaving another reader on the
 old contract.
@@ -1306,105 +1728,122 @@ old contract.
 | `src/viper/_schema.py` | New parameter-source path scalar; replace old stage-key constants | 4, 5 |
 | `src/viper/keys.py` | Add `Train` and `Eval` enums | 5 |
 | `src/viper/parameters.py` | Rename `HttpTransport` to `Http`; owner-aware `ParameterModelRef`; delete `Download`; public alias support | 2, 4 |
-| `src/viper/references.py` | Cloud refs, snapshot rename, union changes | 9 |
-| `src/viper/storage.py` | Destinations, publishers, independent publication, cloud client | 1, 9 |
+| `src/viper/references.py` | Cloud refs, snapshot rename, reuse reference, union changes | 9, 14 |
+| `src/viper/storage.py` | Destinations, publishers, independent publication, cloud client, reused snapshot publication | 1, 9, 14 |
 | `src/viper/artifacts.py` | Drafts, run-relative paths, pointer compatibility | 5, 7 |
 | `src/viper/artifact_loaders.py` | Replace old fixed artifact keys in loader validation | 5 |
 | `src/viper/inputs.py` | Remove HTTP source; local snapshot ref; stored pointer change | 3, 7 |
 | `src/viper/_http.py` | Rename from `http.py`; own the private HTTP implementation, protocol records, shared body ref, optional HTTP params, and custom HTTP draft | 2, 5 |
-| `src/viper/stages.py` | Runner-owned download hierarchy; `DownloadSpec.http`; objectives; draft decorators; key validation | 2, 4, 5 |
+| `src/viper/stages.py` | Runner-owned download hierarchy; `DownloadSpec.http`; objectives; draft decorators; key validation; reuse policy and completion union | 2, 4, 5, 14 |
 | `src/viper/metrics.py` | Remove kind; drafts; context; parameter identity; objectives | 4 |
 | `src/viper/experiments.py` | Remove download params; add factor, variant, replicate, experiment drafts | 2, 6 |
 | `src/viper/benchmark.py` | Draft, metric IDs, optional criteria, complete results | 8 |
-| `src/viper/authoring.py` | Replace YAML draft loading with graph compiler | 5–8 |
-| `src/viper/runs.py` | Input/pointer relationships and terminal cloud references | 7, 9 |
+| `src/viper/authoring.py` | Replace YAML draft loading with graph compiler; expand experiments into ordered plans | 5–8, 12 |
+| `src/viper/runs.py` | Input/pointer relationships, terminal cloud references, executed and reused stage completion | 7, 9, 14 |
+| `src/viper/catalog.py` | Rebuildable SQLite catalog, exact queries, lineage rows, and stage-reuse lookup | 13, 14 |
+| `src/viper/mcp.py` | Deterministic MCP tools generated from typed API models and handlers | 15 |
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
 | `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
 | `src/viper/preflight.py` | Renamed HTTP implementation checks, runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
-| `src/viper/inspection.py` | Render renamed snapshot and result references | 2, 9 |
+| `src/viper/inspection.py` | Render renamed snapshot and result references; share catalog lineage extraction; expose reuse edges | 2, 9, 13, 14 |
 | `src/viper/execution/_materialization.py` | `invoke_http()` and runner download output; local capture; stored materialization | 2, 3, 7 |
 | `src/viper/execution/_stage.py` | New keys; captured-input post-check | 3, 5 |
-| `src/viper/execution/_resolution.py` | New resolved hierarchy and objectives | 2, 4 |
-| `src/viper/execution/_attempt.py` | Publisher use; runner download; captures; cloud destination | 1–4, 9 |
-| `src/viper/execution/_metric.py` | Typed context, mandatory parameter ref, and metric dependency references derived from enclosing snapshots | 4 |
+| `src/viper/execution/_resolution.py` | New resolved hierarchy, objectives, and executed or reused completion | 2, 4, 14 |
+| `src/viper/execution/_attempt.py` | Publisher use; runner download; captures; cloud destination; reuse lookup and fallback | 1–4, 9, 14 |
+| `src/viper/execution/_metric.py` | Typed context, mandatory parameter ref, metric dependency references, and reused metric evidence | 4, 14 |
 | `src/viper/execution/_benchmark.py` | Complete metric-result loop and benchmark lookup through the plan commit | 6, 8, 9 |
-| `src/viper/execution/_publication.py` | Destination-neutral independent files | 1, 9 |
+| `src/viper/execution/_publication.py` | Destination-neutral independent files and reused snapshot publication | 1, 9, 14 |
 | `src/viper/execution/_recovery.py` | Destination-neutral failed-attempt closure | 1, 9 |
 | `src/viper/execution/_source.py` | Cloud file and snapshot routing | 9 |
 | `src/viper/execution/_run.py` | Return terminal refs; restore entry point | 9, 10 |
-| `src/viper/execution/results.py` | `resolved_run_ref`, benchmark `result_ref`, and restore result models | 9, 10 |
+| `src/viper/execution/_batch.py` | Bounded multi-run scheduling and ordered aggregate results | 12 |
+| `src/viper/execution/results.py` | `resolved_run_ref`, benchmark `result_ref`, restore, and aggregate experiment results | 9, 10, 12 |
 | `src/viper/_workers/stages.py` | Remove download; reconstruct captured local input paths; new keys; metric context | 2–5 |
 | `src/viper/_workers/metrics.py` | Load parameter ref and build metric context | 4 |
 | `src/viper/_workers/parameters.py` | Resolve owner-aware parameter-model references | 4 |
 | `src/viper/_workers/artifacts.py` | Consume concrete frozen artifact paths produced by the draft compiler | 5, 6 |
 | `src/viper/_parameter/validation.py` | Resolve project and VIPER owners | 4 |
-| `src/viper/_verification/attempt.py` | Renamed HTTP implementation verification, download equality, canonical local capture path, local-root identity, and objective evidence | 2–4 |
+| `src/viper/_verification/attempt.py` | Renamed HTTP implementation verification, download equality, canonical local capture path, local-root identity, objective evidence, and stage-reuse receipts | 2–4, 14 |
 | `src/viper/_verification/plan.py` | Draft-derived graph, plan/source commit separation, keys, objectives, pointers, benchmarks | 4–8 |
-| `src/viper/_verification/metrics.py` | Parameter binding and complete benchmark metrics | 4, 8 |
+| `src/viper/_verification/metrics.py` | Parameter binding, complete benchmark metrics, and reused source metric evidence | 4, 8, 14 |
 | `src/viper/_verification/storage.py` | Cloud fetch, snapshot list, restore identity | 9, 10 |
-| `src/viper/verification.py` | Dispatch every new verifier rule | 2–10 |
-| `src/viper/execution/__init__.py` | Export restore and updated result types | 9, 10 |
-| `src/viper/api.py` | Python freeze inputs, result refs, restore operation | 5–10 |
+| `src/viper/verification.py` | Dispatch every new verifier rule | 2–10, 13, 14 |
+| `src/viper/execution/__init__.py` | Export restore, batch execution, and updated result types | 9, 10, 12 |
+| `src/viper/api.py` | Python freeze inputs, result refs, restore, batch, catalog, and MCP-owned operation schemas | 5–15 |
 | `src/viper/_api/__init__.py` | Export the restore operation models and handler | 10 |
-| `src/viper/_api/handlers.py` | Compile drafts, return refs, restore handler | 5–10 |
-| `src/viper/cli.py` | Python workflow command changes and restore arguments | 10, 11 |
+| `src/viper/_api/handlers.py` | Compile drafts, return refs, restore, batch, and catalog handlers | 5–13 |
+| `src/viper/cli.py` | Python workflow command changes, restore, batch, catalog, and MCP commands | 10–15 |
 | `src/viper/project_init.py` | Replace the generated download callable in Phase 2 and every remaining legacy pattern in Phase 11 | 2, 11 |
-| `src/viper/__init__.py` | Export `http`, `HttpContext`, and `HttpResult`; remove transport names and other retired names | 2, 4–10 |
+| `src/viper/__init__.py` | Export `http`, `HttpContext`, `HttpResult`, expansion, catalog, and result types; remove retired names | 2, 4–14 |
+| `pyproject.toml` | Add the optional MCP dependency group | 15 |
 | `src/viper/py.typed` | Ship the package's PEP 561 typing marker | Complete |
 | `CHANGELOG.md` | Record the contract implementation under the active release | 11 |
 | `tests/fixtures.py` | Canonical HTTP names, target records, and complete authored graph | All pending phases |
-| `tests/test_protocol.py` | HTTP rename, every schema, union, key, and validator | All pending phases |
-| `tests/test_authoring.py` | Draft constructors and compiler | 5–8 |
+| `tests/test_protocol.py` | HTTP rename, every schema, union, key, reuse model, and validator | All pending phases |
+| `tests/test_authoring.py` | Draft constructors, compiler, and experiment expansion | 5–8, 12 |
 | `tests/test_http_retrieval.py` | HTTP implementation and shared body identity | 2 |
-| `tests/test_run_execution.py` | Downloads, local roots, same-run and prior-run inputs | 2, 3, 7 |
+| `tests/test_run_execution.py` | Downloads, local roots, same-run and prior-run inputs, batch execution, and stage reuse | 2, 3, 7, 12, 14 |
 | `tests/test_execution_acceptance.py` | Complete local and cloud attempts | 2, 3, 9 |
 | `tests/test_execution_signals.py` | Failure, retry, and durable state | 1, 9 |
 | `tests/test_metric_interface.py` | Decorator, context, and live parameters | 4 |
 | `tests/test_metric_provenance.py` | Recomputed receipt identity | 4 |
 | `tests/test_benchmark_execution.py` | Complete results and optional criteria | 8, 9 |
-| `tests/test_storage.py` | Publisher and retrieval backends | 1, 9, 10 |
-| `tests/test_verification.py` | All new verifier rules | 2–10 |
-| `tests/test_verification_acceptance.py` | Tamper and graph rejection cases | 2–10 |
+| `tests/test_storage.py` | Publisher, retrieval, restore, and reused-snapshot backends | 1, 9, 10, 14 |
+| `tests/test_verification.py` | All new verifier rules | 2–10, 14 |
+| `tests/test_verification_acceptance.py` | Tamper, graph, catalog-source, and reuse rejection cases | 2–10, 13, 14 |
 | `tests/test_preflight.py` | Frozen graph, plan commit, and source commit checks | 5–8 |
 | `tests/test_public_api.py` | `viper.http`, removed transport exports, decorators, keys, and constructors | 2, 4–10 |
 | `tests/test_parameter_validation.py` | Project and installed-VIPER parameter-model owners | 4 |
-| `tests/test_inspection.py` | New stage and attempt reference shapes | 2, 9 |
-| `tests/test_api.py` | Typed operation inputs and outputs | 5–10 |
+| `tests/test_inspection.py` | Stage and attempt references, catalog queries, and reuse lineage | 2, 9, 13, 14 |
+| `tests/test_api.py` | Typed operation, batch, catalog, and MCP inputs and outputs | 5–15 |
 | `tests/test_api_json.py` | JSON shapes for result references and restore | 9, 10 |
-| `tests/test_cli.py` | Commands, JSON results, restore syntax | 10, 11 |
+| `tests/test_cli.py` | Commands, JSON results, restore, batch, catalog, and MCP syntax | 10–15 |
 | `tests/test_project_init.py` | Generated source layout | 11 |
 | `tests/test_generated_project_acceptance.py` | Installed public workflow | 11 |
 | `tests/test_stage_invocation.py` | New keys, objective context, and owner-aware parameter binding | 4, 5 |
 | `tests/test_worker.py` | Project-stage worker after download removal and context changes | 2, 4, 5 |
 | `tests/test_resume.py` | `Train.STATE` input and artifact names | 5 |
 | `tests/test_process_startup.py` | Owner-aware parameter source checks | 4 |
-| `tests/test_documentation.py` | Schema mirrors, links, examples, operations, and deterministic contract-to-checklist coverage | 11 |
+| `tests/test_documentation.py` | Schema mirrors, links, examples, operations, and deterministic contract-to-checklist coverage | 11–15 |
+| `docs/development/experiment-expansion.md` | Expansion, aggregate execution, and acceptance cases | 12 |
+| `docs/development/provenance-catalog-mcp.md` | Catalog, MCP tools, access boundary, and acceptance cases | 13, 15 |
+| `docs/development/stage-reuse.md` | Reuse key, receipt, runtime, metric, storage, and verifier contract | 14 |
+| `docs/development/research-memory-roadmap.md` | Deferred ontology, literature, retrieval, and continual-learning sequence | Deferred |
 | `docs/development/frozen-plan-git-identity.md` | Source/plan commit contract and acceptance cases | 6 |
 | `docs/reference/protocol.md` | Exact final serialized contract | 11 |
-| `docs/reference/api.md` | Exact final Python and CLI interface | 11 |
-| `docs/explanation/how-viper-works.md` | One causal execution | 11 |
-| `docs/tutorials/getting-started.md` | First public run | 11 |
-| `README.md` | Complete public example | 11 |
+| `docs/reference/api.md` | Exact final Python, CLI, catalog, and MCP interface | 11–15 |
+| `docs/explanation/how-viper-works.md` | One causal execution with expansion, reuse, and search | 11–15 |
+| `docs/tutorials/getting-started.md` | First public run and first catalog query | 11–15 |
+| `README.md` | Complete public example and local MCP setup | 11–15 |
 
-## 19. Deferred work
+## 23. Deferred work
 
 These items stay outside this implementation sequence:
 
 - Harness mode with explicit `/inputs` promotion.
 - Cross-provider migration or mirroring.
 - Automatic publication of an older local producer graph into Viper Cloud.
-- Resumable stage execution after coordinator-process loss.
 - A production Viper Cloud HTTP adapter before its service contract exists.
-- Agent or MCP interfaces over the finished authoring, execution, verification,
-  benchmark, lineage, and restore operations.
+- Coordinator recovery from the last sealed stage after process or host loss.
+- Typed execution events, event cursors, remote cancellation, and heartbeats.
+- Agent filesystem, network, secret, CPU, GPU, memory, and time permissions.
+- Reachability-based retention and garbage collection.
+- Verified local and cloud archive compression.
+- Streamable HTTP MCP deployment and its authentication and authorization
+  contract.
+- Adaptive optimization and distributed scheduling.
+- The ontology, research knowledge graph, literature ingestion, retrieval, and
+  continual-learning work in
+  [`research-memory-roadmap.md`](research-memory-roadmap.md).
 
-## 20. Current position
+## 24. Current position
 
-The latest system review returned all six pending implementation contracts to
-Draft. The new frozen-plan contract and five repaired contracts await owner
-review. Implementation remains pending. The first missing result is a local
-run that passes through `SnapshotPublisher` and `publish_resolved_files()`
-while preserving its stored bytes and references.
+The latest system review places all nine implementation contracts in Draft.
+The new expansion, reuse, and catalog-MCP contracts await owner review with the
+six earlier migration contracts. The research-memory roadmap remains deferred.
+Implementation remains pending. The first missing result is a local run that
+passes through `SnapshotPublisher` and `publish_resolved_files()` while
+preserving its stored bytes and references.
 
 Once Phase 1 passes, the next pair-coding turn begins Phase 2 with the
 `BaseSpec` and `DownloadSpec` inheritance change.

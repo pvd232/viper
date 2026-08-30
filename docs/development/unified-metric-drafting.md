@@ -754,6 +754,15 @@ class RunPlanDraft(BaseModel):
     reproducibility: ReproducibilitySpec
 ```
 
+[`experiment-expansion.md`](experiment-expansion.md) owns the operation that
+creates one `RunPlanDraft` for every selected variant-replicate pair. This
+contract keeps `RunPlanDraft` as the single-run unit and derives each run's
+metric registry from the same `ExperimentDraft`.
+
+[`stage-reuse.md`](stage-reuse.md) owns reused metric evidence. A reused stage
+links the source measurement and verification receipt through
+`StageReuseReceipt` while preserving the source `Measurement` identity.
+
 `viper.freeze()` derives these persisted values:
 
 ```text

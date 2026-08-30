@@ -70,6 +70,10 @@ the Python expression that selects the artifact and compiles the internal
 input reference.
 [`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) owns the Git step
 between generated plan files and execution.
+[`experiment-expansion.md`](experiment-expansion.md) owns deterministic
+variant-replicate expansion and bounded multi-run execution.
+[`stage-reuse.md`](stage-reuse.md) owns the opt-in policy and evidence required
+to skip a project-owned stage.
 
 ## 2. Required claim
 
@@ -610,6 +614,7 @@ class BaseSpecDraft(BaseModel):
 class ParameterizedSpecDraft(BaseSpecDraft):
     implementation: DecoratedStage
     params: parameters.ParameterSet
+    reuse: StageReuseMode = "never"
 
 
 class DownloadSpecDraft(BaseSpecDraft):
@@ -805,28 +810,50 @@ preflight resolve each reference to its artifact declaration and require an
 requires stored inputs solely because they were authored as pointers.
 
 The target resolved hierarchy separates runner-owned download evidence from
-project-callable invocation evidence:
+project-callable completion evidence. A project-owned stage records either an
+execution or a verified reuse:
 
 ```python
 class ResolvedBaseSpec(ProtocolModel):
     schema_version: Literal[1] = 1
     kind: str
     spec: BaseSpec
-    env: ResolvedEnv
-    execution_context: ExecutionContext
     artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
     completed_at: AwareDatetime
 
 
-class ResolvedParameterizedSpec(ResolvedBaseSpec):
-    spec: ParameterizedSpec
+class ResolvedExecutedSpec(ResolvedBaseSpec):
+    env: ResolvedEnv
+    execution_context: ExecutionContext
+
+
+class ExecutedStageCompletion(ProtocolModel):
+    kind: Literal["executed"] = "executed"
     source: ResolvedGitFileRef
+    env: ResolvedEnv
+    execution_context: ExecutionContext
     startup: ProcessStartupReceipt
     invocation: ResolvedStageInvocationRef
     command: tuple[str, ...] = Field(min_length=1)
 
 
-class ResolvedDownloadSpec(ResolvedBaseSpec):
+class ReusedStageCompletion(ProtocolModel):
+    kind: Literal["reused"] = "reused"
+    receipt: ResolvedStageReuseRef
+
+
+StageCompletion = Annotated[
+    ExecutedStageCompletion | ReusedStageCompletion,
+    Field(discriminator="kind"),
+]
+
+
+class ResolvedParameterizedSpec(ResolvedBaseSpec):
+    spec: ParameterizedSpec
+    completion: StageCompletion
+
+
+class ResolvedDownloadSpec(ResolvedExecutedSpec):
     kind: Literal["download"] = "download"
     spec: DownloadSpec
     retrievals: dict[InputName, ResolvedHttpRetrieval]
@@ -846,9 +873,10 @@ class ResolvedEvalSpec(ResolvedInternalSpec):
 VIPER process that invoked the HTTP function. Each `ResolvedHttpRetrieval`
 records the selected HTTP implementation, request, response, body identity,
 and timestamps.
-`ResolvedParameterizedSpec` retains the project source, process startup,
-invocation receipt, and child-process command used by build, embed, train, and
-eval stages.
+`ExecutedStageCompletion` retains the project source, environment, execution
+context, process startup, invocation receipt, and child-process command used
+by build, embed, train, and eval stages. `ReusedStageCompletion` points to the
+receipt defined by [`stage-reuse.md`](stage-reuse.md).
 
 When VIPER creates an `ArtifactPointer`, it publishes the pointer at the
 selected storage destination. The frozen input stores the pointer's SHA-256
@@ -1030,6 +1058,7 @@ def stage(
     metrics: tuple[MetricDraft, ...] = (),
     eval_id: EvalId | None = None,
     split_inputs: tuple[InputName, ...] = (),
+    reuse: StageReuseMode = "never",
 ) -> StageDraft: ...
 
 
@@ -1834,6 +1863,8 @@ TRAIN_PARAMS = TrainParams(
 
 # The same-run embeddings handle becomes FutureInputRef. Train.MODEL and
 # Train.STATE use protocol-owned keys because later stages understand them.
+# reuse="verified" permits VIPER to select a prior verified training result
+# only when the complete reuse key, including the run seed, matches.
 training = viper.stage(
     train,
     params=TRAIN_PARAMS,
@@ -1852,6 +1883,7 @@ training = viper.stage(
     },
     objective=viper.min(training_loss_metric),
     metrics=(gradient_norm_metric,),
+    reuse="verified",
 )
 
 
@@ -2046,6 +2078,7 @@ experiment = viper.experiment(
     },
     replicates={
         "replicate_01": viper.replicate(seed=7),
+        "replicate_02": viper.replicate(seed=11),
     },
 )
 
@@ -2063,9 +2096,27 @@ plan = viper.plan(
     reproducibility=reproducibility,
 )
 
-# Freezing compiles Python drafts into canonical protocol files. The returned
-# manifest names every generated file that must enter the later plan commit.
-frozen = viper.freeze(plan, root=Path.cwd())
+# viper.expand() creates one ordinary RunPlanDraft per selected
+# variant-replicate pair. The first expanded plan equals the single plan above.
+plans = viper.expand(
+    experiment,
+    run_ids={
+        "l2": {
+            "replicate_01": RUN_ID,
+            "replicate_02": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        },
+    },
+    benchmark=benchmark,
+    source=source,
+    env=env,
+    reproducibility=reproducibility,
+)
+assert plans[0] == plan
+
+# Freezing compiles Python drafts into canonical protocol files. Every
+# returned manifest must enter the later plan commit before execution.
+frozen_runs = tuple(viper.freeze(item, root=Path.cwd()) for item in plans)
+frozen = frozen_runs[0]
 ```
 
 `RunSpec.source.commit` identifies the project source inspected during
@@ -2077,21 +2128,40 @@ git add experiments/ benchmarks/
 git commit -m "Freeze tiny HTTP run"
 ```
 
-The run and benchmark calls consume the named paths returned by freezing:
+The batch runner consumes the named run paths returned by freezing. The
+benchmark call then consumes one successful run and its benchmark path:
 
 ```python
 if frozen.benchmark_spec_path is None:
     raise RuntimeError("the frozen plan has no benchmark")
 
-run_result = viper.execution.run(
+single_run_result = viper.execution.run(
     Path.cwd(),
     frozen.run_spec_path,
 )
 
+batch_result = viper.execution.run_many(
+    Path.cwd(),
+    tuple(item.run_spec_path for item in frozen_runs[1:]),
+    max_concurrency=2,
+)
+
 benchmark_result = viper.execution.benchmark(
     Path.cwd(),
-    run_result.resolved_run_path,
+    single_run_result.resolved_run_path,
     frozen.benchmark_spec_path,
+)
+
+# The catalog rebuilds searchable rows from immutable run evidence. The query
+# returns measurements with the run references required for later verification.
+catalog = viper.catalog(root=Path.cwd())
+catalog.refresh()
+losses = catalog.measurements(
+    viper.MeasurementQuery(
+        experiment_id="tiny_http",
+        metric_ids=("evaluation_loss",),
+        limit=20,
+    )
 )
 ```
 
@@ -2118,13 +2188,16 @@ The public calls build one dependency graph in this order:
 | `viper.factor(...)` | Allowed experimental levels | `viper.experiment()` |
 | `viper.variant(...)` | Ordered stage graph, selected levels, and estimator | `viper.experiment()` |
 | `viper.replicate(...)` | Seeded replicate declaration | `viper.experiment()` |
-| `viper.experiment(...)` | Factors, variants, replicates, and derived metrics | `viper.plan()` |
+| `viper.experiment(...)` | Factors, variants, replicates, and derived metrics | `viper.plan()` or `viper.expand()` |
 | `viper.benchmark(...)` | Fixed test, splits, metrics, and optional criteria | `viper.plan()` |
 | `viper.plan(...)` | One selected variant, replicate, benchmark, and runtime contract | `viper.freeze()` |
+| `viper.expand(...)` | Ordered concrete plans for selected variants and replicates | `viper.freeze()` for each plan |
 | `viper.freeze(...)` | Canonical experiment, benchmark, stage, and run files plus their named paths | Git plan commit |
 | Git plan commit | Immutable identity for every generated plan file | `viper.execution.run()` |
 | `viper.execution.run(...)` | Verified terminal run and its immutable reference | `viper.execution.benchmark()` or later artifact selection |
+| `viper.execution.run_many(...)` | One ordered result for every selected frozen plan | Catalog queries and experiment review |
 | `viper.execution.benchmark(...)` | Candidate and confirmation results under the frozen test conditions | Benchmark inspection and restore |
+| `viper.catalog(...)` | Rebuildable cross-run query interface | Exact run, artifact, and measurement searches |
 
 The graph contains eight distinct input edges:
 
@@ -2621,6 +2694,9 @@ overwrite rules, and review ownership.
 | Artifact paths | Accept run-relative `ArtifactDraft.path` values and prefix the selected run root during freezing | One variant graph can be reused across replicates while every frozen `ArtifactSpec.path` remains concrete |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `ExternalInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
+| Experiment expansion | Implement [`experiment-expansion.md`](experiment-expansion.md) after the single-run compiler | `viper.expand()` returns ordinary ordered `RunPlanDraft` values and `run_many()` retains one result per plan |
+| Stage reuse | Implement [`stage-reuse.md`](stage-reuse.md) after the provenance catalog | `reuse="verified"` skips only a fully matched project stage and records explicit source evidence |
+| Catalog and MCP | Implement [`provenance-catalog-mcp.md`](provenance-catalog-mcp.md) after terminal verification and inspection are stable | Cross-run queries retain immutable source references and MCP tools route through typed API handlers |
 | Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and eval stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
 | Frozen plan result | Return `run_spec_path`, `benchmark_spec_path`, and the complete generated-file manifest | The user commits the exact files and later public calls consume those returned paths directly |

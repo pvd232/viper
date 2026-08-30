@@ -259,17 +259,18 @@ later stages and artifact pointers.
 source and stage-invocation fields belong to the four project-callable stages.
 
 ```python
-class ResolvedDownloadSpec(ResolvedBaseSpec):
+class ResolvedDownloadSpec(ResolvedExecutedSpec):
     kind: Literal["download"] = "download"
     spec: DownloadSpec
     retrievals: dict[InputName, ResolvedHttpRetrieval]
 ```
 
-The coordinated authoring contract moves `source`, `startup`, `invocation`,
-and `command` from `ResolvedBaseSpec` to `ResolvedParameterizedSpec`. The
-download record retains `env`, `execution_context`, `artifacts`, and
-`completed_at`. Each `ResolvedHttpRetrieval` supplies request, HTTP implementation,
-response, body, and timing evidence. See
+The coordinated authoring contract moves project-stage execution fields into
+`ExecutedStageCompletion` and leaves runner execution fields on
+`ResolvedExecutedSpec`. The download record retains `env`,
+`execution_context`, `artifacts`, and `completed_at`. Each
+`ResolvedHttpRetrieval` supplies request, HTTP implementation, response, body,
+and timing evidence. See
 [`automatic-input-resolution.md`](automatic-input-resolution.md#target-frozen-download-and-resolved-stage-models).
 
 ### 4.4 Complete public authoring example
