@@ -75,7 +75,7 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.file_artifact",
     "viper.file_input",
     "viper.freeze",
-    "viper.http_transport",
+    "viper.http",
     "viper.measure",
     "viper.metric",
     "viper.min",
@@ -84,14 +84,18 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.run_artifact",
     "viper.stage",
     "viper.train",
-    "viper.transport",
     "viper.variant",
+}
+
+RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS = {
+    "viper.http_transport",
+    "viper.transport",
 }
 
 COMPLETE_EXAMPLE_COMMENT_TOPICS = {
     "Repository identity",
     "Freezing records each loader",
-    "custom transport owns network I/O",
+    "custom HTTP function sends the request",
     "viper.download() declares a runner-owned stage",
     "Live metrics receive values",
     "viper.measure() supplies concrete parameters",
@@ -369,6 +373,15 @@ def test_complete_authoring_example_covers_the_public_workflow() -> None:
     }
 
     assert COMPLETE_EXAMPLE_PUBLIC_CALLS - calls == set()
+    assert calls & RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS == set()
+
+    imported_modules = {
+        node.module
+        for tree in trees
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert "viper.http" not in imported_modules
 
 
 def test_complete_authoring_parameter_models_are_substantial_and_used() -> None:

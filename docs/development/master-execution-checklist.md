@@ -167,6 +167,7 @@ The contracts share models. One contract owns each shared decision:
 | --- | --- |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
 | HTTP root is `ResolvedHttpRetrieval` | External input roots |
+| Custom HTTP execution uses `@viper.http(id=...)` and `DownloadSpec.http` | Automatic input resolution |
 | Local root is `ResolvedExternalInputRef` | External input roots |
 | Stage input edge is `ExternalInputRef`, `FutureInputRef`, or `StoredInputRef` | External input roots |
 | Draft input compiles to one of those three edges | Automatic input resolution |
@@ -183,12 +184,12 @@ focused test. The matching phase contains one `implements` marker and one
 exact reviewed contract bytes. A contract edit requires another checklist
 review and a new digest.
 
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=26e5d35c76068553bd767e3d3e110be83313ff48a4723fea130d12b25a592b85 -->
-<!-- contract-baseline: external-input-roots.md sha256=cc61a5658c783a35c5de7a78f8234248347b23cc80cd784c2e473f92db55113f -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=bcea89d5cbc0b77a760aa40b8f1234b93d54662f2494dc6bc93a093b2b6ad420 -->
+<!-- contract-baseline: external-input-roots.md sha256=bff7878600cf7098a9e3455ccff2f7cb475aeae967934e4967c8784412a4d1f1 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=1ccc0f118115e78167c07d69f9dff79ada46b787b34f4a0a8ef9a4e2c32b570d -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=bfde792d5d9eb4ba41950e491883ebabd20e22581c4a94e04a417849c7b3b578 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=679ad0b2cdcd151692a8bd47c91760bd8d9250d97942aebead2ca9d7ddae2ce5 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
-<!-- contract-baseline: remote-storage.md sha256=b0f4bf4715cdcc90189c94c25364a86dc521870b86a7fba27bc3d392b94a7ee7 -->
+<!-- contract-baseline: remote-storage.md sha256=5f7a7c483973f03cb434d9fdfbc63633a21bb7310c138d7ef4807cb8bf377e58 -->
 
 ## 4. Specification-system review
 
@@ -214,7 +215,8 @@ The review found and repaired these schema conflicts:
 | Benchmark test data was separate from the evaluation-stage inputs | Compile `BenchmarkDraft.test` and splits once and reuse their pointers in both records. |
 | Freeze-time pointer publication preceded run destination binding | Bind the destination before the first immutable publication in freezing or execution. |
 | A local terminal path lacked its immutable `ResolvedRunRef` | Publish the terminal as a one-file revision and derive its local reference before parsing. |
-| Download custody lacked an operation whose digest covered the bytes written at the artifact path | Add `publish_download_body()` and reject a transport-body change before publication. |
+| Download custody lacked an operation whose digest covered the bytes written at the artifact path | Add `publish_download_body()` and reject an HTTP-body change before publication. |
+| The public HTTP API named its request function a transport and required a separate transport constructor | Use `@viper.http(id=...)`, pass the function through `viper.download(http=...)`, rename the frozen and resolved HTTP records, and delete `viper.transport()`. |
 | A repository-relative local input could escape through a symbolic link | Add `input.local_source_boundary` before capture. |
 | Live metric evidence left the receipt-to-`MetricSpec` join implicit | Join the measurement, invocation metric IDs, frozen stage, and experiment registry in `metric.live.parameter_delivery`. |
 | Python authoring generated plan files after the source commit, and execution searched that source commit for them | Add a separate plan commit and use it for generated documents. |
@@ -307,7 +309,7 @@ Each contract has one case that must fail:
 
 | Contract | Counterexample |
 | --- | --- |
-| Download retrieval artifacts | The transport body changes after receipt validation and before artifact publication. |
+| Download retrieval artifacts | The HTTP result body changes after receipt validation and before artifact publication. |
 | External input roots | A local source path escapes through a symlink, the parent supplies a different workspace file than `captured_input_path()`, or the captured file changes while the worker runs. |
 | Unified metric drafting | A live receipt selects different metric IDs, a metric dependency creates a second payload publication, two stages use one metric ID with different parameters, or benchmark test pointers differ from evaluation inputs. |
 | Automatic input resolution | A same-run input selects an artifact from a later stage, freezing publishes a pointer before binding the run destination, or execution starts before generated files enter the plan commit. |
@@ -433,6 +435,21 @@ single-file artifact. Both records identify one snapshot file.
 
 ### 8.1 Frozen and resolved models
 
+- [ ] Rename `src/viper/http.py` to `src/viper/_http.py` so the package root can
+      export the `viper.http` callable. Update every internal import to the
+      private module and every public example to import HTTP types from `viper`.
+- [ ] In `src/viper/_http.py`, rename `HttpTransportImplementationRef`,
+      `BuiltinHttpTransportSpec`, `ProjectHttpTransportSpec`,
+      `HttpTransportSpec`, and `ResolvedHttpTransport` to
+      `HttpImplementationRef`, `BuiltinHttpImplementationSpec`,
+      `ProjectHttpImplementationSpec`, `HttpImplementationSpec`, and
+      `ResolvedHttpImplementation`.
+- [ ] Rename `transport_id` to `id`, `DownloadSpec.transport` to
+      `DownloadSpec.http`, and `ResolvedHttpRetrieval.transport` to
+      `ResolvedHttpRetrieval.http`. Regenerate every YAML fixture with the new
+      serialized field names.
+- [ ] Rename `parameters.HttpTransport` to `parameters.Http` and update its
+      validators, parameter-model references, fixtures, and public alias.
 - [ ] Move `implementation` and `parameter_model` from `BaseSpec` to
       `ParameterizedSpec` in `src/viper/stages.py`.
 - [ ] Make `DownloadSpec` inherit `BaseSpec` directly and complete the
@@ -451,8 +468,8 @@ single-file artifact. Both records identify one snapshot file.
 <details>
 <summary>Hints</summary>
 
-**Hint 1:** The runner owns the download stage. The selected HTTP transport is
-its sole callable.
+**Hint 1:** The runner owns the download stage. The function selected through
+`DownloadSpec.http` is its sole callable.
 
 **Hint 2:** Keep both resolved maps. The retrieval contains request and response
 facts. The artifact supplies the ordinary stage-output interface.
@@ -464,9 +481,16 @@ receipt and artifact.
 
 ### 8.2 Execution
 
+- [ ] Rename `HttpTransportContext`, `HttpTransportResult`,
+      `HttpTransportCallable`, and their definition and type-variable peers to
+      `HttpContext`, `HttpResult`, `HttpCallable`, and the matching `Http*`
+      names.
+- [ ] Rename `resolve_transport()`, `invoke_transport()`, and `_httpx_transport`
+      to `resolve_http()`, `invoke_http()`, and `_httpx_request`; update preflight,
+      execution, recovery, and verification callers.
 - [ ] Change `execution/_materialization.py:retrieve_download_inputs()` to
       write each verified body directly at its frozen artifact path.
-- [ ] Add `publish_download_body()`. Stream the transport file into a temporary
+- [ ] Add `publish_download_body()`. Stream the HTTP result file into a temporary
       artifact sibling, hash the bytes written, compare the frozen digest and
       byte count, then atomically replace the artifact path.
       <!-- implements: DRA-03 -->
@@ -481,10 +505,17 @@ receipt and artifact.
 
 ### 8.3 Focused proof
 
+- [ ] Update `src/viper/__init__.py` and `__all__` to export `http`,
+      `HttpRequestSpec`, `HttpRetrievalPolicy`, `ObservedHttpResponse`,
+      `HttpRetrievalError`, `HttpContext`, and `HttpResult`. Update
+      `tests/test_public_api.py`, protocol fixtures, and schema assertions.
+      Remove the old exports and compatibility aliases.
+- [ ] Add a repository search assertion that permits `transport` only in the
+      migration tables of the development contracts until those tables retire.
 - [ ] Update `tests/test_http_retrieval.py` for the shared file.
 - [ ] Update `tests/test_run_execution.py` for a runner-owned download.
 - [ ] Update `tests/test_execution_acceptance.py` for one snapshot copy.
-- [ ] Add a same-byte-count body mutation between transport validation and
+- [ ] Add a same-byte-count body mutation between HTTP validation and
       artifact publication. Require `download.runner_custody` to reject it.
 - [ ] Remove callable-copy fixtures from `tests/fixtures.py` and generated
       project tests. Replace the generated download callable in
@@ -686,7 +717,7 @@ python -m pytest \
 
 **Commit boundary:** `Unify metric drafting and runtime context`
 
-## 11. Phase 5 — Python stage, artifact, and transport drafts
+## 11. Phase 5 — Python stage, artifact, and HTTP drafts
 
 **Depends on:** Phases 2 and 4.
 
@@ -711,12 +742,15 @@ writing stage YAML by hand.
 - [ ] Add `@viper.build(params=...)`, `@viper.embed(params=...)`,
       `@viper.train(params=...)`, and `@viper.evaluate(params=...)`.
 - [ ] Retain the attached `StageDefinition` and source verification.
-- [ ] Change `@viper.http_transport` to use optional `params=`.
-- [ ] Add `viper.transport()` for a configured custom transport.
+- [ ] Replace `@viper.http_transport(transport_id=..., parameter_model=...)`
+      with `@viper.http(id=..., params=...)`.
+- [ ] Pass the decorated function and its optional parameter instance through
+      `viper.download(http=..., params=...)`; remove `viper.transport()`.
 - [ ] Add `RunArtifactPath` validation.
 - [ ] Add `SingleFileArtifactDraft` and `BundleArtifactDraft`.
 - [ ] Add `viper.file_artifact()` and the bundle constructor.
-- [ ] Add `BuiltinHttpTransportSpec | CustomHttpTransportDraft` authoring.
+- [ ] Add `BuiltinHttpImplementationSpec | CustomHttpDraft` authoring and
+      compile it into `HttpImplementationSpec`.
       <!-- implements: AIR-02 -->
 
 ### 11.3 Stage drafts
@@ -809,7 +843,7 @@ The plan mapping supplies stage IDs.
 - [ ] Establish `HEAD` as the plan commit during preflight. Load generated
       experiment, variant, benchmark, stage, and run documents from that
       commit. <!-- implements: FPG-02 -->
-- [ ] Keep project callables, parameter classes, artifact loaders, transports,
+- [ ] Keep project callables, parameter classes, artifact loaders, HTTP implementations,
       and metric implementations bound to `RunSpec.source.commit`.
       <!-- implements: FPG-03 -->
 - [ ] Store the plan commit in `ResolvedRun.spec.stored_at` and use it during
@@ -1146,7 +1180,7 @@ package executes.
 - [ ] Rewrite `src/viper/project_init.py` around Python authoring.
 - [ ] Generate four project-owned stage decorators and one runner-owned
       download declaration.
-- [ ] Generate complete parameters, metrics, diagnostics, loaders, transport,
+- [ ] Generate complete parameters, metrics, diagnostics, loaders, HTTP,
       experiment, variant, replicate, run, and benchmark declarations.
 - [ ] Use `Train` and `Eval` keys.
 - [ ] Use run-relative artifact draft paths.
@@ -1160,6 +1194,8 @@ package executes.
 - [ ] Update `docs/tutorials/getting-started.md`.
 - [ ] Update `docs/explanation/how-viper-works.md`.
 - [ ] Update `docs/reference/api.md`.
+- [ ] Replace the public `viper.http` module entry with the package-root
+      `viper.http` decorator and package-root HTTP types.
 - [ ] Update `docs/reference/protocol.md` with every final model and alias.
 - [ ] Update `docs/reference/versioning.md` if alpha compatibility language
       changes.
@@ -1202,14 +1238,14 @@ old contract.
 | --- | --- | --- |
 | `src/viper/_schema.py` | New parameter-source path scalar; replace old stage-key constants | 4, 5 |
 | `src/viper/keys.py` | Add `Train` and `Eval` enums | 5 |
-| `src/viper/parameters.py` | Owner-aware `ParameterModelRef`; delete `Download`; public alias support | 2, 4 |
+| `src/viper/parameters.py` | Rename `HttpTransport` to `Http`; owner-aware `ParameterModelRef`; delete `Download`; public alias support | 2, 4 |
 | `src/viper/references.py` | Cloud refs, snapshot rename, union changes | 9 |
 | `src/viper/storage.py` | Destinations, publishers, independent publication, cloud client | 1, 9 |
 | `src/viper/artifacts.py` | Drafts, run-relative paths, pointer compatibility | 5, 7 |
 | `src/viper/artifact_loaders.py` | Replace old fixed artifact keys in loader validation | 5 |
 | `src/viper/inputs.py` | Remove HTTP source; local snapshot ref; stored pointer change | 3, 7 |
-| `src/viper/http.py` | Shared body ref; optional transport params; custom transport draft | 2, 5 |
-| `src/viper/stages.py` | Runner-owned download hierarchy; objectives; draft decorators; key validation | 2, 4, 5 |
+| `src/viper/_http.py` | Rename from `http.py`; own the private HTTP implementation, protocol records, shared body ref, optional HTTP params, and custom HTTP draft | 2, 5 |
+| `src/viper/stages.py` | Runner-owned download hierarchy; `DownloadSpec.http`; objectives; draft decorators; key validation | 2, 4, 5 |
 | `src/viper/metrics.py` | Remove kind; drafts; context; parameter identity; objectives | 4 |
 | `src/viper/experiments.py` | Remove download params; add factor, variant, replicate, experiment drafts | 2, 6 |
 | `src/viper/benchmark.py` | Draft, metric IDs, optional criteria, complete results | 8 |
@@ -1217,9 +1253,9 @@ old contract.
 | `src/viper/runs.py` | Input/pointer relationships and terminal cloud references | 7, 9 |
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
 | `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
-| `src/viper/preflight.py` | Runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
+| `src/viper/preflight.py` | Renamed HTTP implementation checks, runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
 | `src/viper/inspection.py` | Render renamed snapshot and result references | 2, 9 |
-| `src/viper/execution/_materialization.py` | Runner download output; local capture; stored materialization | 2, 3, 7 |
+| `src/viper/execution/_materialization.py` | `invoke_http()` and runner download output; local capture; stored materialization | 2, 3, 7 |
 | `src/viper/execution/_stage.py` | New keys; captured-input post-check | 3, 5 |
 | `src/viper/execution/_resolution.py` | New resolved hierarchy and objectives | 2, 4 |
 | `src/viper/execution/_attempt.py` | Publisher use; runner download; captures; cloud destination | 1–4, 9 |
@@ -1235,7 +1271,7 @@ old contract.
 | `src/viper/_workers/parameters.py` | Resolve owner-aware parameter-model references | 4 |
 | `src/viper/_workers/artifacts.py` | Consume concrete frozen artifact paths produced by the draft compiler | 5, 6 |
 | `src/viper/_parameter/validation.py` | Resolve project and VIPER owners | 4 |
-| `src/viper/_verification/attempt.py` | Download equality, canonical local capture path, local-root identity, and objective evidence | 2–4 |
+| `src/viper/_verification/attempt.py` | Renamed HTTP implementation verification, download equality, canonical local capture path, local-root identity, and objective evidence | 2–4 |
 | `src/viper/_verification/plan.py` | Draft-derived graph, plan/source commit separation, keys, objectives, pointers, benchmarks | 4–8 |
 | `src/viper/_verification/metrics.py` | Parameter binding and complete benchmark metrics | 4, 8 |
 | `src/viper/_verification/storage.py` | Cloud fetch, snapshot list, restore identity | 9, 10 |
@@ -1246,13 +1282,13 @@ old contract.
 | `src/viper/_api/handlers.py` | Compile drafts, return refs, restore handler | 5–10 |
 | `src/viper/cli.py` | Python workflow command changes and restore arguments | 10, 11 |
 | `src/viper/project_init.py` | Replace the generated download callable in Phase 2 and every remaining legacy pattern in Phase 11 | 2, 11 |
-| `src/viper/__init__.py` | Export new public API and remove retired names | 2, 4–10 |
+| `src/viper/__init__.py` | Export `http`, `HttpContext`, and `HttpResult`; remove transport names and other retired names | 2, 4–10 |
 | `src/viper/py.typed` | Ship the package's PEP 561 typing marker | Complete |
 | `CHANGELOG.md` | Record the contract implementation under the active release | 11 |
-| `tests/fixtures.py` | Canonical target records and complete authored graph | All pending phases |
-| `tests/test_protocol.py` | Every schema, union, key, and validator | All pending phases |
+| `tests/fixtures.py` | Canonical HTTP names, target records, and complete authored graph | All pending phases |
+| `tests/test_protocol.py` | HTTP rename, every schema, union, key, and validator | All pending phases |
 | `tests/test_authoring.py` | Draft constructors and compiler | 5–8 |
-| `tests/test_http_retrieval.py` | Transport and shared body identity | 2 |
+| `tests/test_http_retrieval.py` | HTTP implementation and shared body identity | 2 |
 | `tests/test_run_execution.py` | Downloads, local roots, same-run and prior-run inputs | 2, 3, 7 |
 | `tests/test_execution_acceptance.py` | Complete local and cloud attempts | 2, 3, 9 |
 | `tests/test_execution_signals.py` | Failure, retry, and durable state | 1, 9 |
@@ -1263,7 +1299,7 @@ old contract.
 | `tests/test_verification.py` | All new verifier rules | 2–10 |
 | `tests/test_verification_acceptance.py` | Tamper and graph rejection cases | 2–10 |
 | `tests/test_preflight.py` | Frozen graph, plan commit, and source commit checks | 5–8 |
-| `tests/test_public_api.py` | Exports, decorators, keys, constructors | 4–10 |
+| `tests/test_public_api.py` | `viper.http`, removed transport exports, decorators, keys, and constructors | 2, 4–10 |
 | `tests/test_parameter_validation.py` | Project and installed-VIPER parameter-model owners | 4 |
 | `tests/test_inspection.py` | New stage and attempt reference shapes | 2, 9 |
 | `tests/test_api.py` | Typed operation inputs and outputs | 5–10 |

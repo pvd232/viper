@@ -592,7 +592,7 @@ The download contract gives the HTTP receipt and artifact one shared
 `SnapshotFileRef`:
 
 ```text
-HTTP transport writes response into attempt scratch space
+HTTP function writes response into attempt scratch space
 -> runner verifies the body
 -> runner moves or writes the body at the declared artifact path
 -> ResolvedHttpRetrieval.body receives SnapshotFileRef

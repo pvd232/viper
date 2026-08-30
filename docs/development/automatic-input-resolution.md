@@ -14,7 +14,7 @@ These requirements bind the contract to the master checklist:
 | ID | Implementation obligation |
 | --- | --- |
 | AIR-01 <!-- contract-requirement: AIR-01 phase=5 test=tests/test_public_api.py --> | Add the final stage decorators, parameter namespace, and `Train` and `Eval` keys. |
-| AIR-02 <!-- contract-requirement: AIR-02 phase=5 test=tests/test_authoring.py --> | Add artifact and transport drafts with callable-backed freezing. |
+| AIR-02 <!-- contract-requirement: AIR-02 phase=5 test=tests/test_authoring.py --> | Add artifact and HTTP drafts with callable-backed freezing. |
 | AIR-03 <!-- contract-requirement: AIR-03 phase=5 test=tests/test_authoring.py --> | Replace YAML-backed stage drafts with Python `StageSpecDraft` models and artifact handles. |
 | AIR-04 <!-- contract-requirement: AIR-04 phase=6 test=tests/test_authoring.py --> | Compile experiment, variant, replicate, metric, stage, benchmark, and run documents from one plan. |
 | AIR-05 <!-- contract-requirement: AIR-05 phase=7 test=tests/test_verification_acceptance.py --> | Compile local, same-run, and prior-run inputs and publish prior-run pointers through the selected destination. |
@@ -86,7 +86,8 @@ corresponding measurement.
 
 The user writes the stage decorator, parameter class, and training function.
 `viper.freeze()` writes a same-run reference or pointer. VIPER executes each
-`DownloadSpec`. A custom transport handles any project-specific HTTP request.
+`DownloadSpec`. A function decorated with `@viper.http` handles any
+project-specific HTTP request.
 The user commits the generated plan files before execution. VIPER keeps that
 plan commit separate from the source commit that identifies project code.
 
@@ -233,11 +234,12 @@ def build(*, params: type[BuildParamsT]) -> StageDecorator[BuildParamsT]: ...
 def embed(*, params: type[EmbedParamsT]) -> StageDecorator[EmbedParamsT]: ...
 def train(*, params: type[TrainParamsT]) -> StageDecorator[TrainParamsT]: ...
 def evaluate(*, params: type[EvaluateParamsT]) -> StageDecorator[EvaluateParamsT]: ...
-def http_transport(
+def http(
     *,
-    transport_id: HumanId,
-    params: type[TransportParamsT] = parameters.HttpTransport,
-) -> HttpTransportDecorator[TransportParamsT]: ...
+    id: HumanId,
+    params: type[HttpParamsT] = parameters.Http,
+    executables: tuple[ExternalExecutableSpec, ...] = (),
+) -> HttpDecorator[HttpParamsT]: ...
 ```
 
 `viper.params` is the public alias for the existing parameter categories in
@@ -265,9 +267,9 @@ class ParameterModelRef(ProtocolModel):
 ```
 
 This replaces the current project-only meaning of `ParameterModelRef`. Stage,
-transport, and metric parameter references all use the same owner rule.
+HTTP, and metric parameter references all use the same owner rule.
 
-### Target artifact and transport drafts
+### Target artifact and HTTP drafts
 
 Users give VIPER four kinds of Python definitions:
 
@@ -275,8 +277,8 @@ Users give VIPER four kinds of Python definitions:
 artifact loader function
 -> ArtifactLoaderRef
 
-HTTP transport function
--> HttpTransportImplementationRef
+HTTP function
+-> HttpImplementationRef
 
 parameter class
 -> ParameterModelRef
@@ -339,14 +341,109 @@ ArtifactDraft = Annotated[
 
 
 @dataclass(frozen=True)
-class CustomHttpTransportDraft:
-    implementation: HttpTransportCallable[Any]
-    params: parameters.HttpTransport
+class CustomHttpDraft:
+    id: HumanId
+    implementation: HttpCallable[Any]
+    params: parameters.Http
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
 
-HttpTransportDraft = BuiltinHttpTransportSpec | CustomHttpTransportDraft
+HttpDraft = BuiltinHttpImplementationSpec | CustomHttpDraft
+
+
+class HttpImplementationRef(ProtocolModel):
+    path: PythonRepoRelPath
+    symbol: PythonSymbol
+    sha256: SHA256
+    bytes: int = Field(gt=0)
+
+
+class BuiltinHttpImplementationSpec(ProtocolModel):
+    kind: Literal["builtin"] = "builtin"
+    id: Literal["httpx"] = "httpx"
+
+
+class ProjectHttpImplementationSpec(ProtocolModel):
+    kind: Literal["project"] = "project"
+    id: HumanId
+    implementation: HttpImplementationRef
+    parameter_model: ParameterModelRef
+    params: parameters.Http
+    executables: tuple[ExternalExecutableSpec, ...] = ()
+
+
+HttpImplementationSpec = Annotated[
+    BuiltinHttpImplementationSpec | ProjectHttpImplementationSpec,
+    Field(discriminator="kind"),
+]
+
+
+class ResolvedHttpImplementation(ProtocolModel):
+    spec: HttpImplementationSpec
+    external_executables: tuple[ResolvedExternalExecutable, ...] = ()
+
+
+HttpParamsT = TypeVar("HttpParamsT", bound=parameters.Http)
+
+
+@dataclass(frozen=True)
+class HttpContext(Generic[HttpParamsT]):
+    request: HttpRequestSpec
+    credential: RuntimeHttpCredential | None
+    workspace: Path
+    destination: Path
+    policy: HttpRetrievalPolicy
+    params: HttpParamsT
+    executables: Mapping[HumanId, Path]
+
+
+@dataclass(frozen=True)
+class HttpResult:
+    body: Path
+    response: ObservedHttpResponse
+
+
+@dataclass(frozen=True)
+class HttpDefinition(Generic[HttpParamsT]):
+    id: HumanId
+    parameter_model: type[HttpParamsT]
+    executables: tuple[ExternalExecutableSpec, ...] = ()
+
+
+class HttpCallable(Protocol[HttpParamsT]):
+    def __call__(self, context: HttpContext[HttpParamsT]) -> HttpResult: ...
 ```
+
+The HTTP vocabulary names the user action directly. `@viper.http` declares the
+function that sends the request. `viper.download(http=request)` selects that
+function for the download stage. The frozen and resolved records preserve its
+identity through these exact replacements:
+
+| Current name | Target name |
+| --- | --- |
+| `@viper.http_transport(transport_id=...)` | `@viper.http(id=...)` |
+| `viper.transport()` | Delete; pass the decorated function to `viper.download(http=...)`. |
+| `parameters.HttpTransport` | `parameters.Http` |
+| `HttpTransportImplementationRef` | `HttpImplementationRef` |
+| `BuiltinHttpTransportSpec` | `BuiltinHttpImplementationSpec` |
+| `ProjectHttpTransportSpec` | `ProjectHttpImplementationSpec` |
+| `HttpTransportSpec` | `HttpImplementationSpec` |
+| `ResolvedHttpTransport` | `ResolvedHttpImplementation` |
+| `HttpTransportContext` | `HttpContext` |
+| `HttpTransportResult` | `HttpResult` |
+| `transport_id` | `id` |
+| `DownloadSpec.transport` | `DownloadSpec.http` |
+| `ResolvedHttpRetrieval.transport` | `ResolvedHttpRetrieval.http` |
+
+The callable also owns the package-root name `viper.http`. Phase 2 renames the
+implementation module from `viper.http` to `viper._http` and exports
+`HttpRequestSpec`, `HttpRetrievalPolicy`, `ObservedHttpResponse`,
+`HttpRetrievalError`, `HttpContext`, and `HttpResult` from `viper`. This gives
+`viper.http` one public meaning.
+
+VIPER is in alpha. Implementation removes the old Python names and serialized
+field names in the same increment. Callers and stored fixtures must use the
+target names immediately after that increment.
 
 `ArtifactDraft.path` is relative to the selected run root. For example,
 `artifacts/models/logistic_regression/model.pt` becomes:
@@ -361,19 +458,20 @@ The run-relative draft path lets one `VariantDraft` serve every declared
 replicate while preserving the user's chosen artifact category, entity ID,
 filename, and subdirectories.
 
-A custom transport can use VIPER's base settings. The user writes:
+A custom HTTP function can use VIPER's base settings. The user writes:
 
 ```python
-@viper.http_transport(transport_id="project_httpx")
-def transfer(context: viper.HttpTransportContext) -> viper.HttpTransportResult:
+@viper.http(id="project_httpx")
+def request(context: viper.HttpContext) -> viper.HttpResult:
     ...
 ```
 
-VIPER uses `viper.params.HttpTransport` for that transport.
+VIPER uses `viper.params.Http` for that function.
 
-A configurable transport defines its own parameter class. The decorator's
-`params=` argument receives the class. `viper.transport(params=...)` receives
-the values for one run.
+A configurable HTTP function defines its own parameter class. The decorator's
+`params=` argument receives the class. `viper.download(params=...)` receives
+the values for one run. The decorator's `executables=` argument records any
+external programs required by that function.
 
 ### Target metric and experiment drafts
 
@@ -385,7 +483,7 @@ experiment.
 
 ### Target stage drafts
 
-`DownloadSpecDraft` contains the requests, transport, policy, and artifact
+`DownloadSpecDraft` contains the requests, HTTP implementation, policy, and artifact
 declarations. VIPER runs each request. The other four stage drafts contain one
 decorated project function and one parameter object.
 
@@ -435,7 +533,7 @@ class ParameterizedSpecDraft(BaseSpecDraft):
 class DownloadSpecDraft(BaseSpecDraft):
     kind: Literal["download"] = "download"
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    transport: HttpTransportDraft
+    http: HttpDraft
     policy: HttpRetrievalPolicy
 
 
@@ -536,7 +634,7 @@ class ParameterizedSpec(BaseSpec):
 class DownloadSpec(BaseSpec):
     kind: Literal["download"] = "download"
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    transport: HttpTransportSpec
+    http: HttpImplementationSpec
     policy: HttpRetrievalPolicy
 
 
@@ -658,8 +756,9 @@ class ResolvedInternalSpec(ResolvedParameterizedSpec):
 ```
 
 `ResolvedDownloadSpec` records the environment and execution context of the
-VIPER process that invoked the transport. Each `ResolvedHttpRetrieval` records
-the selected transport, request, response, body identity, and timestamps.
+VIPER process that invoked the HTTP function. Each `ResolvedHttpRetrieval`
+records the selected HTTP implementation, request, response, body identity,
+and timestamps.
 `ResolvedParameterizedSpec` retains the project source, process startup,
 invocation receipt, and child-process command used by build, embed, train, and
 evaluate stages.
@@ -713,7 +812,7 @@ The active resolved model places `source`, `startup`, `invocation`, and
 `command` on `ResolvedBaseSpec`. The target moves those four fields to
 `ResolvedParameterizedSpec`. Verification moves the implementation-source and
 invocation checks with them. Download verification uses
-`ResolvedHttpRetrieval.transport`, the request-response rules, and the shared
+`ResolvedHttpRetrieval.http`, the request-response rules, and the shared
 artifact-file identity.
 
 `StageDraft.spec.artifacts` contains the run-relative path, loader, and data
@@ -820,20 +919,13 @@ def run_artifact(
 ) -> RunArtifactDraft: ...
 
 
-def transport(
-    implementation: HttpTransportCallable[Any],
-    *,
-    params: parameters.HttpTransport | None = None,
-    executables: tuple[ExternalExecutableSpec, ...] = (),
-) -> CustomHttpTransportDraft: ...
-
-
 def download(
     *,
     inputs: dict[InputName, HttpRequestSpec],
     policy: HttpRetrievalPolicy,
     artifacts: dict[ArtifactName, ArtifactDraft],
-    transport: HttpTransportDraft | None = None,
+    http: DecoratedHttp | None = None,
+    params: parameters.Http | None = None,
     environment: EnvironmentSpec | None = None,
     metrics: tuple[MetricDraft, ...] = (),
 ) -> StageDraft: ...
@@ -894,9 +986,10 @@ canonical YAML. The run command executes the frozen stage.
 `viper.stage()` reads the stage kind and parameter class attached by the
 decorator. It rejects a `params` instance whose class differs from the
 decorator's class. `viper.download()` constructs `DownloadSpecDraft` directly
-because the runner owns download execution. A null authoring transport selects
-`BuiltinHttpTransportSpec()`; `DownloadSpecDraft.transport` always contains an
-explicit draft after construction.
+because the runner owns download execution. `http=None` selects
+`BuiltinHttpImplementationSpec()`. A decorated HTTP function produces
+`CustomHttpDraft`. `params=None` creates the package-owned `viper.params.Http`
+value when that function uses the base parameter class.
 
 `viper.freeze()` gathers every objective and additional metric selected by the
 stage drafts. It writes one `MetricSpec` per metric ID into the experiment
@@ -999,7 +1092,7 @@ from torch.utils.data import TensorDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 import viper
-from viper.http import (
+from viper import (
     HttpRequestSpec,
     HttpRetrievalError,
     HttpRetrievalPolicy,
@@ -1097,12 +1190,12 @@ def load_predictions(path: Path) -> list[dict[str, str]]:
     return read_csv(path)
 
 
-# A custom transport owns network I/O. VIPER supplies the frozen request,
+# A custom HTTP function sends the request. VIPER supplies the frozen request,
 # retrieval policy, credential, scratch destination, and base parameters.
-@viper.http_transport(transport_id="project_httpx")
-def transfer(
-    context: viper.HttpTransportContext[viper.params.HttpTransport],
-) -> viper.HttpTransportResult:
+@viper.http(id="project_httpx")
+def request(
+    context: viper.HttpContext[viper.params.Http],
+) -> viper.HttpResult:
     headers = dict(context.request.headers)
     if context.credential is not None:
         headers[context.credential.header] = (
@@ -1142,7 +1235,7 @@ def transfer(
                 for name, value in response.headers.items()
                 if name.lower() in allowed_response_headers
             }
-            return viper.HttpTransportResult(
+            return viper.HttpResult(
                 body=context.destination,
                 response=ObservedHttpResponse(
                     response_url=str(response.url),
@@ -1152,14 +1245,11 @@ def transfer(
             )
 
 
-# viper.transport() captures the decorated function as a transport draft. This
-# example uses the package-owned empty parameter model because every transport
-# setting already comes from HttpRetrievalPolicy or the function body.
-transport = viper.transport(transfer)
-
-
 # viper.download() declares a runner-owned stage. The request key and artifact
 # key match, so one successful response becomes one named single-file artifact.
+# The http= argument selects the decorated request function. This example uses
+# the package-owned empty parameter model because the policy and function body
+# contain every HTTP setting.
 download = viper.download(
     inputs={
         "training_dataset": HttpRequestSpec(
@@ -1172,7 +1262,7 @@ download = viper.download(
             expected_body_bytes=129,
         ),
     },
-    transport=transport,
+    http=request,
     policy=HttpRetrievalPolicy(
         allowed_schemes=frozenset({"http"}),
         allowed_hosts=frozenset({"127.0.0.1"}),
@@ -1891,8 +1981,7 @@ The public calls build one dependency graph in this order:
 
 | Public call | Value it creates | Next consumer |
 | --- | --- | --- |
-| `@viper.http_transport(...)` | Decorated transport implementation | `viper.transport()` |
-| `viper.transport(transfer)` | `CustomHttpTransportDraft` | `viper.download()` |
+| `@viper.http(...)` | Decorated HTTP implementation | `viper.download(http=...)` |
 | `viper.file_artifact(...)` | Artifact declaration with path, loader, and role | `viper.download()` or `viper.stage()` |
 | `viper.file_input(...)` | Local-file input declaration | `viper.stage()` |
 | `viper.download(...)` | Runner-owned download `StageDraft` | `VariantDraft.stages` and `download.artifacts[...]` |
@@ -1999,7 +2088,7 @@ values with the frozen `FloatComparator`.
 The complete runtime path is:
 
 ```text
-project_httpx transport
+project_httpx HTTP function
 -> downloads and verifies training.csv
 -> publishes the training_dataset artifact
 
@@ -2406,8 +2495,8 @@ overwrite rules, and review ownership.
 | Protocol-owned stage keys | Add `viper.keys.Train` and `viper.keys.Eval` as `StrEnum` classes; use their members in Python authoring and stage contexts | Required train and evaluation keys use one package-owned spelling while frozen YAML retains string keys |
 | Parameter namespace | Export `viper.params` as the concise public parameter namespace | `TrainParams` subclasses `viper.params.Train` |
 | Metric, objective, and experiment API | Implement [`unified-metric-drafting.md`](unified-metric-drafting.md) | Stages receive configured metrics, objectives carry direction, and experiments derive one metric registry |
-| Download API | Add runner-owned `viper.download()` and remove the project download callable from the target contract | A download draft contains request, transport, policy, environment, metrics, and artifacts; project implementation and stage parameters belong to the other stage drafts |
-| Transport API | Make the `@viper.http_transport` parameter class and `viper.transport()` parameter instance optional | The example freezes and invokes `project_httpx` through the base transport parameters |
+| Download API | Add runner-owned `viper.download()` and remove the project download callable from the target contract | A download draft contains request, HTTP implementation, policy, environment, metrics, and artifacts; project stage implementation and stage parameters belong to the other stage drafts |
+| HTTP API | Add `@viper.http(id=..., params=...)`; pass the decorated function and its optional parameter instance through `viper.download(http=..., params=...)` | The example freezes and invokes `project_httpx` through the base HTTP parameters |
 | Artifact API | Add `viper.file_artifact()` and callable-backed artifact drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
 | Artifact paths | Accept run-relative `ArtifactDraft.path` values and prefix the selected run root during freezing | One variant graph can be reused across replicates while every frozen `ArtifactSpec.path` remains concrete |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `FileInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
@@ -2424,9 +2513,9 @@ overwrite rules, and review ownership.
 | Verification | Reuse `verify_promoted_artifact()` and existing file-identity checks | Tampered source run or artifact fails verification |
 | Persisted schema | Change `StoredInputRef.pointer` to `ResolvedArtifactPointerRef` and broaden that reference's storage location to `StorageRef` | Default pointers avoid a Git-commit cycle and remain remotely retrievable |
 | Resolved download schema | Move project-invocation fields from `ResolvedBaseSpec` to `ResolvedParameterizedSpec` | `ResolvedDownloadSpec` contains runner environment, execution context, retrieval evidence, and artifacts |
-| Download runtime | Execute transport invocation, verification, publication, and artifact resolution in the runner | A successful request creates matching retrieval and artifact records in the attempt process |
+| Download runtime | Execute the HTTP function, verify and publish its result, and resolve the artifact in the runner | A successful request creates matching retrieval and artifact records in the attempt process |
 | Tests | Add same-run and prior-run input cases, objective-metric cases, and one severed connector for each contract | Tests prove input resolution, objective selection, and metric evidence |
-| Legacy cleanup | Replace `@viper.*_stage`, `parameter_model=`, stage-constructor `stage_id=`, tuple stage plans, the download callable, and required empty transport parameter classes in tests, fixtures, project scaffolding, and docs | Repository search finds each old form only in migration notes that name its replacement |
+| Legacy cleanup | Replace `@viper.*_stage`, `@viper.http_transport`, `viper.transport()`, `parameter_model=`, stage-constructor `stage_id=`, tuple stage plans, the download callable, and required empty HTTP parameter classes in tests, fixtures, project scaffolding, and docs | Repository search finds each old form only in migration notes that name its replacement |
 | Documentation | Publish the complete authoring example after its API and acceptance case pass | README presents the user workflow while pointer construction stays inside VIPER |
 
 ### Legacy cleanup dispositions
@@ -2437,11 +2526,11 @@ replacement:
 | Active symbol or behavior | Disposition | Target owner |
 | --- | --- | --- |
 | `download_stage()` and generated `@viper.download_stage` callables | Delete | `viper.download()` constructs the runner-owned draft. |
-| `DownloadContext` and `HttpRetrievalHandle` | Delete | The runner consumes `HttpTransportResult` and writes `ResolvedHttpRetrieval`. |
-| `parameters.Download` | Delete | Runner-owned `DownloadSpec` uses request, policy, and transport fields. |
+| `DownloadContext` and `HttpRetrievalHandle` | Delete | The runner consumes `HttpResult` and writes `ResolvedHttpRetrieval`. |
+| `parameters.Download` | Delete | Runner-owned `DownloadSpec` uses request, policy, and `http` fields. |
 | `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete | Variant parameters cover project-owned build, embed, train, and evaluate stages. |
 | `StageContextBinding.retrievals` and `HttpRetrievalContextBinding` | Delete | The runner consumes retrieval results directly. |
-| `execute_stage_process(..., retrievals=...)` | Replace | `_execute_attempt()` invokes the transport and resolves download artifacts directly. |
+| `execute_stage_process(..., retrievals=...)` | Replace | `_execute_attempt()` invokes the HTTP function and resolves download artifacts directly. |
 | `BaseSpec.implementation` | Move | `ParameterizedSpec.implementation` owns project-stage source identity. |
 | `ResolvedBaseSpec.source`, `startup`, `invocation`, and `command` | Move | `ResolvedParameterizedSpec` owns project-stage process evidence. |
 | Download-stage `StageInvocationReceipt` fixtures | Delete | Successful requests use `ResolvedHttpRetrieval`; failed download attempts use the attempt journal and raised error. |
@@ -2453,8 +2542,8 @@ replacement:
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | Use `ResolvedArtifactPointerRef` so the frozen input carries pointer byte identity and a local, Git, or remote storage location. |
 | `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Replace | Inherit `ResolvedFileRef`, whose `stored_at` field accepts `StorageRef`; retain canonical pointer-path validation in `StoredInputRef`. |
 | YAML `spec_source` authoring and generated draft-stage files | Replace | `StageDraft.spec` holds the Python-authored declaration until freezing writes canonical YAML. |
-| Required `@viper.http_transport(parameter_model=...)` | Replace | `@viper.http_transport(params=...)` defaults to `viper.params.HttpTransport`. |
-| Required empty transport parameter instances | Delete | `viper.transport(transfer)` constructs the base parameter instance. |
+| `@viper.http_transport(transport_id=..., parameter_model=...)` | Replace | `@viper.http(id=..., params=...)` defaults to `viper.params.Http`. |
+| `viper.transport()` and required empty transport parameter instances | Delete | `viper.download(http=request)` constructs the base `viper.params.Http` instance. |
 | Direct `SingleFileArtifactSpec` construction in public examples | Replace | `viper.file_artifact()` accepts the loader callable and freezing writes `ArtifactLoaderRef`. |
 | Full run paths repeated in every `ArtifactDraft` | Replace | Drafts use `RunArtifactPath`; freezing prefixes `experiments/<experiment-id>/runs/<variant-id>/<run-id>/`. |
 | Bare `metric_ids=` in Python stage authoring | Replace | `objective=` accepts `MetricObjectiveDraft`; `metrics=` accepts `MetricDraft` values; freezing writes the IDs. |
@@ -2588,7 +2677,7 @@ checklist supplies the cross-contract commit order.
 - [ ] Define the complete `StageSpecDraft` variants for the five stage kinds.
 - [ ] Expose one `StageDraftArtifactRef` per declared artifact through
       `StageDraft.artifacts`.
-- [ ] Add callable-backed artifact and transport drafts.
+- [ ] Add callable-backed artifact and HTTP drafts.
 - [ ] Add `RunArtifactPath` and prefix the selected run root when freezing
       every `ArtifactDraft` into `ArtifactSpec`.
 - [ ] Consume the metric and experiment draft types defined by
@@ -2596,7 +2685,7 @@ checklist supplies the cross-contract commit order.
 - [ ] Add `FileInputDraft`, `RunArtifactDraft`, and the `StageInputDraft`
       authoring union.
 - [ ] Add `viper.params`, the shortened project-stage decorators,
-      `viper.stage()`, `viper.download()`, `viper.transport()`,
+      `viper.stage()`, `viper.download()`, `viper.http()`,
       `viper.file_artifact()`, `viper.file_input()`, `viper.run_artifact()`,
       `viper.plan()`, and `viper.freeze()` constructors.
 - [ ] Add `viper.keys.Train` and `viper.keys.Eval`; replace the private
@@ -2612,13 +2701,14 @@ complete.
 ### Phase 2. Expose runner-owned download through Python authoring
 
 - [ ] Make `viper.download()` construct `DownloadSpecDraft` directly.
-- [ ] Select `BuiltinHttpTransportSpec()` when the author omits `transport=`.
-- [ ] Convert a `CustomHttpTransportDraft` into the existing frozen transport
-      records when the author supplies a custom transport.
+- [ ] Select `BuiltinHttpImplementationSpec()` when the author omits `http=`.
+- [ ] Convert a `CustomHttpDraft` into `ProjectHttpImplementationSpec` when the
+      author supplies a function decorated with `@viper.http`.
 - [ ] Replace generated project download callables with `viper.download()`.
 
 **Commit boundary:** Python authoring creates a valid runner-owned download
-stage through either the built-in transport or one decorated custom transport.
+stage through either the built-in HTTP implementation or one function
+decorated with `@viper.http`.
 
 ### Phase 3. Compile local and same-run inputs
 
@@ -2637,7 +2727,7 @@ stage through either the built-in transport or one decorated custom transport.
 - [ ] Let evaluation datasets and split inputs use any `InputRef`; resolve the
       selected declarations and enforce their evaluation or benchmark roles.
 - [ ] Add the local-file-to-training acceptance case.
-- [ ] Add the complete custom-transport download-to-training acceptance case.
+- [ ] Add the complete custom-HTTP download-to-training acceptance case.
 
 **Commit boundary:** a frozen plan connects a local file or download artifact
 to training while the compiler owns the `ExternalInputRef` and

@@ -45,7 +45,7 @@ The active implementation leaves four connectors unfinished:
 - The download executor stores each HTTP body at a retrieval-only path.
   Generated project code and execution fixtures then copy those bytes to a
   separately declared artifact path.
-- `HttpSource` repeats the request, policy, transport, and retrieval operation
+- `HttpSource` repeats the request, policy, HTTP implementation, and retrieval operation
   inside internal-stage input resolution.
 - `ResolvedExternalInputRef` captures a local file, while the verifier lacks a
   local-root identity rule.
@@ -72,7 +72,7 @@ one exact record or field:
 
 | Role | Exact record or field | Claim |
 | --- | --- | --- |
-| External-input-root record | `ResolvedDownloadSpec.retrievals["dataset"]: ResolvedHttpRetrieval` | VIPER performed the request through the recorded transport and received the recorded response. |
+| External-input-root record | `ResolvedDownloadSpec.retrievals["dataset"]: ResolvedHttpRetrieval` | VIPER performed the request through the recorded HTTP implementation and received the recorded response. |
 | Root payload | `ResolvedHttpRetrieval.body: SnapshotFileRef` | The HTTP response body has this path, SHA-256 digest, and byte count in the completed download-stage snapshot. |
 | Artifact view | `ResolvedDownloadSpec.artifacts["dataset"]: ResolvedSingleFileArtifact` | The download stage published those bytes as its named `dataset` output. |
 | Consumer selector | `TrainSpec.inputs["dataset"]: FutureInputRef` | The training stage selects the download stage's `dataset` artifact. |
@@ -91,7 +91,7 @@ root and artifact records; a later run selects the promoted artifact through
 
 The root variants carry source-specific evidence:
 
-- `ResolvedHttpRetrieval` records the HTTP request, transport, response, body,
+- `ResolvedHttpRetrieval` records the HTTP request, implementation, response, body,
   and timestamps.
 - `ResolvedExternalInputRef` records the selected local source and captured
   file identity.
@@ -282,7 +282,7 @@ The target HTTP route uses these classes with the following target fields:
 class ResolvedHttpRetrieval(ProtocolModel):
     input_name: InputName
     request: HttpRequestSpec
-    transport: ResolvedHttpTransport
+    http: ResolvedHttpImplementation
     response: ObservedHttpResponse
     body: SnapshotFileRef
     started_at: AwareDatetime
@@ -319,20 +319,20 @@ through these records.
 ## 4. `DownloadSpec` still means "perform a network request"
 
 This contract preserves the job of `DownloadSpec`: freeze HTTP requests,
-choose a transport and policy, then have VIPER perform and record each network
+choose an HTTP implementation and policy, then have VIPER perform and record each network
 exchange. The stage still downloads response bodies. Its responsibility ends
 with verified acquisition and publication.
 
 The schema gains one mechanical rule: each request has one same-named
 single-file artifact. This complete authoring example uses the built-in HTTPX
-transport selected by the default `transport=None` argument:
+HTTPX implementation selected by the default `http=None` argument:
 
 ```python
 import csv
 from pathlib import Path
 
 import viper
-from viper.http import HttpRequestSpec, HttpRetrievalPolicy
+from viper import HttpRequestSpec, HttpRetrievalPolicy
 
 
 DATASET_PATH = "artifacts/datasets/training_set/dataset.csv"
@@ -374,25 +374,25 @@ download = viper.download(
 )
 ```
 
-The custom-transport version appears in the complete program in
+The custom-HTTP version appears in the complete program in
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
 
 The executor performs this flow:
 
 ```text
 inputs["dataset"]
--> transport writes the response to bounded attempt scratch space
+-> HTTP function writes the response to bounded attempt scratch space
 -> executor verifies the expected digest and byte count
 -> freezer prefixes the selected run root onto artifacts["dataset"].path
 -> executor writes the body at the frozen artifact path
 -> completed stage records one shared SnapshotFileRef
 ```
 
-`DownloadSpec` is runner-owned. It contains the request, transport, policy,
+`DownloadSpec` is runner-owned. It contains the request, HTTP implementation, policy,
 environment override, metric IDs, and artifacts. Build, embed, train, and
 evaluate retain decorated project callables and typed parameters. A
-project-owned HTTP transport remains available through
-`@viper.http_transport` for project-specific transfer behavior.
+project-owned HTTP function remains available through
+`@viper.http` for project-specific request behavior.
 
 The completed stage records two views of the same file:
 
@@ -408,9 +408,9 @@ detailed request-to-artifact schema, runner-owned resolved-stage fields,
 execution changes, and legacy cleanup live in
 [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md).
 
-`DownloadSpec` currently applies one transport and policy to all requests in
+`DownloadSpec` currently applies one HTTP implementation and policy to all requests in
 the stage. Removing `HttpSource` preserves that rule. A future requirement for
-per-request policies or transports belongs in the `DownloadSpec` request
+per-request policies or HTTP implementations belongs in the `DownloadSpec` request
 schema, while the download executor remains the only network path.
 
 ## 5. A downloaded body becomes an external root and a future input
@@ -572,7 +572,7 @@ retrieval.body        == artifact.file
 FutureInputRef names the completed download stage and matching artifact
 ```
 
-The verifier also checks the frozen request, selected transport, response
+The verifier also checks the frozen request, selected HTTP implementation, response
 policy, timing, stage snapshot, and file bytes.
 
 ### Local root
@@ -602,7 +602,7 @@ remain part of `ResolvedArtifactPointerRef`.
 
 ### Downloaded same-run input
 
-A controlled transport returns `b"prior"` for `inputs["prior"]`. The download
+A controlled HTTP function returns `b"prior"` for `inputs["prior"]`. The download
 executor publishes those bytes as `artifacts["prior"]`. The completed download
 stage satisfies:
 
@@ -649,7 +649,7 @@ identity rule.
 | Download ownership | Delete the project download callable, `DownloadContext`, and `parameters.Download`; execute retrieval and publication in the attempt process. |
 | Resolved download schema | Keep runner environment, execution context, retrievals, artifacts, and completion on `ResolvedDownloadSpec`; move project invocation fields to `ResolvedParameterizedSpec`. |
 | External source model | Delete `HttpSource` and `ExternalInputSource`; type both local records with `source: LocalSource`. |
-| Internal input resolution | Remove HTTP transport invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
+| Internal input resolution | Remove HTTP invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
 | Local root model | Delete `ExternalInputRef.path`; reject symlinks and resolved paths outside the repository; derive one path with `captured_input_path()`, atomically copy `ExternalInputRef.source.path` there, and record a `SnapshotFileRef`. |
 | Worker startup | Reconstruct local capture paths with `captured_input_path()` and compare them with `StageContextBinding.inputs`. |
 | Verification | Reconstruct capture paths with the same helper, compare the invocation path with `ResolvedExternalInputRef.file.path`, and add the HTTP receipt-artifact identity rule. |

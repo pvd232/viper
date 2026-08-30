@@ -2,6 +2,12 @@
 
 **Status:** Implemented
 
+The later [automatic input-resolution contract](automatic-input-resolution.md#target-artifact-and-http-drafts)
+reserves `viper.http` for the public HTTP decorator. Its implementation phase
+renames `src/viper/http.py` to `src/viper/_http.py` and re-exports the public
+HTTP types from the package root. That planned rename follows this contract's
+rule: the leading underscore marks the first private path component.
+
 ## Required claim
 
 Every VIPER import path must show one clear boundary between supported public

@@ -34,7 +34,7 @@ These requirements bind the contract to the master checklist:
 | --- | --- |
 | DRA-01 <!-- contract-requirement: DRA-01 phase=2 test=tests/test_protocol.py --> | Replace the frozen and resolved download models with the runner-owned hierarchy and shared-file schema. |
 | DRA-02 <!-- contract-requirement: DRA-02 phase=2 test=tests/test_run_execution.py --> | Execute successful downloads in the attempt process and remove the project download worker. |
-| DRA-03 <!-- contract-requirement: DRA-03 phase=2 test=tests/test_execution_acceptance.py --> | Copy and hash the transport body into the declared artifact path before snapshot publication. |
+| DRA-03 <!-- contract-requirement: DRA-03 phase=2 test=tests/test_execution_acceptance.py --> | Copy and hash the HTTP result body into the declared artifact path before snapshot publication. |
 | DRA-04 <!-- contract-requirement: DRA-04 phase=2 test=tests/test_verification_acceptance.py --> | Verify runner custody and exact receipt-artifact file equality. |
 | DRA-05 <!-- contract-requirement: DRA-05 phase=2 test=tests/test_generated_project_acceptance.py --> | Remove the retired callable-copy path from fixtures, generated scaffolding, and execution tests. |
 | DRA-06 <!-- contract-requirement: DRA-06 phase=11 test=tests/test_documentation.py --> | Remove the retired callable-copy path from protocol and public documentation. |
@@ -168,11 +168,11 @@ class ParameterizedSpec(BaseSpec):
 class DownloadSpec(BaseSpec):
     kind: Literal["download"] = "download"
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    transport: HttpTransportSpec
+    http: HttpImplementationSpec
     policy: HttpRetrievalPolicy
 ```
 
-`DownloadSpec` therefore carries the request map, transport, policy,
+`DownloadSpec` therefore carries the request map, HTTP implementation, policy,
 environment override, metric IDs, and artifact declarations. Build, embed,
 train, and evaluate inherit `ParameterizedSpec` and retain project
 implementation and parameter-model identity.
@@ -192,7 +192,7 @@ receipt, and the artifact.
 DownloadSpec(
     inputs={"prior": HttpRequestSpec(...)},
     artifacts={"prior": SingleFileArtifactSpec(...)},
-    transport=...,
+    http=...,
     policy=...,
 )
 ```
@@ -219,7 +219,7 @@ class SnapshotFileRef(ProtocolModel):
 class ResolvedHttpRetrieval(ProtocolModel):
     input_name: InputName
     request: HttpRequestSpec
-    transport: ResolvedHttpTransport
+    http: ResolvedHttpImplementation
     response: ObservedHttpResponse
     body: SnapshotFileRef
     started_at: AwareDatetime
@@ -249,7 +249,7 @@ for every name:
 ```
 
 The two record classes remain separate. `ResolvedHttpRetrieval` stores the
-request, resolved transport, observed response, and timestamps. The inherited
+request, resolved HTTP implementation, observed response, and timestamps. The inherited
 `artifacts` map gives the same body the standard artifact interface used by
 later stages and artifact pointers.
 
@@ -268,14 +268,14 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
 The coordinated authoring contract moves `source`, `startup`, `invocation`,
 and `command` from `ResolvedBaseSpec` to `ResolvedParameterizedSpec`. The
 download record retains `environment`, `execution_context`, `artifacts`, and
-`completed_at`. Each `ResolvedHttpRetrieval` supplies request, transport,
+`completed_at`. Each `ResolvedHttpRetrieval` supplies request, HTTP implementation,
 response, body, and timing evidence. See
 [`automatic-input-resolution.md`](automatic-input-resolution.md#target-frozen-download-and-resolved-stage-models).
 
 ### 4.4 Complete public authoring example
 
 This program declares one request and its same-named dataset artifact. Omitting
-`transport=` selects VIPER's built-in HTTPX transport. The file served at the
+`http=` selects VIPER's built-in HTTPX implementation. The file served at the
 URL contains these exact 22 bytes:
 
 ```csv
@@ -289,7 +289,7 @@ import csv
 from pathlib import Path
 
 import viper
-from viper.http import HttpRequestSpec, HttpRetrievalPolicy
+from viper import HttpRequestSpec, HttpRetrievalPolicy
 
 
 DATASET_PATH = "artifacts/datasets/training_set/dataset.csv"
@@ -340,20 +340,20 @@ assert download_spec.artifacts["dataset"].path == DATASET_PATH
 At freeze time, `DownloadSpecDraft` becomes the frozen `DownloadSpec` shown in
 section 4.1. Freezing prefixes the selected run root and writes the concrete
 repository-relative path to `DownloadSpec.artifacts["dataset"].path`. At
-execution time, VIPER invokes the selected transport and publishes the verified
+execution time, VIPER invokes the selected HTTP implementation and publishes the verified
 body at that concrete path. Project code delegates publication to the runner.
 
-The complete custom-transport and model-run program lives in
+The complete custom-HTTP and model-run program lives in
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
 
 ## 5. Execution
 
-The executor owns the retrieval body from the transport result through the
+The executor owns the retrieval body from `HttpResult` through the
 completed stage snapshot.
 
 ```text
 DownloadSpec.inputs["prior"]
-    -> HTTP transport retrieves b"prior"
+    -> HTTP function retrieves b"prior"
     -> executor checks the frozen request policy
     -> executor writes b"prior" at spec.artifacts["prior"].path
     -> executor creates SnapshotFileRef(path, sha256, bytes)
@@ -365,7 +365,7 @@ DownloadSpec.inputs["prior"]
 
 `retrieve_download_inputs()` changes its output path from
 `retrieval_body_path(...)` to `stage.artifacts[input_name].path`. One helper
-owns the transfer from the transport destination to that artifact path:
+owns the copy from the HTTP scratch destination to that artifact path:
 
 ```python
 def publish_download_body(
@@ -378,7 +378,7 @@ def publish_download_body(
 ) -> SnapshotFileRef: ...
 ```
 
-The helper opens the transport body as a regular, nonsymlink file beneath the
+The helper opens the HTTP result body as a regular, nonsymlink file beneath the
 attempt workspace. It streams that file into a temporary sibling of the
 declared artifact path while calculating the SHA-256 digest and byte count of
 the bytes it writes. It compares those two values with the frozen request. It
@@ -418,7 +418,7 @@ retrievals:
   prior:
     input_name: prior
     request: <frozen request>
-    transport: <resolved transport>
+    http: <resolved HTTP implementation>
     response: <observed response>
     body:
       path: experiments/.../artifacts/datasets/tiny/prior.bin
@@ -452,7 +452,7 @@ body.sha256 == request.expected_body_sha256
 body.bytes  == request.expected_body_bytes
 ```
 
-`_verify_download_retrievals()` continues to verify the selected transport,
+`_verify_download_retrievals()` continues to verify the selected HTTP implementation,
 request policy, accepted response status, response body, and retrieval timing.
 The function reads the body from the enclosing stage snapshot through
 `SnapshotFileRef`. [`_verify_download_retrievals`](../../src/viper/_verification/attempt.py)
@@ -477,8 +477,8 @@ retrievals[name].body.bytes  == artifacts[name].file.bytes
 **Proposed rule: `download.runner_custody`.**
 
 `retrieve_download_inputs()` passes the attempt-workspace destination to the
-selected transport. `invoke_transport()` requires
-`HttpTransportResult.body.resolve()` to equal that destination, verifies the
+selected HTTP function. `invoke_http()` requires
+`HttpResult.body.resolve()` to equal that destination, verifies the
 regular-file and symlink rules, checks the terminal response, and compares the
 body byte count and SHA-256 digest with `HttpRequestSpec`.
 `publish_download_body()` then hashes the bytes it writes to the declared
@@ -492,7 +492,7 @@ the same identity once more before sealing the stage snapshot.
 | --- | --- | --- | --- |
 | Frozen stage schema | Request and artifact keys vary independently | Keys match one-for-one and every download artifact is a single file | One HTTP body receives one artifact name |
 | Retrieval receipt | `body: ResolvedFileRef` points to a local-store retrieval path | `body: SnapshotFileRef` points to the declared artifact path | Receipt and artifact reference one snapshot file |
-| Retrieval runtime | `retrieve_download_inputs()` publishes a retrieval-body revision and materializes its canonical path | `publish_download_body()` copies and hashes the transport body into `spec.artifacts[name].path` | The digest covers the bytes actually written at the artifact path |
+| Retrieval runtime | `retrieve_download_inputs()` publishes a retrieval-body revision and materializes its canonical path | `publish_download_body()` copies and hashes the HTTP result body into `spec.artifacts[name].path` | The digest covers the bytes actually written at the artifact path |
 | Stage snapshot | Retrieval and artifact loops use different keys | Both loops use the same key | `snapshot_files` stores one body entry |
 | Verification | HTTP body and artifact verification run independently | `download.receipt_artifact_identity` joins the two records | Verifier proves one HTTP body became the named artifact |
 | Stage execution | Download launches a project worker after retrieval | The attempt process retrieves, verifies, publishes, and resolves the artifact | Download becomes a runner-owned stage |
@@ -503,8 +503,8 @@ the same identity once more before sealing the stage snapshot.
 
 ### 8.1 Legacy cleanup
 
-This contract retires the repository-level retrieval-body path. The transport
-still receives an attempt-workspace directory and writes its completed transfer
+This contract retires the repository-level retrieval-body path. The HTTP
+function still receives an attempt-workspace directory and writes its completed response
 there before the executor publishes the verified body at the declared artifact
 path.
 
@@ -512,17 +512,17 @@ path.
 | --- | --- | --- |
 | `viper.paths.retrieval_body_path()`, its imports, and the otherwise empty `viper.paths` module | Delete | Use `stage.artifacts[input_name].path` for the published body. Update the current-gap link when the module is removed. |
 | The `run` and `store` parameters and `LocalArtifactStore.resolved_files()` call in `retrieve_download_inputs()` | Delete | Publish the body once through the completed stage snapshot. Keep the attempt-workspace transfer file as execution scratch. |
-| `HttpRetrievalContextBinding`, `StageContextBinding.retrievals`, `HttpRetrievalHandle`, and `DownloadContext` | Delete | The attempt process consumes `HttpTransportResult` directly and writes `ResolvedHttpRetrieval`. |
+| `HttpRetrievalContextBinding`, `StageContextBinding.retrievals`, `HttpRetrievalHandle`, and `DownloadContext` | Delete | The attempt process consumes `HttpResult` directly and writes `ResolvedHttpRetrieval`. |
 | Download path reconstruction in `viper._workers.stages` and `viper._verification.attempt` | Delete | Download skips the project-stage worker and stage-invocation verifier. Remove the resulting unused retrieval parameters and branches. |
 | The generated download callable in `viper.project_init` | Delete | Generate `viper.download()` authoring code with publication owned by the executor. |
 | Copy loops and mismatched request/artifact names in `test_execution_acceptance.py`, `test_run_execution.py`, and `test_execution_signals.py` | Replace | Use one shared name and let the executor publish the response body. |
 | The `test_verification_acceptance.py` fixture that models one `archive` request and three unrelated artifacts | Replace | Declare three same-named requests and single-file artifacts because this fixture exercises artifact verification. |
 | Mismatched `remote` and `dataset` names in `test_preflight.py` | Replace | Give the request and artifact one shared name. |
 | Hard-coded `stages/<stage-id>/retrievals/<input-name>/body` assertions | Delete | Assert the declared artifact path and its single snapshot member. |
-| `ResolvedHttpRetrieval` model tests that construct `ResolvedFileRef` bodies | Replace | Construct `SnapshotFileRef` bodies at the declared artifact path and assert receipt-artifact equality. Keep transport scratch-file tests unchanged. |
+| `ResolvedHttpRetrieval` model tests that construct `ResolvedFileRef` bodies | Replace | Construct `SnapshotFileRef` bodies at the declared artifact path and assert receipt-artifact equality. Keep HTTP scratch-file tests unchanged. |
 | Generated-project acceptance coverage | Replace | Assert that generated authoring uses `viper.download()` and execution publishes each response artifact. |
 | `docs/reference/protocol.md` models and execution prose | Replace | Document runner-owned download, the shared successful `SnapshotFileRef`, and the executor-owned artifact write. |
-| `HttpTransportContext.workspace`, its bounded `destination`, and transport-level body tests | Retain | The attempt workspace remains the safety boundary for an in-progress transfer. |
+| `HttpContext.workspace`, its bounded `destination`, and HTTP body tests | Retain | The attempt workspace remains the safety boundary for an in-progress request. |
 | `LocalArtifactStore.resolved_files()` and its non-download callers | Replace at the orchestration boundary | Route independent files through `publish_resolved_files()`; the local implementation continues to delegate to `LocalArtifactStore`. |
 | `DownloadSpec.implementation`, `download_stage`, `parameters.Download`, and download `StageInvocationReceipt` fixtures | Delete | `viper.download()` creates a runner-owned `DownloadSpec`; `ResolvedHttpRetrieval` supplies request execution evidence. |
 | `BaseSpec.implementation` | Move | `ParameterizedSpec.implementation` owns project-callable stages. |
@@ -542,7 +542,7 @@ artifacts["prior"]
 -> declared single-file dataset path
 ```
 
-The controlled transport returns `b"prior"`. The executor writes the bytes at
+The controlled HTTP function returns `b"prior"`. The executor writes the bytes at
 the declared artifact path. The resolved download stage contains one retrieval
 and one single-file artifact named `prior`. The stage snapshot contains the
 artifact path once. `verify_run_result()` succeeds.
@@ -555,10 +555,10 @@ snapshot contains the declared artifact path once
 retrieval body SHA-256 and byte count equal the frozen request
 ```
 
-### Rejection: transport body changes before artifact publication
+### Rejection: HTTP result body changes before artifact publication
 
-The controlled transport first returns the expected `b"prior"` body. Before
-`publish_download_body()` copies it, the fixture replaces the transport file
+The controlled HTTP function first returns the expected `b"prior"` body. Before
+`publish_download_body()` copies it, the fixture replaces the scratch file
 with `b"alter"`, which has the same byte count and a different digest.
 `download.runner_custody` rejects the copy, leaves the declared artifact path
 absent, and prevents stage-snapshot publication.
@@ -599,7 +599,7 @@ document. `download.receipt_artifact_identity` rejects that unequal reference.
 6. Replace the existing download fixtures whose request and artifact names
    differ, and remove every retrieval-body-to-artifact copy loop. Remodel the
    verification-acceptance fixture as three same-named HTTP responses and
-   artifacts. Add the success case, transport-body mutation case, and unequal
+   artifacts. Add the success case, HTTP-body mutation case, and unequal
    resolved-reference case in
    `tests/test_run_execution.py`, `tests/test_execution_acceptance.py`,
    `tests/test_execution_signals.py`, `tests/test_preflight.py`,
@@ -616,7 +616,7 @@ document. `download.receipt_artifact_identity` rejects that unequal reference.
 
 | Classification | Rule | Evidence |
 | --- | --- | --- |
-| Preserved | HTTP receipt verification checks the frozen request, transport, response policy, body digest, body byte count, and timing. | `ResolvedHttpRetrieval` and `_verify_download_retrievals()` tests |
+| Preserved | HTTP receipt verification checks the frozen request, HTTP implementation, response policy, body digest, body byte count, and timing. | `ResolvedHttpRetrieval` and `_verify_download_retrievals()` tests |
 | Preserved | A later stage selects a download artifact through `FutureInputRef` or `StoredInputRef`. | Same-run and prior-run input verification tests |
 | Changed | Download stages accept matching request and artifact keys with one single-file artifact per request. | `DownloadSpec` validator tests |
 | Changed | Retrieval bodies move from standalone `ResolvedFileRef` values to `SnapshotFileRef` values. | Resolved-document parser and verifier tests |
