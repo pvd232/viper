@@ -624,14 +624,14 @@ requirement_id = "PDR-02"
 rule_id = "project.root.stability"
 state = "planned"
 scenario = "A command launched from a package child directory publishes one artifact."
-input = "start=/tmp/weekend-models/src/weekend_models; artifact=experiments/tiny/model.pt; bytes=weights-v1"
+setup = "start=/tmp/weekend-models/src/weekend_models; artifact=experiments/tiny/model.pt; bytes=weights-v1"
 declaration = "viper.toml at /tmp/weekend-models/viper.toml"
 runtime = "resolve_project_root(start) returns /tmp/weekend-models once and passes it to LocalArtifactStore"
-persisted_evidence = "LocalFileRef returned by LocalArtifactStore.publish() plus file SHA-256 c0ab742f68a24ef362b5529351eb13561e746b70a0f815efe7b64b570b477851"
 implementation = "src/viper/project.py:resolve_project_root"
-verifier = "project.root.stability requires one resolved root for every internal consumer"
 test = "tests/test_storage.py:test_store_uses_selected_project_root"
-expected = "working bytes and immutable bytes resolve beneath /tmp/weekend-models"
+outcome.kind = "accepted"
+outcome.result = "working bytes and immutable bytes resolve beneath /tmp/weekend-models"
+outcome.persisted_evidence = ["LocalFileRef returned by LocalArtifactStore.publish()", "artifact SHA-256 c0ab742f68a24ef362b5529351eb13561e746b70a0f815efe7b64b570b477851"]
 ```
 
 ### Rejection
@@ -648,14 +648,15 @@ requirement_id = "PDR-03"
 rule_id = "project.path.symlink_free"
 state = "planned"
 scenario = "A local training input names a symlink beneath the selected root."
-input = "ROOT=/tmp/weekend-models; path=inputs/link.csv; link target=/tmp/source.csv"
+setup = "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to /tmp/source.csv"
 declaration = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
 runtime = "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
-persisted_evidence = "none; rejection occurs before the source bytes enter VIPER"
 implementation = "src/viper/project.py:resolve_project_path"
-verifier = "project.path.symlink_free rejects inputs/link.csv"
 test = "tests/test_validation_architecture.py:test_project_paths_reject_symlinks"
-expected = "ProjectPathError before file capture"
+outcome.kind = "rejected"
+outcome.rejected_at = "src/viper/project.py:resolve_project_path"
+outcome.error_type = "ProjectPathError"
+outcome.message_match = "symlink"
 ```
 
 ## 10. Implementation order

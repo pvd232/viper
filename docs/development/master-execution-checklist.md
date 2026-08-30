@@ -285,10 +285,10 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-requirement-traceability.md sha256=68680d6a49191f2ee994296da323316a7859144524aed41d20d6739d40c38430 -->
+<!-- contract-baseline: contract-requirement-traceability.md sha256=4b6af31aa14da1a3c58f1c8ae9e2e0e1c1bd3535b2ec7e9fdf7ce162d0a2afef -->
 
-<!-- contract-baseline: project-data-root.md sha256=1830d2d3656dc4e7ee91d7d75dc4f07b7d8dfab301d4057a3df6f3582d1ee0d3 -->
-<!-- contract-baseline: system-impact-graph.md sha256=acac2df4faba2c54e729fb8362d9a7c821eda6b66c56ba05431a8e72c3fad6de -->
+<!-- contract-baseline: project-data-root.md sha256=b6ffb5b7bd87c0a9b74bd656377b5187a5a9d6f5393b8035a84560349dc6c64c -->
+<!-- contract-baseline: system-impact-graph.md sha256=79aa0a2ff9d844273acc15547df3c22e1ac54e2923344c7834807302ca28b0b6 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
@@ -350,7 +350,7 @@ The review found and repaired these schema conflicts:
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
 | Project root | `viper init ROOT` or explicit `root=` | Local `viper.toml` marker; absolute path omitted from protocol identity | One resolved absolute root per operation | Root resolver, path-boundary checks, local store, and every local consumer |
-| System impact | Two source revisions plus one `SystemContextManifest` | Canonical `SystemGraph`, `SystemCondensationDAG`, `SystemGraphDelta`, and `ImpactReport` files | Reverse dependency closure over changed graph nodes and edges | Strict graph verifier and specification-system review |
+| System impact | Two source revisions plus one `SystemContextManifest` | Canonical `SystemGraph`, `SystemCondensationDAG`, `SystemGraphDelta`, `ImpactReport`, and `PropagationPlan` files | Reverse dependency closure plus one disposition per affected path and planned-addition reconciliation | Strict graph verifier and specification-system review |
 | Local dataset | `ExternalInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
 | HTTP dataset | `HttpRequestSpec` plus file artifact draft | `DownloadSpec` | `ResolvedHttpRetrieval` and `ResolvedSingleFileArtifact` sharing one file | Download verifier and later input compiler |
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
@@ -660,6 +660,12 @@ working-file edit must leave the immutable copy retrievable.
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.context state=planned owner=src/viper/system_graph.py:diff_system_graphs -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.identity state=planned owner=src/viper/system_graph.py:diff_system_graphs -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.impact.closure state=planned owner=src/viper/system_graph.py:compute_impact -->
+- [ ] Build `PropagationPlan` from the strict `ImpactReport`. Assign each
+      affected node to one path disposition, record each required new path as a
+      `PlannedAddition`, and reconcile the plan with the realized candidate
+      delta.
+      <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.coverage state=planned owner=src/viper/system_graph.py:verify_propagation -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.additions state=planned owner=src/viper/system_graph.py:verify_propagation -->
 - [ ] Recompile one source revision twice and require canonical graph equality;
       reject an edge whose endpoint is absent.
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.canonical state=planned owner=src/viper/system_graph.py:compile_system -->
@@ -739,12 +745,16 @@ component edge carries the sorted relation kinds crossing that pair.
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.strict state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
 - [ ] In `tests/test_inspection.py`, change one protocol field and require the
       typed delta and reverse closure to include storage, verification,
-      documentation, and test consumers. <!-- verifies: SIG-03 -->
+      documentation, and test consumers. Require one disposition per affected
+      node and exact agreement between planned and realized additions.
+      <!-- verifies: SIG-03 -->
       <!-- contract-verification: requirement=SIG-03 rule=system.dag.components state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.dag.acyclic state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.delta.context state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.delta.identity state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.impact.closure state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.propagation.coverage state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.propagation.additions state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
 - [ ] In `tests/test_documentation.py`, require every contract requirement to
       preserve every rule, implementation owner, and acceptance test from
       `ContractTraceabilityGraph`. <!-- verifies: SIG-04 -->
@@ -767,7 +777,9 @@ python -m pytest \
 
 Every later phase begins by compiling its candidate source revision under the
 reviewed context manifest. Its focused test selection must contain every test
-reached by the resulting strict `ImpactReport`.
+reached by the resulting strict `ImpactReport`. The phase closes only after its
+`PropagationPlan` covers every affected node and reconciles every planned and
+realized addition.
 
 ## 8. Phase 1 — destination-neutral local publication
 

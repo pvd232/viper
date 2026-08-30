@@ -88,6 +88,10 @@ _CONTRACT_WORKED_EXAMPLE = re.compile(
     r"<!-- contract-worked-example: end -->",
     re.DOTALL,
 )
+_CONTRACT_TRACE_FENCE = re.compile(
+    r"```toml contract-trace\n(?P<body>.*?)\n```",
+    re.DOTALL,
+)
 _PYTHON_FENCE = re.compile(r"```python\n(?P<body>.*?)\n```", re.DOTALL)
 _MERMAID_FENCE = re.compile(r"```mermaid\n(?P<body>.*?)\n```", re.DOTALL)
 _MERMAID_EDGE = re.compile(
@@ -1049,6 +1053,61 @@ def test_phase_zero_contracts_show_three_dags_and_instantiate_models() -> None:
             failures[contract.name] = errors
 
     assert failures == {}
+
+
+def test_phase_zero_contract_traces_use_typed_outcomes() -> None:
+    """Require concrete setup plus distinct accepted and rejected outcomes."""
+    common_fields = {
+        "trace_id",
+        "requirement_id",
+        "rule_id",
+        "state",
+        "scenario",
+        "setup",
+        "declaration",
+        "runtime",
+        "implementation",
+        "test",
+        "outcome",
+    }
+    retired_fields = {"input", "persisted_evidence", "verifier", "expected"}
+
+    for contract in PHASE_ZERO_CONTRACTS:
+        traces = tuple(
+            tomllib.loads(match.group("body"))
+            for match in _CONTRACT_TRACE_FENCE.finditer(contract.read_text())
+        )
+        assert len(traces) == 2, contract.name
+        assert {trace["outcome"]["kind"] for trace in traces} == {
+            "accepted",
+            "rejected",
+        }
+
+        for trace in traces:
+            assert set(trace) == common_fields, (contract.name, trace["trace_id"])
+            assert retired_fields.isdisjoint(trace)
+            assert all(
+                isinstance(trace[field], str) and trace[field].strip()
+                for field in common_fields - {"outcome"}
+            )
+
+            outcome = trace["outcome"]
+            if outcome["kind"] == "accepted":
+                assert set(outcome) == {"kind", "result", "persisted_evidence"}
+                assert outcome["result"].strip()
+                assert outcome["persisted_evidence"]
+            else:
+                assert set(outcome) == {
+                    "kind",
+                    "rejected_at",
+                    "error_type",
+                    "message_match",
+                }
+                assert all(
+                    isinstance(outcome[field], str) and outcome[field].strip()
+                    for field in outcome
+                    if field != "kind"
+                )
 
 
 def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:

@@ -17,7 +17,7 @@ These requirements bind the contract to the master checklist:
 | ID | Implementation obligation |
 | --- | --- |
 | CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_documentation.py --> | Parse every contract requirement and named verifier rule into one canonical traceability model. |
-| CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_documentation.py --> | Require every verifier rule to name one primary implementation owner and at least one exact acceptance test. |
+| CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_documentation.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
 | CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_documentation.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs; one worked example that constructs every contract model; and populated success and rejection traces. |
 | CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_documentation.py --> | Publish a canonical traceability graph that the system-impact compiler ingests directly. |
 
@@ -63,7 +63,7 @@ function.
 
 ```text
 contract-requirement
--> requirement ID + phase + primary test file
+-> requirement ID + phase + one legacy test file
 
 implements / verifies
 -> checklist checkbox + requirement ID
@@ -230,7 +230,6 @@ class ContractRequirementDeclaration(BaseModel):
     requirement_id: RequirementId
     contract: RepoRelPath
     phase: int = Field(ge=0)
-    primary_test: RepoRelPath
 
 
 class VerifierRuleDeclaration(BaseModel):
@@ -264,6 +263,29 @@ class RequirementVerificationLink(BaseModel):
     test: SourceLocation
 
 
+class AcceptedTraceOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["accepted"] = "accepted"
+    result: NonEmptyStr
+    persisted_evidence: tuple[NonEmptyStr, ...] = Field(min_length=1)
+
+
+class RejectedTraceOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["rejected"] = "rejected"
+    rejected_at: SourceLocation
+    error_type: NonEmptyStr
+    message_match: NonEmptyStr
+
+
+TraceOutcome = Annotated[
+    AcceptedTraceOutcome | RejectedTraceOutcome,
+    Field(discriminator="kind"),
+]
+
+
 class ContractTraceCase(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -272,14 +294,12 @@ class ContractTraceCase(BaseModel):
     rule_id: VerifierRuleId
     state: TraceState
     scenario: NonEmptyStr
-    input: NonEmptyStr
+    setup: NonEmptyStr
     declaration: NonEmptyStr
     runtime: NonEmptyStr
-    persisted_evidence: NonEmptyStr
     implementation: SourceLocation
-    verifier: NonEmptyStr
     test: SourceLocation
-    expected: NonEmptyStr
+    outcome: TraceOutcome
 
 
 class ContractTraceabilityGraph(BaseModel):
@@ -299,9 +319,21 @@ class ContractTraceabilityGraph(BaseModel):
 module-level function uses its function name. A method uses
 `ClassName.method_name`. A test uses its complete test-function name.
 
+`ContractTraceCase.setup` states the concrete paths, values, and external state
+present before VIPER runs. `declaration` names the authored model or marker that
+introduces the value. `runtime` names the call that processes it.
+`implementation` and `test` identify the source owner and acceptance test.
+
+`AcceptedTraceOutcome` records the returned result and at least one persisted
+record or artifact. `RejectedTraceOutcome` records the exact source boundary,
+error type, and message fragment expected by the test. The trace's `rule_id`
+supplies the verifier statement through `VerifierRuleDeclaration`. That record
+is the single owner of the statement.
+
 ### Marker syntax
 
-Requirement rows keep the current marker:
+Requirement rows keep the current marker while the old documentation checker
+remains active:
 
 ```html
 <!-- contract-requirement: PDR-03 phase=0 test=tests/test_validation_architecture.py -->
@@ -328,8 +360,9 @@ The focused-test task adds a precise verification marker:
 <!-- contract-verification: requirement=PDR-03 rule=project.path.symlink_free state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
 ```
 
-The parser derives `contract`, `phase`, and `checklist_line` from the marker
-locations. The added markers carry only their new values.
+The traceability parser derives `contract`, `phase`, and `checklist_line` from
+the marker locations. It ignores the legacy requirement-level `test` value.
+Exact test ownership comes from `RequirementVerificationLink`.
 
 Marker and TOML values use `path:symbol` strings. The parser splits the first
 colon after the repository path and constructs `SourceLocation`.
@@ -346,22 +379,24 @@ requirement_id = "PDR-03"
 rule_id = "project.path.symlink_free"
 state = "planned"
 scenario = "A local input names a symlink beneath the selected project root."
-input = "ROOT=/tmp/weekend-models; path=inputs/link.csv"
+setup = "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to /tmp/source.csv"
 declaration = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
 runtime = "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
-persisted_evidence = "none; rejection occurs before the source bytes enter VIPER"
 implementation = "src/viper/project.py:resolve_project_path"
-verifier = "reject when inputs/link.csv or an existing parent is a symlink"
 test = "tests/test_validation_architecture.py:test_project_paths_reject_symlinks"
-expected = "ProjectPathError before file capture"
+outcome.kind = "rejected"
+outcome.rejected_at = "src/viper/project.py:resolve_project_path"
+outcome.error_type = "ProjectPathError"
+outcome.message_match = "symlink"
 ```
 ````
 
 The parser rejects empty values, ellipses, angle-bracket placeholders, and fake
 hash padding. A `planned` source location must use a valid repository-relative
 path and qualified symbol. An `implemented` source location must also exist in
-the candidate source tree. The trace may state `none` for persisted evidence
-only when it names the boundary that rejects the value before persistence.
+the candidate source tree. An accepted outcome names at least one persisted
+record or artifact. A rejected outcome names the exact source boundary, error
+type, and message fragment expected by its test.
 
 ### Illustrative worked example
 
@@ -378,11 +413,14 @@ from viper._contract_traceability import (
     ContractRequirementDeclaration,
     ContractTraceCase,
     ContractTraceabilityGraph,
+    AcceptedTraceOutcome,
+    RejectedTraceOutcome,
     RequirementId,
     RequirementImplementationLink,
     RequirementVerificationLink,
     SourceLocation,
     TraceId,
+    TraceOutcome,
     TraceState,
     VerifierRuleDeclaration,
     VerifierRuleId,
@@ -410,7 +448,6 @@ requirement = ContractRequirementDeclaration(
     requirement_id=REQUIREMENT_ID,
     contract=CONTRACT.as_posix(),
     phase=0,
-    primary_test="tests/test_validation_architecture.py",
 )
 
 rule = VerifierRuleDeclaration(
@@ -457,37 +494,44 @@ verification = RequirementVerificationLink(
     test=test_location,
 )
 
+accepted_outcome: TraceOutcome = AcceptedTraceOutcome(
+    result="ROOT/inputs/train.csv",
+    persisted_evidence=(
+        "ResolvedExternalInputRef.file after capture and publication",
+    ),
+)
 success = ContractTraceCase(
     trace_id=SUCCESS_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
     state=LINK_STATE,
     scenario="A training input names one ordinary file beneath ROOT.",
-    input="ROOT=/tmp/weekend-models; path=inputs/train.csv",
+    setup="ROOT=/tmp/weekend-models; inputs/train.csv is an ordinary file",
     declaration=(
         "ExternalInputRef(source=LocalSource(path='inputs/train.csv'))"
     ),
     runtime=(
         "resolve_project_path(ROOT, 'inputs/train.csv', operation='read')"
     ),
-    persisted_evidence=(
-        "ResolvedExternalInputRef.file after capture and publication"
-    ),
     implementation=implementation_location,
-    verifier="project.path.symlink_free accepts an ordinary descendant",
     test=test_location,
-    expected="ROOT/inputs/train.csv",
+    outcome=accepted_outcome,
 )
 
+rejected_outcome: TraceOutcome = RejectedTraceOutcome(
+    rejected_at=implementation_location,
+    error_type="ProjectPathError",
+    message_match="symlink",
+)
 rejection = ContractTraceCase(
     trace_id=REJECTION_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
     state=LINK_STATE,
     scenario="A training input names ROOT/inputs/link.csv, which is a symlink.",
-    input=(
-        "ROOT=/tmp/weekend-models; path=inputs/link.csv; "
-        "link target=/tmp/source.csv"
+    setup=(
+        "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to "
+        "/tmp/source.csv"
     ),
     declaration=(
         "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
@@ -495,13 +539,9 @@ rejection = ContractTraceCase(
     runtime=(
         "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
     ),
-    persisted_evidence=(
-        "none; rejection occurs before the source bytes enter VIPER"
-    ),
     implementation=implementation_location,
-    verifier="project.path.symlink_free rejects inputs/link.csv",
     test=test_location,
-    expected="ProjectPathError before file capture",
+    outcome=rejected_outcome,
 )
 
 traceability = ContractTraceabilityGraph(
@@ -553,13 +593,12 @@ It then applies these cardinality rules:
 1. A requirement ID belongs to exactly one contract.
 2. Each requirement declares at least one verifier rule.
 3. A verifier rule belongs to exactly one requirement.
-4. Each verifier rule has exactly one primary implementation target.
+4. Each verifier rule has exactly one implementation owner.
 5. Each verifier rule has at least one acceptance-test target.
 6. The implementation and test links use the requirement's declared phase.
-7. The requirement's `primary_test` appears among its rule tests.
-8. Each contract contains one populated success trace and one populated
+7. Each contract contains one populated success trace and one populated
    rejection trace for its selected claim.
-9. Phase closure requires every implementation, verification, and trace link to
+8. Phase closure requires every implementation, verification, and trace link to
    use `state="implemented"`.
 
 The compiler sorts requirements by ID, rules by rule ID, implementation links
@@ -616,7 +655,7 @@ named test function. The traceability graph joins those three representations.
 | `_CONTRACT_REQUIREMENT` parser | Retain and construct `ContractRequirementDeclaration` from its matches. |
 | `_CHECKLIST_MAPPING` parser | Retain as the requirement-to-phase migration oracle. |
 | Requirement-level `implements` and `verifies` markers | Retain through graph parity; remove after confirming that the checklist retains its readable requirement map. |
-| Requirement marker `test=` field | Retain as the primary acceptance-test declaration. |
+| Requirement marker `test=` field | Retain only while the old documentation checker remains active; remove after exact `RequirementVerificationLink` parity. |
 | System-graph contract's independent contract-marker parser | Replace with `ContractTraceabilityGraph` ingestion. |
 | Prose-only verifier rules | Replace sentence-derived identity with stable rule markers. |
 
@@ -630,14 +669,14 @@ requirement_id = "CRT-02"
 rule_id = "contract.rule.implemented"
 state = "planned"
 scenario = "The traceability compiler records one exact planned source owner for a rule."
-input = "requirement=CRT-02; rule=contract.rule.implemented"
+setup = "contract and checklist contain matching CRT-02 and contract.rule.implemented markers"
 declaration = "verifier-rule marker in contract-requirement-traceability.md"
 runtime = "compile_contract_traceability(ROOT)"
-persisted_evidence = "canonical ContractTraceabilityGraph JSON bytes"
 implementation = "src/viper/_contract_traceability.py:compile_contract_traceability"
-verifier = "require exactly one owner target and resolve it when state becomes implemented"
 test = "tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests"
-expected = "one RequirementImplementationLink for contract.rule.implemented"
+outcome.kind = "accepted"
+outcome.result = "one RequirementImplementationLink for contract.rule.implemented"
+outcome.persisted_evidence = ["canonical ContractTraceabilityGraph JSON bytes"]
 ````
 
 ### Rejection
@@ -648,14 +687,15 @@ requirement_id = "CRT-02"
 rule_id = "contract.rule.tested"
 state = "planned"
 scenario = "A verifier rule has no contract-verification marker."
-input = "remove the verification link for contract.rule.tested from the fixture checklist"
+setup = "fixture checklist omits the verification link for contract.rule.tested"
 declaration = "verifier-rule marker remains present"
 runtime = "compile_contract_traceability(fixture_root)"
-persisted_evidence = "none; graph publication stops on incomplete rule coverage"
 implementation = "src/viper/_contract_traceability.py:compile_contract_traceability"
-verifier = "contract.rule.tested"
 test = "tests/test_documentation.py:test_contract_traceability_rejects_orphan_rule"
-expected = "ContractTraceabilityError naming contract.rule.tested"
+outcome.kind = "rejected"
+outcome.rejected_at = "src/viper/_contract_traceability.py:compile_contract_traceability"
+outcome.error_type = "ContractTraceabilityError"
+outcome.message_match = "contract.rule.tested"
 ````
 
 The function and test symbols in these blocks are target symbols. The first

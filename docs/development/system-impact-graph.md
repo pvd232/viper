@@ -17,14 +17,14 @@ These requirements bind the contract to the master checklist:
 | --- | --- |
 | SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_validation_architecture.py --> | Inventory every tracked repository file, derive source-backed nodes from exact file spans, and record one analysis receipt per file. |
 | SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_validation_architecture.py --> | Hold declared external inputs fixed, observe dynamic resolution under each source revision, and fail closed on unresolved dependencies in strict mode. |
-| SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_inspection.py --> | Condense dependency cycles into a DAG and compute a canonical typed delta plus reverse impact closure. |
+| SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_inspection.py --> | Condense dependency cycles into a DAG, compute a canonical typed delta plus reverse impact closure, and reconcile every affected path with one propagation disposition. |
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Ingest the canonical contract traceability graph and preserve each requirement-to-rule-to-owner-to-test path in the system graph. |
 
 ## 2. Required claim
 
 Given two source revisions and one fixed context manifest, VIPER produces the
-same canonical dependency graphs, graph delta, and affected-surface report on
-every conforming execution.
+same canonical dependency graphs, graph delta, affected-surface report, and
+propagation plan on every conforming execution.
 
 Let `C0` and `C1` identify the baseline and candidate source revisions. Let `X`
 identify the fixed context manifest. The compiler constructs:
@@ -138,6 +138,7 @@ source revision + fixed context
 -> graph delta
 -> reverse dependency closure
 -> affected contracts, checklist tasks, and tests
+-> one disposition per affected path plus planned additions
 -> explicit unresolved boundary
 ```
 
@@ -163,6 +164,9 @@ flowchart TD
     Outcome["Proposed observation or unresolved result"]
     Graph["Proposed SystemGraph"]
     DAG["Proposed SystemCondensationDAG"]
+    Delta["Proposed SystemGraphDelta"]
+    Report["Proposed ImpactReport"]
+    Plan["Proposed PropagationPlan"]
 
     Source -->|"git tree"| Inventory
     Inventory -->|"analyzer input"| Analysis
@@ -176,9 +180,13 @@ flowchart TD
     Static -->|"auditable edges"| Graph
     Outcome -->|"observed boundary"| Graph
     Graph -->|"collapse SCCs"| DAG
+    Graph -->|"compare revisions"| Delta
+    DAG -->|"reverse closure"| Report
+    Delta -->|"changed nodes + edges"| Report
+    Report -->|"affected paths"| Plan
 
     class Source,Context input
-    class Inventory,Analysis,Nodes,Static,Attempt,Outcome,Graph,DAG proposed
+    class Inventory,Analysis,Nodes,Static,Attempt,Outcome,Graph,DAG,Delta,Report,Plan proposed
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
@@ -203,6 +211,7 @@ flowchart TD
     Delta["SystemGraphDelta"]
     Closure["Reverse dependency closure"]
     Report["ImpactReport"]
+    Plan["PropagationPlan"]
     Review["Contract review + selected tests"]
 
     Baseline -->|"baseline commit"| Compile
@@ -219,12 +228,14 @@ flowchart TD
     BaseDAG -->|"dependency topology"| Closure
     CandidateDAG -->|"dependency topology"| Closure
     Closure -->|"affected IDs + unresolved"| Report
-    Report -->|"exact scope"| Review
+    Report -->|"affected paths"| Plan
+    CandidateGraph -->|"added file nodes"| Plan
+    Plan -->|"dispositions + planned additions"| Review
 
     class Baseline,Candidate,Context,Traceability input
     class Compile consumer
     class BaseGraph,CandidateGraph,BaseDAG,CandidateDAG evidence
-    class Delta,Closure,Report output
+    class Delta,Closure,Report,Plan output
     class Review consumer
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
@@ -589,6 +600,29 @@ class ImpactReport(ProtocolModel):
     observing_tests: tuple[RequirementVerificationLink, ...]
     unresolved: tuple[UnresolvedDependency, ...]
     complete: bool
+
+
+PropagationAction = Literal["change", "remove", "retain"]
+
+
+class PropagationDisposition(ProtocolModel):
+    path: RepoRelPath
+    action: PropagationAction
+    affected_nodes: tuple[SystemNodeId, ...] = Field(min_length=1)
+    statement: NonEmptyStr
+
+
+class PlannedAddition(ProtocolModel):
+    path: RepoRelPath
+    purpose: NonEmptyStr
+    requirements: tuple[RequirementId, ...] = Field(min_length=1)
+
+
+class PropagationPlan(ProtocolModel):
+    schema_version: Literal[1] = 1
+    impact: ResolvedFileRef
+    dispositions: tuple[PropagationDisposition, ...] = Field(min_length=1)
+    planned_additions: tuple[PlannedAddition, ...]
 ```
 
 `complete` is `True` only when both source graphs have empty `unresolved`
@@ -601,13 +635,25 @@ an `ImpactReport`.
 links it ingested. The impact report therefore preserves whether each reached
 owner or test remains `planned` or already resolves as `implemented`.
 
+`PropagationPlan` gives every affected repository path one action. `change`
+states the required edit. `remove` states what the candidate deletes. `retain`
+states why the affected path remains valid as written. The union of every
+`PropagationDisposition.affected_nodes` must equal
+`ImpactReport.affected_nodes`, and each affected node appears once.
+
+`PlannedAddition` records a required path before implementation creates it. A
+completed candidate graph must contain each planned path among the file nodes
+in `SystemGraphDelta.added_nodes`. Each added repository path must either match
+one planned addition or carry a review explanation before the phase closes.
+
 ### Illustrative worked example
 
 This example builds a real two-commit Git fixture. The candidate changes
 `LocalFileRef.store`. The program constructs every Section 4 model, records one
 successful dynamic resolution, records one unresolved resolution for the
 exploratory path, publishes both graphs, creates their condensation DAG, and
-builds the resulting impact report.
+builds the resulting impact report. It then assigns every affected path a
+disposition and reconciles one planned addition with the candidate delta.
 
 <!-- contract-worked-example: start -->
 
@@ -639,6 +685,10 @@ from viper.system_graph import (
     FileAnalysisStatus,
     FileAnalysisReceipt,
     ImpactReport,
+    PlannedAddition,
+    PropagationAction,
+    PropagationDisposition,
+    PropagationPlan,
     RepositoryFile,
     ResolutionKind,
     ResolutionAttempt,
@@ -687,6 +737,13 @@ TEST_SOURCE = b"""from viper.storage import LocalArtifactStore
 def test_store_uses_declared_location(tmp_path):
     store = LocalArtifactStore(tmp_path)
     assert store.store == \".viper/store\"
+"""
+
+MIGRATION_TEST_SOURCE = b"""from viper.references import LocalFileRef
+
+def test_prior_local_reference_keeps_declared_store():
+    reference = LocalFileRef(store=".viper/store")
+    assert reference.store == ".viper/store"
 """
 
 CONTRACT_SOURCE = b"""| PDR-02 | Bind LocalArtifactStore to ROOT/.viper/store. |
@@ -873,16 +930,21 @@ with TemporaryDirectory() as temporary_directory:
     (fixture_root / "src/viper/references.py").write_bytes(
         CANDIDATE_REFERENCES
     )
+    migration_test_path = fixture_root / "tests/test_storage_migration.py"
+    migration_test_path.write_bytes(MIGRATION_TEST_SOURCE)
     candidate_commit = commit(fixture_root, "change local store directory")
 
-    paths = tuple(sorted(fixture_files))
+    baseline_paths = tuple(sorted(fixture_files))
+    candidate_paths = tuple(
+        sorted((*fixture_files, "tests/test_storage_migration.py"))
+    )
     baseline_raw = {
         path: read_commit_file(fixture_root, baseline_commit, path)
-        for path in paths
+        for path in baseline_paths
     }
     candidate_raw = {
         path: read_commit_file(fixture_root, candidate_commit, path)
-        for path in paths
+        for path in candidate_paths
     }
 
     baseline_inventory = tuple(
@@ -891,7 +953,7 @@ with TemporaryDirectory() as temporary_directory:
             sha256=hashlib.sha256(baseline_raw[path]).hexdigest(),
             bytes=len(baseline_raw[path]),
         )
-        for path in paths
+        for path in baseline_paths
     )
     candidate_inventory = tuple(
         RepositoryFile(
@@ -899,11 +961,16 @@ with TemporaryDirectory() as temporary_directory:
             sha256=hashlib.sha256(candidate_raw[path]).hexdigest(),
             bytes=len(candidate_raw[path]),
         )
-        for path in paths
+        for path in candidate_paths
     )
 
     baseline_file_nodes = tuple(file_node(file) for file in baseline_inventory)
     candidate_file_nodes = tuple(file_node(file) for file in candidate_inventory)
+    candidate_migration_file = next(
+        node
+        for node in candidate_file_nodes
+        if node.path == "tests/test_storage_migration.py"
+    )
 
     baseline_field = span_node(
         "src/viper/references.py",
@@ -1270,7 +1337,7 @@ with TemporaryDirectory() as temporary_directory:
         baseline=baseline_ref,
         candidate=candidate_ref,
         context_sha256=context_sha256,
-        added_nodes=(),
+        added_nodes=(candidate_migration_file,),
         removed_nodes=(),
         changed_nodes=(changed_field,),
         added_edges=(),
@@ -1306,12 +1373,80 @@ with TemporaryDirectory() as temporary_directory:
         unresolved=exploratory_graph.unresolved,
         complete=False,
     )
+    impact_ref = publish_model(
+        store,
+        ".viper/system/baseline..candidate/impact.json",
+        impact,
+    )
+
+    change_action: PropagationAction = "change"
+    dispositions = (
+        PropagationDisposition(
+            path="src/viper/references.py",
+            action=change_action,
+            affected_nodes=(baseline_field.node_id,),
+            statement="Change the LocalFileRef.store default to .viper/objects.",
+        ),
+        PropagationDisposition(
+            path="src/viper/storage.py",
+            action="retain",
+            affected_nodes=(store_constructor.node_id,),
+            statement=(
+                "Retain the constructor because it reads LocalFileRef.store "
+                "instead of repeating the default."
+            ),
+        ),
+        PropagationDisposition(
+            path="docs/development/project-data-root.md",
+            action="change",
+            affected_nodes=(requirement_node.node_id, rule_node.node_id),
+            statement="Update PDR-02 and project.store.boundary for the new path.",
+        ),
+        PropagationDisposition(
+            path="tests/test_storage.py",
+            action="change",
+            affected_nodes=(acceptance_test.node_id,),
+            statement="Expect .viper/objects for newly constructed references.",
+        ),
+    )
+    migration_test = PlannedAddition(
+        path="tests/test_storage_migration.py",
+        purpose="Verify that an existing LocalFileRef keeps its recorded store.",
+        requirements=("PDR-02",),
+    )
+    propagation = PropagationPlan(
+        impact=impact_ref,
+        dispositions=dispositions,
+        planned_additions=(migration_test,),
+    )
+    propagation_ref = publish_model(
+        store,
+        ".viper/system/baseline..candidate/propagation.json",
+        propagation,
+    )
+
+    covered_nodes = {
+        node_id
+        for disposition in propagation.dispositions
+        for node_id in disposition.affected_nodes
+    }
+    realized_additions = {
+        node.path
+        for node in delta.added_nodes
+        if node.kind == "file" and node.path is not None
+    }
+    planned_additions = {
+        addition.path for addition in propagation.planned_additions
+    }
 
     assert baseline_source.commit != candidate_source.commit
     assert baseline_field.sha256 != candidate_field.sha256
     assert delta.changed_nodes == (changed_field,)
     assert impact.affected_requirements == ("PDR-02",)
     assert impact.observing_tests == (verification_link,)
+    assert covered_nodes == set(impact.affected_nodes)
+    assert planned_additions == realized_additions
+    assert store.fetch(propagation_ref.stored_at) == canonical_bytes(propagation)
     assert condensation.components
     assert incomplete_impact.unresolved == (unresolved,)
     assert incomplete_impact.complete is False
@@ -1446,6 +1581,7 @@ One review stores these files:
 .viper/system/<context-sha256>/<source-commit>/dag.json
 .viper/system/<context-sha256>/<baseline>..<candidate>/delta.json
 .viper/system/<context-sha256>/<baseline>..<candidate>/impact.json
+.viper/system/<context-sha256>/<baseline>..<candidate>/propagation.json
 ```
 
 Each file publishes through `publish_resolved_files()` and receives one
@@ -1474,20 +1610,28 @@ The implementation adds these checks:
 | `system.delta.context` <!-- verifier-rule: system.delta.context requirement=SIG-03 --> | Require the baseline and candidate graphs to use the same context digest. |
 | `system.delta.identity` <!-- verifier-rule: system.delta.identity requirement=SIG-03 --> | Recompute every added, removed, and changed node and edge. |
 | `system.impact.closure` <!-- verifier-rule: system.impact.closure requirement=SIG-03 --> | Recompute reverse reachability from every changed node and edge endpoint. |
+| `system.propagation.coverage` <!-- verifier-rule: system.propagation.coverage requirement=SIG-03 --> | Require every affected node to appear in exactly one propagation disposition. |
+| `system.propagation.additions` <!-- verifier-rule: system.propagation.additions requirement=SIG-03 --> | Require planned additions to equal the candidate delta's added repository paths before the phase closes. |
 | `system.requirement.coverage` <!-- verifier-rule: system.requirement.coverage requirement=SIG-04 --> | Require each contract requirement to reach every declared verifier rule, each rule's implementation owner, and each observing test from `ContractTraceabilityGraph`. |
 
 ## 8. Propagation
 
+Until Phase 0 implements `PropagationPlan`, this table states the reviewed
+target paths and actions. After Phase 0, the documentation check renders the
+table from the plan and requires every affected node to appear in exactly one
+row. New paths come from `planned_additions` and must match the candidate delta
+before the phase closes.
+
 | Surface | Required statement |
 | --- | --- |
-| `src/viper/system_graph.py` | Add repository inventory, analysis receipts, source-backed graph models, edge evidence, resolution attempts, canonical serialization, observed discovery, SCC condensation, graph comparison, and impact closure. |
+| `src/viper/system_graph.py` | Add repository inventory, analysis receipts, source-backed graph models, edge evidence, resolution attempts, canonical serialization, observed discovery, SCC condensation, graph comparison, impact closure, propagation planning, and plan reconciliation. |
 | `src/viper/inspection.py` | Add `compile_system()`, `system_diff()`, and `system_impact()` inspection functions. |
 | `src/viper/api.py` | Add typed compile, diff, and impact request and success models for developer tooling. |
 | `src/viper/_api/handlers.py` | Route developer operations through the same compiler and serializers. |
 | `src/viper/cli.py` | Add `viper system compile`, `viper system diff`, and `viper system impact` with deterministic JSON output. |
 | `src/viper/storage.py` | Publish manifests, graphs, DAGs, deltas, and reports through the independent-file publisher. |
 | `tests/test_validation_architecture.py` | Cover complete file inventory, per-file analysis receipts, source anchoring, edge evidence, observed registries, fixed context, one outcome per resolution attempt, unresolved targets, canonical ordering, SCC condensation, and strict failure. |
-| `tests/test_inspection.py` | Cover graph delta, reverse closure, stable impact ordering, and one changed protocol-field path. |
+| `tests/test_inspection.py` | Cover graph delta, reverse closure, stable impact ordering, one disposition per affected node, and planned-addition reconciliation. |
 | `tests/test_documentation.py` | Supply the canonical `ContractTraceabilityGraph`; compare its system-graph paths with the focused documentation oracle during migration. |
 | `docs/development/master-execution-checklist.md` | Produce the compiler in Phase 0 and require its strict impact report before every later phase. |
 | `docs/development/testing.md` | Define the fixed review context and the strict system-impact gate. |
@@ -1501,7 +1645,7 @@ The implementation adds these checks:
 | Independent contract requirement and checklist parser | Retain as an oracle until graph parity passes, then query `implements` and `tests` edges. |
 | `plan_diff()` | Retain; it compares user experiment plans and belongs to the later experiment-graph contract. |
 | `lineage()` | Retain; it compiles verified user-run provenance, while `SystemGraph` compiles VIPER source dependencies. |
-| Manual change-impact prose | Retain for semantic judgment; require its stated scope to match the generated `ImpactReport`. |
+| Manual propagation tables | Generate their paths, actions, and statements from `PropagationPlan`; retain author judgment only in each disposition statement and planned-addition purpose. |
 
 ## 9. Acceptance case
 
@@ -1535,6 +1679,10 @@ span:src/viper/execution/_source.py:RunFetcher.__call__
 span:docs/reference/protocol.md:LocalFileRef
 ```
 
+7. Assign every affected node to one `PropagationDisposition`.
+8. Add `tests/test_storage_migration.py` through `PlannedAddition` and require
+   the candidate delta to contain the same added path.
+
 The populated case distinguishes a detected syntactic dependency from a
 declared contract dependency. `LocalArtifactStore.fetch()` reads
 `location.store`, which static analysis can observe. PDR-02's relationship to
@@ -1546,14 +1694,14 @@ requirement_id = "SIG-03"
 rule_id = "system.impact.closure"
 state = "planned"
 scenario = "The candidate changes LocalFileRef.store from .viper/store to .viper/objects."
-input = "baseline LocalFileRef.store='.viper/store'; candidate LocalFileRef.store='.viper/objects'; context=tests/fixtures/system-context.toml"
+setup = "baseline LocalFileRef.store='.viper/store'; candidate LocalFileRef.store='.viper/objects'; context=tests/fixtures/system-context.toml"
 declaration = "LocalFileRef.store: RepoRelPath = '.viper/store'"
 runtime = "system_diff(baseline, candidate, context) followed by reverse reachability"
-persisted_evidence = "SystemGraphDelta.changed_nodes contains span:src/viper/references.py:LocalFileRef.store"
 implementation = "src/viper/system_graph.py:compute_impact"
-verifier = "system.impact.closure recomputes incoming reachability from the changed field"
 test = "tests/test_inspection.py:test_system_impact_reaches_local_store_consumers"
-expected = "affected nodes include PDR-02, project.store.boundary, LocalArtifactStore.__init__, LocalArtifactStore.fetch, fetch_local_file_bytes, RunFetcher.__call__, and the storage test"
+outcome.kind = "accepted"
+outcome.result = "affected nodes include PDR-02, project.store.boundary, LocalArtifactStore.__init__, LocalArtifactStore.fetch, fetch_local_file_bytes, RunFetcher.__call__, and the storage test"
+outcome.persisted_evidence = ["SystemGraphDelta.changed_nodes contains span:src/viper/references.py:LocalFileRef.store", "PropagationPlan covers every affected node"]
 ```
 
 ### Rejection
@@ -1569,14 +1717,15 @@ requirement_id = "SIG-02"
 rule_id = "system.graph.strict"
 state = "planned"
 scenario = "Decorator registration reads an environment variable absent from the fixed context."
-input = "candidate expression=os.environ['VIPER_BACKEND']; SystemContextManifest.variables=()"
+setup = "candidate expression=os.environ['VIPER_BACKEND']; SystemContextManifest.variables=()"
 declaration = "candidate fixture decorator branches on VIPER_BACKEND"
 runtime = "compile_system(candidate, context, strict=True)"
-persisted_evidence = "none; strict compilation rejects the unresolved attempt before graph publication"
 implementation = "src/viper/system_graph.py:compile_system"
-verifier = "system.graph.strict rejects ResolutionAttempt expression os.environ['VIPER_BACKEND']"
 test = "tests/test_validation_architecture.py:test_system_graph_rejects_unfixed_environment_resolution"
-expected = "SystemGraphError naming VIPER_BACKEND and the candidate source span"
+outcome.kind = "rejected"
+outcome.rejected_at = "src/viper/system_graph.py:compile_system"
+outcome.error_type = "SystemGraphError"
+outcome.message_match = "VIPER_BACKEND"
 ```
 
 ### Dynamic-change case
@@ -1604,10 +1753,13 @@ contents belong to observed outcomes and stay outside the fixed context values.
    checks pass.
 7. Add SCC condensation and canonical DAG serialization.
 8. Add typed graph comparison and reverse impact closure.
-9. Compare graph-backed coverage with the focused documentation and
+9. Add propagation dispositions, planned additions, and candidate-delta
+   reconciliation.
+10. Compare graph-backed coverage with the focused documentation and
    architecture-test oracles.
-10. Add Python, typed API, and CLI developer operations.
-11. Require one strict impact report before each later checklist phase closes.
+11. Add Python, typed API, and CLI developer operations.
+12. Require one strict impact report and reconciled propagation plan before
+    each later checklist phase closes.
 
 **Commit boundary:** `Compile deterministic system impact graphs`
 
