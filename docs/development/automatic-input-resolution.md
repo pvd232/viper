@@ -40,7 +40,7 @@ See [`src/viper/metrics.py`](../../src/viper/metrics.py) and
 [`src/viper/experiments.py`](../../src/viper/experiments.py).
 
 **Proposed:** Four project-owned stage kinds use `@viper.build`,
-`@viper.embed`, `@viper.train`, or `@viper.evaluate`. The decorator's
+`@viper.embed`, `@viper.train`, or `@viper.eval`. The decorator's
 `params=` argument selects the typed parameter class. `viper.stage()` receives
 one validated instance of that class. `viper.download()` creates the
 runner-owned HTTP stage directly.
@@ -168,6 +168,12 @@ class Eval(StrEnum):
     MODEL = "model"
     TEST = "test"
     PREDS = "preds"
+
+
+EvalId = HumanId
+
+
+DataRole = Literal["training", "validation", "eval", "benchmark"]
 ```
 
 The public import is:
@@ -233,7 +239,7 @@ The target decorator signatures are:
 def build(*, params: type[BuildParamsT]) -> StageDecorator[BuildParamsT]: ...
 def embed(*, params: type[EmbedParamsT]) -> StageDecorator[EmbedParamsT]: ...
 def train(*, params: type[TrainParamsT]) -> StageDecorator[TrainParamsT]: ...
-def evaluate(*, params: type[EvaluateParamsT]) -> StageDecorator[EvaluateParamsT]: ...
+def eval(*, params: type[EvalParamsT]) -> StageDecorator[EvalParamsT]: ...
 def http(
     *,
     id: HumanId,
@@ -268,6 +274,82 @@ class ParameterModelRef(ProtocolModel):
 
 This replaces the current project-only meaning of `ParameterModelRef`. Stage,
 HTTP, and metric parameter references all use the same owner rule.
+
+### Target `env` vocabulary
+
+Python identifiers and persisted field names use `env`. English prose,
+`environment.yml`, and `os.environ` retain their existing meanings.
+
+```python
+class PythonEnvSpec(ProtocolModel):
+    python_version: NonEmptyStr
+    distributions: tuple[PythonDistributionSpec, ...] = Field(min_length=1)
+
+
+class GCEEnvSpec(ProtocolModel):
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: GitFileRef
+    python_env: PythonEnvSpec
+
+
+class ResolvedGCEEnv(ProtocolModel):
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: ResolvedGitFileRef
+    python_env: PythonEnvSpec
+
+
+class LocalEnvSpec(ProtocolModel):
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: GitFileRef
+    python_env: PythonEnvSpec
+
+
+class ResolvedLocalEnv(ProtocolModel):
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: ResolvedGitFileRef
+    python_env: PythonEnvSpec
+
+
+EnvSpec = Annotated[
+    GCEEnvSpec | LocalEnvSpec,
+    Field(discriminator="kind"),
+]
+
+
+ResolvedEnv = Annotated[
+    ResolvedGCEEnv | ResolvedLocalEnv,
+    Field(discriminator="kind"),
+]
+
+
+class ProcessStartupReceipt(ProtocolModel):
+    env: dict[StartupVariable, str]
+    reproducibility: ReproducibilitySpec
+    generators: tuple[GeneratorInitializationReceipt, ...]
+
+
+class EnvSecretRef(ProtocolModel):
+    kind: Literal["env"] = "env"
+    variable: NonEmptyStr
+    header: HttpHeaderName
+    prefix: str = ""
+    authorized_origins: frozenset[HttpOrigin] = Field(min_length=1)
+```
+
+`observe_python_env()` returns `PythonEnvSpec`. `resolve_env()` converts one
+`EnvSpec` into `ResolvedEnv`. `RunPlanDraft.env`, `RunSpec.env`,
+`BaseSpecDraft.env`, `BaseSpec.env`, `ResolvedBaseSpec.env`, and
+`ProcessStartupReceipt.env` carry those values through authoring, freezing,
+execution, and verification. `HttpRequestSpec.credentials` accepts
+`EnvSecretRef | None`.
 
 ### Target artifact and HTTP drafts
 
@@ -520,7 +602,7 @@ class BaseSpecDraft(BaseModel):
     )
 
     kind: str
-    environment: EnvironmentSpec | None = None
+    env: EnvSpec | None = None
     metrics: tuple[MetricDraft, ...] = ()
     artifacts: dict[ArtifactName, ArtifactDraft] = Field(min_length=1)
 
@@ -558,12 +640,12 @@ class TrainSpecDraft(InternalSpecDraft):
     params: parameters.Train
 
 
-class EvaluateSpecDraft(InternalSpecDraft):
-    kind: Literal["evaluate"] = "evaluate"
-    evaluation_id: EvaluationId
+class EvalSpecDraft(InternalSpecDraft):
+    kind: Literal["eval"] = "eval"
+    eval_id: EvalId
     objective: MetricObjectiveDraft
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: parameters.Evaluate
+    params: parameters.Eval
 
 
 StageSpecDraft = Annotated[
@@ -571,7 +653,7 @@ StageSpecDraft = Annotated[
     | BuildSpecDraft
     | EmbedSpecDraft
     | TrainSpecDraft
-    | EvaluateSpecDraft,
+    | EvalSpecDraft,
     Field(discriminator="kind"),
 ]
 
@@ -601,7 +683,7 @@ artifact value except `SingleFileArtifactDraft`. The frozen `DownloadSpec`
 repeats both checks, so direct frozen-model construction remains subject to
 the one-request-to-one-file rule.
 
-`TrainSpecDraft.objective` and `EvaluateSpecDraft.objective` are required.
+`TrainSpecDraft.objective` and `EvalSpecDraft.objective` are required.
 `EmbedSpecDraft.objective` is optional. A fixed encoder can create embeddings
 and leave the objective unset. An embedding implementation that optimizes or
 scores an objective can supply one.
@@ -621,7 +703,7 @@ identity out of the common stage base. The target frozen models are:
 class BaseSpec(ProtocolModel):
     kind: str
     schema_version: Literal[1] = 1
-    environment: EnvironmentSpec | None = None
+    env: EnvSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
     artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
 
@@ -660,16 +742,16 @@ class TrainSpec(InternalSpec):
     params: parameters.Train
 
 
-class EvaluateSpec(InternalSpec):
-    kind: Literal["evaluate"] = "evaluate"
-    evaluation_id: EvaluationId
+class EvalSpec(InternalSpec):
+    kind: Literal["eval"] = "eval"
+    eval_id: EvalId
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)
     objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: parameters.Evaluate
+    params: parameters.Eval
 
 
-ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
+ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvalSpec
 
 
 Spec = Annotated[
@@ -693,17 +775,17 @@ TrainSpec.artifacts
 TrainSpec.inputs
 -> accepts model and state together for checkpoint continuation
 
-EvaluateSpec.inputs
+EvalSpec.inputs
 -> requires model and test
 
-EvaluateSpec.artifacts
+EvalSpec.artifacts
 -> requires preds
 ```
 
 The old `parameters`, `resume_state`, `evaluation_dataset`, and `predictions`
 keys fail target-model validation.
 
-`TrainSpec` and `EvaluateSpec` require `objective.metric_id` to appear in
+`TrainSpec` and `EvalSpec` require `objective.metric_id` to appear in
 `metric_ids`. `EmbedSpec` applies the same check when `objective` is present.
 Run-plan verification loads the matching `MetricSpec` from `ExperimentSpec`
 and checks the objective mode and direction.
@@ -716,10 +798,10 @@ The guarantee ends at objective declaration and measurement. The complete
 example uses binary cross-entropy for both the optimizer loss and the reported
 training objective.
 
-The target `EvaluateSpec` accepts `ExternalInputRef`, `FutureInputRef`, or
+The target `EvalSpec` accepts `ExternalInputRef`, `FutureInputRef`, or
 `StoredInputRef` for `Eval.TEST` and every named split. Freezing and
 preflight resolve each reference to its artifact declaration and require an
-`evaluation` or `benchmark` data role. This replaces the active validator that
+`eval` or `benchmark` data role. This replaces the active validator that
 requires stored inputs solely because they were authored as pointers.
 
 The target resolved hierarchy separates runner-owned download evidence from
@@ -730,7 +812,7 @@ class ResolvedBaseSpec(ProtocolModel):
     schema_version: Literal[1] = 1
     kind: str
     spec: BaseSpec
-    environment: ResolvedEnvironment
+    env: ResolvedEnv
     execution_context: ExecutionContext
     artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
     completed_at: AwareDatetime
@@ -753,6 +835,11 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
 class ResolvedInternalSpec(ResolvedParameterizedSpec):
     spec: InternalSpec
     inputs: dict[InputName, ResolvedInputRef]
+
+
+class ResolvedEvalSpec(ResolvedInternalSpec):
+    kind: Literal["eval"] = "eval"
+    spec: EvalSpec
 ```
 
 `ResolvedDownloadSpec` records the environment and execution context of the
@@ -761,7 +848,7 @@ records the selected HTTP implementation, request, response, body identity,
 and timestamps.
 `ResolvedParameterizedSpec` retains the project source, process startup,
 invocation receipt, and child-process command used by build, embed, train, and
-evaluate stages.
+eval stages.
 
 When VIPER creates an `ArtifactPointer`, it publishes the pointer at the
 selected storage destination. The frozen input stores the pointer's SHA-256
@@ -799,7 +886,7 @@ The active-to-target field changes are:
 | `ResolvedStoredInputRef.pointer: ResolvedArtifactPointerRef` | Retain | The resolved stage records the exact pointer selected by the frozen input. |
 | `BaseSpecDraft.metric_ids: tuple[MetricId, ...]` | `BaseSpecDraft.metrics: tuple[MetricDraft, ...]` | Python authoring carries the complete metric configuration and removes bare strings from this layer. |
 | Train objective field absent | `TrainSpecDraft.objective: MetricObjectiveDraft` and `TrainSpec.objective: MetricObjectiveSpec` | Training records its primary metric and improvement direction. |
-| Evaluation objective field absent | `EvaluateSpecDraft.objective: MetricObjectiveDraft` and `EvaluateSpec.objective: MetricObjectiveSpec` | Evaluation records its primary recomputed metric and improvement direction. |
+| Evaluation objective field absent | `EvalSpecDraft.objective: MetricObjectiveDraft` and `EvalSpec.objective: MetricObjectiveSpec` | Evaluation records its primary recomputed metric and improvement direction. |
 | Embed objective field absent | Optional `MetricObjectiveDraft` and `MetricObjectiveSpec` fields | Optimizing embedding algorithms can name an objective; fixed encoders leave it unset. |
 | Public artifact draft paths | `ArtifactDraft.path: RunArtifactPath` | The compiler prefixes the selected run root and writes the concrete repository-relative `ArtifactSpec.path`. |
 | Repeated experiment identity on `RunPlanDraft` | `RunPlanDraft.experiment: ExperimentDraft` plus selected variant and replicate IDs | The experiment owns factors, variants, replicates, and derived metric definitions. |
@@ -838,7 +925,7 @@ class RunPlanDraft(BaseModel):
     replicate: ReplicateId
     benchmark: BenchmarkDraft | None = None
     source: GitSource
-    environment: EnvironmentSpec
+    env: EnvSpec
     reproducibility: ReproducibilitySpec
 ```
 
@@ -927,7 +1014,7 @@ def download(
     artifacts: dict[ArtifactName, ArtifactDraft],
     http: DecoratedHttp | None = None,
     params: parameters.Http | None = None,
-    environment: EnvironmentSpec | None = None,
+    env: EnvSpec | None = None,
     metrics: tuple[MetricDraft, ...] = (),
 ) -> StageDraft: ...
 
@@ -938,10 +1025,10 @@ def stage(
     params: parameters.ParameterSet,
     inputs: dict[InputName, StageInputDraft],
     artifacts: dict[ArtifactName, ArtifactDraft],
-    environment: EnvironmentSpec | None = None,
+    env: EnvSpec | None = None,
     objective: MetricObjectiveDraft | None = None,
     metrics: tuple[MetricDraft, ...] = (),
-    evaluation_id: EvaluationId | None = None,
+    eval_id: EvalId | None = None,
     split_inputs: tuple[InputName, ...] = (),
 ) -> StageDraft: ...
 
@@ -954,7 +1041,7 @@ def plan(
     replicate: ReplicateId,
     benchmark: BenchmarkDraft | None = None,
     source: GitSource,
-    environment: EnvironmentSpec,
+    env: EnvSpec,
     reproducibility: ReproducibilitySpec,
 ) -> RunPlanDraft: ...
 
@@ -1104,6 +1191,9 @@ that dependency chain.
 <!-- complete-authoring-example: start -->
 
 ```python
+
+# models.py
+
 from __future__ import annotations
 
 import csv
@@ -1139,13 +1229,13 @@ from viper.resume import (
     save_resume_state,
 )
 from viper.runtime import (
-    LocalEnvironmentSpec,
+    LocalEnvSpec,
     NumPyRandomnessSpec,
     ParallelismSpec,
     ReproducibilitySpec,
     TorchDeterminismSpec,
     TorchPrecisionSpec,
-    observe_python_environment,
+    observe_python_env,
 )
 
 
@@ -1165,7 +1255,7 @@ NORMALIZATION_PATH = "artifacts/datasets/training_set/normalization.json"
 TRAINING_EMBEDDINGS_PATH = "artifacts/models/training_embeddings/embeddings.csv"
 WEIGHTS_PATH = "artifacts/models/logistic_regression/model.pt"
 STATE_PATH = "artifacts/models/logistic_regression/state.pt"
-PREDICTIONS_PATH = "artifacts/evaluations/holdout/preds.csv"
+PREDICTIONS_PATH = "artifacts/evals/holdout/preds.csv"
 
 
 # The source commit identifies the exact project definitions inspected during
@@ -1422,7 +1512,7 @@ gradient_norm_metric = viper.measure(gradient_norm)
 prediction_dependency = MetricDependency(
     source="artifact",
     name=Eval.PREDS,
-    required_data_role="evaluation",
+    required_data_role="eval",
 )
 evaluation_loss_metric = viper.measure(
     evaluation_loss,
@@ -1781,7 +1871,7 @@ benchmark_split = viper.run_artifact(
 )
 
 
-class EvaluateParams(viper.params.Evaluate):
+class EvalParams(viper.params.Eval):
     batch_size: int = Field(ge=1)
     decision_threshold: float = Field(gt=0.0, lt=1.0)
     temperature: float = Field(gt=0.0)
@@ -1790,8 +1880,8 @@ class EvaluateParams(viper.params.Evaluate):
     negative_label: int
 
 
-@viper.evaluate(params=EvaluateParams)
-def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
+@viper.eval(params=EvalParams)
+def eval_model(context: viper.StageContext[EvalParams]) -> None:
     if context.params.positive_label == context.params.negative_label:
         raise ValueError("evaluation labels must differ")
 
@@ -1845,9 +1935,9 @@ def evaluate(context: viper.StageContext[EvaluateParams]) -> None:
 
 # The model handle is a same-run edge. The test and split handles are prior-run
 # edges. All three become normal paths in the evaluation StageContext.
-evaluation = viper.stage(
-    evaluate,
-    params=EvaluateParams(
+eval_stage = viper.stage(
+    eval_model,
+    params=EvalParams(
         batch_size=2,
         decision_threshold=0.5,
         temperature=1.0,
@@ -1864,12 +1954,12 @@ evaluation = viper.stage(
         Eval.PREDS: viper.artifact(
             path=PREDICTIONS_PATH,
             loader=load_predictions,
-            data_role="evaluation",
+            data_role="eval",
         ),
     },
     objective=viper.min(evaluation_loss_metric),
     metrics=(evaluation_accuracy_metric,),
-    evaluation_id="holdout",
+    eval_id="holdout",
     split_inputs=("holdout",),
 )
 
@@ -1881,13 +1971,13 @@ source = GitSource(
     repository=REPOSITORY,
     commit=source_commit,
 )
-environment = LocalEnvironmentSpec(
+env = LocalEnvSpec(
     lockfile=GitFileRef(
         repository=REPOSITORY,
         commit=source_commit,
         path="pyproject.toml",
     ),
-    python_environment=observe_python_environment(),
+    python_env=observe_python_env(),
 )
 reproducibility = ReproducibilitySpec(
     determinism=TorchDeterminismSpec(
@@ -1923,7 +2013,7 @@ regularization = viper.factor(levels=("none", "l2"))
 # Criteria add pass/fail decisions without changing the recorded measurements.
 benchmark = viper.benchmark(
     benchmark_id="tiny_holdout",
-    evaluation_id="holdout",
+    eval_id="holdout",
     test=benchmark_test,
     splits={"holdout": benchmark_split},
     metrics=(evaluation_loss_metric, evaluation_accuracy_metric),
@@ -1949,7 +2039,7 @@ experiment = viper.experiment(
                 "build_normalization": normalization,
                 "embed_training": training_embeddings,
                 "train": training,
-                "evaluate": evaluation,
+                "eval": eval_stage,
             },
             estimator=training.artifacts[Train.MODEL],
         ),
@@ -1969,7 +2059,7 @@ plan = viper.plan(
     replicate="replicate_01",
     benchmark=benchmark,
     source=source,
-    environment=environment,
+    env=env,
     reproducibility=reproducibility,
 )
 
@@ -2022,7 +2112,7 @@ The public calls build one dependency graph in this order:
 | `@viper.build(params=...)` | Decorated build implementation and parameter class | `viper.stage()` |
 | `@viper.embed(params=...)` | Decorated embed implementation and parameter class | `viper.stage()` |
 | `@viper.train(params=...)` | Decorated train implementation and parameter class | `viper.stage()` |
-| `@viper.evaluate(params=...)` | Decorated evaluation implementation and parameter class | `viper.stage()` |
+| `@viper.eval(params=...)` | Decorated evaluation implementation and parameter class | `viper.stage()` |
 | `viper.stage(...)` | Project-owned `StageDraft` | Later artifact handles and `VariantDraft.stages` |
 | `viper.run_artifact(...)` | `RunArtifactDraft` selecting a completed artifact | Evaluation inputs and benchmark conditions |
 | `viper.factor(...)` | Allowed experimental levels | `viper.experiment()` |
@@ -2045,15 +2135,15 @@ The graph contains eight distinct input edges:
 | `embed_training.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", producer_artifact="training_dataset")` |
 | `embed_training.inputs["normalization"]` | `normalization.artifacts["normalization"]` | `FutureInputRef(producer_stage_id="build_normalization", producer_artifact="normalization")` |
 | `train.inputs["dataset"]` | `training_embeddings.artifacts["embeddings"]` | `FutureInputRef(producer_stage_id="embed_training", producer_artifact="embeddings")` |
-| `evaluate.inputs[Eval.MODEL]` | `training.artifacts[Train.MODEL]` | `FutureInputRef(producer_stage_id="train", producer_artifact=Train.MODEL)` |
-| `evaluate.inputs[Eval.TEST]` | `benchmark_test` | `StoredInputRef(pointer=<test pointer>)` |
-| `evaluate.inputs["holdout"]` | `benchmark_split` | `StoredInputRef(pointer=<split pointer>)` |
+| `eval_stage.inputs[Eval.MODEL]` | `training.artifacts[Train.MODEL]` | `FutureInputRef(producer_stage_id="train", producer_artifact=Train.MODEL)` |
+| `eval_stage.inputs[Eval.TEST]` | `benchmark_test` | `StoredInputRef(pointer=<test pointer>)` |
+| `eval_stage.inputs["holdout"]` | `benchmark_split` | `StoredInputRef(pointer=<split pointer>)` |
 
 The benchmark reuses the last two pointers:
 
 ```text
-EvaluateSpec.inputs[Eval.TEST].pointer == BenchmarkSpec.test
-EvaluateSpec.inputs["holdout"].pointer == BenchmarkSpec.splits["holdout"]
+EvalSpec.inputs[Eval.TEST].pointer == BenchmarkSpec.test
+EvalSpec.inputs["holdout"].pointer == BenchmarkSpec.splits["holdout"]
 ```
 
 `viper.freeze()` also binds the run's storage destination before publishing
@@ -2088,11 +2178,11 @@ Every parameter changes a runtime operation:
 | `TrainParams.momentum` | Configures SGD momentum. |
 | `TrainParams.weight_decay` | Applies L2 weight decay through the optimizer. |
 | `TrainParams.max_gradient_norm` | Clips each batch gradient before the update. |
-| `EvaluateParams.batch_size` | Controls inference batch size. |
-| `EvaluateParams.decision_threshold` | Converts each predicted probability into a class. |
-| `EvaluateParams.temperature` | Scales model logits before the sigmoid. |
-| `EvaluateParams.probability_floor` | Bounds persisted probabilities away from zero and one. |
-| `EvaluateParams.positive_label` and `negative_label` | Define the class values written to `preds.csv`. |
+| `EvalParams.batch_size` | Controls inference batch size. |
+| `EvalParams.decision_threshold` | Converts each predicted probability into a class. |
+| `EvalParams.temperature` | Scales model logits before the sigmoid. |
+| `EvalParams.probability_floor` | Bounds persisted probabilities away from zero and one. |
+| `EvalParams.positive_label` and `negative_label` | Define the class values written to `preds.csv`. |
 | `LossMetricParams.epsilon` | Bounds probabilities before recomputed logarithms. |
 | `LossMetricParams.label_column` and `probability_column` | Select the persisted columns used by recomputation. |
 | `LossMetricParams.positive_label` and `negative_label` | Convert persisted class values into binary-loss targets. |
@@ -2105,8 +2195,8 @@ The metric lifecycle is:
 | `embedding_spread` | Embed | Live diagnostic | Detects a projection that collapses the rows to nearly one value. |
 | `training_loss` | Train | Live objective | Records binary cross-entropy after every epoch. |
 | `gradient_norm` | Train | Live diagnostic | Shows whether clipping or unstable updates dominate training. |
-| `evaluation_loss` | Evaluate | Recompute objective | Computes holdout binary cross-entropy from the persisted predictions. |
-| `evaluation_accuracy` | Evaluate | Recompute metric | Computes holdout classification accuracy from the same predictions. |
+| `evaluation_loss` | Eval | Recompute objective | Computes holdout binary cross-entropy from the persisted predictions. |
+| `evaluation_accuracy` | Eval | Recompute metric | Computes holdout classification accuracy from the same predictions. |
 
 The stage code computes live metrics while it still has the batch or embedding
 values. Evaluation metrics run after `preds.csv` has been published. The
@@ -2139,7 +2229,7 @@ train
 -> records training loss and gradient norm after every epoch
 -> writes model.pt and a real ResumeState
 
-evaluate
+eval
 -> reads the same-run model plus prior-run test embeddings and holdout row IDs
 -> writes probabilities and class predictions
 
@@ -2521,7 +2611,7 @@ overwrite rules, and review ownership.
 
 | Surface | Required change | Acceptance condition |
 | --- | --- | --- |
-| Public stage API | Add `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.evaluate`; use `params=` for each parameter class; retain `StageContext` | The complete example constructs and freezes the plan through the target API |
+| Public stage API | Add `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.eval`; use `params=` for each parameter class; retain `StageContext` | The complete example constructs and freezes the plan through the target API |
 | Protocol-owned stage keys | Add `viper.keys.Train` and `viper.keys.Eval` as `StrEnum` classes; use their members in Python authoring and stage contexts | Required train and evaluation keys use one package-owned spelling while frozen YAML retains string keys |
 | Parameter namespace | Export `viper.params` as the concise public parameter namespace | `TrainParams` subclasses `viper.params.Train` |
 | Metric, objective, and experiment API | Implement [`unified-metric-drafting.md`](unified-metric-drafting.md) | Stages receive configured metrics, objectives carry direction, and experiments derive one metric registry |
@@ -2531,7 +2621,7 @@ overwrite rules, and review ownership.
 | Artifact paths | Accept run-relative `ArtifactDraft.path` values and prefix the selected run root during freezing | One variant graph can be reused across replicates while every frozen `ArtifactSpec.path` remains concrete |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `ExternalInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
-| Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and evaluate stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
+| Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and eval stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
 | `freeze_run_plan()` | Resolve each artifact handle to `FutureInputRef` or generated `StoredInputRef`; consume the experiment and metric drafts defined by the unified metric contract | Frozen specs contain the correct internal references, experiment selections, and metric selections |
 | Frozen plan result | Return `run_spec_path`, `benchmark_spec_path`, and the complete generated-file manifest | The user commits the exact files and later public calls consume those returned paths directly |
 | Pointer writer | Bind the run destination, serialize prior-run `ArtifactPointer` documents, and publish them through the configured independent-file publisher | `StoredInputRef.pointer` carries a digest-bearing `LocalFileRef` or `ViperCloudFileRef`, and execution uses the same destination |
@@ -2558,13 +2648,13 @@ replacement:
 | `download_stage()` and generated `@viper.download_stage` callables | Delete | `viper.download()` constructs the runner-owned draft. |
 | `DownloadContext` and `HttpRetrievalHandle` | Delete | The runner consumes `HttpResult` and writes `ResolvedHttpRetrieval`. |
 | `parameters.Download` | Delete | Runner-owned `DownloadSpec` uses request, policy, and `http` fields. |
-| `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete | Variant parameters cover project-owned build, embed, train, and evaluate stages. |
+| `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete | Variant parameters cover project-owned build, embed, train, and eval stages. |
 | `StageContextBinding.retrievals` and `HttpRetrievalContextBinding` | Delete | The runner consumes retrieval results directly. |
 | `execute_stage_process(..., retrievals=...)` | Replace | `_execute_attempt()` invokes the HTTP function and resolves download artifacts directly. |
 | `BaseSpec.implementation` | Move | `ParameterizedSpec.implementation` owns project-stage source identity. |
 | `ResolvedBaseSpec.source`, `startup`, `invocation`, and `command` | Move | `ResolvedParameterizedSpec` owns project-stage process evidence. |
 | Download-stage `StageInvocationReceipt` fixtures | Delete | Successful requests use `ResolvedHttpRetrieval`; failed download attempts use the attempt journal and raised error. |
-| `@viper.build_stage`, `@viper.embed_stage`, `@viper.train_stage`, and `@viper.evaluate_stage` | Replace | `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.evaluate` use `params=`. |
+| `@viper.build_stage`, `@viper.embed_stage`, `@viper.train_stage`, and `@viper.evaluate_stage` | Replace | `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.eval` use `params=`. |
 | Private `PARAMETERS`, `RESUME_STATE`, `PARAMETERS_INPUT`, `RESUME_STATE_INPUT`, `EVALUATION_DATASET_INPUT`, and `PREDICTIONS` constants | Replace | `viper.keys.Train` and `viper.keys.Eval` replace the old constants and rename the frozen map keys to `model`, `state`, `test`, and `preds`. |
 | `StageDraft.stage_id` and tuple-valued `RunPlanDraft.stages` | Replace | `VariantDraft.stages` mapping keys own stage IDs. |
 | Direct `ExternalInputRef` construction in public authoring | Replace | `viper.input()` creates `ExternalInputDraft`; freezing writes `ExternalInputRef`. |
@@ -2580,7 +2670,7 @@ replacement:
 | Manual `MetricImplementationRef` construction in public examples | Replace | `viper.measure()` accepts the decorated metric and freezing records its exact source identity. |
 | Untyped extra values stored only in `MetricSpec.params` | Replace | A custom metric parameter class produces `MetricSpec.parameter_model`; the worker validates the values through that exact class. |
 | Package-owned parameter classes represented by an absent reference | Replace | Every frozen parameter class has a `ParameterModelRef`; `owner` selects the project or installed VIPER source root. |
-| Stored-only evaluation input at the retired `evaluation_dataset` key | Replace | `EvaluateSpec.inputs[Eval.TEST]` and named splits accept any `InputRef`; freezing and preflight validate the resolved data roles. |
+| Stored-only evaluation input at the retired `evaluation_dataset` key | Replace | `EvalSpec.inputs[Eval.TEST]` and named splits accept any `InputRef`; freezing and preflight validate the resolved data roles. |
 | Existing protocol YAML, CLI parsing, verifier reconstruction, tests, fixtures, and project scaffolding that construct the old shapes | Replace | Each consumer parses or constructs the target frozen and resolved models. |
 
 ## 10. Acceptance cases
@@ -2635,7 +2725,7 @@ draft validation rejects it.
 ### Complete candidate and benchmark pipeline
 
 The acceptance fixture implements the full example. It defines one download
-artifact, one embed stage, one train stage, one evaluate stage, two prior-run
+artifact, one embed stage, one train stage, one eval stage, two prior-run
 benchmark inputs, and six configured metrics.
 
 ```text
@@ -2804,7 +2894,7 @@ compiler-generated pointer.
 - [ ] Compile `BenchmarkDraft.test` and every split through the matching
       evaluation-stage input, then reuse those pointer references in
       `BenchmarkSpec`.
-- [ ] Use `MetricObjectiveDraft` in the train and evaluate examples. Keep the
+- [ ] Use `MetricObjectiveDraft` in the train and eval examples. Keep the
       embed objective optional.
 - [ ] Add live embedding diagnostics, a live training objective and gradient
       diagnostic, and recomputed evaluation loss and accuracy to the complete

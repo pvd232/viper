@@ -389,8 +389,8 @@ inputs["dataset"]
 ```
 
 `DownloadSpec` is runner-owned. It contains the request, HTTP implementation, policy,
-environment override, metric IDs, and artifacts. Build, embed, train, and
-evaluate retain decorated project callables and typed parameters. A
+`env` override, metric IDs, and artifacts. Build, embed, train, and eval
+stages retain decorated project callables and typed parameters. A
 project-owned HTTP function remains available through
 `@viper.http` for project-specific request behavior.
 
@@ -647,7 +647,7 @@ identity rule.
 | Download schema | Require matching request and artifact keys and one `SingleFileArtifactSpec` per request. |
 | Download execution | Publish each verified response directly at its declared artifact path and record one shared `SnapshotFileRef`. |
 | Download ownership | Delete the project download callable, `DownloadContext`, and `parameters.Download`; execute retrieval and publication in the attempt process. |
-| Resolved download schema | Keep runner environment, execution context, retrievals, artifacts, and completion on `ResolvedDownloadSpec`; move project invocation fields to `ResolvedParameterizedSpec`. |
+| Resolved download schema | Keep runner `env`, execution context, retrievals, artifacts, and completion on `ResolvedDownloadSpec`; move project invocation fields to `ResolvedParameterizedSpec`. |
 | External source model | Delete `HttpSource` and `ExternalInputSource`; type both local records with `source: LocalSource`. |
 | Internal input resolution | Remove HTTP invocation from `resolve_inputs()`; resolve local, future, and stored inputs only. |
 | Local root model | Delete `ExternalInputRef.path`; reject symlinks and resolved paths outside the repository; derive one path with `captured_input_path()`, atomically copy `ExternalInputRef.source.path` there, and record a `SnapshotFileRef`. |

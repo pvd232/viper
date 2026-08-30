@@ -67,7 +67,7 @@ COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.build",
     "viper.download",
     "viper.embed",
-    "viper.evaluate",
+    "viper.eval",
     "viper.execution.benchmark",
     "viper.execution.run",
     "viper.experiment",
@@ -92,6 +92,62 @@ RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.file_input",
     "viper.http_transport",
     "viper.transport",
+    "viper.evaluate",
+}
+
+TARGET_EVAL_IDENTIFIERS = {
+    "Eval",
+    "EvalId",
+    "EvalParams",
+    "EvalSpec",
+    "EvalSpecDraft",
+    "EvalVariantStageParams",
+    "ResolvedEvalSpec",
+}
+
+RETIRED_TARGET_EVAL_IDENTIFIERS = {
+    "Evaluate",
+    "EvaluateParams",
+    "EvaluateSpec",
+    "EvaluateSpecDraft",
+    "EvaluateVariantStageParams",
+    "EvaluationId",
+    "ResolvedEvaluateSpec",
+}
+
+TARGET_PROJ_IDENTIFIERS = {
+    "min_proj_norm",
+    "proj_a",
+    "proj_b",
+    "proj_bias",
+    "proj_norm",
+}
+
+TARGET_ENV_IDENTIFIERS = {
+    "EnvSecretRef",
+    "EnvSpec",
+    "GCEEnvSpec",
+    "LocalEnvSpec",
+    "ProcessStartupReceipt",
+    "PythonEnvSpec",
+    "ResolvedEnv",
+    "ResolvedGCEEnv",
+    "ResolvedLocalEnv",
+    "observe_python_env",
+    "resolve_env",
+}
+
+RETIRED_TARGET_ENV_IDENTIFIERS = {
+    "EnvironmentSecretRef",
+    "EnvironmentSpec",
+    "GCEEnvironmentSpec",
+    "LocalEnvironmentSpec",
+    "PythonEnvironmentSpec",
+    "ResolvedEnvironment",
+    "ResolvedGCEEnvironment",
+    "ResolvedLocalEnvironment",
+    "observe_python_environment",
+    "resolve_environment",
 }
 
 COMPLETE_EXAMPLE_COMMENT_TOPICS = {
@@ -384,6 +440,86 @@ def test_complete_authoring_example_covers_the_public_workflow() -> None:
         if isinstance(node, ast.ImportFrom)
     }
     assert "viper.http" not in imported_modules
+
+
+def test_target_contracts_use_env_identifiers() -> None:
+    """Keep target contracts and their implementation plan on `env` names."""
+    contract_text = "\n".join(path.read_text() for path in IMPLEMENTATION_CONTRACTS)
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
+
+    assert TARGET_ENV_IDENTIFIERS - target_identifiers == set()
+    assert target_identifiers & RETIRED_TARGET_ENV_IDENTIFIERS == set()
+    assert 'kind: Literal["env"] = "env"' in contract_text
+    assert 'kind: Literal["environment"] = "environment"' not in contract_text
+    assert all(name in checklist for name in TARGET_ENV_IDENTIFIERS)
+    assert all(name in checklist for name in RETIRED_TARGET_ENV_IDENTIFIERS)
+
+
+def test_target_contracts_use_eval_identifiers() -> None:
+    """Keep the evaluation-stage contract on the `Eval` vocabulary."""
+    contract_text = "\n".join(path.read_text() for path in IMPLEMENTATION_CONTRACTS)
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
+
+    assert TARGET_EVAL_IDENTIFIERS - target_identifiers == set()
+    assert target_identifiers & RETIRED_TARGET_EVAL_IDENTIFIERS == set()
+    assert 'kind: Literal["eval"] = "eval"' in contract_text
+    assert 'kind: Literal["evaluate"] = "evaluate"' not in contract_text
+    assert 'DataRole = Literal["training", "validation", "eval", "benchmark"]' in (
+        contract_text
+    )
+    assert 'data_role="evaluation"' not in contract_text
+    assert "artifacts/evaluations/" not in contract_text
+    assert "eval_id" in target_identifiers
+    assert "evaluation_id" not in target_identifiers
+    assert all(name in checklist for name in TARGET_EVAL_IDENTIFIERS)
+    assert all(name in checklist for name in RETIRED_TARGET_EVAL_IDENTIFIERS)
+
+
+def test_complete_authoring_example_uses_env_keywords() -> None:
+    """Require the full example to use the target env API and fields."""
+    trees = tuple(
+        ast.parse(block, filename=str(AUTOMATIC_INPUT_RESOLUTION))
+        for block in _complete_authoring_blocks()
+    )
+    calls = tuple(
+        node for tree in trees for node in ast.walk(tree) if isinstance(node, ast.Call)
+    )
+    names = {name for node in calls if (name := _dotted_name(node.func)) is not None}
+    plan_calls = tuple(
+        node for node in calls if _dotted_name(node.func) == "viper.plan"
+    )
+
+    assert {"LocalEnvSpec", "observe_python_env"} <= names
+    assert names & {"LocalEnvironmentSpec", "observe_python_environment"} == set()
+    assert plan_calls
+    assert all(
+        "env" in {keyword.arg for keyword in node.keywords}
+        and "environment" not in {keyword.arg for keyword in node.keywords}
+        for node in plan_calls
+    )
+
+
+def test_complete_authoring_example_uses_proj_identifiers() -> None:
+    """Keep projection-related Python names on the `proj` abbreviation."""
+    trees = tuple(
+        ast.parse(block, filename=str(AUTOMATIC_INPUT_RESOLUTION))
+        for block in _complete_authoring_blocks()
+    )
+    identifiers = {
+        name
+        for tree in trees
+        for node in ast.walk(tree)
+        for name in (
+            node.id if isinstance(node, ast.Name) else None,
+            node.attr if isinstance(node, ast.Attribute) else None,
+        )
+        if name is not None
+    }
+
+    assert TARGET_PROJ_IDENTIFIERS <= identifiers
+    assert {name for name in identifiers if "projection" in name.lower()} == set()
 
 
 def test_complete_authoring_parameter_models_are_substantial_and_used() -> None:

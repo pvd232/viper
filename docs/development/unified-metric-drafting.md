@@ -104,7 +104,7 @@ decorated metric function
 -> user constructs MetricImplementationRef
 -> user constructs MetricSpec
 -> user inserts MetricSpec into ExperimentSpec.metrics
--> user copies metric_id into EvaluateSpec.metric_ids
+-> user copies metric_id into EvalSpec.metric_ids
 ```
 
 The current benchmark path is:
@@ -358,7 +358,7 @@ while leaving `objective=None`.
 
 A diagnostic can use `mode="live"` when the stage already holds the required
 values. It can use `mode="recompute"` when the calculation reads persisted
-inputs or artifacts. Build, embed, train, and evaluate stages can select live
+inputs or artifacts. Build, embed, train, and eval stages can select live
 or recomputed diagnostics. A runner-owned download stage selects recomputed
 diagnostics; live `MetricHandle` values come from project stage callables.
 
@@ -553,7 +553,7 @@ class MetricExecutionReceipt(ProtocolModel):
     dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
     startup: ProcessStartupReceipt
     execution_context: ExecutionContext
-    python_environment: PythonEnvironmentSpec
+    python_env: PythonEnvSpec
     value: float = Field(allow_inf_nan=False)
     started_at: AwareDatetime
     completed_at: AwareDatetime
@@ -604,7 +604,7 @@ The target stage models are:
 class BaseSpec(ProtocolModel):
     kind: str
     schema_version: Literal[1] = 1
-    environment: EnvironmentSpec | None = None
+    env: EnvSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
     artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
 
@@ -636,13 +636,13 @@ class TrainSpec(InternalSpec):
     params: parameters.Train
 
 
-class EvaluateSpec(InternalSpec):
-    kind: Literal["evaluate"] = "evaluate"
-    evaluation_id: EvaluationId
+class EvalSpec(InternalSpec):
+    kind: Literal["eval"] = "eval"
+    eval_id: EvalId
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)
     objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: parameters.Evaluate
+    params: parameters.Eval
 ```
 
 The objective metric ID must occur in the same stage's `metric_ids`. A training
@@ -750,7 +750,7 @@ class RunPlanDraft(BaseModel):
     replicate: ReplicateId
     benchmark: BenchmarkDraft | None = None
     source: GitSource
-    environment: EnvironmentSpec
+    env: EnvSpec
     reproducibility: ReproducibilitySpec
 ```
 
@@ -824,17 +824,17 @@ class TrainVariantStageParams(ProtocolModel):
     params: parameters.Train
 
 
-class EvaluateVariantStageParams(ProtocolModel):
-    kind: Literal["evaluate"] = "evaluate"
+class EvalVariantStageParams(ProtocolModel):
+    kind: Literal["eval"] = "eval"
     stage_id: StageId
-    params: parameters.Evaluate
+    params: parameters.Eval
 
 
 VariantStageParams = Annotated[
     BuildVariantStageParams
     | EmbedVariantStageParams
     | TrainVariantStageParams
-    | EvaluateVariantStageParams,
+    | EvalVariantStageParams,
     Field(discriminator="kind"),
 ]
 
@@ -863,7 +863,7 @@ The factor levels and variant stages appear together at authoring time. This
 example continues the
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example)
 program. It reuses that program's `train`, `TrainParams`, artifact loaders,
-metric drafts, `source`, `environment`, and `reproducibility` objects. The two
+metric drafts, `source`, `env`, and `reproducibility` objects. The two
 training stages read the same checked-in
 `inputs/training_embeddings.csv` file. The code below defines every
 variant-specific stage and every run value it uses.
@@ -969,7 +969,7 @@ baseline_plan = viper.plan(
     variant="baseline",
     replicate="replicate_01",
     source=source,
-    environment=environment,
+    env=env,
     reproducibility=reproducibility,
 )
 
@@ -979,7 +979,7 @@ high_rate_plan = viper.plan(
     variant="high_learning_rate",
     replicate="replicate_01",
     source=source,
-    environment=environment,
+    env=env,
     reproducibility=reproducibility,
 )
 
@@ -989,7 +989,7 @@ baseline_replicate_02_plan = viper.plan(
     variant="baseline",
     replicate="replicate_02",
     source=source,
-    environment=environment,
+    env=env,
     reproducibility=reproducibility,
 )
 ```
@@ -1019,7 +1019,7 @@ class BenchmarkDraft(BaseModel):
     )
 
     benchmark_id: BenchmarkId
-    evaluation_id: EvaluationId
+    eval_id: EvalId
     test: RunArtifactDraft
     splits: dict[InputName, RunArtifactDraft] = Field(min_length=1)
     metrics: tuple[MetricDraft, ...] = Field(min_length=1)
@@ -1039,7 +1039,7 @@ class MetricCriterion(ProtocolModel):
 class BenchmarkSpec(ProtocolModel):
     schema_version: Literal[1] = 1
     benchmark_id: BenchmarkId
-    evaluation_id: EvaluationId
+    eval_id: EvalId
     test: ResolvedArtifactPointerRef
     splits: dict[InputName, ResolvedArtifactPointerRef] = Field(min_length=1)
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)
@@ -1106,7 +1106,7 @@ The public constructor is:
 def benchmark(
     *,
     benchmark_id: BenchmarkId,
-    evaluation_id: EvaluationId,
+    eval_id: EvalId,
     test: RunArtifactDraft,
     splits: dict[InputName, RunArtifactDraft],
     metrics: tuple[MetricDraft, ...],
@@ -1122,10 +1122,10 @@ The evaluation stage and benchmark reuse the same draft objects:
 
 ```text
 BenchmarkDraft.test
-== EvaluateSpecDraft.inputs[Eval.TEST]
+== EvalSpecDraft.inputs[Eval.TEST]
 
 BenchmarkDraft.splits[name]
-== EvaluateSpecDraft.inputs[name]
+== EvalSpecDraft.inputs[name]
 ```
 
 Freezing resolves each `RunArtifactDraft` once. It writes the resulting
@@ -1238,7 +1238,7 @@ The successful example produces this evidence chain:
 ExperimentSpec.metrics["evaluation_accuracy"]
 -> exact implementation, params, dependencies, comparator
 
-EvaluateSpec.metric_ids
+EvalSpec.metric_ids
 -> selects evaluation_accuracy
 
 MetricVerificationReceipt from candidate
@@ -1302,7 +1302,7 @@ fails metric verification.
 
 ### `metric.objective.selection`
 
-Every train and evaluate stage has one `MetricObjectiveSpec`. Embed stages may
+Every train and eval stage has one `MetricObjectiveSpec`. Embed stages may
 have one. `MetricObjectiveSpec.metric_id` occurs exactly once in the stage's
 `metric_ids`.
 
@@ -1343,7 +1343,7 @@ stage and that `RunSpec.estimator` names a declared artifact from a train stage.
 ### `experiment.variant.parameters`
 
 `VariantSpec.stage_params` contains one entry for every build, embed, train, and
-evaluate stage in the selected variant. It contains zero download entries.
+eval stage in the selected variant. It contains zero download entries.
 Each entry repeats the selected stage ID, kind, and frozen parameters.
 
 ### `benchmark.metric.selection`
@@ -1355,8 +1355,8 @@ evaluation stage. Every benchmark metric uses `mode="recompute"`.
 
 The evaluation stage uses `StoredInputRef` at `Eval.TEST` and at every name in
 `split_inputs`. `BenchmarkSpec.test` equals the pointer in
-`EvaluateSpec.inputs[Eval.TEST]`. Each `BenchmarkSpec.splits[name]` equals the
-pointer in `EvaluateSpec.inputs[name]`.
+`EvalSpec.inputs[Eval.TEST]`. Each `BenchmarkSpec.splits[name]` equals the
+pointer in `EvalSpec.inputs[name]`.
 
 ### `benchmark.metric.result`
 
@@ -1394,7 +1394,7 @@ Section 4.
 | Stage drafts | Replace objective `MetricDraft` values with `MetricObjectiveDraft`. |
 | Stage protocol | Add `MetricObjectiveSpec` to embed, train, and evaluate specs. |
 | Experiment API | Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, `ExperimentDraft`, and public constructors. Each variant owns level labels, stages, and its estimator. Draft artifact paths remain relative to the selected run root. Derive metrics from all variant stages. |
-| Experiment protocol | Remove `DownloadVariantStageParams` from `VariantStageParams`; derive entries from build, embed, train, and evaluate stages. |
+| Experiment protocol | Remove `DownloadVariantStageParams` from `VariantStageParams`; derive entries from build, embed, train, and eval stages. |
 | Run-plan API | Replace repeated experiment, variant, replicate, seed, stages, and estimator values with `ExperimentDraft` plus selected variant and replicate IDs. |
 | Benchmark API | Add `BenchmarkDraft`; separate selected metrics from optional criteria. |
 | Benchmark protocol | Add `metric_ids` and `criteria`; replace criterion-only metric receipts with `BenchmarkMetricResult`. |
@@ -1454,18 +1454,18 @@ benchmark_split = viper.run_artifact(
     artifact="holdout",
 )
 
-evaluation = viper.stage(
-    evaluate,
-    params=EVALUATE_PARAMS,
+eval_stage = viper.stage(
+    eval_model,
+    params=EVAL_PARAMS,
     inputs={
         Eval.MODEL: training.artifacts[Train.MODEL],
         Eval.TEST: benchmark_test,
         "holdout": benchmark_split,
     },
-    artifacts=EVALUATION_ARTIFACTS,
+    artifacts=EVAL_ARTIFACTS,
     objective=viper.min(evaluation_loss_metric),
     metrics=(evaluation_accuracy_metric,),
-    evaluation_id="holdout",
+    eval_id="holdout",
     split_inputs=("holdout",),
 )
 
@@ -1478,7 +1478,7 @@ experiment = viper.experiment(
                 "download": download,
                 "embed_training": training_embeddings,
                 "train": training,
-                "evaluate": evaluation,
+                "eval": eval_stage,
             },
             estimator=training.artifacts[Train.MODEL],
         ),
@@ -1490,7 +1490,7 @@ experiment = viper.experiment(
 
 benchmark = viper.benchmark(
     benchmark_id="tiny_holdout",
-    evaluation_id="holdout",
+    eval_id="holdout",
     test=benchmark_test,
     splits={"holdout": benchmark_split},
     metrics=(evaluation_loss_metric, evaluation_accuracy_metric),
@@ -1611,9 +1611,9 @@ frozen parameter object.
 - [ ] Derive stage metric IDs from the objective and additional metric drafts
       during Python-plan compilation.
 - [ ] Verify objective mode, direction, and measurement evidence.
-- [ ] Update the complete train and evaluate example.
+- [ ] Update the complete train and eval example.
 
-**Commit boundary:** train and evaluate stages identify a measured objective and
+**Commit boundary:** train and eval stages identify a measured objective and
 its improvement direction.
 
 ### Phase 3. Experiment authoring

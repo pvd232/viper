@@ -155,7 +155,7 @@ The target frozen hierarchy places project callable identity on
 class BaseSpec(ProtocolModel):
     kind: str
     schema_version: Literal[1] = 1
-    environment: EnvironmentSpec | None = None
+    env: EnvSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
     artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
 
@@ -173,8 +173,8 @@ class DownloadSpec(BaseSpec):
 ```
 
 `DownloadSpec` therefore carries the request map, HTTP implementation, policy,
-environment override, metric IDs, and artifact declarations. Build, embed,
-train, and evaluate inherit `ParameterizedSpec` and retain project
+`env` override, metric IDs, and artifact declarations. Build, embed, train,
+and eval stages inherit `ParameterizedSpec` and retain project
 implementation and parameter-model identity.
 
 ```text
@@ -267,7 +267,7 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
 
 The coordinated authoring contract moves `source`, `startup`, `invocation`,
 and `command` from `ResolvedBaseSpec` to `ResolvedParameterizedSpec`. The
-download record retains `environment`, `execution_context`, `artifacts`, and
+download record retains `env`, `execution_context`, `artifacts`, and
 `completed_at`. Each `ResolvedHttpRetrieval` supplies request, HTTP implementation,
 response, body, and timing evidence. See
 [`automatic-input-resolution.md`](automatic-input-resolution.md#target-frozen-download-and-resolved-stage-models).
@@ -496,7 +496,7 @@ the same identity once more before sealing the stage snapshot.
 | Stage snapshot | Retrieval and artifact loops use different keys | Both loops use the same key | `snapshot_files` stores one body entry |
 | Verification | HTTP body and artifact verification run independently | `download.receipt_artifact_identity` joins the two records | Verifier proves one HTTP body became the named artifact |
 | Stage execution | Download launches a project worker after retrieval | The attempt process retrieves, verifies, publishes, and resolves the artifact | Download becomes a runner-owned stage |
-| Resolved stage | `ResolvedDownloadSpec` carries project source, startup, invocation, and command fields through `ResolvedBaseSpec` | Those fields move to `ResolvedParameterizedSpec`; download retains runner environment, execution context, retrievals, artifacts, and completion | Resolved evidence matches the runtime owner |
+| Resolved stage | `ResolvedDownloadSpec` carries project source, startup, invocation, and command fields through `ResolvedBaseSpec` | Those fields move to `ResolvedParameterizedSpec`; download retains runner `env`, execution context, retrievals, artifacts, and completion | Resolved evidence matches the runtime owner |
 | Fixtures and examples | Request names and artifact names may differ | Each download fixture uses the same name in both maps | Tests state the new public rule |
 | Documentation | External roots describes the HTTP receipt and later artifact | External roots links to this contract | One owner for the schema and execution detail |
 | Storage publication | Local publication writes the completed stage snapshot through `LocalArtifactStore` | The destination-aware publisher writes the shared snapshot file once to local storage or Viper Cloud | Receipt and artifact remain joined at either destination |
@@ -620,6 +620,6 @@ document. `download.receipt_artifact_identity` rejects that unequal reference.
 | Preserved | A later stage selects a download artifact through `FutureInputRef` or `StoredInputRef`. | Same-run and prior-run input verification tests |
 | Changed | Download stages accept matching request and artifact keys with one single-file artifact per request. | `DownloadSpec` validator tests |
 | Changed | Retrieval bodies move from standalone `ResolvedFileRef` values to `SnapshotFileRef` values. | Resolved-document parser and verifier tests |
-| Changed | Download execution belongs to the attempt process; project-stage invocation receipts cover build, embed, train, and evaluate. | Resolved-stage schema and attempt-execution tests |
+| Changed | Download execution belongs to the attempt process; project-stage invocation receipts cover build, embed, train, and eval stages. | Resolved-stage schema and attempt-execution tests |
 | Introduced | Retrieval receipt and resolved artifact share one exact `SnapshotFileRef`. | `download.receipt_artifact_identity` acceptance and rejection tests |
 | Strengthened | The attempt verifier proves that the runner published the verified response at the path shared by the retrieval receipt and artifact record. | Runner-custody and receipt-artifact identity assertions |

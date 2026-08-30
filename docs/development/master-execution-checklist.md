@@ -45,7 +45,7 @@ run = viper.plan(
         "train": training,
     },
     source=source,
-    environment=environment,
+    env=env,
     reproducibility=reproducibility,
     benchmark=benchmark,
 )
@@ -184,10 +184,10 @@ focused test. The matching phase contains one `implements` marker and one
 exact reviewed contract bytes. A contract edit requires another checklist
 review and a new digest.
 
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=ce7d3b9a7a8daf90448081afd46280f9f2ef4bdc0e091e025d99dd8a570ca0e1 -->
-<!-- contract-baseline: external-input-roots.md sha256=f7785c08c85b7a6f3584420e1d45a815cf9b8c639e6c2be70a863413d90c5654 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=caabcea0d8eaa1f0e82687d02f17ec3c8349bdd8b175768785abd9ea9beb1e8c -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=56dfe4ba695857d59f9b7c768a54c74062926f24128f62c301e03079929bcab1 -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=3de87a81ddc5e4dc7a9c180dd071141958d61304c8779d9832a6967098907e80 -->
+<!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=28e6e83a4d41069c5d7e7bf3db2792b4f53b92a6401a1a5eb725080a4001d233 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=3d7159e9c82addf02f6fa90afda1ca544b991d231ea563b61f23880702374e9b -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=0abdc07c02e0487c06c60be90b6c3027aba0e9e1be20361c9bdf1cb6ed297f0d -->
 <!-- contract-baseline: remote-storage.md sha256=5f7a7c483973f03cb434d9fdfbc63633a21bb7310c138d7ef4807cb8bf377e58 -->
 
@@ -685,7 +685,7 @@ A stored input follows its pointer to the producer snapshot.
 ### 10.3 Objectives and verification
 
 - [ ] Add `MetricObjectiveSpec`. <!-- implements: UMD-03 -->
-- [ ] Add required objectives to `TrainSpec` and `EvaluateSpec`.
+- [ ] Add required objectives to `TrainSpec` and `EvalSpec`.
 - [ ] Add an optional objective to `EmbedSpec`.
 - [ ] Put the objective metric first in `metric_ids`.
 - [ ] Require live mode for training objectives.
@@ -736,11 +736,57 @@ writing stage YAML by hand.
 - [ ] Replace private constants in `src/viper/_schema.py`.
 - [ ] Change validators, workers, tests, fixtures, and docs to the new values.
 - [ ] Export `viper.keys` and `viper.params` from `src/viper/__init__.py`.
+- [ ] Rename `parameters.Evaluate`, `EvaluateSpecDraft`, `EvaluateSpec`,
+      `ResolvedEvaluateSpec`, `EvaluateVariantStageParams`, and `EvaluationId`
+      to `parameters.Eval`, `EvalSpecDraft`, `EvalSpec`, `ResolvedEvalSpec`,
+      `EvalVariantStageParams`, and `EvalId`.
+- [ ] Rename `evaluation_id` to `eval_id` and the persisted stage kind from
+      `"evaluate"` to `"eval"`.
+- [ ] Rename the `DataRole` value `"evaluation"` to `"eval"` and the artifact
+      directory `artifacts/evaluations/` to `artifacts/evals/`.
+- [ ] Replace `@viper.evaluate(params=...)` with `@viper.eval(params=...)`.
+- [ ] Rename example subclasses from `EvaluateParams(viper.params.Evaluate)`
+      to `EvalParams(viper.params.Eval)`.
+- [ ] Apply the `Eval` vocabulary in `src/viper/parameters.py`,
+      `src/viper/stages.py`, `src/viper/experiments.py`,
+      `src/viper/_schema.py`, public exports, workers, validators, fixtures,
+      tests, and documentation.
+- [ ] Delete the retired evaluation-stage names. English prose continues to
+      use “evaluation” and the verb “evaluate.”
 
-### 11.2 Decorators and declarations
+### 11.2 `env` vocabulary
+
+- [ ] Rename `PythonEnvironmentSpec`, `GCEEnvironmentSpec`,
+      `ResolvedGCEEnvironment`, `LocalEnvironmentSpec`,
+      `ResolvedLocalEnvironment`, `EnvironmentSpec`, and
+      `ResolvedEnvironment` to `PythonEnvSpec`, `GCEEnvSpec`,
+      `ResolvedGCEEnv`, `LocalEnvSpec`, `ResolvedLocalEnv`, `EnvSpec`, and
+      `ResolvedEnv` in `src/viper/runtime.py`.
+- [ ] Rename `EnvironmentSecretRef` to `EnvSecretRef` in
+      `src/viper/http.py`. Change its discriminator from `kind="environment"`
+      to `kind="env"`.
+- [ ] Rename protocol fields from `environment` to `env` on `RunSpec`,
+      `BaseSpec`, `ResolvedBaseSpec`, and `ProcessStartupReceipt`.
+- [ ] Rename `python_environment` to `python_env` on runtime specs and
+      `MetricExecutionReceipt`.
+- [ ] Rename `observe_python_environment()` to `observe_python_env()` and
+      `resolve_environment()` to `resolve_env()`.
+- [ ] Rename parameters and local variables that hold these values to `env`,
+      `effective_env`, or `resolved_env` in `src/viper/authoring.py`,
+      `src/viper/preflight.py`, `src/viper/execution/`,
+      `src/viper/_verification/`, and `src/viper/_workers/`.
+- [ ] Change persisted protocol keys from `environment` to `env` and from
+      `python_environment` to `python_env` in fixtures and generated YAML.
+- [ ] Change verification codes from `environment.*` to `env.*`.
+- [ ] Update public exports, tests, and documentation. Keep ordinary English,
+      `environment.yml`, and `os.environ` unchanged.
+- [ ] Delete the retired names. The alpha API exposes one spelling for each
+      concept.
+
+### 11.3 Decorators and declarations
 
 - [ ] Add `@viper.build(params=...)`, `@viper.embed(params=...)`,
-      `@viper.train(params=...)`, and `@viper.evaluate(params=...)`.
+      `@viper.train(params=...)`, and `@viper.eval(params=...)`.
 - [ ] Retain the attached `StageDefinition` and source verification.
 - [ ] Replace `@viper.http_transport(transport_id=..., parameter_model=...)`
       with `@viper.http(id=..., params=...)`.
@@ -756,11 +802,11 @@ writing stage YAML by hand.
       compile it into `HttpImplementationSpec`.
       <!-- implements: AIR-02 -->
 
-### 11.3 Stage drafts
+### 11.4 Stage drafts
 
 - [ ] Replace `StageDraft(stage_id, spec_source)` with `StageDraft(spec)`.
 - [ ] Add `BaseSpecDraft`, `InternalSpecDraft`, `BuildSpecDraft`,
-      `EmbedSpecDraft`, `TrainSpecDraft`, and `EvaluateSpecDraft`.
+      `EmbedSpecDraft`, `TrainSpecDraft`, and `EvalSpecDraft`.
       <!-- implements: AIR-03 -->
 - [ ] Add `objective` and `metrics` fields to the applicable stage drafts and
       compile them into `MetricObjectiveSpec` and `metric_ids`.
@@ -786,10 +832,14 @@ for a second replicate must leave the draft unchanged.
 
 </details>
 
-### 11.4 Focused proof
+### 11.5 Focused proof
 
 - [ ] Rewrite `tests/test_authoring.py` around Python drafts.
 - [ ] Add decorator and key tests to `tests/test_public_api.py`.
+- [ ] Add env type, field, function, serialization, and verification-code
+      cases to `tests/test_public_api.py`, `tests/test_protocol.py`,
+      `tests/test_preflight.py`, `tests/test_cloud_execution.py`,
+      `tests/test_run_execution.py`, and `tests/test_verification.py`.
 - [ ] Assert that `viper.artifact()` returns `SingleFileArtifactDraft`, that
       `viper.artifact(kind="bundle")` returns `BundleArtifactDraft`, and that a
       download draft rejects the bundle form.
@@ -799,8 +849,12 @@ for a second replicate must leave the draft unchanged.
 ```bash
 python -m pytest \
   tests/test_authoring.py \
+  tests/test_cloud_execution.py \
+  tests/test_preflight.py \
   tests/test_public_api.py \
-  tests/test_protocol.py -q
+  tests/test_protocol.py \
+  tests/test_run_execution.py \
+  tests/test_verification.py -q
 ```
 
 **Commit boundary:** `Add Python stage and artifact drafting`
@@ -1192,6 +1246,7 @@ package executes.
 - [ ] Generate complete parameters, metrics, diagnostics, loaders, HTTP,
       experiment, variant, replicate, run, and benchmark declarations.
 - [ ] Use `Train` and `Eval` keys.
+- [ ] Use `env`, `eval`, and `proj` in generated Python and persisted fields.
 - [ ] Use run-relative artifact draft paths.
 - [ ] Remove `parameters.Download`, `DownloadContext`, and `download_stage`.
 - [ ] Make the generated project freeze, execute, verify, benchmark, and
@@ -1209,6 +1264,9 @@ package executes.
 - [ ] Update `docs/reference/versioning.md` if alpha compatibility language
       changes.
 - [ ] Update `docs/README.md` and release evidence.
+- [ ] Keep the complete authoring example on `proj_a`, `proj_b`, `proj_bias`,
+      `min_proj_norm`, and `proj_norm`. Reject `projection` in Python
+      identifiers.
 - [ ] Remove all retired sync, offload, `HttpSource`, download callable,
       `MetricKind`, and old key references.
       <!-- implements: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
