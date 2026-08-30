@@ -87,7 +87,7 @@ class CatalogRun(BaseModel):
     experiment_id: ExperimentId
     variant_id: VariantId
     replicate_id: ReplicateId
-    status: Literal["succeeded", "failed"]
+    status: Literal["succeeded", "failed", "cancelled"]
     source_commit: GitCommit
     env_sha256: SHA256
     reproducibility_sha256: SHA256
@@ -164,7 +164,7 @@ class RunQuery(BaseModel):
     experiment_id: ExperimentId | None = None
     variant_ids: tuple[VariantId, ...] = ()
     replicate_ids: tuple[ReplicateId, ...] = ()
-    statuses: tuple[Literal["succeeded", "failed"], ...] = ()
+    statuses: tuple[Literal["succeeded", "failed", "cancelled"], ...] = ()
     source_commit: GitCommit | None = None
     env_sha256: SHA256 | None = None
     reproducibility_sha256: SHA256 | None = None
@@ -184,6 +184,7 @@ class ArtifactQuery(BaseModel):
     artifact_names: tuple[ArtifactName, ...] = ()
     data_roles: tuple[DataRole, ...] = ()
     sha256: SHA256 | None = None
+    source_commit: GitCommit | None = None
     limit: int = Field(default=50, ge=1, le=500)
     cursor: str | None = None
 
@@ -195,18 +196,40 @@ class MeasurementQuery(BaseModel):
     variant_ids: tuple[VariantId, ...] = ()
     stage_ids: tuple[StageId, ...] = ()
     metric_ids: tuple[MetricId, ...] = ()
+    input_sha256: SHA256 | None = None
+    env_sha256: SHA256 | None = None
     minimum: float | None = Field(default=None, allow_inf_nan=False)
     maximum: float | None = Field(default=None, allow_inf_nan=False)
     origins: tuple[Literal["executed", "reused"], ...] = ()
     limit: int = Field(default=50, ge=1, le=500)
     cursor: str | None = None
+
+
+class BenchmarkQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    experiment_id: ExperimentId | None = None
+    variant_ids: tuple[VariantId, ...] = ()
+    benchmark_ids: tuple[BenchmarkId, ...] = ()
+    statuses: tuple[Literal["verified", "passed", "failed"], ...] = ()
+    metric_ids: tuple[MetricId, ...] = ()
+    source_commit: GitCommit | None = None
+    env_sha256: SHA256 | None = None
+    input_sha256: SHA256 | None = None
+    artifact_sha256: SHA256 | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
 ```
 
-The result models are `RunPage`, `ArtifactPage`, and `MeasurementPage`. Each
-contains an `items` tuple and `next_cursor: str | None`. Runs sort by
+The result models are `RunPage`, `ArtifactPage`, `MeasurementPage`, and
+`BenchmarkPage`. Each contains an `items` tuple and
+`next_cursor: str | None`. Runs sort by
 `completed_at`, then `run_id`. Artifacts sort by `run_id`, `stage_id`, and
-`artifact_name`. Measurements sort by `run_id`, `stage_id`, `metric_id`, epoch,
-step, and time.
+`artifact_name`. Measurements sort by `run_id`, `stage_id`, `metric_id`, then
+by non-null epoch, non-null step, `measured_at`, and the immutable measurement
+reference. An aggregate measurement with `epoch=None` or `step=None` follows
+measurements with a numeric value in that position. Benchmarks sort by
+`benchmark_id`, `run_id`, and immutable result reference.
 
 ## 6. Catalog storage and refresh
 
@@ -235,8 +258,8 @@ The database has these version-1 tables:
 
 ```text
 discover canonical local terminal paths and supplied ResolvedRunRef values
--> resolve each path to an immutable ResolvedRunRef
--> call verify_run_result()
+-> discover the local knowledge head and supplied knowledge manifest heads
+-> verify each run and walk each manifest chain
 -> extract normalized rows
 -> write a new database in .viper/
 -> fsync the database
@@ -246,8 +269,9 @@ discover canonical local terminal paths and supplied ResolvedRunRef values
 An invalid run enters `sources` with its rejection. Trusted run, artifact,
 measurement, benchmark, lineage, and reuse-key tables accept verified sources.
 
-Catalog writes stay inside its SQLite database. A stale or corrupt catalog can
-be deleted and rebuilt from immutable VIPER records.
+Catalog writes stay inside its SQLite database and derived vector-index
+directory. A stale or corrupt catalog can be deleted and rebuilt from immutable
+VIPER records and knowledge manifest heads.
 
 ## 7. Public catalog interface
 
@@ -257,6 +281,7 @@ class Catalog:
         self,
         *,
         runs: tuple[ResolvedRunRef, ...] = (),
+        knowledge: tuple[ResolvedFileRef, ...] = (),
     ) -> CatalogRefreshResult: ...
 
     def runs(self, query: RunQuery = RunQuery()) -> RunPage: ...
@@ -271,15 +296,23 @@ class Catalog:
         query: MeasurementQuery = MeasurementQuery(),
     ) -> MeasurementPage: ...
 
+    def benchmarks(
+        self,
+        query: BenchmarkQuery = BenchmarkQuery(),
+    ) -> BenchmarkPage: ...
+
     def lineage(self, run: ResolvedRunRef) -> RunLineage: ...
+
+    @property
+    def knowledge(self) -> KnowledgeCatalog: ...
 
 
 def catalog(*, root: Path = Path.cwd()) -> Catalog: ...
 ```
 
-The typed API adds `catalog_refresh`, `search_runs`, `search_artifacts`, and
-`search_measurements`. Their request and success models contain the same query
-and page models.
+The typed API adds `catalog_refresh`, `search_runs`, `search_artifacts`,
+`search_measurements`, and `search_benchmarks`. Their request and success
+models contain the same query and page models.
 
 ## 8. MCP server
 
@@ -324,6 +357,7 @@ get_schema
 lineage
 plan_diff
 search_artifacts
+search_benchmarks
 search_measurements
 search_runs
 status
@@ -337,6 +371,7 @@ verify_run
 Execution access adds:
 
 ```text
+catalog_refresh
 execute_benchmark
 preflight
 restore
@@ -362,8 +397,9 @@ MCP arguments
 
 The default server exposes the read tool set. `--access execute` adds the
 execution tool set and grants the local MCP client the same authority as the
-user running the CLI process. The server fixes one repository root at startup
-and rejects paths outside it.
+user running the CLI process. `catalog_refresh` belongs to execution access
+because it replaces the local derived database. The server fixes one
+repository root at startup and rejects paths outside it.
 
 Streamable HTTP stays deferred until VIPER defines authentication,
 authorization, rate limits, and deployment ownership. The MCP specification
@@ -400,6 +436,25 @@ measurements. `RunQuery(input_sha256=...)` finds both runs.
 `MeasurementQuery(metric_ids=("test_loss",))` returns both values with their
 variant IDs and immutable run references.
 
+`ArtifactQuery(source_commit=...)` finds artifacts produced from one source
+commit. `MeasurementQuery(input_sha256=..., env_sha256=...)` finds metric
+values observed with one input and environment.
+`BenchmarkQuery(artifact_sha256=...)` finds every benchmark result that
+evaluated one artifact.
+
+### Null ordering
+
+One fixture contains step measurements, an epoch summary, and a stage summary
+for the same metric. Two catalog rebuilds return the numeric steps first, then
+the epoch summary, then the stage summary. Pagination across those boundaries
+returns each measurement once.
+
+### Atomic replacement
+
+A reader holds the old catalog open while refresh builds and replaces the new
+database. Every query sees either the complete old database or the complete
+new database. The replacement keeps partial state invisible to readers.
+
 ### MCP schema equality
 
 The MCP client lists tools twice and receives the same order. Every tool input
@@ -416,9 +471,9 @@ outside the root fixed at startup.
 
 | Surface | Required change |
 | --- | --- |
-| `src/viper/catalog.py` | Add the derived models, SQLite schema, refresh, exact queries, and stage-reuse lookup. |
+| `src/viper/catalog.py` | Add the derived models, SQLite schema, refresh, exact run, artifact, measurement, and benchmark queries, and stage-reuse lookup. |
 | `src/viper/inspection.py` | Share normalized lineage extraction with catalog refresh. |
-| `src/viper/api.py` | Add catalog request and success models and operations. |
+| `src/viper/api.py` | Add catalog refresh and run, artifact, measurement, and benchmark search request and success models. |
 | `src/viper/_api/handlers.py` | Route catalog requests through `Catalog`. |
 | `src/viper/mcp.py` | Generate tools from typed operation registries and dispatch each call. |
 | `src/viper/cli.py` | Add `catalog refresh`, catalog search commands, and `mcp --access`. |
@@ -444,7 +499,7 @@ wrapper converts only the MCP result envelope.
 
 1. Add catalog models and version-1 SQLite schema.
 2. Extract rows from one verified run.
-3. Add atomic rebuild, pagination, and exact queries.
+3. Add atomic rebuild, concurrent-reader proof, pagination, null ordering, and exact queries.
 4. Add the stage-reuse lookup consumed by the next contract.
 5. Add catalog typed operations and CLI commands.
 6. Add the optional MCP dependency and stdio server.

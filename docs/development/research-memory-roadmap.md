@@ -2,12 +2,13 @@
 
 VIPER's long-term research memory should begin with verified experiments, add
 versioned scientific labels, and derive comparisons within explicit contexts.
-This document records that direction. The current contract migration ends
-before this work begins.
+The deterministic foundation now belongs to the active contract migration.
+Learned representations, literature ingestion, outcome models, and continual
+learning remain later research work.
 
 ## 1. Status
 
-**Status:** deferred architecture roadmap.
+**Status:** active foundation with deferred learned layers.
 
 The current migration supplies three prerequisites:
 
@@ -17,8 +18,18 @@ immutable run evidence
 -> MCP access to exact queries and operations
 ```
 
-The research-memory system begins after those three layers pass their
-acceptance tests.
+[`experiment-knowledge-primitives.md`](experiment-knowledge-primitives.md)
+adds the fourth layer in Phases 16 and 17:
+
+```text
+versioned ontology and assignments
+-> controlled modulations and paired effects
+-> diagnostic signatures and evidence-backed journal assertions
+-> exact graph filters and optional vector indexes
+```
+
+The learned work in Sections 7 and 8 begins after these four layers pass their
+acceptance tests and produce reviewed training and evaluation records.
 
 ## 2. Intended use
 
@@ -71,7 +82,8 @@ inference strategy
 compute and precision regime
 ```
 
-Assignments must distinguish three origins:
+The active primitive contract defines the exact ontology, target, and
+assignment models. Assignments distinguish three origins:
 
 ```text
 declared
@@ -90,7 +102,9 @@ historical experiment record.
 ## 5. Experiment modulations and impact
 
 An experiment modulation changes one or more primitives between comparable
-runs. The graph must store the changed fields and the comparison set.
+runs. The active primitive contract stores the changed fields, comparison
+context, paired measurements, numeric effect, uncertainty, and versioned
+impact policy.
 
 `high`, `medium`, and `low` require a stated context. An impact classification
 needs these inputs:
@@ -131,6 +145,9 @@ The search system can use three filters in order:
 
 The third filter suggests candidates for review. An exact identity or explicit
 equivalence rule performs rejection.
+
+The active primitive contract implements this order through exact catalog
+fields, graph edges, and one optional HNSW index per vector view.
 
 An architecture becomes clearly unpromising only after a versioned exclusion
 rule evaluates enough comparable evidence. The rule must state its minimum
@@ -186,34 +203,49 @@ retrieve exact relevant evidence
 
 ## 9. Planned interfaces
 
-The provenance catalog should eventually support graph and semantic queries
-through the same Python, CLI, and MCP surfaces:
+Phases 16 and 17 add graph and semantic queries through the same Python, CLI,
+and MCP surfaces:
 
 ```text
 find experiments by primitive labels
 compare one modulation across matched runs
 retrieve negative results in one search region
-find papers connected to one method family
 return evidence for one proposed experiment
 record reviewed labels and finding policies
 ```
 
-Write operations require a separate authority contract. The current MCP
-contract exposes exact VIPER operations and catalog reads. Scientific-label
-creation and editing begin with that later authority contract.
+Knowledge publication uses execute access. Search uses read access. Literature
+queries begin after the literature records have their own contract.
 
-## 10. Deferred implementation sequence
+## 10. Build sequence
 
-1. Define the versioned ontology and label-assignment records.
-2. Extract protocol evidence into graph nodes and edges.
-3. Add exact comparison strata and numeric effect estimates.
-4. Add versioned impact and exclusion policies.
-5. Add primary-source literature ingestion and claim records.
-6. Add graph and semantic retrieval.
-7. Add MCP read tools for the new queries.
-8. Add reviewed write operations and authority rules.
-9. Evaluate experiment proposal quality and duplicate avoidance.
-10. Train domain-specific classifiers or policies from reviewed traces.
+### Active in the current migration
+
+1. Define the versioned primitive ontology and exact assignment records.
+2. Define controlled `Modulation`, paired `EffectEstimate`, `ImpactPolicy`, and
+   `ImpactAssessment` records.
+3. Extract deterministic `DiagnosticSignature` records.
+4. Add typed `JournalAssertion` records with immutable evidence links.
+5. Build exact filters and graph traversal.
+6. Keep diagnostic vectors and journal-text vectors in separate views.
+7. Add one optional HNSW index per vector view.
+8. Record reviewed retrieval judgments against exact query and candidate
+   vectors.
+9. Expose publication and search through Python, typed API, CLI, and MCP.
+
+### Deferred until reviewed evidence exists
+
+1. Train and evaluate primitive classifiers from reviewed assignments.
+2. Train aspect-aware and multi-view representations against held-out retrieval
+   judgments.
+3. Add primary-source literature and claim records.
+4. Train context-conditioned outcome models on controlled comparison records.
+5. Evaluate experiment acquisition against duplicate rejection, proposal
+   quality, cost, and verified outcome improvement.
+6. Train domain-specific policies from reviewed decision traces.
+
+Each deferred step starts only after its contract names the immutable training
+set, held-out evaluation set, metric, baseline, and acceptance threshold.
 
 ## 11. Remaining platform work
 
@@ -227,6 +259,8 @@ The following platform capabilities also remain outside the current migration:
 - Local and cloud archive compression with verified restore.
 - Cross-provider storage migration and mirroring.
 - Adaptive search, Bayesian optimization, and distributed scheduling.
+- Learned primitive classifiers, vector representations, outcome models,
+  acquisition policies, and continual-learning policies.
 
 These capabilities can consume the immutable records, catalog, and MCP layer.
 They preserve the evidence model defined by the current contracts.

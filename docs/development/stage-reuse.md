@@ -73,7 +73,6 @@ class ParameterizedSpecDraft(BaseSpecDraft):
 class ParameterizedSpec(BaseSpec):
     implementation: StageImplementationRef
     parameter_model: ParameterModelRef
-    params: parameters.ParameterSet
     reuse: StageReuseMode = "never"
 ```
 
@@ -293,6 +292,7 @@ resolve and verify current stage inputs
 -> query Catalog.stage_reuse_keys
 -> choose the newest completed candidate; break ties by run ID and attempt ID
 -> verify the complete source run
+-> require source_stage.completion.kind == "executed"
 -> rebuild and compare the source StageReuseKey
 -> map each source artifact file to the target artifact path
 -> publish StageReuseReceipt as a standalone file
@@ -302,9 +302,11 @@ resolve and verify current stage inputs
 ```
 
 The catalog row supplies a candidate. Full source verification grants reuse.
-A stale row causes candidate rejection and ordinary execution. A candidate
-verification failure removes the row during the next refresh and also falls
-back to ordinary execution.
+A reused completion remains searchable lineage evidence. Candidate lookup
+accepts only an executed completion as its source. This rule keeps every reuse receipt joined directly to
+one stage process that actually produced the selected bytes. A stale row or a
+failed candidate verification causes ordinary execution. Refresh removes the
+invalid row the next time it rebuilds the catalog.
 
 ### Snapshot publication
 
@@ -312,6 +314,14 @@ The storage publisher adds one operation:
 
 ```python
 class SnapshotPublisher(Protocol):
+    def publish(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        files: Mapping[RepoRelPath, Path],
+    ) -> StageResultSnapshot: ...
+
     def publish_reuse(
         self,
         *,
@@ -357,15 +367,16 @@ The verifier accepts a reused stage only after all of these checks pass:
 3. `source_run` verifies completely and succeeded.
 4. `source_attempt` is that run's successful attempt.
 5. `source_stage` occurs in that attempt.
-6. Rebuilding the key from the source stage equals `StageReuseReceipt.key`.
-7. Rebuilding the key from the target stage and resolved target inputs equals
+6. `source_stage.completion.kind` equals `"executed"`.
+7. Rebuilding the key from the source stage equals `StageReuseReceipt.key`.
+8. Rebuilding the key from the target stage and resolved target inputs equals
    the same key.
-8. Every source file belongs to `source_stage.snapshot`.
-9. Every target file belongs to the target stage snapshot.
-10. Source and target digest and byte count match.
-11. Artifact names, kinds, loaders, data roles, and normalized paths match.
-12. Metric evidence covers every target metric ID exactly once.
-13. Every source measurement and verification receipt belongs to the verified
+9. Every source file belongs to `source_stage.snapshot`.
+10. Every target file belongs to the target stage snapshot.
+11. Source and target digest and byte count match.
+12. Artifact names, kinds, loaders, data roles, and normalized paths match.
+13. Metric evidence covers every target metric ID exactly once.
+14. Every source measurement and verification receipt belongs to the verified
     source attempt and matches the target `MetricSpec` digest.
 
 ## 10. Acceptance cases
@@ -410,6 +421,13 @@ Full verification rejects the candidate. VIPER runs the target stage.
 
 The candidate run used reuse. The independent confirmation executes every
 stage and publishes new stage snapshots.
+
+### Reused source candidate
+
+The catalog contains an executed completion and a newer reused completion with
+the same key. Candidate selection skips the reused completion and selects the
+executed completion. An absent valid executed completion sends the target stage
+through ordinary execution.
 
 ## 11. Propagation
 

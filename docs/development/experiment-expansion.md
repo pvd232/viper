@@ -166,6 +166,14 @@ def run_many(
 journals, terminal files, verification, and storage publication remain owned
 by that operation.
 
+`timeout_seconds` keeps the existing `viper.execution.run()` meaning. A
+positive value is passed unchanged to every run call and limits the wait for
+each stage or metric child process. A whole run or batch can last longer. When
+a child process reaches the limit, that run's batch
+entry receives `status="failed"` and the ordinary typed timeout failure. Other
+runs continue unless `stop_on_failure=True`. Python, typed API, and CLI entry
+points reject zero and negative values before starting any run.
+
 When `stop_on_failure=True`, the first observed failure prevents further plan
 starts. Every plan awaiting start receives `status="skipped"`.
 Runs already in progress finish and keep their actual result.
@@ -269,6 +277,14 @@ order.
 
 The first run fails with `stop_on_failure=True`. Every run awaiting start
 receives `status="skipped"` and a concrete reason.
+
+### Forwarded process timeout
+
+One run's stage process exceeds `timeout_seconds` while another run's processes
+complete within it. The first entry contains the typed timeout failure and the
+second succeeds. With `stop_on_failure=True`, the timeout prevents any later
+unstarted run from starting. Python, typed API, and CLI calls reject
+`timeout_seconds <= 0` with the same field error.
 
 ## 9. Propagation
 

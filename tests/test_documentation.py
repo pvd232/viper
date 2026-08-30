@@ -15,9 +15,7 @@ from viper.api import OPERATIONS
 ROOT = Path(__file__).parents[1]
 PROTOCOL = ROOT / "docs/reference/protocol.md"
 API_REFERENCE = ROOT / "docs/reference/api.md"
-AUTOMATIC_INPUT_RESOLUTION = (
-    ROOT / "docs/development/automatic-input-resolution.md"
-)
+AUTOMATIC_INPUT_RESOLUTION = ROOT / "docs/development/automatic-input-resolution.md"
 TRAINING_GUIDES = (
     ROOT / "README.md",
     API_REFERENCE,
@@ -36,6 +34,7 @@ IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/experiment-expansion.md",
     ROOT / "docs/development/provenance-catalog-mcp.md",
     ROOT / "docs/development/stage-reuse.md",
+    ROOT / "docs/development/experiment-knowledge-primitives.md",
 )
 
 _CONTRACT_REQUIREMENT = re.compile(
@@ -249,9 +248,7 @@ def _dotted_name(node: ast.AST) -> str | None:
 
 def _complete_authoring_blocks() -> tuple[str, ...]:
     """Return the marked end-to-end authoring and execution blocks."""
-    match = _COMPLETE_AUTHORING_EXAMPLE.search(
-        AUTOMATIC_INPUT_RESOLUTION.read_text()
-    )
+    match = _COMPLETE_AUTHORING_EXAMPLE.search(AUTOMATIC_INPUT_RESOLUTION.read_text())
     assert match is not None
     blocks = _python_blocks(match.group("body"))
     assert blocks
@@ -286,6 +283,25 @@ def _class_fields(node: ast.ClassDef) -> tuple[tuple[str, str | None, str | None
 def _class_bases(node: ast.ClassDef) -> tuple[str | None, ...]:
     """Describe the declared bases of one class."""
     return tuple(_normalized(base) for base in node.bases)
+
+
+def _class_methods(
+    node: ast.ClassDef,
+) -> tuple[tuple[str, str, str | None, tuple[str, ...]], ...]:
+    """Describe methods declared directly by one contract class."""
+    return tuple(
+        (
+            statement.name,
+            ast.unparse(statement.args).replace("viper.", ""),
+            _normalized(statement.returns),
+            tuple(
+                ast.unparse(decorator).replace("viper.", "")
+                for decorator in statement.decorator_list
+            ),
+        )
+        for statement in node.body
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+    )
 
 
 def _definitions(
@@ -328,6 +344,18 @@ def _protocol_definitions() -> tuple[dict[str, ast.ClassDef], dict[str, ast.AST]
                 if node.value is not None:
                     aliases[node.target.id] = node.value
     return classes, aliases
+
+
+def _contract_class_definitions() -> dict[str, list[tuple[Path, ast.ClassDef]]]:
+    """Collect every top-level class shown by the active contracts."""
+    classes: dict[str, list[tuple[Path, ast.ClassDef]]] = {}
+    for contract in IMPLEMENTATION_CONTRACTS:
+        for block in _python_blocks(contract.read_text()):
+            tree = ast.parse(block, filename=str(contract))
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef):
+                    classes.setdefault(node.name, []).append((contract, node))
+    return classes
 
 
 def _github_anchors(markdown: str) -> set[str]:
@@ -393,6 +421,247 @@ def test_protocol_type_aliases_match_their_defining_modules() -> None:
         if _normalized(source_aliases[name]) != _normalized(protocol_aliases[name])
     }
     assert mismatches == {}
+
+
+def test_repeated_contract_classes_have_identical_declarations() -> None:
+    """Reject two active contracts that assign different fields to one class."""
+    definitions = _contract_class_definitions()
+    repeated = {name: values for name, values in definitions.items() if len(values) > 1}
+
+    assert len(repeated) >= 25
+    mismatches = {}
+    for name, values in sorted(repeated.items()):
+        declarations = {
+            (_class_bases(node), _class_fields(node), _class_methods(node))
+            for _, node in values
+        }
+        if len(declarations) > 1:
+            mismatches[name] = {
+                path.name: (
+                    _class_bases(node),
+                    _class_fields(node),
+                    _class_methods(node),
+                )
+                for path, node in values
+            }
+
+    assert mismatches == {}
+
+
+def test_catalog_contract_exposes_every_promised_query_field() -> None:
+    """Bind catalog questions to exact typed filters and result methods."""
+    contract = ROOT / "docs/development/provenance-catalog-mcp.md"
+    classes = {
+        name: next(node for path, node in values if path == contract)
+        for name, values in _contract_class_definitions().items()
+        if any(path == contract for path, _ in values)
+    }
+    expected_fields = {
+        "RunQuery": {
+            "experiment_id",
+            "variant_ids",
+            "replicate_ids",
+            "statuses",
+            "source_commit",
+            "env_sha256",
+            "reproducibility_sha256",
+            "benchmark_id",
+            "input_sha256",
+            "artifact_sha256",
+            "limit",
+            "cursor",
+        },
+        "ArtifactQuery": {
+            "experiment_id",
+            "variant_ids",
+            "stage_ids",
+            "artifact_names",
+            "data_roles",
+            "sha256",
+            "source_commit",
+            "limit",
+            "cursor",
+        },
+        "MeasurementQuery": {
+            "experiment_id",
+            "variant_ids",
+            "stage_ids",
+            "metric_ids",
+            "input_sha256",
+            "env_sha256",
+            "minimum",
+            "maximum",
+            "origins",
+            "limit",
+            "cursor",
+        },
+        "BenchmarkQuery": {
+            "experiment_id",
+            "variant_ids",
+            "benchmark_ids",
+            "statuses",
+            "metric_ids",
+            "source_commit",
+            "env_sha256",
+            "input_sha256",
+            "artifact_sha256",
+            "limit",
+            "cursor",
+        },
+    }
+
+    assert {
+        name: {field for field, _, _ in _class_fields(classes[name])}
+        for name in expected_fields
+    } == expected_fields
+
+    catalog_methods = {
+        node.name
+        for node in classes["Catalog"].body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert {
+        "refresh",
+        "runs",
+        "artifacts",
+        "measurements",
+        "benchmarks",
+        "lineage",
+    } <= catalog_methods
+
+    text = contract.read_text()
+    assert "search_benchmarks" in text
+    assert "catalog_refresh` belongs to execution access" in text
+
+
+def test_knowledge_contract_exposes_exact_queries_and_tool_sets() -> None:
+    """Bind scientific searches and agent tools to exact public models."""
+    contract = ROOT / "docs/development/experiment-knowledge-primitives.md"
+    classes = {
+        name: next(node for path, node in values if path == contract)
+        for name, values in _contract_class_definitions().items()
+        if any(path == contract for path, _ in values)
+    }
+    expected_fields = {
+        "PrimitiveQuery": {
+            "ontology_id",
+            "ontology_versions",
+            "dimensions",
+            "primitive_ids",
+            "labels",
+            "limit",
+            "cursor",
+        },
+        "AssignmentQuery": {
+            "run",
+            "stage_ids",
+            "origins",
+            "primitive_ids",
+            "decisions",
+            "effective_only",
+            "limit",
+            "cursor",
+        },
+        "ModulationQuery": {
+            "baseline_runs",
+            "candidate_runs",
+            "dimensions",
+            "primitive_ids",
+            "context_sha256",
+            "limit",
+            "cursor",
+        },
+        "EffectQuery": {
+            "metric_ids",
+            "directions",
+            "primitive_ids",
+            "context_sha256",
+            "minimum_improvement",
+            "maximum_improvement",
+            "limit",
+            "cursor",
+        },
+        "ImpactQuery": {
+            "metric_ids",
+            "impacts",
+            "policy_ids",
+            "context_sha256",
+            "limit",
+            "cursor",
+        },
+        "DiagnosticQuery": {
+            "runs",
+            "stage_ids",
+            "metric_ids",
+            "limit",
+            "cursor",
+        },
+        "AssertionQuery": {
+            "kinds",
+            "statuses",
+            "evidence_kinds",
+            "primitive_ids",
+            "limit",
+            "cursor",
+        },
+        "RetrievalJudgmentQuery": {
+            "view_ids",
+            "aspects",
+            "minimum_relevance",
+            "reviewers",
+            "limit",
+            "cursor",
+        },
+        "SimilarityQuery": {
+            "view_id",
+            "view_version",
+            "values",
+            "primitive_ids",
+            "metric_ids",
+            "assertion_statuses",
+            "limit",
+        },
+    }
+
+    assert {
+        name: {field for field, _, _ in _class_fields(classes[name])}
+        for name in expected_fields
+    } == expected_fields
+
+    methods = {
+        node.name
+        for node in classes["KnowledgeCatalog"].body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert methods == {
+        "primitives",
+        "assignments",
+        "modulations",
+        "effects",
+        "impacts",
+        "diagnostics",
+        "assertions",
+        "retrieval_judgments",
+        "similar",
+    }
+
+    text = contract.read_text()
+    read_block = re.search(
+        r"MCP read mode adds these tools in name order:\n\n```text\n(.*?)\n```",
+        text,
+        re.S,
+    )
+    execute_block = re.search(
+        r"MCP execute mode adds:\n\n```text\n(.*?)\n```",
+        text,
+        re.S,
+    )
+    assert read_block is not None
+    assert execute_block is not None
+    assert read_block.group(1).splitlines() == sorted(read_block.group(1).splitlines())
+    assert execute_block.group(1).splitlines() == sorted(
+        execute_block.group(1).splitlines()
+    )
 
 
 def test_protocol_uses_renderer_safe_math_fences() -> None:
@@ -560,9 +829,7 @@ def test_complete_authoring_parameter_models_are_substantial_and_used() -> None:
 
     assert parameter_classes
     assert {
-        name: fields
-        for name, fields in parameter_classes.items()
-        if len(fields) < 5
+        name: fields for name, fields in parameter_classes.items() if len(fields) < 5
     } == {}
     assert {
         name: sorted(set(fields) - parameter_accesses)
@@ -582,9 +849,7 @@ def test_complete_authoring_example_comments_explain_each_handoff() -> None:
 
     assert len(comments.splitlines()) >= 30
     assert {
-        topic
-        for topic in COMPLETE_EXAMPLE_COMMENT_TOPICS
-        if topic not in comments
+        topic for topic in COMPLETE_EXAMPLE_COMMENT_TOPICS if topic not in comments
     } == set()
 
 
@@ -645,12 +910,13 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
     }
     assert set(baselines) == {contract.name for contract in IMPLEMENTATION_CONTRACTS}
     for contract in IMPLEMENTATION_CONTRACTS:
-        assert hashlib.sha256(contract.read_bytes()).hexdigest() == baselines[
-            contract.name
-        ]
+        assert (
+            hashlib.sha256(contract.read_bytes()).hexdigest()
+            == baselines[contract.name]
+        )
 
     phase_matches = tuple(_PHASE_HEADING.finditer(checklist))
-    assert len(phase_matches) == 15
+    assert len(phase_matches) == 18
     mappings: dict[str, dict[str, list[tuple[int, str]]]] = {
         "implements": {},
         "verifies": {},
@@ -670,13 +936,12 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
             for marker in _CHECKLIST_MAPPING.finditer(block):
                 role = marker.group("role")
                 requirements = tuple(
-                    value.strip()
-                    for value in marker.group("requirements").split(",")
+                    value.strip() for value in marker.group("requirements").split(",")
                 )
                 for requirement in requirements:
                     mappings[role].setdefault(requirement, []).append((phase, block))
 
-    assert set(phase_text) == set(range(1, 16))
+    assert set(phase_text) == set(range(1, 19))
 
     declared = set(declarations)
     assert set(mappings["implements"]) == declared
@@ -700,6 +965,45 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
             )
             or "**Contracts:** All." in owner_section
         ), requirement
+
+
+def test_contract_propagation_paths_enter_the_code_change_ledger() -> None:
+    """Require every concrete propagation owner in the authoritative ledger."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    missing: dict[str, list[str]] = {}
+    for contract in IMPLEMENTATION_CONTRACTS:
+        text = contract.read_text()
+        match = re.search(
+            r"^## \d+\. Propagation[^\n]*\n(?P<body>.*?)(?=^## |\Z)",
+            text,
+            re.M | re.S,
+        )
+        assert match is not None, contract.name
+        paths = {
+            value
+            for value in re.findall(r"`([^`]+)`", match.group("body"))
+            if value.startswith(("src/", "tests/")) or value == "pyproject.toml"
+        }
+        absent = sorted(path for path in paths if f"`{path}`" not in checklist)
+        if absent:
+            missing[contract.name] = absent
+
+    assert missing == {}
+
+
+def test_terminal_release_gate_follows_every_implementation_phase() -> None:
+    """Keep full repository and wheel validation after the last build phase."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    phases = tuple(_PHASE_HEADING.finditer(checklist))
+    assert phases
+    assert int(phases[-1].group("phase")) == 18
+    terminal = checklist[phases[-1].start() :]
+    earlier = checklist[: phases[-1].start()]
+
+    for command in ("make check", "make check-integration", "make check-release"):
+        assert command in terminal
+        assert command not in earlier
+    assert "Install the wheel with the `mcp` and `knowledge` extras" in terminal
 
 
 def test_master_checklist_names_existing_test_modules() -> None:

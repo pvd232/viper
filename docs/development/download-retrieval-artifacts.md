@@ -163,6 +163,7 @@ class BaseSpec(ProtocolModel):
 class ParameterizedSpec(BaseSpec):
     implementation: StageImplementationRef
     parameter_model: ParameterModelRef
+    reuse: StageReuseMode = "never"
 
 
 class DownloadSpec(BaseSpec):
