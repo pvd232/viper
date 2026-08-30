@@ -2514,6 +2514,13 @@ These items stay outside this implementation sequence:
   representations, context-conditioned outcome models, experiment-acquisition
   policies, and continual-learning policies in
   [`research-memory-roadmap.md`](research-memory-roadmap.md).
+- Global contract-system extraction after VIPER's contract and checklist
+  procedures pass their complete traceability and documentation gates. Classify
+  each rule as portable or VIPER-specific, extract the portable contracts,
+  schemas, validators, and skill evaluations into `/Users/machina/.agents`, and
+  establish parity case by case. Keep VIPER unchanged during the initial
+  extraction. Evaluate a project-profile conversion only after the global
+  system and VIPER both pass their own checks.
 
 ## 28. Current position
 
