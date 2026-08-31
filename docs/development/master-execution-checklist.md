@@ -288,7 +288,7 @@ a new digest.
 <!-- contract-baseline: contract-requirement-traceability.md sha256=2bf7c2512e5b3a9d993badc393c10c556e9557c16c37930fec544ea398154f72 -->
 
 <!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
-<!-- contract-baseline: system-impact-graph.md sha256=05372d54a632285afc8456d719afcad50f3d7fa44015606095a9fb0647fd2c3c -->
+<!-- contract-baseline: system-impact-graph.md sha256=566ead198e0abe516739d700545cb5b8bcb6a402981463a1d272f2e3156b5840 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
@@ -972,6 +972,9 @@ working-file edit must leave the immutable copy retrievable.
 - [ ] Ingest `ContractTraceabilityGraph` and preserve each requirement, rule,
       implementation-owner, and acceptance-test path. <!-- implements: SIG-04 -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.requirement.coverage state=planned owner=src/viper/system_graph.py:ingest_contract_traceability -->
+- [x] Keep the three system-impact DAGs aligned with their exact semantic
+      topology and color roles.
+      <!-- contract-implementation: requirement=SIG-04 rule=system.diagram.topology state=implemented owner=tests/test_documentation.py:test_system_impact_dags_preserve_semantic_topology -->
 - [ ] Run observed discovery under `SystemContextManifest`. Hold external
       inputs equal while recording imports, decorator registrations, registry
       entries, reflection targets, and subprocess entrypoints. Create one
@@ -1096,6 +1099,9 @@ component edge carries the sorted relation kinds crossing that pair.
       preserve every rule, implementation owner, and acceptance test from
       `ContractTraceabilityGraph`. <!-- verifies: SIG-04 -->
       <!-- contract-verification: requirement=SIG-04 rule=system.requirement.coverage state=planned test=tests/test_documentation.py:test_system_graph_preserves_contract_traceability -->
+- [x] In `tests/test_documentation.py`, parse the three system-impact DAGs and
+      require their exact edges, semantic node classes, palette, and link style.
+      <!-- contract-verification: requirement=SIG-04 rule=system.diagram.topology state=implemented test=tests/test_documentation.py:test_system_impact_dags_preserve_semantic_topology -->
 
 ```bash
 python -m pytest \

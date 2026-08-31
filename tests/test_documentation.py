@@ -37,6 +37,7 @@ MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist
 CONTRACT_TRACEABILITY = (
     ROOT / "docs/development/contract-requirement-traceability.md"
 )
+SYSTEM_IMPACT_GRAPH = ROOT / "docs/development/system-impact-graph.md"
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
@@ -125,6 +126,10 @@ _MERMAID_CLASS_DEF = re.compile(
     r"^\s*classDef (?P<role>[a-z]+) (?P<style>.+)$",
     re.MULTILINE,
 )
+_MERMAID_CLASS_ASSIGNMENT = re.compile(
+    r"^\s*class (?P<nodes>[A-Za-z0-9_,]+) (?P<role>[a-z]+)$",
+    re.MULTILINE,
+)
 
 TRACEABILITY_DAG_PALETTES = (
     {
@@ -143,6 +148,136 @@ TRACEABILITY_DAG_PALETTES = (
     },
 )
 TRACEABILITY_LINK_STYLE = "linkStyle default stroke:#94a3b8,stroke-width:2px"
+SYSTEM_IMPACT_DAG_PALETTES = (
+    {
+        "input": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
+        "current": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
+        "evidence": "fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px",
+        "gap": "fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px",
+    },
+    {
+        "input": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
+        "proposed": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
+    },
+    {
+        "input": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
+        "evidence": "fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px",
+        "output": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
+        "consumer": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
+    },
+)
+SYSTEM_IMPACT_DAG_ROLES = (
+    {
+        "Python": "input",
+        "Contracts": "input",
+        "Plans": "input",
+        "Runs": "input",
+        "Architecture": "current",
+        "Documentation": "current",
+        "PlanDiff": "current",
+        "Lineage": "current",
+        "LocalA": "evidence",
+        "LocalB": "evidence",
+        "LocalC": "evidence",
+        "LocalD": "evidence",
+        "Gap": "gap",
+    },
+    {
+        "Baseline": "input",
+        "Candidate": "input",
+        "Context": "input",
+        "Inventory": "proposed",
+        "Files": "proposed",
+        "Analyze": "proposed",
+        "Analysis": "proposed",
+        "Nodes": "proposed",
+        "Static": "proposed",
+        "Discovery": "proposed",
+        "Attempt": "proposed",
+        "Outcome": "proposed",
+        "Graph": "proposed",
+        "DAG": "proposed",
+        "Delta": "proposed",
+        "Report": "proposed",
+        "Plan": "proposed",
+    },
+    {
+        "Baseline": "input",
+        "Candidate": "input",
+        "Context": "input",
+        "Traceability": "input",
+        "Compile": "consumer",
+        "BaseGraph": "evidence",
+        "CandidateGraph": "evidence",
+        "BaseDAG": "evidence",
+        "CandidateDAG": "evidence",
+        "Delta": "output",
+        "Closure": "output",
+        "Report": "output",
+        "Plan": "output",
+        "Review": "consumer",
+    },
+)
+SYSTEM_IMPACT_DAG_EDGES = (
+    {
+        ("Python", "Architecture"),
+        ("Contracts", "Documentation"),
+        ("Plans", "PlanDiff"),
+        ("Runs", "Lineage"),
+        ("Architecture", "LocalA"),
+        ("Documentation", "LocalB"),
+        ("PlanDiff", "LocalC"),
+        ("Lineage", "LocalD"),
+        ("LocalA", "Gap"),
+        ("LocalB", "Gap"),
+        ("LocalC", "Gap"),
+        ("LocalD", "Gap"),
+    },
+    {
+        ("Baseline", "Inventory"),
+        ("Candidate", "Inventory"),
+        ("Inventory", "Files"),
+        ("Files", "Analyze"),
+        ("Analyze", "Analysis"),
+        ("Analyze", "Nodes"),
+        ("Analyze", "Static"),
+        ("Baseline", "Discovery"),
+        ("Candidate", "Discovery"),
+        ("Context", "Discovery"),
+        ("Discovery", "Attempt"),
+        ("Attempt", "Outcome"),
+        ("Files", "Graph"),
+        ("Analysis", "Graph"),
+        ("Nodes", "Graph"),
+        ("Static", "Graph"),
+        ("Outcome", "Graph"),
+        ("Graph", "DAG"),
+        ("Graph", "Delta"),
+        ("DAG", "Report"),
+        ("Delta", "Report"),
+        ("Report", "Plan"),
+        ("Delta", "Plan"),
+    },
+    {
+        ("Baseline", "Compile"),
+        ("Candidate", "Compile"),
+        ("Context", "Compile"),
+        ("Traceability", "Compile"),
+        ("Compile", "BaseGraph"),
+        ("Compile", "CandidateGraph"),
+        ("BaseGraph", "BaseDAG"),
+        ("CandidateGraph", "CandidateDAG"),
+        ("BaseGraph", "Delta"),
+        ("CandidateGraph", "Delta"),
+        ("Delta", "Closure"),
+        ("BaseDAG", "Closure"),
+        ("CandidateDAG", "Closure"),
+        ("Closure", "Report"),
+        ("Report", "Plan"),
+        ("CandidateGraph", "Plan"),
+        ("Plan", "Review"),
+    },
+)
 
 COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.at_least",
@@ -1120,6 +1255,45 @@ def test_contract_traceability_dags_use_semantic_palette() -> None:
             match.group("role"): match.group("style")
             for match in _MERMAID_CLASS_DEF.finditer(diagram)
         }
+        assert actual_palette == expected_palette
+        assert TRACEABILITY_LINK_STYLE in diagram
+
+
+def test_system_impact_dags_preserve_semantic_topology() -> None:
+    """Keep each system-impact DAG edge and role aligned with its contract."""
+    current_gap = _numbered_contract_section(
+        SYSTEM_IMPACT_GRAPH.read_text(),
+        3,
+    )
+    diagrams = tuple(
+        match.group("body") for match in _MERMAID_FENCE.finditer(current_gap)
+    )
+
+    assert len(diagrams) == 3
+    for diagram, expected_edges, expected_roles, expected_palette in zip(
+        diagrams,
+        SYSTEM_IMPACT_DAG_EDGES,
+        SYSTEM_IMPACT_DAG_ROLES,
+        SYSTEM_IMPACT_DAG_PALETTES,
+        strict=True,
+    ):
+        actual_edges: set[tuple[str, str]] = set()
+        for line in diagram.splitlines():
+            edge = _MERMAID_EDGE.match(line)
+            if edge is not None:
+                actual_edges.add((edge.group("source"), edge.group("target")))
+        actual_roles = {
+            node: assignment.group("role")
+            for assignment in _MERMAID_CLASS_ASSIGNMENT.finditer(diagram)
+            for node in assignment.group("nodes").split(",")
+        }
+        actual_palette = {
+            match.group("role"): match.group("style")
+            for match in _MERMAID_CLASS_DEF.finditer(diagram)
+        }
+
+        assert actual_edges == expected_edges
+        assert actual_roles == expected_roles
         assert actual_palette == expected_palette
         assert TRACEABILITY_LINK_STYLE in diagram
 

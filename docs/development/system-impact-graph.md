@@ -80,6 +80,23 @@ These checks establish separate local relationships. The system lacks one graph
 that connects a changed protocol field to its constructor, runtime consumer,
 persisted record, verifier, contract requirement, checklist task, and test.
 
+### Diagram color contract
+
+The three diagrams use the shared semantic palette from
+[contract requirement traceability](contract-requirement-traceability.md#diagram-color-contract).
+Node labels preserve the same meaning in monochrome.
+
+| Color | Mermaid classes | Meaning |
+| --- | --- | --- |
+| Amber | `input` | Source revisions, fixed context, or other compiler inputs. |
+| Blue | `current`, `consumer` | Existing tools or operations that consume graph results. |
+| Teal | `evidence` | Existing or persisted results. |
+| Red | `gap` | A relationship missing from the current system. |
+| Purple | `proposed`, `output` | Proposed records, compiler stages, or generated outputs. |
+
+Every node uses white text and a two-pixel stroke. Every link uses `#94a3b8`
+with a two-pixel stroke.
+
 ### Current DAG
 
 The current tools produce four separate dependency views. Each output uses a
@@ -87,7 +104,10 @@ private identity namespace and local edge evidence.
 
 ```mermaid
 flowchart TD
-    Source["Tracked repository files"]
+    Python["Python source files"]
+    Contracts["Contracts + checklist"]
+    Plans["Two frozen plans"]
+    Runs["One verified run"]
     Architecture["test_validation_architecture.py<br/>Python import checks"]
     Documentation["test_documentation.py<br/>contract + checklist checks"]
     PlanDiff["inspection.plan_diff()<br/>frozen plan leaves"]
@@ -98,10 +118,10 @@ flowchart TD
     LocalD["Run lineage"]
     Gap["No shared node IDs<br/>no cross-view impact closure"]
 
-    Source -->|"Python files"| Architecture
-    Source -->|"Markdown + schemas"| Documentation
-    Source -->|"frozen plan"| PlanDiff
-    Source -->|"resolved run"| Lineage
+    Python -->|"module source"| Architecture
+    Contracts -->|"Markdown markers"| Documentation
+    Plans -->|"frozen plan records"| PlanDiff
+    Runs -->|"resolved run records"| Lineage
     Architecture -->|"local output"| LocalA
     Documentation -->|"local output"| LocalB
     PlanDiff -->|"local output"| LocalC
@@ -111,7 +131,7 @@ flowchart TD
     LocalC -->|"ends locally"| Gap
     LocalD -->|"ends locally"| Gap
 
-    class Source input
+    class Python,Contracts,Plans,Runs input
     class Architecture,Documentation,PlanDiff,Lineage current
     class LocalA,LocalB,LocalC,LocalD evidence
     class Gap gap
@@ -148,45 +168,57 @@ compiler consumes those ownership links directly.
 
 ### Proposed-change DAG
 
-The proposed compiler derives every source-backed node from the tracked file
-inventory and records one visible result for every supported resolution
+The proposed compiler derives every source-backed node from the tracked-file
+inventory. Each analyzer records what it examined and what it emitted. The
+observed pass records one visible result for every supported resolution
 attempt.
 
 ```mermaid
 flowchart TD
-    Source["Proposed SystemSource<br/>commit"]
+    Baseline["Proposed baseline<br/>SystemSource"]
+    Candidate["Proposed candidate<br/>SystemSource"]
     Context["Proposed SystemContextManifest<br/>fixed external inputs"]
-    Inventory["Proposed RepositoryFile inventory"]
-    Analysis["Proposed FileAnalysisReceipt<br/>per tracked file"]
+    Inventory["Proposed tracked-file inventory<br/>per revision"]
+    Files["Proposed tracked files<br/>RepositoryFile set"]
+    Analyze["Proposed file analyzers"]
+    Analysis["Proposed analysis coverage<br/>FileAnalysisReceipt set"]
     Nodes["Proposed SystemNode set"]
     Static["Proposed source-evidenced edges"]
+    Discovery["Proposed isolated discovery<br/>per revision"]
     Attempt["Proposed ResolutionAttempt"]
     Outcome["Proposed observation or unresolved result"]
-    Graph["Proposed SystemGraph"]
-    DAG["Proposed SystemCondensationDAG"]
+    Graph["Proposed SystemGraph<br/>per revision"]
+    DAG["Proposed SystemCondensationDAG<br/>per revision"]
     Delta["Proposed SystemGraphDelta"]
     Report["Proposed ImpactReport"]
     Plan["Proposed PropagationPlan"]
 
-    Source -->|"git tree"| Inventory
-    Inventory -->|"analyzer input"| Analysis
-    Analysis -->|"source spans"| Nodes
-    Analysis -->|"declared + static relations"| Static
-    Context -->|"fixed values"| Attempt
-    Source -->|"candidate code"| Attempt
+    Baseline -->|"baseline commit"| Inventory
+    Candidate -->|"candidate commit"| Inventory
+    Inventory -->|"ordered records"| Files
+    Files -->|"one file at a time"| Analyze
+    Analyze -->|"records coverage"| Analysis
+    Analyze -->|"emits source spans"| Nodes
+    Analyze -->|"emits static relations"| Static
+    Baseline -->|"baseline code"| Discovery
+    Candidate -->|"candidate code"| Discovery
+    Context -->|"same fixed inputs"| Discovery
+    Discovery -->|"one per lookup"| Attempt
     Attempt -->|"exactly one result"| Outcome
-    Inventory -->|"ordered files"| Graph
+    Files -->|"ordered files"| Graph
+    Analysis -->|"ordered receipts"| Graph
     Nodes -->|"ordered nodes"| Graph
     Static -->|"auditable edges"| Graph
     Outcome -->|"observed boundary"| Graph
-    Graph -->|"collapse SCCs"| DAG
-    Graph -->|"compare revisions"| Delta
+    Graph -->|"collapse each graph's SCCs"| DAG
+    Graph -->|"compare both revisions"| Delta
     DAG -->|"reverse closure"| Report
     Delta -->|"changed nodes + edges"| Report
     Report -->|"affected paths"| Plan
+    Delta -->|"candidate added paths"| Plan
 
-    class Source,Context input
-    class Inventory,Analysis,Nodes,Static,Attempt,Outcome,Graph,DAG,Delta,Report,Plan proposed
+    class Baseline,Candidate,Context input
+    class Inventory,Files,Analyze,Analysis,Nodes,Static,Discovery,Attempt,Outcome,Graph,DAG,Delta,Report,Plan proposed
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
@@ -204,8 +236,8 @@ flowchart TD
     Context["Shared SystemContextManifest"]
     Traceability["ContractTraceabilityGraph"]
     Compile["Two compile_system() calls"]
-    BaseGraph["Baseline SystemGraph"]
-    CandidateGraph["Candidate SystemGraph"]
+    BaseGraph["Baseline SystemGraph<br/>baseline SystemNode set"]
+    CandidateGraph["Candidate SystemGraph<br/>candidate SystemNode set"]
     BaseDAG["Baseline condensation DAG"]
     CandidateDAG["Candidate condensation DAG"]
     Delta["SystemGraphDelta"]
@@ -1613,6 +1645,7 @@ The implementation adds these checks:
 | `system.propagation.coverage` <!-- verifier-rule: system.propagation.coverage requirement=SIG-03 --> | Require every affected node to appear in exactly one propagation disposition. |
 | `system.propagation.additions` <!-- verifier-rule: system.propagation.additions requirement=SIG-03 --> | Require planned additions to equal the candidate delta's added repository paths before the phase closes. |
 | `system.requirement.coverage` <!-- verifier-rule: system.requirement.coverage requirement=SIG-04 --> | Require each contract requirement to reach every declared verifier rule, each rule's implementation owner, and each observing test from `ContractTraceabilityGraph`. |
+| `system.diagram.topology` <!-- verifier-rule: system.diagram.topology requirement=SIG-04 --> | Require the current, proposed-change, and integrated DAGs to preserve their exact semantic edges, node roles, palette, and link style. |
 
 ## 8. Propagation
 
