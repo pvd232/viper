@@ -288,7 +288,7 @@ a new digest.
 <!-- contract-baseline: contract-requirement-traceability.md sha256=2bf7c2512e5b3a9d993badc393c10c556e9557c16c37930fec544ea398154f72 -->
 
 <!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
-<!-- contract-baseline: system-impact-graph.md sha256=a0009abfd0f1aae741b63d2c038b048f946cfcc1b21f98c67c699951e83b566e -->
+<!-- contract-baseline: system-impact-graph.md sha256=ed2f49e56695f611989dc853ee583b66d69b3a36f78fe4e26fe8e9dde1457252 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
@@ -749,16 +749,19 @@ component edge carries the sorted relation kinds crossing that pair.
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.canonical state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.references state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.strict state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
-- [ ] In `tests/test_inspection.py`, change one protocol field and require the
-      typed delta and reverse closure to include storage, verification,
-      documentation, and test consumers. Require one disposition per affected
-      node and exact agreement between planned and realized additions.
+- [ ] In `tests/test_inspection.py`, change one protocol field and replay the
+      committed agent-skills `model_support` to `models` rename. Require each
+      typed delta and reverse closure to contain its exact implementation,
+      verification, documentation, fixture, and test consumers. Require one
+      disposition per affected node and exact agreement between planned and
+      realized additions.
       <!-- verifies: SIG-03 -->
       <!-- contract-verification: requirement=SIG-03 rule=system.dag.components state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.dag.acyclic state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.delta.context state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.delta.identity state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.impact.closure state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.impact.closure state=planned test=tests/test_inspection.py:test_system_impact_replays_skill_manifest_rename -->
       <!-- contract-verification: requirement=SIG-03 rule=system.propagation.coverage state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.propagation.additions state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
 - [ ] In `tests/test_documentation.py`, require every contract requirement to

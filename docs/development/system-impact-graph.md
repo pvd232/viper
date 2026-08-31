@@ -1736,6 +1736,94 @@ omits `run`. The graph delta removes the `registers` edge and reaches the API,
 CLI, MCP, documentation, and test consumers. The test proves that registry
 contents belong to observed outcomes and stay outside the fixed context values.
 
+### Committed manifest-field rename fixture
+
+The system-graph implementation must replay one completed change from the
+global agent-skills repository. The change renamed the serialized skill
+manifest field `model_support` to `models` and advanced the manifest from
+version 2 to version 3.
+
+The fixture fixes these Git revisions:
+
+```text
+repository: https://github.com/pvd232/agents.git
+baseline:   c8898ba694b2f506cd123acd1adfb0abfe8509cc
+candidate:  4efa77318f9f4df7e2164176247b9282a8000a7b
+patch:      6aec6d0caa938465ef968b585d4fef5e501810fda8d63ead609243a2de2022db
+```
+
+The patch value is the SHA-256 digest of the exact full-index binary diff:
+
+```bash
+git diff --binary --full-index \
+  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
+  4efa77318f9f4df7e2164176247b9282a8000a7b \
+  | shasum -a 256
+```
+
+The delta removes
+`field:schemas/skill-evaluation.schema.json:properties.model_support` and adds
+`field:schemas/skill-evaluation.schema.json:properties.models`. Reverse closure
+over both endpoints must reach these exact paths:
+
+```text
+contracts/skill-evaluation.md
+evals/code-documentation/skill-contract.json
+evals/contract-gap-specification/skill-contract.json
+evals/master-execution-checklist/checklist.json
+evals/master-execution-checklist/skill-contract.json
+evals/technical-nomenclature/skill-contract.json
+schemas/skill-evaluation.schema.json
+scripts/run-skill-evaluations.py
+scripts/validate-skill-contract.py
+scripts/validate-skill-evaluation-run.py
+tests/test_run_skill_evaluations.py
+tests/test_skill_contract.py
+```
+
+This command reconstructs the exact path delta from Git:
+
+```bash
+git diff --name-status \
+  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
+  4efa77318f9f4df7e2164176247b9282a8000a7b
+```
+
+The original review cycle used this command trace from the clean baseline:
+
+```bash
+git fetch --prune origin
+git rev-parse HEAD
+git rev-parse origin/main
+git status --short
+rg -n 'model_support|modelSupport' . \
+  --glob '!eval-results/**' \
+  --glob '!.git/**'
+shasum -a 256 contracts/skill-evaluation.md
+./scripts/validate-master-checklist.py \
+  evals/master-execution-checklist/checklist.json
+for manifest in evals/*/skill-contract.json; do
+  ./scripts/validate-skill-contract.py "$manifest"
+done
+python3 -m unittest \
+  tests.test_skill_contract \
+  tests.test_run_skill_evaluations
+git diff --check
+git diff --name-status \
+  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
+  4efa77318f9f4df7e2164176247b9282a8000a7b
+git diff --binary --full-index \
+  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
+  4efa77318f9f4df7e2164176247b9282a8000a7b \
+  | shasum -a 256
+```
+
+The fixture passes when the compiled reverse closure equals the committed path
+set. A missing path proves an extraction gap. An extra path requires an
+inspectable edge with source evidence. The test must also require the retired
+name to remain only in the explicit rejection case that proves version 3
+rejects `model_support`.
+
 ## 10. Implementation order
 
 1. Implement
