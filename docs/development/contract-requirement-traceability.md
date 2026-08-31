@@ -28,16 +28,16 @@ machine-readable repository evidence:
 
 ```text
 What does the contract require?
--> ContractRequirementDeclaration
+-> ContractRequirement
 
 Which invariant enforces it?
--> VerifierRuleDeclaration
+-> VerifierRule
 
 Which source symbol implements that invariant?
--> RequirementImplementationLink
+-> RuleImplementation
 
 Which test proves the accepted and rejected behavior?
--> RequirementVerificationLink
+-> RuleVerification
 ```
 
 The resulting chain is:
@@ -137,11 +137,11 @@ The proposed records make each missing relationship explicit.
 
 ```mermaid
 flowchart TD
-    Requirement["Proposed<br/>ContractRequirementDeclaration"]
-    Rule["Proposed<br/>VerifierRuleDeclaration"]
-    Owner["Proposed<br/>RequirementImplementationLink"]
-    Test["Proposed<br/>RequirementVerificationLink"]
-    Cases["Proposed<br/>success + rejection ContractTraceCase"]
+    Requirement["Proposed<br/>ContractRequirement"]
+    Rule["Proposed<br/>VerifierRule"]
+    Owner["Proposed<br/>RuleImplementation"]
+    Test["Proposed<br/>RuleVerification"]
+    Cases["Proposed<br/>success + rejection ContractTrace"]
     Graph["Proposed<br/>ContractTraceabilityGraph"]
 
     Requirement -->|"requirement_id"| Rule
@@ -216,7 +216,7 @@ TraceId = Annotated[
 TraceState = Literal["planned", "implemented"]
 
 
-class SourceLocation(BaseModel):
+class RepoSymbolRef(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: RepoRelPath
@@ -224,14 +224,14 @@ class SourceLocation(BaseModel):
     line: int | None = Field(default=None, ge=1)
 
 
-class ContractRequirementDeclaration(BaseModel):
+class ContractRequirement(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     requirement_id: RequirementId
     contract: RepoRelPath
 
 
-class VerifierRuleDeclaration(BaseModel):
+class VerifierRule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     rule_id: VerifierRuleId
@@ -240,7 +240,7 @@ class VerifierRuleDeclaration(BaseModel):
     statement: NonEmptyStr
 
 
-class RequirementImplementationLink(BaseModel):
+class RuleImplementation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     requirement_id: RequirementId
@@ -248,10 +248,10 @@ class RequirementImplementationLink(BaseModel):
     phase: int = Field(ge=0)
     checklist_line: int = Field(ge=1)
     state: TraceState
-    owner: SourceLocation
+    owner: RepoSymbolRef
 
 
-class RequirementVerificationLink(BaseModel):
+class RuleVerification(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     requirement_id: RequirementId
@@ -259,10 +259,10 @@ class RequirementVerificationLink(BaseModel):
     phase: int = Field(ge=0)
     checklist_line: int = Field(ge=1)
     state: TraceState
-    test: SourceLocation
+    test: RepoSymbolRef
 
 
-class AcceptedTraceOutcome(BaseModel):
+class AcceptedOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: Literal["accepted"] = "accepted"
@@ -270,22 +270,22 @@ class AcceptedTraceOutcome(BaseModel):
     persisted_evidence: tuple[NonEmptyStr, ...] = Field(min_length=1)
 
 
-class RejectedTraceOutcome(BaseModel):
+class RejectedOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: Literal["rejected"] = "rejected"
-    rejected_at: SourceLocation
+    rejected_at: RepoSymbolRef
     error_type: NonEmptyStr
     message_match: NonEmptyStr
 
 
 TraceOutcome = Annotated[
-    AcceptedTraceOutcome | RejectedTraceOutcome,
+    AcceptedOutcome | RejectedOutcome,
     Field(discriminator="kind"),
 ]
 
 
-class ContractTraceCase(BaseModel):
+class ContractTrace(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     trace_id: TraceId
@@ -296,8 +296,8 @@ class ContractTraceCase(BaseModel):
     setup: NonEmptyStr
     declared_input: NonEmptyStr
     invocation: NonEmptyStr
-    implementation: SourceLocation
-    test: SourceLocation
+    implementation: RepoSymbolRef
+    test: RepoSymbolRef
     outcome: TraceOutcome
 
 
@@ -305,20 +305,20 @@ class ContractTraceabilityGraph(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[1] = 1
-    requirements: tuple[ContractRequirementDeclaration, ...] = Field(min_length=1)
-    rules: tuple[VerifierRuleDeclaration, ...] = Field(min_length=1)
-    implementations: tuple[RequirementImplementationLink, ...] = Field(
+    requirements: tuple[ContractRequirement, ...] = Field(min_length=1)
+    rules: tuple[VerifierRule, ...] = Field(min_length=1)
+    implementations: tuple[RuleImplementation, ...] = Field(
         min_length=1
     )
-    verifications: tuple[RequirementVerificationLink, ...] = Field(min_length=1)
-    traces: tuple[ContractTraceCase, ...] = Field(min_length=1)
+    verifications: tuple[RuleVerification, ...] = Field(min_length=1)
+    traces: tuple[ContractTrace, ...] = Field(min_length=1)
 ```
 
-`SourceLocation.symbol` uses the qualified name found in the named file. A
+`RepoSymbolRef.symbol` uses the qualified name found in the named file. A
 module-level function uses its function name. A method uses
 `ClassName.method_name`. A test uses its complete test-function name.
 
-`ContractTraceCase.scenario` names the one behavior demonstrated by the case.
+`ContractTrace.scenario` names the one behavior demonstrated by the case.
 `setup` enumerates the exact starting paths, values, and external conditions.
 `declared_input` reproduces the exact authored model, marker, or configuration
 value being processed. `invocation` names the exact callable invocation or
@@ -327,10 +327,10 @@ command that processes it.
 test. These fields must not contain placeholders such as `...`, `TBD`, `TODO`,
 or unresolved symbolic names.
 
-`AcceptedTraceOutcome` records the returned result and at least one persisted
-record or artifact. `RejectedTraceOutcome` records the exact source boundary,
+`AcceptedOutcome` records the returned result and at least one persisted
+record or artifact. `RejectedOutcome` records the exact source boundary,
 error type, and message fragment expected by the test. The trace's `rule_id`
-supplies the verifier statement through `VerifierRuleDeclaration`. That record
+supplies the verifier statement through `VerifierRule`. That record
 is the single owner of the statement.
 
 ### Marker syntax
@@ -370,7 +370,7 @@ traceability graph passes parity with the existing documentation checker. The
 cleanup step then removes both fields.
 
 Marker and TOML values use `path:symbol` strings. The parser splits the first
-colon after the repository path and constructs `SourceLocation`.
+colon after the repository path and constructs `RepoSymbolRef`.
 
 ### Populated trace blocks
 
@@ -415,19 +415,19 @@ import json
 from pathlib import Path
 
 from viper._contract_traceability import (
-    ContractRequirementDeclaration,
-    ContractTraceCase,
+    ContractRequirement,
+    ContractTrace,
     ContractTraceabilityGraph,
-    AcceptedTraceOutcome,
-    RejectedTraceOutcome,
+    AcceptedOutcome,
+    RejectedOutcome,
     RequirementId,
-    RequirementImplementationLink,
-    RequirementVerificationLink,
-    SourceLocation,
+    RepoSymbolRef,
+    RuleImplementation,
+    RuleVerification,
     TraceId,
     TraceOutcome,
     TraceState,
-    VerifierRuleDeclaration,
+    VerifierRule,
     VerifierRuleId,
 )
 
@@ -450,12 +450,12 @@ def marker_line(path: Path, marker: str) -> int:
     raise ValueError(f"missing marker: {marker}")
 
 
-requirement = ContractRequirementDeclaration(
+requirement = ContractRequirement(
     requirement_id=REQUIREMENT_ID,
     contract=CONTRACT.as_posix(),
 )
 
-rule = VerifierRuleDeclaration(
+rule = VerifierRule(
     rule_id=RULE_ID,
     requirement_id=requirement.requirement_id,
     contract=requirement.contract,
@@ -465,16 +465,16 @@ rule = VerifierRuleDeclaration(
     ),
 )
 
-implementation_location = SourceLocation(
+implementation_location = RepoSymbolRef(
     path="src/viper/project.py",
     symbol="resolve_project_path",
 )
-test_location = SourceLocation(
+test_location = RepoSymbolRef(
     path="tests/test_validation_architecture.py",
     symbol="test_project_paths_reject_symlinks",
 )
 
-implementation = RequirementImplementationLink(
+implementation = RuleImplementation(
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
     phase=requirement.phase,
@@ -486,7 +486,7 @@ implementation = RequirementImplementationLink(
     owner=implementation_location,
 )
 
-verification = RequirementVerificationLink(
+verification = RuleVerification(
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
     phase=requirement.phase,
@@ -499,13 +499,13 @@ verification = RequirementVerificationLink(
     test=test_location,
 )
 
-accepted_outcome: TraceOutcome = AcceptedTraceOutcome(
+accepted_outcome: TraceOutcome = AcceptedOutcome(
     result="ROOT/inputs/train.csv",
     persisted_evidence=(
         "ResolvedExternalInputRef.file after capture and publication",
     ),
 )
-success = ContractTraceCase(
+success = ContractTrace(
     trace_id=SUCCESS_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
@@ -523,12 +523,12 @@ success = ContractTraceCase(
     outcome=accepted_outcome,
 )
 
-rejected_outcome: TraceOutcome = RejectedTraceOutcome(
+rejected_outcome: TraceOutcome = RejectedOutcome(
     rejected_at=implementation_location,
     error_type="ProjectPathError",
     message_match="symlink",
 )
-rejection = ContractTraceCase(
+rejection = ContractTrace(
     trace_id=REJECTION_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
@@ -658,10 +658,10 @@ named test function. The traceability graph joins those three representations.
 
 | Current occurrence | Disposition |
 | --- | --- |
-| `_CONTRACT_REQUIREMENT` parser | Retain and construct `ContractRequirementDeclaration` from its matches. |
+| `_CONTRACT_REQUIREMENT` parser | Retain and construct `ContractRequirement` from its matches. |
 | `_CHECKLIST_MAPPING` parser | Retain as the requirement-to-phase migration oracle. |
 | Requirement-level `implements` and `verifies` markers | Retain through graph parity; remove after confirming that the checklist retains its readable requirement map. |
-| Requirement marker `test=` field | Retain only while the old documentation checker remains active; remove after exact `RequirementVerificationLink` parity. |
+| Requirement marker `test=` field | Retain only while the old documentation checker remains active; remove after exact `RuleVerification` parity. |
 | System-graph contract's independent contract-marker parser | Replace with `ContractTraceabilityGraph` ingestion. |
 | Prose-only verifier rules | Replace sentence-derived identity with stable rule markers. |
 
@@ -681,7 +681,7 @@ invocation = "compile_contract_traceability(ROOT)"
 implementation = "src/viper/_contract_traceability.py:compile_contract_traceability"
 test = "tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests"
 outcome.kind = "accepted"
-outcome.result = "one RequirementImplementationLink for contract.rule.implemented"
+outcome.result = "one RuleImplementation for contract.rule.implemented"
 outcome.persisted_evidence = ["canonical ContractTraceabilityGraph JSON bytes"]
 ````
 

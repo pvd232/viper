@@ -596,8 +596,8 @@ class ImpactReport(ProtocolModel):
     delta: ResolvedFileRef
     affected_nodes: tuple[SystemNodeId, ...]
     affected_requirements: tuple[RequirementId, ...]
-    affected_implementations: tuple[RequirementImplementationLink, ...]
-    observing_tests: tuple[RequirementVerificationLink, ...]
+    affected_implementations: tuple[RuleImplementation, ...]
+    observing_tests: tuple[RuleVerification, ...]
     unresolved: tuple[UnresolvedDependency, ...]
     complete: bool
 
@@ -629,8 +629,8 @@ class PropagationPlan(ProtocolModel):
 collections. Strict compilation rejects an incomplete graph before publishing
 an `ImpactReport`.
 
-`RequirementId`, `RequirementImplementationLink`, and
-`RequirementVerificationLink` come from the contract-traceability models.
+`RequirementId`, `RuleImplementation`, and `RuleVerification` come from the
+contract-traceability models.
 `contract_traceability_sha256` binds the source graph to the exact requirement
 links it ingested. The impact report therefore preserves whether each reached
 owner or test remains `planned` or already resolves as `implemented`.
@@ -668,9 +668,9 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from viper._contract_traceability import (
-    RequirementImplementationLink,
-    RequirementVerificationLink,
-    SourceLocation,
+    RepoSymbolRef,
+    RuleImplementation,
+    RuleVerification,
 )
 from viper.references import ResolvedFileRef
 from viper.storage import LocalArtifactStore
@@ -1214,17 +1214,17 @@ with TemporaryDirectory() as temporary_directory:
     )
     context_sha256 = digest(context)
 
-    implementation_location = SourceLocation(
+    implementation_location = RepoSymbolRef(
         path="src/viper/storage.py",
         symbol="LocalArtifactStore.__init__",
         line=3,
     )
-    test_location = SourceLocation(
+    test_location = RepoSymbolRef(
         path="tests/test_storage.py",
         symbol="test_store_uses_declared_location",
         line=3,
     )
-    implementation_link = RequirementImplementationLink(
+    implementation_link = RuleImplementation(
         requirement_id="PDR-02",
         rule_id="project.store.boundary",
         phase=0,
@@ -1232,7 +1232,7 @@ with TemporaryDirectory() as temporary_directory:
         state="implemented",
         owner=implementation_location,
     )
-    verification_link = RequirementVerificationLink(
+    verification_link = RuleVerification(
         requirement_id="PDR-02",
         rule_id="project.store.boundary",
         phase=0,
