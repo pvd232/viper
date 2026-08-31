@@ -1506,6 +1506,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
 
     for block_id, manifest in manifests.items():
         dependencies = manifest["depends_on"]
+        assert isinstance(dependencies, list)
         assert len(dependencies) == len(set(dependencies)), block_id
         for dependency in dependencies:
             assert dependency in manifests, (block_id, dependency)

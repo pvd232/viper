@@ -135,7 +135,7 @@ def resolve_project_root(root: Path | None = None) -> Path:
 ```toml pair-block
 id = "P0-PDR-02"
 requirements = ["PDR-01"]
-targets = ["src/viper/project_init.py:add_project_root_files"]
+targets = ["src/viper/project_init.py:ROOT_FILES"]
 tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
 gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
 depends_on = ["P0-PDR-01"]
