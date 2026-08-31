@@ -285,10 +285,10 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-requirement-traceability.md sha256=e8a47f30f6645d9481664bdc1cf7ceadb1c7c9e255298ddf80a4869c344a37ec -->
+<!-- contract-baseline: contract-requirement-traceability.md sha256=bf4d8f204d81c2b2bc501c6c0d25c2e5839532d677937a95b4b976849e53f432 -->
 
-<!-- contract-baseline: project-data-root.md sha256=b6ffb5b7bd87c0a9b74bd656377b5187a5a9d6f5393b8035a84560349dc6c64c -->
-<!-- contract-baseline: system-impact-graph.md sha256=f5f90d39e148bf79f6465b01954eb842ee45f9c440eaec2abc82d01bf88a4f29 -->
+<!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
+<!-- contract-baseline: system-impact-graph.md sha256=a0009abfd0f1aae741b63d2c038b048f946cfcc1b21f98c67c699951e83b566e -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
@@ -558,6 +558,8 @@ tests before later phases change code.
       <!-- implements: CRT-03 -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.trace.populated state=planned owner=src/viper/_contract_traceability.py:parse_contract_traces -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=planned owner=src/viper/_contract_traceability.py:validate_contract_example -->
+      <!-- contract-implementation: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented owner=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
+      <!-- contract-implementation: requirement=CRT-03 rule=contract.model.documented state=implemented owner=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
 - [ ] Apply the three-DAG and complete worked-example format to each remaining
       pending contract. Extend the documentation test from
       `PHASE_ZERO_CONTRACTS` to `IMPLEMENTATION_CONTRACTS` before Phase 0
@@ -703,6 +705,8 @@ component edge carries the sorted relation kinds crossing that pair.
       <!-- verifies: CRT-03 -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.trace.populated state=planned test=tests/test_documentation.py:test_contract_traces_are_populated -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=planned test=tests/test_documentation.py:test_phase_zero_contracts_show_three_dags_and_instantiate_models -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
 - [ ] In `tests/test_documentation.py`, compile twice, require identical graph
       bytes, and require every rule to reach its owner and tests.
       <!-- verifies: CRT-04 -->

@@ -10,6 +10,16 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import unquote
 
+from viper._contract_traceability import (
+    AcceptedTraceOutcome,
+    ContractRequirement,
+    ContractTraceabilityGraph,
+    ContractTraceCase,
+    RejectedTraceOutcome,
+    RepoSymbolRef,
+    RuleEdge,
+    VerifierRule,
+)
 from viper.api import OPERATIONS
 
 ROOT = Path(__file__).parents[1]
@@ -24,6 +34,9 @@ TRAINING_GUIDES = (
 )
 
 MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
+CONTRACT_TRACEABILITY = (
+    ROOT / "docs/development/contract-requirement-traceability.md"
+)
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
@@ -44,6 +57,16 @@ PHASE_ZERO_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
     ROOT / "docs/development/system-impact-graph.md",
+)
+TRACEABILITY_MODELS = (
+    RepoSymbolRef,
+    ContractRequirement,
+    VerifierRule,
+    RuleEdge,
+    AcceptedTraceOutcome,
+    RejectedTraceOutcome,
+    ContractTraceCase,
+    ContractTraceabilityGraph,
 )
 
 _CONTRACT_REQUIREMENT = re.compile(
@@ -1055,6 +1078,50 @@ def test_phase_zero_contracts_show_three_dags_and_instantiate_models() -> None:
     assert failures == {}
 
 
+def test_contract_traceability_model_block_matches_runtime() -> None:
+    """Keep every documented traceability class and field aligned with Python."""
+    text = CONTRACT_TRACEABILITY.read_text()
+    section = text.split("## 4. Contract models", maxsplit=1)[1].split(
+        "## 5. Execution", maxsplit=1
+    )[0]
+    block = _PYTHON_FENCE.search(section)
+    assert block is not None
+
+    tree = ast.parse(block.group("body"))
+    documented = {
+        node.name: tuple(
+            child.target.id
+            for child in node.body
+            if isinstance(child, ast.AnnAssign)
+            and isinstance(child.target, ast.Name)
+        )
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    implemented = {
+        model.__name__: tuple(model.model_fields) for model in TRACEABILITY_MODELS
+    }
+
+    assert documented == implemented
+
+
+def test_contract_traceability_schema_describes_every_field() -> None:
+    """Require each traceability field to explain its persisted role."""
+    missing: dict[str, list[str]] = {}
+
+    for model in TRACEABILITY_MODELS:
+        properties = model.model_json_schema().get("properties", {})
+        undescribed = sorted(
+            field_name
+            for field_name, field_schema in properties.items()
+            if not field_schema.get("description", "").strip()
+        )
+        if undescribed:
+            missing[model.__name__] = undescribed
+
+    assert missing == {}
+
+
 def test_phase_zero_contract_traces_use_typed_outcomes() -> None:
     """Require concrete setup plus distinct accepted and rejected outcomes."""
     common_fields = {
@@ -1064,13 +1131,19 @@ def test_phase_zero_contract_traces_use_typed_outcomes() -> None:
         "state",
         "scenario",
         "setup",
-        "declaration",
-        "runtime",
+        "input",
+        "invocation",
         "implementation",
         "test",
         "outcome",
     }
-    retired_fields = {"input", "persisted_evidence", "verifier", "expected"}
+    retired_fields = {
+        "declaration",
+        "runtime",
+        "persisted_evidence",
+        "verifier",
+        "expected",
+    }
 
     for contract in PHASE_ZERO_CONTRACTS:
         traces = tuple(
@@ -1093,9 +1166,9 @@ def test_phase_zero_contract_traces_use_typed_outcomes() -> None:
 
             outcome = trace["outcome"]
             if outcome["kind"] == "accepted":
-                assert set(outcome) == {"kind", "result", "persisted_evidence"}
+                assert set(outcome) == {"kind", "result", "evidence"}
                 assert outcome["result"].strip()
-                assert outcome["persisted_evidence"]
+                assert outcome["evidence"]
             else:
                 assert set(outcome) == {
                     "kind",

@@ -34,10 +34,10 @@ Which invariant enforces it?
 -> VerifierRule
 
 Which source symbol implements that invariant?
--> RuleImplementation
+-> RuleEdge(kind="implementation")
 
 Which test proves the accepted and rejected behavior?
--> RuleVerification
+-> RuleEdge(kind="verification")
 ```
 
 The resulting chain is:
@@ -139,14 +139,14 @@ The proposed records make each missing relationship explicit.
 flowchart TD
     Requirement["Proposed<br/>ContractRequirement"]
     Rule["Proposed<br/>VerifierRule"]
-    Owner["Proposed<br/>RuleImplementation"]
-    Test["Proposed<br/>RuleVerification"]
-    Cases["Proposed<br/>success + rejection ContractTrace"]
+    Owner["Proposed<br/>implementation RuleEdge"]
+    Test["Proposed<br/>verification RuleEdge"]
+    Cases["Proposed<br/>success + rejection ContractTraceCase"]
     Graph["Proposed<br/>ContractTraceabilityGraph"]
 
     Requirement -->|"requirement_id"| Rule
-    Rule -->|"rule_id + owner"| Owner
-    Rule -->|"rule_id + test"| Test
+    Rule -->|"kind=implementation"| Owner
+    Rule -->|"kind=verification"| Test
     Owner -->|"exact source location"| Graph
     Test -->|"exact test location"| Graph
     Cases -->|"concrete values"| Graph
@@ -203,132 +203,202 @@ identity.
 ```python
 RequirementId = Annotated[
     str,
-    StringConstraints(pattern=r"^[A-Z]{3}-[0-9]{2}$"),
+    Field(pattern=r"^[A-Z]{3}-[0-9]{2}$"),
 ]
 VerifierRuleId = Annotated[
     str,
-    StringConstraints(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"),
+    Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"),
 ]
 TraceId = Annotated[
     str,
-    StringConstraints(pattern=r"^[a-z][a-z0-9-]+$"),
+    Field(pattern=r"^[a-z][a-z0-9-]+$"),
 ]
+RuleEdgeKind = Literal["implementation", "verification"]
 TraceState = Literal["planned", "implemented"]
 
 
-class RepoSymbolRef(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class RepoSymbolRef(ProtocolModel):
+    """Reference one qualified symbol in one repository file."""
 
-    path: RepoRelPath
-    symbol: NonEmptyStr
-    line: int | None = Field(default=None, ge=1)
-
-
-class ContractRequirement(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    requirement_id: RequirementId
-    contract: RepoRelPath
+    path: RepoRelPath = Field(
+        description="Repository-relative source file containing the symbol."
+    )
+    symbol: NonEmptyStr = Field(
+        description="Qualified symbol name resolved inside the source file."
+    )
 
 
-class VerifierRule(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class ContractRequirement(ProtocolModel):
+    """Identify one requirement declared by one contract."""
 
-    rule_id: VerifierRuleId
-    requirement_id: RequirementId
-    contract: RepoRelPath
-    statement: NonEmptyStr
-
-
-class RuleImplementation(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    requirement_id: RequirementId
-    rule_id: VerifierRuleId
-    phase: int = Field(ge=0)
-    checklist_line: int = Field(ge=1)
-    state: TraceState
-    owner: RepoSymbolRef
+    requirement_id: RequirementId = Field(
+        description="Stable identifier declared by the owning contract."
+    )
+    contract: RepoRelPath = Field(
+        description="Repository-relative contract that declares the requirement."
+    )
 
 
-class RuleVerification(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class VerifierRule(ProtocolModel):
+    """Declare one testable rule required by a contract."""
 
-    requirement_id: RequirementId
-    rule_id: VerifierRuleId
-    phase: int = Field(ge=0)
-    checklist_line: int = Field(ge=1)
-    state: TraceState
-    test: RepoSymbolRef
-
-
-class AcceptedOutcome(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    kind: Literal["accepted"] = "accepted"
-    result: NonEmptyStr
-    persisted_evidence: tuple[NonEmptyStr, ...] = Field(min_length=1)
+    rule_id: VerifierRuleId = Field(
+        description="Stable identifier of the executable invariant."
+    )
+    requirement_id: RequirementId = Field(
+        description="Contract requirement that owns the verifier rule."
+    )
+    contract: RepoRelPath = Field(
+        description="Repository-relative contract that declares the rule."
+    )
+    statement: NonEmptyStr = Field(
+        description="Testable invariant enforced by the rule."
+    )
 
 
-class RejectedOutcome(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class RuleEdge(ProtocolModel):
+    """Connect one verifier rule to an implementation or test."""
 
-    kind: Literal["rejected"] = "rejected"
-    rejected_at: RepoSymbolRef
-    error_type: NonEmptyStr
-    message_match: NonEmptyStr
+    kind: RuleEdgeKind = Field(
+        description="Relationship from the rule to an implementation or test."
+    )
+    rule_id: VerifierRuleId = Field(
+        description="Verifier rule at the source of this edge."
+    )
+    phase: int = Field(
+        ge=0,
+        description="Checklist phase that schedules this relationship.",
+    )
+    checklist_line: int = Field(
+        ge=1,
+        description="One-based checklist line that declares this relationship.",
+    )
+    state: TraceState = Field(
+        description="Whether the referenced symbol is planned or implemented."
+    )
+    target: RepoSymbolRef = Field(
+        description="Repository symbol reached by this relationship."
+    )
+
+
+class AcceptedTraceOutcome(ProtocolModel):
+    """Describe the result and evidence produced by an accepted trace."""
+
+    kind: Literal["accepted"] = Field(
+        default="accepted",
+        description="Discriminator for a successful trace.",
+    )
+    result: NonEmptyStr = Field(
+        description="Value or state the successful invocation must produce."
+    )
+    evidence: tuple[NonEmptyStr, ...] = Field(
+        min_length=1,
+        description="Durable records or artifacts that prove the result occurred.",
+    )
+
+
+class RejectedTraceOutcome(ProtocolModel):
+    """Describe the failure expected from a rejected trace."""
+
+    kind: Literal["rejected"] = Field(
+        default="rejected",
+        description="Discriminator for a rejected trace.",
+    )
+    rejected_at: RepoSymbolRef = Field(
+        description="Exact code symbol that must reject the input."
+    )
+    error_type: NonEmptyStr = Field(
+        description="Exception type the caller must receive."
+    )
+    message_match: NonEmptyStr = Field(
+        description="Stable error-message text the test must observe."
+    )
 
 
 TraceOutcome = Annotated[
-    AcceptedOutcome | RejectedOutcome,
+    AcceptedTraceOutcome | RejectedTraceOutcome,
     Field(discriminator="kind"),
 ]
 
 
-class ContractTrace(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class ContractTraceCase(ProtocolModel):
+    """Trace one rule through a concrete accepted or rejected case."""
 
-    trace_id: TraceId
-    requirement_id: RequirementId
-    rule_id: VerifierRuleId
-    state: TraceState
-    scenario: NonEmptyStr
-    setup: NonEmptyStr
-    declared_input: NonEmptyStr
-    invocation: NonEmptyStr
-    implementation: RepoSymbolRef
-    test: RepoSymbolRef
-    outcome: TraceOutcome
-
-
-class ContractTraceabilityGraph(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    schema_version: Literal[1] = 1
-    requirements: tuple[ContractRequirement, ...] = Field(min_length=1)
-    rules: tuple[VerifierRule, ...] = Field(min_length=1)
-    implementations: tuple[RuleImplementation, ...] = Field(
-        min_length=1
+    trace_id: TraceId = Field(
+        description="Stable identifier of this concrete trace case."
     )
-    verifications: tuple[RuleVerification, ...] = Field(min_length=1)
-    traces: tuple[ContractTrace, ...] = Field(min_length=1)
+    requirement_id: RequirementId = Field(
+        description="Contract requirement demonstrated by the case."
+    )
+    rule_id: VerifierRuleId = Field(
+        description="Verifier rule exercised by the case."
+    )
+    state: TraceState = Field(
+        description="Whether the referenced implementation and test exist."
+    )
+    scenario: NonEmptyStr = Field(
+        description="One behavior demonstrated by the case."
+    )
+    setup: NonEmptyStr = Field(
+        description="Concrete state established before the invocation."
+    )
+    input: NonEmptyStr = Field(
+        description="Exact authored value or declaration processed by the invocation."
+    )
+    invocation: NonEmptyStr = Field(
+        description="Exact function call or command that processes the input."
+    )
+    implementation: RepoSymbolRef = Field(
+        description="Source symbol that implements the exercised behavior."
+    )
+    test: RepoSymbolRef = Field(
+        description="Test function that observes the expected outcome."
+    )
+    outcome: TraceOutcome = Field(
+        description="Accepted result or rejected failure expected from the case."
+    )
+
+
+class ContractTraceabilityGraph(ProtocolModel):
+    """Store the complete ordered traceability graph."""
+
+    schema_version: Literal[1] = Field(
+        default=1,
+        description="Format version of the serialized traceability graph.",
+    )
+    requirements: tuple[ContractRequirement, ...] = Field(
+        min_length=1,
+        description="Ordered contract requirements represented by the graph.",
+    )
+    rules: tuple[VerifierRule, ...] = Field(
+        min_length=1,
+        description="Ordered verifier rules represented by the graph.",
+    )
+    edges: tuple[RuleEdge, ...] = Field(
+        min_length=1,
+        description="Ordered implementation and verification relationships.",
+    )
+    traces: tuple[ContractTraceCase, ...] = Field(
+        min_length=1,
+        description="Ordered accepted and rejected trace cases.",
+    )
 ```
 
 `RepoSymbolRef.symbol` uses the qualified name found in the named file. A
 module-level function uses its function name. A method uses
 `ClassName.method_name`. A test uses its complete test-function name.
 
-`ContractTrace.scenario` names the one behavior demonstrated by the case.
+`ContractTraceCase.scenario` names the one behavior demonstrated by the case.
 `setup` enumerates the exact starting paths, values, and external conditions.
-`declared_input` reproduces the exact authored model, marker, or configuration
+`input` reproduces the exact authored model, marker, or configuration
 value being processed. `invocation` names the exact callable invocation or
 command that processes it.
 `implementation` and `test` identify the exact source owner and acceptance
 test. These fields must not contain placeholders such as `...`, `TBD`, `TODO`,
 or unresolved symbolic names.
 
-`AcceptedOutcome` records the returned result and at least one persisted
-record or artifact. `RejectedOutcome` records the exact source boundary,
+`AcceptedTraceOutcome` records the returned result and at least one durable
+record or artifact. `RejectedTraceOutcome` records the exact source boundary,
 error type, and message fragment expected by the test. The trace's `rule_id`
 supplies the verifier statement through `VerifierRule`. That record
 is the single owner of the statement.
@@ -385,7 +455,7 @@ rule_id = "project.path.symlink_free"
 state = "planned"
 scenario = "A local input names a symlink beneath the selected project root."
 setup = "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to /tmp/source.csv"
-declared_input = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
+input = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
 invocation = "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
 implementation = "src/viper/project.py:resolve_project_path"
 test = "tests/test_validation_architecture.py:test_project_paths_reject_symlinks"
@@ -415,15 +485,15 @@ import json
 from pathlib import Path
 
 from viper._contract_traceability import (
+    AcceptedTraceOutcome,
     ContractRequirement,
-    ContractTrace,
+    ContractTraceCase,
     ContractTraceabilityGraph,
-    AcceptedOutcome,
-    RejectedOutcome,
+    RejectedTraceOutcome,
     RequirementId,
     RepoSymbolRef,
-    RuleImplementation,
-    RuleVerification,
+    RuleEdge,
+    RuleEdgeKind,
     TraceId,
     TraceOutcome,
     TraceState,
@@ -474,45 +544,47 @@ test_location = RepoSymbolRef(
     symbol="test_project_paths_reject_symlinks",
 )
 
-implementation = RuleImplementation(
-    requirement_id=requirement.requirement_id,
+implementation_kind: RuleEdgeKind = "implementation"
+implementation = RuleEdge(
+    kind=implementation_kind,
     rule_id=rule.rule_id,
-    phase=requirement.phase,
+    phase=CHECKLIST_PHASE,
     checklist_line=marker_line(
         CHECKLIST,
         "requirement=PDR-03 rule=project.path.symlink_free",
     ),
     state=LINK_STATE,
-    owner=implementation_location,
+    target=implementation_location,
 )
 
-verification = RuleVerification(
-    requirement_id=requirement.requirement_id,
+verification_kind: RuleEdgeKind = "verification"
+verification = RuleEdge(
+    kind=verification_kind,
     rule_id=rule.rule_id,
-    phase=requirement.phase,
+    phase=CHECKLIST_PHASE,
     checklist_line=marker_line(
         CHECKLIST,
         "contract-verification: requirement=PDR-03 "
         "rule=project.path.symlink_free",
     ),
     state=LINK_STATE,
-    test=test_location,
+    target=test_location,
 )
 
-accepted_outcome: TraceOutcome = AcceptedOutcome(
+accepted_outcome: TraceOutcome = AcceptedTraceOutcome(
     result="ROOT/inputs/train.csv",
-    persisted_evidence=(
+    evidence=(
         "ResolvedExternalInputRef.file after capture and publication",
     ),
 )
-success = ContractTrace(
+success = ContractTraceCase(
     trace_id=SUCCESS_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
     state=LINK_STATE,
     scenario="A training input names one ordinary file beneath ROOT.",
     setup="ROOT=/tmp/weekend-models; inputs/train.csv is an ordinary file",
-    declared_input=(
+    input=(
         "ExternalInputRef(source=LocalSource(path='inputs/train.csv'))"
     ),
     invocation=(
@@ -523,12 +595,12 @@ success = ContractTrace(
     outcome=accepted_outcome,
 )
 
-rejected_outcome: TraceOutcome = RejectedOutcome(
+rejected_outcome: TraceOutcome = RejectedTraceOutcome(
     rejected_at=implementation_location,
     error_type="ProjectPathError",
     message_match="symlink",
 )
-rejection = ContractTrace(
+rejection = ContractTraceCase(
     trace_id=REJECTION_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
@@ -538,7 +610,7 @@ rejection = ContractTrace(
         "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to "
         "/tmp/source.csv"
     ),
-    declared_input=(
+    input=(
         "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
     ),
     invocation=(
@@ -552,8 +624,7 @@ rejection = ContractTrace(
 traceability = ContractTraceabilityGraph(
     requirements=(requirement,),
     rules=(rule,),
-    implementations=(implementation,),
-    verifications=(verification,),
+    edges=(implementation, verification),
     traces=(success, rejection),
 )
 
@@ -564,8 +635,8 @@ canonical_bytes = json.dumps(
 ).encode()
 
 assert traceability.rules[0].requirement_id == "PDR-03"
-assert traceability.implementations[0].owner.symbol == "resolve_project_path"
-assert traceability.verifications[0].test.symbol == (
+assert traceability.edges[0].target.symbol == "resolve_project_path"
+assert traceability.edges[1].target.symbol == (
     "test_project_paths_reject_symlinks"
 )
 assert b'"trace_id":"project-path-symlink-rejection"' in canonical_bytes
@@ -635,6 +706,8 @@ machine's absolute checkout path.
 | `contract.rule.tested` <!-- verifier-rule: contract.rule.tested requirement=CRT-02 --> | Each verifier rule names at least one exact test target; every link marked `implemented` resolves to an existing test function. |
 | `contract.trace.populated` <!-- verifier-rule: contract.trace.populated requirement=CRT-03 --> | Each contract contains parseable success and rejection traces. Every trace names one behavior, its exact starting state, the exact declared input being processed, the exact invocation, valid source locations for its declared state, and no placeholders. |
 | `contract.example.complete` <!-- verifier-rule: contract.example.complete requirement=CRT-03 --> | Each contract contains three rendered DAG sources and one marked, syntax-valid worked example that constructs every class and calls every operation declared in Section 4. |
+| `contract.model.matches_runtime` <!-- verifier-rule: contract.model.matches_runtime requirement=CRT-03 --> | Every Section 4 traceability class has the same name and direct fields as its Python implementation. |
+| `contract.model.documented` <!-- verifier-rule: contract.model.documented requirement=CRT-03 --> | Every direct field in each persisted traceability model has a non-empty generated-schema description that states its role. |
 | `contract.graph.canonical` <!-- verifier-rule: contract.graph.canonical requirement=CRT-04 --> | Repeated compilation produces identical ordered JSON bytes. |
 | `contract.graph.complete` <!-- verifier-rule: contract.graph.complete requirement=CRT-04 --> | Every requirement and rule reaches its owner and tests. |
 
@@ -661,7 +734,7 @@ named test function. The traceability graph joins those three representations.
 | `_CONTRACT_REQUIREMENT` parser | Retain and construct `ContractRequirement` from its matches. |
 | `_CHECKLIST_MAPPING` parser | Retain as the requirement-to-phase migration oracle. |
 | Requirement-level `implements` and `verifies` markers | Retain through graph parity; remove after confirming that the checklist retains its readable requirement map. |
-| Requirement marker `test=` field | Retain only while the old documentation checker remains active; remove after exact `RuleVerification` parity. |
+| Requirement marker `test=` field | Retain only while the old documentation checker remains active; remove after exact verification-edge parity. |
 | System-graph contract's independent contract-marker parser | Replace with `ContractTraceabilityGraph` ingestion. |
 | Prose-only verifier rules | Replace sentence-derived identity with stable rule markers. |
 
@@ -676,13 +749,13 @@ rule_id = "contract.rule.implemented"
 state = "planned"
 scenario = "The traceability compiler records one exact planned source owner for a rule."
 setup = "docs/development/contract-requirement-traceability.md declares CRT-02 and contract.rule.implemented; docs/development/master-execution-checklist.md assigns that rule to src/viper/_contract_traceability.py:compile_contract_traceability"
-declared_input = "<!-- verifier-rule: contract.rule.implemented requirement=CRT-02 -->"
+input = "<!-- verifier-rule: contract.rule.implemented requirement=CRT-02 -->"
 invocation = "compile_contract_traceability(ROOT)"
 implementation = "src/viper/_contract_traceability.py:compile_contract_traceability"
 test = "tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests"
 outcome.kind = "accepted"
-outcome.result = "one RuleImplementation for contract.rule.implemented"
-outcome.persisted_evidence = ["canonical ContractTraceabilityGraph JSON bytes"]
+outcome.result = "one implementation RuleEdge for contract.rule.implemented"
+outcome.evidence = ["canonical ContractTraceabilityGraph JSON bytes"]
 ````
 
 ### Rejection
@@ -694,7 +767,7 @@ rule_id = "contract.rule.tested"
 state = "planned"
 scenario = "A verifier rule has no contract-verification marker."
 setup = "fixture docs/development/contract-requirement-traceability.md declares contract.rule.tested; fixture docs/development/master-execution-checklist.md omits its contract-verification marker"
-declared_input = "<!-- verifier-rule: contract.rule.tested requirement=CRT-02 -->"
+input = "<!-- verifier-rule: contract.rule.tested requirement=CRT-02 -->"
 invocation = "compile_contract_traceability(fixture_root)"
 implementation = "src/viper/_contract_traceability.py:compile_contract_traceability"
 test = "tests/test_documentation.py:test_contract_traceability_rejects_orphan_rule"

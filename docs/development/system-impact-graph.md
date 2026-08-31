@@ -1695,13 +1695,13 @@ rule_id = "system.impact.closure"
 state = "planned"
 scenario = "The candidate changes LocalFileRef.store from .viper/store to .viper/objects."
 setup = "baseline LocalFileRef.store='.viper/store'; candidate LocalFileRef.store='.viper/objects'; context=tests/fixtures/system-context.toml"
-declaration = "LocalFileRef.store: RepoRelPath = '.viper/store'"
-runtime = "system_diff(baseline, candidate, context) followed by reverse reachability"
+input = "LocalFileRef.store: RepoRelPath = '.viper/store'"
+invocation = "system_diff(baseline, candidate, context) followed by reverse reachability"
 implementation = "src/viper/system_graph.py:compute_impact"
 test = "tests/test_inspection.py:test_system_impact_reaches_local_store_consumers"
 outcome.kind = "accepted"
 outcome.result = "affected nodes include PDR-02, project.store.boundary, LocalArtifactStore.__init__, LocalArtifactStore.fetch, fetch_local_file_bytes, RunFetcher.__call__, and the storage test"
-outcome.persisted_evidence = ["SystemGraphDelta.changed_nodes contains span:src/viper/references.py:LocalFileRef.store", "PropagationPlan covers every affected node"]
+outcome.evidence = ["SystemGraphDelta.changed_nodes contains span:src/viper/references.py:LocalFileRef.store", "PropagationPlan covers every affected node"]
 ```
 
 ### Rejection
@@ -1718,8 +1718,8 @@ rule_id = "system.graph.strict"
 state = "planned"
 scenario = "Decorator registration reads an environment variable absent from the fixed context."
 setup = "candidate expression=os.environ['VIPER_BACKEND']; SystemContextManifest.variables=()"
-declaration = "candidate fixture decorator branches on VIPER_BACKEND"
-runtime = "compile_system(candidate, context, strict=True)"
+input = "candidate fixture decorator branches on VIPER_BACKEND"
+invocation = "compile_system(candidate, context, strict=True)"
 implementation = "src/viper/system_graph.py:compile_system"
 test = "tests/test_validation_architecture.py:test_system_graph_rejects_unfixed_environment_resolution"
 outcome.kind = "rejected"

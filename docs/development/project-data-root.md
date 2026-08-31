@@ -625,13 +625,13 @@ rule_id = "project.root.stability"
 state = "planned"
 scenario = "A command launched from a package child directory publishes one artifact."
 setup = "start=/tmp/weekend-models/src/weekend_models; artifact=experiments/tiny/model.pt; bytes=weights-v1"
-declaration = "viper.toml at /tmp/weekend-models/viper.toml"
-runtime = "resolve_project_root(start) returns /tmp/weekend-models once and passes it to LocalArtifactStore"
+input = "viper.toml at /tmp/weekend-models/viper.toml"
+invocation = "resolve_project_root(start) returns /tmp/weekend-models once and passes it to LocalArtifactStore"
 implementation = "src/viper/project.py:resolve_project_root"
 test = "tests/test_storage.py:test_store_uses_selected_project_root"
 outcome.kind = "accepted"
 outcome.result = "working bytes and immutable bytes resolve beneath /tmp/weekend-models"
-outcome.persisted_evidence = ["LocalFileRef returned by LocalArtifactStore.publish()", "artifact SHA-256 c0ab742f68a24ef362b5529351eb13561e746b70a0f815efe7b64b570b477851"]
+outcome.evidence = ["LocalFileRef returned by LocalArtifactStore.publish()", "artifact SHA-256 c0ab742f68a24ef362b5529351eb13561e746b70a0f815efe7b64b570b477851"]
 ```
 
 ### Rejection
@@ -649,8 +649,8 @@ rule_id = "project.path.symlink_free"
 state = "planned"
 scenario = "A local training input names a symlink beneath the selected root."
 setup = "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to /tmp/source.csv"
-declaration = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
-runtime = "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
+input = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
+invocation = "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
 implementation = "src/viper/project.py:resolve_project_path"
 test = "tests/test_validation_architecture.py:test_project_paths_reject_symlinks"
 outcome.kind = "rejected"
