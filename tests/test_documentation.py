@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib
 import re
 import tomllib
 from collections import Counter
@@ -38,6 +39,7 @@ CONTRACT_TRACEABILITY = (
     ROOT / "docs/development/contract-requirement-traceability.md"
 )
 SYSTEM_IMPACT_GRAPH = ROOT / "docs/development/system-impact-graph.md"
+PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/phase-0-pair-coding.md"
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
@@ -130,6 +132,27 @@ _MERMAID_CLASS_ASSIGNMENT = re.compile(
     r"^\s*class (?P<nodes>[A-Za-z0-9_,]+) (?P<role>[a-z]+)$",
     re.MULTILINE,
 )
+_PHASE_ZERO_SECTION = re.compile(
+    r"^## 7\. Phase 0\b(?P<body>.*?)(?=^## 8\. Phase 1\b)",
+    re.MULTILINE | re.DOTALL,
+)
+_PHASE_ZERO_CHECKBOX = re.compile(
+    r"^- \[[ x]\] .*?(?=^- \[[ x]\] |^### |^## |\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_PAIR_BLOCK_MARKER = re.compile(r"<!-- pair-block: (?P<id>P0-[A-Z]+-\d{2}) -->")
+_PAIR_BLOCK_DEFINITION = re.compile(
+    r"<!-- pair-block-definition: (?P<id>P0-[A-Z]+-\d{2}) -->\n"
+    r"```toml pair-block\n(?P<manifest>.*?)\n```\n"
+    r"(?P<body>.*?)(?=<!-- pair-block-definition: |^## |\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_PAIR_EDIT = re.compile(r"```python pair-edit\n(?P<code>.*?)\n```", re.DOTALL)
+_PAIR_PLACEHOLDER = re.compile(
+    r"(?:\bTBD\b|\bTODO\b|^\s*\.\.\.\s*$|=\s*\.\.\.\s*$)",
+    re.MULTILINE,
+)
+_IMPLEMENTED_EXAMPLE_MODULES = {"viper._contract_traceability"}
 
 TRACEABILITY_DAG_PALETTES = (
     {
@@ -1296,6 +1319,255 @@ def test_system_impact_dags_preserve_semantic_topology() -> None:
         assert actual_roles == expected_roles
         assert actual_palette == expected_palette
         assert TRACEABILITY_LINK_STYLE in diagram
+
+
+def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
+    """Bind every Phase 0 task to one parseable dependency-ordered edit."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    phase_match = _PHASE_ZERO_SECTION.search(checklist)
+    assert phase_match is not None
+    checkboxes = tuple(_PHASE_ZERO_CHECKBOX.finditer(phase_match.group("body")))
+    marker_ids: list[str] = []
+    implemented_ids: set[str] = set()
+    for checkbox in checkboxes:
+        markers = tuple(_PAIR_BLOCK_MARKER.finditer(checkbox.group(0)))
+        assert len(markers) == 1, checkbox.group(0).splitlines()[0]
+        block_id = markers[0].group("id")
+        marker_ids.append(block_id)
+        if checkbox.group(0).startswith("- [x]"):
+            implemented_ids.add(block_id)
+    assert len(marker_ids) == len(set(marker_ids))
+
+    reference = PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
+    definitions = tuple(_PAIR_BLOCK_DEFINITION.finditer(reference))
+    definition_ids = [definition.group("id") for definition in definitions]
+    assert len(definition_ids) == len(set(definition_ids))
+    assert set(definition_ids) == set(marker_ids)
+
+    requirement_ids = {
+        match.group("requirement")
+        for contract in PHASE_ZERO_CONTRACTS
+        for match in _CONTRACT_REQUIREMENT.finditer(
+            contract.read_text(encoding="utf-8")
+        )
+    }
+    manifests: dict[str, dict[str, object]] = {}
+    order: dict[str, int] = {}
+    target_pattern = re.compile(
+        r"^(?:src|tests)/[a-z0-9_/]+\.py:[A-Za-z_][A-Za-z0-9_.]*$"
+    )
+    for index, definition in enumerate(definitions):
+        block_id = definition.group("id")
+        manifest = tomllib.loads(definition.group("manifest"))
+        assert manifest["id"] == block_id
+        assert set(manifest) == {
+            "id",
+            "requirements",
+            "targets",
+            "tests",
+            "gate",
+            "depends_on",
+        }
+        assert manifest["requirements"]
+        assert set(manifest["requirements"]) <= requirement_ids
+        assert manifest["targets"]
+        assert manifest["tests"]
+        assert all(target_pattern.fullmatch(value) for value in manifest["targets"])
+        assert all(target_pattern.fullmatch(value) for value in manifest["tests"])
+        assert all(
+            (ROOT / value.partition(":")[0]).is_file()
+            for value in manifest["tests"]
+        )
+        assert str(manifest["gate"]).startswith("conda run -n mantra ")
+
+        edits = tuple(_PAIR_EDIT.finditer(definition.group("body")))
+        assert len(edits) == 1, block_id
+        code = edits[0].group("code")
+        assert _PAIR_PLACEHOLDER.search(code) is None, block_id
+        edit_tree = ast.parse(
+            code,
+            filename=f"{PHASE_ZERO_PAIR_CODING.name}:{block_id}",
+        )
+        if block_id not in implemented_ids:
+            declarations: set[str] = set()
+            for node in edit_tree.body:
+                if isinstance(
+                    node,
+                    (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+                ):
+                    declarations.add(node.name)
+                if isinstance(node, ast.ClassDef):
+                    declarations.update(
+                        f"{node.name}.{member.name}"
+                        for member in node.body
+                        if isinstance(
+                            member,
+                            (ast.FunctionDef, ast.AsyncFunctionDef),
+                        )
+                    )
+                if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    targets = (
+                        node.targets
+                        if isinstance(node, ast.Assign)
+                        else (node.target,)
+                    )
+                    declarations.update(
+                        target.id for target in targets if isinstance(target, ast.Name)
+                    )
+            for target in manifest["targets"]:
+                symbol = target.partition(":")[2]
+                assert symbol in declarations, (block_id, target)
+        manifests[block_id] = manifest
+        order[block_id] = index
+
+    for block_id, manifest in manifests.items():
+        dependencies = manifest["depends_on"]
+        assert len(dependencies) == len(set(dependencies)), block_id
+        for dependency in dependencies:
+            assert dependency in manifests, (block_id, dependency)
+            assert order[dependency] < order[block_id], (block_id, dependency)
+
+
+def test_phase_zero_system_models_match_contract() -> None:
+    """Keep the system-graph coding block aligned with its contract models."""
+    contract_text = SYSTEM_IMPACT_GRAPH.read_text(encoding="utf-8")
+    contract_models = _numbered_contract_section(contract_text, 4).split(
+        "### Illustrative worked example",
+        1,
+    )[0]
+    contract_classes = {
+        node.name: node
+        for match in _PYTHON_FENCE.finditer(contract_models)
+        for node in ast.parse(match.group("body")).body
+        if isinstance(node, ast.ClassDef)
+    }
+
+    reference = PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
+    definition = next(
+        match
+        for match in _PAIR_BLOCK_DEFINITION.finditer(reference)
+        if match.group("id") == "P0-SIG-01"
+    )
+    edit = _PAIR_EDIT.search(definition.group("body"))
+    assert edit is not None
+    planned_classes = {
+        node.name: node
+        for node in ast.parse(edit.group("code")).body
+        if isinstance(node, ast.ClassDef)
+    }
+
+    assert set(contract_classes) <= set(planned_classes)
+    mismatches = {
+        name: {
+            "contract": (
+                _class_bases(contract_classes[name]),
+                _class_fields(contract_classes[name]),
+            ),
+            "pair_block": (
+                _class_bases(planned_classes[name]),
+                _class_fields(planned_classes[name]),
+            ),
+        }
+        for name in contract_classes
+        if (
+            _class_bases(contract_classes[name]),
+            _class_fields(contract_classes[name]),
+        )
+        != (
+            _class_bases(planned_classes[name]),
+            _class_fields(planned_classes[name]),
+        )
+    }
+    assert mismatches == {}
+
+
+def _worked_example_runtime_failures(
+    contract_name: str,
+    example: str,
+) -> list[str]:
+    """Return every stale live import or model field in one worked example."""
+    failures: list[str] = []
+    blocks = tuple(
+        match.group("body") for match in _PYTHON_FENCE.finditer(example)
+    )
+    tree = ast.parse("\n\n".join(blocks), filename=contract_name)
+    imported: dict[str, object] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        if node.module not in _IMPLEMENTED_EXAMPLE_MODULES:
+            continue
+        try:
+            module = importlib.import_module(node.module)
+        except ModuleNotFoundError:
+            continue
+        for name in node.names:
+            if not hasattr(module, name.name):
+                failures.append(
+                    f"{contract_name}: missing {node.module}.{name.name}"
+                )
+                continue
+            imported[name.asname or name.name] = getattr(module, name.name)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        model = imported.get(node.func.id)
+        fields = getattr(model, "model_fields", None)
+        if fields is None:
+            continue
+        unknown = sorted(
+            keyword.arg
+            for keyword in node.keywords
+            if keyword.arg is not None and keyword.arg not in fields
+        )
+        if unknown:
+            failures.append(
+                f"{contract_name}: {node.func.id} has unknown fields {unknown}"
+            )
+    return failures
+
+
+def test_worked_examples_resolve_live_imports_and_constructor_fields() -> None:
+    """Reject stale runtime names and constructor fields in worked examples."""
+    failures: list[str] = []
+    for contract in PHASE_ZERO_CONTRACTS:
+        example_match = _CONTRACT_WORKED_EXAMPLE.search(
+            contract.read_text(encoding="utf-8")
+        )
+        assert example_match is not None, contract.name
+        failures.extend(
+            _worked_example_runtime_failures(
+                contract.name,
+                example_match.group("body"),
+            )
+        )
+
+    assert failures == []
+
+
+def test_worked_example_runtime_check_rejects_retired_models_and_fields() -> None:
+    """Preserve the stale traceability-model defect as a rejected fixture."""
+    example = """```python
+from viper._contract_traceability import (
+    ContractRequirement,
+    RuleImplementation,
+)
+
+ContractRequirement(
+    requirement_id="CRT-01",
+    contract="docs/development/example.md",
+    phase=0,
+)
+```"""
+
+    assert _worked_example_runtime_failures("retired-model.md", example) == [
+        (
+            "retired-model.md: missing "
+            "viper._contract_traceability.RuleImplementation"
+        ),
+        "retired-model.md: ContractRequirement has unknown fields ['phase']",
+    ]
 
 
 def test_contract_traceability_model_block_matches_runtime() -> None:

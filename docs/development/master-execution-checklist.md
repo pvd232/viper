@@ -288,7 +288,7 @@ a new digest.
 <!-- contract-baseline: contract-requirement-traceability.md sha256=2bf7c2512e5b3a9d993badc393c10c556e9557c16c37930fec544ea398154f72 -->
 
 <!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
-<!-- contract-baseline: system-impact-graph.md sha256=566ead198e0abe516739d700545cb5b8bcb6a402981463a1d272f2e3156b5840 -->
+<!-- contract-baseline: system-impact-graph.md sha256=cb89e38c3beff5b786c17b57a9424c1cb92e98d23b466d092f421d281e99e580 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
 <!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
@@ -509,6 +509,13 @@ sequence in this document keeps one active branch and completes them in order.
 
 ## 6. Pair-coding protocol
 
+The [Phase 0 pair-coding reference](phase-0-pair-coding.md) is the executable
+code appendix for this checklist. Every Phase 0 checkbox carries one
+`pair-block` marker. That marker resolves to one complete block containing the
+contract requirement, dependencies, target symbol, exact edit, focused test,
+and completion gate. The documentation suite rejects missing blocks, duplicate
+ownership, dependency cycles, invalid Python, and placeholders.
+
 For each checkbox group:
 
 1. Read the outcome and the first test.
@@ -543,11 +550,13 @@ tests before later phases change code.
 - [ ] Add the exact traceability models and parsers in
       `src/viper/_contract_traceability.py`; compile current requirement rows
       and verifier-rule markers into canonical declarations.
+      <!-- pair-block: P0-CRT-01 -->
       <!-- implements: CRT-01 -->
       <!-- contract-implementation: requirement=CRT-01 rule=contract.requirement.unique state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-01 rule=contract.rule.declared state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
 - [ ] Resolve every rule to one exact source owner and at least one exact test
       function; reject missing files, symbols, and phase mismatches.
+      <!-- pair-block: P0-CRT-02 -->
       <!-- implements: CRT-02 -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.tested state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
@@ -555,6 +564,7 @@ tests before later phases change code.
       current, proposed-change, and integrated DAGs; reject placeholders,
       unresolved source locations, unconstructed Section 4 models, missing
       success cases, and missing rejection cases.
+      <!-- pair-block: P0-CRT-03 -->
       <!-- implements: CRT-03 -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.trace.populated state=planned owner=src/viper/_contract_traceability.py:parse_contract_traces -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=planned owner=src/viper/_contract_traceability.py:validate_contract_example -->
@@ -565,8 +575,10 @@ tests before later phases change code.
       pending contract. Extend the documentation test from
       `PHASE_ZERO_CONTRACTS` to `IMPLEMENTATION_CONTRACTS` before Phase 0
       closes.
+      <!-- pair-block: P0-CRT-04 -->
 - [ ] Serialize one ordered `ContractTraceabilityGraph` and compare its
       requirement and phase coverage with the current documentation oracle.
+      <!-- pair-block: P0-CRT-05 -->
       <!-- implements: CRT-04 -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.canonical state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.complete state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
@@ -918,25 +930,31 @@ After the focused tests pass:
 
 - [ ] Add `ProjectSettings`, `ProjectRootError`, `find_project_root()`, and
       `resolve_project_root()` in `src/viper/project.py`.
+      <!-- pair-block: P0-PDR-01 -->
       <!-- implements: PDR-01 -->
       <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=planned owner=src/viper/project.py:resolve_project_root -->
 - [ ] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
       staged project scaffold in `src/viper/project_init.py`.
+      <!-- pair-block: P0-PDR-02 -->
       <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=planned owner=src/viper/project_init.py:initialize_project -->
 - [ ] Route public default roots through `resolve_project_root()` and pass the
       resolved value into internal operations exactly once.
+      <!-- pair-block: P0-PDR-03 -->
       <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=planned owner=src/viper/project.py:resolve_project_root -->
       <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=planned owner=src/viper/project.py:resolve_project_root -->
 - [ ] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
       as the root-selection operation. <!-- implements: PDR-04 -->
+      <!-- pair-block: P0-PDR-04 -->
       <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=planned owner=tests/test_documentation.py:test_project_root_vocabulary -->
 - [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
       at their protocol paths and preserve separate immutable copies.
+      <!-- pair-block: P0-PDR-05 -->
       <!-- implements: PDR-02 -->
       <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=planned owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
 - [ ] Add `resolve_project_path()` and reject every descendant symlink, logical
       traversal, and final resolved escape before any local read, write,
       capture, publication, or restore. <!-- implements: PDR-03 -->
+      <!-- pair-block: P0-PDR-06 -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_project_path -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
@@ -961,36 +979,46 @@ working-file edit must leave the immutable copy retrievable.
       edge-evidence, resolution-attempt, observation, unresolved-dependency,
       graph, component-DAG, delta, and impact models to
       `src/viper/system_graph.py`. <!-- implements: SIG-01 -->
+      <!-- pair-block: P0-SIG-01 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.edge.evidence state=planned owner=src/viper/system_graph.py:SystemEdge -->
 - [ ] Enumerate every tracked file in the selected commit. Emit one file node
       and one `FileAnalysisReceipt` per file before semantic extraction.
+      <!-- pair-block: P0-SIG-02 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.inventory.complete state=planned owner=src/viper/system_graph.py:compile_system -->
 - [ ] Compile source spans and relationships from Python, configuration,
       contracts, checklist tasks, and tests. Require every source-backed node
       and edge to cite an inventoried file and exact span.
+      <!-- pair-block: P0-SIG-03 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.anchored state=planned owner=src/viper/system_graph.py:compile_system -->
 - [ ] Ingest `ContractTraceabilityGraph` and preserve each requirement, rule,
       implementation-owner, and acceptance-test path. <!-- implements: SIG-04 -->
+      <!-- pair-block: P0-SIG-04 -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.requirement.coverage state=planned owner=src/viper/system_graph.py:ingest_contract_traceability -->
+      <!-- contract-implementation: requirement=SIG-04 rule=system.plan.coverage state=planned owner=src/viper/system_graph.py:ingest_pair_blocks -->
 - [x] Keep the three system-impact DAGs aligned with their exact semantic
       topology and color roles.
+      <!-- pair-block: P0-SIG-05 -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.diagram.topology state=implemented owner=tests/test_documentation.py:test_system_impact_dags_preserve_semantic_topology -->
 - [ ] Run observed discovery under `SystemContextManifest`. Hold external
       inputs equal while recording imports, decorator registrations, registry
       entries, reflection targets, and subprocess entrypoints. Create one
       `ResolutionAttempt` and exactly one observed or unresolved outcome per
       lookup. <!-- implements: SIG-02 -->
+      <!-- pair-block: P0-SIG-06 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.resolution.total state=planned owner=src/viper/system_graph.py:SystemGraph -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.context.identity state=planned owner=src/viper/system_graph.py:compile_system -->
 - [ ] Reject unresolved dependencies in strict mode. Publish unresolved nodes
       and `ImpactReport.complete=False` only in exploratory mode.
+      <!-- pair-block: P0-SIG-07 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.strict state=planned owner=src/viper/system_graph.py:compile_system -->
 - [ ] Collapse strongly connected components, retain crossing relation kinds,
       and require the resulting component graph to be acyclic.
+      <!-- pair-block: P0-SIG-08 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.dag.components state=planned owner=src/viper/system_graph.py:condense_system_graph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.dag.acyclic state=planned owner=src/viper/system_graph.py:condense_system_graph -->
 - [ ] Compare canonical graphs and compute reverse impact closure from every
       changed node and edge endpoint. <!-- implements: SIG-03 -->
+      <!-- pair-block: P0-SIG-09 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.context state=planned owner=src/viper/system_graph.py:diff_system_graphs -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.identity state=planned owner=src/viper/system_graph.py:diff_system_graphs -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.impact.closure state=planned owner=src/viper/system_graph.py:compute_impact -->
@@ -998,10 +1026,12 @@ working-file edit must leave the immutable copy retrievable.
       affected node to one path disposition, record each required new path as a
       `PlannedAddition`, and reconcile the plan with the realized candidate
       delta.
+      <!-- pair-block: P0-SIG-10 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.coverage state=planned owner=src/viper/system_graph.py:verify_propagation -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.additions state=planned owner=src/viper/system_graph.py:verify_propagation -->
 - [ ] Recompile one source revision twice and require canonical graph equality;
       reject an edge whose endpoint is absent.
+      <!-- pair-block: P0-SIG-11 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.canonical state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.references state=planned owner=src/viper/system_graph.py:SystemGraph -->
 
@@ -1023,17 +1053,20 @@ component edge carries the sorted relation kinds crossing that pair.
 
 - [ ] In `tests/test_documentation.py`, reject duplicate requirements and
       orphan rules; require canonical declarations.
+      <!-- pair-block: P0-PROOF-01 -->
       <!-- verifies: CRT-01 -->
       <!-- contract-verification: requirement=CRT-01 rule=contract.requirement.unique state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
       <!-- contract-verification: requirement=CRT-01 rule=contract.rule.declared state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
 - [ ] In `tests/test_documentation.py`, reject a missing implementation symbol
       and a missing test function.
+      <!-- pair-block: P0-PROOF-02 -->
       <!-- verifies: CRT-02 -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
 - [ ] In `tests/test_documentation.py`, reject an omitted trace, placeholder
       value, unresolved source location, missing DAG, and Section 4 model absent
       from the worked example.
+      <!-- pair-block: P0-PROOF-03 -->
       <!-- verifies: CRT-03 -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.trace.populated state=planned test=tests/test_documentation.py:test_contract_traces_are_populated -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=planned test=tests/test_documentation.py:test_phase_zero_contracts_show_three_dags_and_instantiate_models -->
@@ -1042,35 +1075,41 @@ component edge carries the sorted relation kinds crossing that pair.
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
 - [ ] In `tests/test_documentation.py`, compile twice, require identical graph
       bytes, and require every rule to reach its owner and tests.
+      <!-- pair-block: P0-PROOF-04 -->
       <!-- verifies: CRT-04 -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=planned test=tests/test_documentation.py:test_contract_traceability_graph_is_canonical -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=planned test=tests/test_documentation.py:test_contract_traceability_graph_is_canonical -->
 
 - [ ] In `tests/test_project_init.py`, initialize outside the current directory,
       discover the root from a child directory, and assert the complete tree.
+      <!-- pair-block: P0-PROOF-05 -->
       <!-- verifies: PDR-01 -->
       <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=planned test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
       <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=planned test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
 - [ ] In `tests/test_storage.py`, publish beneath the selected root, mutate the
       working artifact, retrieve the original immutable bytes, and reject an
       escaping store. <!-- verifies: PDR-02 -->
+      <!-- pair-block: P0-PROOF-06 -->
       <!-- contract-verification: requirement=PDR-02 rule=project.root.git state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
       <!-- contract-verification: requirement=PDR-02 rule=project.store.boundary state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
       <!-- contract-verification: requirement=PDR-02 rule=project.root.stability state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
 - [ ] In `tests/test_validation_architecture.py`, reject a symlink escape and a
       public operation that bypasses the shared root resolver.
+      <!-- pair-block: P0-PROOF-07 -->
       <!-- verifies: PDR-03 -->
       <!-- contract-verification: requirement=PDR-03 rule=project.path.logical_boundary state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
       <!-- contract-verification: requirement=PDR-03 rule=project.path.symlink_free state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
       <!-- contract-verification: requirement=PDR-03 rule=project.path.resolved_boundary state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
 - [ ] Compare root vocabulary and the protocol tree in
       `tests/test_documentation.py`. <!-- verifies: PDR-04 -->
+      <!-- pair-block: P0-PROOF-08 -->
       <!-- contract-verification: requirement=PDR-04 rule=project.root.vocabulary state=planned test=tests/test_documentation.py:test_project_root_vocabulary -->
 - [ ] In `tests/test_validation_architecture.py`, compile the same source and
       context twice; require complete file and analysis-receipt coverage plus
       identical graph and DAG bytes. Remove one decorator and require the
       observed `registers` edge to disappear. Reject one undeclared environment
       input in strict mode.
+      <!-- pair-block: P0-PROOF-09 -->
       <!-- verifies: SIG-01, SIG-02 -->
       <!-- contract-verification: requirement=SIG-01 rule=system.inventory.complete state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
       <!-- contract-verification: requirement=SIG-01 rule=system.analysis.anchored state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
@@ -1086,6 +1125,7 @@ component edge carries the sorted relation kinds crossing that pair.
       verification, documentation, fixture, and test consumers. Require one
       disposition per affected node and exact agreement between planned and
       realized additions.
+      <!-- pair-block: P0-PROOF-10 -->
       <!-- verifies: SIG-03 -->
       <!-- contract-verification: requirement=SIG-03 rule=system.dag.components state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.dag.acyclic state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
@@ -1098,9 +1138,12 @@ component edge carries the sorted relation kinds crossing that pair.
 - [ ] In `tests/test_documentation.py`, require every contract requirement to
       preserve every rule, implementation owner, and acceptance test from
       `ContractTraceabilityGraph`. <!-- verifies: SIG-04 -->
+      <!-- pair-block: P0-PROOF-11 -->
       <!-- contract-verification: requirement=SIG-04 rule=system.requirement.coverage state=planned test=tests/test_documentation.py:test_system_graph_preserves_contract_traceability -->
+      <!-- contract-verification: requirement=SIG-04 rule=system.plan.coverage state=implemented test=tests/test_documentation.py:test_phase_zero_checkboxes_have_complete_ordered_pair_blocks -->
 - [x] In `tests/test_documentation.py`, parse the three system-impact DAGs and
       require their exact edges, semantic node classes, palette, and link style.
+      <!-- pair-block: P0-PROOF-12 -->
       <!-- contract-verification: requirement=SIG-04 rule=system.diagram.topology state=implemented test=tests/test_documentation.py:test_system_impact_dags_preserve_semantic_topology -->
 
 ```bash

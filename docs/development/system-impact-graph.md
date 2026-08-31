@@ -283,6 +283,10 @@ flowchart TD
 ```python
 SystemNodeId = Annotated[str, StringConstraints(min_length=1)]
 SystemComponentId = SHA256
+PairBlockId = Annotated[
+    str,
+    StringConstraints(pattern=r"^P0-[A-Z]+-[0-9]{2}$"),
+]
 
 SystemNodeKind = Literal[
     "file",
@@ -308,6 +312,8 @@ SystemNodeRole = Literal[
     "contract",
     "contract_requirement",
     "checklist_task",
+    "implementation_block",
+    "completion_gate",
     "acceptance_test",
     "installed_package",
     "context_variable",
@@ -317,7 +323,7 @@ SystemNodeRole = Literal[
 
 SystemEdgeKind = Literal[
     "defines",
-    "contains",
+    "defined_in",
     "imports",
     "calls",
     "registers",
@@ -334,6 +340,9 @@ SystemEdgeKind = Literal[
     "documents",
     "resolves",
     "launches",
+    "changes",
+    "depends_on",
+    "gates_on",
 ]
 
 ResolutionKind = Literal[
@@ -446,6 +455,28 @@ Strict review accepts opaque and excluded files only when their roles remain
 outside package behavior, protocol behavior, execution, verification, tests,
 and contract coverage.
 
+### Pair-coding plan
+
+```python
+class PairBlock(ProtocolModel):
+    block_id: PairBlockId
+    document: RepoRelPath
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    sha256: SHA256
+    requirements: tuple[RequirementId, ...] = Field(min_length=1)
+    targets: tuple[RepoSymbolRef, ...] = Field(min_length=1)
+    tests: tuple[RepoSymbolRef, ...] = Field(min_length=1)
+    gate: NonEmptyStr
+    depends_on: tuple[PairBlockId, ...]
+```
+
+`PairBlock` is the parsed form of one Phase 0 coding block. The compiler hashes
+the complete marked block, validates its source and test references, and
+topologically orders `depends_on`. Its system-graph node uses
+`roles=("implementation_block",)`. The gate becomes a second span with
+`roles=("completion_gate",)`.
+
 ### Nodes and edge evidence
 
 ```python
@@ -514,7 +545,7 @@ class UnresolvedDependency(ProtocolModel):
   of the exact source bytes in that span. Its path names an inventoried file.
 - An `external` node requires `symbol` and omits repository path, line, and
   source digest fields.
-- Every `span` has one incoming `contains` edge from its owning `file` node.
+- Every `span` has one outgoing `defined_in` edge to its owning `file` node.
 
 Node IDs use these canonical forms:
 
@@ -628,8 +659,8 @@ class ImpactReport(ProtocolModel):
     delta: ResolvedFileRef
     affected_nodes: tuple[SystemNodeId, ...]
     affected_requirements: tuple[RequirementId, ...]
-    affected_implementations: tuple[RuleImplementation, ...]
-    observing_tests: tuple[RuleVerification, ...]
+    affected_implementations: tuple[RuleEdge, ...]
+    observing_tests: tuple[RuleEdge, ...]
     unresolved: tuple[UnresolvedDependency, ...]
     complete: bool
 
@@ -661,8 +692,9 @@ class PropagationPlan(ProtocolModel):
 collections. Strict compilation rejects an incomplete graph before publishing
 an `ImpactReport`.
 
-`RequirementId`, `RuleImplementation`, and `RuleVerification` come from the
-contract-traceability models.
+`RequirementId` and `RuleEdge` come from the contract-traceability models.
+`affected_implementations` contains edges whose `kind` is `"implementation"`.
+`observing_tests` contains edges whose `kind` is `"verification"`.
 `contract_traceability_sha256` binds the source graph to the exact requirement
 links it ingested. The impact report therefore preserves whether each reached
 owner or test remains `planned` or already resolves as `implemented`.
@@ -701,8 +733,7 @@ from typing import Any
 
 from viper._contract_traceability import (
     RepoSymbolRef,
-    RuleImplementation,
-    RuleVerification,
+    RuleEdge,
 )
 from viper.references import ResolvedFileRef
 from viper.storage import LocalArtifactStore
@@ -717,6 +748,8 @@ from viper.system_graph import (
     FileAnalysisStatus,
     FileAnalysisReceipt,
     ImpactReport,
+    PairBlock,
+    PairBlockId,
     PlannedAddition,
     PropagationAction,
     PropagationDisposition,
@@ -937,6 +970,41 @@ def publish_model(
 ) -> ResolvedFileRef:
     """Publish one canonical model document and return its immutable ref."""
     return store.resolved_files({path: canonical_bytes(value)})[0]
+
+
+pair_block_id: PairBlockId = "P0-PDR-05"
+pair_block = PairBlock(
+    block_id=pair_block_id,
+    document="docs/development/phase-0-pair-coding.md",
+    start_line=658,
+    end_line=687,
+    sha256=digest(
+        {
+            "block_id": pair_block_id,
+            "document": "docs/development/phase-0-pair-coding.md",
+            "start_line": 658,
+            "end_line": 687,
+        }
+    ),
+    requirements=("PDR-02",),
+    targets=(
+        RepoSymbolRef(
+            path="src/viper/storage.py",
+            symbol="LocalArtifactStore.__init__",
+        ),
+    ),
+    tests=(
+        RepoSymbolRef(
+            path="tests/test_storage.py",
+            symbol="test_store_uses_selected_project_root",
+        ),
+    ),
+    gate=(
+        "conda run -n mantra python -m pytest tests/test_storage.py "
+        "-k uses_selected_project_root -q"
+    ),
+    depends_on=("P0-PDR-01", "P0-PDR-03"),
+)
 
 
 with TemporaryDirectory() as temporary_directory:
@@ -1249,35 +1317,33 @@ with TemporaryDirectory() as temporary_directory:
     implementation_location = RepoSymbolRef(
         path="src/viper/storage.py",
         symbol="LocalArtifactStore.__init__",
-        line=3,
     )
     test_location = RepoSymbolRef(
         path="tests/test_storage.py",
         symbol="test_store_uses_declared_location",
-        line=3,
     )
-    implementation_link = RuleImplementation(
-        requirement_id="PDR-02",
+    implementation_link = RuleEdge(
+        kind="implementation",
         rule_id="project.store.boundary",
         phase=0,
         checklist_line=2,
         state="implemented",
-        owner=implementation_location,
+        target=implementation_location,
     )
-    verification_link = RuleVerification(
-        requirement_id="PDR-02",
+    verification_link = RuleEdge(
+        kind="verification",
         rule_id="project.store.boundary",
         phase=0,
         checklist_line=3,
         state="implemented",
-        test=test_location,
+        target=test_location,
     )
     traceability_sha256 = digest(
         {
-            "implementations": [
-                implementation_link.model_dump(mode="json")
+            "edges": [
+                implementation_link.model_dump(mode="json"),
+                verification_link.model_dump(mode="json"),
             ],
-            "verifications": [verification_link.model_dump(mode="json")],
         }
     )
 
@@ -1531,13 +1597,19 @@ TOML and configuration analyzer
 -> configuration spans and declared relationships
 
 Markdown contract analyzer
--> contract, requirement, verifier-rule, and checklist-task spans
+-> contract, requirement, verifier-rule, checklist-task, PairBlock, and gate spans
 
 pytest analyzer
 -> test and fixture spans
 
 ContractTraceabilityGraph
 -> exact requirement, rule, implementation-owner, and acceptance-test edges
+
+Phase 0 PairBlock manifests
+-> one implementation-block span per checklist task
+-> changes edges to exact source targets
+-> depends_on edges to prerequisite PairBlocks and focused tests
+-> gates_on edge to the completion-gate span
 
 typed operation and CLI registries
 -> API-operation and CLI-command edges
@@ -1645,6 +1717,7 @@ The implementation adds these checks:
 | `system.propagation.coverage` <!-- verifier-rule: system.propagation.coverage requirement=SIG-03 --> | Require every affected node to appear in exactly one propagation disposition. |
 | `system.propagation.additions` <!-- verifier-rule: system.propagation.additions requirement=SIG-03 --> | Require planned additions to equal the candidate delta's added repository paths before the phase closes. |
 | `system.requirement.coverage` <!-- verifier-rule: system.requirement.coverage requirement=SIG-04 --> | Require each contract requirement to reach every declared verifier rule, each rule's implementation owner, and each observing test from `ContractTraceabilityGraph`. |
+| `system.plan.coverage` <!-- verifier-rule: system.plan.coverage requirement=SIG-04 --> | Require each Phase 0 checklist task to reach exactly one PairBlock, every changed source target, every focused test, one completion gate, and every declared prerequisite block. |
 | `system.diagram.topology` <!-- verifier-rule: system.diagram.topology requirement=SIG-04 --> | Require the current, proposed-change, and integrated DAGs to preserve their exact semantic edges, node roles, palette, and link style. |
 
 ## 8. Propagation
