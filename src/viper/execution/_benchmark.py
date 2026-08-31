@@ -88,7 +88,8 @@ def benchmark(
         verify_benchmark_result,
         verify_run_result,
     )
-    from ._run import RunFetcher, execute_benchmark_confirmation
+    from ._run import execute_benchmark_confirmation
+    from ._source import RunFetcher
 
     root = repository_root.resolve()
     candidate_path = resolved_run_path.resolve()

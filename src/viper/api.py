@@ -528,24 +528,27 @@ OPERATIONS: tuple[OperationName, ...] = (
 )
 
 
-from ._api.handlers import compare_runs as compare_runs
-from ._api.handlers import execute_benchmark as execute_benchmark
-from ._api.handlers import execute_stage as execute_stage
-from ._api.handlers import freeze_run as freeze_run
-from ._api.handlers import get_capabilities as get_capabilities
-from ._api.handlers import get_schema as get_schema
-from ._api.handlers import init_project as init_project
-from ._api.handlers import lineage as lineage
-from ._api.handlers import plan_diff as plan_diff
-from ._api.handlers import preflight as preflight
-from ._api.handlers import retry_request, run_request
-from ._api.handlers import status as status
-from ._api.handlers import validate_resolved_stage as validate_resolved_stage
-from ._api.handlers import validate_run_spec as validate_run_spec
-from ._api.handlers import validate_stage as validate_stage
-from ._api.handlers import verify_benchmark as verify_benchmark
-from ._api.handlers import verify_pointer as verify_pointer
-from ._api.handlers import verify_run as verify_run
+from ._api.handlers import (
+    compare_runs,
+    execute_benchmark,
+    execute_stage,
+    freeze_run,
+    get_capabilities,
+    get_schema,
+    init_project,
+    lineage,
+    plan_diff,
+    preflight,
+    retry_request,
+    run_request,
+    status,
+    validate_resolved_stage,
+    validate_run_spec,
+    validate_stage,
+    verify_benchmark,
+    verify_pointer,
+    verify_run,
+)
 
 RequestType = type[APIModel]
 Handler = Callable[[Any], SuccessModel]

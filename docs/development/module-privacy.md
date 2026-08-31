@@ -59,6 +59,11 @@ This protocol defines three static checks:
 | `package.shared_symbol` | Reject an import of a single-underscore symbol from another module. |
 | `package.public_execution_surface` | Results and errors returned or raised by public execution functions have public import paths. |
 
+The source tree also rejects `from module import name as name`. A public module
+lists supported imported names in `__all__`; an internal caller imports a name
+from the module that defines it. Ruff rejects every redundant self-alias
+through `PLC0414`.
+
 These checks govern Python source structure. Runtime execution and the
 serialized provenance protocol retain their current behavior.
 
