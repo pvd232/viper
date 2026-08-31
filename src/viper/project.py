@@ -1,13 +1,14 @@
+"""Initialize project files and establish global root discovery ."""
 from __future__ import annotations
 
 import subprocess
 import tomllib
 from pathlib import Path
+from typing import Literal
 
 from pydantic import ValidationError
 
 from ._schema import ProtocolModel
-from typing import Literal
 
 
 class ProjectSettings(ProtocolModel):
