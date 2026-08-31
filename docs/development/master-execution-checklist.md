@@ -297,7 +297,7 @@ a new digest.
 
 <!-- contract-baseline: contract-requirement-traceability.md sha256=2bf7c2512e5b3a9d993badc393c10c556e9557c16c37930fec544ea398154f72 -->
 
-<!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
+<!-- contract-baseline: project-data-root.md sha256=74acbb87c68fa1849d6bd82bafe49bb5fd367b046dd47f8a678b3c456c40f8a4 -->
 <!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
 <!-- contract-baseline: system-impact-graph.md sha256=cb89e38c3beff5b786c17b57a9424c1cb92e98d23b466d092f421d281e99e580 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
@@ -960,12 +960,7 @@ After the focused tests pass:
 - [ ] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
       as the root-selection operation. <!-- implements: PDR-04 -->
       <!-- pair-block: P0-PDR-04 -->
-      <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=planned owner=tests/test_documentation.py:test_project_root_vocabulary -->
-- [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
-      at their protocol paths and preserve separate immutable copies.
-      <!-- pair-block: P0-PDR-05 -->
-      <!-- implements: PDR-02 -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=planned owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
+      <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=planned owner=src/viper/cli.py:add_root -->
 - [ ] Add `resolve_project_path()` and reject every descendant symlink, logical
       traversal, and final resolved escape before any local read, write,
       capture, publication, or restore. <!-- implements: PDR-03 -->
@@ -973,6 +968,11 @@ After the focused tests pass:
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_project_path -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
+- [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
+      at their protocol paths and preserve separate immutable copies.
+      <!-- pair-block: P0-PDR-05 -->
+      <!-- implements: PDR-02 -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=planned owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
 
 <details>
 <summary>Hints</summary>
@@ -1146,13 +1146,14 @@ component edge carries the sorted relation kinds crossing that pair.
       <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=planned test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
 - [ ] In `tests/test_storage.py`, publish beneath the selected root, mutate the
       working artifact, retrieve the original immutable bytes, and reject an
-      escaping store. <!-- verifies: PDR-02 -->
+      escaping store. In `tests/test_validation_architecture.py`, require each
+      operation to resolve every selected root once. <!-- verifies: PDR-02 -->
       <!-- pair-block: P0-PROOF-06 -->
       <!-- contract-verification: requirement=PDR-02 rule=project.root.git state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
       <!-- contract-verification: requirement=PDR-02 rule=project.store.boundary state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
-      <!-- contract-verification: requirement=PDR-02 rule=project.root.stability state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
-- [ ] In `tests/test_validation_architecture.py`, reject a symlink escape and a
-      public operation that bypasses the shared root resolver.
+      <!-- contract-verification: requirement=PDR-02 rule=project.root.stability state=planned test=tests/test_validation_architecture.py:test_operations_resolve_project_root_once -->
+- [ ] In `tests/test_validation_architecture.py`, reject descendant symlinks,
+      logical traversal, and resolved path escapes.
       <!-- pair-block: P0-PROOF-07 -->
       <!-- verifies: PDR-03 -->
       <!-- contract-verification: requirement=PDR-03 rule=project.path.logical_boundary state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->

@@ -58,7 +58,3 @@ def resolve_project_root(root: Path | None = None) -> Path:
 
     _require_git_work_tree(resolved)
     return resolved
-
-
-def _resolve_operation_root(root: Path | None) -> Path:
-    return resolve_project_root(root)

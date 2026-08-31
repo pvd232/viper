@@ -57,7 +57,7 @@ The two sets of files share one root and retain separate paths.
 `viper init` already accepts a target path. `InitProjectRequest.path` reaches
 `initialize_project(path, package)`, which writes the starter project under that
 path. Runtime functions separately receive `repository_root` or default a
-public `root` argument to `Path.cwd()`.
+public helper's `repository_root` argument to `Path.cwd()`.
 
 ```text
 viper init TARGET
@@ -66,12 +66,13 @@ viper init TARGET
 -> starter files beneath TARGET
 
 later command
--> explicit repository_root or Path.cwd()
+-> explicit repository_root or helper default Path.cwd()
 -> execution and storage paths beneath that independently selected value
 ```
 
 Current initialization leaves root discovery undefined. A later command chooses
-its root independently through `repository_root` or `Path.cwd()`. The starter
+its root independently through `repository_root` or a helper's `Path.cwd()`
+default. The starter
 project also creates only portions of the reserved protocol tree. The current
 code therefore uses one conceptual root through several selection rules.
 
@@ -86,7 +87,7 @@ flowchart TD
     Scaffold["initialize_project(path, package)"]
     Files["Starter files beneath TARGET"]
     Command["Later public command"]
-    Choice["repository_root or Path.cwd()"]
+    Choice["repository_root or helper default Path.cwd()"]
     Runtime["Execution and storage paths"]
     Gap["No persisted root marker<br/>no shared discovery rule"]
 
@@ -209,7 +210,7 @@ The `[project]` table uses this complete model:
 class ProjectSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1]
 
 
 class ViperConfig(BaseModel):
@@ -249,6 +250,17 @@ viper init ROOT --package PACKAGE
 
 `ROOT` maps to `InitProjectRequest.path`.
 `InitProjectSuccess.project_root` returns the resolved absolute root.
+
+Other local requests expose optional roots with one vocabulary:
+
+| Request shape | Public field | Resolved runtime value |
+| --- | --- | --- |
+| One project | `root` | `project_root` |
+| Two projects | `left_root`, `right_root` | `left_root`, `right_root` after independent resolution |
+
+`FreezeRunRequest`, `PreflightRequest`, `ExecuteStageRequest`, `RunRequest`,
+`ExecuteBenchmarkRequest`, and `VerificationRequest` use `root`.
+`PlanDiffRequest` and `CompareRunsRequest` use `left_root` and `right_root`.
 
 ### Runtime root resolution
 
@@ -493,7 +505,7 @@ until the user creates their first record. Initialization creates the reserved
 Every local public entry point follows one root path:
 
 ```text
-explicit root or current directory
+explicit root or marker discovery from the current directory
 -> resolve_project_root()
 -> validated absolute project root
 -> authoring, freezing, execution, verification, catalog, knowledge, or restore
@@ -563,7 +575,7 @@ The implementation adds these checks:
 | `project.path.symlink_free` <!-- verifier-rule: project.path.symlink_free requirement=PDR-03 --> | After canonicalizing `ROOT`, reject every symlink from its first descendant component through the governed source or target. |
 | `project.path.resolved_boundary` <!-- verifier-rule: project.path.resolved_boundary requirement=PDR-03 --> | Resolve the symlink-free candidate as a final defense and require it to remain beneath the canonical `ROOT`. |
 | `project.store.boundary` <!-- verifier-rule: project.store.boundary requirement=PDR-02 --> | `LocalArtifactStore.store_root` stays beneath `ROOT`. |
-| `project.root.stability` <!-- verifier-rule: project.root.stability requirement=PDR-02 --> | One operation resolves the root once and passes that value to every internal consumer. |
+| `project.root.stability` <!-- verifier-rule: project.root.stability requirement=PDR-02 --> | One operation resolves each selected root once and passes the canonical value to every internal consumer. |
 | `project.root.vocabulary` <!-- verifier-rule: project.root.vocabulary requirement=PDR-04 --> | The protocol, API, CLI, typed operations, scaffold, and documentation use `root`, `ROOT`, or `project_root` according to their declared scope. |
 
 The verifier reconstructs local paths from the explicit root supplied for
@@ -576,8 +588,8 @@ digests and byte counts through the existing storage rules.
 | --- | --- |
 | `src/viper/project_init.py` | Add `viper.toml`, complete the reserved protocol tree, and preserve staged atomic initialization. |
 | `src/viper/project.py` | Add `ProjectSettings`, `ProjectRootError`, `ProjectPathError`, `find_project_root()`, `resolve_project_root()`, and `resolve_project_path()`. |
-| `src/viper/api.py` | Keep `InitProjectRequest.path` and `InitProjectSuccess.project_root`; route optional public roots through the shared resolver. |
-| `src/viper/_api/handlers.py` | Resolve one root at each operation boundary and pass it to internal functions. |
+| `src/viper/api.py` | Keep `InitProjectRequest.path` and `InitProjectSuccess.project_root`; expose `root`, `left_root`, and `right_root`; resolve each selected root at the operation boundary. |
+| `src/viper/_api/handlers.py` | Receive the first root-aware operation bodies during `P0-PDR-03`; `P0-MOD-03` moves those bodies into `api.py` unchanged and deletes this transitional module. |
 | `src/viper/cli.py` | Document the `init` positional argument as `ROOT`; use `--root` on commands that need an explicit override. |
 | `src/viper/storage.py` | Construct `LocalArtifactStore` from the resolved project root and preserve `.viper/store` as a separate subtree. |
 | `src/viper/_verification/storage.py` | Replace `Path.cwd()` reconstruction with the explicit verified root. |
@@ -663,11 +675,13 @@ outcome.message_match = "symlink"
 
 1. Add the root marker, `ProjectSettings`, and root resolver with unit tests.
 2. Complete the generated protocol tree and acceptance test.
-3. Route initialization, authoring, execution, verification, inspection, and
-   storage through one resolved root.
-4. Replace public `--repository-root` spelling with `--root`.
-5. Add boundary and relocation tests.
-6. Update the protocol tree and public documentation.
-7. Run the Phase 0 gate from the master execution checklist.
+3. Replace public request and CLI root names, then resolve each selected root
+   once at the current operation boundary.
+4. Add the shared project-path boundary before constructing local storage.
+5. Route authoring, execution, verification, inspection, and storage through
+   the resolved root.
+6. Add boundary and relocation tests.
+7. Update the protocol tree and public documentation.
+8. Run the Phase 0 gate from the master execution checklist.
 
 **Commit boundary:** `Bind every local operation to one project root`

@@ -34,7 +34,9 @@ def test_init_project_generates_importable_five_stage_project(
     )
 
     assert result.project_root == target
-    assert len(result.files) == 20
+    assert len(result.files) == 22
+    assert target / "viper.toml" in result.files
+    assert target / "inputs" / ".gitkeep" in result.files
     assert completed.returncode == 0, completed.stdout + completed.stderr
     assert "1 passed" in completed.stdout
 
