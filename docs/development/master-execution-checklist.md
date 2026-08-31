@@ -285,7 +285,7 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-requirement-traceability.md sha256=4b6af31aa14da1a3c58f1c8ae9e2e0e1c1bd3535b2ec7e9fdf7ce162d0a2afef -->
+<!-- contract-baseline: contract-requirement-traceability.md sha256=74202d786ef03dee7eb7c809d5efbed0f450f98c1aabb56c8fb38014157f8ecf -->
 
 <!-- contract-baseline: project-data-root.md sha256=b6ffb5b7bd87c0a9b74bd656377b5187a5a9d6f5393b8035a84560349dc6c64c -->
 <!-- contract-baseline: system-impact-graph.md sha256=79aa0a2ff9d844273acc15547df3c22e1ac54e2923344c7834807302ca28b0b6 -->
@@ -546,7 +546,7 @@ tests before later phases change code.
       <!-- implements: CRT-01 -->
       <!-- contract-implementation: requirement=CRT-01 rule=contract.requirement.unique state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-01 rule=contract.rule.declared state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-- [ ] Resolve every rule to one primary source owner and at least one exact test
+- [ ] Resolve every rule to one exact source owner and at least one exact test
       function; reject missing files, symbols, and phase mismatches.
       <!-- implements: CRT-02 -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
