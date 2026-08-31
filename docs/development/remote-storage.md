@@ -579,7 +579,7 @@ and `stored_at`. The caller selects the result by path and constructs the exact
 reference named in the standalone-file table in section 5.1.
 
 `bind_run_destination()` atomically creates or loads the run-level destination
-record. `viper.freeze()` calls it before publishing a generated artifact
+record. `viper.authoring.freeze()` calls it before publishing a generated artifact
 pointer. Run execution calls it before stage work or any immutable publication.
 Both callers receive the stored destination and reject a different configured
 value with `storage_destination_changed`.
@@ -738,7 +738,7 @@ Before the first immutable publication, VIPER writes the parsed
 
 `bind_run_destination()` creates that run-level control file atomically. The
 first immutable publisher owns the first call. A prior-run input may make
-`viper.freeze()` the first caller because freezing publishes its generated
+`viper.authoring.freeze()` the first caller because freezing publishes its generated
 `ArtifactPointer`. A plan whose freeze step publishes zero immutable files
 binds the destination when execution begins.
 

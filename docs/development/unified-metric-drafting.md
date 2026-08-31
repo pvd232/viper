@@ -27,7 +27,7 @@ These requirements bind the contract to the master checklist:
 | UMD-05 <!-- contract-requirement: UMD-05 phase=8 test=tests/test_benchmark_execution.py --> | Record every benchmark metric under fixed inputs and apply optional criteria. |
 | UMD-06 <!-- contract-requirement: UMD-06 phase=11 test=tests/test_documentation.py --> | Remove retired metric shapes and publish the final metric, experiment, and benchmark API. |
 
-**Current:** `@viper.metric` attaches `metric_id`, `kind`, and `mode` to a
+**Current:** `@viper.metrics.metric` attaches `metric_id`, `kind`, and `mode` to a
 function or stateful class. `MetricSpec` stores the exact implementation,
 parameter values, dependencies, and recomputation comparator. Project code or
 fixtures construct `MetricSpec` directly. Stages select metrics through bare
@@ -41,12 +41,12 @@ records only metrics that have thresholds. See
 [`src/viper/benchmark.py`](../../src/viper/benchmark.py) and
 [`src/viper/execution/_benchmark.py`](../../src/viper/execution/_benchmark.py).
 
-**Proposed:** `viper.measure()` creates one configured `MetricDraft`.
-`viper.min()` or `viper.max()` gives that metric an objective
-direction. `viper.experiment()` defines factors, variants, and replicates while
-`viper.freeze()` derives the experiment's metric registry from the selected
-stages. `viper.benchmark()` fixes the evaluation data, splits, metrics, and
-optional criteria.
+**Proposed:** `viper.metrics.measure()` creates one configured `MetricDraft`.
+`viper.metrics.min()` or `viper.metrics.max()` gives that metric an objective
+direction. `viper.authoring.experiment()` defines factors, variants, and
+replicates. `viper.authoring.freeze()` derives the experiment's metric registry
+from the selected stages. `benchmark()` from `viper.benchmark` fixes the
+evaluation data, splits, metrics, and optional criteria.
 
 The benchmark model follows four observations from primary sources:
 
@@ -77,7 +77,7 @@ value, and verifies every recomputed value from its declared files.
 
 When a user freezes an experiment, VIPER derives `ExperimentSpec.metrics` from
 the metrics reachable through the experiment's stage drafts.
-`viper.experiment()` therefore lists factors, variants, and replicates once.
+`viper.authoring.experiment()` therefore lists factors, variants, and replicates once.
 
 When a user runs a benchmark, VIPER records the exact evaluation dataset,
 splits, metric values, candidate evidence, and confirmation evidence. Optional
@@ -134,7 +134,7 @@ score.
 
 ### Metric definition and configuration
 
-The decorator defines stable metric metadata. `viper.measure()` supplies the
+The decorator defines stable metric metadata. `viper.metrics.measure()` supplies the
 values that can change between experiments.
 
 ```python
@@ -230,23 +230,23 @@ def metric_definition(
 ```
 
 ```text
-@viper.metric(...)
+@viper.metrics.metric(...)
 -> construct MetricDefinition
 -> attach it to the function or class as __viper_metric__
 
-viper.measure(implementation, ...)
+viper.metrics.measure(implementation, ...)
 -> call metric_definition(implementation)
 -> validate mode, dependencies, and comparator
 -> return MetricDraft containing the implementation and configured values
 
-viper.freeze(plan)
+viper.authoring.freeze(plan)
 -> call metric_definition(MetricDraft.implementation)
 -> inspect type(MetricDraft.params)
 -> hash the implementation and custom parameter-model source
 -> write MetricSpec
 ```
 
-`viper.measure()` constructs `viper.params.Metric()` when the caller omits
+`viper.metrics.measure()` constructs `viper.params.Metric()` when the caller omits
 `params`. A supplied instance must subclass `viper.params.Metric`. Freezing
 derives the parameter class from `type(MetricDraft.params)`.
 
@@ -310,25 +310,30 @@ recomputed diagnostic also uses declared dependencies, a comparator, and a
 `MetricVerificationReceipt`.
 
 ```python
-@viper.metric(
+from viper import params
+from viper.authoring import stage
+from viper.metrics import MetricContext, measure, metric, min
+
+
+@metric(
     metric_id="gradient_norm",
     mode="live",
 )
 def gradient_norm(
-    _context: viper.MetricContext[viper.params.Metric],
+    _context: MetricContext[params.Metric],
     batch_norms: list[float],
 ) -> float:
     return max(batch_norms)
 
 
-gradient_norm_metric = viper.measure(gradient_norm)
+gradient_norm_metric = measure(gradient_norm)
 
-training = viper.stage(
+training = stage(
     train,
     params=TRAIN_PARAMS,
     inputs=TRAIN_INPUTS,
     artifacts=TRAIN_ARTIFACTS,
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -382,8 +387,11 @@ class MetricContext(BaseModel, Generic[MetricParamsT]):
 A recomputed metric keeps its current context-first call:
 
 ```python
+from viper.metrics import MetricContext
+
+
 def evaluation_loss(
-    context: viper.MetricContext[LossMetricParams],
+    context: MetricContext[LossMetricParams],
 ) -> float:
     ...
 ```
@@ -392,8 +400,12 @@ A stateless live metric receives the same context before the observations
 supplied to `record()`:
 
 ```python
+from viper import params
+from viper.metrics import MetricContext
+
+
 def training_loss(
-    context: viper.MetricContext[viper.params.Metric],
+    context: MetricContext[params.Metric],
     batch_losses: list[float],
 ) -> float:
     ...
@@ -402,12 +414,13 @@ def training_loss(
 A stateful live metric receives the context once:
 
 ```python
-class RunningAccuracy(
-    viper.StatefulMetric[AccuracyMetricParams]
-):
+from viper.metrics import MetricContext, StatefulMetric
+
+
+class RunningAccuracy(StatefulMetric[AccuracyMetricParams]):
     def __init__(
         self,
-        context: viper.MetricContext[AccuracyMetricParams],
+        context: MetricContext[AccuracyMetricParams],
     ) -> None:
         self.params = context.params
         self.correct = 0
@@ -701,7 +714,7 @@ class ExperimentDraft(BaseModel):
 ```
 
 `ExperimentDraft` omits `metrics`. Every configured metric must be selected by
-at least one stage in one declared variant. `viper.freeze()` walks every
+at least one stage in one declared variant. `viper.authoring.freeze()` walks every
 variant's stage objectives and metrics, produces one `MetricSpec` per metric ID,
 and writes those records into `ExperimentSpec.metrics`.
 
@@ -764,7 +777,7 @@ metric registry from the same `ExperimentDraft`.
 links the source measurement and verification receipt through
 `StageReuseReceipt` while preserving the source `Measurement` identity.
 
-`viper.freeze()` derives these persisted values:
+`viper.authoring.freeze()` derives these persisted values:
 
 ```text
 RunSpec.experiment_id
@@ -879,7 +892,20 @@ training stages read the same checked-in
 variant-specific stage and every run value it uses.
 
 ```python
-baseline_training = viper.stage(
+from viper.artifacts import artifact
+from viper.authoring import (
+    experiment,
+    factor,
+    input,
+    plan,
+    replicate,
+    stage,
+    variant,
+)
+from viper.metrics import min
+
+
+baseline_training = stage(
     train,
     params=TrainParams(
         epochs=40,
@@ -890,28 +916,28 @@ baseline_training = viper.stage(
         max_gradient_norm=1.0,
     ),
     inputs={
-        "dataset": viper.input(
+        "dataset": input(
             path="inputs/training_embeddings.csv",
             data_role="training",
         ),
     },
     artifacts={
-        Train.MODEL: viper.artifact(
+        Train.MODEL: artifact(
             path="artifacts/models/logistic_regression/model.pt",
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.artifact(
+        Train.STATE: artifact(
             path="artifacts/models/logistic_regression/state.pt",
             loader=load_resume_state_artifact,
             data_role="training",
         ),
     },
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 
-high_rate_training = viper.stage(
+high_rate_training = stage(
     train,
     params=TrainParams(
         epochs=40,
@@ -922,43 +948,43 @@ high_rate_training = viper.stage(
         max_gradient_norm=1.0,
     ),
     inputs={
-        "dataset": viper.input(
+        "dataset": input(
             path="inputs/training_embeddings.csv",
             data_role="training",
         ),
     },
     artifacts={
-        Train.MODEL: viper.artifact(
+        Train.MODEL: artifact(
             path="artifacts/models/logistic_regression/model.pt",
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.artifact(
+        Train.STATE: artifact(
             path="artifacts/models/logistic_regression/state.pt",
             loader=load_resume_state_artifact,
             data_role="training",
         ),
     },
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 
-experiment = viper.experiment(
+study = experiment(
     experiment_id="tiny_http",
     factors={
-        "learning_rate": viper.factor(
+        "learning_rate": factor(
             levels=("baseline", "high"),
         ),
     },
     variants={
-        "baseline": viper.variant(
+        "baseline": variant(
             levels={"learning_rate": "baseline"},
             stages={
                 "train": baseline_training,
             },
             estimator=baseline_training.artifacts[Train.MODEL],
         ),
-        "high_learning_rate": viper.variant(
+        "high_learning_rate": variant(
             levels={"learning_rate": "high"},
             stages={
                 "train": high_rate_training,
@@ -967,15 +993,15 @@ experiment = viper.experiment(
         ),
     },
     replicates={
-        "replicate_01": viper.replicate(seed=7),
-        "replicate_02": viper.replicate(seed=19),
+        "replicate_01": replicate(seed=7),
+        "replicate_02": replicate(seed=19),
     },
 )
 
 
-baseline_plan = viper.plan(
+baseline_plan = plan(
     run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
-    experiment=experiment,
+    experiment=study,
     variant="baseline",
     replicate="replicate_01",
     source=source,
@@ -983,9 +1009,9 @@ baseline_plan = viper.plan(
     reproducibility=reproducibility,
 )
 
-high_rate_plan = viper.plan(
+high_rate_plan = plan(
     run_id="01ARZ3NDEKTSV4RRFFQ69G5FAW",
-    experiment=experiment,
+    experiment=study,
     variant="high_learning_rate",
     replicate="replicate_01",
     source=source,
@@ -993,9 +1019,9 @@ high_rate_plan = viper.plan(
     reproducibility=reproducibility,
 )
 
-baseline_replicate_02_plan = viper.plan(
+baseline_replicate_02_plan = plan(
     run_id="01ARZ3NDEKTSV4RRFFQ69G5FAX",
-    experiment=experiment,
+    experiment=study,
     variant="baseline",
     replicate="replicate_02",
     source=source,
@@ -1147,7 +1173,7 @@ execution, and benchmark record therefore share one test-data identity.
 
 ### Freezing metrics and objectives
 
-For each `MetricDraft`, `viper.freeze()` performs these operations:
+For each `MetricDraft`, `viper.authoring.freeze()` performs these operations:
 
 ```text
 call metric_definition(MetricDraft.implementation)
@@ -1222,7 +1248,7 @@ Verification repeats that operation in a separate worker and writes
 
 ### Freezing experiments
 
-`viper.freeze()` validates every factor level, selected variant, replicate, and
+`viper.authoring.freeze()` validates every factor level, selected variant, replicate, and
 stage parameter set. It writes `ExperimentSpec`, the selected `VariantSpec`, all
 stage specs, and `RunSpec`.
 
@@ -1395,7 +1421,7 @@ Section 4.
 
 | Surface | Change |
 | --- | --- |
-| Public metric API | Add typed metric decorators, preserve `MetricDefinition` attachment and retrieval, remove `MetricKind`, and add `viper.measure()`, `viper.min()`, `viper.max()`, `viper.at_least()`, and `viper.at_most()`. |
+| Public metric API | Add typed metric decorators, preserve `MetricDefinition` attachment and retrieval, remove `MetricKind`, and add `viper.metrics.measure()`, `viper.metrics.min()`, `viper.metrics.max()`, `viper.benchmark.at_least()`, and `viper.benchmark.at_most()`. |
 | Live metric runtime | Pass validated `MetricContext` through `MetricHandle`; functions receive it first and stateful classes receive it at construction. |
 | Metric protocol | Add `parameter_model` to `MetricSpec` and `MetricExecutionReceipt`. |
 | Parameter-model identity | Add `ParameterModelRef.owner` and resolve `path` relative to either the project or installed VIPER package root. |
@@ -1421,12 +1447,12 @@ The superseded behavior has these dispositions:
 | Undefined proposed `MetricDecorator` return type | Replace with `Callable[[DecoratedMetricT], DecoratedMetricT]`. |
 | Implicit `MetricDefinition` handoff | Preserve `__viper_metric__` attachment and `metric_definition()` retrieval for metric ID and mode. |
 | `MetricKind` and the decorator's `kind=` argument | Delete them. The stage's `objective=` or `metrics=` field records the metric's role; `MetricMode` records when VIPER calculates it. |
-| Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metric` and `viper.measure()`. |
+| Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metrics.metric` and `viper.metrics.measure()`. |
 | Python stage authoring that accepts `metric_ids=` | Replace with `objective=` and `metrics=`. |
 | Proposed `LiveMetricContext` | Delete; `MetricContext` serves both modes. |
 | Live metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
 | Parameterless `StatefulMetric` subclasses | Replace constructors with `MetricContext`. |
-| Manual `ExperimentSpec` and `VariantSpec` construction in public examples | Replace with `viper.experiment()`, `viper.variant()`, and `viper.replicate()`. |
+| Manual `ExperimentSpec` and `VariantSpec` construction in public examples | Replace with `viper.authoring.experiment()`, `viper.authoring.variant()`, and `viper.authoring.replicate()`. |
 | `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete with `parameters.Download`; derive variant parameters from project-owned stages. |
 | `BenchmarkSpec.metrics: tuple[MetricCriterion, ...]` | Replace with `metric_ids` and optional `criteria`. |
 | `MetricCriterionReceipt` | Delete after `BenchmarkMetricResult` and `MetricCriterionResult` cover recorded values and optional criteria. |
@@ -1443,28 +1469,33 @@ and one recomputed evaluation accuracy metric.
 It creates:
 
 ```python
-training = viper.stage(
+from viper.authoring import experiment, replicate, run_artifact, stage, variant
+from viper.benchmark import at_least, benchmark
+from viper.metrics import min
+
+
+training = stage(
     train,
     params=TRAIN_PARAMS,
     inputs={"dataset": training_embeddings.artifacts["embeddings"]},
     artifacts=TRAIN_ARTIFACTS,
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 
-benchmark_test = viper.run_artifact(
+benchmark_test = run_artifact(
     resolved_run=BENCHMARK_DATA_RUN,
     stage="embed_test",
     artifact="embeddings",
 )
 
-benchmark_split = viper.run_artifact(
+benchmark_split = run_artifact(
     resolved_run=BENCHMARK_DATA_RUN,
     stage="split_test",
     artifact="holdout",
 )
 
-eval_stage = viper.stage(
+eval_stage = stage(
     eval_model,
     params=EVAL_PARAMS,
     inputs={
@@ -1473,16 +1504,16 @@ eval_stage = viper.stage(
         "holdout": benchmark_split,
     },
     artifacts=EVAL_ARTIFACTS,
-    objective=viper.min(evaluation_loss_metric),
+    objective=min(evaluation_loss_metric),
     metrics=(evaluation_accuracy_metric,),
     eval_id="holdout",
     split_inputs=("holdout",),
 )
 
-experiment = viper.experiment(
+study = experiment(
     experiment_id="tiny_http",
     variants={
-        "baseline": viper.variant(
+        "baseline": variant(
             levels={},
             stages={
                 "download": download,
@@ -1494,24 +1525,24 @@ experiment = viper.experiment(
         ),
     },
     replicates={
-        "replicate_01": viper.replicate(seed=7),
+        "replicate_01": replicate(seed=7),
     },
 )
 
-benchmark = viper.benchmark(
+benchmark_draft = benchmark(
     benchmark_id="tiny_holdout",
     eval_id="holdout",
     test=benchmark_test,
     splits={"holdout": benchmark_split},
     metrics=(evaluation_loss_metric, evaluation_accuracy_metric),
     criteria=(
-        viper.at_least(evaluation_accuracy_metric, 0.90),
+        at_least(evaluation_accuracy_metric, 0.90),
     ),
 )
 ```
 
-`viper.plan(benchmark=benchmark, ...)` attaches the benchmark to the candidate
-run. Freezing compiles `benchmark_test` and `benchmark_split` once, writes
+`viper.authoring.plan(benchmark=benchmark_draft, ...)` attaches the benchmark
+to the candidate run. Freezing compiles `benchmark_test` and `benchmark_split` once, writes
 them as `StoredInputRef` values in the evaluation stage, and reuses their
 pointer references in `BenchmarkSpec.test` and `BenchmarkSpec.splits`.
 
@@ -1650,7 +1681,7 @@ with one compiler-derived metric registry.
 
 - [ ] Add `BenchmarkDraft` and its public constructor.
 - [ ] Name the fixed evaluation input `test` in `BenchmarkDraft`,
-      `BenchmarkSpec`, and `viper.benchmark()`.
+      `BenchmarkSpec`, and `benchmark()` from `viper.benchmark`.
 - [ ] Compile the benchmark's test and split drafts once; reuse the resulting
       pointers in the evaluation stage and benchmark specification.
 - [ ] Split `BenchmarkSpec.metric_ids` from optional `criteria`.

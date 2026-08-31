@@ -184,7 +184,7 @@ class ResolvedExternalInputRef(ProtocolModel):
     data_role: DataRole
 ```
 
-`viper.input()` creates `ExternalInputDraft`. Freezing alone constructs the
+`viper.authoring.input()` creates `ExternalInputDraft`. Freezing alone constructs the
 `ExternalInputRef` protocol record.
 `ExternalInputRef.source.path` is the repository-relative source selected by
 the user. `resolve_inputs()` reads that file once and writes the same bytes to
@@ -271,7 +271,7 @@ The active-to-target field changes are exact:
 | `ResolvedExternalInputRef.source: ExternalInputSource` | Replace | `ResolvedExternalInputRef.source: LocalSource` |
 | `ResolvedExternalInputRef.file: ResolvedFileRef` | Replace | `ResolvedExternalInputRef.file: SnapshotFileRef` identifies the attempt-owned input inside the completed consuming-stage snapshot. |
 | Both `data_role` fields | Retain | The resolved record copies the frozen declaration. |
-| Public `ExternalInputRef` construction | Replace | `viper.input()` returns `ExternalInputDraft`; freezing writes the protocol record. |
+| Public `ExternalInputRef` construction | Replace | `viper.authoring.input()` returns `ExternalInputDraft`; freezing writes the protocol record. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | The compiler stores its generated pointer and writes `ResolvedArtifactPointerRef`. |
 
 ### 3.2 HTTP root, artifact, and consumer edge
@@ -324,14 +324,15 @@ exchange. The stage still downloads response bodies. Its responsibility ends
 with verified acquisition and publication.
 
 The schema gains one mechanical rule: each request has one same-named
-single-file artifact. This complete authoring example uses the built-in HTTPX
-HTTPX implementation selected by the default `http=None` argument:
+single-file artifact. This complete authoring example uses the built-in HTTP
+implementation selected by the default `http=None` argument:
 
 ```python
 import csv
 from pathlib import Path
 
 from viper import authoring
+from viper.artifacts import artifact
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
 
@@ -365,7 +366,7 @@ download = authoring.download(
         timeout_seconds=10.0,
     ),
     artifacts={
-        "dataset": viper.artifact(
+        "dataset": artifact(
             path=DATASET_PATH,
             loader=load_dataset,
             data_role="training",
@@ -392,7 +393,7 @@ inputs["dataset"]
 `env` override, metric IDs, and artifacts. Build, embed, train, and eval
 stages retain decorated project callables and typed parameters. A
 project-owned HTTP function remains available through
-`@viper.http` for project-specific request behavior.
+`@http` from `viper.http` for project-specific request behavior.
 
 The completed stage records two views of the same file:
 
@@ -476,21 +477,26 @@ protocol reference from the data's provenance position:
 
 | Selected data | Public Python expression | Frozen record |
 | --- | --- | --- |
-| Local file entering at the consuming-stage boundary | `viper.input(...)` | `ExternalInputRef` |
+| Local file entering at the consuming-stage boundary | `viper.authoring.input(...)` | `ExternalInputRef` |
 | Artifact produced earlier in the active run | `download.artifacts["dataset"]` | `FutureInputRef` |
-| Artifact produced in a completed run | `viper.run_artifact(...)` | Generated `ArtifactPointer` plus `StoredInputRef` |
+| Artifact produced in a completed run | `viper.authoring.run_artifact(...)` | Generated `ArtifactPointer` plus `StoredInputRef` |
 
 The three complete selections are:
 
 ```python
-local_dataset = viper.input(
+from pathlib import Path
+
+from viper.authoring import input, run_artifact
+
+
+local_dataset = input(
     path="inputs/raw/dataset.csv",
     data_role="training",
 )
 
 same_run_dataset = download.artifacts["dataset"]
 
-prior_run_dataset = viper.run_artifact(
+prior_run_dataset = run_artifact(
     resolved_run=Path(
         "experiments/tiny_http/runs/baseline/"
         "01ARZ3NDEKTSV4RRFFQ69G5FAA/resolved.yaml"
@@ -503,26 +509,29 @@ prior_run_dataset = viper.run_artifact(
 Each value can occupy the same input slot:
 
 ```python
+from viper.artifacts import artifact
+from viper.authoring import stage
 from viper.keys import Train
+from viper.metrics import min
 
 
-training = viper.stage(
+training = stage(
     train,
     params=TRAIN_PARAMS,
     inputs={"dataset": same_run_dataset},
     artifacts={
-        Train.MODEL: viper.artifact(
+        Train.MODEL: artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.artifact(
+        Train.STATE: artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
     },
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -630,7 +639,7 @@ runner reads or copies the target.
 ### Downloaded prior-run input
 
 A completed producer run publishes `download.artifacts["prior"]`. A second
-plan selects it through `viper.run_artifact()`. Freezing publishes one
+plan selects it through `viper.authoring.run_artifact()`. Freezing publishes one
 digest-bearing pointer and writes `StoredInputRef` into the training spec.
 `verify_promoted_artifact()` follows the pointer to the producer run's
 `ResolvedHttpRetrieval`, shared `ResolvedSingleFileArtifact`, and snapshot
@@ -653,7 +662,7 @@ identity rule.
 | Local root model | Delete `ExternalInputRef.path`; reject symlinks and resolved paths outside the repository; derive one path with `captured_input_path()`, atomically copy `ExternalInputRef.source.path` there, and record a `SnapshotFileRef`. |
 | Worker startup | Reconstruct local capture paths with `captured_input_path()` and compare them with `StageContextBinding.inputs`. |
 | Verification | Reconstruct capture paths with the same helper, compare the invocation path with `ResolvedExternalInputRef.file.path`, and add the HTTP receipt-artifact identity rule. |
-| Authoring | Add `viper.input()` and `viper.run_artifact()`; convert local files, same-run handles, and prior-run drafts into `ExternalInputRef`, `FutureInputRef`, and `StoredInputRef`. |
+| Authoring | Add `viper.authoring.input()` and `viper.authoring.run_artifact()`; convert local files, same-run handles, and prior-run drafts into `ExternalInputRef`, `FutureInputRef`, and `StoredInputRef`. |
 | Prior-run pointer schema | Change `StoredInputRef.pointer` to digest-bearing `ResolvedArtifactPointerRef`; let the pointer use any `StorageRef`. |
 | Storage publication | Include captured local roots in their consuming-stage snapshots. Publish generated pointer files separately at the configured local or Viper Cloud destination. |
 | Tests | Cover local roots and source-boundary rejection in [`tests/test_run_execution.py`](../../tests/test_run_execution.py) and [`tests/test_execution_acceptance.py`](../../tests/test_execution_acceptance.py); cover same-run and prior-run downloaded inputs plus tampering in [`tests/test_verification_acceptance.py`](../../tests/test_verification_acceptance.py). |

@@ -76,7 +76,7 @@ class ParameterizedSpec(BaseSpec):
     reuse: StageReuseMode = "never"
 ```
 
-`viper.stage()` adds the same argument:
+`viper.authoring.stage()` adds the same argument:
 
 ```python
 def stage(

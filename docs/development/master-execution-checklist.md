@@ -29,6 +29,8 @@ The authoring program uses decorated stage and metric functions:
 from viper import execution
 from viper.artifacts import artifact
 from viper.authoring import expand, experiment, freeze, plan, stage
+from viper.catalog import MeasurementQuery, catalog
+from viper.knowledge import knowledge
 from viper.metrics import min
 
 
@@ -114,16 +116,16 @@ After the plan commit, bounded execution and catalog search use the same
 single-run operations and immutable records:
 
 ```python
-results = viper.execution.run_many(
+results = execution.run_many(
     Path.cwd(),
     tuple(item.run_spec_path for item in frozen_runs),
     max_concurrency=2,
 )
 
-catalog = viper.catalog(root=Path.cwd())
-catalog.refresh()
-losses = catalog.measurements(
-    viper.MeasurementQuery(metric_ids=("test_loss",))
+history = catalog(root=Path.cwd())
+history.refresh()
+losses = history.measurements(
+    MeasurementQuery(metric_ids=("test_loss",))
 )
 ```
 
@@ -131,11 +133,11 @@ After verification, the same project can publish scientific labels and
 evidence-backed conclusions:
 
 ```python
-knowledge = viper.knowledge(root=Path.cwd())
-ontology_publication = knowledge.publish_ontology(ontology)
-assignment_publication = knowledge.publish_assignment(model_family_assignment)
-effect_publication = knowledge.publish_effect(test_loss_effect)
-assertion_publication = knowledge.publish_assertion(test_loss_conclusion)
+memory = knowledge(root=Path.cwd())
+ontology_publication = memory.publish_ontology(ontology)
+assignment_publication = memory.publish_assignment(model_family_assignment)
+effect_publication = memory.publish_effect(test_loss_effect)
+assertion_publication = memory.publish_assertion(test_loss_conclusion)
 
 effect_ref = effect_publication.record
 portable_knowledge_head = assertion_publication.manifest
@@ -176,7 +178,7 @@ VIPER separates four jobs.
 
 ```mermaid
 flowchart LR
-    Author["Python authoring"] -->|"viper.freeze"| Frozen["Canonical YAML"]
+    Author["Python authoring"] -->|"viper.authoring.freeze"| Frozen["Canonical YAML"]
     Frozen -->|"viper.execution.run"| Runner["Attempt executor"]
     Local["Local file"] -->|"ExternalInputRef"| Runner
     HTTP["HTTP service"] -->|"DownloadSpec"| Runner
@@ -264,7 +266,7 @@ The contracts share models. One contract owns each shared decision:
 | Typed dependency cycles condense into the unweighted DAG used for impact closure | Deterministic system impact graph |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
 | HTTP root is `ResolvedHttpRetrieval` | External input roots |
-| Custom HTTP execution uses `@viper.http(id=...)` and `DownloadSpec.http` | Automatic input resolution |
+| Custom HTTP execution uses `@http(id=...)` from `viper.http` and `DownloadSpec.http` | Automatic input resolution |
 | Local root is `ResolvedExternalInputRef` | External input roots |
 | Stage input edge is `ExternalInputRef`, `FutureInputRef`, or `StoredInputRef` | External input roots |
 | Draft input compiles to one of those three edges | Automatic input resolution |
@@ -295,15 +297,15 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
 <!-- contract-baseline: system-impact-graph.md sha256=cb89e38c3beff5b786c17b57a9424c1cb92e98d23b466d092f421d281e99e580 -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=55e19de461c438aae117b94ee1ef2867eee872c8c80b17e4f19e22b9ebd9798d -->
-<!-- contract-baseline: external-input-roots.md sha256=1516995b621d2c48adc39fd7c5125246fed1c65333e6871b2e95a2ec1de76778 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=bf2be60669aab45daca03af0cfc09990e76fc0e7bfe761a09e299670f6188578 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=b78d17f34966b2de4bd272333a4ee7cbca25b3f0c4ab0ffba367a80c57219044 -->
-<!-- contract-baseline: frozen-plan-git-identity.md sha256=64b7be56c45efc1eb0ca29778c4fe41a372210fd4761aa9ec8ca1669b846094a -->
-<!-- contract-baseline: remote-storage.md sha256=0487831f4ac301ee5499aa5723106a592b9f412fabcbc04612f99e31e40677b6 -->
-<!-- contract-baseline: experiment-expansion.md sha256=f72e4efd429ba206972934b6788a341d40f079e6e1f320af758ecf1c3942a3d1 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=c13ac03bc75f2c80c4ddf49e2b5744f90b78d107cb6529159c2250da965268ae -->
-<!-- contract-baseline: stage-reuse.md sha256=74ed511429334a24599ccbed49a4ce7d688bc865fed7bb2b9843d55345d2ce87 -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
+<!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=ad7ed3b8fc334bd0f1c5bb0207b90bcafc03b5f0403592b77d7bb0074c9619e1 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=f4c723edccd27bdcc63c49f1ac369f16599eb45c0f7a6a193550efe106e2d29d -->
+<!-- contract-baseline: frozen-plan-git-identity.md sha256=361b78746b4f72567517e1672cf2997ede22d8c107e28685ed82125df9586c84 -->
+<!-- contract-baseline: remote-storage.md sha256=a38a9a743f488619acee0d55785b9689b41ec78231d8bfb03eb815f9d3fe132c -->
+<!-- contract-baseline: experiment-expansion.md sha256=e8edfe2d0c1b4841aaa639b5721bb0eb5612f01d2cf30aade8813e86c2e2c9cb -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=a31636f188037e335f528c8fe52b79d5d4172e2fa34f549c5e0e8ecb8805134c -->
+<!-- contract-baseline: stage-reuse.md sha256=e0b7572ab0e842cdbd24ed93b9cf6776e0abc3acfbef886d3c881d06c62ae231 -->
 <!-- contract-baseline: experiment-knowledge-primitives.md sha256=4b5809bde81d46456b62e5c8e541b7bb071c793ec6c022d01f0558b13c53d0d7 -->
 
 ## 4. Specification-system review
@@ -335,12 +337,12 @@ The review found and repaired these schema conflicts:
 | Freeze-time pointer publication preceded run destination binding | Bind the destination before the first immutable publication in freezing or execution. |
 | A local terminal path lacked its immutable `ResolvedRunRef` | Publish the terminal as a one-file revision and derive its local reference before parsing. |
 | Download custody lacked an operation whose digest covered the bytes written at the artifact path | Add `publish_download_body()` and reject an HTTP-body change before publication. |
-| The public HTTP API named its request function a transport and required a separate transport constructor | Use `@viper.http(id=...)`, pass the function through `viper.download(http=...)`, rename the frozen and resolved HTTP records, and delete `viper.transport()`. |
+| The public HTTP API named its request function a transport and required a separate transport constructor | Use `@http(id=...)` from `viper.http`, pass the function through `viper.authoring.download(http=...)`, rename the frozen and resolved HTTP records, and delete `viper.transport()`. |
 | A repository-relative local input could escape through a symbolic link | Add `input.local_source_boundary` before capture. |
 | Live metric evidence left the receipt-to-`MetricSpec` join implicit | Join the measurement, invocation metric IDs, frozen stage, and experiment registry in `metric.live.parameter_delivery`. |
 | Python authoring generated plan files after the source commit, and execution searched that source commit for them | Add a separate plan commit and use it for generated documents. |
 | Restore CLI behavior lacked exact Python and typed-operation models | Add one selector, result, request, success, and direct execution interface. |
-| `ExperimentDraft` declared a run matrix while `viper.plan()` selected one pair | Add `viper.expand()` and keep `RunPlanDraft` as the single-run unit. |
+| `ExperimentDraft` declared a run matrix while `viper.authoring.plan()` selected one pair | Add `viper.authoring.expand()` and keep `RunPlanDraft` as the single-run unit. |
 | Every resolved project stage required an invocation | Add executed and reused completion variants plus `StageReuseReceipt`. |
 | Stage reuse could select a digest from an untrusted cache | Derive candidates from the catalog and fully verify the source run before reuse. |
 | Cross-run inspection lacked a source-of-truth boundary | Make the catalog rebuildable and require an immutable source reference on every result. |
@@ -1348,7 +1350,7 @@ receipt and artifact.
       artifact publication. Require `download.runner_custody` to reject it.
 - [ ] Remove callable-copy fixtures from `tests/fixtures.py` and generated
       project tests. Replace the generated download callable in
-      `src/viper/project_init.py` with `viper.download()` authoring.
+      `src/viper/project_init.py` with `viper.authoring.download()` authoring.
       <!-- implements: DRA-05 -->
 - [ ] Run: <!-- verifies: DRA-01, DRA-02, DRA-03, DRA-04, DRA-05 -->
 
@@ -1466,8 +1468,9 @@ parameter class and values reach the calculation in both modes.
       `src/viper/metrics.py`.
 - [ ] Keep `MetricDefinition.metric_id` and `.mode`.
 - [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
-- [ ] Add `viper.measure()`, `viper.min()`, `viper.max()`, `viper.at_least()`,
-      and `viper.at_most()`. <!-- implements: UMD-01 -->
+- [ ] Add `viper.metrics.measure()`, `viper.metrics.min()`,
+      `viper.metrics.max()`, `viper.benchmark.at_least()`, and
+      `viper.benchmark.at_most()`. <!-- implements: UMD-01 -->
 - [ ] Derive the parameter class from `type(MetricDraft.params)`.
 - [ ] Write a mandatory `ParameterModelRef` to `MetricSpec` and
       `MetricExecutionReceipt`. <!-- implements: UMD-02 -->
@@ -1574,7 +1577,7 @@ writing stage YAML by hand.
       `"evaluate"` to `"eval"`.
 - [ ] Rename the `DataRole` value `"evaluation"` to `"eval"` and the artifact
       directory `artifacts/evaluations/` to `artifacts/evals/`.
-- [ ] Replace `@viper.evaluate(params=...)` with `@viper.eval(params=...)`.
+- [ ] Replace `@viper.evaluate(params=...)` with `@viper.stages.eval(params=...)`.
 - [ ] Rename example subclasses from `EvaluateParams(viper.params.Evaluate)`
       to `EvalParams(viper.params.Eval)`.
 - [ ] Apply the `Eval` vocabulary in `src/viper/parameters.py`,
@@ -1833,7 +1836,7 @@ mode. The ordinary API accepts drafts.
 
 ### 14.3 Focused proof
 
-- [ ] Assert that `viper.input(path=..., data_role=...)` returns the expected
+- [ ] Assert that `viper.authoring.input(path=..., data_role=...)` returns the expected
       `ExternalInputDraft`.
 - [ ] Add local, same-run, and prior-run cases to `tests/test_authoring.py`.
 - [ ] Add stage-order and missing-artifact rejections.
@@ -1862,7 +1865,7 @@ conditions. Thresholds remain optional.
 
 ### 15.1 Models and authoring
 
-- [ ] Add `BenchmarkDraft` and `viper.benchmark()`.
+- [ ] Add `BenchmarkDraft` and `benchmark()` in `viper.benchmark`.
       <!-- implements: UMD-05 -->
 - [ ] Add `BenchmarkDraft.test` and accept one prior-run test artifact plus
       named split drafts.
@@ -2097,8 +2100,8 @@ freeze, run, benchmark, and restore.
 - [ ] Update `docs/tutorials/getting-started.md`.
 - [ ] Update `docs/explanation/how-viper-works.md`.
 - [ ] Update `docs/reference/api.md`.
-- [ ] Replace the public `viper.http` module entry with the package-root
-      `viper.http` decorator and package-root HTTP types.
+- [ ] Keep the HTTP decorator and public HTTP types in their defining
+      `viper.http` module. Do not add package-root HTTP aliases.
 - [ ] Update `docs/reference/protocol.md` with every model and alias
       implemented through Phase 11.
 - [ ] Update `docs/reference/versioning.md` if alpha compatibility language
@@ -2142,7 +2145,7 @@ limit.
 ### 19.1 Deterministic expansion
 
 - [ ] Add `RunIdMap` and `expand()` to `src/viper/authoring.py`.
-      <!-- phase-produces: viper.expand -->
+      <!-- phase-produces: viper.authoring.expand -->
       <!-- implements: EXP-01 -->
 - [ ] Preserve `ExperimentDraft.variants` order and
       `ExperimentDraft.replicates` order.
@@ -2282,7 +2285,7 @@ storage and out of protocol records.
 - [ ] Add stable sort keys, a maximum page size of 500, and opaque cursors that
       bind the query and last sort key.
 - [ ] Add `Catalog.lineage()` through the existing verified lineage builder.
-- [ ] Add `viper.catalog(root=...)` and export the public query and page models.
+- [ ] Add `catalog(root=...)` and export the public query and page models.
       <!-- phase-produces: viper.catalog -->
 - [ ] Put numeric epoch and step values before null summaries and include the
       immutable measurement reference as the final tie breaker.
@@ -2326,7 +2329,7 @@ stage invocation.
 ### 21.1 Models and canonical key
 
 - [ ] Add `StageReuseMode` to project-owned stage drafts and frozen specs.
-- [ ] Add `reuse=` to `viper.stage()` and default it to `"never"`.
+- [ ] Add `reuse=` to `viper.authoring.stage()` and default it to `"never"`.
 - [ ] Add `ReuseFileIdentity`, `ReuseInputIdentity`, and `StageReuseKey`.
       <!-- phase-produces: StageReuseKey -->
 - [ ] Extend the version-1 catalog with the `stage_reuse_keys` table and a
@@ -2556,8 +2559,8 @@ one model with nullable classifier, reviewer, and confidence fields.
 - [ ] Add `JournalEvidence` and `JournalAssertion`. Enforce review-field states
       and require effect or impact evidence for an exclusion.
 - [ ] Add `KnowledgeRecordKind`, `KnowledgeRecord`, and `KnowledgeStore`
-      through `JournalAssertion`; add `viper.knowledge()` and the corresponding
-      typed publish methods.
+      through `JournalAssertion`; add `knowledge()` in `viper.knowledge` and
+      the corresponding typed publish methods.
       Validate every referenced record, serialize canonical JSON, call
       `publish_resolved_files()`, and return `KnowledgePublicationResult`.
       <!-- implements: EKP-02 -->
@@ -2744,7 +2747,7 @@ phase.
       `docs/tutorials/getting-started.md`. The example covers expansion,
       bounded execution, catalog search, verified stage reuse, knowledge
       publication, and MCP access.
-      <!-- phase-consumes: viper.expand, viper.execution.run_many, viper.catalog, StageReuseKey, KnowledgeVector, RetrievalJudgment -->
+      <!-- phase-consumes: viper.authoring.expand, viper.execution.run_many, viper.catalog, StageReuseKey, KnowledgeVector, RetrievalJudgment -->
 - [ ] Extend the generated project with two variants and two replicates.
 - [ ] Freeze and execute the complete expansion with bounded concurrency and a
       positive child-process timeout.

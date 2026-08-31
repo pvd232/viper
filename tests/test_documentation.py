@@ -100,7 +100,7 @@ _ORDERED_CAPABILITIES = {
     "StageReuseKey",
     "viper.catalog",
     "viper.execution.run_many",
-    "viper.expand",
+    "viper.authoring.expand",
 }
 _COMPLETE_AUTHORING_EXAMPLE = re.compile(
     r"<!-- complete-authoring-example: start -->"
@@ -1947,3 +1947,48 @@ def test_current_docs_do_not_reference_retired_public_modules() -> None:
     assert "FileInputDraft" not in text
     assert "docs/contracts" not in text
     assert "PUBLICATION_TODO" not in text
+
+
+def test_current_docs_import_public_functions_from_defining_modules() -> None:
+    """Reject package-root names owned by a public submodule."""
+    current_guides = tuple(
+        path
+        for path in PUBLIC_MARKDOWN
+        if path.name not in {"CHANGELOG.md", "0.1.0a1.md"}
+    )
+    text = "\n".join(path.read_text() for path in current_guides)
+    rooted_names = (
+        "Artifact",
+        "DownloadSpecDraft",
+        "MeasurementQuery",
+        "MetricContext",
+        "StatefulMetric",
+        "artifact",
+        "at_least",
+        "at_most",
+        "build",
+        "download",
+        "embed",
+        "eval",
+        "experiment",
+        "expand",
+        "factor",
+        "freeze",
+        "input",
+        "max",
+        "measure",
+        "metric",
+        "min",
+        "plan",
+        "replicate",
+        "run_artifact",
+        "stage",
+        "train",
+        "variant",
+    )
+
+    for name in rooted_names:
+        assert re.search(rf"\bviper\.{name}\b", text) is None
+    for name in ("benchmark", "catalog", "http", "knowledge"):
+        assert re.search(rf"\bviper\.{name}\(", text) is None
+        assert re.search(rf"@viper\.{name}(?!\.)\b", text) is None

@@ -2921,7 +2921,8 @@ checklist supplies the cross-contract commit order.
 Phase 11 publishes the single-run workflow through `viper.authoring.freeze()`,
 `viper.execution.run()`, `viper.execution.benchmark()`, and restore. The
 complete target example also shows `viper.authoring.expand()`,
-`viper.execution.run_many()`, verified stage reuse, `viper.catalog()`, and the
+`viper.execution.run_many()`, verified stage reuse, `catalog()` from
+`viper.catalog`, and the
 knowledge API. Their owning contracts implement those calls in Phases 12–17.
 Phase 18 publishes the combined workflow after those phases pass.
 
@@ -2945,7 +2946,8 @@ Phase 18 publishes the combined workflow after those phases pass.
 - [ ] Add `ExternalInputDraft`, `RunArtifactDraft`, and the `StageInputDraft`
       authoring union.
 - [ ] Add `viper.params`, the shortened project-stage decorators,
-      `viper.authoring.stage()`, `viper.authoring.download()`, `viper.http()`,
+      `viper.authoring.stage()`, `viper.authoring.download()`, `http()` from
+      `viper.http`,
       `viper.artifacts.artifact()`, `viper.authoring.input()`, `viper.authoring.run_artifact()`,
       `viper.authoring.plan()`, and `viper.authoring.freeze()` constructors.
 - [ ] Add `viper.keys.Train` and `viper.keys.Eval`; replace the private
@@ -2963,12 +2965,12 @@ complete.
 - [ ] Make `viper.authoring.download()` construct `DownloadSpecDraft` directly.
 - [ ] Select `BuiltinHttpImplementationSpec()` when the author omits `http=`.
 - [ ] Convert a `CustomHttpDraft` into `ProjectHttpImplementationSpec` when the
-      author supplies a function decorated with `@viper.http`.
+      author supplies a function decorated with `@http`.
 - [ ] Replace generated project download callables with `viper.authoring.download()`.
 
 **Commit boundary:** Python authoring creates a valid runner-owned download
 stage through either the built-in HTTP implementation or one function
-decorated with `@viper.http`.
+decorated with `@http`.
 
 ### Phase 3. Compile local and same-run inputs
 

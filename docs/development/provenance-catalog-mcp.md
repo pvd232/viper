@@ -22,7 +22,8 @@ These requirements bind the contract to the master checklist:
 `lineage()` builds one graph from that result. `compare_runs()` compares two
 verified runs. Current inspection covers one or two selected runs.
 
-**Target:** `viper.catalog()` opens `.viper/catalog.sqlite3`. `Catalog.refresh()`
+**Target:** `catalog()` from `viper.catalog` opens `.viper/catalog.sqlite3`.
+`Catalog.refresh()`
 rebuilds searchable rows from terminal run references. Search results always
 retain the immutable reference that supplied each fact. Deleting the database
 and refreshing it produces the same searchable facts.

@@ -18,10 +18,10 @@ These requirements bind the contract to the master checklist:
 | EXP-03 <!-- contract-requirement: EXP-03 phase=12 test=tests/test_api.py --> | Expose the same batch result through Python, typed API, and CLI surfaces. |
 
 **Current:** `ExperimentDraft` owns variant graphs and replicate seeds.
-`viper.plan()` selects one variant and one replicate. The user must repeat that
+`viper.authoring.plan()` selects one variant and one replicate. The user must repeat that
 call, assign every run ID, freeze every plan, and collect execution failures.
 
-**Target:** `viper.expand()` creates the complete ordered set of
+**Target:** `viper.authoring.expand()` creates the complete ordered set of
 `RunPlanDraft` values. `viper.execution.run_many()` executes their frozen
 paths. Each plan remains an ordinary `RunPlanDraft`. Each run still produces
 an ordinary terminal `ResolvedRun`.
@@ -29,7 +29,7 @@ an ordinary terminal `ResolvedRun`.
 ## 2. Required claim
 
 Given the same `ExperimentDraft`, selected IDs, run-ID map, benchmark, source,
-environment, and reproducibility settings, `viper.expand()` returns the same
+environment, and reproducibility settings, `viper.authoring.expand()` returns the same
 ordered plans.
 
 The order is:
@@ -51,9 +51,9 @@ The existing single-run authoring path is complete in the target contracts:
 
 ```text
 ExperimentDraft
--> viper.plan(variant=..., replicate=...)
+-> viper.authoring.plan(variant=..., replicate=...)
 -> RunPlanDraft
--> viper.freeze()
+-> viper.authoring.freeze()
 -> FrozenPlanFiles
 -> viper.execution.run()
 ```
@@ -68,7 +68,7 @@ selected variants x selected replicates
 -> one aggregate result
 ```
 
-This contract keeps `viper.plan()`, `viper.freeze()`, and
+This contract keeps `viper.authoring.plan()`, `viper.authoring.freeze()`, and
 `viper.execution.run()` as the single-run primitives. Expansion calls those
 primitives and preserves the existing frozen run format.
 
@@ -181,7 +181,13 @@ Runs already in progress finish and keep their actual result.
 ### Complete example
 
 ```python
-plans = viper.expand(
+from pathlib import Path
+
+from viper import execution
+from viper.authoring import expand, freeze
+
+
+plans = expand(
     experiment,
     run_ids={
         "baseline": {
@@ -199,11 +205,11 @@ plans = viper.expand(
     reproducibility=reproducibility,
 )
 
-frozen = tuple(viper.freeze(plan) for plan in plans)
+frozen = tuple(freeze(plan) for plan in plans)
 
 # The user commits every path in every FrozenPlanFiles.files tuple here.
 
-results = viper.execution.run_many(
+results = execution.run_many(
     Path.cwd(),
     tuple(item.run_spec_path for item in frozen),
     max_concurrency=2,
@@ -212,10 +218,10 @@ results = viper.execution.run_many(
 
 ## 6. Runtime ownership
 
-`viper.expand()` validates the selection and constructs `RunPlanDraft` values.
+`viper.authoring.expand()` validates the selection and constructs `RunPlanDraft` values.
 Execution and file writes begin in later operations.
 
-`viper.freeze()` remains the only operation that writes canonical plan files.
+`viper.authoring.freeze()` remains the only operation that writes canonical plan files.
 The plan-commit rules in
 [`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) apply to every
 returned `FrozenPlanFiles` value.
@@ -305,7 +311,7 @@ unstarted run from starting. Python, typed API, and CLI calls reject
 ## 10. Legacy cleanup
 
 The implementation removes hand-written loops from generated scaffolding and
-examples when those loops only repeat `viper.plan()` across an experiment.
+examples when those loops only repeat `viper.authoring.plan()` across an experiment.
 Single-plan examples remain when they teach one run.
 
 The implementation ends at bounded local scheduling. A scheduler service,

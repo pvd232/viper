@@ -291,6 +291,7 @@ import csv
 from pathlib import Path
 
 from viper import authoring
+from viper.artifacts import artifact
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
 
@@ -324,7 +325,7 @@ download = authoring.download(
         timeout_seconds=10.0,
     ),
     artifacts={
-        "dataset": viper.artifact(
+        "dataset": artifact(
             path=DATASET_PATH,
             loader=load_dataset,
             data_role="training",
@@ -333,7 +334,7 @@ download = authoring.download(
 )
 
 download_spec = download.spec
-assert isinstance(download_spec, viper.DownloadSpecDraft)
+assert isinstance(download_spec, authoring.DownloadSpecDraft)
 assert set(download_spec.inputs) == {"dataset"}
 assert set(download_spec.artifacts) == {"dataset"}
 assert download_spec.artifacts["dataset"].path == DATASET_PATH
@@ -516,17 +517,17 @@ path.
 | The `run` and `store` parameters and `LocalArtifactStore.resolved_files()` call in `retrieve_download_inputs()` | Delete | Publish the body once through the completed stage snapshot. Keep the attempt-workspace transfer file as execution scratch. |
 | `HttpRetrievalContextBinding`, `StageContextBinding.retrievals`, `HttpRetrievalHandle`, and `DownloadContext` | Delete | The attempt process consumes `HttpResult` directly and writes `ResolvedHttpRetrieval`. |
 | Download path reconstruction in `viper._workers.stages` and `viper._verification.attempt` | Delete | Download skips the project-stage worker and stage-invocation verifier. Remove the resulting unused retrieval parameters and branches. |
-| The generated download callable in `viper.project_init` | Delete | Generate `viper.download()` authoring code with publication owned by the executor. |
+| The generated download callable in `viper.project_init` | Delete | Generate `viper.authoring.download()` authoring code with publication owned by the executor. |
 | Copy loops and mismatched request/artifact names in `test_execution_acceptance.py`, `test_run_execution.py`, and `test_execution_signals.py` | Replace | Use one shared name and let the executor publish the response body. |
 | The `test_verification_acceptance.py` fixture that models one `archive` request and three unrelated artifacts | Replace | Declare three same-named requests and single-file artifacts because this fixture exercises artifact verification. |
 | Mismatched `remote` and `dataset` names in `test_preflight.py` | Replace | Give the request and artifact one shared name. |
 | Hard-coded `stages/<stage-id>/retrievals/<input-name>/body` assertions | Delete | Assert the declared artifact path and its single snapshot member. |
 | `ResolvedHttpRetrieval` model tests that construct `ResolvedFileRef` bodies | Replace | Construct `SnapshotFileRef` bodies at the declared artifact path and assert receipt-artifact equality. Keep HTTP scratch-file tests unchanged. |
-| Generated-project acceptance coverage | Replace | Assert that generated authoring uses `viper.download()` and execution publishes each response artifact. |
+| Generated-project acceptance coverage | Replace | Assert that generated authoring uses `viper.authoring.download()` and execution publishes each response artifact. |
 | `docs/reference/protocol.md` models and execution prose | Replace | Document runner-owned download, the shared successful `SnapshotFileRef`, and the executor-owned artifact write. |
 | `HttpContext.workspace`, its bounded `destination`, and HTTP body tests | Retain | The attempt workspace remains the safety boundary for an in-progress request. |
 | `LocalArtifactStore.resolved_files()` and its non-download callers | Replace at the orchestration boundary | Route independent files through `publish_resolved_files()`; the local implementation continues to delegate to `LocalArtifactStore`. |
-| `DownloadSpec.implementation`, `download_stage`, `parameters.Download`, and download `StageInvocationReceipt` fixtures | Delete | `viper.download()` creates a runner-owned `DownloadSpec`; `ResolvedHttpRetrieval` supplies request execution evidence. |
+| `DownloadSpec.implementation`, `download_stage`, `parameters.Download`, and download `StageInvocationReceipt` fixtures | Delete | `viper.authoring.download()` creates a runner-owned `DownloadSpec`; `ResolvedHttpRetrieval` supplies request execution evidence. |
 | `BaseSpec.implementation` | Move | `ParameterizedSpec.implementation` owns project-callable stages. |
 | `ResolvedBaseSpec.source`, `startup`, `invocation`, and `command` | Move | `ResolvedParameterizedSpec` owns project-callable execution evidence. |
 
@@ -607,7 +608,7 @@ document. `download.receipt_artifact_identity` rejects that unequal reference.
    `tests/test_execution_signals.py`, `tests/test_preflight.py`,
    `tests/test_generated_project_acceptance.py`, and
    `tests/test_verification_acceptance.py`.
-7. Replace generated download-stage scaffolding with `viper.download()`
+7. Replace generated download-stage scaffolding with `viper.authoring.download()`
    authoring in [`src/viper/project_init.py`](../../src/viper/project_init.py)
    and the protocol reference. Link
    [`external-input-roots.md`](external-input-roots.md) to this contract and
