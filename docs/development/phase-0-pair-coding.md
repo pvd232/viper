@@ -56,7 +56,260 @@ during review must become a rejected fixture and a deterministic validator
 before its review cycle closes. This rule turns a one-time inference into a
 repeatable regression check.
 
-## 2. Contract traceability
+
+## 2. Project root
+
+<!-- pair-block-definition: P0-PDR-01 -->
+```toml pair-block
+id = "P0-PDR-01"
+requirements = ["PDR-01"]
+targets = ["src/viper/project.py:ProjectSettings", "src/viper/project.py:find_project_root", "src/viper/project.py:resolve_project_root"]
+tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
+gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
+depends_on = []
+```
+
+Create `src/viper/project.py` with the root marker model and resolver.
+
+```python pair-edit
+from __future__ import annotations
+
+import subprocess
+import tomllib
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
+
+
+class ProjectSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: int = 1
+
+
+class ProjectRootError(ValueError):
+    """Report a missing, invalid, or incompatible project root."""
+
+
+def find_project_root(start: Path) -> Path:
+    candidate = start.resolve()
+    if candidate.is_file():
+        candidate = candidate.parent
+    for directory in (candidate, *candidate.parents):
+        if (directory / "viper.toml").is_file():
+            return directory
+    raise ProjectRootError(f"no viper.toml found from {start}")
+
+
+def _require_git_work_tree(root: Path) -> None:
+    completed = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise ProjectRootError(f"project root is not in a Git work tree: {root}")
+    if Path(completed.stdout.strip()).resolve() != root:
+        raise ProjectRootError(f"viper.toml must be at the Git work-tree root: {root}")
+
+
+def resolve_project_root(root: Path | None = None) -> Path:
+    resolved = find_project_root(root if root is not None else Path.cwd())
+    marker = resolved / "viper.toml"
+    try:
+        settings = ProjectSettings.model_validate(
+            tomllib.loads(marker.read_text(encoding="utf-8")).get("project", {})
+        )
+    except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
+        raise ProjectRootError(f"invalid project marker: {marker}") from error
+    if settings.schema_version != 1:
+        raise ProjectRootError(
+            f"unsupported project schema version: {settings.schema_version}"
+        )
+    _require_git_work_tree(resolved)
+    return resolved
+```
+
+<!-- pair-block-definition: P0-PDR-02 -->
+```toml pair-block
+id = "P0-PDR-02"
+requirements = ["PDR-01"]
+targets = ["src/viper/project_init.py:add_project_root_files"]
+tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
+gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
+depends_on = ["P0-PDR-01"]
+```
+
+Add these exact entries to the mapping returned by `_project_files()`.
+
+```python pair-edit
+PROJECT_ROOT_FILES = {
+    "viper.toml": "[project]\nschema_version = 1\n",
+    "inputs/.gitkeep": "",
+    "benchmarks/README.md": "# Benchmarks\n",
+    "experiments/README.md": "# Experiments\n",
+}
+
+
+def add_project_root_files(files: dict[str, str]) -> dict[str, str]:
+    overlap = files.keys() & PROJECT_ROOT_FILES.keys()
+    if overlap:
+        raise ProjectInitializationError(
+            f"project scaffold duplicates reserved paths: {sorted(overlap)}"
+        )
+    return {**files, **PROJECT_ROOT_FILES}
+```
+
+Call `add_project_root_files(files)` immediately before `_project_files()`
+returns.
+
+<!-- pair-block-definition: P0-PDR-03 -->
+```toml pair-block
+id = "P0-PDR-03"
+requirements = ["PDR-02"]
+targets = ["src/viper/api.py:_resolve_operation_root", "src/viper/_api/handlers.py:handle_freeze"]
+tests = ["tests/test_storage.py:test_store_uses_selected_project_root"]
+gate = "conda run -n mantra python -m pytest tests/test_storage.py -k uses_selected_project_root -q"
+depends_on = ["P0-PDR-01"]
+```
+
+Resolve the public input once. Internal handlers receive the canonical path.
+
+```python pair-edit
+from viper.project import resolve_project_root
+
+
+def _resolve_operation_root(root: Path | None) -> Path:
+    return resolve_project_root(root)
+
+
+def handle_freeze(request: FreezeRunPlanRequest) -> ViperResult:
+    root = _resolve_operation_root(request.root)
+    draft = load_run_plan_draft(root, request.draft)
+    return freeze_run_plan(root, draft)
+```
+
+Apply the same `root = _resolve_operation_root(request.root)` boundary to each
+public filesystem operation. Internal helpers receive that one resolved value.
+
+<!-- pair-block-definition: P0-PDR-04 -->
+```toml pair-block
+id = "P0-PDR-04"
+requirements = ["PDR-04"]
+targets = ["src/viper/cli.py:add_root_argument", "src/viper/api.py:RunRequest"]
+tests = ["tests/test_documentation.py:test_project_root_vocabulary"]
+gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k project_root_vocabulary -q"
+depends_on = ["P0-PDR-03"]
+```
+
+Use `root` at public boundaries and `project_root` for the resolved internal
+value.
+
+```python pair-edit
+class RunRequest(APIModel):
+    root: Path | None = None
+
+
+def add_root_argument(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="VIPER project root; defaults to discovery from the current directory",
+    )
+```
+
+Delete `--repository-root`, `repository_root`, `left_repository_root`, and
+`right_repository_root` from public request and CLI surfaces. Comparison
+operations use `left_root` and `right_root`.
+
+<!-- pair-block-definition: P0-PDR-05 -->
+```toml pair-block
+id = "P0-PDR-05"
+requirements = ["PDR-02"]
+targets = ["src/viper/storage.py:LocalArtifactStore.__init__"]
+tests = ["tests/test_storage.py:test_store_uses_selected_project_root"]
+gate = "conda run -n mantra python -m pytest tests/test_storage.py -k uses_selected_project_root -q"
+depends_on = ["P0-PDR-03"]
+```
+
+Replace the constructor with the shared project-root boundary.
+
+```python pair-edit
+from .project import resolve_project_path
+
+
+class LocalArtifactStore:
+    def __init__(self, project_root: Path, store: RepoRelPath = ".viper/store"):
+        self.project_root = project_root
+        self.store = store
+        self.store_root = resolve_project_path(
+            project_root,
+            store,
+            operation="write",
+            allow_missing=True,
+        )
+```
+
+Rename internal `repository_root` attributes to `project_root`. Preserve the
+persisted `LocalFileRef.store` value `.viper/store`.
+
+<!-- pair-block-definition: P0-PDR-06 -->
+```toml pair-block
+id = "P0-PDR-06"
+requirements = ["PDR-03"]
+targets = ["src/viper/project.py:resolve_project_path"]
+tests = ["tests/test_validation_architecture.py:test_project_paths_reject_symlinks"]
+gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k project_paths_reject_symlinks -q"
+depends_on = [
+    "P0-PDR-02",
+    "P0-PDR-04",
+    "P0-PDR-05",
+]
+```
+
+Add the path resolver to `src/viper/project.py`.
+
+```python pair-edit
+from typing import Literal
+
+from viper._schema import RepoRelPath
+
+
+PathOperation = Literal["read", "write"]
+
+
+def resolve_project_path(
+    project_root: Path,
+    path: RepoRelPath,
+    *,
+    operation: PathOperation,
+    allow_missing: bool = False,
+) -> Path:
+    root = project_root.resolve(strict=True)
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ProjectRootError(f"project path escapes ROOT: {path}")
+    candidate = root / relative
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ProjectRootError(f"project path contains a symlink: {path}")
+        if not current.exists():
+            break
+    resolved = candidate.resolve(strict=False)
+    if not resolved.is_relative_to(root):
+        raise ProjectRootError(f"resolved project path escapes ROOT: {path}")
+    if operation == "read" and not allow_missing and not resolved.is_file():
+        raise ProjectRootError(f"project file is missing: {path}")
+    if operation == "write" and not allow_missing and not resolved.parent.is_dir():
+        raise ProjectRootError(f"project parent is missing: {path}")
+    return resolved
+```
+
+## 3. Contract traceability
 
 <!-- pair-block-definition: P0-CRT-01 -->
 ```toml pair-block
@@ -65,7 +318,7 @@ requirements = ["CRT-01"]
 targets = ["src/viper/_contract_traceability.py:_parse_requirement_markers", "src/viper/_contract_traceability.py:_parse_verifier_rules"]
 tests = ["tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests"]
 gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k contract_rules_map_to_owners_and_tests -q"
-depends_on = []
+depends_on = ["P0-PDR-06"]
 ```
 
 Add the imports, error, private row type, patterns, and both complete parsers
@@ -488,254 +741,6 @@ def compile_contract_traceability(
     return graph
 ```
 
-## 3. Project root
-
-<!-- pair-block-definition: P0-PDR-01 -->
-```toml pair-block
-id = "P0-PDR-01"
-requirements = ["PDR-01"]
-targets = ["src/viper/project.py:ProjectSettings", "src/viper/project.py:find_project_root", "src/viper/project.py:resolve_project_root"]
-tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
-gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
-depends_on = ["P0-CRT-05"]
-```
-
-Create `src/viper/project.py` with the root marker model and resolver.
-
-```python pair-edit
-from __future__ import annotations
-
-import subprocess
-import tomllib
-from pathlib import Path
-
-from pydantic import BaseModel, ConfigDict
-
-
-class ProjectSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    schema_version: int = 1
-
-
-class ProjectRootError(ValueError):
-    """Report a missing, invalid, or incompatible project root."""
-
-
-def find_project_root(start: Path) -> Path:
-    candidate = start.resolve()
-    if candidate.is_file():
-        candidate = candidate.parent
-    for directory in (candidate, *candidate.parents):
-        if (directory / "viper.toml").is_file():
-            return directory
-    raise ProjectRootError(f"no viper.toml found from {start}")
-
-
-def _require_git_work_tree(root: Path) -> None:
-    completed = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        raise ProjectRootError(f"project root is not in a Git work tree: {root}")
-    if Path(completed.stdout.strip()).resolve() != root:
-        raise ProjectRootError(f"viper.toml must be at the Git work-tree root: {root}")
-
-
-def resolve_project_root(root: Path | None = None) -> Path:
-    resolved = find_project_root(root if root is not None else Path.cwd())
-    marker = resolved / "viper.toml"
-    try:
-        settings = ProjectSettings.model_validate(
-            tomllib.loads(marker.read_text(encoding="utf-8")).get("project", {})
-        )
-    except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
-        raise ProjectRootError(f"invalid project marker: {marker}") from error
-    if settings.schema_version != 1:
-        raise ProjectRootError(
-            f"unsupported project schema version: {settings.schema_version}"
-        )
-    _require_git_work_tree(resolved)
-    return resolved
-```
-
-<!-- pair-block-definition: P0-PDR-02 -->
-```toml pair-block
-id = "P0-PDR-02"
-requirements = ["PDR-01"]
-targets = ["src/viper/project_init.py:add_project_root_files"]
-tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
-gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
-depends_on = ["P0-PDR-01"]
-```
-
-Add these exact entries to the mapping returned by `_project_files()`.
-
-```python pair-edit
-PROJECT_ROOT_FILES = {
-    "viper.toml": "[project]\nschema_version = 1\n",
-    "inputs/.gitkeep": "",
-    "benchmarks/README.md": "# Benchmarks\n",
-    "experiments/README.md": "# Experiments\n",
-}
-
-
-def add_project_root_files(files: dict[str, str]) -> dict[str, str]:
-    overlap = files.keys() & PROJECT_ROOT_FILES.keys()
-    if overlap:
-        raise ProjectInitializationError(
-            f"project scaffold duplicates reserved paths: {sorted(overlap)}"
-        )
-    return {**files, **PROJECT_ROOT_FILES}
-```
-
-Call `add_project_root_files(files)` immediately before `_project_files()`
-returns.
-
-<!-- pair-block-definition: P0-PDR-03 -->
-```toml pair-block
-id = "P0-PDR-03"
-requirements = ["PDR-02"]
-targets = ["src/viper/api.py:_resolve_operation_root", "src/viper/_api/handlers.py:handle_freeze"]
-tests = ["tests/test_storage.py:test_store_uses_selected_project_root"]
-gate = "conda run -n mantra python -m pytest tests/test_storage.py -k uses_selected_project_root -q"
-depends_on = ["P0-PDR-01"]
-```
-
-Resolve the public input once. Internal handlers receive the canonical path.
-
-```python pair-edit
-from viper.project import resolve_project_root
-
-
-def _resolve_operation_root(root: Path | None) -> Path:
-    return resolve_project_root(root)
-
-
-def handle_freeze(request: FreezeRunPlanRequest) -> ViperResult:
-    root = _resolve_operation_root(request.root)
-    draft = load_run_plan_draft(root, request.draft)
-    return freeze_run_plan(root, draft)
-```
-
-Apply the same `root = _resolve_operation_root(request.root)` boundary to each
-public filesystem operation. Internal helpers receive that one resolved value.
-
-<!-- pair-block-definition: P0-PDR-04 -->
-```toml pair-block
-id = "P0-PDR-04"
-requirements = ["PDR-04"]
-targets = ["src/viper/cli.py:add_root_argument", "src/viper/api.py:RunRequest"]
-tests = ["tests/test_documentation.py:test_project_root_vocabulary"]
-gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k project_root_vocabulary -q"
-depends_on = ["P0-PDR-03"]
-```
-
-Use `root` at public boundaries and `project_root` for the resolved internal
-value.
-
-```python pair-edit
-class RunRequest(APIModel):
-    root: Path | None = None
-
-
-def add_root_argument(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "--root",
-        type=Path,
-        default=None,
-        help="VIPER project root; defaults to discovery from the current directory",
-    )
-```
-
-Delete `--repository-root`, `repository_root`, `left_repository_root`, and
-`right_repository_root` from public request and CLI surfaces. Comparison
-operations use `left_root` and `right_root`.
-
-<!-- pair-block-definition: P0-PDR-05 -->
-```toml pair-block
-id = "P0-PDR-05"
-requirements = ["PDR-02"]
-targets = ["src/viper/storage.py:LocalArtifactStore.__init__"]
-tests = ["tests/test_storage.py:test_store_uses_selected_project_root"]
-gate = "conda run -n mantra python -m pytest tests/test_storage.py -k uses_selected_project_root -q"
-depends_on = ["P0-PDR-01", "P0-PDR-03"]
-```
-
-Replace the constructor with the shared project-root boundary.
-
-```python pair-edit
-from .project import resolve_project_path
-
-
-class LocalArtifactStore:
-    def __init__(self, project_root: Path, store: RepoRelPath = ".viper/store"):
-        self.project_root = project_root
-        self.store = store
-        self.store_root = resolve_project_path(
-            project_root,
-            store,
-            operation="write",
-            allow_missing=True,
-        )
-```
-
-Rename internal `repository_root` attributes to `project_root`. Preserve the
-persisted `LocalFileRef.store` value `.viper/store`.
-
-<!-- pair-block-definition: P0-PDR-06 -->
-```toml pair-block
-id = "P0-PDR-06"
-requirements = ["PDR-03"]
-targets = ["src/viper/project.py:resolve_project_path"]
-tests = ["tests/test_validation_architecture.py:test_project_paths_reject_symlinks"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k project_paths_reject_symlinks -q"
-depends_on = ["P0-PDR-01"]
-```
-
-Add the path resolver to `src/viper/project.py`.
-
-```python pair-edit
-from typing import Literal
-
-from viper._schema import RepoRelPath
-
-
-PathOperation = Literal["read", "write"]
-
-
-def resolve_project_path(
-    project_root: Path,
-    path: RepoRelPath,
-    *,
-    operation: PathOperation,
-    allow_missing: bool = False,
-) -> Path:
-    root = project_root.resolve(strict=True)
-    relative = Path(path)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ProjectRootError(f"project path escapes ROOT: {path}")
-    candidate = root / relative
-    current = root
-    for part in relative.parts:
-        current = current / part
-        if current.is_symlink():
-            raise ProjectRootError(f"project path contains a symlink: {path}")
-        if not current.exists():
-            break
-    resolved = candidate.resolve(strict=False)
-    if not resolved.is_relative_to(root):
-        raise ProjectRootError(f"resolved project path escapes ROOT: {path}")
-    if operation == "read" and not allow_missing and not resolved.is_file():
-        raise ProjectRootError(f"project file is missing: {path}")
-    if operation == "write" and not allow_missing and not resolved.parent.is_dir():
-        raise ProjectRootError(f"project parent is missing: {path}")
-    return resolved
-```
-
 ## 4. Public module ownership
 
 <!-- pair-block-definition: P0-MOD-01 -->
@@ -745,7 +750,7 @@ requirements = ["MOD-01"]
 targets = ["src/viper/verification/models.py:VerificationPolicy", "src/viper/verification/models.py:VerifiedRunResult"]
 tests = ["tests/test_public_api.py:test_verification_namespace_separates_operations_and_models"]
 gate = "conda run -n mantra python -m pytest tests/test_public_api.py -k verification_namespace_separates_operations_and_models -q"
-depends_on = ["P0-PDR-06"]
+depends_on = ["P0-CRT-05"]
 ```
 
 Create `src/viper/verification/models.py`. Move these declarations from
@@ -2522,7 +2527,7 @@ requirements = ["SIG-01"]
 targets = ["src/viper/system_graph.py:PairBlock", "src/viper/system_graph.py:SystemGraph", "src/viper/system_graph.py:SystemCondensationDAG", "src/viper/system_graph.py:SystemGraphDelta", "src/viper/system_graph.py:ImpactReport"]
 tests = ["tests/test_documentation.py:test_phase_zero_system_models_match_contract", "tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable"]
 gate = "conda run -n mantra python -m pytest tests/test_documentation.py tests/test_validation_architecture.py -k 'phase_zero_system_models_match_contract or system_graph_inventory_and_edges_are_auditable' -q"
-depends_on = ["P0-CRT-05", "P0-PDR-01", "P0-MOD-04"]
+depends_on = ["P0-MOD-04"]
 ```
 
 Create `src/viper/system_graph.py` with this complete model slice and canonical
