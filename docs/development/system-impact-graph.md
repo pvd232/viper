@@ -1747,17 +1747,17 @@ The fixture fixes these Git revisions:
 
 ```text
 repository: https://github.com/pvd232/agents.git
-baseline:   c8898ba694b2f506cd123acd1adfb0abfe8509cc
-candidate:  4efa77318f9f4df7e2164176247b9282a8000a7b
-patch:      6aec6d0caa938465ef968b585d4fef5e501810fda8d63ead609243a2de2022db
+baseline:   6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b
+candidate:  18083057eeb92c755ead031122afd48e8a77d653
+patch:      4a012e32f583c1c4c9664f67c3d3ef0472b99893938a958ac49898db20ebc2ba
 ```
 
 The patch value is the SHA-256 digest of the exact full-index binary diff:
 
 ```bash
 git diff --binary --full-index \
-  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
-  4efa77318f9f4df7e2164176247b9282a8000a7b \
+  6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b \
+  18083057eeb92c755ead031122afd48e8a77d653 \
   | shasum -a 256
 ```
 
@@ -1785,8 +1785,8 @@ This command reconstructs the exact path delta from Git:
 
 ```bash
 git diff --name-status \
-  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
-  4efa77318f9f4df7e2164176247b9282a8000a7b
+  6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b \
+  18083057eeb92c755ead031122afd48e8a77d653
 ```
 
 The original review cycle used this command trace from the clean baseline:
@@ -1810,11 +1810,11 @@ python3 -m unittest \
   tests.test_run_skill_evaluations
 git diff --check
 git diff --name-status \
-  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
-  4efa77318f9f4df7e2164176247b9282a8000a7b
+  6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b \
+  18083057eeb92c755ead031122afd48e8a77d653
 git diff --binary --full-index \
-  c8898ba694b2f506cd123acd1adfb0abfe8509cc \
-  4efa77318f9f4df7e2164176247b9282a8000a7b \
+  6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b \
+  18083057eeb92c755ead031122afd48e8a77d653 \
   | shasum -a 256
 ```
 
