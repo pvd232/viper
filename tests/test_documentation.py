@@ -13,8 +13,8 @@ from urllib.parse import unquote
 from viper._contract_traceability import (
     AcceptedTraceOutcome,
     ContractRequirement,
+    ContractTrace,
     ContractTraceabilityGraph,
-    ContractTraceCase,
     RejectedTraceOutcome,
     RepoSymbolRef,
     RuleEdge,
@@ -65,7 +65,7 @@ TRACEABILITY_MODELS = (
     RuleEdge,
     AcceptedTraceOutcome,
     RejectedTraceOutcome,
-    ContractTraceCase,
+    ContractTrace,
     ContractTraceabilityGraph,
 )
 

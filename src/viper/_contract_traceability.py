@@ -129,23 +129,23 @@ TraceOutcome = Annotated[
 ]
 
 
-class ContractTraceCase(ProtocolModel):
-    """Trace one rule through a concrete accepted or rejected case."""
+class ContractTrace(ProtocolModel):
+    """Record one concrete accepted or rejected execution of a verifier rule."""
 
     trace_id: TraceId = Field(
-        description="Stable identifier of this concrete trace case."
+        description="Stable identifier of this concrete trace."
     )
     requirement_id: RequirementId = Field(
-        description="Contract requirement demonstrated by the case."
+        description="Contract requirement demonstrated by the trace."
     )
     rule_id: VerifierRuleId = Field(
-        description="Verifier rule exercised by the case."
+        description="Verifier rule exercised by the trace."
     )
     state: TraceState = Field(
         description="Whether the referenced implementation and test exist."
     )
     scenario: NonEmptyStr = Field(
-        description="One behavior demonstrated by the case."
+        description="One behavior demonstrated by the trace."
     )
     setup: NonEmptyStr = Field(
         description="Concrete state established before the invocation."
@@ -163,7 +163,7 @@ class ContractTraceCase(ProtocolModel):
         description="Test function that observes the expected outcome."
     )
     outcome: TraceOutcome = Field(
-        description="Accepted result or rejected failure expected from the case."
+        description="Accepted result or rejected failure expected from the trace."
     )
 
 
@@ -186,7 +186,7 @@ class ContractTraceabilityGraph(ProtocolModel):
         min_length=1,
         description="Ordered implementation and verification relationships.",
     )
-    traces: tuple[ContractTraceCase, ...] = Field(
+    traces: tuple[ContractTrace, ...] = Field(
         min_length=1,
-        description="Ordered accepted and rejected trace cases.",
+        description="Ordered accepted and rejected traces.",
     )

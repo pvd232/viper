@@ -160,7 +160,7 @@ flowchart TD
     Rule["Proposed<br/>VerifierRule"]
     Owner["Proposed<br/>implementation RuleEdge"]
     Test["Proposed<br/>verification RuleEdge"]
-    Cases["Proposed<br/>success + rejection ContractTraceCase"]
+    Cases["Proposed<br/>success + rejection ContractTrace"]
     Graph["Proposed<br/>ContractTraceabilityGraph"]
 
     Requirement -->|"requirement_id"| Rule
@@ -340,23 +340,23 @@ TraceOutcome = Annotated[
 ]
 
 
-class ContractTraceCase(ProtocolModel):
-    """Trace one rule through a concrete accepted or rejected case."""
+class ContractTrace(ProtocolModel):
+    """Record one concrete accepted or rejected execution of a verifier rule."""
 
     trace_id: TraceId = Field(
-        description="Stable identifier of this concrete trace case."
+        description="Stable identifier of this concrete trace."
     )
     requirement_id: RequirementId = Field(
-        description="Contract requirement demonstrated by the case."
+        description="Contract requirement demonstrated by the trace."
     )
     rule_id: VerifierRuleId = Field(
-        description="Verifier rule exercised by the case."
+        description="Verifier rule exercised by the trace."
     )
     state: TraceState = Field(
         description="Whether the referenced implementation and test exist."
     )
     scenario: NonEmptyStr = Field(
-        description="One behavior demonstrated by the case."
+        description="One behavior demonstrated by the trace."
     )
     setup: NonEmptyStr = Field(
         description="Concrete state established before the invocation."
@@ -374,7 +374,7 @@ class ContractTraceCase(ProtocolModel):
         description="Test function that observes the expected outcome."
     )
     outcome: TraceOutcome = Field(
-        description="Accepted result or rejected failure expected from the case."
+        description="Accepted result or rejected failure expected from the trace."
     )
 
 
@@ -397,9 +397,9 @@ class ContractTraceabilityGraph(ProtocolModel):
         min_length=1,
         description="Ordered implementation and verification relationships.",
     )
-    traces: tuple[ContractTraceCase, ...] = Field(
+    traces: tuple[ContractTrace, ...] = Field(
         min_length=1,
-        description="Ordered accepted and rejected trace cases.",
+        description="Ordered accepted and rejected traces.",
     )
 ```
 
@@ -407,7 +407,7 @@ class ContractTraceabilityGraph(ProtocolModel):
 module-level function uses its function name. A method uses
 `ClassName.method_name`. A test uses its complete test-function name.
 
-`ContractTraceCase.scenario` names the one behavior demonstrated by the case.
+`ContractTrace.scenario` names the one behavior demonstrated by the case.
 `setup` enumerates the exact starting paths, values, and external conditions.
 `input` reproduces the exact authored model, marker, or configuration
 value being processed. `invocation` names the exact callable invocation or
@@ -506,7 +506,7 @@ from pathlib import Path
 from viper._contract_traceability import (
     AcceptedTraceOutcome,
     ContractRequirement,
-    ContractTraceCase,
+    ContractTrace,
     ContractTraceabilityGraph,
     RejectedTraceOutcome,
     RequirementId,
@@ -596,7 +596,7 @@ accepted_outcome: TraceOutcome = AcceptedTraceOutcome(
         "ResolvedExternalInputRef.file after capture and publication",
     ),
 )
-success = ContractTraceCase(
+success = ContractTrace(
     trace_id=SUCCESS_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
@@ -619,7 +619,7 @@ rejected_outcome: TraceOutcome = RejectedTraceOutcome(
     error_type="ProjectPathError",
     message_match="symlink",
 )
-rejection = ContractTraceCase(
+rejection = ContractTrace(
     trace_id=REJECTION_TRACE_ID,
     requirement_id=requirement.requirement_id,
     rule_id=rule.rule_id,
