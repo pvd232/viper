@@ -12,6 +12,8 @@ working agreements and load the user-scoped skills relevant to the active task.
   changes.
 - Keep public entities in the domain modules listed in
   `docs/reference/api.md`.
+- Keep `src/viper/__init__.py` docstring-only. Import each public object from
+  its defining module.
 - Keep serialized protocol fields and discriminators stable during Python
   module refactors.
 - Mark the first private package or module boundary with a leading underscore.

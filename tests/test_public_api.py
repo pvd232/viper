@@ -9,7 +9,9 @@ from importlib import resources
 from pathlib import Path
 
 import viper
-from viper import api, execution, stages
+import viper.api as api
+import viper.execution as execution
+import viper.stages as stages
 from viper._api import handlers
 from viper.execution.errors import BenchmarkExecutionError, RunError
 from viper.execution.results import BenchmarkExecutionResult, RunResult
@@ -35,9 +37,36 @@ PUBLIC_MODULES = (
 )
 
 
+def _root_package_statements(path: Path) -> list[ast.stmt]:
+    """Return package-root statements after the module docstring."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    body = list(tree.body)
+    if ast.get_docstring(tree) is not None:
+        body.pop(0)
+    return body
+
+
 def test_root_package_defines_no_forwarding_exports() -> None:
     """Require callers to import each public name from its defining module."""
-    assert not hasattr(viper, "__all__")
+    package_root = Path(viper.__file__)
+    tree = ast.parse(package_root.read_text(encoding="utf-8"))
+
+    assert ast.get_docstring(tree) == "VIPER package."
+    assert _root_package_statements(package_root) == []
+
+
+def test_root_package_rejects_a_forwarding_import(tmp_path: Path) -> None:
+    """Reject a package-root import of a name owned by a public module."""
+    package_root = tmp_path / "__init__.py"
+    package_root.write_text(
+        '"""VIPER package."""\n\nfrom .stages import Context\n',
+        encoding="utf-8",
+    )
+
+    statements = _root_package_statements(package_root)
+
+    assert len(statements) == 1
+    assert isinstance(statements[0], ast.ImportFrom)
 
 
 def test_every_public_module_imports() -> None:

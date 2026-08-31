@@ -18,7 +18,7 @@ boundary. A second underscore on `execute_attempt` repeats the same signal.
 
 ## Original gap
 
-**Inspected:** VIPER currently uses three conflicting patterns:
+**Original state:** VIPER used three conflicting patterns:
 
 ```text
 viper._parameter._validation
@@ -30,13 +30,12 @@ The first path marks both the package and module as private. The second marks
 both the module and a function shared with another module. The third marks the
 private package once and gives its shared function a normal name.
 
-The repository currently permits all three patterns. An executable source-tree
-check must select and enforce one convention. That check is the missing
-connector between the intended module layout and the source tree.
+The original repository permitted all three patterns. The implemented
+source-tree checks now enforce one convention.
 
 ## Contract
 
-VIPER will use a leading underscore at the first path component that becomes
+VIPER uses a leading underscore at the first path component that becomes
 private.
 
 ```text
@@ -50,14 +49,15 @@ A function called only within its defining module keeps a leading underscore.
 A function imported by another module uses a normal function name because its
 package or module path already marks the private boundary.
 
-This protocol defines four static checks:
+This protocol defines five static checks:
 
 | Check | Rule |
 | --- | --- |
-| `package.private_boundary` | An underscored package contains normally named modules, except `__init__.py`. |
-| `package.shared_symbol` | Reject an import of a single-underscore symbol from another module. |
-| `package.public_execution_surface` | Results and errors returned or raised by public execution functions have public import paths. |
-| `package.local_export` | Every name in a public module's `__all__` is defined in that module. |
+| `package.private` | An underscored package contains normally named modules, except `__init__.py`. |
+| `package.import` | Reject an import of a single-underscore symbol from another module. |
+| `package.execution` | Results and errors returned or raised by public execution functions have public import paths. |
+| `package.export` | Every name in a public module's `__all__` is defined in that module. |
+| `package.root` | `src/viper/__init__.py` contains only the package docstring. |
 
 The source tree also rejects `from module import name as name`. A public module
 lists only local definitions in `__all__`. Every caller imports a name from the
@@ -81,14 +81,16 @@ byte-for-byte outside its scope.
 
 ## Verification
 
-`tests/test_validation_architecture.py` will inspect Python files beneath
-`src/viper`. The test will apply `package.private_boundary` to file paths and
-`package.shared_symbol` to `from ... import ...` statements.
+`tests/test_validation_architecture.py` inspects Python files beneath
+`src/viper`. The test applies `package.private` to file paths and
+`package.import` to `from ... import ...` statements.
 
-`tests/test_public_api.py` applies `package.public_execution_surface` by
+`tests/test_public_api.py` applies `package.execution` by
 importing result types from `viper.execution.results` and errors from
 `viper.execution.errors`. The same test parses every public module and rejects
-an exported name that lacks a local definition.
+an exported name that lacks a local definition. `package.root` parses
+`src/viper/__init__.py` and requires its package docstring to be the only
+statement.
 
 The source tree is the inspected value. The tests are the verifier. The Git
 commit records the checked source, while runtime receipts continue to describe
@@ -275,7 +277,7 @@ module when they directly test that module.
 | --- | --- | --- | --- |
 | Runtime behavior | Internal callers use underscored shared functions. | Internal callers use normal names within private modules. | Preserved. Function bodies and call order stay unchanged. |
 | Parameter validation | `_parameter/_validation.py` owns validation. | `_parameter/validation.py` owns validation. | Preserved. Only the internal import path changes. |
-| Public Python API | Execution returns types defined in private modules. | `viper.execution` exports its result and error types. | Strengthened. Public functions and their public types share one supported namespace. |
+| Public Python API | Execution returned types defined in private modules. | `viper.execution.results` owns result types; `viper.execution.errors` owns error types; `viper.execution` owns only operations. | Strengthened. Every public value has one defining module. |
 | Persisted files | Existing schema classes produce YAML and JSON. | The same classes produce the same fields and bytes. | Preserved. Schema versions stay unchanged. |
 | Verification | Verification functions perform the existing comparisons. | The same functions receive normal internal names. | Preserved. The same checks remain active. |
 | CLI | CLI operations call the application API. | The handler imports change internally. | Preserved. Commands, arguments, output, and exit status stay unchanged. |
@@ -294,8 +296,9 @@ paths, SHA-256 values, and byte counts remain unchanged.
 **Changed:** Python code that imports private paths must use the new owner. VIPER
 is an alpha package, so release notes must list these import changes.
 
-**Introduced:** `viper.execution` becomes the supported owner of execution
-results and execution errors.
+**Introduced:** `viper.execution.results` owns execution results,
+`viper.execution.errors` owns execution errors, and `viper.execution` owns the
+`run()`, `retry()`, and `benchmark()` operations.
 
 ## Acceptance cases
 
@@ -305,7 +308,7 @@ The success case contains one private execution module with a shared function:
 from ._attempt import execute_attempt
 ```
 
-`package.shared_symbol` accepts the import because `_attempt.py` already marks
+`package.import` accepts the import because `_attempt.py` already marks
 the private boundary.
 
 The targeted rejection contains a redundant function marker:
@@ -314,9 +317,18 @@ The targeted rejection contains a redundant function marker:
 from ._attempt import _execute_attempt
 ```
 
-`package.shared_symbol` rejects `_execute_attempt` because another module
+`package.import` rejects `_execute_attempt` because another module
 imports it. A separate rejection creates `_parameter/_validation.py` and
-expects `package.private_boundary` to reject the doubly marked path.
+expects `package.private` to reject the doubly marked path.
+
+A package-root rejection adds this forwarding import:
+
+```python
+from .stages import Context
+```
+
+`package.root` rejects the import because callers must import
+`Context` from `viper.stages`.
 
 ## Master execution checklist
 
@@ -325,9 +337,12 @@ the phases in order. Each commit must contain only the files named by its phase.
 
 ### Terminal outcome
 
-The refactor is complete when VIPER exposes its execution results and errors
-through `viper.execution`, every shared internal function follows the module
-privacy protocol, and the architecture test rejects a redundant underscore.
+The refactor is complete because VIPER exposes execution results through
+`viper.execution.results`, execution errors through `viper.execution.errors`,
+and operations through `viper.execution`. Every shared internal function
+follows the module-privacy protocol, and the architecture test rejects a
+redundant underscore. The public-API test rejects a package-root forwarding
+import.
 
 ### Coverage
 
@@ -335,9 +350,9 @@ privacy protocol, and the architecture test rejects a redundant underscore.
 | --- | --- | --- | --- |
 | Parameter validation path | `_parameter/_validation.py` remains | Phase 1 | Parameter and preflight tests pass with the new import path. |
 | Shared internal functions | Cross-module imports use underscored symbols | Phase 2 | Execution, verification, and application tests pass after the renames. |
-| Execution results and errors | Public functions expose types from private modules | Phase 3 | Public import tests pass. |
+| Execution results and errors | Public result and error modules own their local types | Phase 3 | Public import tests pass. |
 | Shared Git test support | One test imports `_git` from another test module | Phase 4 | Both test modules import `tests.git_repository`. |
-| Enforced convention | The source tree permits all three patterns | Phase 5 | The validation-architecture rejection cases pass. |
+| Enforced convention | The source tree permits all three patterns and package-root forwarding | Phase 5 | The architecture and public-API rejection cases pass. |
 
 ### Phase 1. Normalize parameter validation
 
@@ -417,8 +432,10 @@ python -m pytest tests/test_run_execution.py tests/test_verification.py \
 - [x] Move `BenchmarkExecutionResult` into `execution/results.py`.
 - [x] Rename `execution/_errors.py` to `execution/errors.py`.
 - [x] Move `BenchmarkExecutionError` into `execution/errors.py`.
-- [x] Export `RunResult`, `BenchmarkExecutionResult`, `RunError`, and
-      `BenchmarkExecutionError` from `viper.execution`.
+- [x] Export `RunResult` and `BenchmarkExecutionResult` from
+      `viper.execution.results`. Export `RunError` and
+      `BenchmarkExecutionError` from `viper.execution.errors`. Keep
+      `viper.execution.__all__` limited to `run`, `retry`, and `benchmark`.
 - [x] Add `viper.randomness` to the public-module inventory introduced with
       the RNG ownership split.
 - [x] Update `docs/reference/api.md` with the supported imports.
@@ -464,6 +481,8 @@ python -m pytest tests/test_generated_project_acceptance.py --collect-only -q
 - [x] Add the two structural checks to
       `tests/test_validation_architecture.py`.
 - [x] Add one temporary invalid source tree for each rejection case.
+- [x] Require `src/viper/__init__.py` to remain docstring-only and add one
+      rejected forwarding import to `tests/test_public_api.py`.
 - [x] Run the structural test against the completed source tree.
 
 **Acceptance gate**
@@ -492,6 +511,6 @@ python -m pytest tests/test_parameter_validation.py tests/test_preflight.py \
 
 ## Verdict
 
-Implement the refactor in the five phases above. The change gives each private
-boundary one visible marker, gives public execution values supported imports,
-and preserves the experiment and verification behavior.
+The five phases are implemented. Each private boundary has one visible marker,
+each public execution value has one defining module, and the experiment and
+verification behavior remains unchanged.
