@@ -121,6 +121,28 @@ _MERMAID_EDGE = re.compile(
     r"^\s*(?P<source>[A-Za-z][A-Za-z0-9_]*)\s+-->"
     r'(?:\|"[^"]+"\|)?\s*(?P<target>[A-Za-z][A-Za-z0-9_]*)\s*$'
 )
+_MERMAID_CLASS_DEF = re.compile(
+    r"^\s*classDef (?P<role>[a-z]+) (?P<style>.+)$",
+    re.MULTILINE,
+)
+
+TRACEABILITY_DAG_PALETTES = (
+    {
+        "current": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
+        "evidence": "fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px",
+        "gap": "fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px",
+    },
+    {
+        "proposed": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
+    },
+    {
+        "contract": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
+        "checklist": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
+        "implementation": "fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px",
+        "output": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
+    },
+)
+TRACEABILITY_LINK_STYLE = "linkStyle default stroke:#94a3b8,stroke-width:2px"
 
 COMPLETE_EXAMPLE_PUBLIC_CALLS = {
     "viper.at_least",
@@ -1076,6 +1098,30 @@ def test_phase_zero_contracts_show_three_dags_and_instantiate_models() -> None:
             failures[contract.name] = errors
 
     assert failures == {}
+
+
+def test_contract_traceability_dags_use_semantic_palette() -> None:
+    """Keep each traceability DAG role bound to its declared color."""
+    text = CONTRACT_TRACEABILITY.read_text()
+    section = text.split("## 3. Current gap", maxsplit=1)[1].split(
+        "## 4. Contract models", maxsplit=1
+    )[0]
+    diagrams = tuple(
+        match.group("body") for match in _MERMAID_FENCE.finditer(section)
+    )
+
+    assert len(diagrams) == len(TRACEABILITY_DAG_PALETTES)
+    for diagram, expected_palette in zip(
+        diagrams,
+        TRACEABILITY_DAG_PALETTES,
+        strict=True,
+    ):
+        actual_palette = {
+            match.group("role"): match.group("style")
+            for match in _MERMAID_CLASS_DEF.finditer(diagram)
+        }
+        assert actual_palette == expected_palette
+        assert TRACEABILITY_LINK_STYLE in diagram
 
 
 def test_contract_traceability_model_block_matches_runtime() -> None:

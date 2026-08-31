@@ -131,6 +131,25 @@ The existing `implements`, `verifies`, and baseline markers remain as the
 migration oracle until the graph produces the same requirement and phase
 coverage.
 
+### Diagram color contract
+
+The three DAGs use color to identify each node's role. Complete node labels
+carry the same meaning independently of color.
+
+| Role | Mermaid classes | Fill | Stroke |
+| --- | --- | --- | --- |
+| Authored contract or current declaration | `contract`, `current` | `#1e3a8a` | `#60a5fa` |
+| Existing implementation or observed evidence | `implementation`, `evidence` | `#115e59` | `#5eead4` |
+| Unsupported gap | `gap` | `#7f1d1d` | `#fca5a5` |
+| Proposed model or generated output | `proposed`, `output` | `#581c87` | `#d8b4fe` |
+| Checklist-owned scheduling | `checklist` | `#713f12` | `#fbbf24` |
+
+Every role uses white text and a two-pixel stroke. Every link uses `#94a3b8`
+with a two-pixel stroke. The current DAG uses blue, teal, and red to separate
+existing declarations, supporting evidence, and the gap. The proposed-change
+DAG uses purple. The integrated DAG uses blue, amber, teal, and purple to show
+the contract, checklist, implementation, and generated graph boundaries.
+
 ### Proposed-change DAG
 
 The proposed records make each missing relationship explicit.
@@ -394,8 +413,8 @@ module-level function uses its function name. A method uses
 value being processed. `invocation` names the exact callable invocation or
 command that processes it.
 `implementation` and `test` identify the exact source owner and acceptance
-test. These fields must not contain placeholders such as `...`, `TBD`, `TODO`,
-or unresolved symbolic names.
+test. These fields accept exact values; placeholders such as `...`, `TBD`,
+`TODO`, and unresolved symbolic names fail validation.
 
 `AcceptedTraceOutcome` records the returned result and at least one durable
 record or artifact. `RejectedTraceOutcome` records the exact source boundary,
@@ -704,8 +723,9 @@ machine's absolute checkout path.
 | `contract.rule.declared` <!-- verifier-rule: contract.rule.declared requirement=CRT-01 --> | Each requirement declares at least one unique verifier rule. |
 | `contract.rule.implemented` <!-- verifier-rule: contract.rule.implemented requirement=CRT-02 --> | Each verifier rule names one exact implementation target; every link marked `implemented` resolves to an existing file and symbol. |
 | `contract.rule.tested` <!-- verifier-rule: contract.rule.tested requirement=CRT-02 --> | Each verifier rule names at least one exact test target; every link marked `implemented` resolves to an existing test function. |
-| `contract.trace.populated` <!-- verifier-rule: contract.trace.populated requirement=CRT-03 --> | Each contract contains parseable success and rejection traces. Every trace names one behavior, its exact starting state, the exact declared input being processed, the exact invocation, valid source locations for its declared state, and no placeholders. |
+| `contract.trace.populated` <!-- verifier-rule: contract.trace.populated requirement=CRT-03 --> | Each contract contains parseable success and rejection traces. Every trace names one behavior, its exact starting state, the exact declared input being processed, the exact invocation, valid source locations for its declared state, and concrete values throughout. |
 | `contract.example.complete` <!-- verifier-rule: contract.example.complete requirement=CRT-03 --> | Each contract contains three rendered DAG sources and one marked, syntax-valid worked example that constructs every class and calls every operation declared in Section 4. |
+| `contract.diagram.palette` <!-- verifier-rule: contract.diagram.palette requirement=CRT-03 --> | The current, proposed-change, and integrated DAGs use the declared semantic role colors and neutral link style. |
 | `contract.model.matches_runtime` <!-- verifier-rule: contract.model.matches_runtime requirement=CRT-03 --> | Every Section 4 traceability class has the same name and direct fields as its Python implementation. |
 | `contract.model.documented` <!-- verifier-rule: contract.model.documented requirement=CRT-03 --> | Every direct field in each persisted traceability model has a non-empty generated-schema description that states its role. |
 | `contract.graph.canonical` <!-- verifier-rule: contract.graph.canonical requirement=CRT-04 --> | Repeated compilation produces identical ordered JSON bytes. |
