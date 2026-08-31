@@ -1,8 +1,12 @@
 """Cross-file verification for VIPER provenance records."""
 
+# Public verification types must exist before private verifier modules import them.
+# ruff: noqa: E402
+
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 import yaml
 
@@ -15,6 +19,121 @@ from ._schema import (
     DataRole,
     RepoRelPath,
 )
+from .artifacts import ArtifactPointer, ResolvedArtifact, StageArtifactRef
+from .benchmark import BenchmarkResult, BenchmarkSpec
+from .experiments import ExperimentSpec, VariantSpec
+from .ids import InputName, StageId
+from .inputs import (
+    FutureInputRef,
+    ResolvedFutureInputRef,
+    ResolvedStoredInputRef,
+    StoredInputRef,
+)
+from .metrics import Measurement, MetricVerificationReceipt
+from .references import (
+    GitFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    SnapshotFileRef,
+    StageResultSnapshotRef,
+    StorageModel,
+)
+from .runs import ResolvedRun, RunAttempt, RunSpec
+from .serialization import document_digest, parse_yaml_bytes
+from .stages import (
+    BaseSpec,
+    EvaluateSpec,
+    InternalSpec,
+    ResolvedBaseSpec,
+    ResolvedInternalSpec,
+    TrainSpec,
+)
+
+
+class VerificationError(ValueError):
+    """A referenced file could not be retrieved or failed verification."""
+
+
+@dataclass(frozen=True)
+class VerificationPolicy:
+    """Define which source repositories may execute project-owned code."""
+
+    trusted_source_repositories: frozenset[str]
+
+    def permits_source(self, repository: object) -> bool:
+        """Return whether project code from one repository may execute."""
+        normalized = str(repository).rstrip("/")
+        return normalized in {
+            trusted.rstrip("/") for trusted in self.trusted_source_repositories
+        }
+
+
+@dataclass(frozen=True)
+class VerifiedSnapshotFile:
+    """One snapshot file whose bytes match its recorded identity."""
+
+    reference: SnapshotFileRef
+    content: bytes
+
+
+@dataclass(frozen=True)
+class VerifiedArtifact:
+    """One resolved artifact and all of its verified files."""
+
+    artifact: ResolvedArtifact
+    files: tuple[VerifiedSnapshotFile, ...]
+    data_role: DataRole
+    references: tuple[ResolvedFileRef, ...] = ()
+
+
+@dataclass(frozen=True)
+class VerifiedInput:
+    """A verified artifact and the local path where a stage consumes it."""
+
+    path: RepoRelPath
+    data_role: DataRole
+    artifact: ResolvedArtifact
+    files: tuple[VerifiedSnapshotFile, ...]
+    references: tuple[ResolvedFileRef, ...] = ()
+
+
+@dataclass(frozen=True)
+class VerifiedRunPlan:
+    """The connected records constituting one verified run plan."""
+
+    run: RunSpec
+    experiment: ExperimentSpec
+    variant: VariantSpec
+    benchmark: BenchmarkSpec | None
+    stages: dict[StageId, BaseSpec]
+
+
+@dataclass(frozen=True)
+class VerifiedRunResult:
+    """A verified terminal run and its connected records."""
+
+    result: ResolvedRun
+    plan: VerifiedRunPlan
+    attempts: tuple[RunAttempt, ...]
+    resolved_stages: dict[StageId, ResolvedBaseSpec]
+    measurements: tuple[Measurement, ...]
+
+
+@dataclass(frozen=True)
+class VerifiedBenchmarkResult:
+    """A benchmark result and its verified run and confirmation execution."""
+
+    result: BenchmarkResult
+    run: VerifiedRunResult
+    confirmation: RunAttempt
+    confirmation_stages: dict[StageId, ResolvedBaseSpec]
+    confirmation_measurements: tuple[Measurement, ...]
+
+
+StorageFetcher = Callable[[StorageModel], bytes]
+StageSnapshot = StageResultSnapshotRef | LocalStageResultSnapshotRef
+
+
 from ._verification.attempt import (
     verify_attempt_files,
     verify_attempt_journal,
@@ -24,86 +143,20 @@ from ._verification.attempt import (
 from ._verification.metrics import (
     verify_recomputed_metrics,
 )
-from ._verification.models import (
-    VerificationError,
-    VerificationPolicy,
-    VerifiedArtifact,
-    VerifiedBenchmarkResult,
-    VerifiedInput,
-    VerifiedRunPlan,
-    VerifiedRunResult,
-    VerifiedSnapshotFile,
-)
 from ._verification.paths import (
-    resolved_stage_spec_path,
     run_root,
-    stage_invocation_path,
-    stage_spec_path,
 )
 from ._verification.plan import (
-    verify_benchmark_spec,
-    verify_experiment_and_variant,
-    verify_parameter_model_references,
     verify_run_plan,
-    verify_run_plan_relationships,
-    verify_run_spec,
-    verify_stage_plan,
 )
 from ._verification.storage import (
-    StageSnapshot,
-    StorageFetcher,
     artifact_revision_identity,
-    fetch_git_file_bytes,
-    fetch_huggingface_file_bytes,
-    fetch_local_file_bytes,
-    fetch_storage_bytes,
-    list_huggingface_snapshot_files,
-    list_local_snapshot_files,
-    list_snapshot_files,
     load_verified_artifact,
     read_attempt_reference,
     read_resolved_file,
-    read_snapshot_file,
     snapshot_identity,
-    verify_resolved_file_bytes,
     verify_run_attempt_references,
     verify_snapshot_artifact,
-)
-from .artifacts import (
-    ArtifactPointer,
-    StageArtifactRef,
-)
-from .benchmark import (
-    BenchmarkResult,
-    BenchmarkSpec,
-)
-from .ids import InputName, StageId
-from .inputs import (
-    FutureInputRef,
-    ResolvedFutureInputRef,
-    ResolvedStoredInputRef,
-    StoredInputRef,
-)
-from .metrics import (
-    Measurement,
-    MetricVerificationReceipt,
-)
-from .references import (
-    GitFileRef,
-    ResolvedFileRef,
-)
-from .runs import (
-    ResolvedRun,
-    RunAttempt,
-    RunSpec,
-)
-from .serialization import document_digest, parse_yaml_bytes
-from .stages import (
-    EvaluateSpec,
-    InternalSpec,
-    ResolvedBaseSpec,
-    ResolvedInternalSpec,
-    TrainSpec,
 )
 
 __all__ = [
@@ -117,40 +170,10 @@ __all__ = [
     "VerifiedRunPlan",
     "VerifiedRunResult",
     "VerifiedSnapshotFile",
-    "fetch_git_file_bytes",
-    "fetch_huggingface_file_bytes",
-    "fetch_local_file_bytes",
-    "fetch_storage_bytes",
-    "list_huggingface_snapshot_files",
-    "list_local_snapshot_files",
-    "list_snapshot_files",
-    "load_verified_artifact",
-    "read_attempt_reference",
-    "read_resolved_file",
-    "read_snapshot_file",
-    "resolved_stage_spec_path",
-    "run_root",
-    "stage_invocation_path",
-    "stage_spec_path",
-    "verify_attempt_files",
     "verify_attempt_future_inputs",
-    "verify_attempt_journal",
-    "verify_attempt_stages",
     "verify_benchmark_result",
-    "verify_benchmark_spec",
-    "verify_experiment_and_variant",
-    "verify_measurement_stage_times",
-    "verify_parameter_model_references",
     "verify_promoted_artifact",
-    "verify_recomputed_metrics",
-    "verify_resolved_file_bytes",
-    "verify_run_attempt_references",
-    "verify_run_plan",
-    "verify_run_plan_relationships",
     "verify_run_result",
-    "verify_run_spec",
-    "verify_snapshot_artifact",
-    "verify_stage_plan",
     "verify_stored_input_selections",
     "verify_stored_inputs",
 ]

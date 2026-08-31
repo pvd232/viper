@@ -7,12 +7,14 @@ from types import MappingProxyType
 import numpy as np
 import pytest
 
-from viper import StageContext, parameters, train_stage
+from viper import parameters
 from viper.stages import (
+    Context,
     StageDefinitionError,
     StageImplementationRef,
     load_stage_callable,
     stage_definition,
+    train,
 )
 
 
@@ -22,8 +24,8 @@ class ExampleTrainParameters(parameters.Train):
     epochs: int
 
 
-@train_stage(parameter_model=ExampleTrainParameters)
-def train(context: StageContext[ExampleTrainParameters]) -> None:
+@train(params=ExampleTrainParameters)
+def train(context: Context[ExampleTrainParameters]) -> None:
     """Consume one typed context in the direct decorator fixture."""
     assert context.params.epochs > 0
 
@@ -39,7 +41,7 @@ def test_train_decorator_exposes_stage_kind_and_parameter_model() -> None:
 def test_stage_context_keeps_live_values_outside_pydantic() -> None:
     """Carry paths and generator objects through the frozen runtime dataclass."""
     generator = np.random.Generator(np.random.PCG64(7))
-    context = StageContext(
+    context = Context(
         run_id="01JABCDEFGHJKMNPQRSTVWXYZ0",
         attempt_id=1,
         stage_id="train",
@@ -59,11 +61,11 @@ def test_stage_loader_requires_exact_decorated_top_level_callable(
 ) -> None:
     """Load the selected symbol only when its bytes and decorator agree."""
     raw = (
-        b"from viper import train_stage\n"
+        b"from viper.stages import train\n"
         b"from viper import parameters\n\n"
         b"class Params(parameters.Train):\n"
         b"    epochs: int\n\n"
-        b"@train_stage(parameter_model=Params)\n"
+        b"@train(params=Params)\n"
         b"def fit(context):\n"
         b"    return None\n"
     )
@@ -106,8 +108,8 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
     )
     raw = (
         b"from example_project.parameters import ProjectParameters\n"
-        b"from viper import train_stage\n\n"
-        b"@train_stage(parameter_model=ProjectParameters)\n"
+        b"from viper.stages import train\n\n"
+        b"@train(params=ProjectParameters)\n"
         b"def fit(context):\n"
         b"    return None\n"
     )

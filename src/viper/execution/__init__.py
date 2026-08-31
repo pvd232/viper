@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .errors import BenchmarkExecutionError, RunError
-from .results import BenchmarkExecutionResult, RunResult
+if TYPE_CHECKING:
+    from .results import BenchmarkExecutionResult, RunResult
 
 
 def run(
@@ -59,10 +60,6 @@ def benchmark(
 
 
 __all__ = [
-    "BenchmarkExecutionError",
-    "BenchmarkExecutionResult",
-    "RunError",
-    "RunResult",
     "benchmark",
     "retry",
     "run",

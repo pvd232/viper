@@ -23,11 +23,11 @@ def validate_package_name(package: str) -> None:
 def _project_files(package: str) -> dict[str, str]:
     """Return the complete starter-project file mapping."""
     stage_definitions = {
-        "download": ("DownloadParameters", "download_stage", "dataset"),
-        "build": ("BuildParameters", "build_stage", "prior"),
-        "embed": ("EmbedParameters", "embed_stage", "embedding"),
-        "train": ("TrainParameters", "train_stage", "parameters"),
-        "evaluate": ("EvaluateParameters", "evaluate_stage", "predictions"),
+        "download": ("DownloadParameters", "download", "dataset"),
+        "build": ("BuildParameters", "build", "prior"),
+        "embed": ("EmbedParameters", "embed", "embedding"),
+        "train": ("TrainParameters", "train", "parameters"),
+        "evaluate": ("EvaluateParameters", "eval", "predictions"),
     }
     files: dict[str, str] = {
         ".gitignore": ".viper/\n__pycache__/\n*.egg-info/\n",
@@ -72,35 +72,35 @@ pythonpath = ["src"]
         f"src/{package}/parameters.py": (
             '''"""Define project-owned stage parameter models."""
 
-import viper
 from pydantic import Field
+from viper import parameters
 
 
-class DownloadParameters(viper.parameters.Download):
+class DownloadParameters(parameters.Download):
     """Select the expected media type for the retrieved dataset."""
 
     media_type: str = "text/plain"
 
 
-class BuildParameters(viper.parameters.Build):
+class BuildParameters(parameters.Build):
     """Select the delimiter consumed by the prior builder."""
 
     delimiter: str = ","
 
 
-class EmbedParameters(viper.parameters.Embed):
+class EmbedParameters(parameters.Embed):
     """Select the dimension of the example embedding."""
 
     dimensions: int = Field(default=2, gt=0)
 
 
-class TrainParameters(viper.parameters.Train):
+class TrainParameters(parameters.Train):
     """Select the number of example training passes."""
 
     epochs: int = Field(default=1, gt=0)
 
 
-class EvaluateParameters(viper.parameters.Evaluate):
+class EvaluateParameters(parameters.Evaluate):
     """Select the label written beside the example predictions."""
 
     label: str = "baseline"
@@ -205,7 +205,7 @@ requires an independently executed confirmation.
         "train.py": f'''"""Run one frozen project plan."""
 
 from {package}.stages.train import train
-from viper import run
+from viper.api import run
 
 
 def main() -> None:
@@ -274,10 +274,10 @@ def test_stage_kinds() -> None:
         ] = f'''"""Execute the example {stage} stage."""
 
 from {package}.parameters import {parameter_class}
-from viper import {decorator}
+from viper.stages import {decorator}
 
 
-@{decorator}(parameter_model={parameter_class})
+@{decorator}(params={parameter_class})
 def {stage}(context) -> None:
     """Write the declared {artifact} artifact from verified inputs."""
 {stage_body}'''

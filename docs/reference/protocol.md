@@ -2074,7 +2074,7 @@ exactly for `torch_cuda`.
 
 The child retains each configured `numpy.random.Generator` created while
 applying the run controls. Immediately before stage invocation, the child
-places those objects in the read-only `StageContext.numpy_generators` mapping.
+places those objects in the read-only `Context.numpy_generators` mapping.
 The mapping keys equal `StageContextBinding.numpy_generator_names`. The
 corresponding `GeneratorInitializationReceipt` values contain the states hashed
 immediately after generator initialization. The child constructs the receipts
@@ -2129,7 +2129,7 @@ BaseSpec.implementation
 StageContextBinding
 -> exact run, attempt, stage, parameters, inputs, artifacts, metrics, and named generators
 
-exact callable(StageContext)
+exact callable(Context)
 -> one recorded invocation
 ```
 
@@ -2551,7 +2551,7 @@ ParamsT = TypeVar("ParamsT", bound=viper.parameters.ParameterSet)
 
 
 @dataclass(frozen=True)
-class StageContext(Generic[ParamsT]):
+class Context(Generic[ParamsT]):
     run_id: RunId
     attempt_id: int
     stage_id: StageId
@@ -2617,7 +2617,7 @@ class HttpRetrievalHandle:
 
 
 @dataclass(frozen=True)
-class DownloadContext(StageContext[viper.parameters.Download]):
+class DownloadContext(Context[viper.parameters.Download]):
     retrievals: Mapping[InputName, HttpRetrievalHandle]
 
 
@@ -2659,16 +2659,16 @@ Spec = Annotated[
 
 `StageImplementationRef` identifies the callable. The runner validates
 `ParameterizedSpec.params` through `ParameterModelRef`, constructs one
-`StageContext`, and passes it as the callable's sole argument:
+`Context`, and passes it as the callable's sole argument:
 
 ```text
 stage implementation reference
 -> exact callable
 
 stage spec + active attempt
--> typed StageContext
+-> typed Context
 
-exact callable(StageContext)
+exact callable(Context)
 -> StageInvocationReceipt
 ```
 
@@ -2679,7 +2679,7 @@ metric IDs bound to runner-owned handles, and the sorted generator names. For
 a download stage, it also binds each terminal HTTP response to the path,
 SHA-256, and byte count delivered through `DownloadContext`.
 
-`viper.http_transport()` decorates one project transport callable. Freezing
+`http_transport()` from `viper.http` decorates one project transport callable. Freezing
 resolves its repository-relative path, symbol, SHA-256, byte count, parameter
 class, and parameter values into `ProjectHttpTransportSpec`. During execution,
 the runner constructs one `HttpTransportContext`, invokes the selected
@@ -2998,7 +2998,7 @@ b_k^{(N_k)}
 ```
 
 The continuing stage receives the two verified artifact paths through
-`StageContext.inputs`. Its frozen project implementation restores the initial
+`Context.inputs`. Its frozen project implementation restores the initial
 state of $\omega_\ell$ from the loader values. A project that claims exact
 resumption establishes:
 
@@ -3513,7 +3513,7 @@ For a metric with `mode="recompute"`, the verifier:
    embedded measurement.
 
 For a metric with `mode="live"`, the verifier establishes that the active
-`StageContext` contained the frozen metric handle and that the measurement was
+`Context` contained the frozen metric handle and that the measurement was
 written through the attempt's measurement sink. A numerical recomputation
 claim requires a future contract that captures the live values supplied to the
 metric.

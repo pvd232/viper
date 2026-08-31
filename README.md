@@ -36,17 +36,18 @@ The draft describes one run.
 ```python
 from pathlib import Path
 
-import viper
 from my_project.training import train_model
+from viper import parameters
+from viper.stages import Context, train
 
 
-class TrainParameters(viper.parameters.Train):
+class TrainParameters(parameters.Train):
     epochs: int
     learning_rate: float
 
 
-@viper.train_stage(parameter_model=TrainParameters)
-def train(context: viper.StageContext[TrainParameters]) -> None:
+@train(params=TrainParameters)
+def fit(context: Context[TrainParameters]) -> None:
     dataset: Path = context.inputs["dataset"]
     weights_to_output: Path = context.artifacts["parameters"]
     train_model(
@@ -135,17 +136,19 @@ Add this entrypoint to `train.py`:
 ```python
 from pathlib import Path
 
-import viper
 from my_project.training import train_model
+from viper import parameters
+from viper.api import run
+from viper.stages import Context, train
 
 
-class TrainParameters(viper.parameters.Train):
+class TrainParameters(parameters.Train):
     epochs: int
     learning_rate: float
 
 
-@viper.train_stage(parameter_model=TrainParameters)
-def train(context: viper.StageContext[TrainParameters]) -> None:
+@train(params=TrainParameters)
+def fit(context: Context[TrainParameters]) -> None:
     dataset: Path = context.inputs["dataset"]
     weights_to_output: Path = context.artifacts["parameters"]
     train_model(
@@ -156,7 +159,7 @@ def train(context: viper.StageContext[TrainParameters]) -> None:
     )
 
 if __name__ == "__main__":
-    viper.run(train)
+    run(fit)
 ```
 
 Then run:

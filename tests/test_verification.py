@@ -30,6 +30,19 @@ from viper._schema import (
     RESUME_STATE,
     NonEmptyStr,
 )
+from viper._verification.attempt import verify_attempt_files
+from viper._verification.plan import (
+    verify_parameter_model_references,
+    verify_run_plan_relationships,
+    verify_run_spec,
+    verify_stage_plan,
+)
+from viper._verification.storage import (
+    fetch_git_file_bytes,
+    load_verified_artifact,
+    read_resolved_file,
+    read_snapshot_file,
+)
 from viper.artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
@@ -117,16 +130,7 @@ from viper.verification import (
     VerificationPolicy,
     VerifiedArtifact,
     VerifiedSnapshotFile,
-    fetch_git_file_bytes,
-    load_verified_artifact,
-    read_resolved_file,
-    read_snapshot_file,
-    verify_attempt_files,
     verify_attempt_future_inputs,
-    verify_parameter_model_references,
-    verify_run_plan_relationships,
-    verify_run_spec,
-    verify_stage_plan,
     verify_stored_input_selections,
 )
 

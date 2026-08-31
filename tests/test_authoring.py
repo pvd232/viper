@@ -203,8 +203,8 @@ class RunPlanAuthoringTests(unittest.TestCase):
             parameter_path.write_bytes(parameter_raw)
             implementation_raw = (
                 b"from project.parameters.train import StrandTrainParameters\n"
-                b"from viper import train_stage\n\n"
-                b"@train_stage(parameter_model=StrandTrainParameters)\n"
+                b"from viper.stages import train\n\n"
+                b"@train(params=StrandTrainParameters)\n"
                 b"def fit(context):\n"
                 b"    pass\n"
             )

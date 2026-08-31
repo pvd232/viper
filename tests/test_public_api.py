@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
+import inspect
 from importlib import resources
+from pathlib import Path
 
 import viper
-from viper import api, execution
+from viper import api, execution, stages
+from viper._api import handlers
+from viper.execution.errors import BenchmarkExecutionError, RunError
+from viper.execution.results import BenchmarkExecutionResult, RunResult
 
 PUBLIC_MODULES = (
     "api",
@@ -28,28 +34,10 @@ PUBLIC_MODULES = (
     "verification",
 )
 
-ROOT_EXPORTS = (
-    "parameters",
-    "StageContext",
-    "DownloadContext",
-    "HttpRetrievalHandle",
-    "HttpTransportContext",
-    "HttpTransportResult",
-    "build_stage",
-    "download_stage",
-    "embed_stage",
-    "evaluate_stage",
-    "train_stage",
-    "http_transport",
-    "run",
-    "retry",
-)
 
-
-def test_root_package_exports_project_interface() -> None:
-    """Keep the package root limited to the project-facing interface."""
-    assert tuple(viper.__all__) == ROOT_EXPORTS
-    assert viper.parameters.__name__ == "viper.parameters"
+def test_root_package_defines_no_forwarding_exports() -> None:
+    """Require callers to import each public name from its defining module."""
+    assert not hasattr(viper, "__all__")
 
 
 def test_every_public_module_imports() -> None:
@@ -58,22 +46,58 @@ def test_every_public_module_imports() -> None:
         assert importlib.import_module(f"viper.{name}") is not None
 
 
-def test_execution_namespace_uses_operation_names_once() -> None:
-    """Expose execution operations and their public result and error types."""
+def test_execution_namespace_owns_only_operations() -> None:
+    """Keep execution records and errors in their defining modules."""
     assert tuple(execution.__all__) == (
-        "BenchmarkExecutionError",
-        "BenchmarkExecutionResult",
-        "RunError",
-        "RunResult",
         "benchmark",
         "retry",
         "run",
     )
-    assert issubclass(execution.BenchmarkExecutionError, RuntimeError)
-    assert issubclass(execution.RunError, RuntimeError)
+    assert issubclass(BenchmarkExecutionError, RuntimeError)
+    assert issubclass(RunError, RuntimeError)
+    assert BenchmarkExecutionResult.__module__ == "viper.execution.results"
+    assert RunResult.__module__ == "viper.execution.results"
     assert callable(execution.run)
     assert callable(execution.retry)
     assert callable(execution.benchmark)
+
+
+def test_stage_interface_uses_parsimonious_names() -> None:
+    """Let the stage module supply the category once at each use site."""
+    assert stages.Context.__module__ == "viper.stages"
+    assert tuple(
+        operation.__name__
+        for operation in (stages.download, stages.build, stages.embed, stages.train)
+    ) == ("download", "build", "embed", "train")
+    assert stages.eval.__name__ == "eval"
+
+
+def test_public_modules_export_only_local_definitions() -> None:
+    """Reject a public ``__all__`` entry imported from another module."""
+    package_root = Path(viper.__file__).parent
+    for path in sorted(package_root.rglob("*.py")):
+        relative = path.relative_to(package_root)
+        if any(part.startswith("_") for part in relative.parts):
+            continue
+        module_name = ".".join(("viper", *relative.with_suffix("").parts))
+        if module_name.endswith(".__init__"):
+            module_name = module_name.removesuffix(".__init__")
+        module = importlib.import_module(module_name)
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        local_names = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        for node in tree.body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = (
+                    node.targets if isinstance(node, ast.Assign) else (node.target,)
+                )
+                local_names.update(
+                    target.id for target in targets if isinstance(target, ast.Name)
+                )
+        assert set(getattr(module, "__all__", ())) <= local_names, module_name
 
 
 def test_api_exports_and_registries_are_complete() -> None:
@@ -84,9 +108,38 @@ def test_api_exports_and_registries_are_complete() -> None:
     assert tuple(api.HANDLER_REGISTRY) == api.OPERATIONS
 
 
+def test_api_wrappers_preserve_handler_signatures() -> None:
+    """Keep each public wrapper's arguments identical to its handler."""
+    for name in (
+        "validate_stage",
+        "validate_resolved_stage",
+        "validate_run_spec",
+        "freeze_run",
+        "preflight",
+        "execute_stage",
+        "run_request",
+        "retry_request",
+        "execute_benchmark",
+        "plan_diff",
+        "lineage",
+        "status",
+        "compare_runs",
+        "verify_run",
+        "verify_benchmark",
+        "verify_pointer",
+        "get_schema",
+        "get_capabilities",
+        "init_project",
+    ):
+        assert inspect.signature(getattr(api, name)) == inspect.signature(
+            getattr(handlers, name)
+        )
+
+
 def test_parameter_categories_form_the_public_extension_namespace() -> None:
     """Expose one parameter category for each supported extension role."""
-    assert tuple(viper.parameters.__all__) == (
+    parameters = importlib.import_module("viper.parameters")
+    assert tuple(parameters.__all__) == (
         "Build",
         "Download",
         "Embed",
@@ -96,7 +149,7 @@ def test_parameter_categories_form_the_public_extension_namespace() -> None:
         "ParameterModelRef",
         "Train",
     )
-    assert issubclass(viper.parameters.Train, viper.parameters.ParameterSet)
+    assert issubclass(parameters.Train, parameters.ParameterSet)
 
 
 def test_installed_package_declares_inline_type_information() -> None:

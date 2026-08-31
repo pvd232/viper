@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from .._verification.storage import read_attempt_reference
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
@@ -35,12 +36,7 @@ from ..stages import (
     InternalSpec,
 )
 from ..storage import LocalArtifactStore, snapshot_file
-from ..verification import (
-    VerificationError,
-    VerificationPolicy,
-    read_attempt_reference,
-    verify_run_result,
-)
+from ..verification import VerificationError, VerificationPolicy, verify_run_result
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
 from ._materialization import resolve_inputs, retrieve_download_inputs
 from ._metric import MetricExecutionError, run_after_stage_metrics

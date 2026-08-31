@@ -34,7 +34,7 @@ from ..stages import (
     TrainSpec,
     verify_stage_implementation_bytes,
 )
-from .models import VerificationError, VerifiedRunPlan
+from ..verification import VerificationError, VerifiedRunPlan
 from .paths import run_root, stage_spec_path
 from .storage import (
     StorageFetcher,

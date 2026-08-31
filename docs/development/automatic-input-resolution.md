@@ -20,9 +20,10 @@ These requirements bind the contract to the master checklist:
 | AIR-05 <!-- contract-requirement: AIR-05 phase=7 test=tests/test_verification_acceptance.py --> | Compile local, same-run, and prior-run inputs and publish prior-run pointers through the selected destination. |
 | AIR-06 <!-- contract-requirement: AIR-06 phase=11 test=tests/test_documentation.py --> | Remove retired authoring forms and publish the complete single-run Python workflow through freeze, run, benchmark, and restore. |
 
-**Current:** Project code defines stages with `@viper.download_stage`,
-`@viper.train_stage`, and a subclass of `viper.parameters.Train`. Each stage
-function receives a `StageContext`. The function reads input paths from
+**Current:** Project code imports `download` or `train` from `viper.stages` and
+uses that function as a decorator. A parameter class subclasses
+`viper.parameters.Train`. Each stage function receives a `Context`. The
+function reads input paths from
 `context.inputs` and writes files at the paths in `context.artifacts`.
 See [`README.md`](../../README.md#define-a-stage) and
 [`src/viper/stages.py`](../../src/viper/stages.py).
@@ -32,22 +33,22 @@ See [`README.md`](../../README.md#define-a-stage) and
 construct those internal reference objects themselves.
 See [`src/viper/stages.py`](../../src/viper/stages.py).
 
-**Current:** `StageContext.metrics` gives project stages live metric handles,
+**Current:** `Context.metrics` gives project stages live metric handles,
 and `ExperimentSpec.metrics` stores complete `MetricSpec` records. Stage
 authoring accepts bare metric IDs. Metric implementation binding and objective
 designation remain outside the authoring model.
 See [`src/viper/metrics.py`](../../src/viper/metrics.py) and
 [`src/viper/experiments.py`](../../src/viper/experiments.py).
 
-**Proposed:** Four project-owned stage kinds use `@viper.build`,
-`@viper.embed`, `@viper.train`, or `@viper.eval`. The decorator's
-`params=` argument selects the typed parameter class. `viper.stage()` receives
-one validated instance of that class. `viper.download()` creates the
-runner-owned HTTP stage directly.
+**Proposed:** Project code imports `build`, `embed`, `train`, or `eval` from
+`viper.stages`. The decorator's `params=` argument selects the typed parameter
+class. `stage()` from `viper.authoring` receives one validated instance of that
+class. `download()` from `viper.authoring` creates the runner-owned HTTP stage
+directly.
 
 The keys in `plan.stages` become the stage IDs. A user can pass a local file, an
 artifact from an earlier stage, or an artifact from an earlier run to
-`viper.stage()`. `viper.freeze()` converts that value into `ExternalInputRef`,
+`stage()`. `freeze()` from `viper.authoring` converts that value into `ExternalInputRef`,
 `FutureInputRef`, or `StoredInputRef`. For an earlier run, VIPER also writes an
 `ArtifactPointer`.
 
@@ -57,7 +58,7 @@ and may name an objective when its algorithm has one. A fixed encoder leaves
 the objective unset.
 
 This contract changes the Python API. It also makes VIPER execute
-`DownloadSpec`. The four project-owned stage types keep using `StageContext`.
+`DownloadSpec`. The four project-owned stage types keep using `Context`.
 They also keep the same artifact and input paths. The download contract makes
 `ResolvedHttpRetrieval.body` equal the matching
 `ResolvedSingleFileArtifact.file`.
@@ -80,7 +81,7 @@ to skip a project-owned stage.
 When a user passes a VIPER artifact into a training stage, VIPER records which
 stage produced it and which artifact the user chose. VIPER writes the required
 input reference. The training function receives the verified path through
-`StageContext.inputs`.
+`Context.inputs`.
 
 When the user authors training or evaluation, VIPER also requires one configured
 objective. Freezing writes its complete `MetricSpec`, includes its ID in the
@@ -89,9 +90,9 @@ improvement direction. The stage or metric worker then produces the
 corresponding measurement.
 
 The user writes the stage decorator, parameter class, and training function.
-`viper.freeze()` writes a same-run reference or pointer. VIPER executes each
-`DownloadSpec`. A function decorated with `@viper.http` handles any
-project-specific HTTP request.
+`freeze()` from `viper.authoring` writes a same-run reference or pointer. VIPER
+executes each `DownloadSpec`. A function decorated with `@http` from
+`viper.http` handles any project-specific HTTP request.
 The user commits the generated plan files before execution. VIPER keeps that
 plan commit separate from the source commit that identifies project code.
 
@@ -132,12 +133,12 @@ belongs to the proposed authoring operation.
 
 **Inspected:** The executor follows `StoredInputRef.pointer` and calls
 `verify_promoted_artifact()`. It then places the verified files at the declared
-input path and passes that path to `StageContext`.
+input path and passes that path to `Context`.
 [`src/viper/execution/_materialization.py`](../../src/viper/execution/_materialization.py)
 
 VIPER can already execute all three reference types. Users still have to create
 the reference objects themselves. The proposed Python API accepts ordinary
-files and artifact handles. `viper.freeze()` creates the required reference.
+files and artifact handles. `viper.authoring.freeze()` creates the required reference.
 
 The metric runtime also exists. The missing authoring connector is:
 
@@ -203,6 +204,7 @@ The four project-owned stage decorators use `params=` for the parameter class:
 from my_cool_model_acronym.training import train_model
 from pydantic import Field
 from viper.keys import Train
+from viper.stages import Context, train
 
 class TrainParams(viper.params.Train):
     epochs: int = Field(ge=1)
@@ -215,8 +217,8 @@ class TrainParams(viper.params.Train):
 
 # The decorated function owns model computation. VIPER supplies frozen
 # parameters, resolved input paths, output paths, metric handles, and RNGs.
-@viper.train(params=TrainParams)
-def train(context: viper.StageContext[TrainParams]) -> None:
+@train(params=TrainParams)
+def fit(context: Context[TrainParams]) -> None:
     dataset = context.inputs["dataset"]
     parameters = context.artifacts[Train.MODEL]
     train_model(
@@ -232,7 +234,7 @@ def train(context: viper.StageContext[TrainParams]) -> None:
     )
 ```
 
-The decorator records `TrainParams` as the parameter model. `viper.stage()`
+The decorator records `TrainParams` as the parameter model. `viper.authoring.stage()`
 later receives one complete `TrainParams` instance and places those values in
 `TrainSpec.params`. The executor continues to pass a `Path` through
 `context.inputs["dataset"]` and metric handles through `context.metrics`.
@@ -374,7 +376,7 @@ metric function or stateful metric class
 -> MetricSpec
 ```
 
-`viper.freeze()` records the source file, Python symbol, SHA-256 digest, and
+`viper.authoring.freeze()` records the source file, Python symbol, SHA-256 digest, and
 byte count for each definition. The frozen YAML stores those records.
 
 ```python
@@ -500,15 +502,15 @@ class HttpCallable(Protocol[HttpParamsT]):
     def __call__(self, context: HttpContext[HttpParamsT]) -> HttpResult: ...
 ```
 
-The HTTP vocabulary names the user action directly. `@viper.http` declares the
-function that sends the request. `viper.download(http=request)` selects that
-function for the download stage. The frozen and resolved records preserve its
-identity through these exact replacements:
+The HTTP vocabulary names the user action directly. `http()` from `viper.http`
+decorates the function that sends the request. `download(http=request)` from
+`viper.authoring` selects that function for the download stage. The frozen and
+resolved records preserve its identity through these exact replacements:
 
 | Current name | Target name |
 | --- | --- |
-| `@viper.http_transport(transport_id=...)` | `@viper.http(id=...)` |
-| `viper.transport()` | Delete; pass the decorated function to `viper.download(http=...)`. |
+| `http_transport(transport_id=...)` | `http(id=...)` in `viper.http` |
+| `transport()` | Delete; pass the decorated function to `download(http=...)`. |
 | `parameters.HttpTransport` | `parameters.Http` |
 | `HttpTransportImplementationRef` | `HttpImplementationRef` |
 | `BuiltinHttpTransportSpec` | `BuiltinHttpImplementationSpec` |
@@ -521,11 +523,8 @@ identity through these exact replacements:
 | `DownloadSpec.transport` | `DownloadSpec.http` |
 | `ResolvedHttpRetrieval.transport` | `ResolvedHttpRetrieval.http` |
 
-The callable also owns the package-root name `viper.http`. Phase 2 renames the
-implementation module from `viper.http` to `viper._http` and exports
-`HttpRequestSpec`, `HttpRetrievalPolicy`, `ObservedHttpResponse`,
-`HttpRetrievalError`, `HttpContext`, and `HttpResult` from `viper`. This gives
-`viper.http` one public meaning.
+`viper.http` remains the defining public module for the decorator and its HTTP
+types. The package root forwards none of those names.
 
 VIPER is in alpha. Implementation removes the old Python names and serialized
 field names in the same increment. Callers and stored fixtures must use the
@@ -547,15 +546,18 @@ filename, and subdirectories.
 A custom HTTP function can use VIPER's base settings. The user writes:
 
 ```python
-@viper.http(id="project_httpx")
-def request(context: viper.HttpContext) -> viper.HttpResult:
+from viper.http import HttpContext, HttpResult, http
+
+
+@http(id="project_httpx")
+def request(context: HttpContext) -> HttpResult:
     ...
 ```
 
 VIPER uses `viper.params.Http` for that function.
 
 A configurable HTTP function defines its own parameter class. The decorator's
-`params=` argument receives the class. `viper.download(params=...)` receives
+`params=` argument receives the class. `viper.authoring.download(params=...)` receives
 the values for one run. The decorator's `executables=` argument records any
 external programs required by that function.
 
@@ -1079,18 +1081,21 @@ def plan(
 def freeze(plan: RunPlanDraft, *, root: Path | None = None) -> FrozenPlanFiles: ...
 ```
 
-`viper.artifact()` declares one named stage output. Omitting `kind` returns a
+`artifact()` from `viper.artifacts` declares one named stage output. Omitting `kind` returns a
 `SingleFileArtifactDraft`. Passing `kind="bundle"` returns a
 `BundleArtifactDraft` whose path names the bundle's directory root.
 
 ```python
-model = viper.artifact(
+from viper.artifacts import artifact
+
+
+model = artifact(
     path="artifacts/models/classifier/model.pt",
     loader=load_weights,
     data_role="training",
 )
 
-tokenizer = viper.artifact(
+tokenizer = artifact(
     path="artifacts/models/classifier/tokenizer",
     loader=load_tokenizer,
     data_role="training",
@@ -1103,10 +1108,10 @@ frozen `ArtifactSpec` and resolved artifact type VIPER writes. A download stage
 accepts the single-file form because each HTTP response has one body. Project
 stages accept either form.
 
-`viper.input()` declares one repository file whose bytes enter VIPER at the
+`input()` from `viper.authoring` declares one repository file whose bytes enter VIPER at the
 consuming stage. It returns `ExternalInputDraft`. Freezing converts that draft
 into `ExternalInputRef`. Same-run inputs use `stage.artifacts[name]`; prior-run
-inputs use `viper.run_artifact()`.
+inputs use `run_artifact()` from `viper.authoring`.
 
 The result exposes the paths consumed by later public operations:
 
@@ -1125,23 +1130,23 @@ The complete plan-commit contract belongs to
 every path in `files` before execution. `run_spec_path` and a present
 `benchmark_spec_path` occur in that tuple.
 
-`viper.stage()` replaces hand-written stage YAML during authoring. It returns a
+`viper.authoring.stage()` replaces hand-written stage YAML during authoring. It returns a
 `StageDraft` that describes one future stage: the decorated function, parameter
-values, inputs, and artifact declarations. `viper.freeze()` later writes the
+values, inputs, and artifact declarations. `viper.authoring.freeze()` later writes the
 canonical YAML. The run command executes the frozen stage.
 
-`viper.stage()` reads the stage kind and parameter class attached by the
+`viper.authoring.stage()` reads the stage kind and parameter class attached by the
 decorator. It rejects a `params` instance whose class differs from the
-decorator's class. `viper.download()` constructs `DownloadSpecDraft` directly
+decorator's class. `viper.authoring.download()` constructs `DownloadSpecDraft` directly
 because the runner owns download execution. `http=None` selects
 `BuiltinHttpImplementationSpec()`. A decorated HTTP function produces
 `CustomHttpDraft`. `params=None` creates the package-owned `viper.params.Http`
 value when that function uses the base parameter class.
 
-`viper.freeze()` gathers every objective and additional metric selected by the
+`viper.authoring.freeze()` gathers every objective and additional metric selected by the
 stage drafts. It writes one `MetricSpec` per metric ID into the experiment
 record and one `MetricObjectiveSpec` into each stage that names an objective.
-`viper.experiment()` supplies factors, variants, and replicates. The compiler
+`viper.authoring.experiment()` supplies factors, variants, and replicates. The compiler
 derives one metric list from their stage selections. The complete rules belong to
 [`unified-metric-drafting.md`](unified-metric-drafting.md).
 
@@ -1241,15 +1246,41 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import TensorDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
-import viper
-from viper import (
+from viper import execution, params
+from viper.artifacts import artifact
+from viper.authoring import (
+    download,
+    expand,
+    experiment,
+    factor,
+    freeze,
+    input,
+    plan,
+    replicate,
+    run_artifact,
+    stage,
+    variant,
+)
+from viper.benchmark import at_least, at_most, benchmark
+from viper.catalog import MeasurementQuery, catalog
+from viper.http import (
     HttpRequestSpec,
     HttpRetrievalError,
     HttpRetrievalPolicy,
+    HttpContext,
+    HttpResult,
     ObservedHttpResponse,
+    http,
 )
 from viper.keys import Eval, Train
-from viper.metrics import FloatComparator, MetricContext, MetricDependency
+from viper.metrics import (
+    FloatComparator,
+    MetricContext,
+    MetricDependency,
+    measure,
+    metric,
+    min,
+)
 from viper.references import GitFileRef, GitSource
 from viper.resume import (
     DataLoaderConfiguration,
@@ -1267,10 +1298,11 @@ from viper.runtime import (
     TorchPrecisionSpec,
     observe_python_env,
 )
+from viper.stages import Context, build, embed, eval, train
 
 
 # Repository identity becomes RunSpec.source. The run ID selects one concrete
-# output root when viper.freeze() turns reusable drafts into frozen records.
+# output root when freeze() turns reusable drafts into frozen records.
 REPOSITORY = "https://github.com/example/tiny-viper-model"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 BENCHMARK_DATA_RUN = Path(
@@ -1342,10 +1374,10 @@ def load_predictions(path: Path) -> list[dict[str, str]]:
 
 # A custom HTTP function sends the request. VIPER supplies the frozen request,
 # retrieval policy, credential, scratch destination, and base parameters.
-@viper.http(id="project_httpx")
+@http(id="project_httpx")
 def request(
-    context: viper.HttpContext[viper.params.Http],
-) -> viper.HttpResult:
+    context: HttpContext[params.Http],
+) -> HttpResult:
     headers = dict(context.request.headers)
     if context.credential is not None:
         headers[context.credential.header] = (
@@ -1385,7 +1417,7 @@ def request(
                 for name, value in response.headers.items()
                 if name.lower() in allowed_response_headers
             }
-            return viper.HttpResult(
+            return HttpResult(
                 body=context.destination,
                 response=ObservedHttpResponse(
                     response_url=str(response.url),
@@ -1395,12 +1427,12 @@ def request(
             )
 
 
-# viper.download() declares a runner-owned stage. The request key and artifact
+# download() declares a runner-owned stage. The request key and artifact
 # key match, so one successful response becomes one named single-file artifact.
 # The http= argument selects the decorated request function. This example uses
 # the package-owned empty parameter model because the policy and function body
 # contain every HTTP setting.
-download = viper.download(
+download = download(
     inputs={
         "training_dataset": HttpRequestSpec(
             url="http://127.0.0.1:8000/training.csv",
@@ -1423,7 +1455,7 @@ download = viper.download(
         timeout_seconds=10.0,
     ),
     artifacts={
-        "training_dataset": viper.artifact(
+        "training_dataset": artifact(
             path=TRAINING_DATASET_PATH,
             loader=load_dataset,
             data_role="training",
@@ -1434,52 +1466,52 @@ download = viper.download(
 
 # Live metrics receive values from a running stage. Recomputed metrics read
 # published artifacts after the stage finishes.
-@viper.metric(
+@metric(
     metric_id="embedding_reconstruction_loss",
     mode="live",
 )
 def embedding_reconstruction_loss(
-    context: viper.MetricContext[viper.params.Metric],
+    context: MetricContext[params.Metric],
     values: list[float],
 ) -> float:
     return sum(values) / len(values)
 
 
-@viper.metric(
+@metric(
     metric_id="embedding_spread",
     mode="live",
 )
 def embedding_spread(
-    context: viper.MetricContext[viper.params.Metric],
+    context: MetricContext[params.Metric],
     values: list[float],
 ) -> float:
     mean = sum(values) / len(values)
     return sum((value - mean) ** 2 for value in values) / len(values)
 
 
-@viper.metric(
+@metric(
     metric_id="training_loss",
     mode="live",
 )
 def training_loss(
-    context: viper.MetricContext[viper.params.Metric],
+    context: MetricContext[params.Metric],
     batch_losses: list[float],
 ) -> float:
     return sum(batch_losses) / len(batch_losses)
 
 
-@viper.metric(
+@metric(
     metric_id="gradient_norm",
     mode="live",
 )
 def gradient_norm(
-    context: viper.MetricContext[viper.params.Metric],
+    context: MetricContext[params.Metric],
     batch_norms: list[float],
 ) -> float:
     return max(batch_norms)
 
 
-class LossMetricParams(viper.params.Metric):
+class LossMetricParams(params.Metric):
     epsilon: float = Field(gt=0.0, lt=0.5)
     label_column: str = Field(min_length=1)
     probability_column: str = Field(min_length=1)
@@ -1487,12 +1519,12 @@ class LossMetricParams(viper.params.Metric):
     negative_label: int
 
 
-@viper.metric(
+@metric(
     metric_id="evaluation_loss",
     mode="recompute",
 )
 def evaluation_loss(
-    context: viper.MetricContext[LossMetricParams],
+    context: MetricContext[LossMetricParams],
 ) -> float:
     params = context.params
     rows = load_predictions(context.artifacts[Eval.PREDS])
@@ -1515,12 +1547,12 @@ def evaluation_loss(
     return sum(losses) / len(losses)
 
 
-@viper.metric(
+@metric(
     metric_id="evaluation_accuracy",
     mode="recompute",
 )
 def evaluation_accuracy(
-    context: viper.MetricContext[viper.params.Metric],
+    context: MetricContext[params.Metric],
 ) -> float:
     rows = load_predictions(context.artifacts[Eval.PREDS])
     correct = sum(
@@ -1530,21 +1562,21 @@ def evaluation_accuracy(
     return correct / len(rows)
 
 
-# viper.measure() supplies concrete parameters, dependencies, and comparison
+# measure() supplies concrete parameters, dependencies, and comparison
 # rules. The resulting drafts can be reused by stages and benchmarks.
-embedding_reconstruction_metric = viper.measure(
+embedding_reconstruction_metric = measure(
     embedding_reconstruction_loss
 )
-embedding_spread_metric = viper.measure(embedding_spread)
-training_loss_metric = viper.measure(training_loss)
-gradient_norm_metric = viper.measure(gradient_norm)
+embedding_spread_metric = measure(embedding_spread)
+training_loss_metric = measure(training_loss)
+gradient_norm_metric = measure(gradient_norm)
 
 prediction_dependency = MetricDependency(
     source="artifact",
     name=Eval.PREDS,
     required_data_role="eval",
 )
-evaluation_loss_metric = viper.measure(
+evaluation_loss_metric = measure(
     evaluation_loss,
     params=LossMetricParams(
         epsilon=1e-7,
@@ -1556,23 +1588,23 @@ evaluation_loss_metric = viper.measure(
     dependencies=(prediction_dependency,),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
 )
-evaluation_accuracy_metric = viper.measure(
+evaluation_accuracy_metric = measure(
     evaluation_accuracy,
     dependencies=(prediction_dependency,),
     comparator=FloatComparator(),
 )
 
 
-# viper.input() declares bytes that already exist in the repository. The
+# input() declares bytes that already exist in the repository. The
 # build stage receives an attempt-owned capture of this file, while the
 # download artifact reaches the same stage through a same-run artifact handle.
-feature_schema = viper.input(
+feature_schema = input(
     path="inputs/feature_schema.json",
     data_role="training",
 )
 
 
-class BuildParams(viper.params.Build):
+class BuildParams(params.Build):
     min_rows: int = Field(ge=2)
     expected_feature_count: int = Field(ge=1)
     standard_deviation_floor: float = Field(gt=0.0)
@@ -1582,9 +1614,9 @@ class BuildParams(viper.params.Build):
 
 # The build stage turns source data and a local schema into a reusable profile.
 # Each BuildParams field controls one validation or calculation below.
-@viper.build(params=BuildParams)
+@build(params=BuildParams)
 def build_normalization(
-    context: viper.StageContext[BuildParams],
+    context: Context[BuildParams],
 ) -> None:
     rows = load_dataset(context.inputs["dataset"])
     schema = load_json_object(context.inputs["schema"])
@@ -1645,7 +1677,7 @@ BUILD_PARAMS = BuildParams(
     allowed_labels=(0, 1),
 )
 
-normalization = viper.stage(
+normalization = stage(
     build_normalization,
     params=BUILD_PARAMS,
     inputs={
@@ -1653,7 +1685,7 @@ normalization = viper.stage(
         "schema": feature_schema,
     },
     artifacts={
-        "normalization": viper.artifact(
+        "normalization": artifact(
             path=NORMALIZATION_PATH,
             loader=load_json_object,
             data_role="training",
@@ -1662,7 +1694,7 @@ normalization = viper.stage(
 )
 
 
-class EmbedParams(viper.params.Embed):
+class EmbedParams(params.Embed):
     proj_a: float
     proj_b: float
     proj_bias: float
@@ -1671,8 +1703,8 @@ class EmbedParams(viper.params.Embed):
     output_decimals: int = Field(ge=1, le=12)
 
 
-@viper.embed(params=EmbedParams)
-def embed(context: viper.StageContext[EmbedParams]) -> None:
+@embed(params=EmbedParams)
+def embed(context: Context[EmbedParams]) -> None:
     rows = load_dataset(context.inputs["dataset"])
     normalization_profile = load_json_object(
         context.inputs["normalization"]
@@ -1750,7 +1782,7 @@ EMBED_PARAMS = EmbedParams(
 
 # The two input handles become two FutureInputRef records during freezing.
 # Both producer stages occur earlier in the same variant stage mapping.
-training_embeddings = viper.stage(
+training_embeddings = stage(
     embed,
     params=EMBED_PARAMS,
     inputs={
@@ -1758,7 +1790,7 @@ training_embeddings = viper.stage(
         "normalization": normalization.artifacts["normalization"],
     },
     artifacts={
-        "embeddings": viper.artifact(
+        "embeddings": artifact(
             path=TRAINING_EMBEDDINGS_PATH,
             loader=load_embeddings,
             data_role="training",
@@ -1770,7 +1802,7 @@ training_embeddings = viper.stage(
     ),
 )
 
-class TrainParams(viper.params.Train):
+class TrainParams(params.Train):
     epochs: int = Field(ge=1)
     batch_size: int = Field(ge=1)
     learning_rate: float = Field(gt=0.0)
@@ -1781,8 +1813,8 @@ class TrainParams(viper.params.Train):
 
 # The decorated function owns model computation. VIPER supplies frozen
 # parameters, resolved input paths, output paths, metric handles, and RNGs.
-@viper.train(params=TrainParams)
-def train(context: viper.StageContext[TrainParams]) -> None:
+@train(params=TrainParams)
+def train(context: Context[TrainParams]) -> None:
     rows = load_embeddings(context.inputs["dataset"])
     features = torch.tensor(
         [[float(row["embedding"])] for row in rows],
@@ -1866,45 +1898,45 @@ TRAIN_PARAMS = TrainParams(
 # Train.STATE use protocol-owned keys because later stages understand them.
 # reuse="verified" permits VIPER to select a prior verified training result
 # only when the complete reuse key, including the run seed, matches.
-training = viper.stage(
+training = stage(
     train,
     params=TRAIN_PARAMS,
     inputs={"dataset": training_embeddings.artifacts["embeddings"]},
     artifacts={
-        Train.MODEL: viper.artifact(
+        Train.MODEL: artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.artifact(
+        Train.STATE: artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
     },
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
     reuse="verified",
 )
 
 
-# viper.run_artifact() selects immutable outputs from one completed data run.
+# run_artifact() selects immutable outputs from one completed data run.
 # Freezing publishes one pointer for each selection and reuses those pointers
 # in both the evaluation stage and the benchmark definition.
-benchmark_test = viper.run_artifact(
+benchmark_test = run_artifact(
     resolved_run=BENCHMARK_DATA_RUN,
     stage="embed_test",
     artifact="embeddings",
 )
 
-benchmark_split = viper.run_artifact(
+benchmark_split = run_artifact(
     resolved_run=BENCHMARK_DATA_RUN,
     stage="split_test",
     artifact="holdout",
 )
 
 
-class EvalParams(viper.params.Eval):
+class EvalParams(params.Eval):
     batch_size: int = Field(ge=1)
     decision_threshold: float = Field(gt=0.0, lt=1.0)
     temperature: float = Field(gt=0.0)
@@ -1913,8 +1945,8 @@ class EvalParams(viper.params.Eval):
     negative_label: int
 
 
-@viper.eval(params=EvalParams)
-def eval_model(context: viper.StageContext[EvalParams]) -> None:
+@eval(params=EvalParams)
+def eval_model(context: Context[EvalParams]) -> None:
     if context.params.positive_label == context.params.negative_label:
         raise ValueError("evaluation labels must differ")
 
@@ -1967,8 +1999,8 @@ def eval_model(context: viper.StageContext[EvalParams]) -> None:
 
 
 # The model handle is a same-run edge. The test and split handles are prior-run
-# edges. All three become normal paths in the evaluation StageContext.
-eval_stage = viper.stage(
+# edges. All three become normal paths in the evaluation Context.
+eval_stage = stage(
     eval_model,
     params=EvalParams(
         batch_size=2,
@@ -1984,13 +2016,13 @@ eval_stage = viper.stage(
         "holdout": benchmark_split,
     },
     artifacts={
-        Eval.PREDS: viper.artifact(
+        Eval.PREDS: artifact(
             path=PREDICTIONS_PATH,
             loader=load_predictions,
             data_role="eval",
         ),
     },
-    objective=viper.min(evaluation_loss_metric),
+    objective=min(evaluation_loss_metric),
     metrics=(evaluation_accuracy_metric,),
     eval_id="holdout",
     split_inputs=("holdout",),
@@ -2039,33 +2071,33 @@ reproducibility = ReproducibilitySpec(
 )
 
 
-regularization = viper.factor(levels=("none", "l2"))
+regularization = factor(levels=("none", "l2"))
 
 # The benchmark enters the plan below. Its test and split remain prior-run
 # artifacts because BenchmarkDraft fixes immutable evaluation conditions.
 # Criteria add pass/fail decisions without changing the recorded measurements.
-benchmark = viper.benchmark(
+benchmark = benchmark(
     benchmark_id="tiny_holdout",
     eval_id="holdout",
     test=benchmark_test,
     splits={"holdout": benchmark_split},
     metrics=(evaluation_loss_metric, evaluation_accuracy_metric),
     criteria=(
-        viper.at_most(evaluation_loss_metric, 0.35),
-        viper.at_least(evaluation_accuracy_metric, 0.75),
+        at_most(evaluation_loss_metric, 0.35),
+        at_least(evaluation_accuracy_metric, 0.75),
     ),
 )
 
 
 # The experiment owns reusable factors, variants, and seeded replicates. Stage
 # IDs come from the variant's mapping keys, so each StageDraft stays reusable.
-experiment = viper.experiment(
+experiment = experiment(
     experiment_id="tiny_http",
     factors={
         "regularization": regularization,
     },
     variants={
-        "l2": viper.variant(
+        "l2": variant(
             levels={"regularization": "l2"},
             stages={
                 "download": download,
@@ -2078,15 +2110,15 @@ experiment = viper.experiment(
         ),
     },
     replicates={
-        "replicate_01": viper.replicate(seed=7),
-        "replicate_02": viper.replicate(seed=11),
+        "replicate_01": replicate(seed=7),
+        "replicate_02": replicate(seed=11),
     },
 )
 
 
 # The plan selects one variant and replicate, then attaches the benchmark and
 # runtime contracts required for this concrete run.
-plan = viper.plan(
+plan = plan(
     run_id=RUN_ID,
     experiment=experiment,
     variant="l2",
@@ -2097,9 +2129,9 @@ plan = viper.plan(
     reproducibility=reproducibility,
 )
 
-# viper.expand() creates one ordinary RunPlanDraft per selected
+# expand() creates one ordinary RunPlanDraft per selected
 # variant-replicate pair. The first expanded plan equals the single plan above.
-plans = viper.expand(
+plans = expand(
     experiment,
     run_ids={
         "l2": {
@@ -2116,7 +2148,7 @@ assert plans[0] == plan
 
 # Freezing compiles Python drafts into canonical protocol files. Every
 # returned manifest must enter the later plan commit before execution.
-frozen_runs = tuple(viper.freeze(item, root=Path.cwd()) for item in plans)
+frozen_runs = tuple(freeze(item, root=Path.cwd()) for item in plans)
 frozen = frozen_runs[0]
 ```
 
@@ -2136,18 +2168,18 @@ benchmark call then consumes one successful run and its benchmark path:
 if frozen.benchmark_spec_path is None:
     raise RuntimeError("the frozen plan has no benchmark")
 
-single_run_result = viper.execution.run(
+single_run_result = execution.run(
     Path.cwd(),
     frozen.run_spec_path,
 )
 
-batch_result = viper.execution.run_many(
+batch_result = execution.run_many(
     Path.cwd(),
     tuple(item.run_spec_path for item in frozen_runs[1:]),
     max_concurrency=2,
 )
 
-benchmark_result = viper.execution.benchmark(
+benchmark_result = execution.benchmark(
     Path.cwd(),
     single_run_result.resolved_run_path,
     frozen.benchmark_spec_path,
@@ -2155,10 +2187,10 @@ benchmark_result = viper.execution.benchmark(
 
 # The catalog rebuilds searchable rows from immutable run evidence. The query
 # returns measurements with the run references required for later verification.
-catalog = viper.catalog(root=Path.cwd())
-catalog.refresh()
-losses = catalog.measurements(
-    viper.MeasurementQuery(
+history = catalog(root=Path.cwd())
+history.refresh()
+losses = history.measurements(
+    MeasurementQuery(
         experiment_id="tiny_http",
         metric_ids=("evaluation_loss",),
         limit=20,
@@ -2168,37 +2200,38 @@ losses = catalog.measurements(
 
 <!-- complete-authoring-example: end -->
 
-The public calls build one dependency graph in this order:
+The import block above names each defining module. Those public calls build one
+dependency graph in this order:
 
 | Public call | Value it creates | Next consumer |
 | --- | --- | --- |
-| `@viper.http(...)` | Decorated HTTP implementation | `viper.download(http=...)` |
-| `viper.artifact(...)` | One file artifact by default, or one bundle when `kind="bundle"` | `viper.download()` or `viper.stage()` |
-| `viper.input(...)` | Local input entering directly at the consuming stage | `viper.stage()` |
-| `viper.download(...)` | Runner-owned download `StageDraft` | `VariantDraft.stages` and `download.artifacts[...]` |
-| `@viper.metric(...)` | Decorated metric implementation | `viper.measure()` |
-| `viper.measure(...)` | Configured `MetricDraft` | Stage objective, stage metrics, and benchmark metrics |
-| `viper.min(...)` | Objective with improvement direction `min` | `viper.stage(objective=...)` |
-| `viper.at_most(...)` and `viper.at_least(...)` | Optional benchmark criteria | `viper.benchmark()` |
-| `@viper.build(params=...)` | Decorated build implementation and parameter class | `viper.stage()` |
-| `@viper.embed(params=...)` | Decorated embed implementation and parameter class | `viper.stage()` |
-| `@viper.train(params=...)` | Decorated train implementation and parameter class | `viper.stage()` |
-| `@viper.eval(params=...)` | Decorated evaluation implementation and parameter class | `viper.stage()` |
-| `viper.stage(...)` | Project-owned `StageDraft` | Later artifact handles and `VariantDraft.stages` |
-| `viper.run_artifact(...)` | `RunArtifactDraft` selecting a completed artifact | Evaluation inputs and benchmark conditions |
-| `viper.factor(...)` | Allowed experimental levels | `viper.experiment()` |
-| `viper.variant(...)` | Ordered stage graph, selected levels, and estimator | `viper.experiment()` |
-| `viper.replicate(...)` | Seeded replicate declaration | `viper.experiment()` |
-| `viper.experiment(...)` | Factors, variants, replicates, and derived metrics | `viper.plan()` or `viper.expand()` |
-| `viper.benchmark(...)` | Fixed test, splits, metrics, and optional criteria | `viper.plan()` |
-| `viper.plan(...)` | One selected variant, replicate, benchmark, and runtime contract | `viper.freeze()` |
-| `viper.expand(...)` | Ordered concrete plans for selected variants and replicates | `viper.freeze()` for each plan |
-| `viper.freeze(...)` | Canonical experiment, benchmark, stage, and run files plus their named paths | Git plan commit |
-| Git plan commit | Immutable identity for every generated plan file | `viper.execution.run()` |
-| `viper.execution.run(...)` | Verified terminal run and its immutable reference | `viper.execution.benchmark()` or later artifact selection |
-| `viper.execution.run_many(...)` | One ordered result for every selected frozen plan | Catalog queries and experiment review |
-| `viper.execution.benchmark(...)` | Candidate and confirmation results under the frozen test conditions | Benchmark inspection and restore |
-| `viper.catalog(...)` | Rebuildable cross-run query interface | Exact run, artifact, and measurement searches |
+| `@http(...)` | Decorated HTTP implementation | `download(http=...)` |
+| `artifact(...)` | One file artifact by default, or one bundle when `kind="bundle"` | `download()` or `stage()` |
+| `input(...)` | Local input entering directly at the consuming stage | `stage()` |
+| `download(...)` | Runner-owned download `StageDraft` | `VariantDraft.stages` and `download.artifacts[...]` |
+| `@metric(...)` | Decorated metric implementation | `measure()` |
+| `measure(...)` | Configured `MetricDraft` | Stage objective, stage metrics, and benchmark metrics |
+| `min(...)` | Objective with improvement direction `min` | `stage(objective=...)` |
+| `at_most(...)` and `at_least(...)` | Optional benchmark criteria | `benchmark()` |
+| `@build(params=...)` | Decorated build implementation and parameter class | `stage()` |
+| `@embed(params=...)` | Decorated embed implementation and parameter class | `stage()` |
+| `@train(params=...)` | Decorated train implementation and parameter class | `stage()` |
+| `@eval(params=...)` | Decorated evaluation implementation and parameter class | `stage()` |
+| `stage(...)` | Project-owned `StageDraft` | Later artifact handles and `VariantDraft.stages` |
+| `run_artifact(...)` | `RunArtifactDraft` selecting a completed artifact | Evaluation inputs and benchmark conditions |
+| `factor(...)` | Allowed experimental levels | `experiment()` |
+| `variant(...)` | Ordered stage graph, selected levels, and estimator | `experiment()` |
+| `replicate(...)` | Seeded replicate declaration | `experiment()` |
+| `experiment(...)` | Factors, variants, replicates, and derived metrics | `plan()` or `expand()` |
+| `benchmark(...)` | Fixed test, splits, metrics, and optional criteria | `plan()` |
+| `plan(...)` | One selected variant, replicate, benchmark, and runtime contract | `freeze()` |
+| `expand(...)` | Ordered concrete plans for selected variants and replicates | `freeze()` for each plan |
+| `freeze(...)` | Canonical experiment, benchmark, stage, and run files plus their named paths | Git plan commit |
+| Git plan commit | Immutable identity for every generated plan file | `execution.run()` |
+| `execution.run(...)` | Verified terminal run and its immutable reference | `execution.benchmark()` or later artifact selection |
+| `execution.run_many(...)` | One ordered result for every selected frozen plan | Catalog queries and experiment review |
+| `execution.benchmark(...)` | Candidate and confirmation results under the frozen test conditions | Benchmark inspection and restore |
+| `catalog(...)` | Rebuildable cross-run query interface | Exact run, artifact, and measurement searches |
 
 The graph contains eight distinct input edges:
 
@@ -2220,7 +2253,7 @@ EvalSpec.inputs[Eval.TEST].pointer == BenchmarkSpec.test
 EvalSpec.inputs["holdout"].pointer == BenchmarkSpec.splits["holdout"]
 ```
 
-`viper.freeze()` also binds the run's storage destination before publishing
+`viper.authoring.freeze()` also binds the run's storage destination before publishing
 either generated pointer. Execution later loads the same binding before stage
 work. The plan commit and source commit remain separate: generated YAML comes
 from the plan commit, while decorated callables and other project definitions
@@ -2317,7 +2350,7 @@ benchmark executor
 -> applies the optional loss and accuracy criteria
 ```
 
-`viper.freeze()` turns each same-run artifact handle into `FutureInputRef`. It
+`viper.authoring.freeze()` turns each same-run artifact handle into `FutureInputRef`. It
 turns `benchmark_test` and `benchmark_split` into `StoredInputRef` once and
 reuses their pointer references in `BenchmarkSpec`. It also turns each
 `MetricDraft` into one byte-addressed `MetricSpec`. The frozen train objective
@@ -2329,35 +2362,40 @@ experiment metric registry from these stage selections.
 ### Complete local-file and prior-run selections
 
 The complete program uses every input route. `feature_schema` enters through
-`viper.input()`. The download, normalization, embeddings, and model enter
-later stages through same-run artifact handles. `benchmark_test` and
-`benchmark_split` enter through `viper.run_artifact()`.
+`input()` from `viper.authoring`. The download, normalization, embeddings, and
+model enter later stages through same-run artifact handles. `benchmark_test`
+and `benchmark_split` enter through `run_artifact()` from `viper.authoring`.
 
 The following alternative trains directly from a local embeddings file:
 
 ```python
-local_embeddings = viper.input(
+from viper.artifacts import artifact
+from viper.authoring import input, stage
+from viper.metrics import min
+
+
+local_embeddings = input(
     path="inputs/raw/training_embeddings.csv",
     data_role="training",
 )
 
-local_training = viper.stage(
+local_training = stage(
     train,
     params=TRAIN_PARAMS,
     inputs={"dataset": local_embeddings},
     artifacts={
-        Train.MODEL: viper.artifact(
+        Train.MODEL: artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.artifact(
+        Train.STATE: artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
     },
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -2365,7 +2403,12 @@ local_training = viper.stage(
 An artifact from a completed run enters through a generated pointer:
 
 ```python
-prior_embeddings = viper.run_artifact(
+from viper.artifacts import artifact
+from viper.authoring import run_artifact, stage
+from viper.metrics import min
+
+
+prior_embeddings = run_artifact(
     resolved_run=Path(
         "experiments/tiny_http/runs/baseline/"
         "01ARZ3NDEKTSV4RRFFQ69G5FAA/resolved.yaml"
@@ -2374,23 +2417,23 @@ prior_embeddings = viper.run_artifact(
     artifact="embeddings",
 )
 
-prior_training = viper.stage(
+prior_training = stage(
     train,
     params=TRAIN_PARAMS,
     inputs={"dataset": prior_embeddings},
     artifacts={
-        Train.MODEL: viper.artifact(
+        Train.MODEL: artifact(
             path=WEIGHTS_PATH,
             loader=load_weights,
             data_role="training",
         ),
-        Train.STATE: viper.artifact(
+        Train.STATE: artifact(
             path=STATE_PATH,
             loader=load_resume_state_artifact,
             data_role="training",
         ),
     },
-    objective=viper.min(training_loss_metric),
+    objective=min(training_loss_metric),
     metrics=(gradient_norm_metric,),
 )
 ```
@@ -2452,7 +2495,7 @@ stage publishes an artifact, and a later training stage selects it.
 
 ### Same-run path
 
-`viper.freeze()` performs these steps:
+`viper.authoring.freeze()` performs these steps:
 
 ```text
 StageDraftArtifactRef(producer=download, artifact_name="dataset")
@@ -2470,7 +2513,7 @@ FutureInputRef
 -> find the completed download stage
 -> find dataset in the download stage specification
 -> read the artifact's declared path
--> pass that path through StageContext.inputs["dataset"]
+-> pass that path through Context.inputs["dataset"]
 ```
 
 `FutureInputRef` represents the selection because the source artifact becomes
@@ -2479,7 +2522,7 @@ artifact path through `context.inputs["dataset"]`.
 
 ### Prior-run path
 
-For an artifact from an earlier run, `viper.freeze()` performs these steps:
+For an artifact from an earlier run, `viper.authoring.freeze()` performs these steps:
 
 ```text
 RunArtifactDraft(
@@ -2512,17 +2555,17 @@ StoredInputRef.pointer
 -> verify_promoted_artifact()
 -> locate the exact dataset files
 -> materialize the files at StoredInputRef.path
--> pass the path through StageContext.inputs["dataset"]
+-> pass the path through Context.inputs["dataset"]
 ```
 
-`viper.freeze()` writes the pointer file. The verifier checks the pointer and
+`viper.authoring.freeze()` writes the pointer file. The verifier checks the pointer and
 the selected artifact. The training function reads the accepted artifact.
 
 The destination binding occurs before terminal or pointer publication. A later
 attempt loads that binding before stage work. Changing the configured
 destination produces `storage_destination_changed`.
 
-When `RunArtifactDraft.resolved_run` is a `Path`, `viper.freeze()` loads and
+When `RunArtifactDraft.resolved_run` is a `Path`, `viper.authoring.freeze()` loads and
 checks the terminal run. For a Viper Cloud destination, it then checks the
 producer graph before publishing the terminal document. Every reachable
 immutable reference must resolve through Viper Cloud, Hugging Face, or Git.
@@ -2593,7 +2636,7 @@ reuses their pointer references in `BenchmarkSpec.test` and
 
 ### `input.source.exists`
 
-`viper.freeze()` looks for the selected stage and artifact. It searches the
+`viper.authoring.freeze()` looks for the selected stage and artifact. It searches the
 current plan or the selected earlier run. A missing stage or artifact stops
 freezing.
 
@@ -2642,7 +2685,7 @@ document.
 Users can choose an input in three ways:
 
 ```text
-viper.input(path="inputs/raw/dataset.csv", data_role="training")
+viper.authoring.input(path="inputs/raw/dataset.csv", data_role="training")
 -> compiler writes ExternalInputRef
 -> context.inputs["dataset"]
 
@@ -2651,7 +2694,7 @@ download.artifacts["dataset"]
 -> compiler writes FutureInputRef
 -> context.inputs["dataset"]
 
-viper.run_artifact(
+viper.authoring.run_artifact(
     resolved_run=Path(
         "experiments/tiny_http/runs/baseline/"
         "01ARZ3NDEKTSV4RRFFQ69G5FAA/resolved.yaml"
@@ -2685,17 +2728,17 @@ overwrite rules, and review ownership.
 
 | Surface | Required change | Acceptance condition |
 | --- | --- | --- |
-| Public stage API | Add `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.eval`; use `params=` for each parameter class; retain `StageContext` | The complete example constructs and freezes the plan through the target API |
+| Public stage API | Define `build`, `embed`, `train`, `eval`, and `Context` in `viper.stages`; use `params=` for each parameter class | The complete example imports every name from `viper.stages` and freezes the plan through the target API |
 | Protocol-owned stage keys | Add `viper.keys.Train` and `viper.keys.Eval` as `StrEnum` classes; use their members in Python authoring and stage contexts | Required train and evaluation keys use one package-owned spelling while frozen YAML retains string keys |
-| Parameter namespace | Export `viper.params` as the concise public parameter namespace | `TrainParams` subclasses `viper.params.Train` |
+| Parameter namespace | Rename the defining module to `viper.params` | `TrainParams` subclasses `viper.params.Train` without a package-root alias |
 | Metric, objective, and experiment API | Implement [`unified-metric-drafting.md`](unified-metric-drafting.md) | Stages receive configured metrics, objectives carry direction, and experiments derive one metric registry |
-| Download API | Add runner-owned `viper.download()` and remove the project download callable from the target contract | A download draft contains request, HTTP implementation, policy, environment, metrics, and artifacts; project stage implementation and stage parameters belong to the other stage drafts |
-| HTTP API | Add `@viper.http(id=..., params=...)`; pass the decorated function and its optional parameter instance through `viper.download(http=..., params=...)` | The example freezes and invokes `project_httpx` through the base HTTP parameters |
-| Artifact API | Add `viper.artifact()` and callable-backed file and bundle drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
+| Download API | Define runner-owned `download()` in `viper.authoring` and remove the project download callable from the target contract | A download draft contains request, HTTP implementation, policy, environment, metrics, and artifacts; project stage implementation and stage parameters belong to the other stage drafts |
+| HTTP API | Define `http()` in `viper.http`; pass the decorated function and its optional parameter instance through `download(http=..., params=...)` | The example freezes and invokes `project_httpx` through the base HTTP parameters |
+| Artifact API | Define `artifact()` in `viper.artifacts` with callable-backed file and bundle drafts | Freezing converts each loader callable into an exact `ArtifactLoaderRef` |
 | Artifact paths | Accept run-relative `ArtifactDraft.path` values and prefix the selected run root during freezing | One variant graph can be reused across replicates while every frozen `ArtifactSpec.path` remains concrete |
 | Authoring model | Replace `StageDraft.stage_id` and `spec_source` with `spec`; add `StageSpecDraft`, `ExternalInputDraft`, `RunArtifactDraft`, and artifact-handle access through `StageDraft.artifacts` | A stage input accepts a local file, same-run artifact, or prior-run artifact draft |
 | Variant and plan models | Put `dict[StageId, StageDraft]` and the estimator on `VariantDraft`; let `RunPlanDraft` select one variant and replicate | Variant stage keys become the only source of stage IDs, and each variant owns its executable graph |
-| Experiment expansion | Implement [`experiment-expansion.md`](experiment-expansion.md) after the single-run compiler | `viper.expand()` returns ordinary ordered `RunPlanDraft` values and `run_many()` retains one result per plan |
+| Experiment expansion | Implement [`experiment-expansion.md`](experiment-expansion.md) after the single-run compiler | `expand()` from `viper.authoring` returns ordinary ordered `RunPlanDraft` values and `run_many()` retains one result per plan |
 | Stage reuse | Implement [`stage-reuse.md`](stage-reuse.md) after the provenance catalog | `reuse="verified"` skips only a fully matched project stage and records explicit source evidence |
 | Catalog and MCP | Implement [`provenance-catalog-mcp.md`](provenance-catalog-mcp.md) after terminal verification and inspection are stable | Cross-run queries retain immutable source references and MCP tools route through typed API handlers |
 | Variant parameter protocol | Remove `DownloadVariantStageParams` with `parameters.Download`; derive `VariantSpec.stage_params` from build, embed, train, and eval stages | The variant parameter set matches every project-owned stage and excludes runner-owned download stages |
@@ -2706,7 +2749,7 @@ overwrite rules, and review ownership.
 | Stage validators | Validate source existence, stage order, roles, and materialization paths | Invalid declarations fail during freezing |
 | Evaluation input validator | Accept external, same-run, or prior-run evaluation data and split references; validate the resolved data roles | The full example uses `Eval.TEST` and shares its prior-run test and split drafts with the benchmark |
 | Benchmark input compiler | Compile `BenchmarkDraft.test` and splits once; reuse their `StoredInputRef.pointer` values in `BenchmarkSpec` | Candidate evaluation, confirmation evaluation, and benchmark evidence select identical data |
-| Runtime resolution | Reuse existing `FutureInputRef` and `StoredInputRef` materialization | `StageContext.inputs` receives the expected path |
+| Runtime resolution | Reuse existing `FutureInputRef` and `StoredInputRef` materialization | `Context.inputs` receives the expected path |
 | Verification | Reuse `verify_promoted_artifact()` and existing file-identity checks | Tampered source run or artifact fails verification |
 | Persisted schema | Change `StoredInputRef.pointer` to `ResolvedArtifactPointerRef` and broaden that reference's storage location to `StorageRef` | Default pointers avoid a Git-commit cycle and remain remotely retrievable |
 | Resolved download schema | Move project-invocation fields from `ResolvedBaseSpec` to `ResolvedParameterizedSpec` | `ResolvedDownloadSpec` contains runner environment, execution context, retrieval evidence, and artifacts |
@@ -2722,7 +2765,7 @@ replacement:
 
 | Active symbol or behavior | Disposition | Target owner |
 | --- | --- | --- |
-| `download_stage()` and generated `@viper.download_stage` callables | Delete | `viper.download()` constructs the runner-owned draft. |
+| `download()` and generated project download callables | Delete | `download()` from `viper.authoring` constructs the runner-owned draft. |
 | `DownloadContext` and `HttpRetrievalHandle` | Delete | The runner consumes `HttpResult` and writes `ResolvedHttpRetrieval`. |
 | `parameters.Download` | Delete | Runner-owned `DownloadSpec` uses request, policy, and `http` fields. |
 | `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete | Variant parameters cover project-owned build, embed, train, and eval stages. |
@@ -2731,20 +2774,20 @@ replacement:
 | `BaseSpec.implementation` | Move | `ParameterizedSpec.implementation` owns project-stage source identity. |
 | `ResolvedBaseSpec.source`, `startup`, `invocation`, and `command` | Move | `ResolvedParameterizedSpec` owns project-stage process evidence. |
 | Download-stage `StageInvocationReceipt` fixtures | Delete | Successful requests use `ResolvedHttpRetrieval`; failed download attempts use the attempt journal and raised error. |
-| `@viper.build_stage`, `@viper.embed_stage`, `@viper.train_stage`, and `@viper.evaluate_stage` | Replace | `@viper.build`, `@viper.embed`, `@viper.train`, and `@viper.eval` use `params=`. |
+| `build_stage`, `embed_stage`, `train_stage`, and `evaluate_stage` | Replace | `build`, `embed`, `train`, and `eval` are defined in `viper.stages` and use `params=`. |
 | Private `PARAMETERS`, `RESUME_STATE`, `PARAMETERS_INPUT`, `RESUME_STATE_INPUT`, `EVALUATION_DATASET_INPUT`, and `PREDICTIONS` constants | Replace | `viper.keys.Train` and `viper.keys.Eval` replace the old constants and rename the frozen map keys to `model`, `state`, `test`, and `preds`. |
 | `StageDraft.stage_id` and tuple-valued `RunPlanDraft.stages` | Replace | `VariantDraft.stages` mapping keys own stage IDs. |
-| Direct `ExternalInputRef` construction in public authoring | Replace | `viper.input()` creates `ExternalInputDraft`; freezing writes `ExternalInputRef`. |
-| Proposed prior-run construction through `RunArtifactRef` | Replace | `viper.run_artifact()` creates `RunArtifactDraft`; freezing verifies the completed run and writes the pointer. |
+| Direct `ExternalInputRef` construction in public authoring | Replace | `input()` from `viper.authoring` creates `ExternalInputDraft`; freezing writes `ExternalInputRef`. |
+| Proposed prior-run construction through `RunArtifactRef` | Replace | `run_artifact()` from `viper.authoring` creates `RunArtifactDraft`; freezing verifies the completed run and writes the pointer. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | Use `ResolvedArtifactPointerRef` so the frozen input carries pointer byte identity and a local, Git, or remote storage location. |
 | `ResolvedArtifactPointerRef.stored_at: ArtifactPointerRef` | Replace | Inherit `ResolvedFileRef`, whose `stored_at` field accepts `StorageRef`; retain canonical pointer-path validation in `StoredInputRef`. |
 | YAML `spec_source` authoring and generated draft-stage files | Replace | `StageDraft.spec` holds the Python-authored declaration until freezing writes canonical YAML. |
-| `@viper.http_transport(transport_id=..., parameter_model=...)` | Replace | `@viper.http(id=..., params=...)` defaults to `viper.params.Http`. |
-| `viper.transport()` and required empty transport parameter instances | Delete | `viper.download(http=request)` constructs the base `viper.params.Http` instance. |
-| Direct `SingleFileArtifactSpec` or `BundleArtifactSpec` construction in public examples | Replace | `viper.artifact()` accepts the loader callable and optional `kind`; freezing writes `ArtifactLoaderRef`. |
+| `http_transport(transport_id=..., parameter_model=...)` | Replace | `http(id=..., params=...)` from `viper.http` defaults to `viper.params.Http`. |
+| `transport()` and required empty transport parameter instances | Delete | `download(http=request)` constructs the base `viper.params.Http` instance. |
+| Direct `SingleFileArtifactSpec` or `BundleArtifactSpec` construction in public examples | Replace | `artifact()` from `viper.artifacts` accepts the loader callable and optional `kind`; freezing writes `ArtifactLoaderRef`. |
 | Full run paths repeated in every `ArtifactDraft` | Replace | Drafts use `RunArtifactPath`; freezing prefixes `experiments/<experiment-id>/runs/<variant-id>/<run-id>/`. |
 | Bare `metric_ids=` in Python stage authoring | Replace | `objective=` accepts `MetricObjectiveDraft`; `metrics=` accepts `MetricDraft` values; freezing writes the IDs. |
-| Manual `MetricImplementationRef` construction in public examples | Replace | `viper.measure()` accepts the decorated metric and freezing records its exact source identity. |
+| Manual `MetricImplementationRef` construction in public examples | Replace | `measure()` from `viper.metrics` accepts the decorated metric and freezing records its exact source identity. |
 | Untyped extra values stored only in `MetricSpec.params` | Replace | A custom metric parameter class produces `MetricSpec.parameter_model`; the worker validates the values through that exact class. |
 | Package-owned parameter classes represented by an absent reference | Replace | Every frozen parameter class has a `ParameterModelRef`; `owner` selects the project or installed VIPER source root. |
 | Stored-only evaluation input at the retired `evaluation_dataset` key | Replace | `EvalSpec.inputs[Eval.TEST]` and named splits accept any `InputRef`; freezing and preflight validate the resolved data roles. |
@@ -2766,9 +2809,9 @@ contains its own selected run root.
 ### Local file and training
 
 The acceptance fixture creates `inputs/raw/training_embeddings.csv` and selects
-it through `viper.input()`.
+it through `viper.authoring.input()`.
 
-The test first asserts that `viper.input(path=..., data_role=...)` returns a
+The test first asserts that `viper.authoring.input(path=..., data_role=...)` returns a
 `ExternalInputDraft` carrying the same path and role.
 
 ```text
@@ -2791,12 +2834,12 @@ access remains outside the observed boundary.
 
 ### Artifact constructor
 
-Construct `viper.artifact()` with the default `kind` and assert that it returns a
+Construct `viper.artifacts.artifact()` with the default `kind` and assert that it returns a
 `SingleFileArtifactDraft` with `kind == "file"`. Construct it with
 `kind="bundle"` and assert that it returns a `BundleArtifactDraft` with
 `kind == "bundle"`. Freeze both declarations and assert that the resulting
 `ArtifactSpec` values preserve the selected kind, path, loader identity, and
-data role. Pass the bundle declaration to `viper.download()` and assert that
+data role. Pass the bundle declaration to `viper.authoring.download()` and assert that
 draft validation rejects it.
 
 ### Complete candidate and benchmark pipeline
@@ -2875,9 +2918,9 @@ download, local-root capture, and metric runtime in the
 This section groups the work owned by the automatic-input contract. The master
 checklist supplies the cross-contract commit order.
 
-Phase 11 publishes the single-run workflow through `viper.freeze()`,
+Phase 11 publishes the single-run workflow through `viper.authoring.freeze()`,
 `viper.execution.run()`, `viper.execution.benchmark()`, and restore. The
-complete target example also shows `viper.expand()`,
+complete target example also shows `viper.authoring.expand()`,
 `viper.execution.run_many()`, verified stage reuse, `viper.catalog()`, and the
 knowledge API. Their owning contracts implement those calls in Phases 12–17.
 Phase 18 publishes the combined workflow after those phases pass.
@@ -2902,9 +2945,9 @@ Phase 18 publishes the combined workflow after those phases pass.
 - [ ] Add `ExternalInputDraft`, `RunArtifactDraft`, and the `StageInputDraft`
       authoring union.
 - [ ] Add `viper.params`, the shortened project-stage decorators,
-      `viper.stage()`, `viper.download()`, `viper.http()`,
-      `viper.artifact()`, `viper.input()`, `viper.run_artifact()`,
-      `viper.plan()`, and `viper.freeze()` constructors.
+      `viper.authoring.stage()`, `viper.authoring.download()`, `viper.http()`,
+      `viper.artifacts.artifact()`, `viper.authoring.input()`, `viper.authoring.run_artifact()`,
+      `viper.authoring.plan()`, and `viper.authoring.freeze()` constructors.
 - [ ] Add `viper.keys.Train` and `viper.keys.Eval`; replace the private
       duplicate constants with enum members.
 - [ ] Add focused model tests.
@@ -2917,11 +2960,11 @@ complete.
 
 ### Phase 2. Expose runner-owned download through Python authoring
 
-- [ ] Make `viper.download()` construct `DownloadSpecDraft` directly.
+- [ ] Make `viper.authoring.download()` construct `DownloadSpecDraft` directly.
 - [ ] Select `BuiltinHttpImplementationSpec()` when the author omits `http=`.
 - [ ] Convert a `CustomHttpDraft` into `ProjectHttpImplementationSpec` when the
       author supplies a function decorated with `@viper.http`.
-- [ ] Replace generated project download callables with `viper.download()`.
+- [ ] Replace generated project download callables with `viper.authoring.download()`.
 
 **Commit boundary:** Python authoring creates a valid runner-owned download
 stage through either the built-in HTTP implementation or one function
@@ -2994,7 +3037,7 @@ freeze one complete model run through the same Python authoring program.
 - [ ] Document plan-owned stage IDs and automatic input resolution in the
       getting-started guide.
 - [ ] Document pointer files as generated protocol evidence.
-- [ ] Document the required plan commit between `viper.freeze()` and
+- [ ] Document the required plan commit between `viper.authoring.freeze()` and
       `viper.execution.run()`.
 - [ ] Add the harness-mode design as a separate proposed contract.
 
@@ -3016,7 +3059,7 @@ Python authoring API defined in this contract.
 
 The runtime already publishes artifacts, checks pointers, and places input
 files where stages can read them. The proposed API adds the missing step:
-`viper.freeze()` chooses and writes `FutureInputRef` or `StoredInputRef` for the
+`viper.authoring.freeze()` chooses and writes `FutureInputRef` or `StoredInputRef` for the
 user.
 
 Implementation starts with the draft models and the runner-owned download

@@ -6,38 +6,38 @@ operation, and renders the same result models.
 
 ## Project interface
 
-Import these names from the package root:
+Import each name from the module that defines it:
 
 ```python
-import viper
-
-viper.download_stage
-viper.build_stage
-viper.embed_stage
-viper.train_stage
-viper.evaluate_stage
-viper.http_transport
-viper.run
-viper.retry
-viper.StageContext
-viper.DownloadContext
+from viper.api import retry, run
+from viper.http import http_transport
+from viper.stages import (
+    Context,
+    DownloadContext,
+    build,
+    download,
+    embed,
+    eval,
+    train,
+)
 ```
 
 Stage decorators bind one top-level callable to a stage kind and a project
 parameter class:
 
 ```python
-import viper
 from my_project.training import train_model
+from viper import parameters
+from viper.stages import Context, train
 
 
-class TrainParameters(viper.parameters.Train):
+class TrainParameters(parameters.Train):
     epochs: int
     learning_rate: float
 
 
-@viper.train_stage(parameter_model=TrainParameters)
-def train(context: viper.StageContext[TrainParameters]) -> None:
+@train(params=TrainParameters)
+def fit(context: Context[TrainParameters]) -> None:
     dataset_path = context.inputs["dataset"]
     weights_path = context.artifacts["parameters"]
     train_model(
@@ -48,7 +48,7 @@ def train(context: viper.StageContext[TrainParameters]) -> None:
     )
 ```
 
-`StageContext` provides the active run, attempt, and stage IDs; the validated
+`Context` provides the active run, attempt, and stage IDs; the validated
 parameter value; materialized input paths; writable artifact paths; live metric
 handles; and named NumPy generators. `DownloadContext` adds verified HTTP
 retrieval handles.
@@ -81,12 +81,15 @@ production and recomputation.
 
 ## Python execution
 
-`viper.run(stage_callable)` connects a project entrypoint to one stage selected
+`viper.api.run(stage_callable)` connects a project entrypoint to one stage selected
 by the command arguments:
 
 ```python
+from viper.api import run
+
+
 if __name__ == "__main__":
-    viper.run(train)
+    run(fit)
 ```
 
 ```bash
@@ -98,7 +101,7 @@ matches the selected `StageImplementationRef`, decorator kind, and parameter
 class. The function returns `RunSuccess` after the terminal run passes
 verification.
 
-`viper.retry(run_spec, repository_root=...)` allocates the next attempt for the
+`viper.api.retry(run_spec, repository_root=...)` allocates the next attempt for the
 same frozen plan and returns `RetrySuccess`.
 
 Administrative Python callers can execute complete plans directly through the
@@ -106,12 +109,8 @@ execution namespace:
 
 ```python
 from viper import execution
-from viper.execution import (
-    BenchmarkExecutionError,
-    BenchmarkExecutionResult,
-    RunError,
-    RunResult,
-)
+from viper.execution.errors import BenchmarkExecutionError, RunError
+from viper.execution.results import BenchmarkExecutionResult, RunResult
 
 run_result = execution.run(repository_root, run_spec_path)
 retry_result = execution.retry(repository_root, run_spec_path)
@@ -277,6 +276,5 @@ Public types and functions have one owner:
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval through the local store |
 
-The package root contains `viper.parameters`, the project-facing decorators,
-the runtime contexts, `run()`, and `retry()`. Import administrative documents
-and operations from the owner modules listed above.
+The package root forwards no names. Import every public object from the module
+that owns its definition.

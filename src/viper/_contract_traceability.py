@@ -132,21 +132,15 @@ TraceOutcome = Annotated[
 class ContractTrace(ProtocolModel):
     """Record one concrete accepted or rejected execution of a verifier rule."""
 
-    trace_id: TraceId = Field(
-        description="Stable identifier of this concrete trace."
-    )
+    trace_id: TraceId = Field(description="Stable identifier of this concrete trace.")
     requirement_id: RequirementId = Field(
         description="Contract requirement demonstrated by the trace."
     )
-    rule_id: VerifierRuleId = Field(
-        description="Verifier rule exercised by the trace."
-    )
+    rule_id: VerifierRuleId = Field(description="Verifier rule exercised by the trace.")
     state: TraceState = Field(
         description="Whether the referenced implementation and test exist."
     )
-    scenario: NonEmptyStr = Field(
-        description="One behavior demonstrated by the trace."
-    )
+    scenario: NonEmptyStr = Field(description="One behavior demonstrated by the trace.")
     setup: NonEmptyStr = Field(
         description="Concrete state established before the invocation."
     )

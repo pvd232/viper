@@ -78,7 +78,7 @@ def test_process_environment_rejects_multi_gpu_startup() -> None:
 
 
 def test_named_numpy_receipt_identifies_the_delivered_generator() -> None:
-    """Hash the same initialized generator object delivered to StageContext."""
+    """Hash the same initialized generator object delivered to Context."""
     initialized = apply_reproducibility(7, _controls())
     generator = initialized.numpy_generators["augmentation"]
     receipt = next(

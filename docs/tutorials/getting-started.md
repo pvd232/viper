@@ -42,17 +42,19 @@ A project parameter class extends the matching category from
 `viper.parameters`. The stage callable receives one typed context:
 
 ```python
-import viper
 from my_project.training import train_model
+from viper import parameters
+from viper.api import run
+from viper.stages import Context, train
 
 
-class TrainParameters(viper.parameters.Train):
+class TrainParameters(parameters.Train):
     epochs: int
     learning_rate: float
 
 
-@viper.train_stage(parameter_model=TrainParameters)
-def train(context: viper.StageContext[TrainParameters]) -> None:
+@train(params=TrainParameters)
+def fit(context: Context[TrainParameters]) -> None:
     dataset_path = context.inputs["dataset"]
     weights_path = context.artifacts["parameters"]
     train_model(
@@ -76,7 +78,7 @@ Use the decorated callable in the project's normal entrypoint:
 
 ```python
 if __name__ == "__main__":
-    viper.run(train)
+    run(fit)
 ```
 
 The entrypoint receives the selected plan and stage through command arguments:
@@ -88,7 +90,7 @@ python train.py \
   --repository-root .
 ```
 
-`viper.run(train)` checks that `train` matches the implementation selected by
+`run(fit)` checks that `fit` matches the implementation selected by
 the frozen stage. It then executes and verifies the complete run.
 
 ## Freeze and inspect a plan

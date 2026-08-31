@@ -26,11 +26,11 @@ from ..runtime import (
 )
 from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from ..stages import (
+    Context,
     DownloadContext,
     DownloadSpec,
     InternalSpec,
     ParameterizedSpec,
-    StageContext,
     StageContextBinding,
     StageInvocationReceipt,
     load_stage_callable,
@@ -271,14 +271,14 @@ def main(argv: list[str] | None = None) -> int:
                     raise ValueError("startup.context: HTTP body byte count differs")
                 if hashlib.sha256(raw).hexdigest() != value.body.sha256:
                     raise ValueError("startup.context: HTTP body SHA-256 differs")
-            context: StageContext[Any] = DownloadContext(
+            context: Context[Any] = DownloadContext(
                 **common_context,
                 retrievals=MappingProxyType(retrievals),
             )
         else:
             if binding.retrievals:
                 raise ValueError("startup.context: internal stage received retrievals")
-            context = StageContext(**common_context)
+            context = Context(**common_context)
         with autocast_context(run.reproducibility):
             function(context)
     except Exception as exc:

@@ -333,7 +333,7 @@ training = viper.stage(
 )
 ```
 
-Selection makes the diagnostic available through `StageContext.metrics`. The
+Selection makes the diagnostic available through `Context.metrics`. The
 training function produces one diagnostic measurement after each epoch:
 
 ```python

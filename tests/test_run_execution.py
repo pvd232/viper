@@ -22,26 +22,27 @@ from tests.fixtures import (
 )
 from tests.git_repository import REPOSITORY, run_git
 from viper import parameters
-from viper import run as run_stage
 from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
 )
+from viper._verification.storage import read_attempt_reference
 from viper.api import CompareRunsRequest, RunSuccess
 from viper.api import compare_runs as compare_runs_application
+from viper.api import run as run_stage
 from viper.artifacts import (
     ArtifactLoaderRef,
     SingleFileArtifactSpec,
     StageArtifactRef,
 )
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
-from viper.execution import RunError
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
 from viper.execution._metric import MetricWorkerResult
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._source import RunFetcher
 from viper.execution._stage import StageExecutionError, execute_stage_process
+from viper.execution.errors import RunError
 from viper.experiments import (
     DownloadVariantStageParams,
     ExperimentSpec,
@@ -88,12 +89,7 @@ from viper.stages import (
     load_stage_callable,
 )
 from viper.storage import LocalArtifactStore
-from viper.verification import (
-    VerificationError,
-    VerificationPolicy,
-    read_attempt_reference,
-    verify_run_result,
-)
+from viper.verification import VerificationError, VerificationPolicy, verify_run_result
 from viper.workspace import AttemptWorkspace
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -273,8 +269,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         ),
         "jobs/download.py": (
             b"from project.parameters.download import TinyDownloadParameters\n"
-            b"from viper import download_stage\n\n"
-            b"@download_stage(parameter_model=TinyDownloadParameters)\n"
+            b"from viper.stages import download\n\n"
+            b"@download(params=TinyDownloadParameters)\n"
             b"def download(context):\n"
             b"    path = context.artifacts['prior']\n"
             b"    path.parent.mkdir(parents=True, exist_ok=True)\n"
@@ -283,8 +279,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         ),
         "jobs/train.py": (
             b"from project.parameters.train import TinyTrainParameters\n"
-            b"from viper import train_stage\n\n"
-            b"@train_stage(parameter_model=TinyTrainParameters)\n"
+            b"from viper.stages import train\n\n"
+            b"@train(params=TinyTrainParameters)\n"
             b"def train(context):\n"
             b"    assert context.params.epochs == 1\n"
             b"    assert context.params.batch_size == 1\n"
@@ -764,8 +760,8 @@ def test_train_stage_captures_local_external_input(
         ),
         "jobs/train.py": (
             b"from project.parameters.train import TinyTrainParameters\n"
-            b"from viper import train_stage\n\n"
-            b"@train_stage(parameter_model=TinyTrainParameters)\n"
+            b"from viper.stages import train\n\n"
+            b"@train(params=TinyTrainParameters)\n"
             b"def train(context):\n"
             b"    assert context.params.epochs == 1\n"
             b"    assert context.params.batch_size == 1\n"

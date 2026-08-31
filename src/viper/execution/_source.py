@@ -7,6 +7,11 @@ import subprocess
 from pathlib import Path
 
 from .._schema import RepoRelPath
+from .._verification.storage import (
+    fetch_git_file_bytes,
+    fetch_huggingface_file_bytes,
+    list_huggingface_snapshot_files,
+)
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
@@ -16,11 +21,6 @@ from ..references import (
     StorageModel,
 )
 from ..storage import LocalArtifactStore
-from ..verification import (
-    fetch_git_file_bytes,
-    fetch_huggingface_file_bytes,
-    list_huggingface_snapshot_files,
-)
 from .errors import RunError
 
 

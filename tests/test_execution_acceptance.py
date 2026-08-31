@@ -54,8 +54,8 @@ class StageExecutionAcceptanceTests(unittest.TestCase):
         )
         implementation_source = (
             b"from project.parameters.download import TinyDownloadParameters\n"
-            b"from viper import download_stage\n\n"
-            b"@download_stage(parameter_model=TinyDownloadParameters)\n"
+            b"from viper.stages import download\n\n"
+            b"@download(params=TinyDownloadParameters)\n"
             b"def ingest(context):\n"
             b"    target = context.artifacts['dataset']\n"
             b"    target.parent.mkdir(parents=True, exist_ok=True)\n"

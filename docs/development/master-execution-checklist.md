@@ -26,28 +26,34 @@ and checklist surfaces reported by that graph.
 The authoring program uses decorated stage and metric functions:
 
 ```python
-training = viper.stage(
+from viper import execution
+from viper.artifacts import artifact
+from viper.authoring import expand, experiment, freeze, plan, stage
+from viper.metrics import min
+
+
+training = stage(
     train_model,
     params=TrainParams(...),
     inputs={"dataset": downloaded.artifacts["dataset"]},
     artifacts={
-        Train.MODEL: viper.artifact(...),
-        Train.STATE: viper.artifact(...),
+        Train.MODEL: artifact(...),
+        Train.STATE: artifact(...),
     },
-    objective=viper.min(training_loss),
+    objective=min(training_loss),
     metrics=(gradient_norm,),
 )
 
-experiment = viper.experiment(
+study = experiment(
     experiment_id="tiny_http",
     factors=...,
     variants=...,
     replicates=...,
 )
 
-run = viper.plan(
+run = plan(
     run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
-    experiment=experiment,
+    experiment=study,
     variant="baseline",
     replicate="replicate_01",
     stages={
@@ -60,14 +66,14 @@ run = viper.plan(
     benchmark=benchmark,
 )
 
-frozen = viper.freeze(run)
+frozen = freeze(run)
 ```
 
 The same experiment can produce every selected run:
 
 ```python
-plans = viper.expand(
-    experiment,
+plans = expand(
+    study,
     run_ids={
         "baseline": {
             "replicate_01": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -80,10 +86,10 @@ plans = viper.expand(
     reproducibility=reproducibility,
 )
 
-frozen_runs = tuple(viper.freeze(plan) for plan in plans)
+frozen_runs = tuple(freeze(item) for item in plans)
 ```
 
-`viper.freeze()` writes canonical YAML and returns every generated path. The
+`freeze()` from `viper.authoring` writes canonical YAML and returns every generated path. The
 user reviews and commits those files. The resulting plan commit identifies the
 YAML that VIPER executes. `RunSpec.source.commit` separately identifies the
 project code and Python definitions used during freezing.
@@ -92,12 +98,12 @@ project code and Python definitions used during freezing.
 if frozen.benchmark_spec_path is None:
     raise RuntimeError("the frozen plan has no benchmark")
 
-run_result = viper.execution.run(
+run_result = execution.run(
     Path.cwd(),
     frozen.run_spec_path,
 )
 
-benchmark_result = viper.execution.benchmark(
+benchmark_result = execution.benchmark(
     Path.cwd(),
     run_result.resolved_run_path,
     frozen.benchmark_spec_path,
@@ -289,10 +295,10 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
 <!-- contract-baseline: system-impact-graph.md sha256=cb89e38c3beff5b786c17b57a9424c1cb92e98d23b466d092f421d281e99e580 -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=74df5c118d6d299845f6712c5601b3421981edf6e409710d0329df81015cf621 -->
-<!-- contract-baseline: external-input-roots.md sha256=cf6a351a78c2e11b6f7722fdc71ded9b24a36c37823023984a7bc8a09956c40a -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=f8d30ada4c40569651c5620578f97ec23f1502b31b4b3eb85af2cd88ca16f8f3 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=5d780c99b87c3472bb12c160e7e288112093435d9467b19c506bd1f648b92d35 -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=55e19de461c438aae117b94ee1ef2867eee872c8c80b17e4f19e22b9ebd9798d -->
+<!-- contract-baseline: external-input-roots.md sha256=1516995b621d2c48adc39fd7c5125246fed1c65333e6871b2e95a2ec1de76778 -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=bf2be60669aab45daca03af0cfc09990e76fc0e7bfe761a09e299670f6188578 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=b78d17f34966b2de4bd272333a4ee7cbca25b3f0c4ab0ffba367a80c57219044 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=64b7be56c45efc1eb0ca29778c4fe41a372210fd4761aa9ec8ca1669b846094a -->
 <!-- contract-baseline: remote-storage.md sha256=0487831f4ac301ee5499aa5723106a592b9f412fabcbc04612f99e31e40677b6 -->
 <!-- contract-baseline: experiment-expansion.md sha256=f72e4efd429ba206972934b6788a341d40f079e6e1f320af758ecf1c3942a3d1 -->
@@ -1257,10 +1263,10 @@ single-file artifact. Both records identify one snapshot file.
 
 ### 9.1 Frozen and resolved models
 
-- [ ] Rename `src/viper/http.py` to `src/viper/_http.py` so the package root can
-      export the `viper.http` callable. Update every internal import to the
-      private module and every public example to import HTTP types from `viper`.
-- [ ] In `src/viper/_http.py`, rename `HttpTransportImplementationRef`,
+- [ ] Keep `src/viper/http.py` as the defining public HTTP module. Define the
+      `http` decorator and every supported HTTP type there. List only local
+      definitions in `viper.http.__all__`.
+- [ ] In `src/viper/http.py`, rename `HttpTransportImplementationRef`,
       `BuiltinHttpTransportSpec`, `ProjectHttpTransportSpec`,
       `HttpTransportSpec`, and `ResolvedHttpTransport` to
       `HttpImplementationRef`, `BuiltinHttpImplementationSpec`,
@@ -1327,11 +1333,12 @@ receipt and artifact.
 
 ### 9.3 Focused proof
 
-- [ ] Update `src/viper/__init__.py` and `__all__` to export `http`,
-      `HttpRequestSpec`, `HttpRetrievalPolicy`, `ObservedHttpResponse`,
-      `HttpRetrievalError`, `HttpContext`, and `HttpResult`. Update
-      `tests/test_public_api.py`, protocol fixtures, and schema assertions.
-      Remove the old exports and compatibility aliases.
+- [ ] Define `http`, `HttpRequestSpec`, `HttpRetrievalPolicy`,
+      `ObservedHttpResponse`, `HttpRetrievalError`, `HttpContext`, and
+      `HttpResult` in `src/viper/http.py`. List only those local definitions in
+      that module's `__all__`. Keep `src/viper/__init__.py` free of forwarding
+      exports. Update `tests/test_public_api.py`, protocol fixtures, and schema
+      assertions.
 - [ ] Add a repository search assertion that permits `transport` only in the
       migration tables of the development contracts until those tables retire.
 - [ ] Update `tests/test_http_retrieval.py` for the shared file.
@@ -1557,7 +1564,8 @@ writing stage YAML by hand.
       `Eval.PREDS = "preds"`.
 - [ ] Replace private constants in `src/viper/_schema.py`.
 - [ ] Change validators, workers, tests, fixtures, and docs to the new values.
-- [ ] Export `viper.keys` and `viper.params` from `src/viper/__init__.py`.
+- [ ] Define `viper.keys` and `viper.params` as public modules. Keep the package
+      root free of forwarding exports.
 - [ ] Rename `parameters.Evaluate`, `EvaluateSpecDraft`, `EvaluateSpec`,
       `ResolvedEvaluateSpec`, `EvaluateVariantStageParams`, and `EvaluationId`
       to `parameters.Eval`, `EvalSpecDraft`, `EvalSpec`, `ResolvedEvalSpec`,
@@ -1607,19 +1615,20 @@ writing stage YAML by hand.
 
 ### 12.3 Decorators and declarations
 
-- [ ] Add `@viper.build(params=...)`, `@viper.embed(params=...)`,
-      `@viper.train(params=...)`, and `@viper.eval(params=...)`.
+- [ ] Define `build(params=...)`, `embed(params=...)`, `train(params=...)`, and
+      `eval(params=...)` in `viper.stages`.
 - [ ] Retain the attached `StageDefinition` and source verification.
-- [ ] Replace `@viper.http_transport(transport_id=..., parameter_model=...)`
-      with `@viper.http(id=..., params=...)`.
+- [ ] Replace `http_transport(transport_id=..., parameter_model=...)` with
+      `http(id=..., params=...)` in `viper.http`.
 - [ ] Pass the decorated function and its optional parameter instance through
-      `viper.download(http=..., params=...)`; remove `viper.transport()`.
+      `download(http=..., params=...)` from `viper.authoring`; remove
+      `transport()`.
 - [ ] Add `RunArtifactPath` validation.
 - [ ] Add `SingleFileArtifactDraft` and `BundleArtifactDraft`.
-- [ ] Add one `viper.artifact()` constructor. It returns a single-file draft by
-      default and a bundle draft when `kind="bundle"`.
-- [ ] Export `viper.artifact` from `src/viper/__init__.py`; omit a second public
-      constructor for either representation.
+- [ ] Add one `artifact()` constructor to `viper.artifacts`. It returns a
+      single-file draft by default and a bundle draft when `kind="bundle"`.
+- [ ] List `artifact` in `viper.artifacts.__all__`; keep the package root free
+      of forwarding exports and omit a second public constructor.
 - [ ] Add `BuiltinHttpImplementationSpec | CustomHttpDraft` authoring and
       compile it into `HttpImplementationSpec`.
       <!-- implements: AIR-02 -->
@@ -1632,8 +1641,9 @@ writing stage YAML by hand.
       <!-- implements: AIR-03 -->
 - [ ] Add `objective` and `metrics` fields to the applicable stage drafts and
       compile them into `MetricObjectiveSpec` and `metric_ids`.
-- [ ] Add runner-owned `DownloadSpecDraft` and `viper.download()`.
-- [ ] Add `viper.stage()` for a decorated project callable.
+- [ ] Add runner-owned `DownloadSpecDraft` and `download()` to
+      `viper.authoring`.
+- [ ] Add `stage()` to `viper.authoring` for a decorated project callable.
 - [ ] Add private `StageDraftArtifactRef` values returned by
       `StageDraft.artifacts`.
 - [ ] Derive stage kind and parameter class from the decorator.
@@ -1662,8 +1672,9 @@ for a second replicate must leave the draft unchanged.
       cases to `tests/test_public_api.py`, `tests/test_protocol.py`,
       `tests/test_preflight.py`, `tests/test_cloud_execution.py`,
       `tests/test_run_execution.py`, and `tests/test_verification.py`.
-- [ ] Assert that `viper.artifact()` returns `SingleFileArtifactDraft`, that
-      `viper.artifact(kind="bundle")` returns `BundleArtifactDraft`, and that a
+- [ ] Assert that `artifact()` from `viper.artifacts` returns
+      `SingleFileArtifactDraft`, that `artifact(kind="bundle")` returns
+      `BundleArtifactDraft`, and that a
       download draft rejects the bundle form.
 - [ ] Add two-run path compilation to `tests/test_protocol.py`.
 - [ ] Run: <!-- verifies: AIR-01, AIR-02, AIR-03 -->
@@ -1697,13 +1708,13 @@ The plan mapping supplies stage IDs.
 - [ ] Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, and
       `ExperimentDraft` to `src/viper/experiments.py`.
       <!-- implements: UMD-04 -->
-- [ ] Add `viper.factor()`, `viper.variant()`, `viper.replicate()`, and
-      `viper.experiment()`.
+- [ ] Add `factor()`, `variant()`, `replicate()`, and `experiment()` to
+      `viper.authoring`.
 - [ ] Put `levels`, `stages`, and `estimator` on each `VariantDraft`.
 - [ ] Put seeds on `ReplicateDraft`.
 - [ ] Change `RunPlanDraft` to hold one experiment and selected variant and
       replicate IDs.
-- [ ] Add `viper.plan()`.
+- [ ] Add `plan()` to `viper.authoring`.
 
 ### 13.2 Compiler
 
@@ -1781,12 +1792,13 @@ the correct provenance edge.
 
 ### 14.1 Draft values
 
-- [ ] Add `ExternalInputDraft` and one public `viper.input()` constructor.
-- [ ] Add `RunArtifactDraft` and `viper.run_artifact()`.
+- [ ] Add `ExternalInputDraft` and one public `input()` constructor to
+      `viper.authoring`.
+- [ ] Add `RunArtifactDraft` and `run_artifact()` to `viper.authoring`.
       <!-- implements: EIR-04 -->
 - [ ] Define `StageInputDraft = ExternalInputDraft | StageDraftArtifactRef |
       RunArtifactDraft`.
-- [ ] Export `viper.input` from `src/viper/__init__.py`.
+- [ ] List `input` and `run_artifact` in `viper.authoring.__all__`.
 - [ ] Accept `StageInputDraft` in internal stage drafts.
 
 ### 14.2 Compilation
@@ -2129,7 +2141,7 @@ limit.
 
 ### 19.1 Deterministic expansion
 
-- [ ] Add `RunIdMap` and `viper.expand()` to `src/viper/authoring.py`.
+- [ ] Add `RunIdMap` and `expand()` to `src/viper/authoring.py`.
       <!-- phase-produces: viper.expand -->
       <!-- implements: EXP-01 -->
 - [ ] Preserve `ExperimentDraft.variants` order and
@@ -2138,8 +2150,8 @@ limit.
       repeated IDs.
 - [ ] Require `run_ids` to contain exactly the selected Cartesian product.
 - [ ] Reject one `RunId` assigned to two pairs.
-- [ ] Construct each item by calling the existing `viper.plan()` primitive.
-- [ ] Export `expand` from `src/viper/__init__.py`.
+- [ ] Construct each item by calling the existing `plan()` primitive.
+- [ ] List `expand` in `viper.authoring.__all__`.
 
 <details>
 <summary>Hints</summary>
@@ -2177,7 +2189,8 @@ file writes after expansion returns.
 - [ ] With `stop_on_failure=True`, stop submitting new paths after the first
       failure and mark every unstarted path as skipped.
 - [ ] Let already running calls finish.
-- [ ] Export `run_many()` and the result models from `viper.execution`.
+- [ ] Define `run_many()` in `viper.execution`. Define its result models in
+      `viper.execution.results`.
       <!-- phase-produces: viper.execution.run_many -->
 
 ### 19.3 Typed API and CLI
@@ -2664,8 +2677,9 @@ recorded result to that fixture and those index settings.
 
 ### 24.2 Python, API, CLI, and MCP
 
-- [ ] Export `knowledge`, its protocol models, and its query and result models
-      from `src/viper/__init__.py`.
+- [ ] Define `knowledge` and its protocol, query, and result models in the
+      public module that owns the knowledge interface. Export only local
+      definitions from that module.
 - [ ] Add typed knowledge publication, exact search, graph traversal, and
       similarity-search request and success models to `src/viper/api.py`.
 - [ ] Route every operation through `src/viper/_api/handlers.py`.
@@ -2828,13 +2842,13 @@ old contract.
 | `src/viper/_verification/metrics.py` | Parameter binding, complete benchmark metrics, and reused source metric evidence | 4, 8, 14 |
 | `src/viper/_verification/storage.py` | Explicit project-root reconstruction, cloud fetch, snapshot list, and restore identity | 0, 9, 10 |
 | `src/viper/verification.py` | Dispatch every new verifier rule | 2–10, 13, 14, 16–17 |
-| `src/viper/execution/__init__.py` | Export restore, batch execution, and updated result types | 9, 10, 12 |
+| `src/viper/execution/__init__.py` | Define restore and batch operations; keep result types in `execution.results` | 9, 10, 12 |
 | `src/viper/api.py` | Root-aware developer graph operations, Python freeze inputs, result refs, restore, batch, catalog, knowledge, and MCP-owned operation schemas | 0, 5–17 |
-| `src/viper/_api/__init__.py` | Export the restore operation models and handler | 10 |
+| `src/viper/_api/__init__.py` | Mark the internal API implementation package | 10 |
 | `src/viper/_api/handlers.py` | Resolve project roots; compile system graphs and drafts; return refs; restore, batch, catalog, and knowledge handlers | 0, 5–17 |
 | `src/viper/cli.py` | `--root`, system graph commands, Python workflow changes, restore, batch, catalog, knowledge, and MCP commands | 0, 10–17 |
 | `src/viper/project_init.py` | Add the root marker and complete protocol tree; replace the generated download callable; remove legacy patterns; add the terminal knowledge workflow | 0, 2, 11, 18 |
-| `src/viper/__init__.py` | Export `http`, `HttpContext`, `HttpResult`, expansion, catalog, knowledge, and result types; remove retired names | 2, 4–17 |
+| `src/viper/__init__.py` | Remain free of forwarding exports | 2, 4–17 |
 | `pyproject.toml` | Register system-graph tests and add the optional MCP and knowledge dependency groups | 0, 15, 17 |
 | `src/viper/py.typed` | Ship the package's PEP 561 typing marker | Complete |
 | `CHANGELOG.md` | Record the contract implementation under the active release | 11 |

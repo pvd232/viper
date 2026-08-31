@@ -67,7 +67,7 @@ from ..stages import (
     StageContextBinding,
     StageInvocationReceipt,
 )
-from .models import VerificationError, VerificationPolicy
+from ..verification import VerificationError, VerificationPolicy
 from .paths import (
     resolved_stage_spec_path,
     run_root,

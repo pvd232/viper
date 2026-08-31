@@ -31,7 +31,8 @@ from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
 )
-from viper._verification.attempt import _verify_stage_invocation
+from viper._verification.attempt import _verify_stage_invocation, verify_attempt_stages
+from viper._verification.storage import read_attempt_reference
 from viper.artifacts import (
     ArtifactLoaderRef,
     SingleFileArtifactSpec,
@@ -75,13 +76,7 @@ from viper.stages import (
     TrainSpec,
 )
 from viper.storage import LocalArtifactStore
-from viper.verification import (
-    VerificationError,
-    VerificationPolicy,
-    read_attempt_reference,
-    verify_attempt_stages,
-    verify_run_result,
-)
+from viper.verification import VerificationError, VerificationPolicy, verify_run_result
 
 REPOSITORY = "https://github.com/example/viper-signal-project"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -182,8 +177,8 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes
         ),
         "jobs/download.py": (
             b"from project.parameters.download import SignalDownloadParameters\n"
-            b"from viper import download_stage\n\n"
-            b"@download_stage(parameter_model=SignalDownloadParameters)\n"
+            b"from viper.stages import download\n\n"
+            b"@download(params=SignalDownloadParameters)\n"
             b"def download(context):\n"
             b"    target = context.artifacts['prior']\n"
             b"    target.parent.mkdir(parents=True, exist_ok=True)\n"
@@ -195,8 +190,9 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes
             b"import sys\n"
             b"import time\n\n"
             b"from project.parameters.train import SignalTrainParameters\n"
-            b"from viper import run, train_stage\n\n"
-            b"@train_stage(parameter_model=SignalTrainParameters)\n"
+            b"from viper.api import run\n"
+            b"from viper.stages import train\n\n"
+            b"@train(params=SignalTrainParameters)\n"
             b"def train(context):\n"
             + train_operation
             + b"\nif __name__ == '__main__':\n"

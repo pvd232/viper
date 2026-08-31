@@ -15,6 +15,12 @@ from ._parameter.validation import (
     validate_stage_parameters,
     verify_parameter_model_bytes,
 )
+from ._verification.plan import (
+    verify_benchmark_spec,
+    verify_experiment_and_variant,
+    verify_run_plan_relationships,
+)
+from ._verification.storage import fetch_storage_bytes
 from .http import (
     HttpRetrievalError,
     ProjectHttpTransportSpec,
@@ -46,13 +52,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
-from .verification import (
-    VerificationError,
-    fetch_storage_bytes,
-    verify_benchmark_spec,
-    verify_experiment_and_variant,
-    verify_run_plan_relationships,
-)
+from .verification import VerificationError
 
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[

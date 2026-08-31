@@ -50,6 +50,7 @@ from .stages import (
     stage_definition,
     verify_stage_implementation_bytes,
 )
+from .verification import StorageFetcher
 
 OperationName = Literal[
     "validate_stage",
@@ -528,27 +529,132 @@ OPERATIONS: tuple[OperationName, ...] = (
 )
 
 
-from ._api.handlers import (
-    compare_runs,
-    execute_benchmark,
-    execute_stage,
-    freeze_run,
-    get_capabilities,
-    get_schema,
-    init_project,
-    lineage,
-    plan_diff,
-    preflight,
-    retry_request,
-    run_request,
-    status,
-    validate_resolved_stage,
-    validate_run_spec,
-    validate_stage,
-    verify_benchmark,
-    verify_pointer,
-    verify_run,
-)
+from ._api import handlers as _handlers
+
+
+def validate_stage(request: ValidateStageRequest) -> ValidateStageSuccess:
+    """Validate one authored stage document."""
+    return _handlers.validate_stage(request)
+
+
+def validate_resolved_stage(
+    request: ValidateResolvedStageRequest,
+) -> ValidateResolvedStageSuccess:
+    """Validate one resolved stage document."""
+    return _handlers.validate_resolved_stage(request)
+
+
+def validate_run_spec(request: ValidateRunSpecRequest) -> ValidateRunSpecSuccess:
+    """Validate one run document."""
+    return _handlers.validate_run_spec(request)
+
+
+def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
+    """Freeze one editable run plan."""
+    return _handlers.freeze_run(request)
+
+
+def preflight(request: PreflightRequest) -> PreflightSuccess:
+    """Check one run before execution."""
+    return _handlers.preflight(request)
+
+
+def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
+    """Execute one selected stage."""
+    return _handlers.execute_stage(request)
+
+
+def run_request(request: RunRequest) -> RunSuccess:
+    """Execute one complete run request."""
+    return _handlers.run_request(request)
+
+
+def retry_request(request: RetryRequest) -> RetrySuccess:
+    """Retry one failed run request."""
+    return _handlers.retry_request(request)
+
+
+def execute_benchmark(
+    request: ExecuteBenchmarkRequest,
+) -> ExecuteBenchmarkSuccess:
+    """Execute one benchmark confirmation."""
+    return _handlers.execute_benchmark(request)
+
+
+def plan_diff(request: PlanDiffRequest) -> PlanDiffSuccess:
+    """Compare two frozen run plans."""
+    return _handlers.plan_diff(request)
+
+
+def lineage(
+    request: LineageRequest,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> LineageSuccess:
+    """Return one verified run's lineage graph."""
+    return _handlers.lineage(request, fetcher=fetcher)
+
+
+def status(request: StatusRequest) -> StatusSuccess:
+    """Return one attempt's current status."""
+    return _handlers.status(request)
+
+
+def compare_runs(
+    request: CompareRunsRequest,
+    *,
+    left_fetcher: StorageFetcher | None = None,
+    right_fetcher: StorageFetcher | None = None,
+) -> CompareRunsSuccess:
+    """Compare two verified runs."""
+    return _handlers.compare_runs(
+        request,
+        left_fetcher=left_fetcher,
+        right_fetcher=right_fetcher,
+    )
+
+
+def verify_run(
+    request: VerifyRunRequest,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> VerifyRunSuccess:
+    """Verify one terminal run."""
+    return _handlers.verify_run(request, fetcher=fetcher)
+
+
+def verify_benchmark(
+    request: VerifyBenchmarkRequest,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> VerifyBenchmarkSuccess:
+    """Verify one benchmark result."""
+    return _handlers.verify_benchmark(request, fetcher=fetcher)
+
+
+def verify_pointer(
+    request: VerifyPointerRequest,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> VerifyPointerSuccess:
+    """Verify one promoted artifact pointer."""
+    return _handlers.verify_pointer(request, fetcher=fetcher)
+
+
+def get_schema(request: SchemaRequest) -> SchemaSuccess:
+    """Return one public model's JSON Schema."""
+    return _handlers.get_schema(request)
+
+
+def get_capabilities(request: CapabilitiesRequest) -> CapabilitiesSuccess:
+    """Return the supported operations and models."""
+    return _handlers.get_capabilities(request)
+
+
+def init_project(request: InitProjectRequest) -> InitProjectSuccess:
+    """Create one starter project."""
+    return _handlers.init_project(request)
+
 
 RequestType = type[APIModel]
 Handler = Callable[[Any], SuccessModel]

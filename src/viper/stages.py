@@ -64,7 +64,7 @@ ParamsT = TypeVar("ParamsT", bound=parameters.ParameterSet)
 
 
 @dataclass(frozen=True)
-class StageContext(Generic[ParamsT]):
+class Context(Generic[ParamsT]):
     """Carry one validated project-stage invocation inside the controlled child."""
 
     run_id: RunId
@@ -78,7 +78,7 @@ class StageContext(Generic[ParamsT]):
 
 
 @dataclass(frozen=True)
-class DownloadContext(StageContext[parameters.Download]):
+class DownloadContext(Context[parameters.Download]):
     """Extend the stage context with verified HTTP retrieval handles."""
 
     retrievals: Mapping[InputName, HttpRetrievalHandle]
@@ -702,46 +702,46 @@ def _stage_decorator(
         """Validate the callable interface and attach its immutable definition."""
         parameters = tuple(inspect.signature(function).parameters.values())
         if len(parameters) != 1:
-            raise TypeError("a stage callable must accept one StageContext argument")
+            raise TypeError("a stage callable must accept one Context argument")
         setattr(function, "__viper_stage__", definition)
         return function
 
     return decorate
 
 
-def download_stage(
-    *, parameter_model: type[parameters.Download]
+def download(
+    *, params: type[parameters.Download]
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one download-stage callable."""
-    return _stage_decorator("download", parameter_model)
+    return _stage_decorator("download", params)
 
 
-def build_stage(
-    *, parameter_model: type[parameters.Build]
+def build(
+    *, params: type[parameters.Build]
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one build-stage callable."""
-    return _stage_decorator("build", parameter_model)
+    return _stage_decorator("build", params)
 
 
-def embed_stage(
-    *, parameter_model: type[parameters.Embed]
+def embed(
+    *, params: type[parameters.Embed]
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one embedding-stage callable."""
-    return _stage_decorator("embed", parameter_model)
+    return _stage_decorator("embed", params)
 
 
-def train_stage(
-    *, parameter_model: type[parameters.Train]
+def train(
+    *, params: type[parameters.Train]
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one training-stage callable."""
-    return _stage_decorator("train", parameter_model)
+    return _stage_decorator("train", params)
 
 
-def evaluate_stage(
-    *, parameter_model: type[parameters.Evaluate]
+def eval(
+    *, params: type[parameters.Evaluate]
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one evaluation-stage callable."""
-    return _stage_decorator("evaluate", parameter_model)
+    return _stage_decorator("evaluate", params)
 
 
 def verify_stage_implementation_bytes(
@@ -764,7 +764,7 @@ def load_stage_callable(
     reference: StageImplementationRef,
     *,
     import_root: Path | None = None,
-) -> Callable[[StageContext[Any]], None]:
+) -> Callable[[Context[Any]], None]:
     """Load and validate the exact decorated top-level callable in one file."""
     verify_stage_implementation_bytes(reference, path.read_bytes())
     module_name = f"_viper_stage_{path.stem}_{abs(hash(path.resolve()))}"
@@ -831,7 +831,7 @@ def load_stage_callable(
                 ):
                     sys.modules.pop(name, None)
             sys.modules.update(saved_modules)
-    return cast(Callable[[StageContext[Any]], None], value)
+    return cast(Callable[[Context[Any]], None], value)
 
 
 def stage_definition(function: Callable[..., Any]) -> StageDefinition[Any]:

@@ -303,33 +303,55 @@ SYSTEM_IMPACT_DAG_EDGES = (
 )
 
 COMPLETE_EXAMPLE_PUBLIC_CALLS = {
-    "viper.at_least",
-    "viper.at_most",
-    "viper.benchmark",
-    "viper.build",
-    "viper.download",
-    "viper.embed",
-    "viper.eval",
-    "viper.execution.benchmark",
-    "viper.execution.run",
-    "viper.execution.run_many",
-    "viper.expand",
-    "viper.experiment",
-    "viper.factor",
-    "viper.artifact",
-    "viper.input",
-    "viper.freeze",
-    "viper.http",
-    "viper.measure",
-    "viper.metric",
-    "viper.min",
-    "viper.plan",
-    "viper.replicate",
-    "viper.run_artifact",
-    "viper.stage",
-    "viper.train",
-    "viper.variant",
-    "viper.catalog",
+    "artifact",
+    "at_least",
+    "at_most",
+    "benchmark",
+    "build",
+    "catalog",
+    "download",
+    "embed",
+    "eval",
+    "execution.benchmark",
+    "execution.run",
+    "execution.run_many",
+    "expand",
+    "experiment",
+    "factor",
+    "freeze",
+    "http",
+    "input",
+    "measure",
+    "metric",
+    "min",
+    "plan",
+    "replicate",
+    "run_artifact",
+    "stage",
+    "train",
+    "variant",
+}
+
+COMPLETE_EXAMPLE_PUBLIC_IMPORTS = {
+    "viper.artifacts": {"artifact"},
+    "viper.authoring": {
+        "download",
+        "expand",
+        "experiment",
+        "factor",
+        "freeze",
+        "input",
+        "plan",
+        "replicate",
+        "run_artifact",
+        "stage",
+        "variant",
+    },
+    "viper.benchmark": {"at_least", "at_most", "benchmark"},
+    "viper.catalog": {"MeasurementQuery", "catalog"},
+    "viper.http": {"HttpContext", "HttpResult", "http"},
+    "viper.metrics": {"measure", "metric", "min"},
+    "viper.stages": {"Context", "build", "embed", "eval", "train"},
 }
 
 RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS = {
@@ -399,14 +421,14 @@ COMPLETE_EXAMPLE_COMMENT_TOPICS = {
     "Repository identity",
     "Freezing records each loader",
     "custom HTTP function sends the request",
-    "viper.download() declares a runner-owned stage",
+    "download() declares a runner-owned stage",
     "Live metrics receive values",
-    "viper.measure() supplies concrete parameters",
-    "viper.input() declares bytes",
+    "measure() supplies concrete parameters",
+    "input() declares bytes",
     "build stage turns source data",
     "input handles become two FutureInputRef records",
     "decorated function owns model computation",
-    "viper.run_artifact() selects immutable outputs",
+    "run_artifact() selects immutable outputs",
     "model handle is a same-run edge",
     "Source, environment, and reproducibility records",
     "benchmark enters the plan",
@@ -948,13 +970,15 @@ def test_complete_authoring_example_covers_the_public_workflow() -> None:
     assert COMPLETE_EXAMPLE_PUBLIC_CALLS - calls == set()
     assert calls & RETIRED_COMPLETE_EXAMPLE_PUBLIC_CALLS == set()
 
-    imported_modules = {
-        node.module
+    imported_names = {
+        node.module: {alias.name for alias in node.names}
         for tree in trees
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom)
+        if node.module in COMPLETE_EXAMPLE_PUBLIC_IMPORTS
     }
-    assert "viper.http" not in imported_modules
+    for module, names in COMPLETE_EXAMPLE_PUBLIC_IMPORTS.items():
+        assert names <= imported_names[module]
 
 
 def test_target_contracts_use_env_identifiers() -> None:
@@ -1002,9 +1026,7 @@ def test_complete_authoring_example_uses_env_keywords() -> None:
         node for tree in trees for node in ast.walk(tree) if isinstance(node, ast.Call)
     )
     names = {name for node in calls if (name := _dotted_name(node.func)) is not None}
-    plan_calls = tuple(
-        node for node in calls if _dotted_name(node.func) == "viper.plan"
-    )
+    plan_calls = tuple(node for node in calls if _dotted_name(node.func) == "plan")
 
     assert {"LocalEnvSpec", "observe_python_env"} <= names
     assert names & {"LocalEnvironmentSpec", "observe_python_environment"} == set()
@@ -1055,7 +1077,7 @@ def test_complete_authoring_parameter_models_are_substantial_and_used() -> None:
         if isinstance(node, ast.ClassDef)
         if any(
             (base_name := _dotted_name(base)) is not None
-            and base_name.startswith("viper.params.")
+            and base_name.startswith("params.")
             for base in node.bases
         )
     }

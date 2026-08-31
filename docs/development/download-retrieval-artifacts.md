@@ -290,8 +290,8 @@ feature,label
 import csv
 from pathlib import Path
 
-import viper
-from viper import HttpRequestSpec, HttpRetrievalPolicy
+from viper import authoring
+from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
 
 DATASET_PATH = "artifacts/datasets/training_set/dataset.csv"
@@ -302,7 +302,7 @@ def load_dataset(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(source))
 
 
-download = viper.download(
+download = authoring.download(
     inputs={
         "dataset": HttpRequestSpec(
             url="http://127.0.0.1:8000/dataset.csv",

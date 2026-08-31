@@ -40,19 +40,15 @@ from ..references import (
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
-from .models import (
+from ..verification import (
+    StageSnapshot,
+    StorageFetcher,
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
     VerifiedSnapshotFile,
 )
 from .paths import run_root
-
-StorageFetcher = Callable[[StorageModel], bytes]
-
-
-StageSnapshot = StageResultSnapshotRef | LocalStageResultSnapshotRef
-
 
 _ARTIFACT_VALIDATION_CACHE: dict[
     tuple[str, str, str, tuple[tuple[str, str, int], ...]],

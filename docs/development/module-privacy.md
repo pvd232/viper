@@ -3,10 +3,9 @@
 **Status:** Implemented
 
 The later [automatic input-resolution contract](automatic-input-resolution.md#target-artifact-and-http-drafts)
-reserves `viper.http` for the public HTTP decorator. Its implementation phase
-renames `src/viper/http.py` to `src/viper/_http.py` and re-exports the public
-HTTP types from the package root. That planned rename follows this contract's
-rule: the leading underscore marks the first private path component.
+reserves `viper.http` for the public HTTP interface. Its implementation phase
+keeps every supported HTTP name in that defining module. The package root
+forwards no names.
 
 ## Required claim
 
@@ -51,18 +50,19 @@ A function called only within its defining module keeps a leading underscore.
 A function imported by another module uses a normal function name because its
 package or module path already marks the private boundary.
 
-This protocol defines three static checks:
+This protocol defines four static checks:
 
 | Check | Rule |
 | --- | --- |
 | `package.private_boundary` | An underscored package contains normally named modules, except `__init__.py`. |
 | `package.shared_symbol` | Reject an import of a single-underscore symbol from another module. |
 | `package.public_execution_surface` | Results and errors returned or raised by public execution functions have public import paths. |
+| `package.local_export` | Every name in a public module's `__all__` is defined in that module. |
 
 The source tree also rejects `from module import name as name`. A public module
-lists supported imported names in `__all__`; an internal caller imports a name
-from the module that defines it. Ruff rejects every redundant self-alias
-through `PLC0414`.
+lists only local definitions in `__all__`. Every caller imports a name from the
+module that defines it. Ruff rejects every redundant self-alias through
+`PLC0414`.
 
 These checks govern Python source structure. Runtime execution and the
 serialized provenance protocol retain their current behavior.
@@ -85,8 +85,10 @@ byte-for-byte outside its scope.
 `src/viper`. The test will apply `package.private_boundary` to file paths and
 `package.shared_symbol` to `from ... import ...` statements.
 
-`tests/test_public_api.py` will apply `package.public_execution_surface` by
-importing the result and error types from `viper.execution`.
+`tests/test_public_api.py` applies `package.public_execution_surface` by
+importing result types from `viper.execution.results` and errors from
+`viper.execution.errors`. The same test parses every public module and rejects
+an exported name that lacks a local definition.
 
 The source tree is the inspected value. The tests are the verifier. The Git
 commit records the checked source, while runtime receipts continue to describe
@@ -163,16 +165,15 @@ defined in `execution/_benchmark.py`, which was also private.
 **Implemented:** [`execution/results.py`](../../src/viper/execution/results.py)
 now owns `RunResult` and `BenchmarkExecutionResult`. The implementation renamed
 `_results.py` to `results.py`, moved `BenchmarkExecutionResult` into that
-module, and exported both result types from `viper.execution`:
+module:
 
 ```python
-from viper.execution import BenchmarkExecutionResult, RunResult
+from viper.execution.results import BenchmarkExecutionResult, RunResult
 ```
 
-`RunError` and `BenchmarkExecutionError` now live in
-[`viper.execution.errors`](../../src/viper/execution/errors.py), and
-`viper.execution` exports both exceptions. Callers inspect returned values and
-catch execution errors through supported import paths.
+`RunError` and `BenchmarkExecutionError` live in
+[`viper.execution.errors`](../../src/viper/execution/errors.py). Callers inspect
+returned values and catch execution errors through their defining modules.
 
 ## Exact changes
 
@@ -181,8 +182,8 @@ catch execution errors through supported import paths.
 | Original path | Implemented path | Required updates |
 | --- | --- | --- |
 | `viper/_parameter/_validation.py` | `viper/_parameter/validation.py` | Update imports in authoring, HTTP, preflight, execution, verification, workers, and parameter tests. |
-| `viper/execution/_results.py` | `viper/execution/results.py` | Update execution imports and export `RunResult` and `BenchmarkExecutionResult` from `viper.execution`. |
-| `viper/execution/_errors.py` | `viper/execution/errors.py` | Update execution and API imports and export `RunError` and `BenchmarkExecutionError` from `viper.execution`. |
+| `viper/execution/_results.py` | `viper/execution/results.py` | Update callers to import `RunResult` and `BenchmarkExecutionResult` from the defining module. |
+| `viper/execution/_errors.py` | `viper/execution/errors.py` | Update callers to import `RunError` and `BenchmarkExecutionError` from the defining module. |
 
 `BenchmarkExecutionResult` moved from `execution/_benchmark.py` to
 `execution/results.py`. `BenchmarkExecutionError` moved from

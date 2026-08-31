@@ -40,17 +40,19 @@ A project owns its scientific code and parameter classes. VIPER supplies stage
 decorators and typed contexts:
 
 ```python
-import viper
 from my_project.training import train_model
+from viper import parameters
+from viper.api import run
+from viper.stages import Context, train
 
 
-class TrainParameters(viper.parameters.Train):
+class TrainParameters(parameters.Train):
     epochs: int
     learning_rate: float
 
 
-@viper.train_stage(parameter_model=TrainParameters)
-def train(context: viper.StageContext[TrainParameters]) -> None:
+@train(params=TrainParameters)
+def fit(context: Context[TrainParameters]) -> None:
     dataset_path = context.inputs["dataset"]
     weights_path = context.artifacts["parameters"]
     train_model(
@@ -62,7 +64,7 @@ def train(context: viper.StageContext[TrainParameters]) -> None:
 ```
 
 The decorator binds `train` to the training-stage category and
-`TrainParameters`. The callable receives one `StageContext` containing the
+`TrainParameters`. The callable receives one `Context` containing the
 validated parameters, materialized input paths, writable artifact paths, live
 metric handles, named NumPy generators, and active run identity. The
 [stage module](../../src/viper/stages.py) owns this interface.
@@ -74,7 +76,7 @@ The project can use its ordinary Python entrypoint:
 
 ```python
 if __name__ == "__main__":
-    viper.run(train)
+    run(fit)
 ```
 
 ```bash
@@ -137,7 +139,7 @@ For one training stage, the coordinator performs the equivalent of:
 ```python
 callable = load_verified_callable(stage.implementation)
 params = load_and_validate(stage.parameter_model, stage.params)
-context = StageContext(
+context = Context(
     run_id=run.run_id,
     attempt_id=attempt_id,
     stage_id=stage.stage_id,
@@ -150,7 +152,7 @@ context = StageContext(
 callable(context)
 ```
 
-The live `StageContext` contains Python runtime objects. VIPER also persists a
+The live `Context` contains Python runtime objects. VIPER also persists a
 serializable binding that names the same invocation through stable paths and
 identities. The [stage executor](../../src/viper/execution/_stage.py)
 and [stage worker](../../src/viper/_workers/stages.py) implement this boundary.
@@ -173,7 +175,7 @@ Download stages use frozen HTTP requests. A request fixes the URL, accepted
 statuses, expected response byte count, and expected SHA-256 digest. The
 selected transport retrieves the body. VIPER checks the response before the
 download callable receives it through `DownloadContext`. Projects can register
-another transport through `@viper.http_transport` while retaining the same
+another transport through `@http_transport` from `viper.http` while retaining the same
 request and response contract. The [HTTP module](../../src/viper/http.py) owns
 this interface.
 
