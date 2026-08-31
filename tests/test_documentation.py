@@ -38,11 +38,13 @@ MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist
 CONTRACT_TRACEABILITY = (
     ROOT / "docs/development/contract-requirement-traceability.md"
 )
+MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
 SYSTEM_IMPACT_GRAPH = ROOT / "docs/development/system-impact-graph.md"
 PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/phase-0-pair-coding.md"
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
+    MODULE_OWNERSHIP,
     ROOT / "docs/development/system-impact-graph.md",
     ROOT / "docs/development/download-retrieval-artifacts.md",
     ROOT / "docs/development/external-input-roots.md",
@@ -59,6 +61,7 @@ IMPLEMENTATION_CONTRACTS = (
 PHASE_ZERO_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
+    MODULE_OWNERSHIP,
     ROOT / "docs/development/system-impact-graph.md",
 )
 TRACEABILITY_MODELS = (
@@ -171,6 +174,36 @@ TRACEABILITY_DAG_PALETTES = (
     },
 )
 TRACEABILITY_LINK_STYLE = "linkStyle default stroke:#94a3b8,stroke-width:2px"
+MODULE_OWNERSHIP_DAG_EDGES = (
+    {
+        ("ApiTypes", "Handlers"),
+        ("Handlers", "Wrappers"),
+        ("VerificationTypes", "PrivateVerification"),
+        ("PrivateVerification", "LateImports"),
+        ("VerificationTypes", "LateImports"),
+    },
+    {
+        ("Models", "Verification"),
+        ("Private", "Verification"),
+        ("Api", "Verification"),
+        ("Api", "Tests"),
+        ("Verification", "Tests"),
+        ("Models", "Tests"),
+    },
+    {
+        ("Contract", "ModelsTask"),
+        ("ModelsTask", "Models"),
+        ("Models", "VerificationTask"),
+        ("VerificationTask", "Verification"),
+        ("Verification", "ApiTask"),
+        ("ApiTask", "Api"),
+        ("Models", "Test"),
+        ("Verification", "Test"),
+        ("Api", "Test"),
+        ("Test", "System"),
+    },
+)
+MODULE_OWNERSHIP_DAG_PALETTES = TRACEABILITY_DAG_PALETTES
 SYSTEM_IMPACT_DAG_PALETTES = (
     {
         "input": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
@@ -1304,6 +1337,35 @@ def test_contract_traceability_dags_use_semantic_palette() -> None:
         assert TRACEABILITY_LINK_STYLE in diagram
 
 
+def test_module_ownership_dags_preserve_semantic_topology() -> None:
+    """Keep the module refactor diagrams aligned with the scheduled moves."""
+    current_gap = _numbered_contract_section(MODULE_OWNERSHIP.read_text(), 3)
+    diagrams = tuple(
+        match.group("body") for match in _MERMAID_FENCE.finditer(current_gap)
+    )
+
+    assert len(diagrams) == 3
+    for diagram, expected_edges, expected_palette in zip(
+        diagrams,
+        MODULE_OWNERSHIP_DAG_EDGES,
+        MODULE_OWNERSHIP_DAG_PALETTES,
+        strict=True,
+    ):
+        actual_edges = {
+            (edge.group("source"), edge.group("target"))
+            for line in diagram.splitlines()
+            if (edge := _MERMAID_EDGE.match(line)) is not None
+        }
+        actual_palette = {
+            match.group("role"): match.group("style")
+            for match in _MERMAID_CLASS_DEF.finditer(diagram)
+        }
+
+        assert actual_edges == expected_edges
+        assert actual_palette == expected_palette
+        assert TRACEABILITY_LINK_STYLE in diagram
+
+
 def test_system_impact_dags_preserve_semantic_topology() -> None:
     """Keep each system-impact DAG edge and role aligned with its contract."""
     current_gap = _numbered_contract_section(
@@ -1448,6 +1510,89 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         for dependency in dependencies:
             assert dependency in manifests, (block_id, dependency)
             assert order[dependency] < order[block_id], (block_id, dependency)
+
+
+def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
+    """Keep each planned move equal to the complete current definition set."""
+    reference = PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
+
+    def planned_tree(block_id: str) -> ast.Module:
+        definition = next(
+            match
+            for match in _PAIR_BLOCK_DEFINITION.finditer(reference)
+            if match.group("id") == block_id
+        )
+        edit = _PAIR_EDIT.search(definition.group("body"))
+        assert edit is not None
+        return ast.parse(edit.group("code"))
+
+    verification_source = ast.parse(
+        (ROOT / "src/viper/verification.py").read_text(encoding="utf-8")
+    )
+    verification_target = planned_tree("P0-MOD-02")
+    source_operations = {
+        node.name: node
+        for node in verification_source.body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("verify_")
+    }
+    target_operations = {
+        node.name: node
+        for node in verification_target.body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("verify_")
+    }
+    assert source_operations.keys() == target_operations.keys()
+    assert {
+        name: _normalized(node) for name, node in source_operations.items()
+    } == {
+        name: _normalized(node) for name, node in target_operations.items()
+    }
+
+    model_names = {
+        "VerificationError",
+        "VerificationPolicy",
+        "VerifiedSnapshotFile",
+        "VerifiedArtifact",
+        "VerifiedInput",
+        "VerifiedRunPlan",
+        "VerifiedRunResult",
+        "VerifiedBenchmarkResult",
+    }
+    model_target = planned_tree("P0-MOD-01")
+    source_models = {
+        node.name: node
+        for node in verification_source.body
+        if isinstance(node, ast.ClassDef) and node.name in model_names
+    }
+    target_models = {
+        node.name: node
+        for node in model_target.body
+        if isinstance(node, ast.ClassDef) and node.name in model_names
+    }
+    assert source_models.keys() == target_models.keys()
+    assert {name: _normalized(node) for name, node in source_models.items()} == {
+        name: _normalized(node) for name, node in target_models.items()
+    }
+
+    api_source = ast.parse(
+        (ROOT / "src/viper/_api/handlers.py").read_text(encoding="utf-8")
+    )
+    api_target = planned_tree("P0-MOD-03")
+    source_handlers = {
+        node.name: node
+        for node in api_source.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    target_handlers = {
+        node.name: node
+        for node in api_target.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    assert source_handlers.keys() == target_handlers.keys()
+    assert {
+        name: _normalized(node) for name, node in source_handlers.items()
+    } == {
+        name: _normalized(node) for name, node in target_handlers.items()
+    }
 
 
 def test_phase_zero_system_models_match_contract() -> None:

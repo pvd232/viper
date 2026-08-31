@@ -228,18 +228,16 @@ verifier import two functions from `_verification/storage.py`.
 
 The functions return the same values and enforce the same comparisons.
 
-### Shared application handlers
+### Public API operations
 
-[`api.py`](../../src/viper/api.py) imports two handlers from the private `_api`
-package.
+The initial privacy refactor gave shared application handlers normal names and
+left their bodies in the private `_api` package. The approved
+[public module ownership contract](module-ownership.md) completes that move:
+`viper.api` defines each public operation body and registers that same local
+function. The pass-through wrappers and `_api/handlers.py` are retired.
 
-| Current | Proposed |
-| --- | --- |
-| `_run_request` | `run_request` |
-| `_retry_request` | `retry_request` |
-
-The operation registry and the Python entry points must reference the new
-names. Existing request and success models remain unchanged.
+Existing request models, result models, operation names, signatures, and
+returned values remain unchanged.
 
 ### Shared test support
 

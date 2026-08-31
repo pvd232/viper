@@ -242,6 +242,7 @@ typed graph delta
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
 | [Contract requirement traceability](contract-requirement-traceability.md) | Draft after audit | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
 | [Project data root](project-data-root.md) | Draft after audit | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
+| [Public module ownership](module-ownership.md) | Approved design | One defining module for API operations, verification operations, and verification types |
 | [Deterministic system impact graph](system-impact-graph.md) | Draft after audit | Fixed-context source compilation, dependency DAGs, graph deltas, and impact closure |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
@@ -262,6 +263,7 @@ The contracts share models. One contract owns each shared decision:
 | Each contract requirement reaches named verifier rules, exact implementation owners, populated traces, and exact test functions | Contract requirement traceability |
 | `viper init ROOT` selects the source, protocol, working-data, and local-state tree | Project data root |
 | `.viper/store` remains a separate immutable subtree beneath the selected root | Project data root |
+| Public API and verification symbols are implemented in the modules callers import | Public module ownership |
 | Fixed external inputs and observed dynamic resolution define deterministic development impact | Deterministic system impact graph |
 | Typed dependency cycles condense into the unweighted DAG used for impact closure | Deterministic system impact graph |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
@@ -277,7 +279,7 @@ The contracts share models. One contract owns each shared decision:
 | One experiment expands into ordinary `RunPlanDraft` values | Experiment expansion |
 | A skipped stage records `StageReuseReceipt` and a new target snapshot | Verified stage reuse |
 | Cross-run search rows remain derived from immutable references | Provenance catalog and MCP |
-| MCP tool schemas and calls reuse typed API models and handlers | Provenance catalog and MCP |
+| MCP tool schemas and calls reuse typed API models and registered operations | Provenance catalog and MCP |
 | Scientific labels keep declared, inferred, and reviewed origins separate | Experiment knowledge primitives |
 | Controlled comparisons use verified run and measurement references | Experiment knowledge primitives |
 | Exact filters run before vector ranking; exact identity or reviewed equivalence rejects a duplicate | Experiment knowledge primitives |
@@ -296,6 +298,7 @@ a new digest.
 <!-- contract-baseline: contract-requirement-traceability.md sha256=2bf7c2512e5b3a9d993badc393c10c556e9557c16c37930fec544ea398154f72 -->
 
 <!-- contract-baseline: project-data-root.md sha256=7a63f4312299f2c755bb249e5efaed571569f1d2e456d759ab02b8282e0315fa -->
+<!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
 <!-- contract-baseline: system-impact-graph.md sha256=cb89e38c3beff5b786c17b57a9424c1cb92e98d23b466d092f421d281e99e580 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
@@ -346,7 +349,8 @@ The review found and repaired these schema conflicts:
 | Every resolved project stage required an invocation | Add executed and reused completion variants plus `StageReuseReceipt`. |
 | Stage reuse could select a digest from an untrusted cache | Derive candidates from the catalog and fully verify the source run before reuse. |
 | Cross-run inspection lacked a source-of-truth boundary | Make the catalog rebuildable and require an immutable source reference on every result. |
-| An MCP implementation could duplicate API models and handlers | Generate tool schemas from typed API models and route calls through `dispatch()`. |
+| An MCP implementation could duplicate API models and operations | Generate tool schemas from typed API models and route calls through `dispatch()`. |
+| Public API modules depended on private modules that imported their public types back | Move public operation bodies and verification types to their final defining modules before compiling the system graph. |
 | Catalog promises exceeded its typed query fields | Add source, input, environment, artifact, and benchmark filters plus a typed benchmark query. |
 | A reused completion could become the source of another reuse receipt | Restrict reuse sources to verified `ExecutedStageCompletion` records. |
 | Batch timeout behavior was undefined | Forward one positive child-process timeout to each existing `execution.run()` call on every surface. |
@@ -510,10 +514,11 @@ Phase 11 -> Phase 12 -> Phase 13 -> Phase 14 -> Phase 15
 Phase 15 -> Phase 16 -> Phase 17 -> Phase 18
 ```
 
-Phase 0 first establishes contract traceability. It then establishes the root
-used by every later local path and the compiler used by every later impact
-review. Phases 2 and 4 may occur on separate branches after Phase 1. The pair-coding
-sequence in this document keeps one active branch and completes them in order.
+Phase 0 first establishes contract traceability and the root used by every
+later local path. It then gives public API and verification symbols one owner
+before compiling those relationships into the system graph. Phases 2 and 4 may
+occur on separate branches after Phase 1. The pair-coding sequence in this
+document keeps one active branch and completes them in order.
 
 ## 6. Pair-coding protocol
 
@@ -538,18 +543,20 @@ Each pair-coding turn changes one bounded behavior. The user writes the code.
 Codex inspects the live file, explains the next edit, and chooses the next test
 from the observed result.
 
-## 7. Phase 0 — traceability, project root, and deterministic system impact
+## 7. Phase 0 — traceability, project root, module ownership, and system impact
 
 **Depends on:** Module-privacy work already implemented.
 
 **Contracts:** [Contract requirement traceability](contract-requirement-traceability.md),
-[project data root](project-data-root.md), and
+[project data root](project-data-root.md),
+[public module ownership](module-ownership.md), and
 [deterministic system impact graph](system-impact-graph.md)
 
 **Outcome:** Every contract requirement has a named rule, exact implementation
 owner, populated trace, and exact test. `viper init ROOT` creates the complete
-protocol tree and every later local operation resolves that same root. VIPER
-can then compile two source revisions under one fixed context, publish canonical
+protocol tree and every later local operation resolves that same root. Public
+API and verification imports then identify their defining modules. VIPER can
+compile that stable source tree under one fixed context, publish canonical
 dependency graphs, and return the exact affected requirements and observing
 tests before later phases change code.
 
@@ -779,7 +786,7 @@ def _parse_verifier_rules(
     return tuple(sorted(rules, key=lambda rule: rule.rule_id))
 ```
 
-**Check:** parse the three `PHASE_ZERO_CONTRACTS` and inspect their ordered
+**Check:** parse the four `PHASE_ZERO_CONTRACTS` and inspect their ordered
 requirement and rule IDs.
 
 ##### Block 3 — checklist edges and Python symbols
@@ -853,7 +860,7 @@ Reuse the current AST and Mermaid checks in `tests/test_documentation.py` as
 the migration oracle. Move shared parsing into production after the new
 functions pass parity. Keep test helpers inside the test suite.
 
-**Check:** run the populated-trace and worked-example tests for all three Phase
+**Check:** run the populated-trace and worked-example tests for all four Phase
 0 contracts, including one omitted-trace fixture and one placeholder fixture.
 
 ##### Block 5 — canonical compiler and bytes
@@ -861,7 +868,7 @@ functions pass parity. Keep test helpers inside the test suite.
 **File:** `src/viper/_contract_traceability.py`
 
 Add `json`, `compile_contract_traceability()`, and
-`serialize_contract_traceability()`. The compiler defaults to the three Phase
+`serialize_contract_traceability()`. The compiler defaults to the four Phase
 0 contracts during bootstrap and accepts explicit contract paths for fixture
 tests.
 
@@ -981,7 +988,39 @@ working-file edit must leave the immutable copy retrievable.
 
 </details>
 
-### 7.3 System graph compiler
+### 7.3 Public module ownership
+
+- [ ] Move verification errors, policies, result dataclasses, and aliases into
+      `src/viper/verification/models.py` while preserving their declarations.
+      <!-- pair-block: P0-MOD-01 -->
+      <!-- contract-implementation: requirement=MOD-01 rule=module.verification.owner state=planned owner=src/viper/verification/models.py:VerificationPolicy -->
+- [ ] Replace `src/viper/verification.py` with the public
+      `src/viper/verification/__init__.py` package module. Move every public
+      verification operation there and update each importer to use the defining
+      operation or model module.
+      <!-- pair-block: P0-MOD-02 -->
+- [ ] Move every helper and operation body from `src/viper/_api/handlers.py`
+      into `src/viper/api.py`. Point `HANDLER_REGISTRY` at those local
+      functions, then delete the pass-through wrappers and private handler
+      module. <!-- implements: MOD-01 -->
+      <!-- pair-block: P0-MOD-03 -->
+      <!-- contract-implementation: requirement=MOD-01 rule=module.api.owner state=planned owner=src/viper/api.py:HANDLER_REGISTRY -->
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** Move verification models first. Both verification operations and
+API operations consume those types.
+
+**Hint 2:** Preserve every function signature and body. This refactor changes
+the defining module while behavior remains fixed.
+
+**Hint 3:** Delete a retired module only after every direct importer points to
+the new owner.
+
+</details>
+
+### 7.4 System graph compiler
 
 - [ ] Add the exact inventory, analysis-receipt, context, node, role, edge,
       edge-evidence, resolution-attempt, observation, unresolved-dependency,
@@ -1057,7 +1096,18 @@ component edge carries the sorted relation kinds crossing that pair.
 
 </details>
 
-### 7.4 Focused proof
+### 7.5 Focused proof
+
+- [ ] In `tests/test_public_api.py`, require every API registry callable and
+      verification operation to belong to its public module; require every
+      verification type to belong to `viper.verification.models`; reject both
+      retired source files; and preserve existing API and verification results.
+      <!-- pair-block: P0-MOD-04 -->
+      <!-- verifies: MOD-01 -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=planned test=tests/test_public_api.py:test_api_operations_are_locally_defined -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=planned test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
 
 - [ ] In `tests/test_documentation.py`, reject duplicate requirements and
       orphan rules; require canonical declarations.
@@ -1158,6 +1208,9 @@ component edge carries the sorted relation kinds crossing that pair.
 python -m pytest \
   tests/test_project_init.py \
   tests/test_storage.py \
+  tests/test_public_api.py \
+  tests/test_api.py \
+  tests/test_verification.py \
   tests/test_validation_architecture.py \
   tests/test_inspection.py \
   tests/test_documentation.py -q
@@ -1167,7 +1220,8 @@ python -m pytest \
 
 1. `Trace contract requirements to code and tests`
 2. `Bind every local operation to one project root`
-3. `Compile deterministic system impact graphs`
+3. `Give public modules one implementation owner`
+4. `Compile deterministic system impact graphs`
 
 Every later phase begins by compiling its candidate source revision under the
 reviewed context manifest. Its focused test selection must contain every test
@@ -2047,8 +2101,7 @@ authentication exchange, error mapping, and service-side seal semantics.
 - [ ] Require `--output` to be a directory for all artifacts, a bundle, or a
       list.
 - [ ] Add `RestoreRequest`, `RestoreSuccess`, the `restore` operation name, and
-      matching registry and handler entries in `src/viper/api.py` and
-      `_api/handlers.py`.
+      the matching registry entry and operation body in `src/viper/api.py`.
 - [ ] Route the Python function, typed handler, and CLI through one restore
       engine and require equal `RestoreResult` file sets.
 
@@ -2202,7 +2255,7 @@ file writes after expansion returns.
       <!-- implements: EXP-03 -->
 - [ ] Add `run_many` to `OperationName`, `OPERATIONS`, the schema registry,
       request registry, and handler registry.
-- [ ] Add the handler to `src/viper/_api/handlers.py` and return the same
+- [ ] Add the operation body to `src/viper/api.py` and return the same
       `ExperimentExecutionResult` as the Python function.
 - [ ] Add `viper run-many` with an ordered list of run-spec paths,
       `--max-concurrency`, `--timeout-seconds`, and `--stop-on-failure`.
@@ -2486,7 +2539,7 @@ operations and immutable-reference operations.
 - [ ] Validate every successful structured result with its success model.
 - [ ] Validate `ViperFailure` results and credential redaction.
 - [ ] Prove read mode omits execution tools.
-- [ ] Prove execute mode calls the same mocked handlers as typed API dispatch.
+- [ ] Prove execute mode calls the same mocked operations as typed API dispatch.
 - [ ] Prove a path outside the fixed root fails before the handler runs.
 - [ ] Exercise one stdio discovery, list, and call sequence.
 - [ ] Run: <!-- verifies: PCM-03, PCM-04 -->
@@ -2685,7 +2738,8 @@ recorded result to that fixture and those index settings.
       definitions from that module.
 - [ ] Add typed knowledge publication, exact search, graph traversal, and
       similarity-search request and success models to `src/viper/api.py`.
-- [ ] Route every operation through `src/viper/_api/handlers.py`.
+- [ ] Define every operation body in `src/viper/api.py` and register that local
+      function in `HANDLER_REGISTRY`.
 - [ ] Add `viper knowledge publish`, `viper knowledge search`, and
       `viper knowledge refresh` commands with deterministic JSON output.
 - [ ] Add knowledge searches to MCP read mode. Add publication and refresh to
@@ -2818,7 +2872,7 @@ old contract.
 | `src/viper/runs.py` | Input/pointer relationships, terminal cloud references, executed and reused stage completion | 7, 9, 14 |
 | `src/viper/catalog.py` | Rebuildable SQLite catalog, exact queries, lineage rows, stage-reuse lookup, knowledge graph, and vector-view indexes | 13, 14, 17 |
 | `src/viper/knowledge.py` | Ontology, assignments, modulations, effects, impacts, diagnostics, journals, vectors, and immutable publication | 16, 17 |
-| `src/viper/mcp.py` | Deterministic MCP tools generated from typed API models and handlers | 15, 17 |
+| `src/viper/mcp.py` | Deterministic MCP tools generated from typed API models and registered operations | 15, 17 |
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
 | `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
 | `src/viper/preflight.py` | Renamed HTTP implementation checks, runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
@@ -2844,11 +2898,10 @@ old contract.
 | `src/viper/_verification/plan.py` | Draft-derived graph, plan/source commit separation, keys, objectives, pointers, benchmarks | 4–8 |
 | `src/viper/_verification/metrics.py` | Parameter binding, complete benchmark metrics, and reused source metric evidence | 4, 8, 14 |
 | `src/viper/_verification/storage.py` | Explicit project-root reconstruction, cloud fetch, snapshot list, and restore identity | 0, 9, 10 |
-| `src/viper/verification.py` | Dispatch every new verifier rule | 2–10, 13, 14, 16–17 |
+| `src/viper/verification/__init__.py` | Define public verification operations and dispatch every new verifier rule | 0, 2–10, 13, 14, 16–17 |
+| `src/viper/verification/models.py` | Define public verification errors, policies, result records, and callable aliases | 0 |
 | `src/viper/execution/__init__.py` | Define restore and batch operations; keep result types in `execution.results` | 9, 10, 12 |
 | `src/viper/api.py` | Root-aware developer graph operations, Python freeze inputs, result refs, restore, batch, catalog, knowledge, and MCP-owned operation schemas | 0, 5–17 |
-| `src/viper/_api/__init__.py` | Mark the internal API implementation package | 10 |
-| `src/viper/_api/handlers.py` | Resolve project roots; compile system graphs and drafts; return refs; restore, batch, catalog, and knowledge handlers | 0, 5–17 |
 | `src/viper/cli.py` | `--root`, system graph commands, Python workflow changes, restore, batch, catalog, knowledge, and MCP commands | 0, 10–17 |
 | `src/viper/project_init.py` | Add the root marker and complete protocol tree; replace the generated download callable; remove legacy patterns; add the terminal knowledge workflow | 0, 2, 11, 18 |
 | `src/viper/__init__.py` | Remain free of forwarding exports | 2, 4–17 |
@@ -2927,13 +2980,14 @@ These items stay outside this implementation sequence:
 
 ## 28. Current position
 
-The latest system review places all twelve implementation contracts in Draft.
+The latest system review leaves implementation pending across the active
+contract stack.
 The experiment-knowledge contract activates the deterministic foundation from
 the research-memory roadmap. Learned representations, literature ingestion,
 outcome models, acquisition, and continual learning remain deferred.
 Implementation remains pending. The first missing result is an initialized
-project whose marker, protocol tree, local store, and strict system impact graph
-pass the Phase 0 gate.
+project whose marker, protocol tree, local store, public module ownership, and
+strict system impact graph pass the Phase 0 gate.
 
 Once Phase 0 passes, Phase 1 introduces destination-neutral local publication.
 
