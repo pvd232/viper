@@ -13,6 +13,29 @@ from viper.api import (
     dispatch,
     init_project,
 )
+from viper.project import find_project_root, resolve_project_root
+from viper.project_init import initialize_project
+
+
+def test_init_project_establishes_discoverable_root(tmp_path: Path) -> None:
+    """Create one complete project whose root is discoverable from a child."""
+    target = tmp_path / "outside" / "starter"
+    initialize_project(target, "sample_project")
+    subprocess.run(["git", "init", str(target)], check=True, capture_output=True)
+
+    child = target / "src" / "sample_project"
+    assert find_project_root(child) == target.resolve()
+    assert resolve_project_root(child) == target.resolve()
+
+    required = {
+        "viper.toml",
+        "inputs",
+        "benchmarks",
+        "experiments",
+        ".gitignore",
+        "pyproject.toml",
+    }
+    assert required <= {path.name for path in target.iterdir()}
 
 
 def test_init_project_generates_importable_five_stage_project(

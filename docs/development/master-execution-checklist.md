@@ -617,15 +617,15 @@ later phases change code.
 
 ### 7.1 Project root
 
-- [ ] Add `ProjectSettings`, `ProjectRootError`, `find_project_root()`, and
+- [x] Add `ProjectSettings`, `ProjectRootError`, `find_project_root()`, and
       `resolve_project_root()` in `src/viper/project.py`.
       <!-- pair-block: P0-PDR-01 -->
       <!-- implements: PDR-01 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=planned owner=src/viper/project.py:resolve_project_root -->
-- [ ] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=implemented owner=src/viper/project.py:resolve_project_root -->
+- [x] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
       staged project scaffold in `src/viper/project_init.py`.
       <!-- pair-block: P0-PDR-02 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=planned owner=src/viper/project_init.py:initialize_project -->
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=implemented owner=src/viper/project_init.py:initialize_project -->
 - [ ] Route public default roots through `resolve_project_root()` and pass the
       resolved value into internal operations exactly once.
       <!-- pair-block: P0-PDR-03 -->
@@ -915,12 +915,12 @@ edge IDs on every crossing component edge.
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.declaration.anchored state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
 
-- [ ] In `tests/test_project_init.py`, initialize outside the current directory,
+- [x] In `tests/test_project_init.py`, initialize outside the current directory,
       discover the root from a child directory, and assert the complete tree.
       <!-- pair-block: P0-PROOF-05 -->
       <!-- verifies: PDR-01 -->
-      <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=planned test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
-      <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=planned test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
+      <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=implemented test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
+      <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=implemented test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
 - [ ] In `tests/test_storage.py`, publish beneath the selected root, mutate the
       working artifact, retrieve the original immutable bytes, and reject an
       escaping store. In `tests/test_validation_architecture.py`, require each
