@@ -62,7 +62,7 @@ from viper.metrics import (
     MetricSpec,
 )
 from viper.parameters import ParameterModelRef
-from viper.project_init import initialize_project
+from viper.project import init
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -248,7 +248,7 @@ def test_generated_project_executes_five_stage_benchmark(
 ) -> None:
     """Run generated code through acquisition, training, and confirmation."""
     root = tmp_path / "generated"
-    initialize_project(root, "sample_project")
+    init(root, "sample_project")
     run_git(root, "init", "--quiet")
     run_git(root, "config", "user.email", "viper@example.com")
     run_git(root, "config", "user.name", "VIPER Test")

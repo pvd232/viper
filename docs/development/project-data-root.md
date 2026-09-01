@@ -55,14 +55,14 @@ The two sets of files share one root and retain separate paths.
 ### Inspected path
 
 `viper init` already accepts a target path. `InitProjectRequest.path` reaches
-`initialize_project(path, package)`, which writes the starter project under that
+`init(path, package)`, which writes the starter project under that
 path. Runtime functions separately receive `repository_root` or default a
 public helper's `repository_root` argument to `Path.cwd()`.
 
 ```text
 viper init TARGET
 -> InitProjectRequest.path
--> initialize_project(path, package)
+-> init(path, package)
 -> starter files beneath TARGET
 
 later command
@@ -84,7 +84,7 @@ Initialization and later execution currently start from separate path values.
 flowchart TD
     Init["viper init TARGET"]
     Request["InitProjectRequest.path"]
-    Scaffold["initialize_project(path, package)"]
+    Scaffold["init(path, package)"]
     Files["Starter files beneath TARGET"]
     Command["Later public command"]
     Choice["repository_root or helper default Path.cwd()"]
@@ -128,12 +128,12 @@ runtime value shared by later operations.
 
 ```mermaid
 flowchart TD
-    Settings["Proposed ProjectSettings"]
+    Settings["Proposed Settings"]
     Config["Proposed ViperConfig"]
     Marker["Proposed ROOT/viper.toml"]
-    Find["Proposed find_project_root()"]
-    Resolve["Proposed resolve_project_root()"]
-    Path["Proposed resolve_project_path()"]
+    Find["Proposed find_root()"]
+    Resolve["Proposed resolve_root()"]
+    Path["Proposed resolve_path()"]
     Store["LocalArtifactStore<br/>ROOT/.viper/store"]
 
     Settings -->|"project"| Config
@@ -162,15 +162,15 @@ flowchart TD
     Config["ViperConfig<br/>ROOT/viper.toml"]
     Success["InitProjectSuccess<br/>project_root = ROOT"]
     Command["Later API or CLI call"]
-    Root["resolve_project_root()<br/>canonical ROOT"]
+    Root["resolve_root()<br/>canonical ROOT"]
     Relative["RepoRelPath"]
-    Governed["resolve_project_path()<br/>symlink-free descendant"]
+    Governed["resolve_path()<br/>symlink-free descendant"]
     Working["Working file beneath ROOT"]
     Store["LocalArtifactStore<br/>ROOT/.viper/store"]
     Reference["LocalFileRef or<br/>LocalStageResultSnapshotRef"]
 
     Init -->|"ROOT + package"| Request
-    Request -->|"initialize_project()"| Config
+    Request -->|"init()"| Config
     Config -->|"returns"| Success
     Command -->|"explicit root or marker search"| Root
     Success -->|"same selected root"| Root
@@ -207,7 +207,7 @@ schema_version = 1
 The `[project]` table uses this complete model:
 
 ```python
-class ProjectSettings(BaseModel):
+class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[1]
@@ -216,7 +216,7 @@ class ProjectSettings(BaseModel):
 class ViperConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    project: ProjectSettings
+    project: Settings
     storage: StorageSettings = Field(default_factory=StorageSettings)
 ```
 
@@ -268,19 +268,15 @@ The root resolver returns one runtime path. Protocol serializers receive
 relative paths only.
 
 ```python
-def find_project_root(start: Path | None = None) -> Path:
+def find_root(start: Path) -> Path:
     """Return the nearest parent containing viper.toml."""
 
 
-def resolve_project_root(
-    root: Path | None = None,
-    *,
-    start: Path | None = None,
-) -> Path:
-    """Validate an explicit root or discover one from start."""
+def resolve_root(root: Path | None = None) -> Path:
+    """Return a root with a valid marker at its Git work-tree boundary."""
 
 
-def resolve_project_path(
+def resolve_path(
     root: Path,
     path: RepoRelPath,
     *,
@@ -289,15 +285,15 @@ def resolve_project_path(
     """Return one symlink-free path beneath the canonical project root."""
 ```
 
-`resolve_project_root()` applies this order:
+`resolve_root()` applies this order:
 
 1. An explicit `root` wins.
-2. Otherwise, `find_project_root(start)` uses `Path.cwd()` when `start` is
+2. Otherwise, `find_root(start)` uses `Path.cwd()` when `start` is
    absent, then walks from the resolved starting path through its parents.
 3. The selected directory must contain a valid `viper.toml`.
 4. The selected directory must be a Git work tree before freezing, source
    verification, or execution begins.
-5. Failure raises `ProjectRootError` before reading or writing experiment data.
+5. Failure raises `RootError` before reading or writing experiment data.
 
 The resolver canonicalizes the selected root once with `Path.resolve()`. VIPER
 then rejects any symlink in a governed descendant path. This applies to local
@@ -309,7 +305,7 @@ symlink check handles both an accidental link and a link created to escape the
 project tree. The resolved-boundary check supplies a final defense after
 symlink rejection.
 
-`resolve_project_path()` applies the same rule to every governed descendant.
+`resolve_path()` applies the same rule to every governed descendant.
 For a read, each component through the final source must exist as an ordinary
 file-tree location. For a write, every existing parent and target must also be
 an ordinary file-tree location. The function resolves the candidate after
@@ -353,14 +349,14 @@ import pytest
 
 from viper.api import InitProjectRequest, InitProjectSuccess
 from viper.project import (
-    ProjectPathError,
-    ProjectSettings,
+    PathError,
+    Settings,
     ViperConfig,
-    find_project_root,
-    resolve_project_path,
-    resolve_project_root,
+    find_root,
+    init,
+    resolve_path,
+    resolve_root,
 )
-from viper.project_init import initialize_project
 from viper.references import LocalFileRef, LocalStageResultSnapshotRef
 from viper.storage import (
     LocalArtifactStore,
@@ -376,13 +372,13 @@ with TemporaryDirectory() as temporary_directory:
         path=root,
         package="weekend_models",
     )
-    created_files = initialize_project(request.path, request.package)
+    created_files = init(request.path, request.package)
     success = InitProjectSuccess(
         project_root=request.path.resolve(),
         files=created_files,
     )
 
-    project_settings = ProjectSettings(schema_version=1)
+    project_settings = Settings(schema_version=1)
     storage_settings = StorageSettings(
         destination=LocalStorageDestination(),
     )
@@ -391,20 +387,20 @@ with TemporaryDirectory() as temporary_directory:
         storage=storage_settings,
     )
 
-    # initialize_project() writes this exact configuration in the target API.
+    # init() writes this exact configuration in the target API.
     assert config.project.schema_version == 1
     assert config.storage.destination.kind == "local"
     assert success.project_root == root.resolve()
 
     package_directory = root / "src" / "weekend_models"
-    discovered_root = find_project_root(package_directory)
-    selected_root = resolve_project_root(start=package_directory)
+    discovered_root = find_root(package_directory)
+    selected_root = resolve_root(package_directory)
     assert discovered_root == selected_root == success.project_root
 
     source_path = root / "inputs" / "train.csv"
     source_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.write_bytes(b"feature,label\n1,0\n")
-    governed_source = resolve_project_path(
+    governed_source = resolve_path(
         selected_root,
         "inputs/train.csv",
         operation="read",
@@ -413,7 +409,7 @@ with TemporaryDirectory() as temporary_directory:
 
     artifact_path = "experiments/tiny/model.pt"
     artifact_bytes = b"weights-v1"
-    working_artifact = resolve_project_path(
+    working_artifact = resolve_path(
         selected_root,
         artifact_path,
         operation="write",
@@ -453,8 +449,8 @@ with TemporaryDirectory() as temporary_directory:
     linked_input = root / "inputs" / "link.csv"
     linked_input.symlink_to(outside)
 
-    with pytest.raises(ProjectPathError):
-        resolve_project_path(
+    with pytest.raises(PathError):
+        resolve_path(
             selected_root,
             "inputs/link.csv",
             operation="read",
@@ -477,11 +473,11 @@ destination = "local"
 
 ### Initialization
 
-`initialize_project()` receives the selected root and performs one staged
+`init()` receives the selected root and performs one staged
 write:
 
 ```python
-def initialize_project(path: Path, package: str) -> tuple[Path, ...]: ...
+def init(path: Path, package: str) -> tuple[Path, ...]: ...
 ```
 
 The target operation is:
@@ -506,7 +502,7 @@ Every local public entry point follows one root path:
 
 ```text
 explicit root or marker discovery from the current directory
--> resolve_project_root()
+-> resolve_root()
 -> validated absolute project root
 -> authoring, freezing, execution, verification, catalog, knowledge, or restore
 ```
@@ -586,14 +582,14 @@ digests and byte counts through the existing storage rules.
 
 | Surface | Required statement |
 | --- | --- |
-| `src/viper/project_init.py` | Add `viper.toml`, complete the reserved protocol tree, and preserve staged atomic initialization. |
-| `src/viper/project.py` | Add `ProjectSettings`, `ProjectRootError`, `ProjectPathError`, `find_project_root()`, `resolve_project_root()`, and `resolve_project_path()`. |
+| `src/viper/project.py` | Add `viper.toml`, complete the reserved protocol tree, and preserve staged atomic initialization. |
+| `src/viper/project.py` | Add `Settings`, `RootError`, `PathError`, `find_root()`, `resolve_root()`, `resolve_path()`, and `init()`. |
 | `src/viper/api.py` | Keep `InitProjectRequest.path` and `InitProjectSuccess.project_root`; expose `root`, `left_root`, and `right_root`; resolve each selected root at the operation boundary. |
 | `src/viper/_api/handlers.py` | Receive the first root-aware operation bodies during `P0-PDR-03`; `P0-MOD-03` moves those bodies into `api.py` unchanged and deletes this transitional module. |
 | `src/viper/cli.py` | Document the `init` positional argument as `ROOT`; use `--root` on commands that need an explicit override. |
 | `src/viper/storage.py` | Construct `LocalArtifactStore` from the resolved project root and preserve `.viper/store` as a separate subtree. |
 | `src/viper/_verification/storage.py` | Replace `Path.cwd()` reconstruction with the explicit verified root. |
-| `src/viper/authoring.py` | Resolve default roots through `resolve_project_root()` before freezing. |
+| `src/viper/authoring.py` | Resolve default roots through `resolve_root()` before freezing. |
 | `src/viper/execution/_attempt.py` | Pass one resolved root through attempt execution and every stage boundary. |
 | `src/viper/execution/_run.py` | Resolve the public run and restore root once before attempt execution. |
 | `src/viper/execution/_metric.py` | Use the attempt's resolved root for metric inputs and implementations. |
@@ -608,7 +604,7 @@ digests and byte counts through the existing storage rules.
 
 | Current occurrence | Disposition |
 | --- | --- |
-| Public `Path.cwd()` defaults that bypass root discovery | Replace with `root: Path | None = None` and `resolve_project_root()`. |
+| Public `Path.cwd()` defaults that bypass root discovery | Replace with `root: Path | None = None` and `resolve_root()`. |
 | CLI `--repository-root` spelling | Replace with `--root`; delete the old spelling during this alpha migration. |
 | `_verification/storage.py` use of `Path.cwd()` | Delete and require the verifier's resolved root. |
 | Internal `repository_root` parameters | Retain where the name distinguishes the resolved Git/project root from another runtime path. |
@@ -638,8 +634,8 @@ state = "planned"
 scenario = "A command launched from a package child directory publishes one artifact."
 setup = "start=/tmp/weekend-models/src/weekend_models; artifact=experiments/tiny/model.pt; bytes=weights-v1"
 input = "viper.toml at /tmp/weekend-models/viper.toml"
-invocation = "resolve_project_root(start) returns /tmp/weekend-models once and passes it to LocalArtifactStore"
-implementation = "src/viper/project.py:resolve_project_root"
+invocation = "resolve_root(start) returns /tmp/weekend-models once and passes it to LocalArtifactStore"
+implementation = "src/viper/project.py:resolve_root"
 test = "tests/test_storage.py:test_store_uses_selected_project_root"
 outcome.kind = "accepted"
 outcome.result = "working bytes and immutable bytes resolve beneath /tmp/weekend-models"
@@ -662,18 +658,18 @@ state = "planned"
 scenario = "A local training input names a symlink beneath the selected root."
 setup = "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to /tmp/source.csv"
 input = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
-invocation = "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
-implementation = "src/viper/project.py:resolve_project_path"
+invocation = "resolve_path(ROOT, 'inputs/link.csv', operation='read')"
+implementation = "src/viper/project.py:resolve_path"
 test = "tests/test_validation_architecture.py:test_project_paths_reject_symlinks"
 outcome.kind = "rejected"
-outcome.rejected_at = "src/viper/project.py:resolve_project_path"
-outcome.error_type = "ProjectPathError"
+outcome.rejected_at = "src/viper/project.py:resolve_path"
+outcome.error_type = "PathError"
 outcome.message_match = "symlink"
 ```
 
 ## 10. Implementation order
 
-1. Add the root marker, `ProjectSettings`, and root resolver with unit tests.
+1. Add the root marker, `Settings`, and root resolver with unit tests.
 2. Complete the generated protocol tree and acceptance test.
 3. Replace public request and CLI root names, then resolve each selected root
    once at the current operation boundary.

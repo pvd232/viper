@@ -328,19 +328,19 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=37cbd0da1c3297068d3cf25bc8eca4ff980021db850c7104a524d354df4099ec -->
+<!-- contract-baseline: contract-traceability.md sha256=1cc97a63c2ca715f71abff02084b8bf81ba40dc7da6b6cc5121e9de8d7f813da -->
 
-<!-- contract-baseline: project-data-root.md sha256=be4656fdf8a74d78b537c7d13ce907b6de1afc42fbc95e0093d0d9f761ae8bfd -->
+<!-- contract-baseline: project-data-root.md sha256=79eb1100e89642c2bb79c51627c068552bab743d910cefbbe3ebd0bc6276a5af -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
 <!-- contract-baseline: system-impact-compiler.md sha256=a4633fe87d789eed2ccf53e086dc3effb4700aaa44c4416a7b2e7b40affe05c9 -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=c6d9eb733483e526f3d5f48a6ee7d9286dd0eb9aff872ba6eb8d6936dcf61eed -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=1e3b082c70675f1b8c93b900749eb52b69644760b1eeb5aec58af55a60a1436d -->
 <!-- contract-baseline: external-input-roots.md sha256=e392471c58db799b0766dc1607a9a0821d6df66fa194fc2c391c7a0d3335ccc8 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=2a783dbb3d348516f647efb837fccdb0917de008705c142144fbd6b8a9fd1b03 -->
 <!-- contract-baseline: automatic-input-resolution.md sha256=0bcd5fba467acee497220a99085663e085706caf4d3b93ea28b865d3879a5c78 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=a36055d171989130aa625df16866fcafdcaa5d7aa01a942041ae3a88c2323ed4 -->
 <!-- contract-baseline: remote-storage.md sha256=bb7ec5224ec46daf389293c4504236816ba05c58e3fefb63e721dcbad846556d -->
 <!-- contract-baseline: experiment-expansion.md sha256=4fcbd2e40e16651f697544f41923d331d04b99e631b6072e42fbcad96cafcc98 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=727ffd1aab1859a38af0738dce210225a5b701071f0df41e89bbb549f1d31932 -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=16d545bcdb3873db34a5aab04c4e1d4273c2f6b75c1cebd4a7e3a5574db81488 -->
 <!-- contract-baseline: stage-reuse.md sha256=30345396844be978a004167e27af5fc6b38e83dbc32a3b19a94e0ed030d89ed8 -->
 <!-- contract-baseline: experiment-knowledge-primitives.md sha256=728758e2ffe67b5aba4d6a2b7d09a682090bbb48e429645045ca694b43796348 -->
 <!-- contract-baseline: research-memory-roadmap.md sha256=df705a3646fc1ed81bd36564477b06650ccd465a01d7ecfa74affa411d7e8eb4 -->
@@ -616,31 +616,31 @@ later phases change code.
 
 ### 7.1 Project root
 
-- [ ] Add `ProjectSettings`, `ProjectRootError`, `find_project_root()`, and
-      `resolve_project_root()` in `src/viper/project.py`.
+- [ ] Add `Settings`, `RootError`, `find_root()`, and `resolve_root()` in
+      `src/viper/project.py`.
       <!-- pair-block: P0-PDR-01 -->
       <!-- implements: PDR-01 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=planned owner=src/viper/project.py:resolve_project_root -->
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=planned owner=src/viper/project.py:resolve_root -->
 - [ ] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
-      staged project scaffold in `src/viper/project_init.py`.
+      staged project scaffold in `src/viper/project.py`.
       <!-- pair-block: P0-PDR-02 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=planned owner=src/viper/project_init.py:initialize_project -->
-- [ ] Route public default roots through `resolve_project_root()` and pass the
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=planned owner=src/viper/project.py:init -->
+- [ ] Route public default roots through `resolve_root()` and pass the
       resolved value into internal operations exactly once.
       <!-- pair-block: P0-PDR-03 -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=planned owner=src/viper/project.py:resolve_project_root -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=planned owner=src/viper/project.py:resolve_project_root -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=planned owner=src/viper/project.py:resolve_root -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=planned owner=src/viper/project.py:resolve_root -->
 - [ ] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
       as the root-selection operation. <!-- implements: PDR-04 -->
       <!-- pair-block: P0-PDR-04 -->
       <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=planned owner=src/viper/cli.py:add_root -->
-- [ ] Add `resolve_project_path()` and reject every descendant symlink, logical
+- [ ] Add `resolve_path()` and reject every descendant symlink, logical
       traversal, and final resolved escape before any local read, write,
       capture, publication, or restore. <!-- implements: PDR-03 -->
       <!-- pair-block: P0-PDR-06 -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_project_path -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=planned owner=src/viper/project.py:resolve_path -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_path -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=planned owner=src/viper/project.py:resolve_path -->
 - [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
       at their protocol paths and preserve separate immutable copies.
       <!-- pair-block: P0-PDR-05 -->
@@ -918,8 +918,8 @@ edge IDs on every crossing component edge.
       discover the root from a child directory, and assert the complete tree.
       <!-- pair-block: P0-PROOF-05 -->
       <!-- verifies: PDR-01 -->
-      <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=planned test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
-      <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=planned test=tests/test_project_init.py:test_init_project_establishes_discoverable_root -->
+      <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=planned test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
+      <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=planned test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
 - [ ] In `tests/test_storage.py`, publish beneath the selected root, mutate the
       working artifact, retrieve the original immutable bytes, and reject an
       escaping store. In `tests/test_validation_architecture.py`, require each
@@ -1225,7 +1225,7 @@ receipt and artifact.
       artifact publication. Require `download.runner_custody` to reject it.
 - [ ] Remove callable-copy fixtures from `tests/fixtures.py` and generated
       project tests. Replace the generated download callable in
-      `src/viper/project_init.py` with `viper.authoring.download()` authoring.
+      `src/viper/project.py` with `viper.authoring.download()` authoring.
       <!-- implements: DRA-05 -->
 - [ ] Run: <!-- verifies: DRA-01, DRA-02, DRA-03, DRA-04, DRA-05 -->
 
@@ -1956,7 +1956,7 @@ freeze, run, benchmark, and restore.
 
 ### 18.1 Generated project
 
-- [ ] Rewrite `src/viper/project_init.py` around Python authoring.
+- [ ] Rewrite the scaffold in `src/viper/project.py` around Python authoring.
 - [ ] Generate four project-owned stage decorators and one runner-owned
       download declaration.
 - [ ] Generate complete parameters, metrics, diagnostics, loaders, HTTP,

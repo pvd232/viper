@@ -186,7 +186,7 @@ flowchart TD
     Contract["Contract row<br/>PDR-03"]
     Rule["Verifier rule<br/>project.path.symlink_free"]
     Task["Checklist implementation marker<br/>planned source owner"]
-    Source["Source symbol<br/>resolve_project_path"]
+    Source["Source symbol<br/>resolve_path"]
     TestMarker["Checklist verification marker<br/>planned test owner"]
     Test["Test function<br/>test_project_paths_reject_symlinks"]
     Cases["Contract trace blocks<br/>success + rejection"]
@@ -476,7 +476,7 @@ current requirement-level marker:
 
 ```html
 <!-- implements: PDR-03 -->
-<!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_project_path -->
+<!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_path -->
 ```
 
 The focused-test task adds a precise verification marker:
@@ -511,12 +511,12 @@ state = "planned"
 scenario = "A local input names a symlink beneath the selected project root."
 setup = "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to /tmp/source.csv"
 input = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
-invocation = "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
-implementation = "src/viper/project.py:resolve_project_path"
+invocation = "resolve_path(ROOT, 'inputs/link.csv', operation='read')"
+implementation = "src/viper/project.py:resolve_path"
 test = "tests/test_validation_architecture.py:test_project_paths_reject_symlinks"
 outcome.kind = "rejected"
-outcome.rejected_at = "src/viper/project.py:resolve_project_path"
-outcome.error_type = "ProjectPathError"
+outcome.rejected_at = "src/viper/project.py:resolve_path"
+outcome.error_type = "PathError"
 outcome.message_match = "symlink"
 ```
 ````
@@ -612,7 +612,7 @@ rule = VerifierRule(
 
 implementation_location = RepoSymbolRef(
     path="src/viper/project.py",
-    symbol="resolve_project_path",
+    symbol="resolve_path",
 )
 test_location = RepoSymbolRef(
     path="tests/test_validation_architecture.py",
@@ -663,7 +663,7 @@ success = ContractTrace(
         "ExternalInputRef(source=LocalSource(path='inputs/train.csv'))"
     ),
     invocation=(
-        "resolve_project_path(ROOT, 'inputs/train.csv', operation='read')"
+        "resolve_path(ROOT, 'inputs/train.csv', operation='read')"
     ),
     implementation=implementation_location,
     test=test_location,
@@ -673,7 +673,7 @@ success = ContractTrace(
 
 rejected_outcome: TraceOutcome = RejectedTraceOutcome(
     rejected_at=implementation_location,
-    error_type="ProjectPathError",
+    error_type="PathError",
     message_match="symlink",
 )
 rejection = ContractTrace(
@@ -690,7 +690,7 @@ rejection = ContractTrace(
         "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
     ),
     invocation=(
-        "resolve_project_path(ROOT, 'inputs/link.csv', operation='read')"
+        "resolve_path(ROOT, 'inputs/link.csv', operation='read')"
     ),
     implementation=implementation_location,
     test=test_location,
@@ -715,7 +715,7 @@ canonical_bytes = json.dumps(
 ).encode()
 
 assert traceability.rules[0].requirement_id == "PDR-03"
-assert traceability.edges[0].target.symbol == "resolve_project_path"
+assert traceability.edges[0].target.symbol == "resolve_path"
 assert traceability.edges[1].target.symbol == (
     "test_project_paths_reject_symlinks"
 )
@@ -726,7 +726,7 @@ The compiler reads the corresponding repository data:
 
 ```html
 <!-- verifier-rule: project.path.symlink_free requirement=PDR-03 -->
-<!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_project_path -->
+<!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_path -->
 <!-- contract-verification: requirement=PDR-03 rule=project.path.symlink_free state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
 ```
 

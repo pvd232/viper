@@ -100,7 +100,7 @@ and [`retrieval_body_path`](../../src/viper/paths.py).
 paths through `context.artifacts`. The project initializer writes a default
 callable that reads each retrieval body and writes the same bytes to the
 artifact path. [`DownloadContext`](../../src/viper/stages.py) and
-[`project_init.py`](../../src/viper/project_init.py) establish that behavior.
+[`project.py`](../../src/viper/project.py) establishes that behavior.
 
 **Current:** after the callable exits, `execute_stage_process()` hashes each
 file in `stage_spec.artifacts` and creates `ResolvedSingleFileArtifact` or
@@ -517,7 +517,7 @@ path.
 | The `run` and `store` parameters and `LocalArtifactStore.resolved_files()` call in `retrieve_download_inputs()` | Delete | Publish the body once through the completed stage snapshot. Keep the attempt-workspace transfer file as execution scratch. |
 | `HttpRetrievalContextBinding`, `StageContextBinding.retrievals`, `HttpRetrievalHandle`, and `DownloadContext` | Delete | The attempt process consumes `HttpResult` directly and writes `ResolvedHttpRetrieval`. |
 | Download path reconstruction in `viper._workers.stages` and `viper._verification.attempt` | Delete | Download skips the project-stage worker and stage-invocation verifier. Remove the resulting unused retrieval parameters and branches. |
-| The generated download callable in `viper.project_init` | Delete | Generate `viper.authoring.download()` authoring code with publication owned by the executor. |
+| The generated download callable in `viper.project` | Delete | Generate `viper.authoring.download()` authoring code with publication owned by the executor. |
 | Copy loops and mismatched request/artifact names in `test_execution_acceptance.py`, `test_run_execution.py`, and `test_execution_signals.py` | Replace | Use one shared name and let the executor publish the response body. |
 | The `test_verification_acceptance.py` fixture that models one `archive` request and three unrelated artifacts | Replace | Declare three same-named requests and single-file artifacts because this fixture exercises artifact verification. |
 | Mismatched `remote` and `dataset` names in `test_preflight.py` | Replace | Give the request and artifact one shared name. |
@@ -609,7 +609,7 @@ document. `download.receipt_artifact_identity` rejects that unequal reference.
    `tests/test_generated_project_acceptance.py`, and
    `tests/test_verification_acceptance.py`.
 7. Replace generated download-stage scaffolding with `viper.authoring.download()`
-   authoring in [`src/viper/project_init.py`](../../src/viper/project_init.py)
+   authoring in [`src/viper/project.py`](../../src/viper/project.py)
    and the protocol reference. Link
    [`external-input-roots.md`](external-input-roots.md) to this contract and
    route the shared snapshot member through the destination-aware publisher

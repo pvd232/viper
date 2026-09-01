@@ -396,7 +396,7 @@ generated schema with the owning request or success model in tests.
 
 The server starts with one explicit `--root`. That path is the sole repository
 boundary for the process. Every path-bearing resource URI, prompt argument, and
-tool argument passes through `resolve_project_path()` before dispatch. The MCP
+tool argument passes through `resolve_path()` before dispatch. The MCP
 2026-07-28 revision deprecates Roots for new implementations; VIPER therefore
 does not accept a second client-supplied root model.
 

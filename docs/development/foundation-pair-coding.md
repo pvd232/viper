@@ -63,8 +63,8 @@ repeatable regression check.
 ```toml pair-block
 id = "P0-PDR-01"
 requirements = ["PDR-01"]
-targets = ["src/viper/project.py:ProjectSettings", "src/viper/project.py:find_project_root", "src/viper/project.py:resolve_project_root"]
-tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
+targets = ["src/viper/project.py:Settings", "src/viper/project.py:find_root", "src/viper/project.py:resolve_root"]
+tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
 gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
 depends_on = []
 ```
@@ -86,7 +86,7 @@ from pydantic import Field, ValidationError
 from ._schema import ProtocolModel
 
 
-class ProjectSettings(ProtocolModel):
+class Settings(ProtocolModel):
     """Represent the ``[project]`` table stored in ``viper.toml``."""
 
     schema_version: Literal[1] = Field(
@@ -94,11 +94,11 @@ class ProjectSettings(ProtocolModel):
     )
 
 
-class ProjectRootError(ValueError):
+class RootError(ValueError):
     """Report a missing, invalid, or incompatible project root."""
 
 
-def find_project_root(start: Path) -> Path:
+def find_root(start: Path) -> Path:
     """Return the nearest ancestor of ``start`` that contains ``viper.toml``."""
     candidate = start.resolve()
     if candidate.is_file():
@@ -106,7 +106,7 @@ def find_project_root(start: Path) -> Path:
     for directory in (candidate, *candidate.parents):
         if (directory / "viper.toml").is_file():
             return directory
-    raise ProjectRootError(f"no viper.toml found from {start}")
+    raise RootError(f"no viper.toml found from {start}")
 
 
 def _require_git_work_tree(root: Path) -> None:
@@ -118,20 +118,20 @@ def _require_git_work_tree(root: Path) -> None:
         text=True,
     )
     if completed.returncode != 0:
-        raise ProjectRootError(f"project root is not in a Git work tree: {root}")
+        raise RootError(f"project root is not in a Git work tree: {root}")
     if Path(completed.stdout.strip()).resolve() != root:
-        raise ProjectRootError(f"viper.toml must be a Git work-tree root: {root}")
+        raise RootError(f"viper.toml must be a Git work-tree root: {root}")
 
 
-def resolve_project_root(root: Path | None = None) -> Path:
+def resolve_root(root: Path | None = None) -> Path:
     """Return a project root with a valid marker at its Git work-tree boundary."""
-    resolved = find_project_root(root if root is not None else Path.cwd())
+    resolved = find_root(root if root is not None else Path.cwd())
     marker = resolved / "viper.toml"
     try:
         data = tomllib.loads(marker.read_text(encoding="utf-8"))
-        ProjectSettings.model_validate(data.get("project", {}))
+        Settings.model_validate(data.get("project", {}))
     except (OSError, tomllib.TOMLDecodeError, ValidationError) as error:
-        raise ProjectRootError(f"invalid project marker: {marker}") from error
+        raise RootError(f"invalid project marker: {marker}") from error
     _require_git_work_tree(resolved)
     return resolved
 ```
@@ -140,8 +140,8 @@ def resolve_project_root(root: Path | None = None) -> Path:
 ```toml pair-block
 id = "P0-PDR-02"
 requirements = ["PDR-01"]
-targets = ["src/viper/project_init.py:ROOT_FILES"]
-tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
+targets = ["src/viper/project.py:ROOT_FILES"]
+tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
 gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
 depends_on = ["P0-PDR-01"]
 ```
@@ -244,8 +244,8 @@ class CompareRunsRequest(APIModel):
 def _project_root(root: Path | None, operation: OperationName) -> Path:
     """Resolve one operation root or raise its stable API failure."""
     try:
-        return resolve_project_root(root)
-    except ProjectRootError as error:
+        return resolve_root(root)
+    except RootError as error:
         raise ViperError(
             ViperFailure(
                 operation=operation,
@@ -543,7 +543,7 @@ def run(
 ) -> RunSuccess:
     """Bind one launched callable to a frozen stage and execute its run."""
     arguments = _stage_parser().parse_args(None if argv is None else list(argv))
-    project_root = resolve_project_root(arguments.root)
+    project_root = resolve_root(arguments.root)
     run_spec_path = arguments.run_spec
     if not run_spec_path.is_absolute():
         run_spec_path = project_root / run_spec_path
@@ -603,7 +603,7 @@ def retry(
     timeout_seconds: float | None = None,
 ) -> RetrySuccess:
     """Append one attempt to a failed frozen run."""
-    project_root = resolve_project_root(root)
+    project_root = resolve_root(root)
     selected = run_spec if run_spec.is_absolute() else project_root / run_spec
     selected = selected.resolve()
     if not selected.is_relative_to(project_root):
@@ -628,7 +628,7 @@ Call `add_root()` for `freeze-run`, `preflight`, `execute-stage`, `run`,
 ```toml pair-block
 id = "P0-PDR-06"
 requirements = ["PDR-03"]
-targets = ["src/viper/project.py:ProjectPathError", "src/viper/project.py:PathOperation", "src/viper/project.py:resolve_project_path"]
+targets = ["src/viper/project.py:PathError", "src/viper/project.py:PathOperation", "src/viper/project.py:resolve_path"]
 tests = ["tests/test_validation_architecture.py:test_project_paths_reject_symlinks"]
 gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k project_paths_reject_symlinks -q"
 depends_on = ["P0-PDR-01"]
@@ -637,14 +637,14 @@ depends_on = ["P0-PDR-01"]
 Add the path error, operation vocabulary, and resolver to `src/viper/project.py`.
 
 ```python pair-edit
-class ProjectPathError(ProjectRootError):
+class PathError(RootError):
     """Report a path that violates project-root custody."""
 
 
 PathOperation = Literal["read", "write"]
 
 
-def resolve_project_path(
+def resolve_path(
     project_root: Path,
     path: RepoRelPath,
     *,
@@ -654,22 +654,22 @@ def resolve_project_path(
     root = project_root.resolve(strict=True)
     relative = Path(path)
     if relative.is_absolute() or ".." in relative.parts:
-        raise ProjectPathError(f"project path escapes ROOT: {path}")
+        raise PathError(f"project path escapes ROOT: {path}")
 
     candidate = root / relative
     current = root
     for part in relative.parts:
         current = current / part
         if current.is_symlink():
-            raise ProjectPathError(f"project path contains a symlink: {path}")
+            raise PathError(f"project path contains a symlink: {path}")
         if not current.exists():
             break
 
     resolved = candidate.resolve(strict=False)
     if not resolved.is_relative_to(root):
-        raise ProjectPathError(f"resolved project path escapes ROOT: {path}")
+        raise PathError(f"resolved project path escapes ROOT: {path}")
     if operation == "read" and not resolved.is_file():
-        raise ProjectPathError(f"project file is missing: {path}")
+        raise PathError(f"project file is missing: {path}")
     return resolved
 ```
 
@@ -695,12 +695,12 @@ class LocalArtifactStore:
         self.project_root = project_root.resolve(strict=True)
         self.store = store
         try:
-            self.store_root = resolve_project_path(
+            self.store_root = resolve_path(
                 self.project_root,
                 store,
                 operation="write",
             )
-        except ProjectPathError as error:
+        except PathError as error:
             raise LocalStoreError("local store escapes the project root") from error
 
 
@@ -1808,8 +1808,7 @@ from .inspection import compare_runs as compare_verified_runs
 from .inspection import lineage as build_lineage
 from .inspection import plan_diff as compare_frozen_plans
 from .preflight import preflight_plan
-from .project import ProjectRootError, resolve_project_root
-from .project_init import ProjectInitializationError, initialize_project
+from .project import InitError, RootError, init, resolve_root
 from .serialization import load_resolved_stage
 from .storage import LocalArtifactStore
 from .verification import (
@@ -1858,8 +1857,8 @@ def _document_error(
 def _project_root(root: Path | None, operation: OperationName) -> Path:
     """Resolve one operation root or raise its stable API failure."""
     try:
-        return resolve_project_root(root)
-    except ProjectRootError as error:
+        return resolve_root(root)
+    except RootError as error:
         raise ViperError(
             ViperFailure(
                 operation=operation,
@@ -2406,8 +2405,8 @@ def get_capabilities(request: CapabilitiesRequest) -> CapabilitiesSuccess:
 def init_project(request: InitProjectRequest) -> InitProjectSuccess:
     """Generate one runnable five-stage starter project."""
     try:
-        files = initialize_project(request.path, request.package)
-    except ProjectInitializationError as exc:
+        files = init(request.path, request.package)
+    except InitError as exc:
         occupied = request.path.exists() and (
             not request.path.is_dir() or any(request.path.iterdir())
         )
@@ -2616,20 +2615,20 @@ owns `P0-PROOF-01` through `P0-PROOF-04`.
 ```toml pair-block
 id = "P0-PROOF-05"
 requirements = ["PDR-01"]
-targets = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
-tests = ["tests/test_project_init.py:test_init_project_establishes_discoverable_root"]
+targets = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
+tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
 gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
 depends_on = ["P0-PDR-01", "P0-PDR-02"]
 ```
 
 ```python pair-edit
-def test_init_project_establishes_discoverable_root(tmp_path: Path) -> None:
+def test_init_establishes_discoverable_root(tmp_path: Path) -> None:
     target = tmp_path / "outside" / "starter"
-    initialize_project(target, "sample_project")
+    init(target, "sample_project")
     subprocess.run(["git", "init", str(target)], check=True, capture_output=True)
     child = target / "src" / "sample_project"
-    assert find_project_root(child) == target.resolve()
-    assert resolve_project_root(child) == target.resolve()
+    assert find_root(child) == target.resolve()
+    assert resolve_root(child) == target.resolve()
     required = {
         "viper.toml",
         "inputs",
@@ -2715,10 +2714,10 @@ def test_project_paths_reject_symlinks(tmp_path: Path) -> None:
     inputs = root / "inputs"
     inputs.mkdir()
     (inputs / "link.csv").symlink_to(outside)
-    with pytest.raises(ProjectPathError, match="symlink"):
-        resolve_project_path(root, "inputs/link.csv", operation="read")
-    with pytest.raises(ProjectPathError, match="escapes"):
-        resolve_project_path(root, "../outside.csv", operation="read")
+    with pytest.raises(PathError, match="symlink"):
+        resolve_path(root, "inputs/link.csv", operation="read")
+    with pytest.raises(PathError, match="escapes"):
+        resolve_path(root, "../outside.csv", operation="read")
 ```
 
 <!-- pair-block-definition: P0-PROOF-08 -->

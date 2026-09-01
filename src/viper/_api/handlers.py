@@ -66,7 +66,7 @@ from ..inspection import compare_runs as compare_verified_runs
 from ..inspection import lineage as build_lineage
 from ..inspection import plan_diff as compare_frozen_plans
 from ..preflight import preflight_plan
-from ..project_init import ProjectInitializationError, initialize_project
+from ..project import InitError, init
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
 from ..verification import (
@@ -609,8 +609,8 @@ def get_capabilities(request: CapabilitiesRequest) -> CapabilitiesSuccess:
 def init_project(request: InitProjectRequest) -> InitProjectSuccess:
     """Generate one runnable five-stage starter project."""
     try:
-        files = initialize_project(request.path, request.package)
-    except ProjectInitializationError as exc:
+        files = init(request.path, request.package)
+    except InitError as exc:
         occupied = request.path.exists() and (
             not request.path.is_dir() or any(request.path.iterdir())
         )

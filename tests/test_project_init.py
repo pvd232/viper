@@ -13,9 +13,10 @@ from viper.api import (
     dispatch,
     init_project,
 )
+from viper.project import find_root, init, resolve_root
 
 
-def test_init_project_generates_importable_five_stage_project(
+def test_init_generates_importable_five_stage_project(
     tmp_path: Path,
 ) -> None:
     """Generate the project and execute its focused tests without editing it."""
@@ -41,7 +42,7 @@ def test_init_project_generates_importable_five_stage_project(
     assert "1 passed" in completed.stdout
 
 
-def test_init_project_rejects_occupied_target_without_mutation(
+def test_init_rejects_occupied_target_without_mutation(
     tmp_path: Path,
 ) -> None:
     """Preserve every existing file when the target directory is occupied."""
@@ -61,7 +62,7 @@ def test_init_project_rejects_occupied_target_without_mutation(
     assert tuple(target.iterdir()) == (existing,)
 
 
-def test_init_project_rejects_invalid_package_before_writing(
+def test_init_rejects_invalid_package_before_writing(
     tmp_path: Path,
 ) -> None:
     """Reject an invalid import name at the request-validation boundary."""
@@ -76,3 +77,21 @@ def test_init_project_rejects_invalid_package_before_writing(
     assert result.origin == "request"
     assert result.code == "invalid_request"
     assert not target.exists()
+
+def test_init_establishes_discoverable_root(tmp_path: Path) -> None:
+    """Guarantee that project root discovery and resolution == project init path ."""
+    target = tmp_path / "outside" / "starter"
+    init(target, "sample_project")
+    subprocess.run(["git", "init", str(target)], check=True, capture_output=True)
+    child = target / "src" / "sample_project"
+    assert find_root(child) == target.resolve()
+    assert resolve_root(child) == target.resolve()
+    required = {
+        "viper.toml",
+        "inputs",
+        "benchmarks",
+        "experiments",
+        ".gitignore",
+        "pyproject.toml",
+    }
+    assert required <= {path.name for path in target.iterdir()}
