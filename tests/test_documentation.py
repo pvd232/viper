@@ -270,18 +270,21 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "Coverage": "proposed",
         "Plan": "proposed",
         "Target": "proposed",
+        "Work": "proposed",
     },
     {
         "Baseline": "input",
         "Context": "input",
         "Contract": "input",
-        "PairReference": "input",
+        "Decisions": "input",
         "CompileBase": "consumer",
         "CompileContract": "consumer",
+        "CompileWork": "consumer",
         "Implementation": "consumer",
         "CompileObserved": "consumer",
         "Review": "consumer",
         "BaseGraph": "evidence",
+        "PairBlocks": "evidence",
         "Candidate": "evidence",
         "CandidateGraph": "evidence",
         "Delta": "output",
@@ -329,17 +332,17 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Closure", "Select"),
         ("Select", "Coverage"),
         ("Closure", "Plan"),
-        ("ContractCompiler", "Plan"),
         ("Graph", "Target"),
         ("Delta", "Target"),
         ("Plan", "Target"),
+        ("Target", "Work"),
+        ("DAG", "Work"),
     },
     {
         ("Baseline", "CompileBase"),
         ("Context", "CompileBase"),
         ("CompileBase", "BaseGraph"),
         ("Contract", "CompileContract"),
-        ("PairReference", "CompileContract"),
         ("BaseGraph", "CompileContract"),
         ("CompileContract", "Delta"),
         ("BaseGraph", "Impact"),
@@ -348,11 +351,14 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Impact", "Tests"),
         ("Tests", "Coverage"),
         ("Impact", "Plan"),
-        ("PairReference", "Plan"),
+        ("Decisions", "Plan"),
         ("BaseGraph", "Target"),
         ("Delta", "Target"),
         ("Plan", "Target"),
-        ("Target", "Implementation"),
+        ("Target", "CompileWork"),
+        ("Condensation", "CompileWork"),
+        ("CompileWork", "PairBlocks"),
+        ("PairBlocks", "Implementation"),
         ("Implementation", "Candidate"),
         ("Candidate", "CompileObserved"),
         ("Context", "CompileObserved"),
@@ -1757,11 +1763,17 @@ def test_phase_zero_system_models_match_contract() -> None:
         "reads_context",
         "launches",
     }
-    for value in node_kinds | edge_kinds:
+    fact_kinds = {"node_identity", "node_roles", "python_signature", "edge"}
+    constraint_kinds = {"presence", "absence", "preservation"}
+    for value in node_kinds | edge_kinds | fact_kinds | constraint_kinds:
         assert f'"{value}"' in contract
         assert value in guide
     assert "source depends on the target" in contract
     assert "source depends on target" in guide
+    assert "ContractCompiler -->|\"PairBlocks\"| Plan" not in contract
+    assert "PairReference" not in contract
+    assert 'CompileWork -->|"ordered work"| PairBlocks' in contract
+    assert 'PairBlocks -->|"bounded work"| Implementation' in contract
 
 
 def _worked_example_runtime_failures(

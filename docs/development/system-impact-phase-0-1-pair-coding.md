@@ -7,16 +7,16 @@ historical draft until Phase 0 removes them.
 
 ## 1. Status and boundary
 
-**Guide status:** audited against the current `main` source and tests at commit
-`20a34188628bc1e0b543262f2030dc0eede5c123`; implementation pending.
+**Guide status:** working-tree contract correction based on commit
+`1821b8c`; implementation pending.
 
 Phase 0 must produce one strict, deterministic path:
 
 ```text
 R0 + X
 -> G0
-contract declarations
--> Delta + RuleEdge declarations + PairBlocks
+contract delta + RuleEdge declarations
+-> Delta + normalized rule dependencies
 -> S_delta + D_delta_plus
 -> H_delta
 -> B
@@ -26,6 +26,8 @@ contract declarations
 -> complete statement and branch execution over B_exec
 -> total propagation plan P
 -> target constraints T*
+-> selected repair operations
+-> generated PairBlocks
 ```
 
 After implementation:
@@ -35,9 +37,15 @@ R1 + X -> G1
 G1 models T*
 ```
 
-`Delta` generally underdetermines the complete future graph. PairBlocks and any
-frozen repair choice provide `P`; `(G0, Delta, P)` compiles the target
-constraints.
+`Delta` generally underdetermines the complete future graph. An accepted
+propagation plan provides the required, forbidden, and preserved graph facts
+for every affected surface. `(G0, Delta, P)` compiles the target constraints.
+`CompileWork` packages selected repair operations and those constraints as
+ordered PairBlocks.
+
+The blocks in this guide are bootstrap PairBlocks: humans authored them to
+implement the compiler before `CompileWork` exists. Production impact analysis
+does not read them to derive `Delta`, `S_delta`, or `H_delta`.
 
 Phase 1 adds the smallest high-return extensions: observed dynamic resolution,
 configuration and Markdown analyzers, persisted artifacts and developer
@@ -99,6 +107,34 @@ verification binding(rule, test)    -> test  --verifies_rule----> rule
 This inversion is required because the stored dependency direction is
 dependent to dependency.
 
+### Target-constraint set
+
+VIPER uses three local atomic constraint operators:
+
+```text
+presence       the fact must occur in G1
+absence        the fact must not occur in G1
+preservation   the fact projected from G0 must occur unchanged in G1
+```
+
+The Phase 0 `GraphFact` union contains exactly:
+
+```text
+node_identity
+node_roles
+python_signature
+edge
+```
+
+These Python names are VIPER conventions. Algebraic graph transformation
+supplies the established graph-constraint and satisfaction semantics; it does
+not prescribe these class names.
+
+`SystemNodeAnchor` carries stable identity fields without observed source
+evidence. `PlannedNodeAnchor` identifies one future node and the delta
+operation that introduced it. `SystemNode` carries the coordinates and digest
+observed after repository compilation.
+
 ## 3. Phase 0 diagnostics contract
 
 Every diagnostic contains `code`, `severity`, `phase`, exact source location
@@ -138,15 +174,18 @@ Each turn implements one block, runs its focused gate, and stops for inspection.
 ```toml pair-block
 id = "P0-SIG-01"
 requirements = ["SIG-01", "SIG-02"]
-targets = ["src/viper/system_graph.py:SystemNode", "src/viper/system_graph.py:SystemEdge", "src/viper/system_graph.py:SystemDiagnostic"]
-tests = ["tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k system_graph_vocabulary_is_closed -q"
+targets = ["src/viper/system_graph.py:SystemNode", "src/viper/system_graph.py:SystemNodeAnchor", "src/viper/system_graph.py:PlannedNodeAnchor", "src/viper/system_graph.py:SystemEdge", "src/viper/system_graph.py:GraphFact", "src/viper/system_graph.py:TargetConstraint", "src/viper/system_graph.py:TargetSpecification", "src/viper/system_graph.py:ConstraintConformanceReceipt", "src/viper/system_graph.py:SystemDiagnostic"]
+tests = ["tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
+gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k 'system_graph_vocabulary_is_closed or system_target_language_is_closed' -q"
 depends_on = []
 ```
 
 Add the four node variants, finite roles, canonical dependency kinds, evidence
-variants, dependency-site receipts, diagnostics, and canonical ID helpers.
-Write table-driven failures for every invalid kind-field and role-kind pair.
+variants, dependency-site receipts, diagnostics, stable anchors, four graph
+fact variants, three target operators, normalized Python signatures, target
+specification, conformance receipts, and canonical ID helpers. Write
+table-driven failures for every invalid kind-field, role-kind, fact-constraint,
+and signature combination.
 
 <!-- pair-block-definition: P0-SIG-02 -->
 ```toml pair-block
@@ -202,12 +241,13 @@ gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k cont
 depends_on = ["P0-SIG-01"]
 ```
 
-Parse existing requirement, verifier-rule, implementation, verification,
-checklist, and PairBlock declarations plus fenced `contract-delta` TOML. Resolve
-all anchors against `G0` or an explicit added-node operation. Derive
+Parse existing requirement, verifier-rule, implementation, and verification
+declarations plus fenced `contract-delta` TOML. Resolve all anchors against
+`G0` or an explicit `PlannedNodeAnchor`. Derive
 `ContractTraceabilityGraph` and normalized rule dependency edges in one pass.
 Reject duplicate IDs, unknown anchors, stale digests, phase mismatches, missing
 bindings, and conflicting operations. The compiler derives `D_delta_plus`.
+Parse bootstrap PairBlocks separately for work traceability.
 
 <!-- pair-block-definition: P0-SIG-05 -->
 ```toml pair-block
@@ -275,16 +315,19 @@ member.
 ```toml pair-block
 id = "P0-SIG-09"
 requirements = ["SIG-03", "SIG-04"]
-targets = ["src/viper/system_graph.py:compile_propagation_plan", "src/viper/system_graph.py:compile_target_constraints"]
-tests = ["tests/test_inspection.py:test_propagation_plan_is_total"]
-gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k propagation_plan_is_total -q"
+targets = ["src/viper/system_graph.py:compile_propagation_plan", "src/viper/system_graph.py:compile_target_constraints", "src/viper/system_graph.py:compile_work"]
+tests = ["tests/test_inspection.py:test_propagation_plan_is_total", "tests/test_inspection.py:test_target_compilation_is_canonical"]
+gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k 'propagation_plan_is_total or target_compilation_is_canonical' -q"
 depends_on = ["P0-SIG-06", "P0-SIG-08"]
 ```
 
 Require one disposition for each baseline affected node and one planned-addition
-record for each introduced node. Compile PairBlock targets, tests, gates, and
-dependencies into `P`, then compile `T* = CompileTarget(G0, Delta, P)`. Preserve
-alternative admissible implementations unless a PairBlock freezes one choice.
+record for each introduced node. Each disposition supplies typed required,
+forbidden, and preserved facts. Compile `T* = CompileTarget(G0, Delta, P)`,
+reject contradictory constraints, and merge identical constraints with all
+origins. Preserve alternative admissible implementations unless repair
+selection freezes one choice. `compile_work()` packages selected repairs and
+hard constraints into SCC-ordered PairBlocks.
 
 <!-- pair-block-definition: P0-SIG-10 -->
 ```toml pair-block
@@ -306,16 +349,19 @@ Add `coverage` and `pytest-cov` to the test extra in this block.
 ```toml pair-block
 id = "P0-SIG-11"
 requirements = ["SIG-01", "SIG-02", "SIG-03", "SIG-04"]
-targets = ["src/viper/system_graph.py:compile_system_change"]
-tests = ["tests/test_inspection.py:test_system_change_compilation_is_deterministic"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py tests/test_inspection.py tests/test_documentation.py -k 'system_graph or contract_compiler or blast or condensation' -q"
+targets = ["src/viper/system_graph.py:compile_system_change", "src/viper/system_graph.py:evaluate_target_conformance"]
+tests = ["tests/test_inspection.py:test_system_change_compilation_is_deterministic", "tests/test_inspection.py:test_target_conformance_is_total"]
+gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py tests/test_inspection.py tests/test_documentation.py -k 'system_graph or contract_compiler or target or blast or condensation' -q"
 depends_on = ["P0-SIG-07", "P0-SIG-08", "P0-SIG-09", "P0-SIG-10"]
 ```
 
 Orchestrate Phase 0 and serialize `graph.json`, `delta.json`, `impact.json`,
 `diagnostics.json`, `condensation.json`, `propagation.json`,
 `target-constraints.json`, and `blast-coverage.json` with canonical JSON. Compile
-twice from shuffled input order and require byte equality.
+twice from shuffled input order and require byte equality. Recompile `R1` under
+the same context and emit exactly one satisfied, violated, or unevaluable
+receipt per target constraint. Strict conformance accepts only all-satisfied
+reports.
 
 ## 5. Phase 0 proof blocks
 
@@ -323,29 +369,33 @@ twice from shuffled input order and require byte equality.
 ```toml pair-block
 id = "P0-PROOF-09"
 requirements = ["SIG-01", "SIG-02"]
-targets = ["tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity"]
-tests = ["tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k system_graph_ast_oracle_parity -q"
+targets = ["tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
+tests = ["tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
+gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k 'system_graph_ast_oracle_parity or system_target_language_is_closed' -q"
 depends_on = ["P0-SIG-03", "P0-SIG-07"]
 ```
 
 Compare the production analyzer with the existing import/privacy AST oracle.
 Delete each expected emitted edge in turn and require the parity or total-site
-gate to fail.
+gate to fail. Mutate each anchor, signature, graph-fact, and target-constraint
+variant and require the closed-vocabulary test to reject it.
 
 <!-- pair-block-definition: P0-PROOF-10 -->
 ```toml pair-block
 id = "P0-PROOF-10"
 requirements = ["SIG-03"]
-targets = ["tests/test_inspection.py:test_system_impact_replays_committed_changes"]
-tests = ["tests/test_inspection.py:test_system_impact_replays_committed_changes"]
-gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k system_impact_replays_committed_changes -q"
-depends_on = ["P0-SIG-09"]
+targets = ["tests/test_inspection.py:test_system_impact_replays_committed_changes", "tests/test_inspection.py:test_target_compilation_is_canonical", "tests/test_inspection.py:test_target_conformance_is_total"]
+tests = ["tests/test_inspection.py:test_system_impact_replays_committed_changes", "tests/test_inspection.py:test_target_compilation_is_canonical", "tests/test_inspection.py:test_target_conformance_is_total"]
+gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k 'system_impact_replays_committed_changes or target_compilation_is_canonical or target_conformance_is_total' -q"
+depends_on = ["P0-SIG-09", "P0-SIG-11"]
 ```
 
 Replay the local-store fixture and the fixed skill-manifest rename. Compare the
 computed affected paths with the reviewed path sets. Record and justify every
-extra path through source evidence; fail on any missing path.
+extra path through source evidence; fail on any missing path. Translate every
+delta and disposition fact, reject one presence/absence contradiction, shuffle
+input order, and require canonical target bytes. Mutate one observed fact and
+require exactly one violated conformance receipt.
 
 <!-- pair-block-definition: P0-PROOF-11 -->
 ```toml pair-block
@@ -383,11 +433,15 @@ Phase 0 closes only when all conditions hold:
 - every registered Python dependency site has one terminal receipt;
 - every graph edge uses the canonical dependency direction and carries exact
   evidence;
-- the contract compiler resolves all declarations and generates the delta,
-  overlay, impact closure, and rule lowering from the declared contract inputs;
+- the contract compiler resolves contract and rule declarations and generates
+  the delta, overlay, impact closure, and rule lowering without reading a
+  manually enumerated dependency or PairBlock list;
 - strict diagnostics are empty in `B`;
 - SCC condensation is canonical and acyclic;
 - the propagation plan covers every affected and introduced node exactly once;
+- target compilation emits only the three atomic operators over the four Phase
+  0 graph facts, rejects contradictions, and produces canonical bytes;
+- conformance emits exactly one receipt per target constraint;
 - selected tests execute every affected statement and branch arc;
 - both committed replay fixtures reproduce every reviewed affected path;
 - two compiles produce identical bytes.

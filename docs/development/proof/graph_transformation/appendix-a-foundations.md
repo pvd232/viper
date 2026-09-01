@@ -618,24 +618,47 @@ construction when bounded execution requires one.
 
 ## A.7 Target compilation, decomposition, and repair selection
 
+Let $\mathcal F$ be the finite Phase 0 graph-fact universe induced by node
+identities, node roles, typed edges, and normalized Python signatures. For
+$f\in\mathcal F$, define three atomic predicates over a candidate graph $G$:
+
+```math
+\begin{aligned}
+\operatorname{Present}(f)(G)
+&\iff f\in\mathcal F(G),\\
+\operatorname{Absent}(f)(G)
+&\iff f\notin\mathcal F(G),\\
+\operatorname{Preserved}_{G_0}(f)(G)
+&\iff f\in\mathcal F(G_0)\cap\mathcal F(G),
+\end{aligned}
+```
+
+where $\mathcal F(G)$ is the canonical fact projection of $G$.
+
 **Definition A.12 (target specification).** Target compilation translates the
 canonical baseline graph, valid delta, and accepted propagation plan into a
-finite canonical set of executable graph predicates:
+finite canonical conjunction of the three atomic predicates:
 
 ```math
 T^*=\operatorname{CompileTarget}(G_0,\Delta,P).
 ```
 
-The predicates include mandatory additions and removals from $\Delta$,
-required and forbidden relationships from $P$, and every preservation
-predicate attached to a `retain` disposition. Define the admissible future
-graph family
+Node and edge additions produce presence predicates. Removals produce absence
+predicates. An edge update produces absence of the baseline edge and presence
+of the replacement edge. Each propagation disposition supplies typed required,
+forbidden, and preserved facts. Define the admissible future graph family
 
 ```math
 \mathcal A(T^*)=\left\{G\;\middle|\;G\models T^*\right\}.
 ```
 
 Target consistency requires $\mathcal A(T^*)\neq\varnothing$.
+
+The atomic predicate names are VIPER conventions. Graph-constraint
+satisfaction is the imported mathematical mechanism; the three-kind normal
+form is the local Phase 0 design. It is complete for the stated target language
+because every accepted input record translates to a finite conjunction of
+presence, absence, and baseline-preservation predicates over $\mathcal F$.
 
 ### Theorem A.4: deterministic target-constraint derivation
 
@@ -648,15 +671,16 @@ conditions hold:
    identifier.
 3. $\Delta$ is valid for $G_0$ and every operation precondition is explicit.
 4. $P$ satisfies $\operatorname{dom}(P)=B$.
-5. Every delta operation and disposition record has one deterministic
-   translation into target predicates.
+5. Every delta operation and typed disposition fact has the total translation
+   stated in Definition A.12.
 6. Target normalization rejects contradictory predicates and applies a fixed
    canonical ordering.
 
 **Proof.** Conditions 1 and 2 fix the baseline facts and every referenced
 entity. Conditions 3 and 4 fix the accepted delta and plan inputs. Condition 5
-maps each input record to one predicate family. Condition 6 rejects
-inconsistent output and gives every consistent predicate set one canonical
+maps each input record to a unique finite predicate multiset. Condition 6
+merges equal predicates with their origins, rejects the simultaneous presence
+and absence of one fact, and gives every consistent predicate set one canonical
 representation. `CompileTarget` therefore returns the same $T^*$ for equal
 inputs. $\square$
 
@@ -911,6 +935,7 @@ The proof imports one primitive from each source family:
 | --- | --- | --- |
 | [Clarke, Helvensteijn, and Schaefer 2010](https://doi.org/10.1145/1868294.1868298) | Explicit deltas, composition, conflict resolution, and unambiguous derivation | Definition of $\Delta$ and target-determinism Conditions 3, 5, and 6 |
 | [Ehrig et al. 2006](https://doi.org/10.1007/3-540-31188-2) | DPO rule application, application and gluing conditions, preservation, constraints, confluence, and termination | Semantics of applying $\Delta$ and selected repair operations $U^*$ |
+| [Ehrig, Ehrig, Habel, and Pennemann 2006](https://doi.org/10.3233/FUN-2006-74107) | Graph constraints, application conditions, and their translations in adhesive high-level replacement systems | Satisfaction semantics for the target specification $T^*$ |
 | [Horwitz, Reps, and Binkley 1990](https://doi.org/10.1145/77606.77608) | Dependence-graph representation and interprocedural slicing | Dependency relation, reverse closure, and blast-radius argument |
 | [Murphy, Notkin, and Sullivan 2001](https://doi.org/10.1109/32.917525) | Intended-versus-extracted structural comparison | Optional convergence, absence, and divergence for selected $G^*$ versus observed $G_1$ |
 
@@ -929,6 +954,13 @@ appendix compiles stable-anchor operations into that rule form. A later
 contract must define the exact typed attributed graph category and the
 operation-to-rule compiler before VIPER can claim a complete DPO instantiation
 ([Ehrig et al. 2006](https://doi.org/10.1007/3-540-31188-2), Chapters 2–4).
+
+Graph constraints state conditions satisfied by graphs, while application
+conditions state conditions for applying transformations. VIPER uses graph
+constraints for $T^*$ and application conditions for delta and repair
+applicability. Presence and absence are the Phase 0 atomic fragment;
+preservation compares a projected baseline fact with the observed fact
+([Ehrig, Ehrig, Habel, and Pennemann 2006](https://doi.org/10.3233/FUN-2006-74107)).
 
 Horwitz, Reps, and Binkley introduced the system dependence graph to represent
 interprocedural dependencies and compute slices across procedure boundaries.

@@ -227,13 +227,16 @@ One development change crosses the review system like this:
 baseline source + fixed context
 -> canonical SystemGraph
 
-contract declarations
--> explicit contract delta + PairBlocks
+contract delta + rule declarations
+-> explicit contract delta + normalized rule dependencies
 -> conservative impact overlay
 -> reverse dependency closure
 -> SCC condensation of the affected graph
 -> affected implementation, verifier, test, contract, and checklist nodes
 -> selected tests cover every affected statement and branch
+-> total propagation facts
+-> canonical target specification
+-> selected repairs packaged as SCC-ordered PairBlocks
 
 implemented source + same fixed context
 -> observed SystemGraph
@@ -304,7 +307,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=74acbb87c68fa1849d6bd82bafe49bb5fd367b046dd47f8a678b3c456c40f8a4 -->
 <!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
-<!-- contract-baseline: system-impact-graph.md sha256=71f43fdb0fc67fe1644e347d85bdb41644a99b701ebf9e7cd51fa92b1302a8f9 -->
+<!-- contract-baseline: system-impact-graph.md sha256=67bcd9150a0cb79b1339b36a4a2ba41cccd7b10148827b63873dc6788e0f9188 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=ad7ed3b8fc334bd0f1c5bb0207b90bcafc03b5f0403592b77d7bb0074c9619e1 -->
@@ -1030,14 +1033,17 @@ the new owner.
 
 ### 7.4 System graph compiler
 
-- [ ] Add the canonical four-variant `SystemNode` union, finite role-kind
-      matrix, dependent-to-dependency `SystemEdge` vocabulary, evidence,
-      dependency-site receipt, and structured diagnostic models.
+- [ ] Add the canonical four-variant `SystemNode` union, stable planned anchors,
+      normalized Python signature facts, finite role-kind matrix,
+      dependent-to-dependency `SystemEdge` vocabulary, four `GraphFact`
+      variants, three target-constraint operators, conformance receipts,
+      evidence, dependency-site receipts, and structured diagnostics.
       <!-- implements: SIG-01, SIG-02 -->
       <!-- pair-block: P0-SIG-01 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.node.vocabulary state=planned owner=src/viper/system_graph.py:SystemNode -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.edge.vocabulary state=planned owner=src/viper/system_graph.py:SystemEdge -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.edge.evidence state=planned owner=src/viper/system_graph.py:SystemEdge -->
+      <!-- contract-implementation: requirement=SIG-01 rule=system.signature.canonical state=planned owner=src/viper/system_graph.py:PythonSignatureFact -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.diagnostics.complete state=planned owner=src/viper/system_graph.py:SystemDiagnostic -->
 - [ ] Enumerate every tracked file, emit one matching analysis receipt, and
       combine AST coordinates with compiler symbol tables to classify every
@@ -1051,15 +1057,16 @@ the new owner.
       star imports and computed targets.
       <!-- pair-block: P0-SIG-03 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.anchored state=planned owner=src/viper/system_graph.py:compile_system -->
-- [ ] Compile requirements, verifier rules, rule bindings, checklist tasks,
-      PairBlocks, and fenced contract-delta operations directly from repository
-      documents. Lower each `RuleEdge` into normalized owner-to-rule or
-      test-to-rule dependency edges. <!-- implements: SIG-03, SIG-04 -->
+- [ ] Compile requirements, verifier rules, rule bindings, and fenced
+      contract-delta operations directly from repository documents. Lower each
+      `RuleEdge` into normalized owner-to-rule or test-to-rule dependency
+      edges. Parse bootstrap PairBlocks separately for work traceability.
+      <!-- implements: SIG-03, SIG-04 -->
       <!-- pair-block: P0-SIG-04 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.contract.delta state=planned owner=src/viper/system_graph.py:compile_contract_delta -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.requirement.coverage state=planned owner=src/viper/system_graph.py:compile_contract_delta -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.rule.lowering state=planned owner=src/viper/system_graph.py:lower_rule_edges -->
-      <!-- contract-implementation: requirement=SIG-04 rule=system.plan.coverage state=planned owner=src/viper/system_graph.py:compile_contract_delta -->
+      <!-- contract-implementation: requirement=SIG-04 rule=system.plan.coverage state=planned owner=src/viper/system_graph.py:compile_work -->
 - [ ] Derive `S_delta` and introduced dependency pairs, then build the
       conservative impact overlay from every baseline dependency plus every
       introduced dependency. Retain removed baseline dependencies.
@@ -1081,12 +1088,15 @@ the new owner.
       <!-- contract-implementation: requirement=SIG-03 rule=system.dag.components state=planned owner=src/viper/system_graph.py:condense_system_graph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.dag.canonical state=planned owner=src/viper/system_graph.py:condense_system_graph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.dag.acyclic state=planned owner=src/viper/system_graph.py:condense_system_graph -->
-- [ ] Compile a total propagation plan from PairBlocks and compile target
-      constraints from `(G0, Delta, P)`. Keep admissible implementation choices
-      open unless a PairBlock freezes one.
+- [ ] Validate one typed propagation disposition per affected node; compile the
+      three-operator `TargetSpecification` from `(G0, Delta, P)`; and package
+      selected repairs as SCC-ordered PairBlocks. Keep admissible implementation
+      choices open until repair selection freezes one.
       <!-- pair-block: P0-SIG-09 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.coverage state=planned owner=src/viper/system_graph.py:verify_propagation -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.additions state=planned owner=src/viper/system_graph.py:verify_propagation -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.target.language state=planned owner=src/viper/system_graph.py:TargetConstraint -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.target.canonical state=planned owner=src/viper/system_graph.py:compile_target_constraints -->
 - [ ] Select at least one pytest node ID for every executable affected symbol.
       Run selected tests with branch measurement and test contexts; require
       complete statement and branch execution inside every affected span.
@@ -1096,8 +1106,9 @@ the new owner.
       <!-- contract-implementation: requirement=SIG-04 rule=system.blast.branch_coverage state=planned owner=src/viper/system_graph.py:verify_blast_coverage -->
 - [ ] Orchestrate the strict compiler and serialize canonical graph, contract
       delta, impact, diagnostics, condensation, propagation, target-constraint,
-      and blast-coverage artifacts. Recompile with shuffled input order and
-      require byte equality.
+      blast-coverage, and conformance artifacts. Recompile with shuffled input
+      order and require byte equality. Emit exactly one terminal conformance
+      receipt per target constraint.
       <!-- pair-block: P0-SIG-11 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.context.identity state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.resolution.total state=planned owner=src/viper/system_graph.py:compile_system -->
@@ -1105,6 +1116,7 @@ the new owner.
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.references state=planned owner=src/viper/system_graph.py:SystemGraph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.context state=planned owner=src/viper/system_graph.py:compare_observed_graph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.identity state=planned owner=src/viper/system_graph.py:compare_observed_graph -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.conformance.total state=planned owner=src/viper/system_graph.py:evaluate_target_conformance -->
 
 <details>
 <summary>Hints</summary>
@@ -1195,6 +1207,7 @@ crossing component edge.
       <!-- contract-verification: requirement=SIG-01 rule=system.inventory.complete state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
       <!-- contract-verification: requirement=SIG-01 rule=system.analysis.anchored state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
       <!-- contract-verification: requirement=SIG-01 rule=system.analysis.total state=planned test=tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity -->
+      <!-- contract-verification: requirement=SIG-01 rule=system.signature.canonical state=planned test=tests/test_validation_architecture.py:test_system_target_language_is_closed -->
       <!-- contract-verification: requirement=SIG-01 rule=system.node.vocabulary state=planned test=tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed -->
       <!-- contract-verification: requirement=SIG-01 rule=system.edge.vocabulary state=planned test=tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed -->
       <!-- contract-verification: requirement=SIG-01 rule=system.edge.evidence state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
@@ -1220,6 +1233,9 @@ crossing component edge.
       <!-- contract-verification: requirement=SIG-03 rule=system.impact.closure state=planned test=tests/test_inspection.py:test_system_impact_replays_skill_manifest_rename -->
       <!-- contract-verification: requirement=SIG-03 rule=system.propagation.coverage state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
       <!-- contract-verification: requirement=SIG-03 rule=system.propagation.additions state=planned test=tests/test_inspection.py:test_system_impact_reaches_local_store_consumers -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.target.language state=planned test=tests/test_inspection.py:test_target_compilation_is_canonical -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.target.canonical state=planned test=tests/test_inspection.py:test_target_compilation_is_canonical -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.conformance.total state=planned test=tests/test_inspection.py:test_target_conformance_is_total -->
 - [ ] Require the automatic contract compiler to preserve every requirement,
       rule, owner, test, checklist task, PairBlock, target, gate, and
       prerequisite. Mutate away every declaration class and require a specific

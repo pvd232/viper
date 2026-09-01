@@ -62,9 +62,11 @@ G_1 = \mathcal C_X(R_1).
 ```
 
 `G1` is compared with the target constraints compiled from `(G0, Delta, P)`.
-`Delta` alone generally underdetermines one complete future graph. PairBlocks,
-implementation policy, and any frozen repair choice supply the propagation
-plan `P` that determines the admissible target constraints.
+`Delta` alone generally underdetermines one complete future graph. An accepted
+propagation plan `P` supplies the required, forbidden, and preserved graph
+facts that the delta leaves open. After target compilation and any bounded
+repair selection, `CompileWork` packages the selected work as ordered
+`PairBlock` records.
 
 The guarantee is conditional on `X`. It identifies impact under the declared
 Python runtime, dependencies, environment variables, fixture files, command
@@ -197,7 +199,7 @@ proves test execution over the affected surface before implementation.
 flowchart TD
     Baseline["Proposed baseline<br/>SystemSource"]
     Context["Proposed SystemContextManifest<br/>fixed external inputs"]
-    ContractDocs["Proposed contract declarations<br/>delta + rules + PairBlocks"]
+    ContractDocs["Proposed contract declarations<br/>delta + rules"]
     Inventory["Proposed tracked-file inventory"]
     Analyze["Proposed AST + symbol analyzers"]
     Sites["Proposed dependency-site receipts"]
@@ -213,6 +215,7 @@ flowchart TD
     Coverage["Proposed blast coverage report"]
     Plan["Proposed PropagationPlan"]
     Target["Proposed target constraints T*"]
+    Work["Proposed generated PairBlocks"]
 
     Baseline -->|"baseline commit"| Inventory
     Context -->|"fixed compiler inputs"| Analyze
@@ -233,13 +236,14 @@ flowchart TD
     Closure -->|"affected executable symbols"| Select
     Select -->|"pytest contexts"| Coverage
     Closure -->|"total disposition"| Plan
-    ContractCompiler -->|"PairBlocks"| Plan
     Graph -->|"baseline constraints"| Target
     Delta -->|"normative change"| Target
     Plan -->|"implementation choices"| Target
+    Target -->|"hard obligations"| Work
+    DAG -->|"execution order"| Work
 
     class Baseline,Context,ContractDocs input
-    class Inventory,Analyze,Sites,Graph,ContractCompiler,Delta,Overlay,Support,Closure,SCC,DAG,Select,Coverage,Plan,Target proposed
+    class Inventory,Analyze,Sites,Graph,ContractCompiler,Delta,Overlay,Support,Closure,SCC,DAG,Select,Coverage,Plan,Target,Work proposed
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
@@ -255,7 +259,7 @@ flowchart TD
     Baseline["Baseline source revision"]
     Context["Shared SystemContextManifest"]
     Contract["Contract delta + rule declarations"]
-    PairReference["Canonical PairBlocks"]
+    Decisions["Accepted propagation decisions"]
     CompileBase["compile_system(R0, X)"]
     BaseGraph["Baseline SystemGraph G0"]
     CompileContract["compile_contract_delta()"]
@@ -266,7 +270,9 @@ flowchart TD
     Coverage["BlastCoverageReport"]
     Plan["PropagationPlan"]
     Target["Target constraints T*"]
-    Implementation["PairBlock implementation"]
+    CompileWork["compile_work()"]
+    PairBlocks["Generated PairBlocks"]
+    Implementation["PairBlock execution"]
     Candidate["Implemented repository R1"]
     CompileObserved["compile_system(R1, X)"]
     CandidateGraph["Observed SystemGraph G1"]
@@ -277,7 +283,6 @@ flowchart TD
     Context -->|"fixed inputs"| CompileBase
     CompileBase -->|"canonical result"| BaseGraph
     Contract -->|"structured declarations"| CompileContract
-    PairReference -->|"implementation plan"| CompileContract
     BaseGraph -->|"anchor resolution"| CompileContract
     CompileContract -->|"checked operations"| Delta
     BaseGraph -->|"baseline dependencies"| Impact
@@ -286,11 +291,14 @@ flowchart TD
     Impact -->|"affected executable symbols"| Tests
     Tests -->|"execution contexts"| Coverage
     Impact -->|"affected obligations"| Plan
-    PairReference -->|"targets + gates"| Plan
+    Decisions -->|"one disposition per affected entity"| Plan
     BaseGraph -->|"baseline constraints"| Target
     Delta -->|"normative change"| Target
     Plan -->|"frozen choices"| Target
-    Target -->|"bounded work"| Implementation
+    Target -->|"hard obligations"| CompileWork
+    Condensation -->|"SCC-safe order"| CompileWork
+    CompileWork -->|"ordered work"| PairBlocks
+    PairBlocks -->|"bounded work"| Implementation
     Implementation -->|"writes"| Candidate
     Candidate -->|"candidate source"| CompileObserved
     Context -->|"same fixed inputs"| CompileObserved
@@ -300,9 +308,9 @@ flowchart TD
     Coverage -->|"pre-implementation gate"| Review
     Conformance -->|"post-implementation gate"| Review
 
-    class Baseline,Context,Contract,PairReference input
-    class CompileBase,CompileContract,Implementation,CompileObserved,Review consumer
-    class BaseGraph,Candidate,CandidateGraph evidence
+    class Baseline,Context,Contract,Decisions input
+    class CompileBase,CompileContract,CompileWork,Implementation,CompileObserved,Review consumer
+    class BaseGraph,PairBlocks,Candidate,CandidateGraph evidence
     class Delta,Impact,Condensation,Tests,Coverage,Plan,Target,Conformance output
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
@@ -597,26 +605,42 @@ context; codes and fields form the stable interface.
 
 ### Contract declarations and automatic lowering
 
-The compiler reads contracts, the master checklist, and PairBlock documents
-directly. The input grammar consists of the existing `contract-requirement`,
-`verifier-rule`, `contract-implementation`, `contract-verification`,
-`pair-block`, and `pair-block-definition` declarations plus one structured
-delta block:
+The compiler reads contracts and their traceability declarations directly.
+The normative-change grammar consists of `contract-requirement`,
+`verifier-rule`, `contract-implementation`, `contract-verification`, and one
+structured delta block. PairBlock declarations are parsed separately for work
+traceability; they do not create delta operations or impact edges.
 
 ```toml contract-delta
-id = "local-store-layout"
+id = "artifact-source"
 baseline_graph_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 [[operations]]
-op = "update_node"
-target = "python:src/viper/references.py:LocalFileRef.store"
-expected_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+operation_id = "remove-artifact-path"
+op = "remove_node"
+target.kind = "python_symbol"
+target.node_id = "python:models.py:ArtifactRef.path"
+target.path = "models.py"
+target.symbol = "ArtifactRef.path"
+target.symbol_kind = "field"
+expected_node_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 [[operations]]
+operation_id = "add-artifact-source"
+op = "add_node"
+node.introduced_by = "add-artifact-source"
+node.anchor.kind = "python_symbol"
+node.anchor.node_id = "python:models.py:ArtifactRef.source"
+node.anchor.path = "models.py"
+node.anchor.symbol = "ArtifactRef.source"
+node.anchor.symbol_kind = "field"
+
+[[operations]]
+operation_id = "load-reads-source"
 op = "add_edge"
-source = "python:src/viper/storage.py:LocalArtifactStore.__init__"
-kind = "reads_symbol"
-target = "python:src/viper/references.py:LocalFileRef.store"
+edge.source = "python:storage.py:LocalArtifactStore.load"
+edge.kind = "reads_symbol"
+edge.target = "python:models.py:ArtifactRef.source"
 ```
 
 The normative operation set is closed:
@@ -632,17 +656,19 @@ DeltaOperationKind = Literal[
 ]
 ```
 
-Each removal or update carries the expected baseline identity. Each addition
-names every field required to derive its canonical identity. The compiler
-rejects an unknown target, stale precondition, duplicate operation, incompatible
-pair of operations, unresolved PairBlock reference, or declaration outside the
-canonical node and edge vocabulary.
+Each removal or update carries the expected baseline identity. Each node
+addition carries a `PlannedNodeAnchor`, which supplies stable identity fields
+without claiming source coordinates or a source digest. The compiler rejects
+an unknown target, stale precondition, duplicate operation, incompatible pair
+of operations, or declaration outside the canonical node, edge, and graph-fact
+vocabularies.
 
-The compiler derives `ContractTraceabilityGraph`, `Delta`, `S_delta`,
+The compiler derives `ContractTraceabilityGraph`, `ContractDelta`, `S_delta`,
 `D_delta_plus`, `H_delta`, `B`, and the initial propagation obligations from the
-declared contract inputs. Human authors declare the intended contract
-change and PairBlock choices. Graph expansion, reverse reachability, SCC
-condensation, test selection, and completeness checks are mechanical.
+declared contract inputs. Human authors declare the intended contract change.
+Graph expansion, reverse reachability, SCC condensation, test selection, and
+completeness checks are mechanical. An accepted propagation plan supplies the
+implementation decisions that the delta leaves open.
 
 ### Pair-coding plan
 
@@ -660,15 +686,45 @@ class PairBlock(ProtocolModel):
     depends_on: tuple[PairBlockId, ...]
 ```
 
-`PairBlock` is the parsed form of one Phase 0 coding block. The compiler hashes
-the complete marked block, validates its source and test references, and
-topologically orders `depends_on`. Its system-graph node uses
+`PairBlock` is one executable unit produced from target obligations, selected
+repairs, and the SCC-safe work order. The compiler hashes the complete marked
+block, validates its source and test references, and topologically orders
+`depends_on`. Its system-graph node uses
 `roles=("pair_block",)`. The gate becomes a document anchor with
 `roles=("completion_gate",)`.
+
+The PairBlocks in the Phase 0 guide are bootstrap records authored before
+`CompileWork` exists. They implement the compiler itself and serve as fixtures
+for the future parser. Production impact compilation never reads those
+bootstrap blocks to derive `ContractDelta`, `S_delta`, or `H_delta`.
 
 ### Nodes and edge evidence
 
 ```python
+PythonParameterKind = Literal[
+    "positional_only",
+    "positional_or_keyword",
+    "var_positional",
+    "keyword_only",
+    "var_keyword",
+]
+
+
+class PythonParameterFact(ProtocolModel):
+    name: NonEmptyStr
+    kind: PythonParameterKind
+    annotation_ast: NonEmptyStr | None = None
+    default_ast: NonEmptyStr | None = None
+
+
+class PythonSignatureFact(ProtocolModel):
+    kind: Literal["python_signature"] = "python_signature"
+    node_id: SystemNodeId
+    is_async: bool
+    parameters: tuple[PythonParameterFact, ...]
+    return_annotation_ast: NonEmptyStr | None = None
+
+
 class RepositoryFileNode(ProtocolModel):
     node_id: SystemNodeId
     kind: Literal["repository_file"] = "repository_file"
@@ -697,6 +753,7 @@ class PythonSymbolNode(ProtocolModel):
     end_line: int = Field(ge=1)
     end_column: int = Field(ge=0)
     sha256: SHA256
+    signature: PythonSignatureFact | None = None
 
 
 class DocumentAnchorNode(ProtocolModel):
@@ -739,6 +796,218 @@ SystemNode = Annotated[
     | ExternalSymbolNode,
     Field(discriminator="kind"),
 ]
+
+
+class RepositoryFileAnchor(ProtocolModel):
+    node_id: SystemNodeId
+    kind: Literal["repository_file"] = "repository_file"
+    path: RepoRelPath
+
+
+class PythonSymbolAnchor(ProtocolModel):
+    node_id: SystemNodeId
+    kind: Literal["python_symbol"] = "python_symbol"
+    path: RepoRelPath
+    symbol: NonEmptyStr
+    symbol_kind: Literal[
+        "class",
+        "function",
+        "async_function",
+        "method",
+        "async_method",
+        "field",
+        "variable",
+    ]
+
+
+class DocumentAnchorRef(ProtocolModel):
+    node_id: SystemNodeId
+    kind: Literal["document_anchor"] = "document_anchor"
+    path: RepoRelPath
+    anchor_kind: Literal[
+        "contract_requirement",
+        "verifier_rule",
+        "checklist_task",
+        "pair_block",
+        "completion_gate",
+    ]
+    symbol: NonEmptyStr
+
+
+class ExternalSymbolAnchor(ProtocolModel):
+    node_id: SystemNodeId
+    kind: Literal["external_symbol"] = "external_symbol"
+    external_kind: Literal[
+        "package",
+        "module",
+        "environment_variable",
+        "file",
+        "command",
+        "runtime_target",
+    ]
+    symbol: NonEmptyStr
+
+
+SystemNodeAnchor = Annotated[
+    RepositoryFileAnchor
+    | PythonSymbolAnchor
+    | DocumentAnchorRef
+    | ExternalSymbolAnchor,
+    Field(discriminator="kind"),
+]
+
+
+class PlannedNodeAnchor(ProtocolModel):
+    anchor: SystemNodeAnchor
+    introduced_by: NonEmptyStr
+
+
+class SystemEdgeAnchor(ProtocolModel):
+    source: SystemNodeId
+    kind: SystemEdgeKind
+    target: SystemNodeId
+
+
+class NodeIdentityFact(ProtocolModel):
+    kind: Literal["node_identity"] = "node_identity"
+    anchor: SystemNodeAnchor
+
+
+class NodeRolesFact(ProtocolModel):
+    kind: Literal["node_roles"] = "node_roles"
+    node_id: SystemNodeId
+    roles: tuple[SystemNodeRole, ...] = Field(min_length=1)
+
+
+class EdgeFact(ProtocolModel):
+    kind: Literal["edge"] = "edge"
+    edge: SystemEdgeAnchor
+
+
+GraphFact = Annotated[
+    NodeIdentityFact | NodeRolesFact | PythonSignatureFact | EdgeFact,
+    Field(discriminator="kind"),
+]
+
+
+class AddNodeOperation(ProtocolModel):
+    operation_id: NonEmptyStr
+    op: Literal["add_node"] = "add_node"
+    node: PlannedNodeAnchor
+
+
+class RemoveNodeOperation(ProtocolModel):
+    operation_id: NonEmptyStr
+    op: Literal["remove_node"] = "remove_node"
+    target: SystemNodeAnchor
+    expected_node_sha256: SHA256
+
+
+class UpdateNodeOperation(ProtocolModel):
+    operation_id: NonEmptyStr
+    op: Literal["update_node"] = "update_node"
+    target: SystemNodeAnchor
+    expected_node_sha256: SHA256
+    required_facts: tuple[GraphFact, ...] = Field(min_length=1)
+
+
+class AddEdgeOperation(ProtocolModel):
+    operation_id: NonEmptyStr
+    op: Literal["add_edge"] = "add_edge"
+    edge: SystemEdgeAnchor
+
+
+class RemoveEdgeOperation(ProtocolModel):
+    operation_id: NonEmptyStr
+    op: Literal["remove_edge"] = "remove_edge"
+    edge: SystemEdgeAnchor
+    expected_edge_id: SHA256
+
+
+class UpdateEdgeOperation(ProtocolModel):
+    operation_id: NonEmptyStr
+    op: Literal["update_edge"] = "update_edge"
+    baseline: SystemEdgeAnchor
+    replacement: SystemEdgeAnchor
+    expected_edge_id: SHA256
+
+
+DeltaOperation = Annotated[
+    AddNodeOperation
+    | RemoveNodeOperation
+    | UpdateNodeOperation
+    | AddEdgeOperation
+    | RemoveEdgeOperation
+    | UpdateEdgeOperation,
+    Field(discriminator="op"),
+]
+
+
+class ContractDelta(ProtocolModel):
+    schema_version: Literal[1] = 1
+    delta_id: NonEmptyStr
+    baseline_graph_sha256: SHA256
+    operations: tuple[DeltaOperation, ...] = Field(min_length=1)
+
+
+class TargetConstraintOrigin(ProtocolModel):
+    kind: Literal["delta_operation", "propagation_disposition"]
+    source_id: NonEmptyStr
+
+
+class PresenceConstraint(ProtocolModel):
+    constraint_id: SHA256
+    kind: Literal["presence"] = "presence"
+    fact: GraphFact
+    origins: tuple[TargetConstraintOrigin, ...] = Field(min_length=1)
+
+
+class AbsenceConstraint(ProtocolModel):
+    constraint_id: SHA256
+    kind: Literal["absence"] = "absence"
+    fact: GraphFact
+    origins: tuple[TargetConstraintOrigin, ...] = Field(min_length=1)
+
+
+class PreservationConstraint(ProtocolModel):
+    constraint_id: SHA256
+    kind: Literal["preservation"] = "preservation"
+    fact: GraphFact
+    origins: tuple[TargetConstraintOrigin, ...] = Field(min_length=1)
+
+
+TargetConstraint = Annotated[
+    PresenceConstraint | AbsenceConstraint | PreservationConstraint,
+    Field(discriminator="kind"),
+]
+
+
+class TargetSpecification(ProtocolModel):
+    schema_version: Literal[1] = 1
+    baseline_graph_sha256: SHA256
+    contract_delta_sha256: SHA256
+    propagation_plan_sha256: SHA256
+    context_sha256: SHA256
+    constraints: tuple[TargetConstraint, ...] = Field(min_length=1)
+
+
+ConstraintOutcome = Literal["satisfied", "violated", "unevaluable"]
+
+
+class ConstraintConformanceReceipt(ProtocolModel):
+    constraint_id: SHA256
+    outcome: ConstraintOutcome
+    observed_fact_sha256: tuple[SHA256, ...]
+    diagnostic_id: SHA256 | None = None
+
+
+class TargetConformanceReport(ProtocolModel):
+    schema_version: Literal[1] = 1
+    target_specification_sha256: SHA256
+    observed_graph_sha256: SHA256
+    context_sha256: SHA256
+    receipts: tuple[ConstraintConformanceReceipt, ...]
+    conforms: bool
 
 
 class SourceEvidence(ProtocolModel):
@@ -787,19 +1056,59 @@ class UnresolvedDependency(ProtocolModel):
     reason: NonEmptyStr
 ```
 
+`PresenceConstraint`, `AbsenceConstraint`, and `PreservationConstraint` form
+VIPER's local atomic target language. The names are project conventions, not
+standard algebraic-graph-transformation class names. Algebraic graph
+transformation supplies graph constraints, application conditions, and the
+satisfaction relation; VIPER normalizes its Phase 0 postconditions to presence,
+absence, and baseline preservation of typed `GraphFact` values. This three-kind
+constraint vocabulary stays independent of node and edge categories. Adding a
+new fact kind therefore does not add another logical operator.
+
+The `GraphFact` union is closed for Phase 0: node identity, node roles, typed
+dependency edge, and normalized Python signature. A constraint ID hashes its
+kind and canonical fact. Equal constraints merge their sorted, unique origins.
+The compiler rejects a fact that is both required present and required absent.
+A preservation fact must occur in `G0`; otherwise the preservation request is
+undefined and compilation fails.
+
+`TargetSpecification` is the concrete representation of $T^*$. Its digest
+covers canonical JSON with constraints sorted by `constraint_id` and origins
+sorted by `(kind, source_id)`. `ConstraintConformanceReceipt` is the result of
+evaluating one constraint against `G1`. A report contains exactly one receipt
+per target constraint. `conforms=True` holds exactly when every receipt is
+`satisfied`; `violated` and `unevaluable` both reject strict conformance.
+
 `SystemNode` applies these field rules:
 
 - A `repository_file` node requires `path` and `sha256`, omits line fields, and
   matches one `RepositoryFile`.
 - A `python_symbol` node requires `path`, `symbol`, `start_line`, `end_line`,
   and the AST column coordinates carried in its source evidence. Its digest
-  covers the exact UTF-8 source span.
+  covers the exact UTF-8 source span. A function or method also carries one
+  `PythonSignatureFact`; other Python symbol kinds set `signature=None`.
 - A `document_anchor` node requires `path`, a stable marker ID in `symbol`, a
   line range, and the exact-span digest.
 - An `external_symbol` node requires a context-qualified `symbol` and omits
   repository path, line, and source digest fields.
 - Every Python symbol and document anchor has one outgoing `contained_by` edge
   to its immediate owner. The owner chain terminates at a repository file.
+
+`PythonSignatureFact` records the structurally relevant public-call boundary
+without binding that boundary to a function body's source digest. Parameter
+order in the tuple is significant. `annotation_ast`, `default_ast`, and
+`return_annotation_ast` store `ast.dump(..., include_attributes=False)` for the
+corresponding expression. Phase 0 therefore checks structural syntax equality;
+it does not claim runtime equivalence between two annotation or default
+expressions.
+
+`SystemNodeAnchor` contains only the fields required to derive a stable node
+identity. It can identify a baseline node or a future node. A
+`PlannedNodeAnchor` wraps a future anchor and records the delta operation that
+first introduced it. Source coordinates, source digests, and resolution
+evidence belong only to an observed `SystemNode` compiled from a repository.
+The contract compiler must never manufacture those observed fields for source
+that does not yet exist.
 
 Node IDs use these canonical forms:
 
@@ -941,14 +1250,18 @@ PropagationAction = Literal["change", "remove", "retain"]
 
 
 class PropagationDisposition(ProtocolModel):
+    disposition_id: NonEmptyStr
     path: RepoRelPath
     action: PropagationAction
     affected_nodes: tuple[SystemNodeId, ...] = Field(min_length=1)
     statement: NonEmptyStr
+    required_facts: tuple[GraphFact, ...]
+    forbidden_facts: tuple[GraphFact, ...]
+    preserved_facts: tuple[GraphFact, ...]
 
 
 class PlannedAddition(ProtocolModel):
-    path: RepoRelPath
+    node: PlannedNodeAnchor
     purpose: NonEmptyStr
     requirements: tuple[RequirementId, ...] = Field(min_length=1)
 
@@ -1032,15 +1345,57 @@ links it ingested. The impact report therefore preserves whether each reached
 owner or test remains `planned` or already resolves as `implemented`.
 
 `PropagationPlan` gives every affected repository path one action. `change`
-states the required edit. `remove` states what the candidate deletes. `retain`
-states why the affected path remains valid as written. The union of every
-`PropagationDisposition.affected_nodes` must equal
+states the required edit and supplies at least one required, forbidden, or
+preserved fact. `remove` supplies at least one forbidden fact. `retain`
+supplies at least one preserved fact. The free-text `statement` explains the
+decision; `CompileTarget` consumes the typed fact collections. The union of
+every `PropagationDisposition.affected_nodes` must equal
 `ImpactReport.affected_nodes`, and each affected node appears once.
 
-`PlannedAddition` records a required path before implementation creates it. A
-completed candidate graph must contain each planned path among the file nodes
-in `SystemGraphDelta.added_nodes`. Each added repository path must either match
-one planned addition or carry a review explanation before the phase closes.
+`PlannedAddition` records a required future node before implementation creates
+it. A completed candidate graph must contain an observed node matching each
+planned anchor. Each added repository node must either match one planned
+addition or carry a review explanation before the phase closes.
+
+### Target compilation and conformance
+
+`CompileTarget(G0, Delta, P)` emits the local atomic constraint normal form by
+these total translation rules:
+
+| Input record | Emitted target constraint |
+| --- | --- |
+| `AddNodeOperation` | presence of its `NodeIdentityFact` |
+| `RemoveNodeOperation` | absence of its baseline `NodeIdentityFact` |
+| `UpdateNodeOperation` | presence of the target identity and every `required_facts` member |
+| `AddEdgeOperation` | presence of its `EdgeFact` |
+| `RemoveEdgeOperation` | absence of its `EdgeFact` |
+| `UpdateEdgeOperation` | absence of the baseline `EdgeFact` and presence of the replacement `EdgeFact` |
+| disposition `required_facts` | presence of each fact |
+| disposition `forbidden_facts` | absence of each fact |
+| disposition `preserved_facts` | preservation of each baseline fact |
+| `PlannedAddition.node` | presence of its `NodeIdentityFact` |
+
+These rule names and Python class names are VIPER conventions. The established
+mathematical basis is graph-constraint satisfaction: graph constraints express
+properties that a graph must satisfy, while application conditions restrict a
+transformation rule's applicability. VIPER uses the former for post-change
+acceptance and retains DPO application conditions for applying delta rules;
+see [Ehrig et al., *Fundamentals of Algebraic Graph
+Transformation*](https://doi.org/10.1007/3-540-31188-2) and [Ehrig, Ehrig,
+Habel, and Pennemann, “Theory of Constraints and Application
+Conditions”](https://doi.org/10.3233/FUN-2006-74107).
+
+Compilation resolves every baseline anchor in `G0`, validates every fresh
+anchor, expands the table, merges identical constraints, and records all
+origins. It rejects contradictory presence and absence constraints. Canonical
+ordering then determines one `TargetSpecification` for equal `(G0, Delta, P)`.
+
+Conformance compiles `R1` under the same `SystemContextManifest`, projects the
+four Phase 0 `GraphFact` variants from `G1`, and evaluates every target
+constraint. Presence requires a matching observed fact. Absence requires no
+matching observed fact. Preservation requires the canonical baseline fact and
+the observed fact to be equal. Each evaluation emits one
+`ConstraintConformanceReceipt`.
 
 ### Illustrative worked example
 
@@ -1070,9 +1425,15 @@ from viper._contract_traceability import (
 from viper.references import ResolvedFileRef
 from viper.storage import LocalArtifactStore
 from viper.system_graph import (
+    AbsenceConstraint,
+    AddEdgeOperation,
+    AddNodeOperation,
     AffectedSymbolCoverage,
     BlastCoverageReport,
     ChangedNode,
+    ConstraintConformanceReceipt,
+    ConstraintOutcome,
+    ContractDelta,
     ContextCommand,
     ContextFile,
     ContextPackage,
@@ -1081,20 +1442,37 @@ from viper.system_graph import (
     DependencySiteOutcome,
     DependencySiteReceipt,
     DiagnosticSeverity,
+    DocumentAnchorRef,
     DocumentAnchorNode,
+    EdgeFact,
     EdgeEvidence,
     EdgeOrigin,
     FileAnalysisStatus,
     FileAnalysisReceipt,
     ExternalSymbolNode,
+    ExternalSymbolAnchor,
+    GraphFact,
     ImpactReport,
+    NodeIdentityFact,
+    NodeRolesFact,
     PairBlock,
     PairBlockId,
     PlannedAddition,
+    PlannedNodeAnchor,
+    PresenceConstraint,
+    PreservationConstraint,
     PropagationAction,
     PropagationDisposition,
     PropagationPlan,
+    PythonParameterFact,
+    PythonParameterKind,
+    PythonSignatureFact,
+    PythonSymbolAnchor,
+    PythonSymbolNode,
+    RemoveEdgeOperation,
+    RemoveNodeOperation,
     RepositoryFile,
+    RepositoryFileAnchor,
     RepositoryFileNode,
     ResolutionKind,
     ResolutionAttempt,
@@ -1108,16 +1486,24 @@ from viper.system_graph import (
     SystemContextManifest,
     SystemDiagnostic,
     SystemEdge,
+    SystemEdgeAnchor,
     SystemEdgeKind,
     SystemGraph,
     SystemGraphDelta,
     SystemNode,
+    SystemNodeAnchor,
     SystemNodeId,
     SystemNodeKind,
     SystemNodeRole,
     SystemSource,
-    PythonSymbolNode,
+    TargetConformanceReport,
+    TargetConstraint,
+    TargetConstraintOrigin,
+    TargetSpecification,
     UnresolvedDependency,
+    UpdateEdgeOperation,
+    UpdateNodeOperation,
+    DeltaOperation,
 )
 
 
@@ -1894,6 +2280,187 @@ with TemporaryDirectory() as temporary_directory:
         propagation,
     )
 
+    references_file_anchor = RepositoryFileAnchor(
+        node_id="file:src/viper/references.py",
+        path="src/viper/references.py",
+    )
+    field_anchor = PythonSymbolAnchor(
+        node_id=baseline_field.node_id,
+        path="src/viper/references.py",
+        symbol="LocalFileRef.store",
+        symbol_kind="field",
+    )
+    requirement_anchor = DocumentAnchorRef(
+        node_id=requirement_node.node_id,
+        path="docs/development/project-data-root.md",
+        anchor_kind="contract_requirement",
+        symbol="PDR-02",
+    )
+    package_anchor = ExternalSymbolAnchor(
+        node_id=package_node.node_id,
+        external_kind="package",
+        symbol="pydantic==2.12.5",
+    )
+    node_anchors: tuple[SystemNodeAnchor, ...] = (
+        references_file_anchor,
+        field_anchor,
+        requirement_anchor,
+        package_anchor,
+    )
+    migration_file_anchor = RepositoryFileAnchor(
+        node_id=candidate_migration_file.node_id,
+        path="tests/test_storage_migration.py",
+    )
+    planned_migration_node = PlannedNodeAnchor(
+        anchor=migration_file_anchor,
+        introduced_by="delta-add-migration-test",
+    )
+    parameter_kind: PythonParameterKind = "positional_or_keyword"
+    root_parameter = PythonParameterFact(
+        name="root",
+        kind=parameter_kind,
+    )
+    constructor_signature = PythonSignatureFact(
+        node_id=store_constructor.node_id,
+        is_async=False,
+        parameters=(root_parameter,),
+    )
+    field_read_anchor = SystemEdgeAnchor(
+        source=field_read.source,
+        kind=field_read.kind,
+        target=field_read.target,
+    )
+    replacement_edge_anchor = SystemEdgeAnchor(
+        source=field_read.source,
+        kind="reads_symbol",
+        target=field_anchor.node_id,
+    )
+    migration_identity = NodeIdentityFact(anchor=migration_file_anchor)
+    field_identity = NodeIdentityFact(anchor=field_anchor)
+    field_roles = NodeRolesFact(
+        node_id=field_anchor.node_id,
+        roles=("protocol_field",),
+    )
+    field_read_fact = EdgeFact(edge=field_read_anchor)
+    target_facts: tuple[GraphFact, ...] = (
+        migration_identity,
+        field_identity,
+        field_roles,
+        constructor_signature,
+        field_read_fact,
+    )
+
+    add_node = AddNodeOperation(
+        operation_id="delta-add-migration-test",
+        node=planned_migration_node,
+    )
+    remove_node = RemoveNodeOperation(
+        operation_id="delta-remove-old-file",
+        target=references_file_anchor,
+        expected_node_sha256=baseline_file_nodes[0].sha256,
+    )
+    update_node = UpdateNodeOperation(
+        operation_id="delta-update-store-field",
+        target=field_anchor,
+        expected_node_sha256=baseline_field.sha256,
+        required_facts=(field_identity, field_roles),
+    )
+    add_edge = AddEdgeOperation(
+        operation_id="delta-add-field-read",
+        edge=replacement_edge_anchor,
+    )
+    remove_edge = RemoveEdgeOperation(
+        operation_id="delta-remove-field-read",
+        edge=field_read_anchor,
+        expected_edge_id=field_read.edge_id,
+    )
+    update_edge = UpdateEdgeOperation(
+        operation_id="delta-update-field-read",
+        baseline=field_read_anchor,
+        replacement=replacement_edge_anchor,
+        expected_edge_id=field_read.edge_id,
+    )
+    delta_operations: tuple[DeltaOperation, ...] = (
+        add_node,
+        remove_node,
+        update_node,
+        add_edge,
+        remove_edge,
+        update_edge,
+    )
+    contract_delta = ContractDelta(
+        delta_id="local-store-migration",
+        baseline_graph_sha256=digest(baseline_graph),
+        operations=delta_operations,
+    )
+
+    delta_origin = TargetConstraintOrigin(
+        kind="delta_operation",
+        source_id=add_node.operation_id,
+    )
+    disposition_origin = TargetConstraintOrigin(
+        kind="propagation_disposition",
+        source_id="retain-constructor-signature",
+    )
+    require_migration = PresenceConstraint(
+        constraint_id=digest(
+            {
+                "kind": "presence",
+                "fact": migration_identity.model_dump(mode="json"),
+            }
+        ),
+        fact=migration_identity,
+        origins=(delta_origin,),
+    )
+    forbid_old_read = AbsenceConstraint(
+        constraint_id=digest(
+            {
+                "kind": "absence",
+                "fact": field_read_fact.model_dump(mode="json"),
+            }
+        ),
+        fact=field_read_fact,
+        origins=(delta_origin,),
+    )
+    preserve_constructor_signature = PreservationConstraint(
+        constraint_id=digest(
+            {
+                "kind": "preservation",
+                "fact": constructor_signature.model_dump(mode="json"),
+            }
+        ),
+        fact=constructor_signature,
+        origins=(disposition_origin,),
+    )
+    target_constraints: tuple[TargetConstraint, ...] = (
+        require_migration,
+        forbid_old_read,
+        preserve_constructor_signature,
+    )
+    target_specification = TargetSpecification(
+        baseline_graph_sha256=digest(baseline_graph),
+        contract_delta_sha256=digest(contract_delta),
+        propagation_plan_sha256=digest(propagation),
+        context_sha256=context_sha256,
+        constraints=target_constraints,
+    )
+    satisfied: ConstraintOutcome = "satisfied"
+    conformance_receipts = tuple(
+        ConstraintConformanceReceipt(
+            constraint_id=constraint.constraint_id,
+            outcome=satisfied,
+            observed_fact_sha256=(digest(constraint.fact),),
+        )
+        for constraint in target_constraints
+    )
+    conformance_report = TargetConformanceReport(
+        target_specification_sha256=digest(target_specification),
+        observed_graph_sha256=digest(candidate_graph),
+        context_sha256=context_sha256,
+        receipts=conformance_receipts,
+        conforms=True,
+    )
+
     covered_nodes = {
         node_id
         for disposition in propagation.dispositions
@@ -1959,6 +2526,10 @@ with TemporaryDirectory() as temporary_directory:
     assert covered_nodes == set(impact.affected_nodes)
     assert planned_additions == realized_additions
     assert store.fetch(propagation_ref.stored_at) == canonical_bytes(propagation)
+    assert len(node_anchors) == 4
+    assert len(target_facts) == 5
+    assert len(contract_delta.operations) == 6
+    assert conformance_report.conforms is True
     assert condensation.components
     assert incomplete_impact.unresolved == (unresolved,)
     assert incomplete_impact.complete is False
@@ -2138,6 +2709,7 @@ The implementation adds these checks:
 | `system.inventory.complete` <!-- verifier-rule: system.inventory.complete requirement=SIG-01 --> | Require one file node and one analysis receipt for every tracked file in the source commit. |
 | `system.analysis.anchored` <!-- verifier-rule: system.analysis.anchored requirement=SIG-01 --> | Require every source-backed node and source-evidenced edge to cite one inventoried file and exact span. |
 | `system.analysis.total` <!-- verifier-rule: system.analysis.total requirement=SIG-01 --> | Require exactly one receipt for every registered dependency-bearing AST site. |
+| `system.signature.canonical` <!-- verifier-rule: system.signature.canonical requirement=SIG-01 --> | Require each function and method to carry one normalized structural signature fact independent of body coordinates and digest. |
 | `system.edge.evidence` <!-- verifier-rule: system.edge.evidence requirement=SIG-01 --> | Recompute every edge ID from its endpoints, relation, origin, and evidence. |
 | `system.context.identity` <!-- verifier-rule: system.context.identity requirement=SIG-02 --> | Recompute the canonical manifest digest. |
 | `system.resolution.total` <!-- verifier-rule: system.resolution.total requirement=SIG-02 --> | Require each resolution attempt to produce exactly one observation or unresolved dependency. |
@@ -2155,6 +2727,9 @@ The implementation adds these checks:
 | `system.impact.closure` <!-- verifier-rule: system.impact.closure requirement=SIG-03 --> | Recompute reverse reachability from `S_delta` in `H_delta`. |
 | `system.propagation.coverage` <!-- verifier-rule: system.propagation.coverage requirement=SIG-03 --> | Require every affected node to appear in exactly one propagation disposition. |
 | `system.propagation.additions` <!-- verifier-rule: system.propagation.additions requirement=SIG-03 --> | Require planned additions to equal the candidate delta's added repository paths before the phase closes. |
+| `system.target.language` <!-- verifier-rule: system.target.language requirement=SIG-03 --> | Require every target constraint to use one Phase 0 graph fact and one presence, absence, or preservation operator. |
+| `system.target.canonical` <!-- verifier-rule: system.target.canonical requirement=SIG-03 --> | Recompile `(G0, Delta, P)`, merge identical origins, reject contradictions, and require byte-identical `TargetSpecification` output. |
+| `system.conformance.total` <!-- verifier-rule: system.conformance.total requirement=SIG-03 --> | Require exactly one conformance receipt per target constraint and set `conforms` exactly when every receipt is satisfied. |
 | `system.requirement.coverage` <!-- verifier-rule: system.requirement.coverage requirement=SIG-04 --> | Compile each requirement, verifier rule, implementation binding, and verification binding directly from the contract and checklist declarations. |
 | `system.rule.lowering` <!-- verifier-rule: system.rule.lowering requirement=SIG-04 --> | Require exactly one implementation binding and at least one verification binding per rule, then lower each binding to a normalized dependency edge. |
 | `system.plan.coverage` <!-- verifier-rule: system.plan.coverage requirement=SIG-04 --> | Require each Phase 0 checklist task to reach exactly one PairBlock, every changed source target, every focused test, one completion gate, and every declared prerequisite block. |
@@ -2526,3 +3101,86 @@ cohesion-aware task partitioning](https://arxiv.org/abs/2606.00953) supplies a
 communication-versus-computation objective for grouping condensation vertices.
 Phase 0 records SCC-safe graph statistics and supplies a deterministic baseline
 for the later optimization comparison.
+
+### 11.6 Target-language and compiler design basis
+
+VIPER derives its target language from the claims the verifier must decide.
+The derivation is local and explicit:
+
+| Required decision | Smallest represented object | Compiler consequence |
+| --- | --- | --- |
+| Does a future repository contain a required entity or relationship? | `PresenceConstraint(GraphFact)` | resolve the anchor and find one equal fact in `G1` |
+| Did implementation remove a forbidden entity or relationship? | `AbsenceConstraint(GraphFact)` | resolve the anchor and require zero equal facts in `G1` |
+| Did an affected surface retain a reviewed baseline property? | `PreservationConstraint(GraphFact)` | require the fact in `G0` and the equal fact in `G1` |
+| Can a future node be named before source exists? | `PlannedNodeAnchor` | carry stable identity while withholding coordinates and source digest |
+| Can a public signature remain stable while a body changes? | `PythonSignatureFact` | compare normalized signature syntax independently of the body span |
+| Can verification account for every obligation? | `ConstraintConformanceReceipt` | emit exactly one terminal outcome per constraint |
+
+This table establishes the necessity of the three operators for Phase 0. It
+does not establish that the Python class names are field-wide standards.
+
+The algebraic graph-transformation literature separates transformation rules,
+application conditions, and graph constraints. The DPO rule span supplies
+deletion, preservation, and addition semantics; graph constraints describe the
+graphs accepted after transformation. [Ehrig et al.'s textbook](https://doi.org/10.1007/3-540-31188-2)
+develops both layers, and [Ehrig, Ehrig, Habel, and Pennemann](https://doi.org/10.3233/FUN-2006-74107)
+give a general theory of graph constraints and application conditions. VIPER's
+presence and absence predicates are a finite atomic fragment of graph-condition
+satisfaction. Preservation is a relational postcondition over the fact
+projection shared by `G0` and `G1`.
+
+Compiler infrastructure supplies engineering controls for that formal core.
+The [MLIR language reference](https://mlir.llvm.org/docs/LangRef/) uses an
+unambiguous, round-trippable IR with explicit operations, values, types, and
+verification constraints. [MLIR's operation-definition
+specification](https://mlir.llvm.org/docs/DefiningDialects/Operations/) derives
+verification from declared constraints and orders structural verification
+before custom verification. Its [diagnostic
+infrastructure](https://mlir.llvm.org/docs/Diagnostics/) retains source
+locations for actionable failures. VIPER applies those controls through a
+closed discriminated IR, staged validators, exact source anchors, structured
+diagnostics, and canonical serialization. MLIR explicitly describes its
+canonicalizer as best-effort rather than a uniquely defined normal form;
+VIPER's byte-determinism requirement is therefore a local stronger rule, not a
+claim borrowed from MLIR.
+
+Open repository-planning systems provide comparison points. [CodePlan](https://arxiv.org/abs/2309.12499)
+combines incremental dependency analysis, change-may-impact analysis, and
+adaptive multi-step planning. [Archbird's public specification](https://archbird.org/)
+separates a canonical repository map, exhaustive constraint verification, an
+editable plan, isolated candidate transitions, and a fresh map-and-verify
+pass; it also preserves unknown relationships instead of silently promoting
+them to facts. VIPER does not import either system's schemas or operation
+names. These systems test the boundary conditions: impact must be derived from
+dependency evidence, planning must remain distinct from verification, unknowns
+must remain visible, and after-state verification must rebuild evidence from
+the candidate repository.
+
+The resulting contribution is the composition specific to VIPER:
+
+```text
+contract delta
+-> conservative dependency impact
+-> total propagation facts
+-> canonical target specification
+-> SCC-safe executable work
+-> fresh observed graph
+-> one conformance receipt per target constraint
+```
+    NodeIdentityFact,
+    NodeRolesFact,
+    PresenceConstraint,
+    PreservationConstraint,
+    PythonParameterFact,
+    PythonParameterKind,
+    PythonSignatureFact,
+    PythonSymbolAnchor,
+    SystemEdgeAnchor,
+    SystemNodeAnchor,
+    TargetConformanceReport,
+    TargetConstraint,
+    TargetConstraintOrigin,
+    TargetSpecification,
+    UpdateEdgeOperation,
+    UpdateNodeOperation,
+    DeltaOperation,
