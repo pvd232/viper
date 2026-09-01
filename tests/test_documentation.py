@@ -41,6 +41,9 @@ CONTRACT_TRACEABILITY = (
 MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
 SYSTEM_IMPACT_GRAPH = ROOT / "docs/development/system-impact-graph.md"
 PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/phase-0-pair-coding.md"
+CONTRACT_TRACEABILITY_PAIR_CODING = (
+    ROOT / "docs/development/contract-traceability-phase-0-pair-coding.md"
+)
 SYSTEM_IMPACT_PAIR_CODING = (
     ROOT / "docs/development/system-impact-phase-0-1-pair-coding.md"
 )
@@ -1429,6 +1432,36 @@ def test_system_impact_dags_preserve_semantic_topology() -> None:
         assert actual_roles == expected_roles
         assert actual_palette == expected_palette
         assert TRACEABILITY_LINK_STYLE in diagram
+
+
+def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
+    """Keep the dedicated CRT guide complete and dependency ordered."""
+    text = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+    headings = (
+        "## 1. Status and boundary",
+        "## 2. Compiler path",
+        "## 3. Pair-coding cycles",
+        "## 4. Pairing rule",
+        "## 5. Phase gate",
+        "## 6. SystemGraph handoff",
+    )
+    positions = tuple(text.index(heading) for heading in headings)
+    assert positions == tuple(sorted(positions))
+
+    cycle_ids = tuple(
+        re.findall(r"<!-- pair-cycle: ([A-Z0-9-]+) -->", text)
+    )
+    assert cycle_ids == (
+        "P0-CRT-01",
+        "P0-CRT-02",
+        "P0-CRT-03",
+        "P0-CRT-04",
+        "P0-CRT-05",
+        "P0-PROOF-01",
+        "P0-PROOF-02",
+        "P0-PROOF-03",
+        "P0-PROOF-04",
+    )
 
 
 def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:

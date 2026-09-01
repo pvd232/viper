@@ -527,8 +527,11 @@ document keeps one active branch and completes them in order.
 
 ## 6. Pair-coding protocol
 
-The [Phase 0 pair-coding reference](phase-0-pair-coding.md) owns the root,
-module, and traceability work. The [SystemGraph Phase 0 and Phase 1 pair-coding
+The [contract traceability Phase 0 pair-coding
+guide](contract-traceability-phase-0-pair-coding.md) owns every `P0-CRT` block
+and `P0-PROOF-01` through `P0-PROOF-04`. The
+[Phase 0 pair-coding reference](phase-0-pair-coding.md) owns the project-root
+and module work. The [SystemGraph Phase 0 and Phase 1 pair-coding
 guide](system-impact-phase-0-1-pair-coding.md) owns every `P0-SIG`,
 `P0-PROOF-09` through `P0-PROOF-12`, and `P1-SIG` block. Every marked checkbox
 resolves to one block containing requirements, prerequisites, targets, tests,

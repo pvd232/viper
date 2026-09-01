@@ -742,9 +742,14 @@ persisted `LocalFileRef.store` value `.viper/store`. Import
 `LocalArtifactStore` in `_api/handlers.py`, add `_local_fetcher()` beside
 `_project_root()`, and place each shown binding before its verifier call.
 Pass those bound values to the existing verifier calls. An explicitly injected
-fetcher remains unchanged and does not require a local project root.
+fetcher stays active; its local project root remains optional.
 
 ## 3. Contract traceability
+
+The dedicated [contract traceability Phase 0 pair-coding
+guide](contract-traceability-phase-0-pair-coding.md) now owns the working-cycle
+layout. The exact `PairBlock` manifests and edits remain here until the compiler
+is implemented and this combined reference can retire them.
 
 <!-- pair-block-definition: P0-CRT-01 -->
 ```toml pair-block
