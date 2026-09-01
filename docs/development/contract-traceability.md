@@ -1,4 +1,4 @@
-# Contract requirement traceability
+# Contract Traceability
 
 VIPER contracts need a mechanical path from each written requirement to the
 code and test that enforce it. The current documentation check stops after
@@ -91,10 +91,10 @@ rule, implementation symbol, and exact test function.
 
 ```mermaid
 flowchart TD
-    Requirement["Requirement marker<br/>PDR-03 · phase 0 · test file"]
+    Requirement["Requirement marker<br/>PDR-03 · Master Phase 0 · test file"]
     Implements["Checklist marker<br/>implements PDR-03"]
     Verifies["Checklist marker<br/>verifies PDR-03"]
-    Phase["Phase 0 checkbox"]
+    Phase["Master Phase 0 checkbox"]
     TestFile["Test file<br/>tests/test_validation_architecture.py"]
     Missing["Unsupported links<br/>rule · source symbol · test function"]
 
@@ -530,7 +530,7 @@ type, and message fragment expected by its test.
 
 ### Illustrative worked example
 
-This example constructs every Section 4 model for `PDR-03`. Phase 0 will create
+This example constructs every Section 4 model for `PDR-03`. Master Phase 0 will create
 the source and test symbols, so both links begin in the `planned` state.
 
 <!-- contract-worked-example: start -->
@@ -803,7 +803,7 @@ named test function. The traceability graph joins those three representations.
 | --- | --- |
 | `src/viper/_contract_traceability.py` | Add exact models, marker parsers, TOML trace parsing, symbol resolution, cardinality checks, and canonical serialization for developer tooling. |
 | `tests/test_documentation.py` | Compare the compiler output with the current requirement, phase, test-file, and baseline oracle; require each contract's three DAGs and complete Section 4 example. |
-| `docs/development/master-execution-checklist.md` | Add the foundational Phase 0 work before project-root and system-graph implementation. |
+| `docs/development/master-execution-checklist.md` | Add the foundational Master Phase 0 work before project-root and system-graph implementation. |
 | `docs/development/*.md` pending contracts | Add verifier-rule markers, three DAGs, one complete worked example, and populated success and rejection traces per contract. |
 | `/Users/machina/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, complete Section 4 example, populated traces, and requirement-rule-owner-test chain. |
 | `docs/development/system-impact-compiler.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
@@ -830,7 +830,7 @@ requirement_id = "CRT-02"
 rule_id = "contract.rule.implemented"
 state = "planned"
 scenario = "The traceability compiler records one exact planned source owner for a rule."
-setup = "docs/development/contract-requirement-traceability.md declares CRT-02 and contract.rule.implemented; docs/development/master-execution-checklist.md assigns that rule to src/viper/_contract_traceability.py:compile_contract_traceability"
+setup = "docs/development/contract-traceability.md declares CRT-02 and contract.rule.implemented; docs/development/master-execution-checklist.md assigns that rule to src/viper/_contract_traceability.py:compile_contract_traceability"
 input = "<!-- verifier-rule: contract.rule.implemented requirement=CRT-02 -->"
 invocation = "compile_contract_traceability(ROOT)"
 implementation = "src/viper/_contract_traceability.py:compile_contract_traceability"
@@ -848,7 +848,7 @@ requirement_id = "CRT-02"
 rule_id = "contract.rule.tested"
 state = "planned"
 scenario = "A verifier rule has no contract-verification marker."
-setup = "fixture docs/development/contract-requirement-traceability.md declares contract.rule.tested; fixture docs/development/master-execution-checklist.md omits its contract-verification marker"
+setup = "fixture docs/development/contract-traceability.md declares contract.rule.tested; fixture docs/development/master-execution-checklist.md omits its contract-verification marker"
 input = "<!-- verifier-rule: contract.rule.tested requirement=CRT-02 -->"
 invocation = "compile_contract_traceability(fixture_root)"
 implementation = "src/viper/_contract_traceability.py:compile_contract_traceability"

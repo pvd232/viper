@@ -128,8 +128,8 @@ one implementation task and one test gate for that requirement in the same
 phase. The check also rejects missing test modules and contract edits whose
 pinned digest differs from the reviewed digest in the checklist.
 
-That is the current requirement-level check. Phase 0 implements the stricter
-[contract requirement traceability](contract-requirement-traceability.md)
+That is the current requirement-level check. Master Phase 0 implements the stricter
+[contract traceability](contract-traceability.md)
 contract:
 
 ```text

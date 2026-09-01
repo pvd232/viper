@@ -1,7 +1,8 @@
-# VIPER contract implementation guide
+# VIPER Master Execution Checklist
 
-Start with Phase 1. It preserves current local behavior while creating the
-publication boundary required by every later phase.
+Start with the first open block in Master Phase 0. Master Phase 0 establishes
+the traceability, repository-root, ownership, and impact evidence required by
+every later phase.
 
 This document is the build reference for VIPER's current development
 contracts. It explains the target system, records the cross-contract review,
@@ -245,13 +246,32 @@ implemented source + same fixed context
 
 ## 3. Contract ownership
 
+### 3.1 Artifact and phase names
+
+The documentation uses one name for each artifact family:
+
+| Artifact | Naming rule | Current example |
+| --- | --- | --- |
+| Governing contract | Stable capability name | [Contract Traceability](contract-traceability.md) |
+| Pair-coding guide | `<Capability> Pair-Coding Guide` | [Contract Traceability Pair-Coding Guide](contract-traceability-pair-coding.md) |
+| Cross-contract schedule | `VIPER Master Execution Checklist` | This document |
+| Scheduled phase | `Master Phase N` | Master Phase 0 |
+| Stable work identity | Existing PairBlock ID | `P0-CRT-01` |
+| Contract-local sequence | `Implementation Step N` | Implementation Step 1 |
+| Research sequence | `Research Stage N` | Research Stage I |
+
+Only this checklist assigns numbered Master Phases. Contract documents retain
+their capability names when the checklist moves them. PairBlock IDs keep their
+existing `P0-*` and `P1-*` prefixes because those IDs already identify their
+scheduled phase and dependency order.
+
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract requirement traceability](contract-requirement-traceability.md) | Draft after audit | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
+| [Contract Traceability](contract-traceability.md) | Draft after audit | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
 | [Project data root](project-data-root.md) | Draft after audit | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design | One defining module for API operations, verification operations, and verification types |
-| [System-Impact Compiler](system-impact-compiler.md) | Audited design; implementation pending | Defined dependency types, automatic `ContractChange` compilation, conservative impact overlay, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and observed conformance |
+| [System Impact Compiler](system-impact-compiler.md) | Audited design; implementation pending | Defined dependency types, automatic `ContractChange` compilation, conservative impact overlay, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and observed conformance |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Draft after audit | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -268,7 +288,7 @@ The contracts share models. One contract owns each shared decision:
 
 | Shared decision | Owner |
 | --- | --- |
-| Each contract requirement reaches named verifier rules, exact implementation owners, populated traces, and exact test functions | Contract requirement traceability |
+| Each contract requirement reaches named verifier rules, exact implementation owners, populated traces, and exact test functions | Contract Traceability |
 | `viper init ROOT` selects the source, protocol, working-data, and local-state tree | Project data root |
 | `.viper/store` remains a separate immutable subtree beneath the selected root | Project data root |
 | Public API and verification symbols are implemented in the modules callers import | Public module ownership |
@@ -293,7 +313,7 @@ The contracts share models. One contract owns each shared decision:
 | Exact filters run before vector ranking; exact identity or reviewed equivalence rejects a duplicate | Experiment knowledge primitives |
 | Learned representations and policies begin after reviewed evidence exists | Research memory roadmap |
 
-### 3.1 Deterministic contract coverage
+### 3.2 Deterministic contract coverage
 
 Each pending contract declares stable requirement IDs with an owning phase and
 focused test. The matching phase contains one requirement-level `implements`
@@ -303,21 +323,21 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-requirement-traceability.md sha256=db25ff9facce59d513ba164ac76096fa7c85169d97645e41b869c58a5e85d836 -->
+<!-- contract-baseline: contract-traceability.md sha256=6415fdefd9c692e1569ef180a8a0c78dc36013b5e4d9002f5267c9e8241f9d47 -->
 
-<!-- contract-baseline: project-data-root.md sha256=74acbb87c68fa1849d6bd82bafe49bb5fd367b046dd47f8a678b3c456c40f8a4 -->
-<!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=739d3ca017febb64eece0586f8474721226931433c34186b368711f4d1c8cdb1 -->
+<!-- contract-baseline: project-data-root.md sha256=4abf108ccf295d9de7e2a2edc2f98e221a6a418cbd838dac401cb1127f74b693 -->
+<!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=c2757b653c03abc6589f57cdb741aa2ec9787b1390b20eea432bada004cb8a50 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=ad7ed3b8fc334bd0f1c5bb0207b90bcafc03b5f0403592b77d7bb0074c9619e1 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=f4c723edccd27bdcc63c49f1ac369f16599eb45c0f7a6a193550efe106e2d29d -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=11677edf79da1b5a6ce34e85aca143412af0ea4e43f7381d03e45ef0e36f271f -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=20b6e2301d52d83b397e503aa2341c09aafd22d46b5683d25e76c33f466e6a34 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=361b78746b4f72567517e1672cf2997ede22d8c107e28685ed82125df9586c84 -->
 <!-- contract-baseline: remote-storage.md sha256=a38a9a743f488619acee0d55785b9689b41ec78231d8bfb03eb815f9d3fe132c -->
 <!-- contract-baseline: experiment-expansion.md sha256=e8edfe2d0c1b4841aaa639b5721bb0eb5612f01d2cf30aade8813e86c2e2c9cb -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=a31636f188037e335f528c8fe52b79d5d4172e2fa34f549c5e0e8ecb8805134c -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=ebefc2b7fdba137600aebd98387e94996621f9391b93e986ec975753afe8808f -->
 <!-- contract-baseline: stage-reuse.md sha256=e0b7572ab0e842cdbd24ed93b9cf6776e0abc3acfbef886d3c881d06c62ae231 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=4b5809bde81d46456b62e5c8e541b7bb071c793ec6c022d01f0558b13c53d0d7 -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=b0be49f4cdfe4ec9b73928134de1e787a8374c3b21b5bbc79962ec4e63ac101f -->
 
 ## 4. Specification-system review
 
@@ -454,7 +474,7 @@ Every new claim has a named rejection or acceptance boundary:
 | --- | --- |
 | Every local operation uses the initialized root | `project.root.marker`, `project.root.stability`, and explicit-root relocation acceptance |
 | Working artifacts remain separate from local immutable evidence | Publish, mutate the working artifact, and retrieve the original bytes through `LocalFileRef` |
-| Development impact uses equal external inputs | `system.context.identity` and `system.delta.context` |
+| Development impact uses the same external inputs and compiler | `system.context.identity`, `system.compiler.identity`, and `system.delta.context` |
 | Dynamic registrations remain observable outcomes | Remove one decorator and require the candidate graph to lose its `registers` edge |
 | Every contract requirement reaches code and a test | `system.requirement.coverage` and graph parity with the existing documentation oracle |
 | HTTP receipt and artifact identify the same bytes | `download.receipt_artifact_identity` |
@@ -513,29 +533,28 @@ Each contract has one case that must fail:
 ## 5. Dependency order
 
 ```text
-Phase 0 -> Phase 1
-Phase 1 -> Phase 2 -> Phase 3
-Phase 1 -> Phase 4
-Phase 2 + Phase 4 -> Phase 5 -> Phase 6
-Phase 3 + Phase 6 -> Phase 7 -> Phase 8 -> Phase 9 -> Phase 10 -> Phase 11
-Phase 11 -> Phase 12 -> Phase 13 -> Phase 14 -> Phase 15
-Phase 15 -> Phase 16 -> Phase 17 -> Phase 18
+Master Phase 0 -> Master Phase 1
+Master Phase 1 -> Master Phase 2 -> Master Phase 3
+Master Phase 1 -> Master Phase 4
+Master Phase 2 + Master Phase 4 -> Master Phase 5 -> Master Phase 6
+Master Phase 3 + Master Phase 6 -> Master Phase 7 -> Master Phase 8 -> Master Phase 9 -> Master Phase 10 -> Master Phase 11
+Master Phase 11 -> Master Phase 12 -> Master Phase 13 -> Master Phase 14 -> Master Phase 15
+Master Phase 15 -> Master Phase 16 -> Master Phase 17 -> Master Phase 18
 ```
 
-Phase 0 first establishes contract traceability and the root used by every
+Master Phase 0 first establishes contract traceability and the root used by every
 later local path. It then gives public API and verification symbols one owner
-before compiling those relationships into the system graph. Phases 2 and 4 may
-occur on separate branches after Phase 1. The pair-coding sequence in this
+before compiling those relationships into the system graph. Master Phases 2 and 4 may
+occur on separate branches after Master Phase 1. The pair-coding sequence in this
 document keeps one active branch and completes them in order.
 
 ## 6. Pair-coding protocol
 
-The [contract traceability Phase 0 pair-coding
-guide](contract-traceability-phase-0-pair-coding.md) owns every `P0-CRT` block
+The [Contract Traceability Pair-Coding
+Guide](contract-traceability-pair-coding.md) owns every `P0-CRT` block
 and `P0-PROOF-01` through `P0-PROOF-04`. The
-[Phase 0 pair-coding reference](phase-0-pair-coding.md) owns the project-root
-and module work. The [System-Impact Compiler
-specification](system-impact-compiler.md#14-implementation-plan-and-verification-gates)
+[Foundation Pair-Coding Guide](foundation-pair-coding.md) owns the project-root
+and module work. The [System Impact Compiler](system-impact-compiler.md#14-implementation-plan-and-verification-gates)
 owns every `P0-SIG`,
 `P0-PROOF-09` through `P0-PROOF-12`, and `P1-SIG` block. Every marked checkbox
 resolves to one block containing requirements, prerequisites, targets, tests,
@@ -555,14 +574,14 @@ Each pair-coding turn changes one bounded behavior. The user writes the code.
 Codex inspects the live file, explains the next edit, and chooses the next test
 from the observed result.
 
-## 7. Phase 0 — traceability, project root, module ownership, and system impact
+## 7. Master Phase 0 — traceability, project root, module ownership, and system impact
 
 **Depends on:** Module-privacy work already implemented.
 
-**Contracts:** [Contract requirement traceability](contract-requirement-traceability.md),
+**Contracts:** [Contract Traceability](contract-traceability.md),
 [project data root](project-data-root.md),
 [public module ownership](module-ownership.md), and
-[System-Impact Compiler](system-impact-compiler.md)
+[System Impact Compiler](system-impact-compiler.md)
 
 **Outcome:** Every contract requirement has a named rule, exact implementation
 owner, populated trace, and exact test. `viper init ROOT` creates the complete
@@ -572,7 +591,7 @@ compile that stable source tree under one fixed context, publish canonical
 dependency graphs, and return the exact affected requirements and observing
 tests before later phases change code.
 
-### 7.1 Contract requirement traceability
+### 7.1 Contract Traceability
 
 - [ ] Add the exact traceability models and parsers in
       `src/viper/_contract_traceability.py`; compile current requirement rows
@@ -600,7 +619,7 @@ tests before later phases change code.
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.documented state=implemented owner=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
 - [ ] Apply the three-DAG and complete worked-example format to each remaining
       pending contract. Extend the documentation test from
-      `PHASE_ZERO_CONTRACTS` to `IMPLEMENTATION_CONTRACTS` before Phase 0
+      `MASTER_PHASE_ZERO_CONTRACTS` to `IMPLEMENTATION_CONTRACTS` before Master Phase 0
       closes.
       <!-- pair-block: P0-CRT-04 -->
 - [ ] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
@@ -630,8 +649,8 @@ system graph consumes its ownership links directly.
 
 #### Pair-coding blocks
 
-The [contract traceability Phase 0 pair-coding
-guide](contract-traceability-phase-0-pair-coding.md) owns the complete
+The [Contract Traceability Pair-Coding
+Guide](contract-traceability-pair-coding.md) owns the complete
 `P0-CRT-01` through `P0-CRT-05` production edits and
 `P0-PROOF-01` through `P0-PROOF-04` acceptance edits. The checklist owns
 their order and state; the guide owns their exact code and focused gates.
@@ -735,7 +754,7 @@ the new owner.
       <!-- pair-block: P0-SIG-02 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.inventory.complete state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.total state=planned owner=src/viper/system_graph.py:analyze_python -->
-- [ ] Implement the Phase 0 Python extraction matrix for imports, direct calls
+- [ ] Implement the Master Phase 0 Python extraction matrix for imports, direct calls
       and construction, inheritance, annotations, decorators, registries,
       symbol reads and writes, and exports. Emit unresolved diagnostics for
       star imports and computed targets.
@@ -796,6 +815,7 @@ the new owner.
       receipt per target constraint.
       <!-- pair-block: P0-SIG-11 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.context.identity state=planned owner=src/viper/system_graph.py:compile_system -->
+      <!-- contract-implementation: requirement=SIG-02 rule=system.compiler.identity state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.resolution.total state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.canonical state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.references state=planned owner=src/viper/system_graph.py:SystemGraph -->
@@ -898,6 +918,7 @@ crossing component edge.
       <!-- contract-verification: requirement=SIG-01 rule=system.edge.vocabulary state=planned test=tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed -->
       <!-- contract-verification: requirement=SIG-01 rule=system.edge.evidence state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
       <!-- contract-verification: requirement=SIG-02 rule=system.context.identity state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
+      <!-- contract-verification: requirement=SIG-02 rule=system.compiler.identity state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
       <!-- contract-verification: requirement=SIG-02 rule=system.resolution.total state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
       <!-- contract-verification: requirement=SIG-02 rule=system.diagnostics.complete state=planned test=tests/test_validation_architecture.py:test_system_graph_diagnostics_fail_closed -->
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.canonical state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
@@ -965,16 +986,16 @@ executable affected symbol, statement, and branch. The phase closes only after
 its `PropagationPlan` covers every affected and introduced node and the observed
 `G1` satisfies the compiled target constraints.
 
-## 8. Phase 1 — destination-neutral local publication
+## 8. Master Phase 1 — destination-neutral local publication
 
 **Depends on:** Module-privacy work already implemented.
 
 **Contract:** [Direct Viper Cloud publication](remote-storage.md)
 
 **Outcome:** Current local runs produce the same bytes and references through a
-new publisher boundary. Cloud implementation begins in Phase 9.
+new publisher boundary. Cloud implementation begins in Master Phase 9.
 
-### 8.0 SystemGraph Phase 1 hardening
+### 8.0 System Impact hardening
 
 - [ ] Observe importlib targets, decorator registrations, literal registries,
       reflection targets, and subprocess entrypoints under the fixed context.
@@ -992,8 +1013,7 @@ new publisher boundary. Cloud implementation begins in Phase 9.
       of the blast and prohibit splitting an SCC.
       <!-- pair-block: P1-SIG-04 -->
 
-These blocks are defined in the [System-Impact Compiler
-specification](system-impact-compiler.md#14-implementation-plan-and-verification-gates).
+These blocks are defined in the [System Impact Compiler](system-impact-compiler.md#14-implementation-plan-and-verification-gates).
 Cohesion-aware optimized
 partitioning remains a later research comparison over the same condensation
 DAG.
@@ -1067,9 +1087,9 @@ python -m pytest \
 
 **Commit boundary:** `Add destination-neutral local publication`
 
-## 9. Phase 2 — runner-owned download stages
+## 9. Master Phase 2 — runner-owned download stages
 
-**Depends on:** Phase 1.
+**Depends on:** Master Phase 1.
 
 **Contracts:** [Download retrieval artifacts](download-retrieval-artifacts.md),
 [external roots](external-input-roots.md)
@@ -1180,9 +1200,9 @@ python -m pytest \
 
 **Commit boundary:** `Make download stages runner owned`
 
-## 10. Phase 3 — captured local external roots
+## 10. Master Phase 3 — captured local external roots
 
-**Depends on:** Phase 2.
+**Depends on:** Master Phase 2.
 
 **Contract:** [External input roots](external-input-roots.md)
 
@@ -1260,9 +1280,9 @@ python -m pytest \
 
 **Commit boundary:** `Bind local input bytes to stage custody`
 
-## 11. Phase 4 — unified metric runtime and protocol
+## 11. Master Phase 4 — unified metric runtime and protocol
 
-**Depends on:** Phase 1.
+**Depends on:** Master Phase 1.
 
 **Contracts:** [Unified metric drafting](unified-metric-drafting.md) and
 [direct Viper Cloud publication](remote-storage.md)
@@ -1339,7 +1359,7 @@ A stored input follows its pointer to the producer snapshot.
 - [ ] Accept either mode for an embedding objective.
 - [ ] Require the final objective measurement.
 - [ ] Permit additional diagnostic metric IDs beside the objective in frozen
-      stage specs. Phase 5 exposes them through `metrics=`.
+      stage specs. Master Phase 5 exposes them through `metrics=`.
 
 ### 11.4 Focused proof
 
@@ -1363,9 +1383,9 @@ python -m pytest \
 
 **Commit boundary:** `Unify metric drafting and runtime context`
 
-## 12. Phase 5 — Python stage, artifact, and HTTP drafts
+## 12. Master Phase 5 — Python stage, artifact, and HTTP drafts
 
-**Depends on:** Phases 2 and 4.
+**Depends on:** Master Phases 2 and 4.
 
 **Contract:** [Automatic input resolution](automatic-input-resolution.md)
 
@@ -1509,9 +1529,9 @@ python -m pytest \
 
 **Commit boundary:** `Add Python stage and artifact drafting`
 
-## 13. Phase 6 — experiments, variants, replicates, and freezing
+## 13. Master Phase 6 — experiments, variants, replicates, and freezing
 
-**Depends on:** Phase 5.
+**Depends on:** Master Phase 5.
 
 **Contracts:** [Unified metric drafting](unified-metric-drafting.md),
 [automatic input resolution](automatic-input-resolution.md), and
@@ -1597,9 +1617,9 @@ python -m pytest \
 
 **Commit boundary:** `Compile experiments and reusable variants`
 
-## 14. Phase 7 — automatic input compilation
+## 14. Master Phase 7 — automatic input compilation
 
-**Depends on:** Phases 3 and 6.
+**Depends on:** Master Phases 3 and 6.
 
 **Contracts:** [Automatic input resolution](automatic-input-resolution.md),
 [external input roots](external-input-roots.md)
@@ -1668,9 +1688,9 @@ python -m pytest \
 
 **Commit boundary:** `Compile artifact handles into provenance inputs`
 
-## 15. Phase 8 — benchmark drafting and complete results
+## 15. Master Phase 8 — benchmark drafting and complete results
 
-**Depends on:** Phase 7.
+**Depends on:** Master Phase 7.
 
 **Contract:** [Unified metric drafting](unified-metric-drafting.md)
 
@@ -1724,9 +1744,9 @@ python -m pytest \
 
 **Commit boundary:** `Record complete benchmark metric results`
 
-## 16. Phase 9 — direct Viper Cloud publication
+## 16. Master Phase 9 — direct Viper Cloud publication
 
-**Depends on:** Phase 8.
+**Depends on:** Master Phase 8.
 
 **Contract:** [Direct Viper Cloud publication](remote-storage.md)
 
@@ -1773,7 +1793,7 @@ Metric dependency resolution stays outside this publication list. It derives
 - [ ] Extend `RunFetcher` for `ViperCloudFileRef` and cloud stage snapshots.
 - [ ] Extend `_verification/storage.py` fetch and list dispatch.
 - [ ] Apply digest and byte-count checks after every cloud fetch.
-- [ ] Route cloud freezing and execution through the Phase 1 run-level
+- [ ] Route cloud freezing and execution through the Master Phase 1 run-level
       destination binding under `.viper/workspaces/<run-id>/`.
 - [ ] Reject a destination change before pointer publication or stage work.
 - [ ] Walk the terminal graph before cloud terminal publication.
@@ -1820,9 +1840,9 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 **Commit boundary:** `Publish immutable evidence directly to Viper Cloud`
 
-## 17. Phase 10 — artifact restore
+## 17. Master Phase 10 — artifact restore
 
-**Depends on:** Phase 9.
+**Depends on:** Master Phase 9.
 
 **Contract:** [Direct Viper Cloud publication](remote-storage.md#104-restore)
 
@@ -1879,9 +1899,9 @@ python -m pytest tests/test_storage.py tests/test_cli.py tests/test_api.py -q
 
 **Commit boundary:** `Restore complete runs and selected artifacts`
 
-## 18. Phase 11 — public workflow migration
+## 18. Master Phase 11 — public workflow migration
 
-**Depends on:** Phases 1–10.
+**Depends on:** Master Phases 1–10.
 
 **Contracts:** [Download retrieval artifacts](download-retrieval-artifacts.md),
 [external input roots](external-input-roots.md),
@@ -1916,7 +1936,7 @@ freeze, run, benchmark, and restore.
 - [ ] Keep the HTTP decorator and public HTTP types in their defining
       `viper.http` module. Keep the package-root namespace free of HTTP aliases.
 - [ ] Update `docs/reference/protocol.md` with every model and alias
-      implemented through Phase 11.
+      implemented through Master Phase 11.
 - [ ] Update `docs/reference/versioning.md` if alpha compatibility language
       changes.
 - [ ] Update `docs/README.md` and release evidence.
@@ -1932,7 +1952,7 @@ freeze, run, benchmark, and restore.
 - [ ] Run `tests/test_documentation.py` after the contract and public-document
       cleanup. <!-- verifies: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
 - [ ] Run the protocol, generated-project, and documentation tests changed by
-      Phases 1–11. Phase 18 owns the full repository and clean-wheel gates.
+      Master Phases 1–11. Master Phase 18 owns the full repository and clean-wheel gates.
 
 ```bash
 python -m pytest \
@@ -1945,9 +1965,9 @@ python -m pytest \
 
 **Commit boundary:** `Publish the Python-authored VIPER workflow`
 
-## 19. Phase 12 — experiment expansion and bounded execution
+## 19. Master Phase 12 — experiment expansion and bounded execution
 
-**Depends on:** Phase 11.
+**Depends on:** Master Phase 11.
 
 **Contract:** [Experiment expansion](experiment-expansion.md)
 
@@ -2046,9 +2066,9 @@ python -m pytest \
 
 **Commit boundary:** `Expand and execute complete experiments`
 
-## 20. Phase 13 — searchable provenance catalog
+## 20. Master Phase 13 — searchable provenance catalog
 
-**Depends on:** Phase 12.
+**Depends on:** Master Phase 12.
 
 **Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
 
@@ -2129,9 +2149,9 @@ python -m pytest \
 
 **Commit boundary:** `Index and search verified provenance`
 
-## 21. Phase 14 — verified stage reuse
+## 21. Master Phase 14 — verified stage reuse
 
-**Depends on:** Phases 9 and 13.
+**Depends on:** Master Phases 9 and 13.
 
 **Contract:** [Verified stage reuse](stage-reuse.md)
 
@@ -2242,9 +2262,9 @@ python -m pytest \
 
 **Commit boundary:** `Reuse verified stage results with explicit evidence`
 
-## 22. Phase 15 — local MCP server
+## 22. Master Phase 15 — local MCP server
 
-**Depends on:** Phases 12–14.
+**Depends on:** Master Phases 12–14.
 
 **Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
 
@@ -2314,9 +2334,9 @@ python -m pytest \
 
 **Commit boundary:** `Expose VIPER through a typed local MCP server`
 
-## 23. Phase 16 — scientific evidence records
+## 23. Master Phase 16 — scientific evidence records
 
-**Depends on:** Phases 9, 13, and 15.
+**Depends on:** Master Phases 9, 13, and 15.
 
 **Contract:**
 [Experiment knowledge primitives](experiment-knowledge-primitives.md)
@@ -2388,7 +2408,7 @@ one model with nullable classifier, reviewer, and confidence fields.
 - [ ] Load the repository `StorageSettings` when `destination=None`. Accept an
       explicit local or cloud destination for cross-run knowledge records and
       keep that location in every returned reference.
-- [ ] Add verifier dispatch for every Phase 16 knowledge record. Failed
+- [ ] Add verifier dispatch for every Master Phase 16 knowledge record. Failed
       validation stops before immutable publication.
 
 <details>
@@ -2428,9 +2448,9 @@ python -m pytest tests/test_verification_acceptance.py -q
 
 **Commit boundary:** `Record verified experiment knowledge`
 
-## 24. Phase 17 — knowledge graph and agent search
+## 24. Master Phase 17 — knowledge graph and agent search
 
-**Depends on:** Phase 16.
+**Depends on:** Master Phase 16.
 
 **Contracts:**
 [Experiment knowledge primitives](experiment-knowledge-primitives.md) and
@@ -2544,9 +2564,9 @@ python -m pytest \
 
 **Commit boundary:** `Search experiment knowledge through every public surface`
 
-## 25. Phase 18 — terminal system and release gate
+## 25. Master Phase 18 — terminal system and release gate
 
-**Depends on:** Phases 1–17.
+**Depends on:** Master Phases 1–17.
 
 **Contracts:** All.
 
@@ -2747,9 +2767,9 @@ the research-memory roadmap. Learned representations, literature ingestion,
 outcome models, acquisition, and continual learning remain deferred.
 Implementation remains pending. The first missing result is an initialized
 project whose marker, protocol tree, local store, public module ownership, and
-strict system impact graph pass the Phase 0 gate.
+strict system impact graph pass the Master Phase 0 gate.
 
-Once Phase 0 passes, Phase 1 introduces destination-neutral local publication.
+Once Master Phase 0 passes, Master Phase 1 introduces destination-neutral local publication.
 
 ## Implementation sources
 

@@ -346,13 +346,13 @@ import.
 
 | Work unit | Current state | Owning phase | Completion evidence |
 | --- | --- | --- | --- |
-| Parameter validation path | `_parameter/_validation.py` remains | Phase 1 | Parameter and preflight tests pass with the new import path. |
-| Shared internal functions | Cross-module imports use underscored symbols | Phase 2 | Execution, verification, and application tests pass after the renames. |
-| Execution results and errors | Public result and error modules own their local types | Phase 3 | Public import tests pass. |
-| Shared Git test support | One test imports `_git` from another test module | Phase 4 | Both test modules import `tests.git_repository`. |
-| Enforced convention | The source tree permits all three patterns and package-root forwarding | Phase 5 | The architecture and public-API rejection cases pass. |
+| Parameter validation path | `_parameter/_validation.py` remains | Implementation Step 1 | Parameter and preflight tests pass with the new import path. |
+| Shared internal functions | Cross-module imports use underscored symbols | Implementation Step 2 | Execution, verification, and application tests pass after the renames. |
+| Execution results and errors | Public result and error modules own their local types | Implementation Step 3 | Public import tests pass. |
+| Shared Git test support | One test imports `_git` from another test module | Implementation Step 4 | Both test modules import `tests.git_repository`. |
+| Enforced convention | The source tree permits all three patterns and package-root forwarding | Implementation Step 5 | The architecture and public-API rejection cases pass. |
 
-### Phase 1. Normalize parameter validation
+### Implementation Step 1 — Normalize parameter validation
 
 **Depends on:** None
 
@@ -379,9 +379,9 @@ python -m pytest tests/test_parameter_validation.py tests/test_preflight.py -q
 
 **Commit boundary:** `Normalize private parameter validation path`
 
-### Phase 2. Normalize shared internal functions
+### Implementation Step 2 — Normalize shared internal functions
 
-**Depends on:** Phase 1
+**Depends on:** Implementation Step 1
 
 - [x] Rename `_execute_attempt()` to `execute_attempt()`.
 - [x] Rename `_resolve_inputs()` to `resolve_inputs()`.
@@ -422,9 +422,9 @@ python -m pytest tests/test_run_execution.py tests/test_verification.py \
 
 **Commit boundary:** `Normalize private subsystem operations`
 
-### Phase 3. Publish execution result and error types
+### Implementation Step 3 — Publish execution result and error types
 
-**Depends on:** Phase 2
+**Depends on:** Implementation Step 2
 
 - [x] Rename `execution/_results.py` to `execution/results.py`.
 - [x] Move `BenchmarkExecutionResult` into `execution/results.py`.
@@ -451,9 +451,9 @@ python -m pytest tests/test_public_api.py tests/test_benchmark_execution.py \
 
 **Commit boundary:** `Publish execution results and errors`
 
-### Phase 4. Repair shared test support
+### Implementation Step 4 — Repair shared test support
 
-**Depends on:** Phase 2
+**Depends on:** Implementation Step 2
 
 - [x] Add `tests/git_repository.py` with `REPOSITORY` and `run_git()`.
 - [x] Update `test_run_execution.py` and
@@ -471,7 +471,7 @@ python -m pytest tests/test_generated_project_acceptance.py --collect-only -q
 
 **Commit boundary:** `Give shared Git test support one owner`
 
-### Phase 5. Enforce the boundary
+### Implementation Step 5 — Enforce the boundary
 
 **Depends on:** Phases 3 and 4
 

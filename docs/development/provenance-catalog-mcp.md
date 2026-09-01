@@ -407,7 +407,7 @@ boundary.
 
 ## 9. Stage-reuse dependency
 
-[`stage-reuse.md`](stage-reuse.md) extends the version-1 catalog in Phase 14
+[`stage-reuse.md`](stage-reuse.md) extends the version-1 catalog in Master Phase 14
 after it defines `StageReuseKey`. That extension adds the `stage_reuse_keys`
 table and the private candidate lookup. Each row stores the complete
 `StageReuseKey`, the candidate `ResolvedRunRef`, successful attempt reference,

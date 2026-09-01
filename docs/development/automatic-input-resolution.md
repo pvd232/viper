@@ -2918,15 +2918,15 @@ download, local-root capture, and metric runtime in the
 This section groups the work owned by the automatic-input contract. The master
 checklist supplies the cross-contract commit order.
 
-Phase 11 publishes the single-run workflow through `viper.authoring.freeze()`,
+Master Phase 11 publishes the single-run workflow through `viper.authoring.freeze()`,
 `viper.execution.run()`, `viper.execution.benchmark()`, and restore. The
 complete target example also shows `viper.authoring.expand()`,
 `viper.execution.run_many()`, verified stage reuse, `catalog()` from
 `viper.catalog`, and the
 knowledge API. Their owning contracts implement those calls in Phases 12–17.
-Phase 18 publishes the combined workflow after those phases pass.
+Master Phase 18 publishes the combined workflow after those master phases pass.
 
-### Phase 1. Define the Python authoring models
+### Implementation Step 1 — Define the Python authoring models
 
 - [ ] Replace `StageDraft.spec_source` with `StageDraft.spec`.
 - [ ] Remove `StageDraft.stage_id`; add `VariantDraft.stages` as
@@ -2960,7 +2960,7 @@ Phase 18 publishes the combined workflow after those phases pass.
 same-run, or prior-run input selections. The compiler-facing draft models are
 complete.
 
-### Phase 2. Expose runner-owned download through Python authoring
+### Implementation Step 2 — Expose runner-owned download through Python authoring
 
 - [ ] Make `viper.authoring.download()` construct `DownloadSpecDraft` directly.
 - [ ] Select `BuiltinHttpImplementationSpec()` when the author omits `http=`.
@@ -2972,7 +2972,7 @@ complete.
 stage through either the built-in HTTP implementation or one function
 decorated with `@http`.
 
-### Phase 3. Compile local and same-run inputs
+### Implementation Step 3 — Compile local and same-run inputs
 
 - [ ] Convert each `ExternalInputDraft` into `ExternalInputRef` with one
       `LocalSource` and the declared data role.
@@ -2995,7 +2995,7 @@ decorated with `@http`.
 to training while the compiler owns the `ExternalInputRef` and
 `FutureInputRef` syntax.
 
-### Phase 4. Generate prior-run pointers
+### Implementation Step 4 — Generate prior-run pointers
 
 - [ ] Change `StoredInputRef.pointer` to `ResolvedArtifactPointerRef` and let
       that reference inherit `StorageRef`.
@@ -3013,7 +3013,7 @@ to training while the compiler owns the `ExternalInputRef` and
 **Commit boundary:** a later run consumes a prior VIPER artifact through a
 compiler-generated pointer.
 
-### Phase 5. Complete metric and experiment integration
+### Implementation Step 5 — Complete metric and experiment integration
 
 - [ ] Pass this contract's complete stage graph into the metric and experiment
       compiler defined by
@@ -3032,7 +3032,7 @@ compiler-generated pointer.
 **Commit boundary:** automatic input resolution and unified experiment drafting
 freeze one complete model run through the same Python authoring program.
 
-### Phase 6. Update user documentation
+### Implementation Step 6 — Update user documentation
 
 - [ ] Replace the README stage example with the complete proposed authoring
       example after the target API passes its acceptance case.

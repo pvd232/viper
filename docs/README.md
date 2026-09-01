@@ -24,9 +24,9 @@ Start with the task you need to complete.
 | [Contributing guide](../CONTRIBUTING.md) | Set up the repository and submit a validated change |
 | [Testing guide](development/testing.md) | Select a test tier, domain, CI gate, or live CUDA check |
 | [Contract implementation guide](development/master-execution-checklist.md) | Review and build the contracts in dependency order with pair-coding hints and acceptance gates |
-| [Contract requirement traceability](development/contract-requirement-traceability.md) | Link each contract requirement to its verifier rule, implementation owner, concrete trace, and acceptance test |
+| [Contract Traceability](development/contract-traceability.md) | Link each contract requirement to its verifier rule, implementation owner, concrete trace, and acceptance test |
 | [Project data root contract](development/project-data-root.md) | Bind initialization, protocol paths, local storage, and later commands to one selected project root |
-| [System-Impact Compiler specification](development/system-impact-compiler.md) | Compile deterministic dependency graphs, complete change plans, bounded work, and post-implementation conformance evidence |
+| [System Impact Compiler](development/system-impact-compiler.md) | Compile deterministic dependency graphs, complete change plans, bounded work, and post-implementation conformance evidence |
 | [Download retrieval contract](development/download-retrieval-artifacts.md) | Make each verified HTTP body the same-named stage artifact |
 | [External input roots contract](development/external-input-roots.md) | Capture local roots and connect HTTP artifacts to later consumers |
 | [Automatic input resolution contract](development/automatic-input-resolution.md) | Compile Python stage drafts and artifact selections into frozen plans |

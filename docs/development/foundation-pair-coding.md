@@ -1,6 +1,6 @@
-# Phase 0 Pair-Coding Reference
+# Foundation Pair-Coding Guide
 
-This document contains the exact bounded edits scheduled by Phase 0 of the
+This document contains the exact bounded foundation edits scheduled by Master Phase 0 of the
 [master execution checklist](master-execution-checklist.md).
 The checklist decides order. Each `PairBlock` below supplies the code, target,
 focused test, and completion gate for one checkbox.
@@ -17,7 +17,7 @@ unknown targets, dependency cycles, placeholders, and invalid Python.
 ContractRequirement
         |
         v
-Phase 0 checkbox -> PairBlock -> exact source target
+Master Phase 0 checkbox -> PairBlock -> exact source target
                          |              |
                          v              v
                    focused test -> completion gate
@@ -34,14 +34,14 @@ The implementation uses five ordinary data-structure operations:
 5. Canonical JSON plus SHA-256 identifies one reviewed graph and permits exact
    set difference between revisions.
 
-This workflow compares Phase 0 nodes through their stable identities. Graph
+This workflow compares foundation nodes through their stable identities. Graph
 isomorphism applies later when two normalized experiment graphs lack shared IDs
 and the question concerns structural equivalence. Exact revision identity uses
 stable IDs and set difference.
 
 ### Audit boundary
 
-Phase 0 uses two audit layers.
+The foundation work uses two audit layers.
 
 The deterministic layer parses markers, manifests, Python syntax, live imports,
 model fields, dependencies, targets, tests, and gates. It reports exact
@@ -746,8 +746,8 @@ fetcher stays active; its local project root remains optional.
 
 ## 3. Contract traceability
 
-The dedicated [contract traceability Phase 0 pair-coding
-guide](contract-traceability-phase-0-pair-coding.md) owns `P0-CRT-01` through
+The dedicated [Contract Traceability Pair-Coding
+guide](contract-traceability-pair-coding.md) owns `P0-CRT-01` through
 `P0-CRT-05` and `P0-PROOF-01` through `P0-PROOF-04`. It contains the
 complete proposed edits, focused tests, dependencies, stop conditions, and
 phase gate. This combined reference links to that single source.
@@ -2503,7 +2503,7 @@ def test_verification_namespace_separates_operations_and_models() -> None:
 
 def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
     """Keep each planned move equal to the complete current definition set."""
-    reference = PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
+    reference = MASTER_PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
 
     def planned_tree(block_id: str) -> ast.Module:
         definition = next(
@@ -2605,7 +2605,7 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
 These blocks add the tests named by the checklist. Imports belong at the top
 of each target test module.
 
-The [contract traceability guide](contract-traceability-phase-0-pair-coding.md)
+The [contract traceability guide](contract-traceability-pair-coding.md)
 owns `P0-PROOF-01` through `P0-PROOF-04`.
 
 <!-- pair-block-definition: P0-PROOF-05 -->
@@ -2764,9 +2764,9 @@ def test_project_root_vocabulary() -> None:
     assert "--right-repository-root" not in cli
 ```
 
-## 6. Phase 0 gates
+## 6. Foundation gate
 
-Run the focused test after each block. Run this phase gate after every Phase 0
+Run the focused test after each block. Run this gate after every foundation
 block has passed:
 
 ```bash

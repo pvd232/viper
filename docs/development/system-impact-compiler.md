@@ -1,6 +1,6 @@
-# VIPER System-Impact Compiler
+# System Impact Compiler
 
-This document is the single source of truth for the System-Impact Compiler. It
+This document is the single source of truth for the System Impact Compiler. It
 owns the normative requirements, graph vocabulary, compilation stages, complete
 proof, implementation PairBlocks, diagnostics, verification rules, acceptance
 gates, and research boundary. The
@@ -49,7 +49,7 @@ for each affected entity, selects bounded implementation work, and recompiles
 the changed repository to verify the result. Sections 1–11 define the
 executable contract. Sections 12–13 prove its formal claims. Section 14 owns
 the implementation sequence and gates. Section 15 contains the research
-program that begins only after Phase 0 clears its kill gate.
+program that begins only after Master Phase 0 clears its kill gate.
 
 ## 1. Status
 
@@ -82,8 +82,9 @@ and one deterministic compiler version, VIPER produces the same canonical
 baseline graph, impact overlay, affected surface, SCC condensation, test
 selection, and target constraints on every conforming execution.
 
-Let `R0` identify the baseline repository and `X` the fixed compilation
-context. Two front ends read the selected repository revision:
+Let `R0` identify the baseline repository, `X` the fixed compilation context,
+and `K` the fixed `SystemCompilerIdentity`. Two front ends read the selected
+repository revision:
 
 ```math
 Q_0=\operatorname{CompileTraceability}(R_0),
@@ -95,7 +96,7 @@ where $Q_0$ is a `ContractTraceabilityGraph` and $W_0$ contains the bootstrap
 `PairBlock` records. Baseline compilation then constructs one `SystemGraph`:
 
 ```math
-G_0 = \mathcal C_X(R_0,Q_0,W_0).
+G_0 = \mathcal C_{X,K}(R_0,Q_0,W_0).
 ```
 
 ```math
@@ -152,7 +153,7 @@ Q_1=\operatorname{CompileTraceability}(R_1),
 \qquad
 W_1=\operatorname{CompilePairBlocks}(R_1),
 \qquad
-G_1 = \mathcal C_X(R_1,Q_1,W_1).
+G_1 = \mathcal C_{X,K}(R_1,Q_1,W_1).
 ```
 
 `G1` is compared with the target constraints compiled from `(G0, Delta, P)`.
@@ -200,7 +201,7 @@ persisted record, verifier, contract requirement, checklist task, and test.
 ### Diagram color contract
 
 The three diagrams use the shared semantic palette from
-[contract requirement traceability](contract-requirement-traceability.md#diagram-color-contract).
+[Contract Traceability](contract-traceability.md#diagram-color-contract).
 Node labels preserve the same meaning in monochrome.
 
 | Color | Mermaid classes | Meaning |
@@ -281,7 +282,7 @@ source revision + fixed context
 
 The CRT compiler derives `ContractTraceabilityGraph` from the declarations
 owned by
-[`contract-requirement-traceability.md`](contract-requirement-traceability.md).
+[`contract-traceability.md`](contract-traceability.md).
 Baseline `compile_system()` lowers that graph into normalized requirement,
 rule, owner, and test dependencies in $G_0$. `compile_contract_change()` is a
 later stage that resolves one `ContractChange` against $G_0$ and returns a
@@ -358,42 +359,69 @@ repository and conformance verifier.
 
 ```mermaid
 flowchart TD
-    Baseline["Baseline inputs<br/>R0 · X · Q0 · W0"]
+    R0["Repository R0"]
+    X["Context X + compiler K"]
+    Q0["ContractTraceabilityGraph Q0"]
+    W0["Bootstrap PairBlocks W0"]
     CompileBase["compile_system()"]
-    BaseGraph["SystemGraph G0"]
+    G0["SystemGraph G0"]
     Change["ContractChange c_delta"]
     CompileChange["compile_contract_change()"]
     Delta["ContractDelta Delta"]
-    Complete["Impact + complete target<br/>H_delta · B · P · T*"]
+    Impact["H_delta + S_delta + B"]
+    SCC["SCC DAG of H_delta[B]"]
+    Tests["Selected tests"]
     Coverage["BlastCoverageReport"]
-    Select["Select + compile work<br/>SCC · Pi · U* · PairBlocks"]
-    Candidate["Implemented repository R1"]
-    Observe["Recompile R1<br/>X · Q1 · W1"]
-    CandidateGraph["SystemGraph G1"]
+    Decisions["Accepted dispositions"]
+    Plan["PropagationPlan P"]
+    Target["TargetSpecification T*"]
+    Repairs["Select repairs Pi + U*"]
+    CompileWork["compile_work()"]
+    PairBlocks["Generated PairBlocks"]
+    Execute["Execute PairBlocks"]
+    R1["Repository R1"]
+    Observe["compile_system()"]
+    G1["SystemGraph G1"]
     Conformance["G1 models T*"]
-    Review["Accept or reject"]
+    Review["Independent acceptance"]
 
-    Baseline --> CompileBase
-    CompileBase --> BaseGraph
-    Change --> CompileChange
-    BaseGraph --> CompileChange
-    CompileChange --> Delta
-    BaseGraph --> Complete
-    Delta --> Complete
-    Complete --> Coverage
-    Complete --> Select
-    Select --> Candidate
-    Candidate --> Observe
-    Observe --> CandidateGraph
-    CandidateGraph --> Conformance
-    Complete --> Conformance
-    Coverage --> Review
-    Conformance --> Review
+    R0 -->|"source"| CompileBase
+    X -->|"fixed inputs"| CompileBase
+    Q0 -->|"contract facts"| CompileBase
+    W0 -->|"work facts"| CompileBase
+    CompileBase -->|"canonical graph"| G0
+    Change -->|"requested operations"| CompileChange
+    G0 -->|"resolve anchors"| CompileChange
+    CompileChange -->|"checked operations"| Delta
+    G0 -->|"baseline dependencies"| Impact
+    Delta -->|"support + new edges"| Impact
+    Impact -->|"affected graph"| SCC
+    Impact -->|"executable symbols"| Tests
+    Tests -->|"execution contexts"| Coverage
+    Impact -->|"affected entities"| Plan
+    Decisions -->|"one per entity"| Plan
+    G0 -->|"baseline facts"| Target
+    Delta -->|"required change"| Target
+    Plan -->|"frozen choices"| Target
+    SCC -->|"safe order"| Repairs
+    Target -->|"hard constraints"| Repairs
+    Repairs -->|"selected work"| CompileWork
+    Target -->|"obligations"| CompileWork
+    CompileWork -->|"ordered work"| PairBlocks
+    PairBlocks -->|"bounded work"| Execute
+    Execute -->|"writes"| R1
+    R1 -->|"source + Q1 + W1"| Observe
+    X -->|"same inputs"| Observe
+    Observe -->|"canonical graph"| G1
+    G1 -->|"observed facts"| Conformance
+    Target -->|"required facts"| Conformance
+    Coverage -->|"pre-change gate"| Review
+    Conformance -->|"post-change gate"| Review
 
-    class Baseline,Change input
-    class CompileBase,CompileChange,Observe,Review consumer
-    class BaseGraph,Candidate,CandidateGraph evidence
-    class Delta,Complete,Coverage,Select,Conformance output
+    class R0,X,Q0,W0,Change,Decisions input
+    class CompileBase,CompileChange,CompileWork,Execute,Observe,Review consumer
+    class G0,PairBlocks,R1,G1 evidence
+    class Delta,Impact,SCC,Tests,Coverage,Plan,Target,Repairs,Conformance output
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
     classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
@@ -577,10 +605,25 @@ reflection targets, resolved imports, and subprocess entrypoints.
 class SystemSource(ProtocolModel):
     repository: HttpUrl
     commit: GitCommit
+
+
+class SystemCompilerIdentity(ProtocolModel):
+    schema_version: Literal[1] = 1
+    symbol: Literal["viper.system_graph.compile_system"]
+    package_version: NonEmptyStr
+    implementation_sha256: SHA256
 ```
 
 The baseline and candidate graphs may use different `SystemSource.commit`
-values. Both graphs must use the same context-manifest digest.
+values. Both graphs must use the same context-manifest digest and the same
+`SystemCompilerIdentity`. `implementation_sha256` covers the source files and
+registered adapters that can change `compile_system()` output. The verifier
+rebuilds this identity before recompiling either repository revision.
+
+`SystemCompilerIdentity.schema_version = 1` is the frozen initial identity
+format. The field set is subject to review before `P0-SIG-01` closes. Any
+approved change increments `schema_version`; it never silently changes the
+meaning of version 1.
 
 ### Repository inventory
 
@@ -656,7 +699,7 @@ class SystemDiagnostic(ProtocolModel):
     remediation: NonEmptyStr
 ```
 
-Phase 0 registers `Import`, `ImportFrom`, `Call`, class bases, decorators,
+Master Phase 0 registers `Import`, `ImportFrom`, `Call`, class bases, decorators,
 function and variable annotations, `Name` and `Attribute` loads and stores,
 literal registries, and `__all__` exports. The analyzer combines Python's AST
 coordinates with the compiler symbol table so aliases, local names, globals,
@@ -667,11 +710,11 @@ an edge-bearing or terminal receipt.
 
 `self_contained` means the construct's dependencies remain inside its owning
 symbol, such as a local literal assignment. It differs from an absent receipt.
-Strict Phase 0 requires every registered site to have exactly
+Strict Master Phase 0 requires every registered site to have exactly
 one receipt and rejects `unresolved` or `unsupported` outcomes in the affected
 surface.
 
-Diagnostic codes are stable API values. Phase 0 reserves these families:
+Diagnostic codes are stable API values. Master Phase 0 reserves these families:
 
 | Family | Required examples |
 | --- | --- |
@@ -746,10 +789,20 @@ without claiming source coordinates or a source digest. The compiler rejects
 an unknown target, stale precondition, duplicate operation, incompatible pair
 of operations, or value outside the defined node, edge, and graph-fact types.
 
+`ContractChange.precedence` names the required order between operation IDs. The
+compiler rejects unknown IDs, self-dependencies, precedence cycles, and every
+noncommuting operation pair whose order remains unspecified. It then performs
+a deterministic topological sort, choosing the lexically smallest ready
+`operation_id` at each step. `ContractDelta.operations` stores that canonical
+linear extension in application order. Before hashing `ContractChange`, the
+compiler sorts operation declarations by `operation_id` and precedence pairs
+by `(before, after)`; source-file order has no semantic effect.
+
 The CRT compiler derives `ContractTraceabilityGraph`. Baseline `compile_system()`
 lowers that graph and bootstrap `PairBlock` records into $G_0$.
 `compile_contract_change(change, g0)` validates a `ContractChange`, resolves
-its anchors against `g0`, orders its operations, and returns `ContractDelta`.
+its anchors against `g0`, compiles `ContractChange.precedence` into the ordered
+`ContractDelta.operations` tuple, and returns `ContractDelta`.
 Subsequent stages derive `S_delta`,
 `D_delta_plus`, `H_delta`, `B`, and the initial propagation obligations.
 Graph expansion, reverse reachability, SCC condensation, test selection, and
@@ -779,7 +832,7 @@ block, validates its source and test references, and topologically orders
 `roles=("pair_block",)`. The gate becomes a document anchor with
 `roles=("completion_gate",)`.
 
-The PairBlocks in the Phase 0 guide are bootstrap records authored before
+The PairBlocks in the Master Phase 0 guide are bootstrap records authored before
 `CompileWork` exists. They implement the compiler itself and serve as fixtures
 for the future parser. Production impact compilation never reads those
 bootstrap blocks to derive `ContractDelta`, `S_delta`, or `H_delta`.
@@ -1029,6 +1082,11 @@ DeltaOperation = Annotated[
 ]
 
 
+class OperationPrecedence(ProtocolModel):
+    before: NonEmptyStr
+    after: NonEmptyStr
+
+
 class ContractChange(ProtocolModel):
     """Store one authored request to change the baseline contract graph."""
 
@@ -1036,13 +1094,15 @@ class ContractChange(ProtocolModel):
     change_id: NonEmptyStr
     baseline_graph_sha256: SHA256
     operations: tuple[DeltaOperation, ...] = Field(min_length=1)
+    precedence: tuple[OperationPrecedence, ...] = ()
 
 
 class ContractDelta(ProtocolModel):
-    """Store the validated, ordered graph operations compiled from a change."""
+    """Store graph operations in their canonical application order."""
 
     schema_version: Literal[1] = 1
     delta_id: NonEmptyStr
+    source_change_sha256: SHA256
     baseline_graph_sha256: SHA256
     operations: tuple[DeltaOperation, ...] = Field(min_length=1)
 
@@ -1085,6 +1145,7 @@ class TargetSpecification(ProtocolModel):
     contract_delta_sha256: SHA256
     propagation_plan_sha256: SHA256
     context_sha256: SHA256
+    compiler_sha256: SHA256
     constraints: tuple[TargetConstraint, ...] = Field(min_length=1)
 
 
@@ -1103,6 +1164,7 @@ class TargetConformanceReport(ProtocolModel):
     target_specification_sha256: SHA256
     observed_graph_sha256: SHA256
     context_sha256: SHA256
+    compiler_sha256: SHA256
     receipts: tuple[ConstraintConformanceReceipt, ...]
     conforms: bool
 
@@ -1157,12 +1219,12 @@ class UnresolvedDependency(ProtocolModel):
 VIPER's local atomic target language. The names are project conventions, not
 standard algebraic-graph-transformation class names. Algebraic graph
 transformation supplies graph constraints, application conditions, and the
-satisfaction relation; VIPER normalizes its Phase 0 postconditions to presence,
+satisfaction relation; VIPER normalizes its Master Phase 0 postconditions to presence,
 absence, and baseline preservation of typed `GraphFact` values. This three-kind
 constraint vocabulary stays independent of node and edge categories. Adding a
 new fact kind therefore does not add another logical operator.
 
-The `GraphFact` union is closed for Phase 0: node identity, node roles, typed
+The `GraphFact` union is closed for Master Phase 0: node identity, node roles, typed
 dependency edge, and normalized Python signature. A constraint ID hashes its
 kind and canonical fact. Equal constraints merge their sorted, unique origins.
 The compiler rejects a fact that is both required present and required absent.
@@ -1195,7 +1257,7 @@ per target constraint. `conforms=True` holds exactly when every receipt is
 without binding that boundary to a function body's source digest. Parameter
 order in the tuple is significant. `annotation_ast`, `default_ast`, and
 `return_annotation_ast` store `ast.dump(..., include_attributes=False)` for the
-corresponding expression. Phase 0 therefore checks structural syntax equality;
+corresponding expression. Master Phase 0 therefore checks structural syntax equality;
 it does not claim runtime equivalence between two annotation or default
 expressions.
 
@@ -1245,6 +1307,7 @@ validation. `edge_id` hashes that complete tuple.
 class SystemGraph(ProtocolModel):
     schema_version: Literal[1] = 1
     source: SystemSource
+    compiler: SystemCompilerIdentity
     context_sha256: SHA256
     contract_traceability_sha256: SHA256
     inventory: tuple[RepositoryFile, ...] = Field(min_length=1)
@@ -1260,6 +1323,7 @@ The planned baseline compiler has this boundary:
 ```text
 def compile_system(
     source: SystemSource,
+    compiler: SystemCompilerIdentity,
     context: SystemContextManifest,
     contract_traceability: ContractTraceabilityGraph,
     pair_blocks: tuple[PairBlock, ...],
@@ -1310,7 +1374,7 @@ class SystemCondensationDAG(ProtocolModel):
     edges: tuple[SystemComponentEdge, ...]
 ```
 
-Phase 0 computes SCCs over the induced affected graph `H_delta[B]`. The set `B`
+Master Phase 0 computes SCCs over the induced affected graph `H_delta[B]`. The set `B`
 alone and an independently filtered import graph are invalid SCC inputs. The implementation
 uses iterative Tarjan traversal with lexically sorted vertices and adjacency.
 An explicit frame stack avoids dependence on Python's recursion limit.
@@ -1326,7 +1390,7 @@ ready components by `component_id`. Python's `graphlib.TopologicalSorter` may
 serve as an independent acyclicity oracle. VIPER's lexically tied order owns
 canonical serialization.
 
-SCCs are atomic scheduling units. Phase 0 may group adjacent SCCs with one
+SCCs are atomic scheduling units. Master Phase 0 may group adjacent SCCs with one
 deterministic greedy heuristic after condensation; each SCC remains whole. The
 cohesion-aware graph-partition objective in the research plan operates on the
 condensation DAG in a later phase. SCC computation remains its required input.
@@ -1345,6 +1409,7 @@ class SystemGraphDelta(ProtocolModel):
     baseline: ResolvedFileRef
     candidate: ResolvedFileRef
     context_sha256: SHA256
+    compiler_sha256: SHA256
     added_nodes: tuple[SystemNode, ...]
     removed_nodes: tuple[SystemNode, ...]
     changed_nodes: tuple[ChangedNode, ...]
@@ -1442,7 +1507,7 @@ class BlastCoverageReport(ProtocolModel):
     complete: bool
 ```
 
-The Phase 0 gate requires empty missing-statement and missing-branch
+The Master Phase 0 gate requires empty missing-statement and missing-branch
 collections. Test contexts retain the exact pytest node ID that executed each
 line and arc. This gate proves execution of the affected surface. Assertion
 quality, behavioral correctness, and dependency-extraction soundness remain
@@ -1508,11 +1573,12 @@ anchor, expands the table, merges identical constraints, and records all
 origins. It rejects contradictory presence and absence constraints. Canonical
 ordering then determines one `TargetSpecification` for equal `(G0, Delta, P)`.
 
-Conformance compiles `R1` under the same `SystemContextManifest`, projects the
-four Phase 0 `GraphFact` variants from `G1`, and evaluates every target
-constraint. Presence requires a matching observed fact. Absence requires no
-matching observed fact. Preservation requires the canonical baseline fact and
-the observed fact to be equal. Each evaluation emits one
+Conformance compiles `R1` under the same `SystemContextManifest` and
+`SystemCompilerIdentity`, verifies both digests against `TargetSpecification`,
+projects the four Master Phase 0 `GraphFact` variants from `G1`, and evaluates
+every target constraint. Presence requires a matching observed fact. Absence
+requires no matching observed fact. Preservation requires the canonical
+baseline fact and the observed fact to be equal. Each evaluation emits one
 `ConstraintConformanceReceipt`.
 
 ### Illustrative worked example
@@ -1575,6 +1641,7 @@ from viper.system_graph import (
     ImpactReport,
     NodeIdentityFact,
     NodeRolesFact,
+    OperationPrecedence,
     PairBlock,
     PairBlockId,
     PlannedAddition,
@@ -1602,6 +1669,7 @@ from viper.system_graph import (
     SystemComponent,
     SystemComponentId,
     SystemComponentEdge,
+    SystemCompilerIdentity,
     SystemCondensationDAG,
     SystemContextManifest,
     SystemDiagnostic,
@@ -1853,13 +1921,13 @@ def publish_model(
 pair_block_id: PairBlockId = "P0-PDR-05"
 pair_block = PairBlock(
     block_id=pair_block_id,
-    document="docs/development/phase-0-pair-coding.md",
+    document="docs/development/foundation-pair-coding.md",
     start_line=658,
     end_line=687,
     sha256=digest(
         {
             "block_id": pair_block_id,
-            "document": "docs/development/phase-0-pair-coding.md",
+            "document": "docs/development/foundation-pair-coding.md",
             "start_line": 658,
             "end_line": 687,
         }
@@ -2190,6 +2258,14 @@ with TemporaryDirectory() as temporary_directory:
         commands=(command,),
     )
     context_sha256 = digest(context)
+    compiler = SystemCompilerIdentity(
+        symbol="viper.system_graph.compile_system",
+        package_version="0.1.0a2",
+        implementation_sha256=hashlib.sha256(
+            b"system-compiler-fixture"
+        ).hexdigest(),
+    )
+    compiler_sha256 = digest(compiler)
 
     implementation_location = RepoSymbolRef(
         path="src/viper/storage.py",
@@ -2246,6 +2322,7 @@ with TemporaryDirectory() as temporary_directory:
     )
     baseline_graph = SystemGraph(
         source=baseline_source,
+        compiler=compiler,
         context_sha256=context_sha256,
         contract_traceability_sha256=traceability_sha256,
         inventory=baseline_inventory,
@@ -2257,6 +2334,7 @@ with TemporaryDirectory() as temporary_directory:
     )
     candidate_graph = SystemGraph(
         source=candidate_source,
+        compiler=compiler,
         context_sha256=context_sha256,
         contract_traceability_sha256=traceability_sha256,
         inventory=candidate_inventory,
@@ -2268,6 +2346,7 @@ with TemporaryDirectory() as temporary_directory:
     )
     exploratory_graph = SystemGraph(
         source=candidate_source,
+        compiler=compiler,
         context_sha256=context_sha256,
         contract_traceability_sha256=traceability_sha256,
         inventory=candidate_inventory,
@@ -2324,6 +2403,7 @@ with TemporaryDirectory() as temporary_directory:
         baseline=baseline_ref,
         candidate=candidate_ref,
         context_sha256=context_sha256,
+        compiler_sha256=compiler_sha256,
         added_nodes=(candidate_migration_file,),
         removed_nodes=(),
         changed_nodes=(changed_field,),
@@ -2332,7 +2412,7 @@ with TemporaryDirectory() as temporary_directory:
     )
     delta_ref = publish_model(
         store,
-        ".viper/system/baseline..candidate/delta.json",
+        ".viper/system/baseline..candidate/system-delta.json",
         delta,
     )
 
@@ -2512,7 +2592,7 @@ with TemporaryDirectory() as temporary_directory:
         replacement=replacement_edge_anchor,
         expected_edge_id=field_read.edge_id,
     )
-    delta_operations: tuple[DeltaOperation, ...] = (
+    example_operations: tuple[DeltaOperation, ...] = (
         add_node,
         remove_node,
         update_node,
@@ -2520,15 +2600,26 @@ with TemporaryDirectory() as temporary_directory:
         remove_edge,
         update_edge,
     )
+    delta_operations: tuple[DeltaOperation, ...] = (
+        add_node,
+        update_node,
+        update_edge,
+    )
+    update_before_edge = OperationPrecedence(
+        before=update_node.operation_id,
+        after=update_edge.operation_id,
+    )
     contract_change = ContractChange(
         change_id="local-store-migration",
         baseline_graph_sha256=digest(baseline_graph),
         operations=delta_operations,
+        precedence=(update_before_edge,),
     )
     contract_delta = ContractDelta(
         delta_id=contract_change.change_id,
+        source_change_sha256=digest(contract_change),
         baseline_graph_sha256=contract_change.baseline_graph_sha256,
-        operations=contract_change.operations,
+        operations=(add_node, update_node, update_edge),
     )
 
     delta_origin = TargetConstraintOrigin(
@@ -2579,6 +2670,7 @@ with TemporaryDirectory() as temporary_directory:
         contract_delta_sha256=digest(contract_delta),
         propagation_plan_sha256=digest(propagation),
         context_sha256=context_sha256,
+        compiler_sha256=compiler_sha256,
         constraints=target_constraints,
     )
     satisfied: ConstraintOutcome = "satisfied"
@@ -2594,6 +2686,7 @@ with TemporaryDirectory() as temporary_directory:
         target_specification_sha256=digest(target_specification),
         observed_graph_sha256=digest(candidate_graph),
         context_sha256=context_sha256,
+        compiler_sha256=compiler_sha256,
         receipts=conformance_receipts,
         conforms=True,
     )
@@ -2739,7 +2832,7 @@ Contract-delta compiler
 -> S_delta and D_delta_plus
 -> H_delta and reverse closure B
 
-Phase 0 PairBlock manifests
+Master Phase 0 PairBlock manifests
 -> one implementation-block span per checklist task
 -> targets edges to exact source targets
 -> block_depends_on edges to prerequisite PairBlocks
@@ -2821,19 +2914,25 @@ The specification-system review gate requires strict mode.
 One review stores these files:
 
 ```text
-.viper/system/<context-sha256>/<source-commit>/graph.json
-.viper/system/<context-sha256>/<source-commit>/dag.json
-.viper/system/<context-sha256>/<baseline>..<candidate>/delta.json
-.viper/system/<context-sha256>/<baseline>..<candidate>/impact.json
-.viper/system/<context-sha256>/<baseline>..<candidate>/propagation.json
+.viper/system/<compiler-sha256>/<context-sha256>/<source-commit>/graph.json
+.viper/system/<compiler-sha256>/<context-sha256>/<source-commit>/dag.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>/changes/<change-id>/change.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>/changes/<change-id>/contract-delta.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>..<candidate>/system-delta.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>..<candidate>/impact.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>..<candidate>/propagation.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>..<candidate>/target.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>..<candidate>/coverage.json
+.viper/system/<compiler-sha256>/<context-sha256>/<baseline>..<candidate>/conformance.json
 ```
 
 Each file publishes through `publish_resolved_files()` and receives one
 `ResolvedFileRef`. The path is a discovery aid. The reference and content
 digest provide identity.
 
-The context manifest is published once. Both graphs store its digest. The
-delta verifier loads both graphs and requires equal context digests.
+The context manifest and compiler identity are published once. Both graphs
+store their digests. The delta verifier loads both graphs and requires equal
+context and compiler digests.
 
 ## 7. Verification
 
@@ -2849,6 +2948,7 @@ The implementation adds these checks:
 | `system.signature.canonical` <!-- verifier-rule: system.signature.canonical requirement=SIG-01 --> | Require each function and method to carry one normalized structural signature fact independent of body coordinates and digest. |
 | `system.edge.evidence` <!-- verifier-rule: system.edge.evidence requirement=SIG-01 --> | Recompute every edge ID from its endpoints, relation, origin, and evidence. |
 | `system.context.identity` <!-- verifier-rule: system.context.identity requirement=SIG-02 --> | Recompute the canonical manifest digest. |
+| `system.compiler.identity` <!-- verifier-rule: system.compiler.identity requirement=SIG-02 --> | Rebuild `SystemCompilerIdentity`; require schema version 1, the `compile_system` symbol, package version, and implementation digest to match across `G0`, `T*`, `G1`, and the conformance report. |
 | `system.resolution.total` <!-- verifier-rule: system.resolution.total requirement=SIG-02 --> | Require each resolution attempt to produce exactly one observation or unresolved dependency. |
 | `system.graph.canonical` <!-- verifier-rule: system.graph.canonical requirement=SIG-02 --> | Recompile the source revision and require identical ordered inventory, analyses, nodes, edges, observations, and unresolved dependencies. |
 | `system.graph.references` <!-- verifier-rule: system.graph.references requirement=SIG-02 --> | Require every edge and observation endpoint to exist. |
@@ -2859,17 +2959,17 @@ The implementation adds these checks:
 | `system.dag.components` <!-- verifier-rule: system.dag.components requirement=SIG-03 --> | Recompute SCCs over `H_delta[B]`, component IDs, cyclic flags, and crossing-edge witnesses. |
 | `system.dag.canonical` <!-- verifier-rule: system.dag.canonical requirement=SIG-03 --> | Require stable component and edge ordering independent of input insertion order. |
 | `system.dag.acyclic` <!-- verifier-rule: system.dag.acyclic requirement=SIG-03 --> | Require deterministic topological ordering to visit every component once. |
-| `system.delta.context` <!-- verifier-rule: system.delta.context requirement=SIG-03 --> | Require the baseline and candidate graphs to use the same context digest. |
+| `system.delta.context` <!-- verifier-rule: system.delta.context requirement=SIG-03 --> | Require the baseline and candidate graphs to use the same context and compiler digests. |
 | `system.delta.identity` <!-- verifier-rule: system.delta.identity requirement=SIG-03 --> | Recompute every added, removed, and changed node and edge. |
 | `system.impact.closure` <!-- verifier-rule: system.impact.closure requirement=SIG-03 --> | Recompute reverse reachability from `S_delta` in `H_delta`. |
 | `system.propagation.coverage` <!-- verifier-rule: system.propagation.coverage requirement=SIG-03 --> | Require every affected node to appear in exactly one propagation disposition. |
 | `system.propagation.additions` <!-- verifier-rule: system.propagation.additions requirement=SIG-03 --> | Require planned additions to equal the candidate delta's added repository paths before the phase closes. |
-| `system.target.language` <!-- verifier-rule: system.target.language requirement=SIG-03 --> | Require every target constraint to use one Phase 0 graph fact and one presence, absence, or preservation operator. |
+| `system.target.language` <!-- verifier-rule: system.target.language requirement=SIG-03 --> | Require every target constraint to use one Master Phase 0 graph fact and one presence, absence, or preservation operator. |
 | `system.target.canonical` <!-- verifier-rule: system.target.canonical requirement=SIG-03 --> | Recompile `(G0, Delta, P)`, merge identical origins, reject contradictions, and require byte-identical `TargetSpecification` output. |
 | `system.conformance.total` <!-- verifier-rule: system.conformance.total requirement=SIG-03 --> | Require exactly one conformance receipt per target constraint and set `conforms` exactly when every receipt is satisfied. |
 | `system.requirement.coverage` <!-- verifier-rule: system.requirement.coverage requirement=SIG-04 --> | Compile each requirement, verifier rule, implementation binding, and verification binding directly from the contract and checklist declarations. |
 | `system.rule.lowering` <!-- verifier-rule: system.rule.lowering requirement=SIG-04 --> | Require exactly one implementation binding and at least one verification binding per rule, then lower each binding to a normalized dependency edge. |
-| `system.plan.coverage` <!-- verifier-rule: system.plan.coverage requirement=SIG-04 --> | Require each Phase 0 checklist task to reach exactly one PairBlock, every changed source target, every focused test, one completion gate, and every declared prerequisite block. |
+| `system.plan.coverage` <!-- verifier-rule: system.plan.coverage requirement=SIG-04 --> | Require each Master Phase 0 checklist task to reach exactly one PairBlock, every changed source target, every focused test, one completion gate, and every declared prerequisite block. |
 | `system.blast.test_selection` <!-- verifier-rule: system.blast.test_selection requirement=SIG-04 --> | Require every executable affected symbol to map to at least one selected pytest node ID. |
 | `system.blast.statement_coverage` <!-- verifier-rule: system.blast.statement_coverage requirement=SIG-04 --> | Require the selected tests to execute every coverage.py statement in every affected executable symbol. |
 | `system.blast.branch_coverage` <!-- verifier-rule: system.blast.branch_coverage requirement=SIG-04 --> | Require the selected tests to execute every coverage.py branch arc sourced inside every affected executable symbol. |
@@ -2877,8 +2977,8 @@ The implementation adds these checks:
 
 ## 8. Propagation
 
-Until Phase 0 implements `PropagationPlan`, this table states the reviewed
-target paths and actions. After Phase 0, the documentation check renders the
+Until Master Phase 0 implements `PropagationPlan`, this table states the reviewed
+target paths and actions. After Master Phase 0, the documentation check renders the
 table from the plan and requires every affected node to appear in exactly one
 row. New paths come from `planned_additions` and must match the candidate delta
 before the phase closes.
@@ -2894,7 +2994,7 @@ before the phase closes.
 | `tests/test_validation_architecture.py` | Cover complete file inventory, per-file analysis receipts, source anchoring, edge evidence, observed registries, fixed context, one outcome per resolution attempt, unresolved targets, canonical ordering, SCC condensation, and strict failure. |
 | `tests/test_inspection.py` | Cover graph delta, reverse closure, stable impact ordering, one disposition per affected node, and planned-addition reconciliation. |
 | `tests/test_documentation.py` | Supply `ContractTraceabilityGraph`; compare its system-graph paths with the focused documentation oracle during migration. |
-| `docs/development/master-execution-checklist.md` | Produce the compiler in Phase 0 and require its strict impact report before every later phase. |
+| `docs/development/master-execution-checklist.md` | Produce the compiler in Master Phase 0 and require its strict impact report before every later master phase. |
 | `docs/development/testing.md` | Define the fixed review context and the strict system-impact gate. |
 | `pyproject.toml` | Register the new tests and any optional graph implementation dependency; the base implementation uses the standard library. |
 
@@ -3088,7 +3188,7 @@ rejects `model_support`.
 ## 10. Implementation order
 
 1. Implement
-   [`contract-requirement-traceability.md`](contract-requirement-traceability.md)
+   [`contract-traceability.md`](contract-traceability.md)
    and produce `ContractTraceabilityGraph` with canonically ordered fields.
 2. Enumerate the Git tree and emit one `RepositoryFile`, file node, and
    `FileAnalysisReceipt` per tracked file.
@@ -3156,7 +3256,7 @@ defines the concrete syntax-node classes and their one-based line and UTF-8
 column coordinates. Python's
 [`symtable` documentation](https://docs.python.org/3/library/symtable.html)
 explains that the compiler builds symbol tables from the AST to determine the
-scope of each identifier. Phase 0 uses both interfaces: AST nodes locate
+scope of each identifier. Master Phase 0 uses both interfaces: AST nodes locate
 evidence; symbol tables resolve lexical ownership.
 
 [Ernst's account of static and dynamic analysis](https://homes.cs.washington.edu/~mernst/pubs/staticdynamic-woda2003-abstract.html)
@@ -3236,7 +3336,7 @@ two mechanisms support the mechanical blast-coverage report.
 The later partition research begins after SCC condensation. [Co-Coder's
 cohesion-aware task partitioning](https://arxiv.org/abs/2606.00953) supplies a
 communication-versus-computation objective for grouping condensation vertices.
-Phase 0 records SCC-safe graph statistics and supplies a deterministic baseline
+Master Phase 0 records SCC-safe graph statistics and supplies a deterministic baseline
 for the later optimization comparison.
 
 ### 11.6 Target-language and compiler design basis
@@ -3253,7 +3353,7 @@ The derivation is local and explicit:
 | Can a public signature remain stable while a body changes? | `PythonSignatureFact` | compare normalized signature syntax independently of the body span |
 | Can verification account for every obligation? | `ConstraintConformanceReceipt` | emit exactly one terminal outcome per constraint |
 
-This table establishes the necessity of the three operators for Phase 0. It
+This table establishes the necessity of the three operators for Master Phase 0. It
 does not establish that the Python class names are field-wide standards.
 
 The algebraic graph-transformation literature separates transformation rules,
@@ -3329,7 +3429,7 @@ contract delta
 This section proves the complete protocol stated in the opening diagram. Every
 result identifies its definitions, assumptions, and conclusion.
 
-### 2. Compile the baseline repository
+### 12.1 Compile the baseline repository
 
 Let $R_0$ be the repository before the proposed change. The repository compiler
 runs under one frozen context $X$. Its other inputs are a
@@ -3337,7 +3437,7 @@ runs under one frozen context $X$. Its other inputs are a
 the same repository revision:
 
 ```math
-\mathcal C_X:
+\mathcal C_{X,K}:
 \mathcal R\times\mathcal{CT}\times\mathcal{PB}
 \rightarrow\mathcal G.
 ```
@@ -3346,7 +3446,7 @@ Write $Q_0=\operatorname{CompileTraceability}(R_0)$ and
 $W_0=\operatorname{CompilePairBlocks}(R_0)$. The compiler produces:
 
 ```math
-G_0=\mathcal C_X(R_0,Q_0,W_0).
+G_0=\mathcal C_{X,K}(R_0,Q_0,W_0).
 ```
 
 The reachability proof uses these concrete data types:
@@ -3418,7 +3518,7 @@ lowers the requirements, verifier rules, owners, and tests in $Q_0$ into
 source-evidenced vertices and typed dependencies while it lowers the source
 inventory, Python analysis, context observations, and scheduling relationships
 from $W_0$. The result is the single graph
-$G_0=\mathcal C_X(R_0,Q_0,W_0)$.
+$G_0=\mathcal C_{X,K}(R_0,Q_0,W_0)$.
 
 Let $c_\Delta$ be an instance of the planned `ContractChange` class. The
 change compiler runs after $G_0$ exists:
@@ -3434,7 +3534,7 @@ The two stages are:
 ```text
 R0 -> compile_contract_traceability() -> Q0: ContractTraceabilityGraph
 R0 -> compile_pair_blocks() -> W0: tuple[PairBlock, ...]
-(R0, X, Q0, W0) -> compile_system() -> G0: SystemGraph
+(R0, K, X, Q0, W0) -> compile_system() -> G0: SystemGraph
 
 (c_Delta: ContractChange, G0) -> compile_contract_change() -> Delta: ContractDelta
 ```
@@ -3446,7 +3546,7 @@ Bootstrap PairBlocks contribute scheduling traceability only to $G_0$; every
 delta operation, member of $S_\Delta$, and introduced edge in $H_\Delta$ comes
 from `ContractChange`.
 
-### 3. Five-file baseline trace
+### 12.2 Five-file baseline trace
 
 The complete toy repository contains `models.py`, `storage.py`, `runner.py`,
 `api.py`, and `tests/test_api.py`. At symbol granularity, the relevant baseline
@@ -3484,16 +3584,16 @@ D_0 = {
 The [detailed formal foundation](#a6-why-the-contract-delta-is-insufficient)
 contains all five source files and the typed dependency trace.
 
-### 4. Represent the direct contract change
+### 12.3 Represent the direct contract change
 
-A contract delta is a finite family of explicit graph operations with a partial
-order that records required application precedence:
+The authored `ContractChange` is a finite family of explicit graph operations
+with a partial order that records only required precedence:
 
 ```math
-\Delta=(O_\Delta,\prec_\Delta).
+c_\Delta=(O_\Delta,\prec_\Delta).
 ```
 
-The toy delta contains these direct requirements:
+The toy change contains these direct requirements:
 
 ```text
 REMOVE ArtifactRef.path
@@ -3502,6 +3602,12 @@ ADD LocalSource
 CHANGE LocalArtifactStore.load return type
 ADD LoadedArtifact
 ```
+
+`compile_contract_change()` validates that partial order and deterministically
+topologically sorts it. The returned `ContractDelta`, denoted $\Delta$, stores
+the resulting operation tuple in application order. This preserves independent
+operations in the authored form and gives execution, hashing, and replay one
+unambiguous sequence.
 
 The closed primitive operation set adds, removes, or updates nodes and typed
 edges. The formal appendix defines the preconditions and DPO application
@@ -3524,7 +3630,7 @@ S_\Delta
 $S_\Delta$ contains the direct operation anchors. Reverse reachability expands
 those anchors into the complete represented affected set $B$.
 
-### 5. Construct the impact-analysis overlay
+### 12.4 Construct the impact-analysis overlay
 
 Let $V_\Delta^+$ contain the vertices directly added by $\Delta$. Let
 $D_\Delta^+$ contain the untyped dependency pairs directly added or introduced
@@ -3561,7 +3667,7 @@ $D_{\mathrm{direct}}$ still omits the propagation changes selected later by
 $P$ and can remove an old path before impact analysis has considered its
 dependents.
 
-### 6. Compute the blast radius
+### 12.5 Compute the blast radius
 
 Write $x\leadsto_{H_\Delta}s$ when $x$ reaches $s$ through zero or more edges
 in $D_{H_\Delta}$. A zero-edge path lets every initial vertex reach itself.
@@ -3600,7 +3706,7 @@ test_verify
 $B$ therefore contains the directly changed vertices, `Runner.verify`,
 `api.verify`, and `test_verify`.
 
-### 7. Prove graph-relative minimality
+### 12.6 Prove graph-relative minimality
 
 A set $C\subseteq V_{H_\Delta}$ is an admissible predecessor-closed set when:
 
@@ -3668,7 +3774,7 @@ under set inclusion. This theorem proves minimality relative to
 $H_\Delta$. Section 8 states the separate assumption that connects
 $H_\Delta$ to real semantic dependencies.
 
-### 8. Prove conservative soundness
+### 12.7 Prove conservative soundness
 
 Let $D_X^{\mathrm{sem}}\subseteq
 V_{H_\Delta}\times V_{H_\Delta}$ be the semantic dependency relation under
@@ -3709,7 +3815,7 @@ edge-inclusion assumption. An alternate represented path can still preserve
 reachability for a particular vertex. The theorem-level guarantee fails once
 the edge-inclusion assumption fails.
 
-### 9. Assign a total propagation plan
+### 12.8 Assign a total propagation plan
 
 $B$ determines which vertices require decisions. $P$ supplies those decisions.
 
@@ -3770,7 +3876,7 @@ but Runner.verify extracts and returns bytes
 The direct delta permits both plans. Selecting $P_A$ or $P_B$ determines how
 the represented dependents must be treated.
 
-### 10. Compile target constraints
+### 12.9 Compile target constraints
 
 The target compiler consumes the baseline graph, direct delta, and accepted
 propagation plan:
@@ -3816,7 +3922,7 @@ A helper function and direct construction can produce different graphs while
 both satisfy the same constraints. Therefore $T^*$ is authoritative unless
 repair selection explicitly freezes one planned graph $G^*$.
 
-### 11. Establish deterministic target derivation
+### 12.10 Establish deterministic target derivation
 
 The same $(G_0,\Delta,P)$ produces the same $T^*$ when all of these protocol
 conditions hold:
@@ -3841,7 +3947,7 @@ These conditions determine $T^*$ only. A unique $G^*$ requires a selector that
 freezes every relevant structural alternative, deterministic graph-rewrite
 application, and canonical graph serialization.
 
-### 12. Decompose, select, and compile PairBlocks
+### 12.11 Decompose, select, and compile PairBlocks
 
 Completeness is fixed once $T^*$ contains every hard obligation induced by the
 total plan. The later stages choose and schedule an implementation that
@@ -3907,7 +4013,7 @@ generated PairBlock and reject contradictory ownership. This coverage theorem
 is a remaining implementation proof obligation. The blast-radius, minimality,
 and target-determinism results establish its inputs.
 
-### 13. Independently reconstruct and verify the result
+### 12.12 Independently reconstruct and verify the result
 
 After implementation, the same frozen repository compiler independently
 reconstructs the observed graph. It first recompiles the traceability and
@@ -3918,7 +4024,7 @@ Q_1=\operatorname{CompileTraceability}(R_1),
 \qquad
 W_1=\operatorname{CompilePairBlocks}(R_1),
 \qquad
-G_1=\mathcal C_X(R_1,Q_1,W_1).
+G_1=\mathcal C_{X,K}(R_1,Q_1,W_1).
 ```
 
 The compiler inspects $R_1$ directly. Independent reconstruction keeps the
@@ -3968,10 +4074,10 @@ and:
 
 This comparison proves only represented structural conformance inside $\Sigma$.
 Behavioral correctness, security, and performance require separate evidence.
-Properties outside the observation boundary of $\mathcal C_X$ remain outside
+Properties outside the observation boundary of $\mathcal C_{X,K}$ remain outside
 the structural proof. Behavioral tests supply a separate acceptance layer.
 
-### 14. Complete claim
+### 12.13 Complete claim
 
 Under the dependency-conservativeness assumption:
 
@@ -4004,7 +4110,7 @@ By implementation and independent reconstruction:
 ```math
 R_1\longrightarrow(Q_1,W_1),
 \qquad
-G_1=\mathcal C_X(R_1,Q_1,W_1).
+G_1=\mathcal C_{X,K}(R_1,Q_1,W_1).
 ```
 
 Acceptance requires:
@@ -4098,7 +4204,7 @@ appendix:
 
 ```text
 1. Baseline front ends          R0 -> (Q0: ContractTraceabilityGraph, W0: PairBlocks)
-2. Repository compilation       (R0, X, Q0, W0) -> G0: SystemGraph
+2. Repository compilation       (R0, K, X, Q0, W0) -> G0: SystemGraph
 3. Change compilation           (ContractChange, G0) -> ContractDelta
 4. Conservative impact          (G0, Delta) -> B
 5. Total propagation planning   (Delta, B) -> P
@@ -4172,8 +4278,9 @@ Every member of $E$ contributes to $D_G$. Repository evidence that does not
 assert dependency belongs in a separate evidence relation rather than being
 inserted into $E$ and filtered during reachability.
 
-Let $X$ be one fixed `SystemContextManifest`. Let $C_X$ be `compile_system()`
-under that context. Its explicit inputs are a repository revision, a
+Let $X$ be one fixed `SystemContextManifest` and $K$ one fixed
+`SystemCompilerIdentity`. Let $\mathcal C_{X,K}$ be `compile_system()` under
+those identities. Its explicit inputs are a repository revision, a
 `ContractTraceabilityGraph`, and the `PairBlock` records parsed from that same
 revision.
 
@@ -4185,7 +4292,7 @@ Q_i=\operatorname{CompileTraceability}(R_i),
 \qquad
 W_i=\operatorname{CompilePairBlocks}(R_i),
 \qquad
-G_i=C_X(R_i,Q_i,W_i)
+G_i=\mathcal C_{X,K}(R_i,Q_i,W_i)
 \quad\text{for }i\in\{0,1\}.
 ```
 
@@ -4203,10 +4310,10 @@ Let $Q_0$ be the `ContractTraceabilityGraph` derived from $R_0$:
 Q_0=\operatorname{CompileTraceability}(R_0).
 ```
 
-$C_X$ lowers $Q_0$ into the requirement, rule, owner, and test vertices and
+$\mathcal C_{X,K}$ lowers $Q_0$ into the requirement, rule, owner, and test vertices and
 dependency edges represented in $G_0$. It also lowers source-analysis facts,
 context observations, and the scheduling relationships in $W_0$. These inputs
-jointly produce $G_0=C_X(R_0,Q_0,W_0)$; $Q_0$ is not compiled as a stand-alone
+jointly produce $G_0=\mathcal C_{X,K}(R_0,Q_0,W_0)$; $Q_0$ is not compiled as a stand-alone
 `SystemGraph`.
 
 Let $c_\Delta$ be a `ContractChange`. Change compilation is the later
@@ -4275,18 +4382,30 @@ Every destructive or updating operation carries an expected old value. That
 precondition prevents the operation from silently applying to a different
 baseline fact.
 
-**Definition A.5 (contract delta).** A contract delta is a finite partially
-ordered family
+**Definition A.5 (authored change and compiled delta).** A `ContractChange`
+$c_\Delta$ contains a finite operation set and precedence relation:
 
 ```math
-\Delta=(O_\Delta,\prec_\Delta),
+c_\Delta=(O_\Delta,\prec_\Delta).
 ```
 
-where $O_\Delta\subseteq\mathcal O$ states the mandatory graph operations and
-$\prec_\Delta$ states every required application order. The delta is valid for
-$G_0$ when every anchor resolves uniquely, every operation precondition holds,
-and at least one linear extension of $\prec_\Delta$ can execute while
-preserving the graph constraints.
+Here $O_\Delta\subseteq\mathcal O$ contains the mandatory graph operations and
+$\prec_\Delta$ contains the required order between operation IDs. The authored
+change is valid for $G_0$ when every anchor resolves uniquely, every operation
+precondition holds, $\prec_\Delta$ is acyclic, and each noncommuting operation
+pair has an explicit order or a deterministic conflict rule.
+
+`compile_contract_change()` computes the canonical linear extension of
+$\prec_\Delta$ by repeatedly selecting the lexically smallest ready operation
+ID. The resulting `ContractDelta` is the ordered tuple
+
+```math
+\Delta=(o_1,o_2,\ldots,o_n),
+```
+
+where every $o_i\in O_\Delta$, every operation occurs exactly once, and
+$o_i\prec_\Delta o_j$ implies $i<j$. `ContractDelta.operations` stores this
+tuple. Applying $\Delta$ means applying $o_1$ through $o_n$ in that order.
 
 **Definition A.6 (delta-induced initial vertex set).** The vertex support of an
 operation is the set of node anchors that it creates, removes, reads, updates,
@@ -4677,7 +4796,7 @@ construction when bounded execution requires one.
 
 ### A.7 Target compilation, decomposition, and repair selection
 
-Let $\mathcal F$ be the finite Phase 0 graph-fact universe induced by node
+Let $\mathcal F$ be the finite Master Phase 0 graph-fact universe induced by node
 identities, node roles, typed edges, and normalized Python signatures. For
 $f\in\mathcal F$, define three atomic predicates over a candidate graph $G$:
 
@@ -4715,7 +4834,7 @@ Target consistency requires $\mathcal A(T^*)\neq\varnothing$.
 
 The atomic predicate names are VIPER conventions. Graph-constraint
 satisfaction is the imported mathematical mechanism; the three-kind normal
-form is the local Phase 0 design. It is complete for the stated target language
+form is the local Master Phase 0 design. It is complete for the stated target language
 because every accepted input record translates to a finite conjunction of
 presence, absence, and baseline-preservation predicates over $\mathcal F$.
 
@@ -4724,7 +4843,7 @@ presence, absence, and baseline-preservation predicates over $\mathcal F$.
 Fixed inputs $(G_0,\Delta,P)$ determine one canonical $T^*$ when all of these
 conditions hold:
 
-1. $C_X$ is deterministic and $G_0$ is canonical.
+1. $\mathcal C_{X,K}$ is deterministic and $G_0$ is canonical.
 2. Every node and typed-edge anchor referenced by $\Delta$ or $P$ either
    resolves uniquely against $G_0$ or is declared fresh under a canonical
    identifier.
@@ -4852,8 +4971,8 @@ authoritative target and no singleton $G^*$ is asserted.
 
 #### Execution compilation
 
-The Phase 0 master checklist already uses a parseable
-[`PairBlock` contract](phase-0-pair-coding.md#1-pairblock-contract) to bind
+The master checklist already uses a parseable
+[`PairBlock` contract](foundation-pair-coding.md#1-pairblock-contract) to bind
 each checklist item to its requirements, dependencies, source targets, tests,
 and completion gate. This appendix keeps that established execution unit and
 defines the additional information required when graph-derived repair
@@ -4881,7 +5000,7 @@ repair confluence or select the architecture.
 
 Implementation applies the selected PairBlocks to $R_0$ and produces $R_1$.
 Strict recompilation derives $Q_1$ and $W_1$ from $R_1$, then uses the same
-context to produce $G_1=C_X(R_1,Q_1,W_1)$.
+context to produce $G_1=\mathcal C_{X,K}(R_1,Q_1,W_1)$.
 
 **Definition A.15 (target conformance).** The observed graph conforms to the
 authoritative target specification exactly when
@@ -4894,7 +5013,7 @@ This judgment evaluates every required, forbidden, and preservation predicate
 in $T^*$ against facts reconstructed from $R_1$. It remains defined when
 $\mathcal A(T^*)$ contains several graphs and no concrete $G^*$ was selected.
 
-**Proposition A.5 (represented target conformance).** Assume that $C_X$
+**Proposition A.5 (represented target conformance).** Assume that $\mathcal C_{X,K}$
 soundly extracts every graph fact referenced by $T^*$ and that the target
 predicate evaluator implements the semantics assigned by `CompileTarget`.
 Then $G_1\models T^*$ establishes that every represented target obligation is
@@ -4963,14 +5082,14 @@ the selected planned graph in scope $\Sigma$ exactly when
 $F_1\subseteq F^*$. By set extensionality, those inclusions hold exactly when
 $F^*=F_1$. $\square$
 
-Phase 0 uses stable identities and exact set difference. A comparison without
+Master Phase 0 uses stable identities and exact set difference. A comparison without
 shared identities requires an explicit correspondence map or a normalized
 graph isomorphism before computing the partition.
 
 #### Limits of the comparison
 
 Target satisfaction and optional planned-graph comparison cover only facts
-emitted by $C_X$ and predicates implemented by the verifier. Arbitrary
+emitted by $\mathcal C_{X,K}$ and predicates implemented by the verifier. Arbitrary
 functional correctness, program termination, numerical correctness, security,
 and behavior under an undeclared context remain outside those results. A
 compiler omission leaves the corresponding implementation defect
@@ -4978,7 +5097,9 @@ unobservable.
 
 The same compiler and context must produce $G_0$ and $G_1$. A compiler-version
 change or context change introduces another independent delta and makes a raw
-set comparison ambiguous.
+set comparison ambiguous. `TargetSpecification` and
+`TargetConformanceReport` therefore persist both digests, and
+`system.compiler.identity` plus `system.delta.context` reject a mismatch.
 
 Absence and divergence also require an explicit comparison policy. Some
 observed implementation facts may be intentionally unconstrained by the
@@ -5018,7 +5139,7 @@ operation-to-rule compiler before VIPER can claim a complete DPO instantiation
 Graph constraints state conditions satisfied by graphs, while application
 conditions state conditions for applying transformations. VIPER uses graph
 constraints for $T^*$ and application conditions for delta and repair
-applicability. Presence and absence are the Phase 0 atomic fragment;
+applicability. Presence and absence are the Master Phase 0 atomic fragment;
 preservation compares a projected baseline fact with the observed fact
 ([Ehrig, Ehrig, Habel, and Pennemann 2006](https://doi.org/10.3233/FUN-2006-74107)).
 
@@ -5068,28 +5189,22 @@ G^*\models T^*,
 \mathcal F_\Sigma(G_1)=\mathcal F_\Sigma(G^*).
 ```
 
-### A.10 Required next formal connectors
+### A.10 Implementation connector status
 
-These definitions are sufficient to state soundness, graph-relative
-minimality, target determinism, and represented conformance. Implementation
-still requires five explicit connectors:
+The specification now defines every connector needed by the proof. The
+connectors remain planned code until their owning PairBlocks close:
 
-1. Compiler adapters must normalize every typed dependency edge into
-   `dependent -> dependency` orientation and store non-dependency evidence
-   outside $E$.
-2. The contract-delta schema must represent mandatory operations separately
-   from the observed revision-difference `SystemGraphDelta`.
-3. `CompileTarget` must translate delta operations and total dispositions into
-   canonical predicates and reject inconsistent target specifications.
-4. The decomposition, repair-selection, and `CompileWork` connectors must
-   preserve every target obligation, selected repair operation, and execution
-   dependency in the generated PairBlocks.
-5. The conformance contract must define target-predicate evaluation and, when
-   a concrete $G^*$ exists, declare $\mathcal F_\Sigma$, including which
-   evidence fields are compared and which are intentionally ignored.
+| Connector | Specified boundary | Implementation owner |
+| --- | --- | --- |
+| Baseline lowering | `compile_system(R, K, X, Q, W) -> SystemGraph` normalizes every `SystemEdge` in dependent-to-dependency direction. | `P0-SIG-01`–`P0-SIG-03` |
+| Change compilation | `compile_contract_change(ContractChange, SystemGraph) -> ContractDelta` resolves anchors and emits one canonical operation order. | `P0-SIG-04` |
+| Impact and planning | `ContractDelta -> (H_delta, S_delta, B)` followed by the total `PropagationPlan` check. | `P0-SIG-05`–`P0-SIG-08` |
+| Target and work compilation | `compile_target_constraints(G0, Delta, P) -> TargetSpecification` and `compile_work(T*, Pi, U*) -> PairBlocks`. | `P0-SIG-09` |
+| Independent conformance | `evaluate_target_conformance(TargetSpecification, G1) -> TargetConformanceReport`, plus scoped `G1`/`G*` comparison when selection freezes `G*`. | `P0-SIG-11` |
 
-These connectors should be added after the foundation receives review. That
-sequence keeps proof review separate from contract-repair review.
+`ContractDelta` and `SystemGraphDelta` remain separate: the first expresses the
+requested change before implementation; the second records the observed
+difference between two compiled repository graphs.
 
 ### Works cited
 
@@ -5138,7 +5253,7 @@ validator recomputes every ID and rejects an inadmissible role-kind pair.
 
 #### SystemEdge set
 
-Every `SystemEdge` means `source depends on target`. Phase 0 accepts only:
+Every `SystemEdge` means `source depends on target`. Master Phase 0 accepts only:
 
 ```text
 contained_by
@@ -5183,7 +5298,7 @@ absence        the fact must not occur in G1
 preservation   the fact projected from G0 must occur unchanged in G1
 ```
 
-The Phase 0 `GraphFact` union contains exactly:
+The Master Phase 0 `GraphFact` union contains exactly:
 
 ```text
 node_identity
@@ -5201,7 +5316,7 @@ evidence. `PlannedNodeAnchor` identifies one future node and the delta
 operation that introduced it. `SystemNode` carries the coordinates and digest
 observed after repository compilation.
 
-### 14.2 Phase 0 diagnostics contract
+### 14.2 Master Phase 0 diagnostics contract
 
 Every diagnostic contains `code`, `severity`, `phase`, exact source location
 when available, related node and edge IDs, a concrete message, and remediation.
@@ -5232,7 +5347,7 @@ Tests assert the stable code and structured fields.
 Exploratory mode may serialize unresolved diagnostics. Complete impact,
 coverage, and implementation-gate outputs require strict mode.
 
-### 14.3 Phase 0 PairBlocks
+### 14.3 Master Phase 0 PairBlocks
 
 Each turn implements one block, runs its focused gate, and stops for inspection.
 
@@ -5279,7 +5394,7 @@ gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.
 depends_on = ["P0-SIG-02"]
 ```
 
-Implement the Phase 0 extraction matrix:
+Implement the Master Phase 0 extraction matrix:
 
 | Python site | Required result |
 | --- | --- |
@@ -5364,7 +5479,7 @@ depends_on = ["P0-SIG-05", "P0-SIG-06"]
 Collect diagnostics across the complete file set. Sort by code, path, line, and
 diagnostic ID. Strict validation rejects any error and specifically
 rejects unresolved or unsupported dependency sites reached by `B`. Golden
-tests assert every Phase 0 diagnostic code and its fields.
+tests assert every Master Phase 0 diagnostic code and its fields.
 
 <!-- pair-block-definition: P0-SIG-08 -->
 ```toml pair-block
@@ -5427,7 +5542,8 @@ gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.
 depends_on = ["P0-SIG-07", "P0-SIG-08", "P0-SIG-09", "P0-SIG-10"]
 ```
 
-Orchestrate Phase 0 and serialize `graph.json`, `delta.json`, `impact.json`,
+Orchestrate Master Phase 0 and serialize `graph.json`, `contract-delta.json`,
+`system-delta.json`, `impact.json`,
 `diagnostics.json`, `condensation.json`, `propagation.json`,
 `target-constraints.json`, and `blast-coverage.json` with canonical JSON. Compile
 twice from shuffled input order and require byte equality. Recompile `R1` under
@@ -5435,7 +5551,7 @@ the same context and emit exactly one satisfied, violated, or unevaluable
 receipt per target constraint. Strict conformance accepts only all-satisfied
 reports.
 
-### 14.4 Phase 0 proof blocks
+### 14.4 Master Phase 0 proof blocks
 
 <!-- pair-block-definition: P0-PROOF-09 -->
 ```toml pair-block
@@ -5497,9 +5613,9 @@ Use a fixture with one unexecuted statement and one unexecuted branch. Prove
 `SGB002` and `SGB003` independently, then add the missing test cases and require
 a complete `BlastCoverageReport`.
 
-### 14.5 Phase 0 kill gate
+### 14.5 Master Phase 0 kill gate
 
-Phase 0 closes only when all conditions hold:
+Master Phase 0 closes only when all conditions hold:
 
 - every tracked behavior-bearing file has one matching receipt;
 - every registered Python dependency site has one terminal receipt;
@@ -5520,11 +5636,11 @@ Phase 0 closes only when all conditions hold:
 
 The kill-gate report records missed surfaces, false-positive paths, selected
 test count, statement and branch obligations, unresolved sites, SCC sizes,
-condensation depth, wall time, and peak memory. Phase 1 begins only if the
+condensation depth, wall time, and peak memory. Master Phase 1 begins only if the
 compiler improves missed-surface detection or review completeness at an
 acceptable analysis cost on the replay fixtures.
 
-### 14.6 Phase 1 high-return PairBlocks
+### 14.6 Master Phase 1 high-return PairBlocks
 
 <!-- pair-block-definition: P1-SIG-01 -->
 ```toml pair-block
@@ -5627,7 +5743,7 @@ cohesion-aware partitioning later.
 
 ## 15. Research program
 
-### 1. Motivation and research objective
+### Research objective
 
 Repository-scale software changes fail differently from isolated coding tasks. A seemingly local request such as renaming `viper.file_artifact` to `viper.artifact` can propagate through implementation code, public exports, type references, tests, documentation, contract examples, serialization schemas, runtime registries, and downstream constructors. In a conventional agentic workflow, one agent is asked to discover these effects, decide what should change, perform the edits, run tests, and then decide whether the work is complete. This places impact discovery, planning, implementation, and completion judgment inside a single probabilistic reasoning loop.
 
@@ -5637,13 +5753,15 @@ At the highest level, the intended research protocol is
 
 $$
 \begin{aligned}
-R_0&\xrightarrow{\mathcal C_X}G_0, \\
+R_0&\longrightarrow(Q_0,W_0)
+\xrightarrow{\mathcal C_{X,K}}G_0, \\
 (G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
 (G_0,\Delta,P)&\xrightarrow{\operatorname{CompileTarget}}T^*, \\
 H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi
 \longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
 (T^*,\Pi,\{U_i^*\})&\xrightarrow{\operatorname{CompileWork}}\mathcal Q
-\longrightarrow R_1\xrightarrow{\mathcal C_X}G_1, \\
+\longrightarrow R_1\longrightarrow(Q_1,W_1)
+\xrightarrow{\mathcal C_{X,K}}G_1, \\
 G_1&\models T^*.
 \end{aligned}
 $$
@@ -5676,9 +5794,9 @@ No affected represented entity may disappear from planning silently. Everything 
 
 ---
 
-### 2. Conceptual derivation
+### Conceptual derivation
 
-#### 2.1 From “DAG 1 versus DAG 2” to a pre-implementation change compiler
+#### From two DAGs to a pre-implementation change compiler
 
 The original intuition was to compare a graph of the current implemented system with a graph of the intended system and derive the implementation work from their difference. The important temporal constraint is that the intended representation must exist before implementation. A graph extracted from an already implemented candidate repository is useful for verification, but it cannot serve as the implementation plan that precedes the implementation.
 
@@ -5690,7 +5808,7 @@ $$
 
 The proposed change is represented explicitly as one or more deltas $\Delta_1,\ldots,\Delta_k$. Their identities and provenance are preserved even when their effects overlap.
 
-#### 2.2 Why a delta does not generally determine a unique future graph
+#### Why a delta does not generally determine a unique future graph
 
 An early formulation assumed that the proposed delta could be applied directly to the baseline graph to obtain a single future graph:
 
@@ -5714,7 +5832,7 @@ $$
 
 In general, implementation freedom should be preserved wherever the specification does not require a particular structural choice. Later phases may select a specific planned realization $G^*\in\mathcal A(T^*)$ when deterministic bounded execution requires one.
 
-#### 2.3 Five distinct jobs
+#### Five distinct jobs
 
 The full system separates five jobs:
 
@@ -5740,15 +5858,15 @@ $$
 \models T^*.
 $$
 
-Phase 0 implements a deliberately simple version of all five jobs so that the end-to-end proposition can be tested before the research program expands.
+Master Phase 0 implements a deliberately simple version of all five jobs so that the end-to-end proposition can be tested before the research program expands.
 
 ---
 
-### Phase I — Formal Completeness and Richer Repository Semantics
+### Research Stage I — Formal Completeness and Richer Repository Semantics
 
-Phase I generalizes the Phase 0 graph and turns its conditional guarantees into an explicit proof boundary. It does not change the total-disposition protocol; it improves the repository representation and the strength of the assumptions under which completeness is claimed.
+Research Stage I generalizes the Master Phase 0 graph and turns its conditional guarantees into an explicit proof boundary. It does not change the total-disposition protocol; it improves the repository representation and the strength of the assumptions under which completeness is claimed.
 
-#### 21. Research repository graph
+#### Research Stage I.1 — Repository graph
 
 Let the research graph be
 
@@ -5769,7 +5887,7 @@ Possible relationship types include imports, calls, reads, writes, construction,
 
 The central limitation remains visible: no graph algorithm can recover a dependency the repository compiler fails to represent. Analysis receipts, unresolved dependencies, runtime-resolution observations, and source provenance therefore belong to the proof boundary rather than being treated as incidental metadata.
 
-#### 22. Multi-delta semantics
+#### Research Stage I.2 — Multi-delta semantics
 
 For $\Delta_1,\ldots,\Delta_k$, the compiler should distinguish disjoint,
 commuting, reinforcing, overlapping, and conflicting changes. The combined
@@ -5781,7 +5899,7 @@ $$
 
 but provenance must remain attached to every affected obligation. Conflicting postconditions must be detected before repair synthesis or execution.
 
-#### 23. Formal target semantics
+#### Research Stage I.3 — Formal target semantics
 
 The combination of $G_0$, $\{\Delta_i\}$, and the complete disposition map $P$ compiles into
 
@@ -5797,9 +5915,9 @@ $$
 
 The target is intentionally constraint-based. A unique future graph is not required unless later selection policies or additional requirements reduce the admissible set to one member.
 
-#### 24. Proof obligations for completeness
+#### Research Stage I.4 — Proof obligations for completeness
 
-##### Theorem 1 — Impact soundness
+##### Research Theorem I.1 — Impact soundness
 
 Under conservative dependency extraction,
 
@@ -5807,11 +5925,11 @@ $$
 \operatorname{Affected}(\Delta)\subseteq B.
 $$
 
-##### Theorem 2 — Impact minimality
+##### Research Theorem I.2 — Impact minimality
 
 $B$ is the least predecessor-closed set containing $S_{\Delta}$.
 
-##### Theorem 3 — Plan completeness
+##### Research Theorem I.3 — Plan completeness
 
 For every accepted plan,
 
@@ -5829,11 +5947,11 @@ These theorems formalize the first research claim: all represented potentially a
 
 ---
 
-### Phase II — Repository-Conditioned Semantic Representation and Calibrated Projections
+### Research Stage II — Repository-Conditioned Semantic Representation and Calibrated Projections
 
-Phase II replaces the crude Phase 0 context and ordinal estimates with a reusable repository-conditioned representation and separately calibrated operation-conditioned projections. The semantic layer remains downstream of formal completeness: it may influence decomposition and choice, but it cannot redefine the impact closure or waive a hard target constraint.
+Research Stage II replaces the crude Master Phase 0 context and ordinal estimates with a reusable repository-conditioned representation and separately calibrated operation-conditioned projections. The semantic layer remains downstream of formal completeness: it may influence decomposition and choice, but it cannot redefine the impact closure or waive a hard target constraint.
 
-#### 25. Persistent semantic state
+#### Research Stage II.1 — Persistent semantic state
 
 For each node $v$, collect a source-evidenced bundle $X(v)$ containing source or signature information, comments and docstrings, node type, language, file role, public/private status, callers, callees, tests, contracts, graph neighborhood, native/CUDA/generated status, complexity features, SCC membership, fan-in, fan-out, and provenance. Construct
 
@@ -5843,7 +5961,7 @@ $$
 
 The representation may be a pretrained code embedding, a structured feature vector, an agent-generated semantic summary, or a hybrid. The representation is not itself an engineering cost and should not replace explicit hard facts such as `cuda=True`, `public_api=True`, or `native_boundary=True`.
 
-#### 26. Operation-conditioned representation
+#### Research Stage II.2 — Operation-conditioned representation
 
 Let $q(\Delta)$ represent change intent. For an operation $\delta_v$ proposed on node $v$, define
 
@@ -5853,7 +5971,7 @@ $$
 
 This distinction matters because a node can be expensive to rewrite but nearly free to retain.
 
-#### 27. Separate semantic projections
+#### Research Stage II.3 — Separate semantic projections
 
 Do not collapse engineering consequence into one universal scalar. Derive separate projections:
 
@@ -5877,9 +5995,9 @@ $$
 
 Effort primarily informs scheduling, coordination cost informs partition boundaries, risk informs repair selection, and verification burden informs acceptance planning.
 
-#### 28. Representation roadmap
+#### Research Stage II.4 — Representation roadmap
 
-The progression should be empirical rather than aspirational. Phase 0 uses explicit static features plus an agent role summary and coarse estimates. The first research upgrade adds a pretrained code embedding while retaining the explicit features. The next stage learns small prediction heads for $w$, $r$, $h$, and $c$ from execution traces. Only if those additions demonstrate value should VIPER learn typed repository-neighborhood aggregation or a joint repository/change representation.
+The progression should be empirical rather than aspirational. Master Phase 0 uses explicit static features plus an agent role summary and coarse estimates. The first research upgrade adds a pretrained code embedding while retaining the explicit features. The next stage learns small prediction heads for $w$, $r$, $h$, and $c$ from execution traces. Only if those additions demonstrate value should VIPER learn typed repository-neighborhood aggregation or a joint repository/change representation.
 
 The intended progression is
 
@@ -5893,15 +6011,15 @@ $$
 \text{typed repository-aware aggregation}.
 $$
 
-The telemetry emitted by Phase 0 supplies the initial supervision: actual implementation time, token use, changed symbols and LOC, repair iterations, test failures, verification cost, cross-agent communication, and final outcomes.
+The telemetry emitted by Master Phase 0 supplies the initial supervision: actual implementation time, token use, changed symbols and LOC, repair iterations, test failures, verification cost, cross-agent communication, and final outcomes.
 
 ---
 
-### Phase III — Optimized SCC-Safe Decomposition
+### Research Stage III — Optimized SCC-Safe Decomposition
 
-Phase III replaces the Phase 0 greedy partition with a principled optimization over SCC-condensed work. The purpose is execution decomposition, not final architecture selection.
+Research Stage III replaces the Master Phase 0 greedy partition with a principled optimization over SCC-condensed work. The purpose is execution decomposition, not final architecture selection.
 
-#### 29. SCC-safe work graph
+#### Research Stage III.1 — SCC-safe work graph
 
 For the induced affected graph
 
@@ -5919,7 +6037,7 @@ $$
 
 The SCCs remain atomic scheduling units. Candidate future graphs are not required to preserve the same SCC structure; breaking a large cycle may itself be a desirable repair.
 
-#### 30. Research partition objective
+#### Research Stage III.2 — Partition objective
 
 Let
 
@@ -5935,7 +6053,7 @@ $$
 
 VIPER's contribution is not this objective itself. The intended extension is to derive its node and edge weights from operation-conditioned repository semantics over a richer typed dependency graph. If $\alpha$ cannot be calibrated to actual communication/computation costs, $W$ and $C$ should remain a multiobjective/Pareto problem rather than being combined through an arbitrary aesthetic weight.
 
-#### 31. Structural diagnostics
+#### Research Stage III.3 — Structural diagnostics
 
 Useful graph statistics include $|V|$, $|E|$, edge density, SCC count, mean and maximum SCC size, condensation-DAG depth, fan-in and fan-out distributions, cut weight, component-size distribution, and workload imbalance. These are diagnostics rather than automatic objectives. Maximizing connected components can reward pathological fragmentation, and minimizing density can be gamed by adding irrelevant structure.
 
@@ -5956,11 +6074,11 @@ If no prior is known, the uniform distribution provides a topology-derived basel
 
 ---
 
-### Phase IV — Formal Repair Spaces and Repository-Local Selection
+### Research Stage IV — Formal Repair Spaces and Repository-Local Selection
 
-Phase IV addresses the implementation freedom left after completeness and decomposition. It treats each work component as a constrained repair problem, removes formally inferior alternatives, and uses repository-aware semantic judgment only for the residual choices that formal information does not order.
+Research Stage IV addresses the implementation freedom left after completeness and decomposition. It treats each work component as a constrained repair problem, removes formally inferior alternatives, and uses repository-aware semantic judgment only for the residual choices that formal information does not order.
 
-#### 32. Component repair spaces
+#### Research Stage IV.1 — Component repair spaces
 
 For partition component $C_i$, use its writable ownership set
 $\widehat W_i=W_i\cup N_i$, read-only boundary $\Gamma_i$, and assigned target
@@ -5999,7 +6117,7 @@ $$
 
 indicates genuine implementation underdetermination. The design should reuse established graph-repair formalisms where possible rather than inventing a new repair semantics merely for VIPER.
 
-#### 33. Formal filtering hierarchy
+#### Research Stage IV.2 — Formal filtering hierarchy
 
 Candidate reduction should remain ordered. Hard validity first removes every repair that violates $T_i^*$. Least-change dominance then removes any repair that has a strict valid sub-update. Structural Pareto dominance can compare interface disturbance, dependency disturbance, SCC effects, blast-radius geometry, cross-component coupling, critical-path consequences, and verification obligations without prematurely forcing these dimensions into one scalar objective.
 
@@ -6011,19 +6129,19 @@ $$
 
 and for every retained least-changing repair $U$ there exists no strict valid sub-update $U'\subset U$ satisfying the same local constraints.
 
-#### 34. Semantic repair selection
+#### Research Stage IV.3 — Semantic repair selection
 
 Topology and cardinality cannot fully order engineering choices. A repair that changes one custom CUDA kernel may be less desirable than one that changes three ordinary Python utilities, even when the first touches fewer graph entities. For every surviving repair, aggregate the operation-conditioned risk, verification burden, architectural sensitivity, performance sensitivity, and any other evidence-supported semantic consequences.
 
 The semantic system may eliminate candidates that are clearly dominated under these repository-local measures, but it must not override hard validity or impact completeness.
 
-#### 35. Residual agent comparator
+#### Research Stage IV.4 — Residual agent comparator
 
 If several formally admissible and non-dominated candidates remain, the final selector agent receives the current repository evidence, original specification, candidate transformations, structural summaries, semantic projections, relevant tests and contracts, and the evidence supporting prior eliminations. Pairwise or small-set comparison is preferred to asking the model for an uncalibrated universal architecture score.
 
 A final selection should record whether it was logically forced, least-change dominant, structurally dominant, semantically dominant, chosen by contextual agent preference, supported by empirical realization evidence, or selected only by a canonical tie-break. Canonical selection provides reproducibility, not a claim of semantic optimality.
 
-#### 36. Composition of local repairs
+#### Research Stage IV.5 — Composition of local repairs
 
 For selected repairs $U_1^*,\ldots,U_m^*$, propose
 
@@ -6045,11 +6163,11 @@ $$
 
 ---
 
-### Phase V — Realization, Independent Reconstruction, and Conformance
+### Research Stage V — Realization, Independent Reconstruction, and Conformance
 
-Phase V generalizes the Phase 0 verifier to the richer target and selected repair structure. It preserves the critical independence boundary: the observed implementation graph is reconstructed from repository evidence, not from the plan.
+Research Stage V generalizes the Master Phase 0 verifier to the richer target and selected repair structure. It preserves the critical independence boundary: the observed implementation graph is reconstructed from repository evidence, not from the plan.
 
-#### 37. Planned target and selected realization
+#### Research Stage V.1 — Planned target and selected realization
 
 Maintain both concepts:
 
@@ -6071,7 +6189,7 @@ $$
 
 must hold. Exact singleton selection is not necessary when the implementation can be accepted against $T^*$ alone, but freezing selected structural choices into $G^*$ can be useful for deterministic bounded execution.
 
-#### 38. Independent realization
+#### Research Stage V.2 — Independent realization
 
 After implementation,
 
@@ -6081,7 +6199,7 @@ $$
 
 The same source-evidenced compiler should be used wherever practical. The graph is reconstructed from the implemented repository, not from implementation reports.
 
-#### 39. Conformance theorem
+#### Research Stage V.3 — Conformance theorem
 
 Under sound post-implementation extraction,
 
@@ -6102,19 +6220,21 @@ separate acceptance evidence.
 
 ---
 
-#### 40. Full research architecture
+#### Research Stage V.4 — Full research architecture
 
 The complete research architecture is
 
 $$
 \begin{aligned}
-R_0&\xrightarrow{\mathcal C_X}G_0, \\
+R_0&\longrightarrow(Q_0,W_0)
+\xrightarrow{\mathcal C_{X,K}}G_0, \\
 (G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
 (G_0,\Delta,P)&\longrightarrow T^*, \\
 H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi^*
 \longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
 (T^*,\Pi^*,\{U_i^*\})&\longrightarrow\mathcal Q
-\longrightarrow R_1\xrightarrow{\mathcal C_X}G_1, \\
+\longrightarrow R_1\longrightarrow(Q_1,W_1)
+\xrightarrow{\mathcal C_{X,K}}G_1, \\
 G_1&\models T^*.
 \end{aligned}
 $$
@@ -6179,7 +6299,7 @@ The formal system determines what must be considered and what is admissible. The
 
 ---
 
-#### 41. Determinism and reproducibility
+#### Research Stage V.5 — Determinism and reproducibility
 
 The system distinguishes mathematical determinism, policy determinism, and model reproducibility. Graph extraction, stable identifiers, reachability, SCC computation, canonicalization, and constraint checking should be mathematically deterministic. Partitioning, repair selection, and tie-breaking are deterministic only relative to a fixed policy. Semantic summaries, embeddings, effort estimates, and agent judgments require model and context freezing if reproducibility is claimed.
 
@@ -6201,7 +6321,7 @@ This distinguishes mathematically necessary decisions from engineering preferenc
 
 ---
 
-#### 42. Prior-art boundary and contribution hypothesis
+#### Research Stage V.6 — Prior-art boundary and contribution hypothesis
 
 The architecture intentionally composes established ideas rather than renaming them. Dependency-based impact analysis and slicing are established in the program-dependence literature. Delta modeling formalizes explicit modifications applied to a core model. Algebraic graph transformation provides formal semantics for graph updates, applicability, and composition. Graph-repair research provides formal repair spaces, least-changing repairs, and the fact that multiple minimal repairs may remain. Software reflexion models provide intended-versus-observed structural comparison. CodePlan combines repository dependency analysis, change-impact propagation, planning, and LLM repository editing. Archbird provides a close deterministic repository `Map -> Plan -> isolated Act -> fresh Map/Verify -> Apply` workflow. Co-Coder formalizes repository-level multi-agent coding as a graph-partitioning problem balancing critical-path computation against cross-agent communication.
 
@@ -6237,7 +6357,7 @@ These remain contribution hypotheses, not established novelty claims. Novelty sh
 
 ---
 
-#### 43. Principal prior work and sources
+#### Research Stage V.7 — Principal prior work and sources
 
 The following sources provide the principal theoretical and systems foundations for the specification.
 
@@ -6254,19 +6374,19 @@ The following sources provide the principal theoretical and systems foundations 
 
 ---
 
-#### 44. Empirical validation program
+#### Research Stage V.8 — Empirical validation program
 
 The research program should be evaluated by ablation rather than by implementing the entire architecture at once. Comparisons should include a strong sequential coding agent, simple file-parallel agents, impact analysis without total disposition, impact analysis with total disposition, SCC-safe partitioning, Co-Coder-style structural partitioning, topology plus semantic effort estimates, and the full semantic repair-selection system.
 
 Primary completeness metrics are missed affected surfaces, stale structures, and omitted contract obligations. Minimality metrics include unnecessary files or symbols changed and dependency churn. Quality metrics include test and build success, structural conformance, regressions, and benchmark behavior where relevant. Agent-efficiency metrics include token use, wall-clock time, repair iterations, context size, and cross-agent communication. Partition metrics include critical path, workload balance, cut weight, and SCC violations. Semantic-model quality should be assessed by the relationship between predicted and observed implementation effort, token use, verification cost, repair iterations, regressions, performance sensitivity, and coordination burden.
 
-The ablation sequence is itself a scope-control mechanism. If total disposition does not improve the Phase 0 baseline, downstream semantic sophistication is not justified. If explicit static semantic metadata performs as well as learned embeddings, the learned representation should not be built. If bounded agent candidate generation performs as well as formal repair-space enumeration, exhaustive synthesis should remain out of scope.
+The ablation sequence is itself a scope-control mechanism. If total disposition does not improve the Master Phase 0 baseline, downstream semantic sophistication is not justified. If explicit static semantic metadata performs as well as learned embeddings, the learned representation should not be built. If bounded agent candidate generation performs as well as formal repair-space enumeration, exhaustive synthesis should remain out of scope.
 
 ---
 
-#### 45. Remaining research and engineering work
+#### Research Stage V.9 — Remaining research and engineering work
 
-The immediate engineering work is the Phase 0 implementation order defined above. The broader research agenda should proceed only after Phase 0 clears its kill gate. Remaining tasks include:
+The immediate engineering work is the Master Phase 0 implementation order defined above. The broader research agenda should proceed only after Master Phase 0 clears its kill gate. Remaining tasks include:
 
 1. defining the complete heterogeneous repository graph schema and exact evidence boundary;
 2. strengthening dynamic-resolution coverage and unresolved-dependency semantics;
@@ -6291,11 +6411,11 @@ The immediate engineering work is the Phase 0 implementation order defined above
 
 ---
 
-#### 46. Canonical research statement
+#### Research Stage V.10 — Research statement
 
 VIPER is intended to function as a software-change compiler. Given a current repository and declarative proposed changes, it derives a conservative represented impact closure, assigns exactly one explicit disposition to every affected represented entity, enriches the resulting obligations with repository-local semantic context, decomposes the complete work into dependency-safe implementation units, permits agents to resolve only those engineering choices left underdetermined by formal constraints, and independently reconstructs the implemented repository to verify structural and behavioral conformance.
 
-Phase 0 is the non-negotiable baseline. It tests whether the simple protocol
+Master Phase 0 is the non-negotiable baseline. It tests whether the simple protocol
 
 $$
 \Delta

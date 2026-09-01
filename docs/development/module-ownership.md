@@ -145,7 +145,7 @@ flowchart TD
 ```
 
 The diagrams use the semantic palette defined by the
-[contract-gap method](contract-requirement-traceability.md#diagram-color-contract).
+[contract-gap method](contract-traceability.md#diagram-color-contract).
 
 ## 4. Contract models
 
@@ -323,7 +323,7 @@ match it.
 | `tests/test_inspection.py` | Change | Import verified result types from their defining module. |
 | `docs/development/module-privacy.md` | Change | Replace the superseded private-handler explanation with the one-owner rule. |
 | `docs/development/master-execution-checklist.md` | Change | Insert this contract before the system graph and assign future API operations to `viper.api`. |
-| `docs/development/phase-0-pair-coding.md` | Change | Supply the exact verification and API migration blocks. |
+| `docs/development/foundation-pair-coding.md` | Change | Supply the exact verification and API migration blocks. |
 
 Any additional importer found during implementation receives the same direct
 import update before `MOD-01` closes.

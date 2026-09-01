@@ -1,8 +1,8 @@
-# Contract traceability Phase 0 pair-coding guide
+# Contract Traceability Pair-Coding Guide
 
 This is the implementation authority for contract-requirement traceability.
-The [contract](contract-requirement-traceability.md) defines what must become
-true. The [master checklist](master-execution-checklist.md#71-contract-requirement-traceability)
+The [contract](contract-traceability.md) defines what must become
+true. The [master checklist](master-execution-checklist.md#71-contract-traceability)
 owns order and completion. This guide supplies the exact edit for each pair
 cycle.
 
@@ -19,7 +19,7 @@ Each `python pair-edit` fence contains code for the user to apply during its
 named pair cycle. Repository implementation begins when the user applies that
 edit.
 
-This phase changes only contract traceability:
+This guide changes only contract traceability during Master Phase 0:
 
 ```text
 existing ContractRequirement, VerifierRule, RuleEdge, and ContractTrace models
@@ -252,7 +252,9 @@ Add the checklist edge parser after the declaration parsers.
 import ast
 
 
-_PHASE_HEADING = re.compile(r"^## \d+\. Phase (?P<phase>\d+)\b", re.MULTILINE)
+_PHASE_HEADING = re.compile(
+    r"^## \d+\. Master Phase (?P<phase>\d+)\b", re.MULTILINE
+)
 _RULE_EDGE = re.compile(
     r"<!-- contract-(?P<kind>implementation|verification): "
     r"requirement=(?P<requirement>[A-Z]{3}-\d{2}) "
@@ -856,7 +858,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
     checklist.write_text(
         dedent(
             """
-            ## 7. Phase 0
+            ## 7. Master Phase 0
 
             <!-- contract-implementation: requirement=CRT-01
             rule=contract.rule state=implemented
@@ -1320,7 +1322,7 @@ Cycle `P0-CRT-04` is the only repeated migration. Add one contract to
 DAGs, its complete worked example, verifier-rule markers, and accepted and
 rejected traces. Run the focused gate after each contract.
 
-## 6. Phase gate
+## 6. Guide gate
 
 After all nine PairBlocks pass, run:
 
@@ -1336,7 +1338,7 @@ conda run -n mantra python -m pytest \
   -k 'contract_compiler or system_graph_preserves_contract_traceability' -q
 ```
 
-Phase 0 contract traceability closes only when:
+The contract-traceability work in Master Phase 0 closes only when:
 
 - every CRT checklist box is checked;
 - every CRT implementation and verification marker has
@@ -1370,7 +1372,7 @@ traversal, propagation coverage, and target constraints.
 ```text
 R0 -> compile_contract_traceability() -> Q0: ContractTraceabilityGraph
 R0 -> compile_pair_blocks() -> W0: tuple[PairBlock, ...]
-(R0, X, Q0, W0) -> compile_system() -> G0: SystemGraph
+(R0, K, X, Q0, W0) -> compile_system() -> G0: SystemGraph
 
 (ContractChange, G0) -> compile_contract_change() -> ContractDelta
 ```

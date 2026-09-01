@@ -1618,7 +1618,7 @@ existing benchmark input-identity checks before execution.
 
 ## 10. Implementation order
 
-### Phase 1. Metric drafts and typed contexts
+### Implementation Step 1 — Metric drafts and typed contexts
 
 - [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
 - [ ] Add the public metric, objective, and criterion constructors.
@@ -1641,7 +1641,7 @@ existing benchmark input-identity checks before execution.
 **Commit boundary:** one configured live or recomputed metric receives its exact
 frozen parameter object.
 
-### Phase 2. Stage objectives
+### Implementation Step 2 — Stage objectives
 
 - [ ] Add `MetricObjectiveSpec` to frozen stage models.
 - [ ] Validate objective mode, direction, and membership in frozen stage metric
@@ -1657,7 +1657,7 @@ frozen parameter object.
 **Commit boundary:** train and eval stages identify a measured objective and
 its improvement direction.
 
-### Phase 3. Experiment authoring
+### Implementation Step 3 — Experiment authoring
 
 - [ ] Add factor, variant, replicate, and experiment drafts.
 - [ ] Compile each run-relative artifact draft path beneath the selected run
@@ -1677,7 +1677,7 @@ its improvement direction.
 **Commit boundary:** Python authoring freezes one complete experiment and run
 with one compiler-derived metric registry.
 
-### Phase 4. Benchmark metric results
+### Implementation Step 4 — Benchmark metric results
 
 - [ ] Add `BenchmarkDraft` and its public constructor.
 - [ ] Name the fixed evaluation input `test` in `BenchmarkDraft`,
@@ -1695,7 +1695,7 @@ with one compiler-derived metric registry.
 **Commit boundary:** a benchmark records verified metric results under exact
 evaluation conditions, with optional threshold judgments.
 
-### Phase 5. System review
+### Implementation Step 5 — System review
 
 - [ ] Compare every repeated target model mechanically.
 - [ ] Parse every Python example.

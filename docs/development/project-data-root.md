@@ -682,6 +682,6 @@ outcome.message_match = "symlink"
    the resolved root.
 6. Add boundary and relocation tests.
 7. Update the protocol tree and public documentation.
-8. Run the Phase 0 gate from the master execution checklist.
+8. Run the Master Phase 0 gate from the master execution checklist.
 
 **Commit boundary:** `Bind every local operation to one project root`

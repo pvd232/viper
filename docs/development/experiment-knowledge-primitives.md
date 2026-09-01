@@ -490,7 +490,7 @@ class RetrievalJudgment(ProtocolModel):
     reviewed_at: AwareDatetime
 ```
 
-Phase 17 defines `VectorViewSpec` and `KnowledgeVector` before it defines
+Master Phase 17 defines `VectorViewSpec` and `KnowledgeVector` before it defines
 `RetrievalJudgment`. The judgment consumes two published vector references, so
 its verifier can load both vectors and compare their view identity.
 
@@ -825,8 +825,8 @@ def knowledge(
 ) -> KnowledgeStore: ...
 ```
 
-Phase 16 first implements `KnowledgeRecordKind`, `KnowledgeRecord`, and
-`KnowledgeStore` through `JournalAssertion`. Phase 17 extends those three
+Master Phase 16 first implements `KnowledgeRecordKind`, `KnowledgeRecord`, and
+`KnowledgeStore` through `JournalAssertion`. Master Phase 17 extends those three
 owners with `KnowledgeVector`, `RetrievalJudgment`, `publish_vector()`, and
 `publish_retrieval_judgment()` after both vector models exist. The code above
 shows the complete target API after both phases.

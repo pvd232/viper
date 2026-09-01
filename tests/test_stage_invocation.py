@@ -14,7 +14,9 @@ from viper.stages import (
     StageImplementationRef,
     load_stage_callable,
     stage_definition,
-    train,
+)
+from viper.stages import (
+    train as train_stage,
 )
 
 
@@ -24,7 +26,7 @@ class ExampleTrainParameters(parameters.Train):
     epochs: int
 
 
-@train(params=ExampleTrainParameters)
+@train_stage(params=ExampleTrainParameters)
 def train(context: Context[ExampleTrainParameters]) -> None:
     """Consume one typed context in the direct decorator fixture."""
     assert context.params.epochs > 0
