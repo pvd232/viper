@@ -3026,6 +3026,13 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
 
 ## 5. System graph
 
+> Historical draft: the canonical `P0-SIG-*` and `P0-PROOF-09` through
+> `P0-PROOF-12` blocks now live in
+> [`system-impact-phase-0-1-pair-coding.md`](system-impact-phase-0-1-pair-coding.md).
+> The documentation validator excludes the blocks below from the active
+> PairBlock set. Phase 0 removes this archived section after the new compiler
+> reaches parity with its AST and documentation oracles.
+
 <!-- pair-block-definition: P0-SIG-01 -->
 ```toml pair-block
 id = "P0-SIG-01"

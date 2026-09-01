@@ -41,6 +41,9 @@ CONTRACT_TRACEABILITY = (
 MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
 SYSTEM_IMPACT_GRAPH = ROOT / "docs/development/system-impact-graph.md"
 PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/phase-0-pair-coding.md"
+SYSTEM_IMPACT_PAIR_CODING = (
+    ROOT / "docs/development/system-impact-phase-0-1-pair-coding.md"
+)
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
@@ -151,6 +154,13 @@ _PAIR_BLOCK_DEFINITION = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 _PAIR_EDIT = re.compile(r"```python pair-edit\n(?P<code>.*?)\n```", re.DOTALL)
+_SYSTEM_PAIR_BLOCK_DEFINITION = re.compile(
+    r"<!-- pair-block-definition: "
+    r"(?P<id>P[01]-SIG-\d{2}|P0-PROOF-(?:09|10|11|12)) -->\n"
+    r"```toml pair-block\n(?P<manifest>.*?)\n```\n"
+    r"(?P<body>.*?)(?=<!-- pair-block-definition: |^## |\Z)",
+    re.MULTILINE | re.DOTALL,
+)
 _PAIR_PLACEHOLDER = re.compile(
     r"(?:\bTBD\b|\bTODO\b|^\s*\.\.\.\s*$|=\s*\.\.\.\s*$)",
     re.MULTILINE,
@@ -240,38 +250,45 @@ SYSTEM_IMPACT_DAG_ROLES = (
     },
     {
         "Baseline": "input",
-        "Candidate": "input",
         "Context": "input",
+        "ContractDocs": "input",
         "Inventory": "proposed",
-        "Files": "proposed",
         "Analyze": "proposed",
-        "Analysis": "proposed",
-        "Nodes": "proposed",
-        "Static": "proposed",
-        "Discovery": "proposed",
-        "Attempt": "proposed",
-        "Outcome": "proposed",
+        "Sites": "proposed",
         "Graph": "proposed",
-        "DAG": "proposed",
+        "ContractCompiler": "proposed",
         "Delta": "proposed",
-        "Report": "proposed",
+        "Overlay": "proposed",
+        "Support": "proposed",
+        "Closure": "proposed",
+        "SCC": "proposed",
+        "DAG": "proposed",
+        "Select": "proposed",
+        "Coverage": "proposed",
         "Plan": "proposed",
+        "Target": "proposed",
     },
     {
         "Baseline": "input",
-        "Candidate": "input",
         "Context": "input",
-        "Traceability": "input",
-        "Compile": "consumer",
-        "BaseGraph": "evidence",
-        "CandidateGraph": "evidence",
-        "BaseDAG": "evidence",
-        "CandidateDAG": "evidence",
-        "Delta": "output",
-        "Closure": "output",
-        "Report": "output",
-        "Plan": "output",
+        "Contract": "input",
+        "PairReference": "input",
+        "CompileBase": "consumer",
+        "CompileContract": "consumer",
+        "Implementation": "consumer",
+        "CompileObserved": "consumer",
         "Review": "consumer",
+        "BaseGraph": "evidence",
+        "Candidate": "evidence",
+        "CandidateGraph": "evidence",
+        "Delta": "output",
+        "Impact": "output",
+        "Condensation": "output",
+        "Tests": "output",
+        "Coverage": "output",
+        "Plan": "output",
+        "Target": "output",
+        "Conformance": "output",
     },
 )
 SYSTEM_IMPACT_DAG_EDGES = (
@@ -291,47 +308,56 @@ SYSTEM_IMPACT_DAG_EDGES = (
     },
     {
         ("Baseline", "Inventory"),
-        ("Candidate", "Inventory"),
-        ("Inventory", "Files"),
-        ("Files", "Analyze"),
-        ("Analyze", "Analysis"),
-        ("Analyze", "Nodes"),
-        ("Analyze", "Static"),
-        ("Baseline", "Discovery"),
-        ("Candidate", "Discovery"),
-        ("Context", "Discovery"),
-        ("Discovery", "Attempt"),
-        ("Attempt", "Outcome"),
-        ("Files", "Graph"),
-        ("Analysis", "Graph"),
-        ("Nodes", "Graph"),
-        ("Static", "Graph"),
-        ("Outcome", "Graph"),
-        ("Graph", "DAG"),
-        ("Graph", "Delta"),
-        ("DAG", "Report"),
-        ("Delta", "Report"),
-        ("Report", "Plan"),
-        ("Delta", "Plan"),
+        ("Context", "Analyze"),
+        ("Inventory", "Analyze"),
+        ("Analyze", "Sites"),
+        ("Analyze", "Graph"),
+        ("Sites", "Graph"),
+        ("ContractDocs", "ContractCompiler"),
+        ("Graph", "ContractCompiler"),
+        ("ContractCompiler", "Delta"),
+        ("Graph", "Overlay"),
+        ("Delta", "Overlay"),
+        ("Delta", "Support"),
+        ("Overlay", "Closure"),
+        ("Support", "Closure"),
+        ("Closure", "SCC"),
+        ("SCC", "DAG"),
+        ("Closure", "Select"),
+        ("Select", "Coverage"),
+        ("Closure", "Plan"),
+        ("ContractCompiler", "Plan"),
+        ("Graph", "Target"),
+        ("Delta", "Target"),
+        ("Plan", "Target"),
     },
     {
-        ("Baseline", "Compile"),
-        ("Candidate", "Compile"),
-        ("Context", "Compile"),
-        ("Traceability", "Compile"),
-        ("Compile", "BaseGraph"),
-        ("Compile", "CandidateGraph"),
-        ("BaseGraph", "BaseDAG"),
-        ("CandidateGraph", "CandidateDAG"),
-        ("BaseGraph", "Delta"),
-        ("CandidateGraph", "Delta"),
-        ("Delta", "Closure"),
-        ("BaseDAG", "Closure"),
-        ("CandidateDAG", "Closure"),
-        ("Closure", "Report"),
-        ("Report", "Plan"),
-        ("CandidateGraph", "Plan"),
-        ("Plan", "Review"),
+        ("Baseline", "CompileBase"),
+        ("Context", "CompileBase"),
+        ("CompileBase", "BaseGraph"),
+        ("Contract", "CompileContract"),
+        ("PairReference", "CompileContract"),
+        ("BaseGraph", "CompileContract"),
+        ("CompileContract", "Delta"),
+        ("BaseGraph", "Impact"),
+        ("Delta", "Impact"),
+        ("Impact", "Condensation"),
+        ("Impact", "Tests"),
+        ("Tests", "Coverage"),
+        ("Impact", "Plan"),
+        ("PairReference", "Plan"),
+        ("BaseGraph", "Target"),
+        ("Delta", "Target"),
+        ("Plan", "Target"),
+        ("Target", "Implementation"),
+        ("Implementation", "Candidate"),
+        ("Candidate", "CompileObserved"),
+        ("Context", "CompileObserved"),
+        ("CompileObserved", "CandidateGraph"),
+        ("CandidateGraph", "Conformance"),
+        ("Target", "Conformance"),
+        ("Coverage", "Review"),
+        ("Conformance", "Review"),
     },
 )
 
@@ -1423,7 +1449,20 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     assert len(marker_ids) == len(set(marker_ids))
 
     reference = PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
-    definitions = tuple(_PAIR_BLOCK_DEFINITION.finditer(reference))
+    legacy_definitions = tuple(
+        definition
+        for definition in _PAIR_BLOCK_DEFINITION.finditer(reference)
+        if not definition.group("id").startswith("P0-SIG-")
+        and definition.group("id")
+        not in {"P0-PROOF-09", "P0-PROOF-10", "P0-PROOF-11", "P0-PROOF-12"}
+    )
+    system_reference = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+    system_definitions = tuple(
+        definition
+        for definition in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(system_reference)
+        if definition.group("id").startswith("P0-")
+    )
+    definitions = legacy_definitions + system_definitions
     definition_ids = [definition.group("id") for definition in definitions]
     assert len(definition_ids) == len(set(definition_ids))
     assert set(definition_ids) == set(marker_ids)
@@ -1465,14 +1504,23 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         assert str(manifest["gate"]).startswith("conda run -n mantra ")
 
         edits = tuple(_PAIR_EDIT.finditer(definition.group("body")))
-        assert len(edits) == 1, block_id
-        code = edits[0].group("code")
-        assert _PAIR_PLACEHOLDER.search(code) is None, block_id
-        edit_tree = ast.parse(
-            code,
-            filename=f"{PHASE_ZERO_PAIR_CODING.name}:{block_id}",
-        )
-        if block_id not in implemented_ids:
+        if block_id.startswith("P0-SIG-") or block_id in {
+            "P0-PROOF-09",
+            "P0-PROOF-10",
+            "P0-PROOF-11",
+            "P0-PROOF-12",
+        }:
+            assert not edits, block_id
+            assert _PAIR_PLACEHOLDER.search(definition.group("body")) is None
+        else:
+            assert len(edits) == 1, block_id
+            code = edits[0].group("code")
+            assert _PAIR_PLACEHOLDER.search(code) is None, block_id
+            edit_tree = ast.parse(
+                code,
+                filename=f"{PHASE_ZERO_PAIR_CODING.name}:{block_id}",
+            )
+        if block_id not in implemented_ids and edits:
             declarations: set[str] = set()
             for node in edit_tree.body:
                 if isinstance(
@@ -1511,6 +1559,37 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         for dependency in dependencies:
             assert dependency in manifests, (block_id, dependency)
             assert order[dependency] < order[block_id], (block_id, dependency)
+
+
+def test_system_graph_phase_one_tasks_have_pair_blocks() -> None:
+    """Bind each high-return Phase 1 SystemGraph task to one ordered block."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    section = checklist.split("### 8.0 SystemGraph Phase 1 hardening", 1)[1].split(
+        "### 8.1 Local publication interface",
+        1,
+    )[0]
+    marker_ids = re.findall(r"<!-- pair-block: (P1-SIG-\d{2}) -->", section)
+    assert marker_ids == ["P1-SIG-01", "P1-SIG-02", "P1-SIG-03", "P1-SIG-04"]
+
+    reference = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+    definitions = {
+        match.group("id"): tomllib.loads(match.group("manifest"))
+        for match in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(reference)
+        if match.group("id").startswith("P1-SIG-")
+    }
+    assert set(definitions) == set(marker_ids)
+    available = {
+        match.group("id")
+        for match in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(reference)
+    }
+    for block_id in marker_ids:
+        manifest = definitions[block_id]
+        assert manifest["id"] == block_id
+        assert manifest["requirements"]
+        assert manifest["targets"]
+        assert manifest["tests"]
+        assert str(manifest["gate"]).startswith("conda run -n mantra ")
+        assert set(manifest["depends_on"]) <= available
 
 
 def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
@@ -1613,56 +1692,43 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
 
 
 def test_phase_zero_system_models_match_contract() -> None:
-    """Keep the system-graph coding block aligned with its contract models."""
-    contract_text = SYSTEM_IMPACT_GRAPH.read_text(encoding="utf-8")
-    contract_models = _numbered_contract_section(contract_text, 4).split(
-        "### Illustrative worked example",
-        1,
-    )[0]
-    contract_classes = {
-        node.name: node
-        for match in _PYTHON_FENCE.finditer(contract_models)
-        for node in ast.parse(match.group("body")).body
-        if isinstance(node, ast.ClassDef)
+    """Keep the canonical SystemGraph vocabulary equal in both active guides."""
+    contract = SYSTEM_IMPACT_GRAPH.read_text(encoding="utf-8")
+    guide = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+    node_kinds = {
+        "repository_file",
+        "python_symbol",
+        "document_anchor",
+        "external_symbol",
     }
-
-    reference = PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
-    definition = next(
-        match
-        for match in _PAIR_BLOCK_DEFINITION.finditer(reference)
-        if match.group("id") == "P0-SIG-01"
-    )
-    edit = _PAIR_EDIT.search(definition.group("body"))
-    assert edit is not None
-    planned_classes = {
-        node.name: node
-        for node in ast.parse(edit.group("code")).body
-        if isinstance(node, ast.ClassDef)
+    edge_kinds = {
+        "contained_by",
+        "imports_module",
+        "imports_symbol",
+        "calls",
+        "constructs",
+        "inherits_from",
+        "uses_type",
+        "reads_symbol",
+        "writes_symbol",
+        "decorated_by",
+        "registers_with",
+        "exports_symbol",
+        "declared_by",
+        "implements_rule",
+        "verifies_rule",
+        "scheduled_by",
+        "targets",
+        "gated_by",
+        "block_depends_on",
+        "reads_context",
+        "launches",
     }
-
-    assert set(contract_classes) <= set(planned_classes)
-    mismatches = {
-        name: {
-            "contract": (
-                _class_bases(contract_classes[name]),
-                _class_fields(contract_classes[name]),
-            ),
-            "pair_block": (
-                _class_bases(planned_classes[name]),
-                _class_fields(planned_classes[name]),
-            ),
-        }
-        for name in contract_classes
-        if (
-            _class_bases(contract_classes[name]),
-            _class_fields(contract_classes[name]),
-        )
-        != (
-            _class_bases(planned_classes[name]),
-            _class_fields(planned_classes[name]),
-        )
-    }
-    assert mismatches == {}
+    for value in node_kinds | edge_kinds:
+        assert f'"{value}"' in contract
+        assert value in guide
+    assert "source depends on the target" in contract
+    assert "source depends on target" in guide
 
 
 def _worked_example_runtime_failures(

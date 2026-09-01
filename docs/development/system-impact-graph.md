@@ -3,47 +3,68 @@
 VIPER needs a repeatable way to identify which implementation, protocol,
 verifier, test, contract, and checklist surfaces a proposed change can affect.
 This contract compiles the codebase and specification stack into one typed
-directed graph under a fixed execution context. It then condenses dependency
-cycles into a DAG and computes the exact graph delta between two source
-revisions.
+directed dependency graph under a fixed execution context. It compiles an
+explicit contract delta into the conservative impact overlay, computes the
+affected surface, condenses affected dependency cycles, and selects tests that
+execute the affected Python surface. A later source revision supplies observed
+conformance evidence for the intended change.
 
 ## 1. Status
 
-**Contract status:** draft after change-impact review; owner review pending.
+**Contract status:** audited design; implementation and owner approval pending.
 
 These requirements bind the contract to the master checklist:
 
 | ID | Implementation obligation |
 | --- | --- |
-| SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_validation_architecture.py --> | Inventory every tracked repository file, derive source-backed nodes from exact file spans, and record one analysis receipt per file. |
-| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_validation_architecture.py --> | Hold declared external inputs fixed, observe dynamic resolution under each source revision, and fail closed on unresolved dependencies in strict mode. |
-| SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_inspection.py --> | Condense dependency cycles into a DAG, compute a canonical typed delta plus reverse impact closure, and reconcile every affected path with one propagation disposition. |
-| SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Ingest the canonical contract traceability graph and preserve each requirement-to-rule-to-owner-to-test path in the system graph. |
+| SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_validation_architecture.py --> | Inventory every tracked file; emit canonical, source-anchored nodes and dependency edges; and classify every supported Python dependency site. |
+| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_validation_architecture.py --> | Produce stable diagnostics, hold declared external inputs fixed, and fail closed on unsupported or unresolved dependencies in the affected surface. |
+| SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_inspection.py --> | Compile the declared contract delta into the conservative impact overlay, reverse closure, affected-graph SCC condensation, and total propagation plan. |
+| SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Compile requirements, verifier rules, rule bindings, checklist tasks, and PairBlocks automatically; select tests for every executable affected node; and require complete statement and branch execution over that surface. |
 
 ## 2. Required claim
 
-Given two source revisions and one fixed context manifest, VIPER produces the
-same canonical dependency graphs, graph delta, affected-surface report, and
-propagation plan on every conforming execution.
+Given one baseline repository, one explicit contract delta, one fixed context,
+and one deterministic compiler version, VIPER produces the same canonical
+baseline graph, impact overlay, affected surface, SCC condensation, test
+selection, and target constraints on every conforming execution.
 
-Let `C0` and `C1` identify the baseline and candidate source revisions. Let `X`
-identify the fixed context manifest. The compiler constructs:
+Let `R0` identify the baseline repository and `X` the fixed compilation
+context. The compiler constructs:
 
 ```math
-G_0 = \operatorname{compile}(C_0 \mid X)
+G_0 = \mathcal C_X(R_0)
 ```
 
 ```math
-G_1 = \operatorname{compile}(C_1 \mid X)
+\Delta = \operatorname{CompileContract}(R_0, G_0, \text{contract declarations})
 ```
 
-The comparator returns:
+The conservative impact graph retains every baseline dependency and adds every
+dependency introduced by the delta:
 
 ```math
-\Delta G = \operatorname{diff}(G_0, G_1)
+H_\Delta = (V_0 \cup V_\Delta^+,\; D_0 \cup D_\Delta^+)
 ```
 
-and the reverse dependency closure of every changed node and edge.
+The affected surface is reverse reachability from the delta support:
+
+```math
+B = \{x \in V_{H_\Delta} \mid \exists s \in S_\Delta:\; x \leadsto s\}.
+```
+
+Removed dependencies remain in `H_delta` because they existed before the
+change and can identify dependents that require migration. A candidate
+repository `R1` is compiled only after implementation:
+
+```math
+G_1 = \mathcal C_X(R_1).
+```
+
+`G1` is compared with the target constraints compiled from `(G0, Delta, P)`.
+`Delta` alone generally underdetermines one complete future graph. PairBlocks,
+implementation policy, and any frozen repair choice supply the propagation
+plan `P` that determines the admissible target constraints.
 
 The guarantee is conditional on `X`. It identifies impact under the declared
 Python runtime, dependencies, environment variables, fixture files, command
@@ -150,75 +171,75 @@ The missing path is:
 source revision + fixed context
 -> complete tracked-file inventory
 -> one analysis receipt per file
--> source-backed nodes and auditable edges
--> observed resolution attempts
--> canonical typed SystemGraph
--> strongly connected components
--> SystemCondensationDAG
--> graph delta
--> reverse dependency closure
+-> source-backed nodes, auditable edges, and dependency-site receipts
+-> canonical baseline SystemGraph G0
+-> automatic contract and RuleEdge compilation
+-> explicit contract delta
+-> conservative H_delta and reverse closure B
+-> SCC condensation of H_delta[B]
 -> affected contracts, checklist tasks, and tests
--> one disposition per affected path plus planned additions
--> explicit unresolved boundary
+-> complete statement and branch execution over B_exec
+-> total propagation plan and target constraints
+-> observed G1 conformance
 ```
 
-Contract coverage enters through the separate
-[`ContractTraceabilityGraph`](contract-requirement-traceability.md). The system
-compiler consumes those ownership links directly.
+The compiler derives `ContractTraceabilityGraph` from the declarations owned by
+[`contract-requirement-traceability.md`](contract-requirement-traceability.md)
+and lowers its `RuleEdge` declarations into normalized dependencies.
 
 ### Proposed-change DAG
 
-The proposed compiler derives every source-backed node from the tracked-file
-inventory. Each analyzer records what it examined and what it emitted. The
-observed pass records one visible result for every supported resolution
-attempt.
+The proposed compiler derives source-backed nodes and dependency-site receipts
+from the baseline inventory, compiles the declared delta, computes impact, and
+proves test execution over the affected surface before implementation.
 
 ```mermaid
 flowchart TD
     Baseline["Proposed baseline<br/>SystemSource"]
-    Candidate["Proposed candidate<br/>SystemSource"]
     Context["Proposed SystemContextManifest<br/>fixed external inputs"]
-    Inventory["Proposed tracked-file inventory<br/>per revision"]
-    Files["Proposed tracked files<br/>RepositoryFile set"]
-    Analyze["Proposed file analyzers"]
-    Analysis["Proposed analysis coverage<br/>FileAnalysisReceipt set"]
-    Nodes["Proposed SystemNode set"]
-    Static["Proposed source-evidenced edges"]
-    Discovery["Proposed isolated discovery<br/>per revision"]
-    Attempt["Proposed ResolutionAttempt"]
-    Outcome["Proposed observation or unresolved result"]
-    Graph["Proposed SystemGraph<br/>per revision"]
-    DAG["Proposed SystemCondensationDAG<br/>per revision"]
-    Delta["Proposed SystemGraphDelta"]
-    Report["Proposed ImpactReport"]
+    ContractDocs["Proposed contract declarations<br/>delta + rules + PairBlocks"]
+    Inventory["Proposed tracked-file inventory"]
+    Analyze["Proposed AST + symbol analyzers"]
+    Sites["Proposed dependency-site receipts"]
+    Graph["Proposed baseline SystemGraph G0"]
+    ContractCompiler["Proposed contract compiler"]
+    Delta["Proposed contract Delta"]
+    Overlay["Proposed conservative H_delta"]
+    Support["Proposed S_delta"]
+    Closure["Proposed reverse closure B"]
+    SCC["Proposed SCCs of H_delta[B]"]
+    DAG["Proposed condensation DAG"]
+    Select["Proposed selected pytest node IDs"]
+    Coverage["Proposed blast coverage report"]
     Plan["Proposed PropagationPlan"]
+    Target["Proposed target constraints T*"]
 
     Baseline -->|"baseline commit"| Inventory
-    Candidate -->|"candidate commit"| Inventory
-    Inventory -->|"ordered records"| Files
-    Files -->|"one file at a time"| Analyze
-    Analyze -->|"records coverage"| Analysis
-    Analyze -->|"emits source spans"| Nodes
-    Analyze -->|"emits static relations"| Static
-    Baseline -->|"baseline code"| Discovery
-    Candidate -->|"candidate code"| Discovery
-    Context -->|"same fixed inputs"| Discovery
-    Discovery -->|"one per lookup"| Attempt
-    Attempt -->|"exactly one result"| Outcome
-    Files -->|"ordered files"| Graph
-    Analysis -->|"ordered receipts"| Graph
-    Nodes -->|"ordered nodes"| Graph
-    Static -->|"auditable edges"| Graph
-    Outcome -->|"observed boundary"| Graph
-    Graph -->|"collapse each graph's SCCs"| DAG
-    Graph -->|"compare both revisions"| Delta
-    DAG -->|"reverse closure"| Report
-    Delta -->|"changed nodes + edges"| Report
-    Report -->|"affected paths"| Plan
-    Delta -->|"candidate added paths"| Plan
+    Context -->|"fixed compiler inputs"| Analyze
+    Inventory -->|"ordered files"| Analyze
+    Analyze -->|"classifies sites"| Sites
+    Analyze -->|"emits nodes + dependencies"| Graph
+    Sites -->|"proves analyzer coverage"| Graph
+    ContractDocs -->|"structured declarations"| ContractCompiler
+    Graph -->|"resolves anchors"| ContractCompiler
+    ContractCompiler -->|"checked operations"| Delta
+    Graph -->|"all baseline dependencies"| Overlay
+    Delta -->|"introduced dependencies"| Overlay
+    Delta -->|"direct support"| Support
+    Overlay -->|"dependency topology"| Closure
+    Support -->|"start vertices"| Closure
+    Closure -->|"affected induced graph"| SCC
+    SCC -->|"collapse components"| DAG
+    Closure -->|"affected executable symbols"| Select
+    Select -->|"pytest contexts"| Coverage
+    Closure -->|"total disposition"| Plan
+    ContractCompiler -->|"PairBlocks"| Plan
+    Graph -->|"baseline constraints"| Target
+    Delta -->|"normative change"| Target
+    Plan -->|"implementation choices"| Target
 
-    class Baseline,Candidate,Context input
-    class Inventory,Files,Analyze,Analysis,Nodes,Static,Discovery,Attempt,Outcome,Graph,DAG,Delta,Report,Plan proposed
+    class Baseline,Context,ContractDocs input
+    class Inventory,Analyze,Sites,Graph,ContractCompiler,Delta,Overlay,Support,Closure,SCC,DAG,Select,Coverage,Plan,Target proposed
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
@@ -226,49 +247,63 @@ flowchart TD
 
 ### Integrated DAG
 
-The integrated path turns one changed source span into an auditable list of
-affected requirements, implementation owners, and tests.
+The integrated path connects the pre-implementation compiler with the observed
+repository and conformance verifier.
 
 ```mermaid
 flowchart TD
     Baseline["Baseline source revision"]
-    Candidate["Candidate source revision"]
     Context["Shared SystemContextManifest"]
-    Traceability["ContractTraceabilityGraph"]
-    Compile["Two compile_system() calls"]
-    BaseGraph["Baseline SystemGraph<br/>baseline SystemNode set"]
-    CandidateGraph["Candidate SystemGraph<br/>candidate SystemNode set"]
-    BaseDAG["Baseline condensation DAG"]
-    CandidateDAG["Candidate condensation DAG"]
-    Delta["SystemGraphDelta"]
-    Closure["Reverse dependency closure"]
-    Report["ImpactReport"]
+    Contract["Contract delta + rule declarations"]
+    PairReference["Canonical PairBlocks"]
+    CompileBase["compile_system(R0, X)"]
+    BaseGraph["Baseline SystemGraph G0"]
+    CompileContract["compile_contract_delta()"]
+    Delta["Contract Delta"]
+    Impact["H_delta + S_delta + B"]
+    Condensation["SCC condensation of H_delta[B]"]
+    Tests["Selected tests"]
+    Coverage["BlastCoverageReport"]
     Plan["PropagationPlan"]
-    Review["Contract review + selected tests"]
+    Target["Target constraints T*"]
+    Implementation["PairBlock implementation"]
+    Candidate["Implemented repository R1"]
+    CompileObserved["compile_system(R1, X)"]
+    CandidateGraph["Observed SystemGraph G1"]
+    Conformance["G1 models T*"]
+    Review["Independent acceptance"]
 
-    Baseline -->|"baseline commit"| Compile
-    Candidate -->|"candidate commit"| Compile
-    Context -->|"same fixed inputs"| Compile
-    Traceability -->|"requirements + owners + tests"| Compile
-    Compile -->|"baseline result"| BaseGraph
-    Compile -->|"candidate result"| CandidateGraph
-    BaseGraph -->|"collapse SCCs"| BaseDAG
-    CandidateGraph -->|"collapse SCCs"| CandidateDAG
-    BaseGraph -->|"compare"| Delta
-    CandidateGraph -->|"compare"| Delta
-    Delta -->|"changed nodes + edges"| Closure
-    BaseDAG -->|"dependency topology"| Closure
-    CandidateDAG -->|"dependency topology"| Closure
-    Closure -->|"affected IDs + unresolved"| Report
-    Report -->|"affected paths"| Plan
-    CandidateGraph -->|"added file nodes"| Plan
-    Plan -->|"dispositions + planned additions"| Review
+    Baseline -->|"baseline commit"| CompileBase
+    Context -->|"fixed inputs"| CompileBase
+    CompileBase -->|"canonical result"| BaseGraph
+    Contract -->|"structured declarations"| CompileContract
+    PairReference -->|"implementation plan"| CompileContract
+    BaseGraph -->|"anchor resolution"| CompileContract
+    CompileContract -->|"checked operations"| Delta
+    BaseGraph -->|"baseline dependencies"| Impact
+    Delta -->|"support + introduced edges"| Impact
+    Impact -->|"affected induced graph"| Condensation
+    Impact -->|"affected executable symbols"| Tests
+    Tests -->|"execution contexts"| Coverage
+    Impact -->|"affected obligations"| Plan
+    PairReference -->|"targets + gates"| Plan
+    BaseGraph -->|"baseline constraints"| Target
+    Delta -->|"normative change"| Target
+    Plan -->|"frozen choices"| Target
+    Target -->|"bounded work"| Implementation
+    Implementation -->|"writes"| Candidate
+    Candidate -->|"candidate source"| CompileObserved
+    Context -->|"same fixed inputs"| CompileObserved
+    CompileObserved -->|"canonical result"| CandidateGraph
+    CandidateGraph -->|"observed structure"| Conformance
+    Target -->|"required structure"| Conformance
+    Coverage -->|"pre-implementation gate"| Review
+    Conformance -->|"post-implementation gate"| Review
 
-    class Baseline,Candidate,Context,Traceability input
-    class Compile consumer
-    class BaseGraph,CandidateGraph,BaseDAG,CandidateDAG evidence
-    class Delta,Closure,Report,Plan output
-    class Review consumer
+    class Baseline,Context,Contract,PairReference input
+    class CompileBase,CompileContract,Implementation,CompileObserved,Review consumer
+    class BaseGraph,Candidate,CandidateGraph evidence
+    class Delta,Impact,Condensation,Tests,Coverage,Plan,Target,Conformance output
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
     classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
@@ -289,15 +324,22 @@ PairBlockId = Annotated[
 ]
 
 SystemNodeKind = Literal[
-    "file",
-    "span",
-    "external",
+    "repository_file",
+    "python_symbol",
+    "document_anchor",
+    "external_symbol",
 ]
 
 SystemNodeRole = Literal[
     "python_module",
-    "python_symbol",
-    "python_field",
+    "python_test_module",
+    "class",
+    "function",
+    "async_function",
+    "method",
+    "async_method",
+    "field",
+    "variable",
     "public_export",
     "configuration",
     "fixture",
@@ -308,41 +350,44 @@ SystemNodeRole = Literal[
     "cli_command",
     "runtime_operation",
     "persisted_document",
-    "verifier_rule",
     "contract",
+    "checklist_document",
     "contract_requirement",
+    "verifier_rule",
     "checklist_task",
-    "implementation_block",
+    "pair_block",
     "completion_gate",
     "acceptance_test",
     "installed_package",
-    "context_variable",
+    "external_module",
+    "environment_variable",
     "context_file",
     "context_command",
+    "runtime_target",
 ]
 
 SystemEdgeKind = Literal[
-    "defines",
-    "defined_in",
-    "imports",
+    "contained_by",
+    "imports_module",
+    "imports_symbol",
     "calls",
-    "registers",
-    "exports",
     "constructs",
-    "reads",
-    "writes",
-    "serializes",
-    "retrieves",
-    "verifies",
-    "enforces",
-    "implements",
-    "tests",
-    "documents",
-    "resolves",
+    "inherits_from",
+    "uses_type",
+    "reads_symbol",
+    "writes_symbol",
+    "decorated_by",
+    "registers_with",
+    "exports_symbol",
+    "declared_by",
+    "implements_rule",
+    "verifies_rule",
+    "scheduled_by",
+    "targets",
+    "gated_by",
+    "block_depends_on",
+    "reads_context",
     "launches",
-    "changes",
-    "depends_on",
-    "gates_on",
 ]
 
 ResolutionKind = Literal[
@@ -357,14 +402,36 @@ EdgeOrigin = Literal["declared", "static", "observed"]
 FileAnalysisStatus = Literal["parsed", "opaque", "excluded"]
 ```
 
-`SystemNodeKind` answers where the node's identity comes from. A `file` is one
-tracked Git-tree entry. A `span` is a named declaration or exact line range in
-one tracked file. An `external` node is a package, variable, command, file, or
-runtime target outside that tree.
+`SystemNodeKind` determines the node's identity grammar and required fields.
+`SystemNodeRole` adds a finite semantic tag. The compiler accepts the listed
+role-kind combinations.
 
-`SystemNodeRole` answers what the node means to VIPER. One span may be both a
-`python_symbol` and an `api_operation`. This separates structural identity from
-semantic use and keeps every source-backed role anchored to a finite file.
+| Node kind | Canonical identity | Required source fields | Admissible role families |
+| --- | --- | --- | --- |
+| `repository_file` | `file:<repo-relative-path>` | path and complete-file digest | module, test module, contract, checklist, configuration, fixture, generated source |
+| `python_symbol` | `python:<path>:<qualified-name>` | path, qualified name, four AST coordinates, exact-span digest | Python declaration kind plus optional protocol, API, CLI, runtime, fixture, test, or export role |
+| `document_anchor` | `anchor:<path>:<anchor-kind>:<stable-id>` | path, stable marker ID, line range, exact-span digest | requirement, verifier rule, checklist task, PairBlock, or completion gate |
+| `external_symbol` | `external:<external-kind>:<context-identity>` | external kind and fixed-context identity | package, module, variable, file, command, or runtime target |
+
+Every member of `SystemEdgeKind` denotes a dependency and uses one direction:
+the source depends on the target. Descriptive relationships, provenance joins,
+and traversal results belong in evidence records or reports, outside the edge
+set. The vocabulary therefore contains one containment direction. The inverse
+`defines`/`defined_in` pair belongs to the superseded vocabulary.
+
+`RuleEdge` remains the traceability compiler's declaration that a verifier rule
+has an implementation owner or observing test. The dependency graph receives
+its mechanically lowered `SystemEdge`:
+
+| `RuleEdge.kind` | Emitted dependency edge |
+| --- | --- |
+| `implementation` | `RuleEdge.target -> verifier-rule`, kind `implements_rule` |
+| `verification` | `RuleEdge.target -> verifier-rule`, kind `verifies_rule` |
+
+Each verifier rule has exactly one implementation binding and at least one
+verification binding. Duplicate bindings, unknown rules, unresolved target
+symbols, and a binding whose checklist phase differs from its requirement are
+compiler errors.
 
 ### Fixed context
 
@@ -455,6 +522,128 @@ Strict review accepts opaque and excluded files only when their roles remain
 outside package behavior, protocol behavior, execution, verification, tests,
 and contract coverage.
 
+### Dependency-site coverage and diagnostics
+
+File coverage and dependency coverage are separate claims. The Python analyzer
+records one `DependencySiteReceipt` for every AST construct in its
+declared dependency-site registry.
+
+```python
+DependencySiteOutcome = Literal[
+    "emitted",
+    "self_contained",
+    "unresolved",
+    "unsupported",
+]
+
+DiagnosticSeverity = Literal["info", "warning", "error"]
+
+
+class DependencySiteReceipt(ProtocolModel):
+    site_id: SHA256
+    path: RepoRelPath
+    ast_kind: NonEmptyStr
+    start_line: int = Field(ge=1)
+    start_column: int = Field(ge=0)
+    end_line: int = Field(ge=1)
+    end_column: int = Field(ge=0)
+    outcome: DependencySiteOutcome
+    emitted_edges: tuple[SHA256, ...]
+    rule_id: NonEmptyStr
+    detail: NonEmptyStr
+
+
+class SystemDiagnostic(ProtocolModel):
+    diagnostic_id: SHA256
+    code: NonEmptyStr
+    severity: DiagnosticSeverity
+    phase: Literal["inventory", "extract", "contract", "impact", "scc", "coverage", "conformance"]
+    message: NonEmptyStr
+    path: RepoRelPath | None = None
+    start_line: int | None = Field(default=None, ge=1)
+    node_ids: tuple[SystemNodeId, ...]
+    edge_ids: tuple[SHA256, ...]
+    remediation: NonEmptyStr
+```
+
+Phase 0 registers `Import`, `ImportFrom`, `Call`, class bases, decorators,
+function and variable annotations, `Name` and `Attribute` loads and stores,
+literal registries, and `__all__` exports. The analyzer combines Python's AST
+coordinates with the compiler symbol table so aliases, local names, globals,
+nonlocals, and imported names retain distinct namespaces. A star import,
+computed import target, computed registry key, or call target that the analyzer
+fails to resolve as `unresolved` or `unsupported`. Every registered site emits
+an edge-bearing or terminal receipt.
+
+`self_contained` means the construct's dependencies remain inside its owning
+symbol, such as a local literal assignment. It differs from an absent receipt.
+Strict Phase 0 requires every registered site to have exactly
+one receipt and rejects `unresolved` or `unsupported` outcomes in the affected
+surface.
+
+Diagnostic codes are stable API values. Phase 0 reserves these families:
+
+| Family | Required examples |
+| --- | --- |
+| `SGI` inventory | missing receipt, duplicate path, digest mismatch, unsupported tracked file |
+| `SGX` extraction | Python parse failure, unsupported AST site, unresolved import, ambiguous name, dynamic call target |
+| `SGC` contract | malformed declaration, duplicate ID, unknown anchor, missing rule owner, missing rule test, delta conflict |
+| `SGG` graph | invalid endpoint, invalid direction, duplicate edge, missing evidence, noncanonical ordering |
+| `SGB` blast | incomplete reverse closure, uncovered affected node, absent selected test, missing statement or branch |
+| `SGS` SCC | missing member, duplicate member, crossing-edge mismatch, cyclic condensation, unstable component ID |
+
+Tests assert diagnostic codes and structured locations. Messages provide
+context; codes and fields form the stable interface.
+
+### Contract declarations and automatic lowering
+
+The compiler reads contracts, the master checklist, and PairBlock documents
+directly. The input grammar consists of the existing `contract-requirement`,
+`verifier-rule`, `contract-implementation`, `contract-verification`,
+`pair-block`, and `pair-block-definition` declarations plus one structured
+delta block:
+
+```toml contract-delta
+id = "local-store-layout"
+baseline_graph_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+[[operations]]
+op = "update_node"
+target = "python:src/viper/references.py:LocalFileRef.store"
+expected_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+[[operations]]
+op = "add_edge"
+source = "python:src/viper/storage.py:LocalArtifactStore.__init__"
+kind = "reads_symbol"
+target = "python:src/viper/references.py:LocalFileRef.store"
+```
+
+The normative operation set is closed:
+
+```python
+DeltaOperationKind = Literal[
+    "add_node",
+    "remove_node",
+    "update_node",
+    "add_edge",
+    "remove_edge",
+    "update_edge",
+]
+```
+
+Each removal or update carries the expected baseline identity. Each addition
+names every field required to derive its canonical identity. The compiler
+rejects an unknown target, stale precondition, duplicate operation, incompatible
+pair of operations, unresolved PairBlock reference, or declaration outside the
+canonical node and edge vocabulary.
+
+The compiler derives `ContractTraceabilityGraph`, `Delta`, `S_delta`,
+`D_delta_plus`, `H_delta`, `B`, and the initial propagation obligations from the
+declared contract inputs. Human authors declare the intended contract
+change and PairBlock choices. Graph expansion, reverse reachability, SCC
+condensation, test selection, and completeness checks are mechanical.
+
 ### Pair-coding plan
 
 ```python
@@ -474,21 +663,82 @@ class PairBlock(ProtocolModel):
 `PairBlock` is the parsed form of one Phase 0 coding block. The compiler hashes
 the complete marked block, validates its source and test references, and
 topologically orders `depends_on`. Its system-graph node uses
-`roles=("implementation_block",)`. The gate becomes a second span with
+`roles=("pair_block",)`. The gate becomes a document anchor with
 `roles=("completion_gate",)`.
 
 ### Nodes and edge evidence
 
 ```python
-class SystemNode(ProtocolModel):
+class RepositoryFileNode(ProtocolModel):
     node_id: SystemNodeId
-    kind: SystemNodeKind
+    kind: Literal["repository_file"] = "repository_file"
     roles: tuple[SystemNodeRole, ...] = Field(min_length=1)
-    path: RepoRelPath | None = None
-    symbol: NonEmptyStr | None = None
-    start_line: int | None = Field(default=None, ge=1)
-    end_line: int | None = Field(default=None, ge=1)
-    sha256: SHA256 | None = None
+    path: RepoRelPath
+    sha256: SHA256
+
+
+class PythonSymbolNode(ProtocolModel):
+    node_id: SystemNodeId
+    kind: Literal["python_symbol"] = "python_symbol"
+    roles: tuple[SystemNodeRole, ...] = Field(min_length=1)
+    path: RepoRelPath
+    symbol: NonEmptyStr
+    symbol_kind: Literal[
+        "class",
+        "function",
+        "async_function",
+        "method",
+        "async_method",
+        "field",
+        "variable",
+    ]
+    start_line: int = Field(ge=1)
+    start_column: int = Field(ge=0)
+    end_line: int = Field(ge=1)
+    end_column: int = Field(ge=0)
+    sha256: SHA256
+
+
+class DocumentAnchorNode(ProtocolModel):
+    node_id: SystemNodeId
+    kind: Literal["document_anchor"] = "document_anchor"
+    roles: tuple[SystemNodeRole, ...] = Field(min_length=1)
+    path: RepoRelPath
+    symbol: NonEmptyStr
+    anchor_kind: Literal[
+        "contract_requirement",
+        "verifier_rule",
+        "checklist_task",
+        "pair_block",
+        "completion_gate",
+    ]
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    sha256: SHA256
+
+
+class ExternalSymbolNode(ProtocolModel):
+    node_id: SystemNodeId
+    kind: Literal["external_symbol"] = "external_symbol"
+    roles: tuple[SystemNodeRole, ...] = Field(min_length=1)
+    external_kind: Literal[
+        "package",
+        "module",
+        "environment_variable",
+        "file",
+        "command",
+        "runtime_target",
+    ]
+    symbol: NonEmptyStr
+
+
+SystemNode = Annotated[
+    RepositoryFileNode
+    | PythonSymbolNode
+    | DocumentAnchorNode
+    | ExternalSymbolNode,
+    Field(discriminator="kind"),
+]
 
 
 class SourceEvidence(ProtocolModel):
@@ -539,20 +789,25 @@ class UnresolvedDependency(ProtocolModel):
 
 `SystemNode` applies these field rules:
 
-- A `file` node requires `path` and `sha256`, omits line fields, and matches one
-  `RepositoryFile`.
-- A `span` node requires `path`, `symbol`, `start_line`, `end_line`, and a digest
-  of the exact source bytes in that span. Its path names an inventoried file.
-- An `external` node requires `symbol` and omits repository path, line, and
-  source digest fields.
-- Every `span` has one outgoing `defined_in` edge to its owning `file` node.
+- A `repository_file` node requires `path` and `sha256`, omits line fields, and
+  matches one `RepositoryFile`.
+- A `python_symbol` node requires `path`, `symbol`, `start_line`, `end_line`,
+  and the AST column coordinates carried in its source evidence. Its digest
+  covers the exact UTF-8 source span.
+- A `document_anchor` node requires `path`, a stable marker ID in `symbol`, a
+  line range, and the exact-span digest.
+- An `external_symbol` node requires a context-qualified `symbol` and omits
+  repository path, line, and source digest fields.
+- Every Python symbol and document anchor has one outgoing `contained_by` edge
+  to its immediate owner. The owner chain terminates at a repository file.
 
 Node IDs use these canonical forms:
 
 ```text
 file:<repository path>
-span:<repository path>:<qualified symbol>
-external:<role>:<fixed-context identity>
+python:<repository path>:<qualified symbol>
+anchor:<repository path>:<anchor kind>:<stable marker ID>
+external:<external kind>:<fixed-context identity>
 ```
 
 Each edge explains why it exists. A declared or statically inferred edge cites
@@ -629,9 +884,26 @@ class SystemCondensationDAG(ProtocolModel):
     edges: tuple[SystemComponentEdge, ...]
 ```
 
-`component_id` hashes the ordered member IDs. The component graph must be
-acyclic. An edge retains every relationship kind crossing the same component
-pair. The DAG remains unweighted.
+Phase 0 computes SCCs over the induced affected graph `H_delta[B]`. The set `B`
+alone and an independently filtered import graph are invalid SCC inputs. The implementation
+uses iterative Tarjan traversal with lexically sorted vertices and adjacency.
+An explicit frame stack avoids dependence on Python's recursion limit.
+
+`component_id` hashes the canonical JSON array of sorted member IDs. A component
+is cyclic when it contains more than one member or its sole member has a
+self-edge. Every affected node belongs to exactly one component. Each crossing
+component edge records the sorted source `SystemEdge.edge_id` witnesses and
+their kinds; internal edges remain available in the full affected graph.
+
+The component graph must be acyclic. A deterministic Kahn traversal schedules
+ready components by `component_id`. Python's `graphlib.TopologicalSorter` may
+serve as an independent acyclicity oracle. VIPER's lexically tied order owns
+canonical serialization.
+
+SCCs are atomic scheduling units. Phase 0 may group adjacent SCCs with one
+deterministic greedy heuristic after condensation; each SCC remains whole. The
+cohesion-aware graph-partition objective in the research plan operates on the
+condensation DAG in a later phase. SCC computation remains its required input.
 
 ### Graph delta and impact report
 
@@ -688,9 +960,69 @@ class PropagationPlan(ProtocolModel):
     planned_additions: tuple[PlannedAddition, ...]
 ```
 
-`complete` is `True` only when both source graphs have empty `unresolved`
-collections. Strict compilation rejects an incomplete graph before publishing
-an `ImpactReport`.
+`SystemGraphDelta` is the observed comparison between two compiled repository
+graphs. The normative `ContractDelta` is compiled from the contract before an
+implementation exists. These records serve distinct lifecycle roles.
+
+For impact analysis, project every typed dependency edge to its endpoint pair:
+
+```math
+D_0 = \{(u,v) \in V_0 \times V_0 \mid \exists k:\; (u,k,v) \in E_0\}.
+```
+
+Let `D_delta_plus` contain the endpoint pair of every dependency introduced or
+replaced by the contract delta. The conservative overlay is:
+
+```math
+D_{H_\Delta} = D_0 \cup D_\Delta^+.
+```
+
+The compiler retains removed baseline dependencies in this overlay. This choice
+preserves the predecessor path needed to find migration work.
+The direct support `S_delta` contains every baseline endpoint named by an
+operation and every introduced node. The blast radius `B` is the reverse
+reachability closure of that support in `H_delta`.
+
+### Blast test coverage
+
+`B_exec` is the subset of affected `python_symbol` nodes with executable
+statements. The selected pytest node IDs must satisfy three separate gates:
+
+1. Every node in `B_exec` is reached by at least one `verifies_rule`, test
+   import, test call, or fixture dependency path.
+2. Running only the selected tests executes every coverage.py statement in
+   each affected symbol span.
+3. Running only the selected tests executes every coverage.py branch arc whose
+   source line lies in each affected symbol span.
+
+```python
+class AffectedSymbolCoverage(ProtocolModel):
+    node_id: SystemNodeId
+    selected_tests: tuple[NonEmptyStr, ...] = Field(min_length=1)
+    statement_lines: tuple[int, ...]
+    missing_statement_lines: tuple[int, ...]
+    branch_arcs: tuple[tuple[int, int], ...]
+    missing_branch_arcs: tuple[tuple[int, int], ...]
+
+
+class BlastCoverageReport(ProtocolModel):
+    impact_sha256: SHA256
+    coverage_data_sha256: SHA256
+    affected_symbols: tuple[AffectedSymbolCoverage, ...]
+    complete: bool
+```
+
+The Phase 0 gate requires empty missing-statement and missing-branch
+collections. Test contexts retain the exact pytest node ID that executed each
+line and arc. This gate proves execution of the affected surface. Assertion
+quality, behavioral correctness, and dependency-extraction soundness remain
+separate verifier obligations.
+
+`ImpactReport.complete` is `True` when the baseline graph and every affected
+dependency site have resolved, supported outcomes under the fixed context.
+Strict compilation rejects an incomplete graph before
+publishing an implementation gate. Post-implementation conformance applies the
+same condition to `G1`.
 
 `RequirementId` and `RuleEdge` come from the contract-traceability models.
 `affected_implementations` contains edges whose `kind` is `"implementation"`.
@@ -738,15 +1070,23 @@ from viper._contract_traceability import (
 from viper.references import ResolvedFileRef
 from viper.storage import LocalArtifactStore
 from viper.system_graph import (
+    AffectedSymbolCoverage,
+    BlastCoverageReport,
     ChangedNode,
     ContextCommand,
     ContextFile,
     ContextPackage,
     ContextVariable,
+    DeltaOperationKind,
+    DependencySiteOutcome,
+    DependencySiteReceipt,
+    DiagnosticSeverity,
+    DocumentAnchorNode,
     EdgeEvidence,
     EdgeOrigin,
     FileAnalysisStatus,
     FileAnalysisReceipt,
+    ExternalSymbolNode,
     ImpactReport,
     PairBlock,
     PairBlockId,
@@ -755,6 +1095,7 @@ from viper.system_graph import (
     PropagationDisposition,
     PropagationPlan,
     RepositoryFile,
+    RepositoryFileNode,
     ResolutionKind,
     ResolutionAttempt,
     ResolutionEvidence,
@@ -765,6 +1106,7 @@ from viper.system_graph import (
     SystemComponentEdge,
     SystemCondensationDAG,
     SystemContextManifest,
+    SystemDiagnostic,
     SystemEdge,
     SystemEdgeKind,
     SystemGraph,
@@ -774,6 +1116,7 @@ from viper.system_graph import (
     SystemNodeKind,
     SystemNodeRole,
     SystemSource,
+    PythonSymbolNode,
     UnresolvedDependency,
 )
 
@@ -884,15 +1227,15 @@ def line_digest(raw: bytes, number: int) -> str:
 
 def file_node(file: RepositoryFile) -> SystemNode:
     """Construct the source-backed node for one tracked file."""
-    node_kind: SystemNodeKind = "file"
+    node_kind: SystemNodeKind = "repository_file"
     role: SystemNodeRole
     if file.path.endswith("project-data-root.md"):
         role = "contract"
     elif file.path.endswith("master-execution-checklist.md"):
-        role = "checklist_task"
+        role = "checklist_document"
     else:
         role = "python_module"
-    return SystemNode(
+    return RepositoryFileNode(
         node_id=f"file:{file.path}",
         kind=node_kind,
         roles=(role,),
@@ -910,15 +1253,44 @@ def span_node(
 ) -> SystemNode:
     """Construct one named source span from an exact fixture line."""
     number = line_number(raw, text)
-    node_kind: SystemNodeKind = "span"
-    return SystemNode(
-        node_id=f"span:{path}:{symbol}",
-        kind=node_kind,
+    document_roles = {
+        "contract_requirement",
+        "verifier_rule",
+        "checklist_task",
+        "pair_block",
+        "completion_gate",
+    }
+    node_kind: SystemNodeKind = (
+        "document_anchor" if role in document_roles else "python_symbol"
+    )
+    prefix = "anchor" if node_kind == "document_anchor" else "python"
+    node_id = (
+        f"{prefix}:{path}:{role}:{symbol}"
+        if node_kind == "document_anchor"
+        else f"{prefix}:{path}:{symbol}"
+    )
+    if node_kind == "document_anchor":
+        return DocumentAnchorNode(
+            node_id=node_id,
+            roles=(role,),
+            path=path,
+            symbol=symbol,
+            anchor_kind=role,
+            start_line=number,
+            end_line=number,
+            sha256=line_digest(raw, number),
+        )
+    symbol_kind = "field" if role == "protocol_field" else "function"
+    return PythonSymbolNode(
+        node_id=node_id,
         roles=(role,),
         path=path,
         symbol=symbol,
+        symbol_kind=symbol_kind,
         start_line=number,
+        start_column=0,
         end_line=number,
+        end_column=len(raw.splitlines()[number - 1]),
         sha256=line_digest(raw, number),
     )
 
@@ -1121,11 +1493,10 @@ with TemporaryDirectory() as temporary_directory:
         CHECKLIST_SOURCE,
         b"Bind LocalArtifactStore",
     )
-    external_kind: SystemNodeKind = "external"
-    package_node = SystemNode(
+    package_node = ExternalSymbolNode(
         node_id="external:installed_package:pydantic==2.12.5",
-        kind=external_kind,
         roles=("installed_package",),
+        external_kind="package",
         symbol="pydantic==2.12.5",
     )
 
@@ -1153,7 +1524,7 @@ with TemporaryDirectory() as temporary_directory:
     field_read = make_edge(
         store_constructor.node_id,
         baseline_field.node_id,
-        "reads",
+        "reads_symbol",
         "static",
         source_evidence(
             "src/viper/storage.py",
@@ -1164,7 +1535,7 @@ with TemporaryDirectory() as temporary_directory:
     rule_requirement = make_edge(
         rule_node.node_id,
         requirement_node.node_id,
-        "enforces",
+        "declared_by",
         "declared",
         source_evidence(
             "docs/development/project-data-root.md",
@@ -1175,7 +1546,7 @@ with TemporaryDirectory() as temporary_directory:
     implementation_rule = make_edge(
         store_constructor.node_id,
         rule_node.node_id,
-        "implements",
+        "implements_rule",
         "declared",
         source_evidence(
             "docs/development/master-execution-checklist.md",
@@ -1186,7 +1557,7 @@ with TemporaryDirectory() as temporary_directory:
     test_rule = make_edge(
         acceptance_test.node_id,
         rule_node.node_id,
-        "tests",
+        "verifies_rule",
         "declared",
         source_evidence(
             "docs/development/master-execution-checklist.md",
@@ -1213,7 +1584,7 @@ with TemporaryDirectory() as temporary_directory:
     observed_edge = make_edge(
         store_constructor.node_id,
         package_node.node_id,
-        "resolves",
+        "imports_module",
         "observed",
         observed_evidence,
     )
@@ -1531,11 +1902,54 @@ with TemporaryDirectory() as temporary_directory:
     realized_additions = {
         node.path
         for node in delta.added_nodes
-        if node.kind == "file" and node.path is not None
+        if node.kind == "repository_file" and node.path is not None
     }
     planned_additions = {
         addition.path for addition in propagation.planned_additions
     }
+
+    dependency_outcome: DependencySiteOutcome = "emitted"
+    diagnostic_severity: DiagnosticSeverity = "info"
+    delta_operation_kind: DeltaOperationKind = "update_node"
+    site_receipt = DependencySiteReceipt(
+        site_id=digest("site:LocalArtifactStore.__init__:reads_symbol"),
+        path="src/viper/storage.py",
+        ast_kind="Attribute",
+        start_line=4,
+        start_column=21,
+        end_line=4,
+        end_column=39,
+        outcome=dependency_outcome,
+        emitted_edges=(field_read.edge_id,),
+        rule_id="python.attribute.load",
+        detail="Resolved LocalFileRef.store through the imported class.",
+    )
+    diagnostic = SystemDiagnostic(
+        diagnostic_id=digest("SGG001:example"),
+        code="SGG001",
+        severity=diagnostic_severity,
+        phase="conformance",
+        message="Example diagnostic record.",
+        node_ids=(baseline_field.node_id,),
+        edge_ids=(),
+        remediation="Recompute the node identity from canonical fields.",
+    )
+    affected_symbol_coverage = AffectedSymbolCoverage(
+        node_id=store_constructor.node_id,
+        selected_tests=(
+            "tests/test_storage.py::test_store_uses_declared_location",
+        ),
+        statement_lines=(3, 4),
+        missing_statement_lines=(),
+        branch_arcs=(),
+        missing_branch_arcs=(),
+    )
+    blast_coverage = BlastCoverageReport(
+        impact_sha256=digest(impact),
+        coverage_data_sha256=digest("fixture coverage data"),
+        affected_symbols=(affected_symbol_coverage,),
+        complete=True,
+    )
 
     assert baseline_source.commit != candidate_source.commit
     assert baseline_field.sha256 != candidate_field.sha256
@@ -1548,6 +1962,10 @@ with TemporaryDirectory() as temporary_directory:
     assert condensation.components
     assert incomplete_impact.unresolved == (unresolved,)
     assert incomplete_impact.complete is False
+    assert site_receipt.outcome == dependency_outcome
+    assert diagnostic.code == "SGG001"
+    assert delta_operation_kind == "update_node"
+    assert blast_coverage.complete is True
 ```
 
 The fixed context used by the example has this external shape:
@@ -1577,18 +1995,22 @@ argv = ["-m", "viper._workers.inspect_registry"]
 ### Static pass
 
 The compiler asks Git for the complete tracked file tree at the source commit.
-It hashes each file and emits one `file` node before semantic analysis begins.
+It hashes each file and emits one `repository_file` node before semantic
+analysis begins.
 
 It then selects an analyzer from the path and content:
 
 ```text
 Git tree
 -> RepositoryFile for every tracked file
--> file node for every RepositoryFile
+-> repository_file node for every RepositoryFile
 
 Python analyzer
--> named spans for symbols and fields
--> imports, calls, decorators, and literal registrations
+-> AST declarations with four source coordinates
+-> compiler symbol tables for lexical binding
+-> one DependencySiteReceipt per registered dependency site
+-> typed imports, calls, construction, inheritance, type, decorator, registry,
+   export, and symbol-access dependencies
 
 public __all__ and package imports
 -> public-export edges
@@ -1597,19 +2019,28 @@ TOML and configuration analyzer
 -> configuration spans and declared relationships
 
 Markdown contract analyzer
--> contract, requirement, verifier-rule, checklist-task, PairBlock, and gate spans
+-> contract file and document-anchor nodes
+-> requirements and verifier rules
+-> RuleEdge declarations lowered to normalized dependency edges
 
 pytest analyzer
 -> test and fixture spans
 
-ContractTraceabilityGraph
--> exact requirement, rule, implementation-owner, and acceptance-test edges
+Contract-delta compiler
+-> closed delta-operation set with checked baseline preconditions
+-> S_delta and D_delta_plus
+-> H_delta and reverse closure B
 
 Phase 0 PairBlock manifests
 -> one implementation-block span per checklist task
--> changes edges to exact source targets
--> depends_on edges to prerequisite PairBlocks and focused tests
--> gates_on edge to the completion-gate span
+-> targets edges to exact source targets
+-> block_depends_on edges to prerequisite PairBlocks
+-> gated_by edges to focused tests and completion gates
+
+Coverage analyzer
+-> selected pytest node IDs reached from B
+-> statement and branch obligations intersected with B_exec
+-> per-test coverage contexts and BlastCoverageReport
 
 typed operation and CLI registries
 -> API-operation and CLI-command edges
@@ -1619,20 +2050,21 @@ The first implementation supports direct names, attributes, literal
 collections, and repository-owned helper calls evaluated solely from declared
 repository inputs.
 
-A planned implementation marker produces a checklist-task span and an
-`implements` edge to its verifier rule. The edge's source evidence contains the
-exact future owner path and symbol. An implemented marker also requires that
-owner to resolve to an inventoried source span and emits an `implements` edge
-from that span to the rule. Verification links follow the same transition. The
-graph therefore represents complete planned ownership while preserving its
-`planned` state.
+A planned implementation marker produces a checklist-task anchor and a
+`RuleEdge` declaration. The compiler resolves the target when its state is
+`implemented`; a planned future target receives a declared node whose identity
+must match its PairBlock target. Lowering emits `target -> rule` with kind
+`implements_rule` or `verifies_rule`. The graph therefore represents complete
+planned ownership while preserving its declared state outside the dependency
+edge.
 
 Every analyzer emits a `FileAnalysisReceipt`. Strict validation requires one
 receipt whose digest matches each inventory file, one inventoried file for each
 source-backed node, and every emitted edge to appear in its owning receipt.
-This gives VIPER exact syntactic coverage over the finite source tree. The
-strict unresolved boundary below handles supported constructs whose runtime
-target remains unresolved after static analysis.
+This gives VIPER exact inventory coverage over the finite source tree.
+`DependencySiteReceipt` supplies the separate extraction-coverage claim. The
+strict unresolved boundary below handles supported constructs whose target
+remains unresolved after static analysis.
 
 ### Observed pass
 
@@ -1701,23 +2133,34 @@ The implementation adds these checks:
 
 | Rule | Executable requirement |
 | --- | --- |
+| `system.node.vocabulary` <!-- verifier-rule: system.node.vocabulary requirement=SIG-01 --> | Recompute every node ID and require its kind, fields, and finite roles to satisfy the compatibility table. |
+| `system.edge.vocabulary` <!-- verifier-rule: system.edge.vocabulary requirement=SIG-01 --> | Require every graph edge to use one canonical dependency kind and dependent-to-dependency direction. |
 | `system.inventory.complete` <!-- verifier-rule: system.inventory.complete requirement=SIG-01 --> | Require one file node and one analysis receipt for every tracked file in the source commit. |
 | `system.analysis.anchored` <!-- verifier-rule: system.analysis.anchored requirement=SIG-01 --> | Require every source-backed node and source-evidenced edge to cite one inventoried file and exact span. |
+| `system.analysis.total` <!-- verifier-rule: system.analysis.total requirement=SIG-01 --> | Require exactly one receipt for every registered dependency-bearing AST site. |
 | `system.edge.evidence` <!-- verifier-rule: system.edge.evidence requirement=SIG-01 --> | Recompute every edge ID from its endpoints, relation, origin, and evidence. |
 | `system.context.identity` <!-- verifier-rule: system.context.identity requirement=SIG-02 --> | Recompute the canonical manifest digest. |
 | `system.resolution.total` <!-- verifier-rule: system.resolution.total requirement=SIG-02 --> | Require each resolution attempt to produce exactly one observation or unresolved dependency. |
 | `system.graph.canonical` <!-- verifier-rule: system.graph.canonical requirement=SIG-02 --> | Recompile the source revision and require identical ordered inventory, analyses, nodes, edges, observations, and unresolved dependencies. |
 | `system.graph.references` <!-- verifier-rule: system.graph.references requirement=SIG-02 --> | Require every edge and observation endpoint to exist. |
-| `system.graph.strict` <!-- verifier-rule: system.graph.strict requirement=SIG-02 --> | Reject unresolved dependencies in the specification-system review path. |
-| `system.dag.components` <!-- verifier-rule: system.dag.components requirement=SIG-03 --> | Recompute strongly connected components and component IDs. |
-| `system.dag.acyclic` <!-- verifier-rule: system.dag.acyclic requirement=SIG-03 --> | Require topological ordering to visit every component once. |
+| `system.diagnostics.complete` <!-- verifier-rule: system.diagnostics.complete requirement=SIG-02 --> | Require each rejected or degraded analysis outcome to emit one stable diagnostic code with an exact location and remediation. |
+| `system.graph.strict` <!-- verifier-rule: system.graph.strict requirement=SIG-02 --> | Reject unsupported or unresolved dependency sites in the affected surface. |
+| `system.contract.delta` <!-- verifier-rule: system.contract.delta requirement=SIG-03 --> | Parse the structured contract delta, validate every operation and precondition, and reject ambiguous or conflicting operations. |
+| `system.impact.overlay` <!-- verifier-rule: system.impact.overlay requirement=SIG-03 --> | Recompute `H_delta` as all baseline dependencies plus every dependency introduced by the contract delta, retaining removed baseline dependencies. |
+| `system.dag.components` <!-- verifier-rule: system.dag.components requirement=SIG-03 --> | Recompute SCCs over `H_delta[B]`, component IDs, cyclic flags, and crossing-edge witnesses. |
+| `system.dag.canonical` <!-- verifier-rule: system.dag.canonical requirement=SIG-03 --> | Require stable component and edge ordering independent of input insertion order. |
+| `system.dag.acyclic` <!-- verifier-rule: system.dag.acyclic requirement=SIG-03 --> | Require deterministic topological ordering to visit every component once. |
 | `system.delta.context` <!-- verifier-rule: system.delta.context requirement=SIG-03 --> | Require the baseline and candidate graphs to use the same context digest. |
 | `system.delta.identity` <!-- verifier-rule: system.delta.identity requirement=SIG-03 --> | Recompute every added, removed, and changed node and edge. |
-| `system.impact.closure` <!-- verifier-rule: system.impact.closure requirement=SIG-03 --> | Recompute reverse reachability from every changed node and edge endpoint. |
+| `system.impact.closure` <!-- verifier-rule: system.impact.closure requirement=SIG-03 --> | Recompute reverse reachability from `S_delta` in `H_delta`. |
 | `system.propagation.coverage` <!-- verifier-rule: system.propagation.coverage requirement=SIG-03 --> | Require every affected node to appear in exactly one propagation disposition. |
 | `system.propagation.additions` <!-- verifier-rule: system.propagation.additions requirement=SIG-03 --> | Require planned additions to equal the candidate delta's added repository paths before the phase closes. |
-| `system.requirement.coverage` <!-- verifier-rule: system.requirement.coverage requirement=SIG-04 --> | Require each contract requirement to reach every declared verifier rule, each rule's implementation owner, and each observing test from `ContractTraceabilityGraph`. |
+| `system.requirement.coverage` <!-- verifier-rule: system.requirement.coverage requirement=SIG-04 --> | Compile each requirement, verifier rule, implementation binding, and verification binding directly from the contract and checklist declarations. |
+| `system.rule.lowering` <!-- verifier-rule: system.rule.lowering requirement=SIG-04 --> | Require exactly one implementation binding and at least one verification binding per rule, then lower each binding to a normalized dependency edge. |
 | `system.plan.coverage` <!-- verifier-rule: system.plan.coverage requirement=SIG-04 --> | Require each Phase 0 checklist task to reach exactly one PairBlock, every changed source target, every focused test, one completion gate, and every declared prerequisite block. |
+| `system.blast.test_selection` <!-- verifier-rule: system.blast.test_selection requirement=SIG-04 --> | Require every executable affected symbol to map to at least one selected pytest node ID. |
+| `system.blast.statement_coverage` <!-- verifier-rule: system.blast.statement_coverage requirement=SIG-04 --> | Require the selected tests to execute every coverage.py statement in every affected executable symbol. |
+| `system.blast.branch_coverage` <!-- verifier-rule: system.blast.branch_coverage requirement=SIG-04 --> | Require the selected tests to execute every coverage.py branch arc sourced inside every affected executable symbol. |
 | `system.diagram.topology` <!-- verifier-rule: system.diagram.topology requirement=SIG-04 --> | Require the current, proposed-change, and integrated DAGs to preserve their exact semantic edges, node roles, palette, and link style. |
 
 ## 8. Propagation
@@ -1748,7 +2191,7 @@ before the phase closes.
 | Current occurrence | Disposition |
 | --- | --- |
 | Independent import-privacy AST scan | Retain as a focused assertion until graph parity passes, then implement it as a query over `SystemGraph`. |
-| Independent contract requirement and checklist parser | Retain as an oracle until graph parity passes, then query `implements` and `tests` edges. |
+| Independent contract requirement and checklist parser | Retain as an oracle until graph parity passes, then query `implements_rule` and `verifies_rule` edges. |
 | `plan_diff()` | Retain; it compares user experiment plans and belongs to the later experiment-graph contract. |
 | `lineage()` | Retain; it compiles verified user-run provenance, while `SystemGraph` compiles VIPER source dependencies. |
 | Manual propagation tables | Generate their paths, actions, and statements from `PropagationPlan`; retain author judgment only in each disposition statement and planned-addition purpose. |
@@ -1838,7 +2281,7 @@ outcome.message_match = "VIPER_BACKEND"
 
 The baseline decorator registers operation `run`. The candidate removes the
 decorator while the context remains equal. The observed candidate registry
-omits `run`. The graph delta removes the `registers` edge and reaches the API,
+omits `run`. The graph delta removes the `registers_with` edge and reaches the API,
 CLI, MCP, documentation, and test consumers. The test proves that registry
 contents belong to observed outcomes and stay outside the fixed context values.
 
@@ -1996,6 +2439,14 @@ Why does VIPER believe that dependency exists?
 
 ### 11.3 Static extraction and observed resolution
 
+Python's [`ast` documentation](https://docs.python.org/3/library/ast.html)
+defines the concrete syntax-node classes and their one-based line and UTF-8
+column coordinates. Python's
+[`symtable` documentation](https://docs.python.org/3/library/symtable.html)
+explains that the compiler builds symbol tables from the AST to determine the
+scope of each identifier. Phase 0 uses both interfaces: AST nodes locate
+evidence; symbol tables resolve lexical ownership.
+
 [Ernst's account of static and dynamic analysis](https://homes.cs.washington.edu/~mernst/pubs/staticdynamic-woda2003-abstract.html)
 describes them as complementary views over possible executions.
 [Build Systems à la Carte](https://users.cs.northwestern.edu/~robby/icfp2018/icfp18/icfp18main-p46-p.pdf)
@@ -2025,6 +2476,12 @@ The full graph may contain import, call, registration, or contract cycles.
 partitions a directed graph into maximal cyclic components in linear time.
 Collapsing each component produces the condensation DAG.
 
+Python's [`graphlib` documentation](https://docs.python.org/3/library/graphlib.html)
+states that a complete topological order exists exactly for an acyclic directed
+graph and notes that ready-node ordering depends on insertion order.
+VIPER therefore uses `TopologicalSorter` as an independent acyclicity check and
+serializes its own lexically tied order.
+
 ```text
 Git tree
 -> RepositoryFile inventory
@@ -2050,7 +2507,22 @@ VIPER reports three separate coverage claims:
 | File coverage | Every tracked Git-tree file has a file node and analysis receipt. | Untracked files are outside the selected source revision. |
 | Extractor coverage | Every supported construct emits a node, edge, or unresolved dependency. | A construct absent from the analyzer contract remains unsupported. |
 | Resolution coverage | Every attempted dynamic lookup has exactly one observed or unresolved outcome. | The result is conditional on the fixed context manifest. |
+| Blast statement coverage | Selected tests execute every coverage.py statement inside every affected executable symbol. | Assertion sufficiency remains a separate obligation. |
+| Blast branch coverage | Selected tests execute every coverage.py branch arc sourced inside every affected executable symbol. | Semantic correctness and graph completeness remain separate obligations. |
 
 Strict review requires complete file coverage, complete supported-extractor
-coverage, and zero unresolved dependencies. This bounded deterministic claim
-covers executions under the fixed context and declared analyzers.
+coverage, zero unresolved dependencies in the affected surface, and complete
+statement and branch execution over `B_exec`.
+
+[Coverage.py's branch documentation](https://coverage.readthedocs.io/en/latest/branch.html)
+defines branch opportunities as source-to-destination line transitions and
+compares possible arcs with executed arcs. [pytest-cov's context
+documentation](https://pytest-cov.readthedocs.io/en/stable/contexts.html)
+records the pytest node ID and execution phase for each measured context. These
+two mechanisms support the mechanical blast-coverage report.
+
+The later partition research begins after SCC condensation. [Co-Coder's
+cohesion-aware task partitioning](https://arxiv.org/abs/2606.00953) supplies a
+communication-versus-computation objective for grouping condensation vertices.
+Phase 0 records SCC-safe graph statistics and supplies a deterministic baseline
+for the later optimization comparison.
