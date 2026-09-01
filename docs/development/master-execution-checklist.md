@@ -347,9 +347,13 @@ a new digest.
 
 ## 4. Specification-system review
 
-This review covers the contract baselines in Section 3.2, current source and
-tests, the protocol reference, the public API, the CLI, the generated project,
-and the research roadmap.
+**Review baseline:** repository commit `5814cda` and the contract digests in
+Section 3.2.
+
+This review covers current source and tests, the protocol reference, the public
+API, the CLI, the generated project, and the research roadmap. This section
+records current decisions and executable gates. Git history retains superseded
+findings and repair records.
 
 ### 4.1 Schema gate
 
@@ -364,10 +368,12 @@ The executable schema gate is `tests/test_documentation.py`:
   and test coverage.
 
 The baseline hashes in Section 3.2 identify the exact contract revisions under
-review. Git history retains earlier conflict-and-repair records; this checklist
-states the current invariants and executable gates.
+review.
 
-### 4.2 Value-lifecycle gate
+**Current result:** `python -m pytest tests/test_documentation.py -q` completed
+with `59 passed`.
+
+### 4.2 Value-lifecycle decisions
 
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
@@ -398,7 +404,7 @@ states the current invariants and executable gates.
 
 Every row has one declaring input, one persisted identity, and one reader.
 
-### 4.3 Behavioral gate
+### 4.3 Behavioral decisions
 
 The contracts now agree on these branch rules:
 
@@ -448,7 +454,7 @@ A benchmark records every selected metric under fixed data and split inputs.
 Criteria add optional thresholds. An empty criteria tuple produces a verified
 result.
 
-### 4.4 Verifier gate
+### 4.4 Verifier boundaries
 
 Every new claim has a named rejection or acceptance boundary:
 
@@ -486,14 +492,7 @@ Every new claim has a named rejection or acceptance boundary:
 | A journal conclusion cites existing evidence | Every reference resolves to the record type declared by `JournalEvidence.kind` |
 | A similarity result stays within its declared view | Exact filters run first; vector dimensions, source type, and view identity verify before ranking |
 
-### 4.5 Propagation gate
-
-Each contract traces its changed models through constructors, serializers,
-workers, verifiers, CLI handlers, tests, examples, and protocol documentation.
-Section 29 defines how those contract-owned propagation paths enter the
-scheduled checklist.
-
-### 4.6 Counterexamples
+### 4.5 Counterexamples
 
 Each contract has one case that must fail:
 
@@ -2780,7 +2779,7 @@ catalog also carries anchored, versioned primary-source literature claims.
       `run_many`, `run_learning_update`, and `evaluate_agent_policy`. Map each
       task ID to one durable VIPER operation identity; route `tasks/get`,
       `tasks/update`, and `tasks/cancel` through that identity; preserve the
-      ordinary status path for clients without the extension.
+      ordinary status path for clients that omit the extension.
       <!-- implements: PCM-07 -->
       <!-- pair-block: P20-RML-02 -->
 
@@ -2794,7 +2793,7 @@ catalog also carries anchored, versioned primary-source literature claims.
       Add `motivates`, `supports`, `qualifies`, and `contradicts` edges to
       hypotheses and observations. <!-- implements: RML-06 -->
       Export a verified research episode and literature bundle as a derived
-      RO-Crate without changing the authoritative VIPER records.
+      RO-Crate while the authoritative VIPER records remain unchanged.
       <!-- pair-block: P20-RML-03 -->
 
 ### 27.3 Focused proof
@@ -2804,9 +2803,9 @@ catalog also carries anchored, versioned primary-source literature claims.
       omission, startup-root rejection, model-invocation receipt custody, MRTR
       review decline, approval receipt, and learning-access isolation.
       <!-- verifies: RML-05, PCM-06 -->
-      In `tests/test_cli.py`, execute each long operation with and without MCP
-      tasks. Require the same durable VIPER identity, terminal status,
-      cancellation effect, and result. <!-- verifies: PCM-07 -->
+      In `tests/test_cli.py`, execute each long operation through direct MCP
+      calls and through MCP tasks. Require the same durable VIPER identity,
+      terminal status, cancellation effect, and result. <!-- verifies: PCM-07 -->
       In `tests/test_verification_acceptance.py`, ingest one published paper,
       one corrected version, one accepted anchored
       claim, and one retracted claim. Reject a changed content digest, broken
@@ -2895,18 +2894,7 @@ make check-release
 
 **Commit boundary:** `Complete the VIPER contract migration`
 
-## 29. Propagation authority
-
-Each governing contract owns its exact propagation table. Each PairBlock owns
-the concrete targets and tests for one bounded edit. The phase checkboxes in
-this checklist schedule those PairBlocks and their completion gates.
-
-`test_contracts_retain_propagation_sections()` checks that every governing
-contract retains its propagation section. Contract baselines bind those
-sections to this checklist revision. Requirement and PairBlock markers bind
-their work to the schedule.
-
-## 30. Deferred work
+## 29. Deferred work
 
 These items stay outside this implementation sequence:
 
