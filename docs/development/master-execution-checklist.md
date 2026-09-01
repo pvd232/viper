@@ -16,8 +16,9 @@ Python experiment, expand its variants and replicates into concrete plans,
 freeze and run them, reuse an
 eligible verified stage, verify and benchmark the results, search them through
 the provenance catalog, attach versioned scientific labels and controlled
-comparisons, search the resulting evidence graph through a local MCP server,
-and restore their artifacts.
+comparisons, reconstruct one auditable research episode, curate reviewed
+learning examples, evaluate a retrieval-memory challenger, search the resulting
+evidence graph through a local MCP server, and restore their artifacts.
 
 Before implementation begins, VIPER compiles the reviewed source and contract
 stack into a deterministic system impact graph. Every later phase closes only
@@ -286,7 +287,7 @@ scheduled phase and dependency order.
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | Draft after audit | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Draft after audit | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
 | [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Draft after audit | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
-| [Research memory roadmap](research-memory-roadmap.md) | Active foundation; later research deferred | Ordered path from deterministic evidence records to learned retrieval and experiment selection |
+| [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned after literature and system review | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
 The contracts share models. One contract owns each shared decision:
 
@@ -311,11 +312,11 @@ The contracts share models. One contract owns each shared decision:
 | One experiment expands into ordinary `RunPlanDraft` values | Experiment expansion |
 | A skipped stage records `StageReuseReceipt` and a new target snapshot | Verified stage reuse |
 | Cross-run search rows remain derived from immutable references | Provenance catalog and MCP |
-| MCP tool schemas and calls reuse typed API models and registered operations | Provenance catalog and MCP |
+| MCP tools, resources, prompts, roots, sampling, elicitation, tasks, and utilities reuse VIPER identities and negotiated protocol capabilities | Provenance catalog and MCP |
 | Scientific labels keep declared, inferred, and reviewed origins separate | Experiment knowledge primitives |
 | Controlled comparisons use verified run and measurement references | Experiment knowledge primitives |
 | Exact filters run before vector ranking; exact identity or reviewed equivalence rejects a duplicate | Experiment knowledge primitives |
-| Learned representations and policies begin after reviewed evidence exists | Research memory roadmap |
+| Research decisions, learning datasets, policy evaluation, promotion, rollback, and literature provenance | Research Memory and Agent Learning |
 
 ### 3.2 Deterministic contract coverage
 
@@ -339,9 +340,10 @@ a new digest.
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=361b78746b4f72567517e1672cf2997ede22d8c107e28685ed82125df9586c84 -->
 <!-- contract-baseline: remote-storage.md sha256=a38a9a743f488619acee0d55785b9689b41ec78231d8bfb03eb815f9d3fe132c -->
 <!-- contract-baseline: experiment-expansion.md sha256=e8edfe2d0c1b4841aaa639b5721bb0eb5612f01d2cf30aade8813e86c2e2c9cb -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=ebefc2b7fdba137600aebd98387e94996621f9391b93e986ec975753afe8808f -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=cbda0436044aedca13cb080819a6098f27501362c22bfc5e48b6881d35833ae1 -->
 <!-- contract-baseline: stage-reuse.md sha256=e0b7572ab0e842cdbd24ed93b9cf6776e0abc3acfbef886d3c881d06c62ae231 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=b0be49f4cdfe4ec9b73928134de1e787a8374c3b21b5bbc79962ec4e63ac101f -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=6dea07a22aad0127f769f1127e2f05e2a92c751f435a70ca6e3b265b18008b0b -->
+<!-- contract-baseline: research-memory-roadmap.md sha256=c9bcb5d3c180f67da1bb7d4badab16ac492eab98f256957fe6c37888ecca6329 -->
 
 ## 4. Specification-system review
 
@@ -512,7 +514,7 @@ Every new claim has a named rejection or acceptance boundary:
 
 The review traced each changed model through constructors, serializers,
 workers, verifiers, CLI handlers, tests, examples, and protocol documentation.
-The code-change ledger in Section 25 is the complete propagation map.
+The code-change ledger in Section 29 is the complete propagation map.
 
 ### 4.6 Counterexamples
 
@@ -532,6 +534,7 @@ Each contract has one case that must fail:
 | Verified stage reuse | A catalog digest match skips execution after an input, environment, metric, source run, artifact file, or benchmark-confirmation relationship changed. |
 | Provenance catalog and MCP | A derived row loses its immutable source reference, a tampered run remains searchable as verified, or an MCP tool bypasses its typed API handler. |
 | Experiment knowledge primitives | An assignment names an unknown primitive, an effect changes a source measurement value, a journal evidence kind mismatches its file, or HNSW distance alone rejects an experiment. |
+| Research Memory and Agent Learning | A late hypothesis is presented as preregistered, one decision candidate is omitted, one source group crosses training and test, or a challenger is promoted after a retention gate fails. |
 | Module privacy | A second module imports a leading-underscore symbol. |
 
 ## 5. Dependency order
@@ -544,6 +547,7 @@ Master Phase 2 + Master Phase 4 -> Master Phase 5 -> Master Phase 6
 Master Phase 3 + Master Phase 6 -> Master Phase 7 -> Master Phase 8 -> Master Phase 9 -> Master Phase 10 -> Master Phase 11
 Master Phase 11 -> Master Phase 12 -> Master Phase 13 -> Master Phase 14 -> Master Phase 15
 Master Phase 15 -> Master Phase 16 -> Master Phase 17 -> Master Phase 18
+Master Phase 18 -> Master Phase 19 -> Master Phase 20 -> Master Phase 21
 ```
 
 Master Phase 0 first establishes contract traceability and the root used by every
@@ -562,7 +566,9 @@ and module work. The [System Impact Compiler](system-impact-compiler.md#14-imple
 owns every `P0-SIG`,
 `P0-PROOF-09` through `P0-PROOF-12`, and `P1-SIG` block. Every marked checkbox
 resolves to one block containing requirements, prerequisites, targets, tests,
-and a completion gate.
+and evidence. The [Research Memory Pair-Coding
+Guide](research-memory-pair-coding.md) owns the `P18-RML`, `P19-RML`, and
+`P20-RML` blocks and their completion gates.
 
 For each checkbox group:
 
@@ -1975,7 +1981,7 @@ freeze, run, benchmark, and restore.
 - [ ] Run `tests/test_documentation.py` after the contract and public-document
       cleanup. <!-- verifies: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
 - [ ] Run the protocol, generated-project, and documentation tests changed by
-      Master Phases 1–11. Master Phase 18 owns the full repository and clean-wheel gates.
+      Master Phases 1–11. Master Phase 21 owns the full repository and clean-wheel gates.
 
 ```bash
 python -m pytest \
@@ -2291,8 +2297,9 @@ python -m pytest \
 
 **Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
 
-**Outcome:** A local MCP client can inspect and search VIPER by default. An
-explicit startup flag adds the existing execution operations.
+**Outcome:** A local MCP client can inspect verified VIPER evidence through
+resources, prompts, and read-only tools by default. An explicit startup flag
+adds the existing execution operations.
 
 ### 22.1 Dependency and server
 
@@ -2307,6 +2314,12 @@ explicit startup flag adds the existing execution operations.
 - [ ] Mark read tools as read-only and execution tools as state-changing.
 - [ ] Keep the repository root fixed at server startup and reject every path
       that resolves outside it.
+- [ ] Add `viper://` immutable resource URIs, typed resource templates, and the
+      six user-selected prompts declared by the contract.
+- [ ] Intersect client roots with the startup root. Add deterministic resource
+      and prompt listing, catalog-head subscriptions, list-change
+      notifications, progress, cancellation, and logging.
+      <!-- implements: PCM-05 -->
 
 <details>
 <summary>Hints</summary>
@@ -2345,7 +2358,11 @@ operations and immutable-reference operations.
 - [ ] Prove execute mode calls the same mocked operations as typed API dispatch.
 - [ ] Prove a path outside the fixed root fails before the handler runs.
 - [ ] Exercise one stdio discovery, list, and call sequence.
-- [ ] Run: <!-- verifies: PCM-03, PCM-04 -->
+- [ ] List and read one immutable resource; expand one resource template; get
+      one prompt; narrow the startup root; refresh the catalog head; and verify
+      equal ordering, one update notification, progress, cancellation, and log
+      custody.
+- [ ] Run: <!-- verifies: PCM-03, PCM-04, PCM-05 -->
 
 ```bash
 python -m pytest \
@@ -2587,9 +2604,199 @@ python -m pytest \
 
 **Commit boundary:** `Search experiment knowledge through every public surface`
 
-## 25. Master Phase 18 — terminal system and release gate
+## 25. Master Phase 18 — research episodes and adaptive experiment validity
 
-**Depends on:** Master Phases 1–17.
+**Depends on:** Master Phases 0, 12, and 15–17.
+
+**Contract:**
+[Research Memory and Agent Learning](research-memory-roadmap.md)
+
+**Guide:**
+[Research Memory Pair-Coding Guide](research-memory-pair-coding.md)
+
+**Outcome:** One research objective becomes a preregistered hypothesis,
+complete candidate set, recomputable experiment selection, verified execution,
+reviewed conclusion, and immutable `ResearchEpisode`.
+
+### 25.1 Research protocol records
+
+- [ ] Add `src/viper/research.py` with the exact identifiers,
+      `ResearchConstraint`, `ResearchObjective`, `AnalysisPlan`,
+      `HypothesisSpec`, `ResourceLimit`, `ResourceBudget`,
+      `ExperimentCandidate`, `SelectionPolicyIdentity`, `CandidateScore`,
+      `ExperimentSelection`, agent invocation receipts, observations,
+      `ResearchReview`, and `ResearchEpisode`.
+- [ ] Add `ResearchRecordKind`, `ResearchRecord`,
+      `ResearchRecordEnvelope`, `ResearchManifest`, and canonical publication
+      under `.viper/research/head.json`.
+- [ ] Bind code-changing candidates to the System Impact Compiler records and
+      their generated PairBlocks. Bind executed candidates to verified
+      `ResolvedRunRef` values. <!-- implements: RML-01 -->
+
+### 25.2 Selection and scientific validity
+
+- [ ] Verify registration time, candidate completeness, unique IDs, named
+      feasibility and safety constraints, selected eligibility, selection
+      probabilities and random seed, supporting evidence, budget totals, and
+      agent/tool receipt identities and digests.
+- [ ] Recompute fixed-budget and fixed-sample conclusions from the referenced
+      measurements and effects.
+- [ ] Reject optional stopping unless the declared interval method is
+      anytime-valid. Validate the selected multiplicity rule and keep
+      exploratory results labeled as exploratory.
+      <!-- implements: RML-02 -->
+- [ ] Extend `Catalog.refresh()` with research-manifest discovery, exact rows,
+      closed research edges, and immutable source references.
+
+### 25.3 Focused proof
+
+- [ ] In `tests/test_protocol.py`, round-trip every record and union member.
+      Publish, discover, verify, and rebuild one complete fixed-budget research
+      episode.
+      <!-- verifies: RML-01 -->
+- [ ] In `tests/test_verification_acceptance.py`, reject a late hypothesis,
+      missing candidate score, ineligible selection, budget overrun, unresolved
+      receipt, mismatched PairBlock or conformance record, fixed interval under
+      optional stopping, and unrecomputed multiplicity claim.
+      <!-- verifies: RML-02 -->
+
+```bash
+python -m pytest \
+  tests/test_protocol.py \
+  tests/test_verification_acceptance.py \
+  tests/test_inspection.py -q
+```
+
+**Commit boundary:** `Record auditable research episodes`
+
+## 26. Master Phase 19 — learning datasets and policy promotion
+
+**Depends on:** Master Phase 18.
+
+**Contract:**
+[Research Memory and Agent Learning](research-memory-roadmap.md)
+
+**Guide:**
+[Research Memory Pair-Coding Guide](research-memory-pair-coding.md)
+
+**Outcome:** Reviewed episodes become group-safe learning datasets. A retrieval
+or workflow challenger can be trained, evaluated against a frozen baseline,
+promoted with explicit approval, and rolled back.
+
+### 26.1 Curation and leakage barriers
+
+- [ ] Add `LearningExample`, `DatasetMember`, `DatasetSplit`, `LeakageCheck`, and
+      `LearningDatasetManifest` with origin, synthetic ancestry, policy-time
+      context, inclusion decision, group identity, catalog snapshot, and data
+      cutoff.
+- [ ] Keep every `group_id` inside one split. Reject post-cutoff evidence,
+      incomplete source lineage, hidden synthetic ancestry, failed leakage
+      checks, and inconsistent origin counts. <!-- implements: RML-03 -->
+
+### 26.2 Update, evaluation, promotion, and rollback
+
+- [ ] Add `LearningUpdateSpec`, `LearningUpdateReceipt`, `EvaluationMetric`,
+      `AgentEvaluationPlan`, `AgentEvaluationResult`, and
+      `PolicyPromotionDecision`.
+- [ ] Implement retrieval-memory publication and workflow induction before any
+      parameter update. Store the complete `AgentPolicyIdentity` for baseline
+      and challenger.
+- [ ] Evaluate identical task, budget, tool-schema, and seed fixtures. Require
+      primary improvement or noninferiority, backward retention, leakage,
+      cost, and safety gates by task and context slice.
+- [ ] Require an explicit `decision="promote"` review and a loadable,
+      smoke-tested rollback policy
+      before promotion. <!-- implements: RML-04 -->
+
+### 26.3 Focused proof
+
+- [ ] In `tests/test_protocol.py`, accept one group-safe manifest and reject
+      cross-split family, dataset, paper, and time leakage. Verify source-origin
+      and synthetic-lineage counts after catalog rebuild.
+      <!-- verifies: RML-03 -->
+- [ ] In `tests/test_verification_acceptance.py`, run one baseline and
+      retrieval-memory challenger over frozen fixtures. Accept a passing
+      promotion; reject aggregate improvement with a failed retention slice;
+      and execute the recorded rollback target.
+      <!-- verifies: RML-04 -->
+
+```bash
+python -m pytest \
+  tests/test_protocol.py \
+  tests/test_verification_acceptance.py \
+  tests/test_inspection.py -q
+```
+
+**Commit boundary:** `Evaluate and promote reviewed research memory`
+
+## 27. Master Phase 20 — research MCP and literature evidence
+
+**Depends on:** Master Phases 15, 18, and 19.
+
+**Contracts:**
+[Research Memory and Agent Learning](research-memory-roadmap.md) and
+[Provenance catalog and MCP](provenance-catalog-mcp.md)
+
+**Outcome:** MCP clients can inspect research evidence, invoke approved
+research workflows, and participate in auditable agent and human review. The
+catalog also carries anchored, versioned primary-source literature claims.
+
+### 27.1 Research-facing MCP
+
+- [ ] Add `--access learn`. Keep read and execute behavior unchanged. Generate
+      learning tools from typed API request and success models.
+- [ ] Add research resources, templates, and prompts. Add client-controlled
+      sampling with `AgentModelInvocationReceipt` and form-mode elicitation
+      that compiles accepted responses into typed review or promotion records.
+      <!-- implements: RML-05, PCM-06 -->
+- [ ] Add task augmentation for `catalog_refresh`, `run_many`,
+      `run_learning_update`, and `evaluate_agent_policy` only after capability
+      negotiation. Map each task ID to one durable VIPER operation identity;
+      preserve ordinary status, cancellation, result retrieval, progress, and
+      logging for clients without tasks. <!-- implements: PCM-07 -->
+
+### 27.2 Literature evidence
+
+- [ ] Add `LiteratureWork`, `LiteratureVersion`, `EvidenceAnchor`, and
+      `LiteratureClaim` with primary-source identity, content digest, exact
+      locator, extraction origin and policy, review state, version chain, and
+      correction or retraction state.
+- [ ] Add catalog rows and exact queries for current and historical versions.
+      Add `motivates`, `supports`, `qualifies`, and `contradicts` edges to
+      hypotheses and observations. <!-- implements: RML-06 -->
+- [ ] Export a verified research episode and literature bundle as a derived
+      RO-Crate without changing the authoritative VIPER records.
+
+### 27.3 Focused proof
+
+- [ ] In `tests/test_api.py`, prove equal schemas and results through Python,
+      typed API, CLI, MCP tools, resources, and prompts. Prove capability
+      omission, root narrowing, sampling custody, review decline, approval
+      receipt, and learning-access isolation.
+      <!-- verifies: RML-05, PCM-06 -->
+- [ ] In `tests/test_cli.py`, execute each long operation with and without MCP
+      tasks. Require the same durable VIPER identity, terminal status,
+      cancellation effect, and result. <!-- verifies: PCM-07 -->
+- [ ] In `tests/test_verification_acceptance.py`, ingest one published paper,
+      one corrected version, one accepted anchored
+      claim, and one retracted claim. Reject a changed content digest, broken
+      version chain, missing anchor, and unreviewed claim used as an accepted
+      scientific conclusion. <!-- verifies: RML-06 -->
+
+```bash
+python -m pytest \
+  tests/test_api.py \
+  tests/test_cli.py \
+  tests/test_inspection.py \
+  tests/test_verification_acceptance.py \
+  tests/test_documentation.py -q
+```
+
+**Commit boundary:** `Expose verified research learning through MCP`
+
+## 28. Master Phase 21 — terminal system and release gate
+
+**Depends on:** Master Phases 1–20.
 
 **Contracts:** All.
 
@@ -2597,13 +2804,15 @@ python -m pytest \
 stack, and every repository release check passes after the last implementation
 phase.
 
-### 25.1 Generated-project integration
+### 28.1 Generated-project integration
 
 - [ ] Publish the complete workflow in `README.md`, `docs/reference/api.md`,
       `docs/reference/protocol.md`, `docs/explanation/how-viper-works.md`, and
       `docs/tutorials/getting-started.md`. The example covers expansion,
       bounded execution, catalog search, verified stage reuse, knowledge
-      publication, and MCP access.
+      publication, one reviewed research episode, one group-safe retrieval
+      dataset, one challenger evaluation and promotion, one anchored literature
+      claim, and read, execute, and learn MCP access.
       <!-- phase-consumes: viper.authoring.expand, viper.execution.run_many, viper.catalog, StageReuseKey, KnowledgeVector, RetrievalJudgment -->
 - [ ] Extend the generated project with two variants and two replicates.
 - [ ] Freeze and execute the complete expansion with bounded concurrency and a
@@ -2612,12 +2821,18 @@ phase.
 - [ ] Verify and benchmark every successful run.
 - [ ] Publish one ontology, declared assignment, controlled modulation, paired
       effect, diagnostic signature, and reviewed journal assertion.
+- [ ] Publish one fixed-budget `ResearchEpisode`, curate its reviewed retrieval
+      example, build a group-safe dataset, evaluate a retrieval-memory
+      challenger, promote it, and verify rollback to the baseline policy.
+- [ ] Publish one anchored literature claim and link it to the hypothesis it
+      motivates.
 - [ ] Rebuild the catalog and retrieve each run, artifact, measurement,
       benchmark, reuse edge, primitive assignment, effect, and assertion.
-- [ ] Call one read and one execute MCP operation through an in-process client.
+- [ ] Read one MCP resource, get one prompt, and call one read, execute, and
+      learn operation through an in-process client.
 - [ ] Restore one selected artifact and the complete run. Compare every digest.
 
-### 25.2 Deterministic contract gate
+### 28.2 Deterministic contract gate
 
 - [ ] Run `tests/test_documentation.py`. Require exact contract baselines,
       one implementation and verification marker per requirement, exact
@@ -2627,13 +2842,13 @@ phase.
 - [ ] Run the focused tests for every changed source and contract surface.
 - [ ] Run the generated-project acceptance test from the source checkout.
 
-### 25.3 Full release proof
+### 28.3 Full release proof
 
 - [ ] Run `make check`.
 - [ ] Run `make check-integration`.
 - [ ] Run `make check-release`.
 - [ ] Build both distributions.
-- [ ] Install the wheel with the `mcp` and `knowledge` extras in a clean
+- [ ] Install the wheel with the `mcp`, `knowledge`, and `research` extras in a clean
       supported Python environment.
 - [ ] Run the generated project from the installed wheel.
 - [ ] Record any required live CUDA and Viper Cloud evidence.
@@ -2649,7 +2864,7 @@ make check-release
 
 **Commit boundary:** `Complete the VIPER contract migration`
 
-## 26. Complete code-change ledger
+## 29. Complete code-change ledger
 
 This ledger prevents a local implementation from leaving another reader on the
 old contract.
@@ -2664,7 +2879,6 @@ old contract.
 | `src/viper/references.py` | Cloud refs, snapshot rename, reuse reference, union changes | 9, 14 |
 | `src/viper/storage.py` | Project-root binding, destinations, publishers, independent publication, cloud client, reused snapshot publication | 0, 1, 9, 14 |
 | `src/viper/artifacts.py` | Drafts, run-relative paths, pointer compatibility | 5, 7 |
-| `src/viper/artifact_loaders.py` | Replace old fixed artifact keys in loader validation | 5 |
 | `src/viper/inputs.py` | Remove HTTP source; local snapshot ref; stored pointer change | 3, 7 |
 | `src/viper/_http.py` | Rename from `http.py`; own the private HTTP implementation, protocol records, shared body ref, optional HTTP params, and custom HTTP draft | 2, 5 |
 | `src/viper/stages.py` | Runner-owned download hierarchy; `DownloadSpec.http`; objectives; draft decorators; key validation; reuse policy and completion union | 2, 4, 5, 14 |
@@ -2673,9 +2887,10 @@ old contract.
 | `src/viper/benchmark.py` | Draft, metric IDs, optional criteria, complete results | 8 |
 | `src/viper/authoring.py` | Resolve the project root; replace YAML draft loading with graph compiler; expand experiments into ordered plans | 0, 5–8, 12 |
 | `src/viper/runs.py` | Input/pointer relationships, terminal cloud references, executed and reused stage completion | 7, 9, 14 |
-| `src/viper/catalog.py` | Rebuildable SQLite catalog, exact queries, lineage rows, stage-reuse lookup, knowledge graph, and vector-view indexes | 13, 14, 17 |
-| `src/viper/knowledge.py` | Ontology, assignments, modulations, effects, impacts, diagnostics, journals, vectors, and immutable publication | 16, 17 |
-| `src/viper/mcp.py` | Deterministic MCP tools generated from typed API models and registered operations | 15, 17 |
+| `src/viper/catalog.py` | Rebuildable SQLite catalog, exact queries, lineage rows, stage-reuse lookup, knowledge and research graphs, literature rows, and vector-view indexes | 13, 14, 17–20 |
+| `src/viper/knowledge.py` | Ontology, assignments, modulations, effects, impacts, diagnostics, journals, vectors, and immutable publication | 16–20 |
+| `src/viper/research.py` | Research objectives, hypotheses, candidates, selections, episodes, learning datasets, updates, evaluations, promotions, literature, manifests, and immutable publication | 18–20 |
+| `src/viper/mcp.py` | Typed tools, resources, templates, prompts, roots, sampling, elicitation, tasks, progress, cancellation, logging, and access modes | 15, 17, 20 |
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
 | `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
 | `src/viper/preflight.py` | Renamed HTTP implementation checks, runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
@@ -2701,14 +2916,15 @@ old contract.
 | `src/viper/_verification/plan.py` | Draft-derived graph, plan/source commit separation, keys, objectives, pointers, benchmarks | 4–8 |
 | `src/viper/_verification/metrics.py` | Parameter binding, complete benchmark metrics, and reused source metric evidence | 4, 8, 14 |
 | `src/viper/_verification/storage.py` | Explicit project-root reconstruction, cloud fetch, snapshot list, and restore identity | 0, 9, 10 |
-| `src/viper/verification/__init__.py` | Define public verification operations and dispatch every new verifier rule | 0, 2–10, 13, 14, 16–17 |
+| `src/viper/_verification/research.py` | Research-link, budget, validity, leakage, evaluation, promotion, rollback, and literature-anchor verification | 18–20 |
+| `src/viper/verification/__init__.py` | Define public verification operations and dispatch every new verifier rule | 0, 2–10, 13, 14, 16–20 |
 | `src/viper/verification/models.py` | Define public verification errors, policies, result records, and callable aliases | 0 |
 | `src/viper/execution/__init__.py` | Define restore and batch operations; keep result types in `execution.results` | 9, 10, 12 |
-| `src/viper/api.py` | Root-aware developer graph operations, Python freeze inputs, result refs, restore, batch, catalog, knowledge, and MCP-owned operation schemas | 0, 5–17 |
-| `src/viper/cli.py` | `--root`, system graph commands, Python workflow changes, restore, batch, catalog, knowledge, and MCP commands | 0, 10–17 |
-| `src/viper/project_init.py` | Add the root marker and complete protocol tree; replace the generated download callable; remove legacy patterns; add the terminal knowledge workflow | 0, 2, 11, 18 |
-| `src/viper/__init__.py` | Remain free of forwarding exports | 2, 4–17 |
-| `pyproject.toml` | Register system-graph tests and add the optional MCP and knowledge dependency groups | 0, 15, 17 |
+| `src/viper/api.py` | Root-aware developer graph operations, Python freeze inputs, result refs, restore, batch, catalog, knowledge, research, and MCP-owned operation schemas | 0, 5–20 |
+| `src/viper/cli.py` | `--root`, system graph commands, Python workflow changes, restore, batch, catalog, knowledge, research, and MCP commands | 0, 10–20 |
+| `src/viper/project_init.py` | Add the root marker and complete protocol tree; replace the generated download callable; remove legacy patterns; add the terminal knowledge and research workflow | 0, 2, 11, 21 |
+| `src/viper/__init__.py` | Remain free of forwarding exports | 2, 4–20 |
+| `pyproject.toml` | Register system-graph tests and add the optional MCP, knowledge, and research dependency groups | 0, 15, 17–20 |
 | `src/viper/py.typed` | Ship the package's PEP 561 typing marker | Complete |
 | `CHANGELOG.md` | Record the contract implementation under the active release | 11 |
 | `tests/fixtures.py` | Canonical HTTP names, target records, and complete authored graph | All pending phases |
@@ -2723,37 +2939,38 @@ old contract.
 | `tests/test_benchmark_execution.py` | Complete results and optional criteria | 8, 9 |
 | `tests/test_storage.py` | Root-bound local storage, publisher, retrieval, restore, and reused-snapshot backends | 0, 1, 9, 10, 14 |
 | `tests/test_verification.py` | All new verifier rules | 2–10, 14 |
-| `tests/test_verification_acceptance.py` | Tamper, graph, catalog-source, reuse, and knowledge-record rejection cases | 2–10, 13, 14, 16–17 |
+| `tests/test_verification_acceptance.py` | Tamper, graph, catalog-source, reuse, knowledge, research, learning, and literature rejection cases | 2–10, 13, 14, 16–20 |
 | `tests/test_preflight.py` | Frozen graph, plan commit, and source commit checks | 5–8 |
 | `tests/test_public_api.py` | `viper.http`, removed transport exports, decorators, keys, constructors, and knowledge exports | 2, 4–10, 17 |
 | `tests/test_parameter_validation.py` | Project and installed-VIPER parameter-model owners | 4 |
-| `tests/test_inspection.py` | System graph delta and impact closure; stage and attempt references; catalog queries; reuse lineage; knowledge graph; vector search | 0, 2, 9, 13, 14, 17 |
-| `tests/test_api.py` | Typed operation, batch, catalog, knowledge, and MCP inputs and outputs | 5–17 |
+| `tests/test_inspection.py` | System graph delta and impact closure; stage and attempt references; catalog queries; reuse lineage; knowledge and research graphs; vector search | 0, 2, 9, 13, 14, 17–20 |
+| `tests/test_api.py` | Typed operation, batch, catalog, knowledge, research, and MCP inputs and outputs | 5–20 |
 | `tests/test_api_json.py` | JSON shapes for result references and restore | 9, 10 |
-| `tests/test_cli.py` | Commands, JSON results, restore, batch, catalog, knowledge, and MCP syntax | 10–17 |
+| `tests/test_cli.py` | Commands, JSON results, restore, batch, catalog, knowledge, research, and MCP syntax | 10–20 |
 | `tests/test_project_init.py` | Root marker, discovery, complete protocol tree, rollback, and generated source layout | 0, 11 |
 | `tests/test_validation_architecture.py` | Fixed-context system compilation, observed dynamic edges, SCC DAGs, strict unresolved-input failure, and root-resolver boundaries | 0 |
-| `tests/test_generated_project_acceptance.py` | Installed public workflow and terminal contract-stack acceptance | 11, 18 |
+| `tests/test_generated_project_acceptance.py` | Installed public workflow and terminal contract-stack acceptance | 11, 21 |
 | `tests/test_stage_invocation.py` | New keys, objective context, and owner-aware parameter binding | 4, 5 |
 | `tests/test_worker.py` | Project-stage worker after download removal and context changes | 2, 4, 5 |
 | `tests/test_resume.py` | `Train.STATE` input and artifact names | 5 |
 | `tests/test_process_startup.py` | Owner-aware parameter source checks | 4 |
-| `tests/test_documentation.py` | System-graph coverage parity, root vocabulary, schema mirrors, links, examples, operations, exact contract models, and deterministic contract-to-checklist coverage | 0, 11–18 |
+| `tests/test_documentation.py` | System-graph coverage parity, root vocabulary, schema mirrors, links, examples, operations, exact contract models, and deterministic contract-to-checklist coverage | 0, 11–21 |
 | `docs/development/project-data-root.md` | Root selection, discovery, path custody, verification, propagation, and acceptance cases | 0 |
 | `docs/development/system-impact-compiler.md` | Fixed context, graph schema, compilation, delta, impact closure, proof, implementation blocks, verification, and acceptance cases | 0 |
 | `docs/development/experiment-expansion.md` | Expansion, aggregate execution, and acceptance cases | 12 |
-| `docs/development/provenance-catalog-mcp.md` | Catalog, MCP tools, access boundary, and acceptance cases | 13, 15 |
+| `docs/development/provenance-catalog-mcp.md` | Catalog; MCP tools, resources, prompts, roots, sampling, elicitation, tasks, utilities, access boundary, and acceptance cases | 13, 15, 20 |
 | `docs/development/stage-reuse.md` | Reuse key, receipt, runtime, metric, storage, and verifier contract | 14 |
 | `docs/development/experiment-knowledge-primitives.md` | Ontology, controlled comparisons, diagnostics, journals, graph, vectors, and agent operations | 16, 17 |
-| `docs/development/research-memory-roadmap.md` | Active deterministic foundation and deferred learned research sequence | 16, 17, Deferred |
+| `docs/development/research-memory-roadmap.md` | Research episodes, adaptive validity, learning datasets, policy evaluation and promotion, literature evidence, and MCP boundaries | 18–20 |
+| `docs/development/research-memory-pair-coding.md` | Bounded implementation cycles for Master Phases 18–20 | 18–20 |
 | `docs/development/frozen-plan-git-identity.md` | Source/plan commit contract and acceptance cases | 6 |
-| `docs/reference/protocol.md` | Selected root and reserved tree plus the exact final serialized contract | 0, 11, 16–18 |
-| `docs/reference/api.md` | Exact final Python, CLI, catalog, knowledge, and MCP interface | 11–18 |
-| `docs/explanation/how-viper-works.md` | One causal execution with expansion, reuse, knowledge publication, and search | 11–18 |
-| `docs/tutorials/getting-started.md` | First public run, catalog query, and evidence-backed assertion | 11–18 |
-| `README.md` | Complete public example and local MCP setup | 11–18 |
+| `docs/reference/protocol.md` | Selected root and reserved tree plus the exact final serialized contract | 0, 11, 16–21 |
+| `docs/reference/api.md` | Exact final Python, CLI, catalog, knowledge, research, and MCP interface | 11–21 |
+| `docs/explanation/how-viper-works.md` | One causal execution with expansion, reuse, knowledge and research publication, learning evaluation, and search | 11–21 |
+| `docs/tutorials/getting-started.md` | First public run, catalog query, evidence-backed assertion, and research episode | 11–21 |
+| `README.md` | Complete public example and local MCP setup | 11–21 |
 
-## 27. Deferred work
+## 30. Deferred work
 
 These items stay outside this implementation sequence:
 
@@ -2769,10 +2986,10 @@ These items stay outside this implementation sequence:
 - Streamable HTTP MCP deployment and its authentication and authorization
   contract.
 - Adaptive optimization and distributed scheduling.
-- Literature ingestion, learned primitive classifiers, learned vector
-  representations, context-conditioned outcome models, experiment-acquisition
-  policies, and continual-learning policies in
-  [`research-memory-roadmap.md`](research-memory-roadmap.md).
+- Weight-updating primitive classifiers, learned vector representations,
+  context-conditioned outcome models, and adaptive acquisition policies after
+  the retrieval-memory and workflow promotion gates in
+  [`Research Memory and Agent Learning`](research-memory-roadmap.md).
 - Global contract-system extraction after VIPER's contract and checklist
   procedures pass their complete traceability and documentation gates. Classify
   each rule as portable or VIPER-specific, extract the portable contracts,
@@ -2781,13 +2998,15 @@ These items stay outside this implementation sequence:
   extraction. Evaluate a project-profile conversion only after the global
   system and VIPER both pass their own checks.
 
-## 28. Current position
+## 31. Current position
 
 The latest system review leaves implementation pending across the active
 contract stack.
-The experiment-knowledge contract activates the deterministic foundation from
-the research-memory roadmap. Learned representations, literature ingestion,
-outcome models, acquisition, and continual learning remain deferred.
+The experiment-knowledge contract supplies the reviewed scientific records
+consumed by the research contract. Research episodes, retrieval-memory
+evaluation, literature ingestion, and the full MCP surface are now scheduled in
+Master Phases 18–20. Weight-updating models remain behind the Master Phase 19
+dataset, retention, promotion, and rollback gates.
 Implementation remains pending. The first missing result is an initialized
 project whose marker, protocol tree, local store, public module ownership, and
 strict system impact graph pass the Master Phase 0 gate.

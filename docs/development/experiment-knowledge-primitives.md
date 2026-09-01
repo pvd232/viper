@@ -1010,8 +1010,11 @@ Every vector carries its source record and view identity.
 
 ## 16. Research boundary
 
-This contract produces the reviewed data needed by later learned systems.
-Later contracts own training for:
+This contract produces the reviewed scientific labels, effects, diagnostics,
+assertions, vectors, and retrieval judgments consumed by
+[`Research Memory and Agent Learning`](research-memory-roadmap.md). That
+contract owns the decision episode, training dataset, learning update,
+evaluation, promotion, and rollback records for:
 
 - primitive classifiers;
 - aspect-aware or multi-view representations;
@@ -1019,9 +1022,10 @@ Later contracts own training for:
 - experiment-acquisition policies; or
 - continual-learning policies from agent traces.
 
-Each later model must name its immutable training records, ontology version,
-evaluation set, acceptance metric, and review policy. The research roadmap
-defines their order after this foundation has accumulated reviewed examples.
+Each model must name its immutable `LearningDatasetManifest`, ontology version,
+frozen `AgentEvaluationPlan`, acceptance metrics, retention suite, and review
+policy. A reviewed `JournalAssertion` can label an episode, but it does not
+substitute for the complete `ResearchEpisode` or `LearningExample` records.
 
 ## 17. Research basis
 

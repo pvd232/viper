@@ -719,6 +719,7 @@ Migrate these contracts one at a time, in checklist order:
 8. `provenance-catalog-mcp.md`
 9. `stage-reuse.md`
 10. `experiment-knowledge-primitives.md`
+11. `research-memory-roadmap.md`
 
 For each contract, add its verifier-rule rows, current DAG, proposed-change
 DAG, integrated DAG, complete Section 4 declarations, marked worked example,

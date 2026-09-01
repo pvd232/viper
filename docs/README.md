@@ -27,6 +27,8 @@ Start with the task you need to complete.
 | [Contract Traceability](development/contract-traceability.md) | Link each contract requirement to its verifier rule, implementation owner, concrete trace, and acceptance test |
 | [Project data root contract](development/project-data-root.md) | Bind initialization, protocol paths, local storage, and later commands to one selected project root |
 | [System Impact Compiler](development/system-impact-compiler.md) | Compile deterministic dependency graphs, complete change plans, bounded work, and post-implementation conformance evidence |
+| [Research Memory and Agent Learning](development/research-memory-roadmap.md) | Record auditable research episodes, curate leakage-safe learning data, evaluate policy changes, and connect literature through the full MCP layout |
+| [Research Memory Pair-Coding Guide](development/research-memory-pair-coding.md) | Implement Master Phases 18–20 through bounded, tested PairBlocks |
 | [Download retrieval contract](development/download-retrieval-artifacts.md) | Make each verified HTTP body the same-named stage artifact |
 | [External input roots contract](development/external-input-roots.md) | Capture local roots and connect HTTP artifacts to later consumers |
 | [Automatic input resolution contract](development/automatic-input-resolution.md) | Compile Python stage drafts and artifact selections into frozen plans |

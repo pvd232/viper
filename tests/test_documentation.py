@@ -43,6 +43,8 @@ MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist
 CONTRACT_TRACEABILITY = ROOT / "docs/development/contract-traceability.md"
 MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
 SYSTEM_IMPACT_COMPILER = ROOT / "docs/development/system-impact-compiler.md"
+RESEARCH_MEMORY = ROOT / "docs/development/research-memory-roadmap.md"
+RESEARCH_MEMORY_PAIR_CODING = ROOT / "docs/development/research-memory-pair-coding.md"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release.yml"
 WORKFLOWS = tuple(sorted((ROOT / ".github/workflows").glob("*.yml")))
 RETIRED_SYSTEM_IMPACT_DOCUMENTS = (
@@ -71,6 +73,7 @@ IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/provenance-catalog-mcp.md",
     ROOT / "docs/development/stage-reuse.md",
     ROOT / "docs/development/experiment-knowledge-primitives.md",
+    RESEARCH_MEMORY,
 )
 
 MASTER_PHASE_ZERO_CONTRACTS = (
@@ -173,6 +176,12 @@ _SYSTEM_PAIR_BLOCK_DEFINITION = re.compile(
     r"```toml pair-block\n(?P<manifest>.*?)\n```\n"
     r"(?P<body>.*?)(?=<!-- pair-block-definition: |^## |\Z)",
     re.MULTILINE | re.DOTALL,
+)
+_RESEARCH_PAIR_BLOCK_DEFINITION = re.compile(
+    r"```toml pair-block\n"
+    r'(?P<manifest>id = "P(?:18|19|20)-RML-\d{2}".*?\n)'
+    r"```",
+    re.DOTALL,
 )
 _PAIR_PLACEHOLDER = re.compile(
     r"(?:\bTBD\b|\bTODO\b|^\s*\.\.\.\s*$|=\s*\.\.\.\s*$)",
@@ -1055,6 +1064,271 @@ def test_knowledge_contract_exposes_exact_queries_and_tool_sets() -> None:
     )
 
 
+def test_research_contract_preserves_learning_and_promotion_boundaries() -> None:
+    """Bind the research loop to exact persisted decision and gate records."""
+    classes = {
+        name: next(node for path, node in values if path == RESEARCH_MEMORY)
+        for name, values in _contract_class_definitions().items()
+        if any(path == RESEARCH_MEMORY for path, _ in values)
+    }
+    expected_fields = {
+        "ResearchObjective": {
+            "schema_version",
+            "objective_id",
+            "question",
+            "target_metrics",
+            "admissible_evidence",
+            "constraints",
+            "created_by",
+            "created_at",
+        },
+        "AnalysisPlan": {
+            "estimand",
+            "comparison",
+            "metric_id",
+            "direction",
+            "minimum_effect",
+            "interval_method",
+            "confidence",
+            "stopping_rule",
+            "maximum_looks",
+            "multiplicity_family",
+            "multiplicity_rule",
+        },
+        "ExperimentSelection": {
+            "schema_version",
+            "objective",
+            "hypothesis",
+            "candidates",
+            "scores",
+            "selected",
+            "policy",
+            "evidence_snapshot",
+            "budget",
+            "random_seed",
+            "selected_at",
+        },
+        "ResearchConstraint": {
+            "constraint_id",
+            "kind",
+            "statement",
+            "enforcement",
+            "verifier_rule",
+            "evidence",
+        },
+        "ResourceLimit": {"resource", "maximum", "unit"},
+        "ResourceBudget": {
+            "maximum_runs",
+            "maximum_wall_seconds",
+            "maximum_cost_usd",
+            "maximum_gpu_seconds",
+            "resource_limits",
+        },
+        "ExperimentCandidate": {
+            "schema_version",
+            "candidate_id",
+            "hypothesis",
+            "plan",
+            "parent_plan",
+            "expected_information_gain",
+            "expected_utility",
+            "expected_cost_usd",
+            "constraint_ids",
+            "supporting_evidence",
+            "system_change_report",
+        },
+        "ResearchEpisode": {
+            "schema_version",
+            "episode_id",
+            "objective",
+            "hypothesis",
+            "selection",
+            "agent_policy",
+            "model_invocations",
+            "tool_invocations",
+            "pair_blocks",
+            "observations",
+            "total_cost_usd",
+            "total_wall_seconds",
+            "review",
+            "started_at",
+            "ended_at",
+        },
+        "LearningDatasetManifest": {
+            "schema_version",
+            "dataset_id",
+            "version",
+            "target",
+            "ontology",
+            "catalog_snapshot",
+            "cutoff_at",
+            "splits",
+            "leakage_checks",
+            "origin_counts",
+            "examples_sha256",
+        },
+        "DatasetMember": {"example", "group_id"},
+        "DatasetSplit": {"name", "members"},
+        "PolicyPromotionDecision": {
+            "schema_version",
+            "baseline_policy",
+            "challenger_policy",
+            "evaluation",
+            "decision",
+            "rollback_policy",
+            "decided_by",
+            "decided_at",
+        },
+        "AgentPolicyIdentity": {
+            "schema_version",
+            "policy_id",
+            "version",
+            "model",
+            "system_prompt_sha256",
+            "workflow_sha256",
+            "retrieval_policy_sha256",
+            "tool_schema_sha256",
+            "memory_manifest",
+            "policy_bundle",
+            "implementation_commit",
+        },
+        "AgentToolInvocationReceipt": {
+            "schema_version",
+            "server",
+            "server_version",
+            "operation",
+            "tool_schema_sha256",
+            "request_sha256",
+            "result_sha256",
+            "task_id",
+            "started_at",
+            "ended_at",
+            "terminal_status",
+            "evidence",
+        },
+        "LiteratureClaim": {
+            "schema_version",
+            "work_version",
+            "claim",
+            "claim_kind",
+            "anchors",
+            "method_primitives",
+            "extraction_origin",
+            "extraction_policy",
+            "review_status",
+            "reviewed_by",
+            "reviewed_at",
+        },
+        "LiteratureWork": {
+            "schema_version",
+            "work_id",
+            "title",
+            "authors",
+            "venue",
+            "doi",
+            "primary_url",
+        },
+        "LiteratureVersion": {
+            "schema_version",
+            "work",
+            "version_label",
+            "publication_state",
+            "retrieved_at",
+            "content_sha256",
+            "content",
+            "prior_version",
+        },
+    }
+
+    assert {
+        name: {field for field, _, _ in _class_fields(classes[name])}
+        for name in expected_fields
+    } == expected_fields
+
+    text = RESEARCH_MEMORY.read_text(encoding="utf-8")
+    for feature in (
+        "Roots",
+        "Resources",
+        "Prompts",
+        "Tools",
+        "Sampling",
+        "Elicitation",
+        "Tasks",
+    ):
+        assert f'["{feature}"]' in text
+    assert "--access learn" in RESEARCH_MEMORY_PAIR_CODING.read_text(encoding="utf-8")
+
+
+def test_research_pair_guide_has_executable_ordered_blocks() -> None:
+    """Bind every research PairBlock to its phase, inputs, tests, and gate."""
+    text = RESEARCH_MEMORY_PAIR_CODING.read_text(encoding="utf-8")
+    manifests = tuple(
+        tomllib.loads(match.group("manifest"))
+        for match in _RESEARCH_PAIR_BLOCK_DEFINITION.finditer(text)
+    )
+    expected_ids = (
+        "P18-RML-01",
+        "P18-RML-02",
+        "P18-RML-03",
+        "P18-RML-04",
+        "P18-RML-05",
+        "P18-RML-06",
+        "P19-RML-01",
+        "P19-RML-02",
+        "P19-RML-03",
+        "P20-RML-01",
+        "P20-RML-02",
+        "P20-RML-03",
+        "P20-RML-04",
+    )
+    assert tuple(manifest["id"] for manifest in manifests) == expected_ids
+
+    prior_ids: set[str] = set()
+    covered_requirements: set[str] = set()
+    for manifest in manifests:
+        block_id = manifest["id"]
+        assert set(manifest) == {
+            "id",
+            "master_phase",
+            "requirements",
+            "depends_on",
+            "targets",
+            "produces",
+            "tests",
+            "gate",
+        }
+        assert manifest["master_phase"] == int(block_id[1:3])
+        assert manifest["requirements"]
+        assert manifest["targets"]
+        assert manifest["produces"]
+        assert manifest["tests"]
+        assert manifest["gate"].startswith("conda run -n mantra python -m pytest ")
+        for test in manifest["tests"]:
+            assert (ROOT / test).is_file()
+            assert test in manifest["gate"]
+        for dependency in manifest["depends_on"]:
+            if dependency == "P17 terminal gate":
+                continue
+            assert dependency in prior_ids
+        prior_ids.add(block_id)
+        covered_requirements.update(manifest["requirements"])
+
+    assert covered_requirements == {
+        "RML-01",
+        "RML-02",
+        "RML-03",
+        "RML-04",
+        "RML-05",
+        "RML-06",
+        "PCM-06",
+        "PCM-07",
+    }
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    assert "owns the `P18-RML`, `P19-RML`, and" in checklist
+    for phase in (18, 19, 20):
+        assert f"Master Phase {phase} " in checklist
+
+
 def test_protocol_uses_renderer_safe_math_fences() -> None:
     """Keep multiline protocol equations inside balanced GitHub math fences."""
     text = PROTOCOL.read_text()
@@ -1538,6 +1812,8 @@ def test_contract_and_schedule_names_are_canonical() -> None:
         MASTER_PHASE_ZERO_PAIR_CODING: "# Foundation Pair-Coding Guide",
         MASTER_EXECUTION_CHECKLIST: "# VIPER Master Execution Checklist",
         SYSTEM_IMPACT_COMPILER: "# System Impact Compiler",
+        RESEARCH_MEMORY: "# Research Memory and Agent Learning",
+        RESEARCH_MEMORY_PAIR_CODING: "# Research Memory Pair-Coding Guide",
     }
     for path, title in expected_titles.items():
         assert path.read_text(encoding="utf-8").splitlines()[0] == title
@@ -2377,7 +2653,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
         )
 
     phase_matches = tuple(_PHASE_HEADING.finditer(checklist))
-    assert len(phase_matches) == 19
+    assert len(phase_matches) == 22
     mappings: dict[str, dict[str, list[tuple[int, str]]]] = {
         "implements": {},
         "verifies": {},
@@ -2402,7 +2678,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
                 for requirement in requirements:
                     mappings[role].setdefault(requirement, []).append((phase, block))
 
-    assert set(phase_text) == set(range(0, 19))
+    assert set(phase_text) == set(range(0, 22))
 
     declared = set(declarations)
     assert set(mappings["implements"]) == declared
@@ -2501,14 +2777,17 @@ def test_terminal_release_gate_follows_every_implementation_phase() -> None:
     checklist = MASTER_EXECUTION_CHECKLIST.read_text()
     phases = tuple(_PHASE_HEADING.finditer(checklist))
     assert phases
-    assert int(phases[-1].group("phase")) == 18
+    assert int(phases[-1].group("phase")) == 21
     terminal = checklist[phases[-1].start() :]
     earlier = checklist[: phases[-1].start()]
 
     for command in ("make check", "make check-integration", "make check-release"):
         assert command in terminal
         assert command not in earlier
-    assert "Install the wheel with the `mcp` and `knowledge` extras" in terminal
+    assert (
+        "Install the wheel with the `mcp`, `knowledge`, and `research` extras"
+        in terminal
+    )
 
 
 def test_release_workflow_copies_only_existing_acceptance_inputs() -> None:
