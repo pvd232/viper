@@ -1263,7 +1263,7 @@ def test_research_contract_preserves_learning_and_promotion_boundaries() -> None
 
 
 def test_research_pair_guide_has_executable_ordered_blocks() -> None:
-    """Bind every research PairBlock to its phase, inputs, tests, and gate."""
+    """Bind every research PairBlock to exact targets, tests, inputs, and gate."""
     text = RESEARCH_MEMORY_PAIR_CODING.read_text(encoding="utf-8")
     manifests = tuple(
         tomllib.loads(match.group("manifest"))
@@ -1288,27 +1288,40 @@ def test_research_pair_guide_has_executable_ordered_blocks() -> None:
 
     prior_ids: set[str] = set()
     covered_requirements: set[str] = set()
+    target_pattern = re.compile(
+        r"^(?:src|tests)/[a-z0-9_/]+\.py:[A-Za-z_][A-Za-z0-9_.]*$"
+    )
+    planned_paths = {
+        value.partition(":")[0]
+        for manifest in manifests
+        for value in manifest["targets"]
+    }
     for manifest in manifests:
         block_id = manifest["id"]
         assert set(manifest) == {
             "id",
-            "master_phase",
             "requirements",
             "depends_on",
             "targets",
-            "produces",
             "tests",
             "gate",
         }
-        assert manifest["master_phase"] == int(block_id[1:3])
         assert manifest["requirements"]
         assert manifest["targets"]
-        assert manifest["produces"]
         assert manifest["tests"]
         assert manifest["gate"].startswith("conda run -n mantra python -m pytest ")
+        assert all(target_pattern.fullmatch(target) for target in manifest["targets"])
+        assert all(target_pattern.fullmatch(test) for test in manifest["tests"])
+        assert len(manifest["targets"]) == len(set(manifest["targets"]))
+        assert len(manifest["tests"]) == len(set(manifest["tests"]))
+        assert len(manifest["depends_on"]) == len(set(manifest["depends_on"]))
+        for target in manifest["targets"]:
+            target_path = target.partition(":")[0]
+            assert (ROOT / target_path).is_file() or target_path in planned_paths
         for test in manifest["tests"]:
-            assert (ROOT / test).is_file()
-            assert test in manifest["gate"]
+            test_path = test.partition(":")[0]
+            assert (ROOT / test_path).is_file() or test_path in planned_paths
+            assert test_path in manifest["gate"]
         for dependency in manifest["depends_on"]:
             assert dependency in prior_ids
         prior_ids.add(block_id)

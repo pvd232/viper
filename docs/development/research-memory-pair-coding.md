@@ -56,6 +56,16 @@ cross-phase entry gates; the first Master Phase 18 block therefore has no
 PairBlock predecessor even though Master Phase 18 cannot start until its
 listed Master Phase prerequisites pass.
 
+Every block uses the shared six-field PairBlock manifest: `id`,
+`requirements`, `targets`, `tests`, `gate`, and `depends_on`. A target names an
+exact implementation symbol as `path:symbol`; a test names an exact observing
+test the same way. The block ID and its checklist marker identify the owning
+Master Phase, so the manifest does not repeat that phase number. Output types
+and functions are targets, not a separate `produces` vocabulary.
+Symbols in files that do not exist yet are planned implementation names fixed
+by this guide. If an earlier block creates a conflicting symbol, stop and amend
+the governing contract and this guide before continuing.
+
 ## 3. Dependency graph
 
 ```mermaid
@@ -90,13 +100,11 @@ flowchart TB
 
 ```toml pair-block
 id = "P18-RML-01"
-master_phase = 18
 requirements = ["RML-01"]
 depends_on = []
-targets = ["src/viper/research.py", "tests/test_protocol.py"]
-produces = ["ResearchConstraint", "ResearchObjective", "AnalysisPlan", "HypothesisSpec", "ResourceLimit", "ResourceBudget"]
-tests = ["tests/test_protocol.py"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py -q"
+targets = ["src/viper/research.py:ResearchObjectiveId", "src/viper/research.py:HypothesisId", "src/viper/research.py:CandidateId", "src/viper/research.py:EpisodeId", "src/viper/research.py:PolicyId", "src/viper/research.py:DatasetId", "src/viper/research.py:ResearchConstraintId", "src/viper/research.py:ResearchConstraint", "src/viper/research.py:ResearchObjective", "src/viper/research.py:AnalysisPlan", "src/viper/research.py:HypothesisSpec", "src/viper/research.py:ResourceLimit", "src/viper/research.py:ResourceBudget"]
+tests = ["tests/test_protocol.py:test_research_core_records_are_frozen_and_canonical"]
+gate = "conda run -n mantra python -m pytest tests/test_protocol.py -k research_core_records_are_frozen_and_canonical -q"
 ```
 
 Add the exact identifier aliases and six models from Sections 6 and 7 of the
@@ -117,13 +125,11 @@ Record that mismatch in the contract before changing the public name.
 
 ```toml pair-block
 id = "P18-RML-02"
-master_phase = 18
 requirements = ["RML-01", "RML-02"]
 depends_on = ["P18-RML-01"]
-targets = ["src/viper/research.py", "tests/test_protocol.py"]
-produces = ["ExperimentCandidate", "SelectionPolicyIdentity", "CandidateScore", "ExperimentSelection"]
-tests = ["tests/test_protocol.py"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py -q"
+targets = ["src/viper/research.py:ExperimentCandidate", "src/viper/research.py:SelectionPolicyIdentity", "src/viper/research.py:CandidateScore", "src/viper/research.py:ExperimentSelection"]
+tests = ["tests/test_protocol.py:test_experiment_selection_is_total_and_budgeted"]
+gate = "conda run -n mantra python -m pytest tests/test_protocol.py -k experiment_selection_is_total_and_budgeted -q"
 ```
 
 Implement the candidate and selection models. Add validators for unique
@@ -145,17 +151,15 @@ conda run -n mantra python -m pytest tests/test_protocol.py -q
 
 ```toml pair-block
 id = "P18-RML-03"
-master_phase = 18
 requirements = ["RML-01"]
 depends_on = ["P18-RML-02"]
-targets = ["src/viper/research.py", "tests/test_protocol.py"]
-produces = ["AgentPolicyIdentity", "AgentModelInvocationReceipt", "AgentToolInvocationReceipt", "ResearchObservation", "ResearchReview", "ResearchEpisode"]
-tests = ["tests/test_protocol.py"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py -q"
+targets = ["src/viper/research.py:AgentModelIdentity", "src/viper/research.py:AgentPolicyIdentity", "src/viper/research.py:AgentModelInvocationReceipt", "src/viper/research.py:AgentToolInvocationReceipt", "src/viper/research.py:ResearchObservation", "src/viper/research.py:ResearchReview", "src/viper/research.py:ResearchEpisode"]
+tests = ["tests/test_protocol.py:test_research_episode_preserves_decision_and_execution_provenance"]
+gate = "conda run -n mantra python -m pytest tests/test_protocol.py -k research_episode_preserves_decision_and_execution_provenance -q"
 ```
 
-Implement the exact policy, invocation, observation, review, and episode
-models. The complete fixture must reference:
+Implement the exact model identity, policy, invocation, observation, review,
+and episode models. The complete fixture must reference:
 
 ```text
 one ResearchObjective
@@ -181,13 +185,11 @@ conda run -n mantra python -m pytest tests/test_protocol.py -q
 
 ```toml pair-block
 id = "P18-RML-04"
-master_phase = 18
 requirements = ["RML-01"]
 depends_on = ["P18-RML-03"]
-targets = ["src/viper/research.py", "src/viper/catalog.py", "tests/test_inspection.py"]
-produces = ["ResearchRecordEnvelope", "ResearchManifest", "research head"]
-tests = ["tests/test_inspection.py"]
-gate = "conda run -n mantra python -m pytest tests/test_inspection.py -q"
+targets = ["src/viper/research.py:ResearchRecordKind", "src/viper/research.py:ResearchRecord", "src/viper/research.py:ResearchRecordEnvelope", "src/viper/research.py:ResearchManifest", "src/viper/research.py:publish_research_record", "src/viper/catalog.py:Catalog.refresh"]
+tests = ["tests/test_inspection.py:test_research_manifest_rebuild_is_canonical"]
+gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k research_manifest_rebuild_is_canonical -q"
 ```
 
 Implement the closed `ResearchRecordKind` and `ResearchRecord` unions.
@@ -209,13 +211,11 @@ conda run -n mantra python -m pytest tests/test_inspection.py -q
 
 ```toml pair-block
 id = "P18-RML-05"
-master_phase = 18
 requirements = ["RML-01", "RML-02"]
 depends_on = ["P18-RML-04"]
-targets = ["src/viper/verification/__init__.py", "src/viper/_verification/research.py", "tests/test_verification_acceptance.py"]
-produces = ["research verifier dispatch"]
-tests = ["tests/test_verification_acceptance.py"]
-gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -q"
+targets = ["src/viper/verification/__init__.py:verify_research_record", "src/viper/_verification/research.py:verify_research_record"]
+tests = ["tests/test_verification_acceptance.py:test_research_verifier_rejects_invalid_episode"]
+gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -k research_verifier_rejects_invalid_episode -q"
 ```
 
 Verify every nested reference and every recomputable value. Add the exact
@@ -244,12 +244,10 @@ conda run -n mantra python -m pytest tests/test_verification_acceptance.py -q
 
 ```toml pair-block
 id = "P18-RML-06"
-master_phase = 18
 requirements = ["RML-01", "RML-02"]
 depends_on = ["P18-RML-05"]
-targets = ["tests/test_protocol.py", "tests/test_inspection.py", "tests/test_verification_acceptance.py", "docs/development/master-execution-checklist.md"]
-produces = ["Master Phase 18 gate"]
-tests = ["tests/test_protocol.py", "tests/test_inspection.py", "tests/test_verification_acceptance.py"]
+targets = ["tests/test_protocol.py:test_research_episode_round_trip", "tests/test_inspection.py:test_research_episode_is_queryable_from_every_identity", "tests/test_verification_acceptance.py:test_research_episode_acceptance_covers_validity_failures"]
+tests = ["tests/test_protocol.py:test_research_episode_round_trip", "tests/test_inspection.py:test_research_episode_is_queryable_from_every_identity", "tests/test_verification_acceptance.py:test_research_episode_acceptance_covers_validity_failures"]
 gate = "conda run -n mantra python -m pytest tests/test_protocol.py tests/test_inspection.py tests/test_verification_acceptance.py -q"
 ```
 
@@ -272,12 +270,10 @@ conda run -n mantra python -m pytest \
 
 ```toml pair-block
 id = "P19-RML-01"
-master_phase = 19
 requirements = ["RML-03"]
 depends_on = ["P18-RML-06"]
-targets = ["src/viper/research.py", "src/viper/catalog.py", "tests/test_protocol.py", "tests/test_verification_acceptance.py"]
-produces = ["LearningExample", "DatasetMember", "DatasetSplit", "LeakageCheck", "LearningDatasetManifest"]
-tests = ["tests/test_protocol.py", "tests/test_verification_acceptance.py"]
+targets = ["src/viper/research.py:LearningOrigin", "src/viper/research.py:LearningTarget", "src/viper/research.py:LearningExample", "src/viper/research.py:DatasetMember", "src/viper/research.py:DatasetSplit", "src/viper/research.py:LeakageCheck", "src/viper/research.py:LearningDatasetManifest", "src/viper/catalog.py:Catalog.refresh"]
+tests = ["tests/test_protocol.py:test_learning_dataset_manifest_preserves_origin_and_splits", "tests/test_verification_acceptance.py:test_learning_dataset_rejects_group_and_time_leakage"]
 gate = "conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q"
 ```
 
@@ -296,12 +292,10 @@ conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verificat
 
 ```toml pair-block
 id = "P19-RML-02"
-master_phase = 19
 requirements = ["RML-04"]
 depends_on = ["P19-RML-01"]
-targets = ["src/viper/research.py", "tests/test_protocol.py", "tests/test_verification_acceptance.py"]
-produces = ["LearningUpdateSpec", "LearningUpdateReceipt", "AgentEvaluationPlan", "AgentEvaluationResult"]
-tests = ["tests/test_protocol.py", "tests/test_verification_acceptance.py"]
+targets = ["src/viper/research.py:LearningUpdateSpec", "src/viper/research.py:LearningUpdateReceipt", "src/viper/research.py:EvaluationMetric", "src/viper/research.py:AgentEvaluationPlan", "src/viper/research.py:AgentEvaluationResult"]
+tests = ["tests/test_protocol.py:test_agent_evaluation_records_baseline_challenger_and_gates", "tests/test_verification_acceptance.py:test_agent_evaluation_recomputes_slice_gates"]
 gate = "conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q"
 ```
 
@@ -320,13 +314,11 @@ conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verificat
 
 ```toml pair-block
 id = "P19-RML-03"
-master_phase = 19
 requirements = ["RML-04"]
 depends_on = ["P19-RML-02"]
-targets = ["src/viper/research.py", "tests/test_verification_acceptance.py", "docs/development/master-execution-checklist.md"]
-produces = ["PolicyPromotionDecision", "Master Phase 19 gate"]
-tests = ["tests/test_verification_acceptance.py"]
-gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -q"
+targets = ["src/viper/research.py:PolicyPromotionDecision"]
+tests = ["tests/test_verification_acceptance.py:test_policy_promotion_requires_passing_gates_and_rollback"]
+gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -k policy_promotion_requires_passing_gates_and_rollback -q"
 ```
 
 Require a passing evaluation, explicit promotion reviewer, and loadable rollback policy.
@@ -348,12 +340,10 @@ conda run -n mantra python -m pytest tests/test_verification_acceptance.py -q
 
 ```toml pair-block
 id = "P20-RML-01"
-master_phase = 20
 requirements = ["RML-05", "PCM-06"]
 depends_on = ["P19-RML-03"]
-targets = ["src/viper/api.py", "src/viper/mcp.py", "src/viper/cli.py", "tests/test_api.py", "tests/test_cli.py"]
-produces = ["learn access", "research resources", "research prompts", "sampling receipts", "review elicitation"]
-tests = ["tests/test_api.py", "tests/test_cli.py"]
+targets = ["src/viper/api.py:OperationName", "src/viper/api.py:OPERATIONS", "src/viper/api.py:REQUEST_REGISTRY", "src/viper/api.py:HANDLER_REGISTRY", "src/viper/mcp.py:create_server", "src/viper/cli.py:main"]
+tests = ["tests/test_api.py:test_research_mcp_schemas_resources_prompts_and_review_custody", "tests/test_cli.py:test_mcp_learn_access_isolated"]
 gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q"
 ```
 
@@ -373,12 +363,10 @@ conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q
 
 ```toml pair-block
 id = "P20-RML-02"
-master_phase = 20
 requirements = ["PCM-07"]
 depends_on = ["P20-RML-01"]
-targets = ["src/viper/mcp.py", "tests/test_api.py", "tests/test_cli.py"]
-produces = ["task augmentation", "ordinary status fallback"]
-tests = ["tests/test_api.py", "tests/test_cli.py"]
+targets = ["src/viper/mcp.py:create_server"]
+tests = ["tests/test_api.py:test_research_tasks_preserve_operation_identity", "tests/test_cli.py:test_research_tasks_match_ordinary_status_and_cancellation"]
 gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q"
 ```
 
@@ -397,12 +385,10 @@ conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q
 
 ```toml pair-block
 id = "P20-RML-03"
-master_phase = 20
 requirements = ["RML-06"]
 depends_on = ["P20-RML-02"]
-targets = ["src/viper/research.py", "src/viper/catalog.py", "tests/test_inspection.py", "tests/test_verification_acceptance.py"]
-produces = ["LiteratureWork", "LiteratureVersion", "EvidenceAnchor", "LiteratureClaim"]
-tests = ["tests/test_inspection.py", "tests/test_verification_acceptance.py"]
+targets = ["src/viper/research.py:LiteratureWork", "src/viper/research.py:LiteratureVersion", "src/viper/research.py:EvidenceAnchor", "src/viper/research.py:LiteratureClaim", "src/viper/catalog.py:Catalog.refresh"]
+tests = ["tests/test_inspection.py:test_literature_records_rebuild_and_link_to_research", "tests/test_verification_acceptance.py:test_literature_verifier_rejects_invalid_versions_and_anchors"]
 gate = "conda run -n mantra python -m pytest tests/test_inspection.py tests/test_verification_acceptance.py -q"
 ```
 
@@ -421,12 +407,10 @@ conda run -n mantra python -m pytest tests/test_inspection.py tests/test_verific
 
 ```toml pair-block
 id = "P20-RML-04"
-master_phase = 20
 requirements = ["RML-05", "RML-06", "PCM-06", "PCM-07"]
 depends_on = ["P20-RML-03"]
-targets = ["tests/test_api.py", "tests/test_cli.py", "tests/test_inspection.py", "tests/test_verification_acceptance.py", "tests/test_documentation.py", "docs/development/master-execution-checklist.md"]
-produces = ["Master Phase 20 gate"]
-tests = ["tests/test_api.py", "tests/test_cli.py", "tests/test_inspection.py", "tests/test_verification_acceptance.py", "tests/test_documentation.py"]
+targets = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
+tests = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
 gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py tests/test_inspection.py tests/test_verification_acceptance.py tests/test_documentation.py -q"
 ```
 

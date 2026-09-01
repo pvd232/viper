@@ -2620,9 +2620,10 @@ reviewed conclusion, and immutable `ResearchEpisode`.
 
 ### 25.1 Research protocol records
 
-- [ ] Add `ResearchConstraint`, `ResearchObjective`, `AnalysisPlan`,
-      `HypothesisSpec`, `ResourceLimit`, and `ResourceBudget` to
-      `src/viper/research.py` with the exact identifiers and validators from
+- [ ] Add `ResearchObjectiveId`, `HypothesisId`, `CandidateId`, `EpisodeId`,
+      `PolicyId`, `DatasetId`, `ResearchConstraintId`, `ResearchConstraint`,
+      `ResearchObjective`, `AnalysisPlan`, `HypothesisSpec`, `ResourceLimit`,
+      and `ResourceBudget` to `src/viper/research.py` with the validators from
       the contract.
       <!-- pair-block: P18-RML-01 -->
 - [ ] Add `ExperimentCandidate`, `SelectionPolicyIdentity`, `CandidateScore`,
@@ -2630,9 +2631,10 @@ reviewed conclusion, and immutable `ResearchEpisode`.
       selected-candidate membership, eligibility, declared budget coverage,
       and the random seed and selection probability for stochastic policies.
       <!-- pair-block: P18-RML-02 -->
-- [ ] Add `AgentPolicyIdentity`, `AgentModelInvocationReceipt`,
-      `AgentToolInvocationReceipt`, `ResearchObservation`, `ResearchReview`,
-      and `ResearchEpisode`. Bind code-changing candidates to System Impact
+- [ ] Add `AgentModelIdentity`, `AgentPolicyIdentity`,
+      `AgentModelInvocationReceipt`, `AgentToolInvocationReceipt`,
+      `ResearchObservation`, `ResearchReview`, and `ResearchEpisode`. Bind
+      code-changing candidates to System Impact
       Compiler records and generated PairBlocks. Bind executed candidates to
       verified `ResolvedRunRef` values. <!-- implements: RML-01 -->
       <!-- pair-block: P18-RML-03 -->
@@ -2692,7 +2694,8 @@ promoted with explicit approval, and rolled back.
 
 ### 26.1 Curation and leakage barriers
 
-- [ ] Add `LearningExample`, `DatasetMember`, `DatasetSplit`, `LeakageCheck`, and
+- [ ] Add `LearningOrigin`, `LearningTarget`, `LearningExample`,
+      `DatasetMember`, `DatasetSplit`, `LeakageCheck`, and
       `LearningDatasetManifest` with origin, synthetic ancestry, policy-time
       context, inclusion decision, group identity, catalog snapshot, and data
       cutoff. Keep every `group_id` inside one split. Reject post-cutoff evidence,
