@@ -157,6 +157,23 @@ review.
 The current parser remains the migration oracle until the canonical
 traceability graph produces the same phase and test coverage.
 
+### System Impact Compiler validation
+
+Master Phase 0 pins CodeQL CLI `2.26.4`, its platform-bundle digest, the
+compatible Python extractor, and the locked VIPER QL pack in
+`SystemCompilerIdentity.codeql`. `tests/test_system_graph_codeql.py` owns the
+database, BQRS, decoded-row, source-fact, reverse-closure, SCC, and AST-oracle
+gates. CodeQL is an external toolchain; install it from the reviewed release
+bundle and verify the recorded digest before running those tests.
+
+The pre-implementation and post-implementation compiles must use the same
+`SystemCompilerIdentity`. Strict Phase 0 rejects every unsupported or
+unresolved dependency-bearing Python site before computing the blast radius.
+Selected pytest node IDs then run with coverage.py branch measurement and
+pytest-cov contexts. The `BlastCoverageReport` must contain zero missing
+statements and zero missing branch arcs inside every executable symbol in the
+blast radius.
+
 Planned links name exact future symbols. Implemented links must resolve in the
 candidate source tree. Phase closure requires every link to use the implemented
 state.

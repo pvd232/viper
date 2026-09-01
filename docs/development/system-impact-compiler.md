@@ -9,38 +9,43 @@ requirements and inherits their definitions from this document.
 
 **Status:** audited design; implementation and owner approval pending.
 
-The compiler follows one end-to-end protocol:
+The compiler uses CodeQL to analyze the repository before and after the
+change. VIPER owns the graph schema, change protocol, work compiler, and
+acceptance decision:
 
 ```mermaid
-block-beta
-    columns 4
-    Inputs["Baseline inputs<br/>R0 · X · Q0 · W0"]
-    Compile["Compile change<br/>G0 · c_delta · Delta"]
-    Impact["Impact closure<br/>H_delta · S_delta · B"]
-    Target["Complete target<br/>dom(P) = B · T*"]
-    Accept["Accept<br/>G1 models T*"]
-    Observe["Observe<br/>G1 from R1 · X · Q1 · W1"]
-    Work["Execute<br/>PairBlocks · R1"]
-    Select["Select<br/>SCC · Pi · U* · optional G*"]
+flowchart TB
+    R0["Repository R0"] -->|"extract"| DB0["CodeQL database"]
+    DB0 -->|"VIPER QL pack"| F0["CodeQLSourceFacts F0"]
+    F0 -->|"lower"| C0["compile_system()"]
+    Q0["ContractTraceabilityGraph Q0"] -->|"contract facts"| C0
+    C0 -->|"canonical result"| G0["SystemGraph G0"]
 
-    Inputs --> Compile
-    Compile --> Impact
-    Impact --> Target
-    Target --> Select
-    Select --> Work
-    Work --> Observe
-    Observe --> Accept
+    G0 -->|"baseline"| Protocol["VIPER change protocol<br/>Delta · B · P · T*"]
+    Protocol -->|"ordered work"| Blocks["PairBlocks"]
+    Blocks -->|"execute"| R1["Repository R1"]
 
-    class Inputs input
-    class Compile,Impact,Target compiler
-    class Select decision
-    class Work,Observe evidence
-    class Accept verification
+    R1 -->|"extract"| DB1["CodeQL database"]
+    DB1 -->|"same VIPER QL pack"| F1["CodeQLSourceFacts F1"]
+    F1 -->|"lower"| C1["compile_system()"]
+    Q1["ContractTraceabilityGraph Q1"] -->|"contract facts"| C1
+    C1 -->|"canonical result"| G1["SystemGraph G1"]
+
+    G1 -->|"observed facts"| Check["evaluate_target_conformance()"]
+    Protocol -->|"TargetSpecification T*"| Check
+    Check -->|"TargetConformanceReport"| Accept["Accept or reject"]
+
+    class R0,Q0,R1,Q1 input
+    class DB0,DB1,F0,F1 analysis
+    class C0,C1,Protocol,Blocks compiler
+    class G0,G1 evidence
+    class Check,Accept verification
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
-    classDef compiler fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
-    classDef decision fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    classDef analysis fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef compiler fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
-    classDef verification fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef verification fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
 In plain English, VIPER compiles the current repository, identifies every
@@ -60,9 +65,10 @@ These requirements bind the contract to the master checklist:
 | ID | Implementation obligation |
 | --- | --- |
 | SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_validation_architecture.py --> | Inventory every tracked file; emit canonical, source-anchored nodes and dependency edges; and classify every supported Python dependency site. |
-| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_validation_architecture.py --> | Produce stable diagnostics, hold declared external inputs fixed, and fail closed on unsupported or unresolved dependencies in the affected surface. |
+| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_validation_architecture.py --> | Produce stable diagnostics, hold declared external inputs fixed, and fail closed on every unsupported or unresolved dependency in the complete supported Python analysis scope before impact closure. |
 | SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_inspection.py --> | Compile a `ContractChange` into a `ContractDelta`, then derive the conservative impact overlay, reverse closure, affected-graph SCC condensation, and total propagation plan. |
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Ingest canonical requirements, verifier rules, and rule bindings from CRT; compile checklist tasks and bootstrap PairBlocks into $G_0$; select tests for every executable affected node; and require complete statement and branch execution over that surface. |
+| SIG-05 <!-- contract-requirement: SIG-05 phase=0 test=tests/test_system_graph_codeql.py --> | Pin CodeQL CLI `2.26.4`, the compatible Python extractor pack, and one locked VIPER QL pack; persist one receipt for database creation and every query; lower the validated rows into both $G_0$ and $G_1$; and reject toolchain, query, schema, decoding, or source-revision drift. |
 
 The master checklist carries one marker for each block named below. Section 14
 defines each block's exact targets, dependencies, tests, and executable gate.
@@ -74,6 +80,21 @@ Section 7 defines every verifier rule in the named verifier family.
 | `SIG-02` | `P0-SIG-01`, `P0-SIG-07`, `P0-SIG-11` | `P0-PROOF-09` | `system.context.*`, `system.resolution.*`, `system.graph.*`, `system.diagnostics.*` |
 | `SIG-03` | `P0-SIG-04`–`P0-SIG-09`, `P0-SIG-11` | `P0-PROOF-10` | `system.contract.*`, `system.delta.*`, `system.impact.*`, `system.dag.*`, `system.propagation.*`, `system.target.*`, `system.conformance.*` |
 | `SIG-04` | `P0-SIG-04`, `P0-SIG-09`–`P0-SIG-11` | `P0-PROOF-11`, `P0-PROOF-12` | `system.requirement.*`, `system.rule.*`, `system.plan.*`, `system.blast.*`, `system.diagram.*` |
+| `SIG-05` | `P0-SIG-01`–`P0-SIG-03`, `P0-SIG-05`–`P0-SIG-08`, `P0-SIG-11` | `P0-PROOF-09`, `P0-PROOF-10` | `system.codeql.*` |
+
+### CodeQL source-analysis contract
+
+A complete source-derived dependency graph requires a named analysis engine,
+fixed query identity, and persisted query evidence. `SIG-05` supplies that
+contract. The declaring input is
+`SystemCompilerIdentity.codeql`; `analyze_source_with_codeql()` creates the
+database and executes the locked pack; `CodeQLAnalysisReceipt` and
+`CodeQLSourceFacts` persist the result; `lower_codeql_source_facts()` constructs
+the source-derived portion of `SystemGraph`; and the `system.codeql.*` rules
+accept or reject the handoff. `P0-SIG-02`, `P0-SIG-03`, `P0-SIG-06`, and
+`P0-SIG-08` own the database, source queries, impact closure, and SCC queries.
+`P0-PROOF-09` compares the result with the independent AST oracle. The same
+boundary runs over $R_0$ and $R_1$.
 
 ## 2. Required claim
 
@@ -83,8 +104,15 @@ baseline graph, impact overlay, affected surface, SCC condensation, test
 selection, and target constraints on every conforming execution.
 
 Let `R0` identify the baseline repository, `X` the fixed compilation context,
-and `K` the fixed `SystemCompilerIdentity`. Two front ends read the selected
-repository revision:
+and `K` the fixed `SystemCompilerIdentity`. `AnalyzeCodeQL` runs the pinned
+CodeQL toolchain and returns validated `CodeQLSourceFacts`:
+
+```math
+F_0=\operatorname{AnalyzeCodeQL}_{K}(R_0),
+```
+
+where $F_0$ contains the source rows and query receipts for `R0`. The contract
+and PairBlock compilers read the same source revision:
 
 ```math
 Q_0=\operatorname{CompileTraceability}(R_0),
@@ -93,10 +121,11 @@ W_0=\operatorname{CompilePairBlocks}(R_0),
 ```
 
 where $Q_0$ is a `ContractTraceabilityGraph` and $W_0$ contains the bootstrap
-`PairBlock` records. Baseline compilation then constructs one `SystemGraph`:
+`PairBlock` records. Baseline compilation constructs one `SystemGraph` from
+all three results:
 
 ```math
-G_0 = \mathcal C_{X,K}(R_0,Q_0,W_0).
+G_0 = \operatorname{CompileSystem}_{X,K}(F_0,Q_0,W_0).
 ```
 
 ```math
@@ -112,23 +141,26 @@ returns a validated `ContractDelta`, represented by $\Delta$. The implemented
 [`ContractTraceabilityGraph`](../../src/viper/_contract_traceability.py)
 records the requirements, verifier rules, implementation owners, tests, and
 worked traces extracted from the contract and checklist files in `R0`.
-`compile_system()` lowers those records alongside the source inventory, AST
-results, resolved dependencies, context `X`, and bootstrap `PairBlock` records
-into the same `SystemGraph`, `G0`. `ContractChange` then requests a change to
-that baseline.
+The compiler orchestrator invokes `analyze_source_with_codeql()`, validates its
+`CodeQLAnalysisReceipt`, and passes the returned rows to `compile_system()`
+alongside context `X`,
+`ContractTraceabilityGraph`, and bootstrap `PairBlock` records into `G0`.
+`ContractChange` then requests a change to that baseline.
 
 The specification uses implementation names at each boundary:
 
 | Pipeline value | Python owner | Status |
 | --- | --- | --- |
 | Contract facts extracted from `R0` | [`ContractTraceabilityGraph`](../../src/viper/_contract_traceability.py) | Implemented in `src/viper/_contract_traceability.py`; lowered into `G0` with the other baseline inputs. |
+| Source facts extracted from `R0` or `R1` | `viper.system_graph.CodeQLSourceFacts` | Planned by `P0-SIG-01`–`P0-SIG-03`; produced by `viper._system_graph.codeql.analyze_source_with_codeql()`. |
+| CodeQL execution evidence | `viper.system_graph.CodeQLAnalysisReceipt` | Planned by `P0-SIG-02`–`P0-SIG-03`; records the database identity, query identities, decoded-result digests, and terminal status. |
 | Requested contract change $c_\Delta$ | `viper.system_graph.ContractChange` | Planned by `P0-SIG-04`. |
 | Validated graph operations $\Delta$ | `viper.system_graph.ContractDelta` | Planned by `P0-SIG-04`. |
 | Change compiler | `viper.system_graph.compile_contract_change()` | Planned by `P0-SIG-04`; accepts `(ContractChange, SystemGraph)` and returns `ContractDelta`. |
 
-The mathematical names refer to instances of those types: $G_0$ is a
-`SystemGraph`, $c_\Delta$ is a `ContractChange`, and $\Delta$ is a
-`ContractDelta`.
+The mathematical names refer to instances of those types: $F_0$ is
+`CodeQLSourceFacts`, $G_0$ is a `SystemGraph`, $c_\Delta$ is a
+`ContractChange`, and $\Delta$ is a `ContractDelta`.
 
 The conservative impact graph retains every baseline dependency and adds every
 dependency introduced by the delta:
@@ -145,15 +177,17 @@ B = \{x \in V_{H_\Delta} \mid \exists s \in S_\Delta:\; x \leadsto s\}.
 
 Removed dependencies remain in `H_delta` because they existed before the
 change and can identify dependents that require migration. A candidate
-repository `R1` is compiled only after implementation. The same front ends
-first derive $Q_1$ and $W_1$ from `R1`:
+repository `R1` is compiled only after implementation. The same pinned CodeQL
+toolchain and front ends derive $F_1$, $Q_1$, and $W_1$ from `R1`:
 
 ```math
+F_1=\operatorname{AnalyzeCodeQL}_{K}(R_1),
+\qquad
 Q_1=\operatorname{CompileTraceability}(R_1),
 \qquad
 W_1=\operatorname{CompilePairBlocks}(R_1),
 \qquad
-G_1 = \mathcal C_{X,K}(R_1,Q_1,W_1).
+G_1 = \operatorname{CompileSystem}_{X,K}(F_1,Q_1,W_1).
 ```
 
 `G1` is compared with the target constraints compiled from `(G0, Delta, P)`.
@@ -260,15 +294,16 @@ flowchart TD
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-### Missing connector
+### Required compiler path
 
-The missing path is:
+The compiler path is:
 
 ```text
-source revision + fixed context
--> complete tracked-file inventory
--> one analysis receipt per file
--> source-backed nodes, auditable edges, and dependency-site receipts
+source revision + pinned CodeQL identity
+-> CodeQL database and locked QL pack
+-> CodeQLAnalysisReceipt and CodeQLSourceFacts
+-> complete tracked-file inventory and one lowering receipt per file
+-> source-backed nodes, auditable edges, and dependency-site outcomes
 -> canonical baseline SystemGraph G0
 -> automatic contract and RuleEdge compilation
 -> ContractChange
@@ -290,25 +325,30 @@ later stage that resolves one `ContractChange` against $G_0$ and returns a
 
 ### Proposed-change DAG
 
-The proposed compiler derives source-backed nodes and dependency-site receipts
-from the baseline inventory, compiles the declared delta, computes impact, and
-proves test execution over the affected surface before implementation.
+The compiler creates a CodeQL database from the selected revision. The locked
+VIPER QL pack emits source facts, dependency-site outcomes, impact closure, and
+SCC membership. VIPER validates and lowers those results into the contract
+types used by planning and verification.
 
 ```mermaid
 flowchart TD
     Baseline["Proposed baseline<br/>SystemSource"]
-    Context["Proposed SystemContextManifest<br/>fixed external inputs"]
+    Compiler["SystemCompilerIdentity<br/>CodeQL 2.26.4 + locked QL pack"]
+    Context["SystemContextManifest<br/>fixed external inputs"]
     Traceability["ContractTraceabilityGraph<br/>baseline contract facts"]
     Change["ContractChange<br/>requested contract change"]
     Bootstrap["Bootstrap PairBlock declarations"]
     Inventory["Proposed tracked-file inventory"]
-    Analyze["Proposed AST + symbol analyzers"]
+    Database["Proposed CodeQL database receipt"]
+    Queries["Proposed VIPER QL source queries"]
+    Facts["Proposed CodeQLSourceFacts"]
     Sites["Proposed dependency-site receipts"]
     Graph["Proposed baseline SystemGraph G0"]
     ContractCompiler["Proposed contract compiler"]
     Delta["Proposed contract Delta"]
     Overlay["Proposed conservative H_delta"]
     Support["Proposed S_delta"]
+    GraphQueries["Proposed VIPER QL graph queries"]
     Closure["Proposed reverse closure B"]
     SCC["Proposed SCCs of H_delta[B]"]
     DAG["Proposed condensation DAG"]
@@ -319,11 +359,16 @@ flowchart TD
     Work["Proposed generated PairBlocks"]
 
     Baseline -->|"baseline commit"| Inventory
-    Context -->|"fixed compiler inputs"| Analyze
-    Inventory -->|"ordered files"| Analyze
-    Analyze -->|"classifies sites"| Sites
-    Analyze -->|"emits nodes + dependencies"| Graph
+    Baseline -->|"source revision"| Database
+    Compiler -->|"pinned toolchain"| Database
+    Database -->|"queryable code"| Queries
+    Compiler -->|"locked query pack"| Queries
+    Queries -->|"decoded rows"| Facts
+    Queries -->|"terminal site outcomes"| Sites
+    Inventory -->|"file coverage"| Graph
+    Facts -->|"nodes + dependencies"| Graph
     Sites -->|"proves analyzer coverage"| Graph
+    Context -->|"fixed observations"| Graph
     Traceability -->|"source-evidenced rule links"| Graph
     Bootstrap -->|"scheduling traceability"| Graph
     Change -->|"requested operations"| ContractCompiler
@@ -332,9 +377,10 @@ flowchart TD
     Graph -->|"all baseline dependencies"| Overlay
     Delta -->|"introduced dependencies"| Overlay
     Delta -->|"direct support"| Support
-    Overlay -->|"dependency topology"| Closure
-    Support -->|"start vertices"| Closure
-    Closure -->|"affected induced graph"| SCC
+    Overlay -->|"dependency rows"| GraphQueries
+    Support -->|"initial vertices"| GraphQueries
+    GraphQueries -->|"least fixed point"| Closure
+    GraphQueries -->|"mutual reachability"| SCC
     SCC -->|"collapse components"| DAG
     Closure -->|"affected executable symbols"| Select
     Select -->|"pytest contexts"| Coverage
@@ -345,8 +391,8 @@ flowchart TD
     Target -->|"hard obligations"| Work
     DAG -->|"execution order"| Work
 
-    class Baseline,Context,Traceability,Change,Bootstrap input
-    class Inventory,Analyze,Sites,Graph,ContractCompiler,Delta,Overlay,Support,Closure,SCC,DAG,Select,Coverage,Plan,Target,Work proposed
+    class Baseline,Compiler,Context,Traceability,Change,Bootstrap input
+    class Inventory,Database,Queries,Facts,Sites,Graph,ContractCompiler,Delta,Overlay,Support,GraphQueries,Closure,SCC,DAG,Select,Coverage,Plan,Target,Work proposed
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
@@ -354,13 +400,17 @@ flowchart TD
 
 ### Integrated DAG
 
-The integrated path connects the pre-implementation compiler with the observed
-repository and conformance verifier.
+The integrated path preserves every planning and verification branch while
+placing the same CodeQL analysis boundary around `R0` and `R1`.
 
 ```mermaid
 flowchart TD
     R0["Repository R0"]
-    X["Context X + compiler K"]
+    K["SystemCompilerIdentity K"]
+    X["SystemContextManifest X"]
+    DB0["CodeQL database R0"]
+    Queries0["VIPER QL source queries"]
+    F0["CodeQLSourceFacts F0"]
     Q0["ContractTraceabilityGraph Q0"]
     W0["Bootstrap PairBlocks W0"]
     CompileBase["compile_system()"]
@@ -368,7 +418,9 @@ flowchart TD
     Change["ContractChange c_delta"]
     CompileChange["compile_contract_change()"]
     Delta["ContractDelta Delta"]
-    Impact["H_delta + S_delta + B"]
+    Impact["H_delta + S_delta"]
+    GraphQueries["VIPER QL graph queries"]
+    Closure["Blast radius B"]
     SCC["SCC DAG of H_delta[B]"]
     Tests["Selected tests"]
     Coverage["BlastCoverageReport"]
@@ -380,13 +432,25 @@ flowchart TD
     PairBlocks["Generated PairBlocks"]
     Execute["Execute PairBlocks"]
     R1["Repository R1"]
+    DB1["CodeQL database R1"]
+    Queries1["Same VIPER QL source queries"]
+    F1["CodeQLSourceFacts F1"]
+    Q1["ContractTraceabilityGraph Q1"]
+    W1["Generated PairBlocks W1"]
     Observe["compile_system()"]
     G1["SystemGraph G1"]
-    Conformance["G1 models T*"]
+    CheckTarget["evaluate_target_conformance()"]
+    Conformance["TargetConformanceReport"]
     Review["Independent acceptance"]
 
-    R0 -->|"source"| CompileBase
+    R0 -->|"source revision"| DB0
+    K -->|"pinned CodeQL + QL pack"| DB0
+    DB0 -->|"queryable code"| Queries0
+    K -->|"query identities"| Queries0
+    Queries0 -->|"decoded rows + receipts"| F0
+    F0 -->|"source facts"| CompileBase
     X -->|"fixed inputs"| CompileBase
+    K -->|"compiler identity"| CompileBase
     Q0 -->|"contract facts"| CompileBase
     W0 -->|"work facts"| CompileBase
     CompileBase -->|"canonical graph"| G0
@@ -395,10 +459,13 @@ flowchart TD
     CompileChange -->|"checked operations"| Delta
     G0 -->|"baseline dependencies"| Impact
     Delta -->|"support + new edges"| Impact
-    Impact -->|"affected graph"| SCC
-    Impact -->|"executable symbols"| Tests
+    Impact -->|"edge + initial-vertex rows"| GraphQueries
+    K -->|"locked graph queries"| GraphQueries
+    GraphQueries -->|"least fixed point"| Closure
+    GraphQueries -->|"mutual reachability"| SCC
+    Closure -->|"executable symbols"| Tests
     Tests -->|"execution contexts"| Coverage
-    Impact -->|"affected entities"| Plan
+    Closure -->|"affected entities"| Plan
     Decisions -->|"one per entity"| Plan
     G0 -->|"baseline facts"| Target
     Delta -->|"required change"| Target
@@ -410,18 +477,28 @@ flowchart TD
     CompileWork -->|"ordered work"| PairBlocks
     PairBlocks -->|"bounded work"| Execute
     Execute -->|"writes"| R1
-    R1 -->|"source + Q1 + W1"| Observe
+    R1 -->|"source revision"| DB1
+    K -->|"same pinned CodeQL"| DB1
+    DB1 -->|"queryable code"| Queries1
+    K -->|"same query identities"| Queries1
+    Queries1 -->|"decoded rows + receipts"| F1
+    F1 -->|"source facts"| Observe
+    Q1 -->|"contract facts"| Observe
+    W1 -->|"work facts"| Observe
     X -->|"same inputs"| Observe
+    K -->|"same compiler identity"| Observe
     Observe -->|"canonical graph"| G1
-    G1 -->|"observed facts"| Conformance
-    Target -->|"required facts"| Conformance
+    G1 -->|"observed facts"| CheckTarget
+    Target -->|"required facts"| CheckTarget
+    CheckTarget -->|"one receipt per constraint"| Conformance
     Coverage -->|"pre-change gate"| Review
     Conformance -->|"post-change gate"| Review
 
-    class R0,X,Q0,W0,Change,Decisions input
-    class CompileBase,CompileChange,CompileWork,Execute,Observe,Review consumer
+    class R0,K,X,Q0,W0,Change,Decisions,Q1,W1 input
+    class DB0,Queries0,F0,DB1,Queries1,F1 evidence
+    class CompileBase,CompileChange,GraphQueries,CompileWork,Execute,Observe,CheckTarget,Review consumer
     class G0,PairBlocks,R1,G1 evidence
-    class Delta,Impact,SCC,Tests,Coverage,Plan,Target,Repairs,Conformance output
+    class Delta,Impact,Closure,SCC,Tests,Coverage,Plan,Target,Repairs,Conformance output
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
     classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
@@ -527,7 +604,7 @@ role-kind combinations.
 | Node kind | Canonical identity | Required source fields | Admissible role families |
 | --- | --- | --- | --- |
 | `repository_file` | `file:<repo-relative-path>` | path and complete-file digest | module, test module, contract, checklist, configuration, fixture, generated source |
-| `python_symbol` | `python:<path>:<qualified-name>` | path, qualified name, four AST coordinates, exact-span digest | Python declaration kind plus optional protocol, API, CLI, runtime, fixture, test, or export role |
+| `python_symbol` | `python:<path>:<qualified-name>` | path, qualified name, four source coordinates, exact-span digest | Python declaration kind plus optional protocol, API, CLI, runtime, fixture, test, or export role |
 | `document_anchor` | `anchor:<path>:<anchor-kind>:<stable-id>` | path, stable marker ID, line range, exact-span digest | requirement, verifier rule, checklist task, PairBlock, or completion gate |
 | `external_symbol` | `external:<external-kind>:<context-identity>` | external kind and fixed-context identity | package, module, variable, file, command, or runtime target |
 
@@ -607,23 +684,43 @@ class SystemSource(ProtocolModel):
     commit: GitCommit
 
 
+class CodeQLPackIdentity(ProtocolModel):
+    name: NonEmptyStr
+    version: NonEmptyStr
+    sha256: SHA256
+
+
+class CodeQLToolchainIdentity(ProtocolModel):
+    cli_version: Literal["2.26.4"] = "2.26.4"
+    bundle_sha256: SHA256
+    python_extractor: CodeQLPackIdentity
+    query_pack: CodeQLPackIdentity
+    lockfile_sha256: SHA256
+
+
 class SystemCompilerIdentity(ProtocolModel):
     schema_version: Literal[1] = 1
     symbol: Literal["viper.system_graph.compile_system"]
     package_version: NonEmptyStr
     implementation_sha256: SHA256
+    codeql: CodeQLToolchainIdentity
 ```
 
 The baseline and candidate graphs may use different `SystemSource.commit`
 values. Both graphs must use the same context-manifest digest and the same
-`SystemCompilerIdentity`. `implementation_sha256` covers the source files and
-registered adapters that can change `compile_system()` output. The verifier
-rebuilds this identity before recompiling either repository revision.
+`SystemCompilerIdentity`. `implementation_sha256` covers the VIPER source files
+that inventory, lower, normalize, and validate `compile_system()` output.
+`CodeQLToolchainIdentity` separately fixes the CLI bundle, Python extractor,
+VIPER query pack, and resolved pack lock. The verifier rebuilds both parts
+before compiling either repository revision.
 
 `SystemCompilerIdentity.schema_version = 1` is the frozen initial identity
-format. The field set is subject to review before `P0-SIG-01` closes. Any
-approved change increments `schema_version`; it never silently changes the
-meaning of version 1.
+format. CodeQL CLI
+[`2.26.4`](https://github.com/github/codeql-cli-binaries/releases/tag/v2.26.4)
+is the Master Phase 0 review baseline. `P0-SIG-02`
+records the official platform bundle digest and compatible Python extractor
+pack before the compiler can publish a graph. Any approved field or semantic
+change creates the next `schema_version`; version 1 keeps its published meaning.
 
 ### Repository inventory
 
@@ -657,9 +754,10 @@ and contract coverage.
 
 ### Dependency-site coverage and diagnostics
 
-File coverage and dependency coverage are separate claims. The Python analyzer
-records one `DependencySiteReceipt` for every AST construct in its
-declared dependency-site registry.
+File coverage and dependency coverage are separate claims. The VIPER QL pack
+records one `CodeQLDependencySiteRow` for every construct in its declared
+dependency-site registry. The row itself is the persisted terminal outcome;
+VIPER validates its edge references while lowering the batch.
 
 ```python
 DependencySiteOutcome = Literal[
@@ -672,25 +770,20 @@ DependencySiteOutcome = Literal[
 DiagnosticSeverity = Literal["info", "warning", "error"]
 
 
-class DependencySiteReceipt(ProtocolModel):
-    site_id: SHA256
-    path: RepoRelPath
-    ast_kind: NonEmptyStr
-    start_line: int = Field(ge=1)
-    start_column: int = Field(ge=0)
-    end_line: int = Field(ge=1)
-    end_column: int = Field(ge=0)
-    outcome: DependencySiteOutcome
-    emitted_edges: tuple[SHA256, ...]
-    rule_id: NonEmptyStr
-    detail: NonEmptyStr
-
-
 class SystemDiagnostic(ProtocolModel):
     diagnostic_id: SHA256
     code: NonEmptyStr
     severity: DiagnosticSeverity
-    phase: Literal["inventory", "extract", "contract", "impact", "scc", "coverage", "conformance"]
+    phase: Literal[
+        "inventory",
+        "codeql",
+        "extract",
+        "contract",
+        "impact",
+        "scc",
+        "coverage",
+        "conformance",
+    ]
     message: NonEmptyStr
     path: RepoRelPath | None = None
     start_line: int | None = Field(default=None, ge=1)
@@ -699,19 +792,20 @@ class SystemDiagnostic(ProtocolModel):
     remediation: NonEmptyStr
 ```
 
-Master Phase 0 registers `Import`, `ImportFrom`, `Call`, class bases, decorators,
-function and variable annotations, `Name` and `Attribute` loads and stores,
-literal registries, and `__all__` exports. The analyzer combines Python's AST
-coordinates with the compiler symbol table so aliases, local names, globals,
-nonlocals, and imported names retain distinct namespaces. A star import,
-computed import target, computed registry key, or call target that the analyzer
-fails to resolve as `unresolved` or `unsupported`. Every registered site emits
-an edge-bearing or terminal receipt.
+Master Phase 0 registers imports, calls, class bases, decorators, function and
+variable annotations, symbol loads and stores, literal registries, and
+`__all__` exports. The QL queries use CodeQL's Python syntax, scope, type,
+control-flow, and data-flow libraries to retain source locations and resolved
+symbol identities. A star import, computed import target, computed registry
+key, or unresolved call target produces an `unresolved` or `unsupported` row.
+Every registered site produces an edge-bearing or terminal row.
 
 `self_contained` means the construct's dependencies remain inside its owning
 symbol, such as a local literal assignment. It differs from an absent receipt.
-Strict Master Phase 0 requires every registered site to have exactly
-one receipt and rejects `unresolved` or `unsupported` outcomes in the affected
+Strict Master Phase 0 requires every registered site to have exactly one
+receipt. It rejects every `unresolved` or `unsupported` Python dependency site
+in the selected repository scope before computing $B$. This global boundary
+prevents a missing edge from hiding its own caller outside the affected
 surface.
 
 Diagnostic codes are stable API values. Master Phase 0 reserves these families:
@@ -719,7 +813,8 @@ Diagnostic codes are stable API values. Master Phase 0 reserves these families:
 | Family | Required examples |
 | --- | --- |
 | `SGI` inventory | missing receipt, duplicate path, digest mismatch, unsupported tracked file |
-| `SGX` extraction | Python parse failure, unsupported AST site, unresolved import, ambiguous name, dynamic call target |
+| `SGX` extraction | CodeQL database or query failure, unsupported dependency site, unresolved import, ambiguous name, dynamic call target |
+| `SGQ` CodeQL | toolchain mismatch, query-pack drift, missing result set, result-schema mismatch, BQRS decode failure, row-count mismatch |
 | `SGC` contract | malformed declaration, duplicate ID, unknown anchor, missing rule owner, missing rule test, delta conflict |
 | `SGG` graph | invalid endpoint, invalid direction, duplicate edge, missing evidence, noncanonical ordering |
 | `SGB` blast | incomplete reverse closure, uncovered affected node, absent selected test, missing statement or branch |
@@ -1029,6 +1124,97 @@ GraphFact = Annotated[
 ]
 
 
+class CodeQLSourceLocation(ProtocolModel):
+    path: RepoRelPath
+    start_line: int = Field(ge=1)
+    start_column: int = Field(ge=0)
+    end_line: int = Field(ge=1)
+    end_column: int = Field(ge=0)
+    expression: NonEmptyStr
+
+
+class CodeQLNodeRow(ProtocolModel):
+    kind: Literal["node"] = "node"
+    row_id: SHA256
+    query_id: NonEmptyStr
+    anchor: PythonSymbolAnchor
+    roles: tuple[SystemNodeRole, ...] = Field(min_length=1)
+    location: CodeQLSourceLocation
+
+
+class CodeQLEdgeRow(ProtocolModel):
+    kind: Literal["edge"] = "edge"
+    row_id: SHA256
+    query_id: NonEmptyStr
+    source: SystemNodeAnchor
+    relation: SystemEdgeKind
+    target: SystemNodeAnchor
+    location: CodeQLSourceLocation
+
+
+class CodeQLSignatureRow(ProtocolModel):
+    kind: Literal["signature"] = "signature"
+    row_id: SHA256
+    query_id: NonEmptyStr
+    signature: PythonSignatureFact
+    location: CodeQLSourceLocation
+
+
+class CodeQLDependencySiteRow(ProtocolModel):
+    kind: Literal["dependency_site"] = "dependency_site"
+    row_id: SHA256
+    query_id: NonEmptyStr
+    site_kind: NonEmptyStr
+    location: CodeQLSourceLocation
+    outcome: DependencySiteOutcome
+    emitted_edge_rows: tuple[SHA256, ...]
+    detail: NonEmptyStr
+
+
+CodeQLSourceFact = Annotated[
+    CodeQLNodeRow
+    | CodeQLEdgeRow
+    | CodeQLSignatureRow
+    | CodeQLDependencySiteRow,
+    Field(discriminator="kind"),
+]
+
+
+class CodeQLDatabaseReceipt(ProtocolModel):
+    database_id: SHA256
+    source: SystemSource
+    toolchain_sha256: SHA256
+    language: Literal["python"] = "python"
+    create_argv: tuple[NonEmptyStr, ...] = Field(min_length=1)
+    create_log_sha256: SHA256
+    status: Literal["ready"] = "ready"
+
+
+class CodeQLQueryReceipt(ProtocolModel):
+    query_id: NonEmptyStr
+    query_pack_sha256: SHA256
+    query_sha256: SHA256
+    result_schema_sha256: SHA256
+    bqrs_sha256: SHA256
+    decoded_sha256: SHA256
+    row_count: int = Field(ge=0)
+    status: Literal["complete"] = "complete"
+
+
+class CodeQLAnalysisReceipt(ProtocolModel):
+    database: CodeQLDatabaseReceipt
+    queries: tuple[CodeQLQueryReceipt, ...] = Field(min_length=1)
+    facts_sha256: SHA256
+
+
+class CodeQLSourceFacts(ProtocolModel):
+    schema_version: Literal[1] = 1
+    source: SystemSource
+    compiler_sha256: SHA256
+    analysis: CodeQLAnalysisReceipt
+    facts: tuple[CodeQLSourceFact, ...]
+
+
 class AddNodeOperation(ProtocolModel):
     operation_id: NonEmptyStr
     op: Literal["add_node"] = "add_node"
@@ -1243,7 +1429,7 @@ per target constraint. `conforms=True` holds exactly when every receipt is
 - A `repository_file` node requires `path` and `sha256`, omits line fields, and
   matches one `RepositoryFile`.
 - A `python_symbol` node requires `path`, `symbol`, `start_line`, `end_line`,
-  and the AST column coordinates carried in its source evidence. Its digest
+  and the source-column coordinates carried in its CodeQL evidence. Its digest
   covers the exact UTF-8 source span. A function or method also carries one
   `PythonSignatureFact`; other Python symbol kinds set `signature=None`.
 - A `document_anchor` node requires `path`, a stable marker ID in `symbol`, a
@@ -1310,6 +1496,7 @@ class SystemGraph(ProtocolModel):
     compiler: SystemCompilerIdentity
     context_sha256: SHA256
     contract_traceability_sha256: SHA256
+    source_analysis: CodeQLAnalysisReceipt
     inventory: tuple[RepositoryFile, ...] = Field(min_length=1)
     analyses: tuple[FileAnalysisReceipt, ...] = Field(min_length=1)
     nodes: tuple[SystemNode, ...] = Field(min_length=1)
@@ -1321,8 +1508,39 @@ class SystemGraph(ProtocolModel):
 The planned baseline compiler has this boundary:
 
 ```text
-def compile_system(
+def analyze_source_with_codeql(
     source: SystemSource,
+    compiler: SystemCompilerIdentity,
+) -> CodeQLSourceFacts: ...
+
+
+def create_codeql_database(
+    source: SystemSource,
+    toolchain: CodeQLToolchainIdentity,
+) -> CodeQLDatabaseReceipt: ...
+
+
+def decode_codeql_results(
+    database: CodeQLDatabaseReceipt,
+    toolchain: CodeQLToolchainIdentity,
+) -> tuple[CodeQLAnalysisReceipt, tuple[CodeQLSourceFact, ...]]: ...
+
+
+def query_impact_closure(
+    edges: tuple[tuple[SystemNodeId, SystemNodeId], ...],
+    initial_vertices: tuple[SystemNodeId, ...],
+    compiler: SystemCompilerIdentity,
+) -> tuple[SystemNodeId, ...]: ...
+
+
+def query_affected_components(
+    affected_edges: tuple[tuple[SystemNodeId, SystemNodeId], ...],
+    compiler: SystemCompilerIdentity,
+) -> tuple[tuple[SystemNodeId, ...], ...]: ...
+
+
+def compile_system(
+    source_facts: CodeQLSourceFacts,
     compiler: SystemCompilerIdentity,
     context: SystemContextManifest,
     contract_traceability: ContractTraceabilityGraph,
@@ -1332,12 +1550,30 @@ def compile_system(
 ) -> SystemGraph: ...
 ```
 
+The planned private function
+`viper._system_graph.codeql.analyze_source_with_codeql()` creates the database,
+runs the locked QL pack, decodes each BQRS result, validates every row, and
+returns `CodeQLSourceFacts`. `compile_system()` lowers those rows into file,
+symbol, import, call, type, and other code-dependency facts.
 `contract_traceability` contributes `ContractRequirement`, `VerifierRule`,
-`RuleEdge`, and `ContractTrace` facts. Repository inventory and Python
-analysis contribute file, symbol, import, call, type, and other code-dependency
-facts. `pair_blocks` contributes scheduling dependencies. `compile_system()`
-normalizes all three sources into the `nodes` and `edges` fields of one
-`SystemGraph`; it does not run any one source as a stand-alone impact graph.
+`RuleEdge`, and `ContractTrace` facts. `pair_blocks` contributes scheduling
+dependencies. `compile_system()` normalizes all three sources into the `nodes`
+and `edges` fields of one `SystemGraph`.
+
+`query_impact_closure()` and `query_affected_components()` write the validated
+edge and initial-vertex rows to CSV and pass them through CodeQL's
+`--external=<predicate>=<file.csv>` interface. The QL pack declares those
+external predicates and result schemas. VIPER accepts a query result only when
+its returned vertex IDs belong to the supplied rows and its receipt matches the
+locked query and schema digests.
+
+Every `CodeQLSourceFact.row_id` hashes the row kind, query ID, and canonical
+field values. A `CodeQLDependencySiteRow.emitted_edge_rows` value must resolve
+to a `CodeQLEdgeRow` in the same batch. `CodeQLAnalysisReceipt.queries` contains
+exactly one receipt for every query declared by the locked pack. The sum of
+their `row_count` values equals the number of rows represented in the decoded
+result sets, including zero-row queries. Missing, duplicate, extra, or
+schema-incompatible result sets fail before graph lowering.
 
 Inventory and analyses sort by path. Nodes sort by `node_id`. Edges sort by
 `edge_id`. Observations and unresolved dependencies sort by
@@ -1375,9 +1611,10 @@ class SystemCondensationDAG(ProtocolModel):
 ```
 
 Master Phase 0 computes SCCs over the induced affected graph `H_delta[B]`. The set `B`
-alone and an independently filtered import graph are invalid SCC inputs. The implementation
-uses iterative Tarjan traversal with lexically sorted vertices and adjacency.
-An explicit frame stack avoids dependence on Python's recursion limit.
+alone and an independently filtered import graph are invalid SCC inputs. The locked QL
+graph query computes mutual reachability over the validated `H_delta[B]` rows.
+VIPER verifies the returned equivalence classes with an iterative Tarjan oracle
+in the tests.
 
 `component_id` hashes the canonical JSON array of sorted member IDs. A component
 is cyclic when it contains more than one member or its sole member has a
@@ -1620,13 +1857,24 @@ from viper.system_graph import (
     ConstraintOutcome,
     ContractChange,
     ContractDelta,
+    CodeQLAnalysisReceipt,
+    CodeQLDatabaseReceipt,
+    CodeQLDependencySiteRow,
+    CodeQLEdgeRow,
+    CodeQLNodeRow,
+    CodeQLPackIdentity,
+    CodeQLQueryReceipt,
+    CodeQLSignatureRow,
+    CodeQLSourceFact,
+    CodeQLSourceFacts,
+    CodeQLSourceLocation,
+    CodeQLToolchainIdentity,
     ContextCommand,
     ContextFile,
     ContextPackage,
     ContextVariable,
     DeltaOperationKind,
     DependencySiteOutcome,
-    DependencySiteReceipt,
     DiagnosticSeverity,
     DocumentAnchorRef,
     DocumentAnchorNode,
@@ -2210,7 +2458,7 @@ with TemporaryDirectory() as temporary_directory:
                 path=file.path,
                 file_sha256=file.sha256,
                 analyzer=(
-                    "python-ast"
+                    "codeql-viper-ql-pack"
                     if file.path.endswith(".py")
                     else "markdown-contract"
                 ),
@@ -2258,12 +2506,29 @@ with TemporaryDirectory() as temporary_directory:
         commands=(command,),
     )
     context_sha256 = digest(context)
+    python_extractor = CodeQLPackIdentity(
+        name="codeql/python-all",
+        version="2.26.4",
+        sha256=hashlib.sha256(b"python-extractor-fixture").hexdigest(),
+    )
+    query_pack = CodeQLPackIdentity(
+        name="viper/system-graph",
+        version="0.1.0",
+        sha256=hashlib.sha256(b"viper-query-pack-fixture").hexdigest(),
+    )
+    codeql_toolchain = CodeQLToolchainIdentity(
+        bundle_sha256=hashlib.sha256(b"codeql-2.26.4-macos-arm64").hexdigest(),
+        python_extractor=python_extractor,
+        query_pack=query_pack,
+        lockfile_sha256=hashlib.sha256(b"codeql-pack-lock").hexdigest(),
+    )
     compiler = SystemCompilerIdentity(
         symbol="viper.system_graph.compile_system",
         package_version="0.1.0a2",
         implementation_sha256=hashlib.sha256(
             b"system-compiler-fixture"
         ).hexdigest(),
+        codeql=codeql_toolchain,
     )
     compiler_sha256 = digest(compiler)
 
@@ -2320,11 +2585,45 @@ with TemporaryDirectory() as temporary_directory:
         repository="https://example.invalid/viper-system-graph-fixture",
         commit=candidate_commit,
     )
+    baseline_database = CodeQLDatabaseReceipt(
+        database_id=digest("codeql-database:baseline"),
+        source=baseline_source,
+        toolchain_sha256=digest(codeql_toolchain),
+        create_argv=("codeql", "database", "create"),
+        create_log_sha256=digest("codeql-create:baseline"),
+    )
+    candidate_database = CodeQLDatabaseReceipt(
+        database_id=digest("codeql-database:candidate"),
+        source=candidate_source,
+        toolchain_sha256=digest(codeql_toolchain),
+        create_argv=("codeql", "database", "create"),
+        create_log_sha256=digest("codeql-create:candidate"),
+    )
+    source_query = CodeQLQueryReceipt(
+        query_id="viper/python/source-facts",
+        query_pack_sha256=query_pack.sha256,
+        query_sha256=digest("query:source-facts"),
+        result_schema_sha256=digest("schema:source-facts:v1"),
+        bqrs_sha256=digest("bqrs:source-facts"),
+        decoded_sha256=digest("decoded:source-facts"),
+        row_count=4,
+    )
+    baseline_analysis = CodeQLAnalysisReceipt(
+        database=baseline_database,
+        queries=(source_query,),
+        facts_sha256=digest("facts:baseline"),
+    )
+    candidate_analysis = CodeQLAnalysisReceipt(
+        database=candidate_database,
+        queries=(source_query,),
+        facts_sha256=digest("facts:candidate"),
+    )
     baseline_graph = SystemGraph(
         source=baseline_source,
         compiler=compiler,
         context_sha256=context_sha256,
         contract_traceability_sha256=traceability_sha256,
+        source_analysis=baseline_analysis,
         inventory=baseline_inventory,
         analyses=analyses_for(baseline_inventory, baseline_nodes),
         nodes=baseline_nodes,
@@ -2337,6 +2636,7 @@ with TemporaryDirectory() as temporary_directory:
         compiler=compiler,
         context_sha256=context_sha256,
         contract_traceability_sha256=traceability_sha256,
+        source_analysis=candidate_analysis,
         inventory=candidate_inventory,
         analyses=analyses_for(candidate_inventory, candidate_nodes),
         nodes=candidate_nodes,
@@ -2349,6 +2649,7 @@ with TemporaryDirectory() as temporary_directory:
         compiler=compiler,
         context_sha256=context_sha256,
         contract_traceability_sha256=traceability_sha256,
+        source_analysis=candidate_analysis,
         inventory=candidate_inventory,
         analyses=analyses_for(candidate_inventory, candidate_nodes),
         nodes=candidate_nodes,
@@ -2501,6 +2802,12 @@ with TemporaryDirectory() as temporary_directory:
         path="src/viper/references.py",
         symbol="LocalFileRef.store",
         symbol_kind="field",
+    )
+    constructor_anchor = PythonSymbolAnchor(
+        node_id=store_constructor.node_id,
+        path="src/viper/storage.py",
+        symbol="LocalArtifactStore.__init__",
+        symbol_kind="method",
     )
     requirement_anchor = DocumentAnchorRef(
         node_id=requirement_node.node_id,
@@ -2708,18 +3015,62 @@ with TemporaryDirectory() as temporary_directory:
     dependency_outcome: DependencySiteOutcome = "emitted"
     diagnostic_severity: DiagnosticSeverity = "info"
     delta_operation_kind: DeltaOperationKind = "update_node"
-    site_receipt = DependencySiteReceipt(
-        site_id=digest("site:LocalArtifactStore.__init__:reads_symbol"),
+    site_receipt = CodeQLDependencySiteRow(
+        row_id=digest("site:LocalArtifactStore.__init__:reads_symbol"),
+        query_id="viper/python/dependency-sites",
+        site_kind="Attribute",
+        location=CodeQLSourceLocation(
+            path="src/viper/storage.py",
+            start_line=4,
+            start_column=21,
+            end_line=4,
+            end_column=39,
+            expression="LocalFileRef.store",
+        ),
+        outcome=dependency_outcome,
+        emitted_edge_rows=(digest("codeql-row:field-read"),),
+        detail="Resolved LocalFileRef.store through the imported class.",
+    )
+    codeql_location = CodeQLSourceLocation(
         path="src/viper/storage.py",
-        ast_kind="Attribute",
         start_line=4,
-        start_column=21,
+        start_column=4,
         end_line=4,
         end_column=39,
-        outcome=dependency_outcome,
-        emitted_edges=(field_read.edge_id,),
-        rule_id="python.attribute.load",
-        detail="Resolved LocalFileRef.store through the imported class.",
+        expression="self.store = LocalFileRef.store",
+    )
+    codeql_node_row = CodeQLNodeRow(
+        row_id=digest("codeql-row:node:store-constructor"),
+        query_id="viper/python/nodes",
+        anchor=constructor_anchor,
+        roles=("runtime_operation",),
+        location=codeql_location,
+    )
+    codeql_edge_row = CodeQLEdgeRow(
+        row_id=digest("codeql-row:field-read"),
+        query_id="viper/python/edges",
+        source=constructor_anchor,
+        relation="reads_symbol",
+        target=field_anchor,
+        location=codeql_location,
+    )
+    codeql_signature_row = CodeQLSignatureRow(
+        row_id=digest("codeql-row:signature:store-constructor"),
+        query_id="viper/python/signatures",
+        signature=constructor_signature,
+        location=codeql_location,
+    )
+    codeql_fact: CodeQLSourceFact = codeql_node_row
+    baseline_source_facts = CodeQLSourceFacts(
+        source=baseline_source,
+        compiler_sha256=compiler_sha256,
+        analysis=baseline_analysis,
+        facts=(
+            codeql_fact,
+            codeql_edge_row,
+            codeql_signature_row,
+            site_receipt,
+        ),
     )
     diagnostic = SystemDiagnostic(
         diagnostic_id=digest("SGG001:example"),
@@ -2795,21 +3146,29 @@ argv = ["-m", "viper._workers.inspect_registry"]
 
 ### Static pass
 
-The compiler asks Git for the complete tracked file tree at the source commit.
-It hashes each file and emits one `repository_file` node before semantic
-analysis begins.
+The compiler asks Git for the complete tracked file tree at the source commit,
+hashes each file, and emits one `repository_file` node. It checks out that same
+commit in an isolated workspace and invokes
+`viper._system_graph.codeql.analyze_source_with_codeql()`.
 
-It then selects an analyzer from the path and content:
+The static pass follows this sequence:
 
 ```text
 Git tree
 -> RepositoryFile for every tracked file
 -> repository_file node for every RepositoryFile
 
-Python analyzer
--> AST declarations with four source coordinates
--> compiler symbol tables for lexical binding
--> one DependencySiteReceipt per registered dependency site
+CodeQL database create
+-> relational Python representation for the selected commit
+-> CodeQLDatabaseReceipt
+
+locked VIPER QL pack
+-> node, edge, signature, and dependency-site result sets
+-> one CodeQLQueryReceipt per declared query
+
+BQRS decoder + VIPER row validators
+-> CodeQLSourceFacts
+-> one CodeQLDependencySiteRow per registered dependency site
 -> typed imports, calls, construction, inheritance, type, decorator, registry,
    export, and symbol-access dependencies
 
@@ -2827,7 +3186,7 @@ Markdown contract analyzer
 pytest analyzer
 -> test and fixture spans
 
-Contract-delta compiler
+Contract-change compiler
 -> closed delta-operation set with checked baseline preconditions
 -> S_delta and D_delta_plus
 -> H_delta and reverse closure B
@@ -2847,9 +3206,11 @@ typed operation and CLI registries
 -> API-operation and CLI-command edges
 ```
 
-The first implementation supports direct names, attributes, literal
-collections, and repository-owned helper calls evaluated solely from declared
-repository inputs.
+The locked query pack declares its supported dependency-site registry and emits
+one terminal row for every registered site. The Master Phase 0 registry covers
+direct names, attributes, literal collections, and repository-owned helper
+calls whose targets CodeQL resolves from the selected source and compatible
+model packs.
 
 A planned implementation marker produces a checklist-task anchor and a
 `RuleEdge` declaration. The compiler resolves the target when its state is
@@ -2859,13 +3220,13 @@ must match its PairBlock target. Lowering emits `target -> rule` with kind
 planned ownership while preserving its declared state outside the dependency
 edge.
 
-Every analyzer emits a `FileAnalysisReceipt`. Strict validation requires one
-receipt whose digest matches each inventory file, one inventoried file for each
+VIPER emits one `FileAnalysisReceipt` for every tracked file after lowering the
+CodeQL rows and the document analyzers. Strict validation requires one receipt
+whose digest matches each inventory file, one inventoried file for each
 source-backed node, and every emitted edge to appear in its owning receipt.
-This gives VIPER exact inventory coverage over the finite source tree.
-`DependencySiteReceipt` supplies the separate extraction-coverage claim. The
-strict unresolved boundary below handles supported constructs whose target
-remains unresolved after static analysis.
+`CodeQLDependencySiteRow` supplies the separate query-coverage claim. The
+strict unresolved boundary below handles constructs whose targets remain
+unresolved after CodeQL extraction, query evaluation, and registered models.
 
 ### Observed pass
 
@@ -2893,27 +3254,33 @@ attempt and lets the graph enforce one outcome per attempt.
 
 ### Unresolved boundary
 
-When discovery reaches an input absent from the context manifest or a construct
-outside the declared resolver, it emits `UnresolvedDependency`. Examples
-include an undeclared environment variable, a network response omitted from
-the fixtures, or an executable omitted from the declared command identities.
+When CodeQL or observed discovery reaches a construct outside the registered
+models, VIPER emits `UnresolvedDependency`. Examples include a computed import,
+an undeclared environment variable, a network response omitted from the
+fixtures, or an executable omitted from the declared command identities.
 
 ```text
 strict=True
--> reject before graph publication
+-> reject any unresolved or unsupported Python dependency site
+-> reject before impact closure and graph publication
 
 strict=False
 -> publish graph with unresolved nodes
 -> ImpactReport.complete = False
 ```
 
-The specification-system review gate requires strict mode.
+Master Phase 0 and every checklist gate require strict mode. Later phases may
+replace global rejection with conservative unknown-target edges only after the
+soundness proof and diagnostics contract cover that representation.
 
 ## 6. Persisted evidence
 
 One review stores these files:
 
 ```text
+.viper/system/<compiler-sha256>/<context-sha256>/<source-commit>/codeql/database.json
+.viper/system/<compiler-sha256>/<context-sha256>/<source-commit>/codeql/queries.json
+.viper/system/<compiler-sha256>/<context-sha256>/<source-commit>/codeql/source-facts.json
 .viper/system/<compiler-sha256>/<context-sha256>/<source-commit>/graph.json
 .viper/system/<compiler-sha256>/<context-sha256>/<source-commit>/dag.json
 .viper/system/<compiler-sha256>/<context-sha256>/<baseline>/changes/<change-id>/change.json
@@ -2930,9 +3297,11 @@ Each file publishes through `publish_resolved_files()` and receives one
 `ResolvedFileRef`. The path is a discovery aid. The reference and content
 digest provide identity.
 
-The context manifest and compiler identity are published once. Both graphs
-store their digests. The delta verifier loads both graphs and requires equal
-context and compiler digests.
+The context manifest and compiler identity are published once. Each graph
+stores the `CodeQLAnalysisReceipt` for its own source revision. The delta
+verifier loads both graphs and requires equal context and compiler digests,
+equal query identities and schemas, and source commits that match the
+corresponding `CodeQLDatabaseReceipt` values.
 
 ## 7. Verification
 
@@ -2942,18 +3311,23 @@ The implementation adds these checks:
 | --- | --- |
 | `system.node.vocabulary` <!-- verifier-rule: system.node.vocabulary requirement=SIG-01 --> | Recompute every node ID and require its kind, fields, and finite roles to satisfy the compatibility table. |
 | `system.edge.vocabulary` <!-- verifier-rule: system.edge.vocabulary requirement=SIG-01 --> | Require every graph edge to use one canonical dependency kind and dependent-to-dependency direction. |
-| `system.inventory.complete` <!-- verifier-rule: system.inventory.complete requirement=SIG-01 --> | Require one file node and one analysis receipt for every tracked file in the source commit. |
+| `system.inventory.complete` <!-- verifier-rule: system.inventory.complete requirement=SIG-01 --> | Require one file node and one terminal source-fact outcome for every tracked file in the source commit. |
 | `system.analysis.anchored` <!-- verifier-rule: system.analysis.anchored requirement=SIG-01 --> | Require every source-backed node and source-evidenced edge to cite one inventoried file and exact span. |
-| `system.analysis.total` <!-- verifier-rule: system.analysis.total requirement=SIG-01 --> | Require exactly one receipt for every registered dependency-bearing AST site. |
+| `system.analysis.total` <!-- verifier-rule: system.analysis.total requirement=SIG-01 --> | Require exactly one `CodeQLDependencySiteRow` for every dependency-bearing Python site in the declared query scope and require every emitted edge reference to resolve. |
 | `system.signature.canonical` <!-- verifier-rule: system.signature.canonical requirement=SIG-01 --> | Require each function and method to carry one normalized structural signature fact independent of body coordinates and digest. |
 | `system.edge.evidence` <!-- verifier-rule: system.edge.evidence requirement=SIG-01 --> | Recompute every edge ID from its endpoints, relation, origin, and evidence. |
+| `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Require CodeQL CLI `2.26.4`, the recorded platform-bundle digest, compatible Python extractor identity, locked VIPER QL-pack identity, and lockfile digest to match `SystemCompilerIdentity`. |
+| `system.codeql.database` <!-- verifier-rule: system.codeql.database requirement=SIG-05 --> | Require a successful `CodeQLDatabaseReceipt` whose source commit and toolchain digest match the graph being compiled. |
+| `system.codeql.queries` <!-- verifier-rule: system.codeql.queries requirement=SIG-05 --> | Require exactly one successful receipt for every locked query; recompute query, result-schema, BQRS, and decoded-row digests and row counts. |
+| `system.codeql.facts` <!-- verifier-rule: system.codeql.facts requirement=SIG-05 --> | Recompute every source-fact row ID, require every endpoint and emitted-edge reference to resolve, and reject duplicate or undeclared query rows. |
+| `system.codeql.parity` <!-- verifier-rule: system.codeql.parity requirement=SIG-05 --> | Require `G0` and `G1` to use the same CodeQL identity and result schemas; in the Phase 0 fixture, require the CodeQL result to contain every edge found by the independent AST oracle. |
 | `system.context.identity` <!-- verifier-rule: system.context.identity requirement=SIG-02 --> | Recompute the canonical manifest digest. |
 | `system.compiler.identity` <!-- verifier-rule: system.compiler.identity requirement=SIG-02 --> | Rebuild `SystemCompilerIdentity`; require schema version 1, the `compile_system` symbol, package version, and implementation digest to match across `G0`, `T*`, `G1`, and the conformance report. |
 | `system.resolution.total` <!-- verifier-rule: system.resolution.total requirement=SIG-02 --> | Require each resolution attempt to produce exactly one observation or unresolved dependency. |
 | `system.graph.canonical` <!-- verifier-rule: system.graph.canonical requirement=SIG-02 --> | Recompile the source revision and require identical ordered inventory, analyses, nodes, edges, observations, and unresolved dependencies. |
 | `system.graph.references` <!-- verifier-rule: system.graph.references requirement=SIG-02 --> | Require every edge and observation endpoint to exist. |
 | `system.diagnostics.complete` <!-- verifier-rule: system.diagnostics.complete requirement=SIG-02 --> | Require each rejected or degraded analysis outcome to emit one stable diagnostic code with an exact location and remediation. |
-| `system.graph.strict` <!-- verifier-rule: system.graph.strict requirement=SIG-02 --> | Reject unsupported or unresolved dependency sites in the affected surface. |
+| `system.graph.strict` <!-- verifier-rule: system.graph.strict requirement=SIG-02 --> | Before computing `B`, reject every unsupported or unresolved dependency site in the complete supported Python analysis scope. |
 | `system.contract.delta` <!-- verifier-rule: system.contract.delta requirement=SIG-03 --> | Parse the structured contract delta, validate every operation and precondition, and reject ambiguous or conflicting operations. |
 | `system.impact.overlay` <!-- verifier-rule: system.impact.overlay requirement=SIG-03 --> | Recompute `H_delta` as all baseline dependencies plus every dependency introduced by the contract delta, retaining removed baseline dependencies. |
 | `system.dag.components` <!-- verifier-rule: system.dag.components requirement=SIG-03 --> | Recompute SCCs over `H_delta[B]`, component IDs, cyclic flags, and crossing-edge witnesses. |
@@ -2985,24 +3359,27 @@ before the phase closes.
 
 | Surface | Required statement |
 | --- | --- |
-| `src/viper/system_graph.py` | Add repository inventory, analysis receipts, source-backed graph models, edge evidence, resolution attempts, canonical serialization, observed discovery, SCC condensation, graph comparison, impact closure, propagation planning, and plan reconciliation. |
+| `src/viper/system_graph.py` | Add the public `SystemGraph`, CodeQL fact and receipt models, source-fact lowering, canonical serialization, graph comparison, impact closure, SCC condensation, propagation planning, and conformance models. |
+| `src/viper/_system_graph/codeql.py` | Add `analyze_source_with_codeql()`, database creation, BQRS decoding, locked-query execution, source-fact validation, reverse-closure queries, and mutual-reachability queries. |
+| `tools/codeql/viper-system-graph/` | Add the locked QL pack, dependency-site and source-fact queries, graph-reachability queries, result schemas, and pack lockfile. |
 | `src/viper/inspection.py` | Add `compile_system()`, `system_diff()`, and `system_impact()` inspection functions. |
 | `src/viper/api.py` | Add typed compile, diff, and impact request and success models for developer tooling. |
 | `src/viper/_api/handlers.py` | Route developer operations through the same compiler and serializers. |
 | `src/viper/cli.py` | Add `viper system compile`, `viper system diff`, and `viper system impact` with deterministic JSON output. |
 | `src/viper/storage.py` | Publish manifests, graphs, DAGs, deltas, and reports through the independent-file publisher. |
-| `tests/test_validation_architecture.py` | Cover complete file inventory, per-file analysis receipts, source anchoring, edge evidence, observed registries, fixed context, one outcome per resolution attempt, unresolved targets, canonical ordering, SCC condensation, and strict failure. |
+| `tests/test_system_graph_codeql.py` | Cover the pinned toolchain, database and query receipts, BQRS decoding, source-fact schemas, total dependency-site outcomes, global unresolved-site rejection, source-fact lowering, closure, SCC results, and AST-oracle parity. |
+| `tests/test_validation_architecture.py` | Retain the current AST checks as an independent fixture oracle and cover the closed public vocabulary, fixed context, source anchoring, canonical ordering, and strict failure. |
 | `tests/test_inspection.py` | Cover graph delta, reverse closure, stable impact ordering, one disposition per affected node, and planned-addition reconciliation. |
 | `tests/test_documentation.py` | Supply `ContractTraceabilityGraph`; compare its system-graph paths with the focused documentation oracle during migration. |
 | `docs/development/master-execution-checklist.md` | Produce the compiler in Master Phase 0 and require its strict impact report before every later master phase. |
 | `docs/development/testing.md` | Define the fixed review context and the strict system-impact gate. |
-| `pyproject.toml` | Register the new tests and any optional graph implementation dependency; the base implementation uses the standard library. |
+| `pyproject.toml` | Register the new tests plus `coverage` and `pytest-cov`. Install CodeQL as the pinned external toolchain, outside the Python dependency set. |
 
 ### Legacy cleanup
 
 | Current occurrence | Disposition |
 | --- | --- |
-| Independent import-privacy AST scan | Retain as a focused assertion until graph parity passes, then implement it as a query over `SystemGraph`. |
+| Independent import-privacy AST scan | Retain solely as a focused test oracle. CodeQL serves as the production source-analysis backend. |
 | Independent contract requirement and checklist parser | Retain as an oracle until graph parity passes, then query `implements_rule` and `verifies_rule` edges. |
 | `plan_diff()` | Retain; it compares user experiment plans and belongs to the later experiment-graph contract. |
 | `lineage()` | Retain; it compiles verified user-run provenance, while `SystemGraph` compiles VIPER source dependencies. |
@@ -3210,7 +3587,7 @@ rejects `model_support`.
 12. Require one strict impact report and reconciled propagation plan before
     each later checklist phase closes.
 
-**Commit boundary:** `Compile deterministic system impact graphs`
+**Commit boundary:** `Compile source-evidenced changes with CodeQL`
 
 ## 11. Design basis
 
@@ -3249,15 +3626,24 @@ What depends on this node?
 Why does VIPER believe that dependency exists?
 ```
 
-### 11.3 Static extraction and observed resolution
+### 11.3 CodeQL source analysis and observed resolution
 
-Python's [`ast` documentation](https://docs.python.org/3/library/ast.html)
-defines the concrete syntax-node classes and their one-based line and UTF-8
-column coordinates. Python's
-[`symtable` documentation](https://docs.python.org/3/library/symtable.html)
-explains that the compiler builds symbol tables from the AST to determine the
-scope of each identifier. Master Phase 0 uses both interfaces: AST nodes locate
-evidence; symbol tables resolve lexical ownership.
+[CodeQL database creation](https://codeql.github.com/docs/codeql-overview/about-codeql/)
+extracts source into a relational database that custom QL queries can inspect.
+Avgustinov, de Moor, Peyton Jones, and Schäfer formalize QL as an
+object-oriented query language over relational data in
+[ECOOP 2016](https://doi.org/10.4230/LIPIcs.ECOOP.2016.2). The
+[CodeQL Python libraries](https://codeql.github.com/docs/codeql-language-guides/codeql-for-python/)
+expose Python syntax, scopes, types, control flow, and data flow. Master Phase 0
+uses a locked VIPER QL pack to select only the rows required by
+`CodeQLSourceFacts`.
+
+Each query runs against a database bound to one source commit. CodeQL writes
+the query result as BQRS; `analyze_source_with_codeql()` decodes it, validates
+the declared result schema, computes row IDs, and records the database, query,
+BQRS, and decoded-row digests in `CodeQLAnalysisReceipt`. These receipts turn
+"CodeQL found this edge" into a reproducible claim about one toolchain, query,
+source revision, and result set.
 
 [Ernst's account of static and dynamic analysis](https://homes.cs.washington.edu/~mernst/pubs/staticdynamic-woda2003-abstract.html)
 describes them as complementary views over possible executions.
@@ -3268,8 +3654,10 @@ VIPER fixes the external context and separates the two results:
 
 ```text
 tracked file
--> static analyzer
--> source-backed nodes and edges
+-> CodeQL database
+-> locked VIPER QL queries
+-> CodeQLSourceFacts
+-> source-backed SystemNode and SystemEdge records
 
 source-backed lookup + fixed context
 -> ResolutionAttempt
@@ -3288,6 +3676,15 @@ The full graph may contain import, call, registration, or contract cycles.
 partitions a directed graph into maximal cyclic components in linear time.
 Collapsing each component produces the condensation DAG.
 
+[QL recursion](https://codeql.github.com/docs/ql-language-reference/recursion/)
+computes least fixed points and supports reflexive and transitive closure.
+VIPER supplies the validated rows of $H_\Delta[B]$ as external predicates. The
+locked graph queries return reverse reachability and mutual-reachability rows;
+mutual reachability defines the SCC equivalence classes. VIPER validates those
+rows, assigns component IDs from sorted members, preserves typed crossing-edge
+witnesses, and serializes the condensation DAG. An independent Python Tarjan
+implementation in the tests rejects an incomplete or merged CodeQL component.
+
 Python's [`graphlib` documentation](https://docs.python.org/3/library/graphlib.html)
 states that a complete topological order exists exactly for an acyclic directed
 graph and notes that ready-node ordering depends on insertion order.
@@ -3297,11 +3694,14 @@ serializes its own lexically tied order.
 ```text
 Git tree
 -> RepositoryFile inventory
--> file and span nodes
--> static edges with source evidence
+-> CodeQL database and locked QL queries
+-> CodeQLSourceFacts with receipts
+-> file and symbol nodes
+-> typed edges with source evidence
 -> observed edges with resolution evidence
 -> complete SystemGraph
--> strongly connected components
+-> CodeQL reverse closure and mutual reachability over H_delta[B]
+-> validated strongly connected components
 -> SystemCondensationDAG
 -> graph delta
 -> reverse impact closure
@@ -3316,14 +3716,14 @@ VIPER reports three separate coverage claims:
 
 | Coverage | Mechanical evidence | Limitation |
 | --- | --- | --- |
-| File coverage | Every tracked Git-tree file has a file node and analysis receipt. | Untracked files are outside the selected source revision. |
-| Extractor coverage | Every supported construct emits a node, edge, or unresolved dependency. | A construct absent from the analyzer contract remains unsupported. |
+| File coverage | Every tracked Git-tree file has a file node and terminal source-fact outcome. | Untracked files are outside the selected source revision. |
+| CodeQL query coverage | Every dependency-bearing construct in the declared query scope emits a `CodeQLDependencySiteRow` and zero or more referenced edges. | A construct absent from the declared query scope remains unsupported and therefore rejects strict Phase 0. |
 | Resolution coverage | Every attempted dynamic lookup has exactly one observed or unresolved outcome. | The result is conditional on the fixed context manifest. |
 | Blast statement coverage | Selected tests execute every coverage.py statement inside every affected executable symbol. | Assertion sufficiency remains a separate obligation. |
 | Blast branch coverage | Selected tests execute every coverage.py branch arc sourced inside every affected executable symbol. | Semantic correctness and graph completeness remain separate obligations. |
 
-Strict review requires complete file coverage, complete supported-extractor
-coverage, zero unresolved dependencies in the affected surface, and complete
+Strict review requires complete file coverage, complete CodeQL query coverage,
+zero unresolved dependencies in the supported Python scope before `B`, and complete
 statement and branch execution over `B_exec`.
 
 [Coverage.py's branch documentation](https://coverage.readthedocs.io/en/latest/branch.html)
@@ -3431,14 +3831,19 @@ result identifies its definitions, assumptions, and conclusion.
 
 ### 12.1 Compile the baseline repository
 
-Let $R_0$ be the repository before the proposed change. The repository compiler
-runs under one frozen context $X$. Its other inputs are a
-`ContractTraceabilityGraph` and the parsed bootstrap `PairBlock` records from
-the same repository revision:
+Let $R_0$ be the repository before the proposed change. Source analysis runs
+under one frozen `SystemCompilerIdentity` $K$ and produces
+`CodeQLSourceFacts` $F_0$. Graph lowering runs under one frozen context $X$ and
+also accepts the `ContractTraceabilityGraph` and bootstrap `PairBlock` records
+compiled from the same repository revision:
+
+```math
+F_0=\operatorname{AnalyzeCodeQL}_K(R_0).
+```
 
 ```math
 \mathcal C_{X,K}:
-\mathcal R\times\mathcal{CT}\times\mathcal{PB}
+\mathcal F\times\mathcal{CT}\times\mathcal{PB}
 \rightarrow\mathcal G.
 ```
 
@@ -3446,7 +3851,7 @@ Write $Q_0=\operatorname{CompileTraceability}(R_0)$ and
 $W_0=\operatorname{CompilePairBlocks}(R_0)$. The compiler produces:
 
 ```math
-G_0=\mathcal C_{X,K}(R_0,Q_0,W_0).
+G_0=\mathcal C_{X,K}(F_0,Q_0,W_0).
 ```
 
 The reachability proof uses these concrete data types:
@@ -3504,7 +3909,7 @@ D_0 = {
 Every typed dependency edge contributes. The type remains in $E_0$ so exact
 verification can distinguish removal of an import from removal of a call.
 
-#### 2.1 Place CRT and delta compilation in the proof pipeline
+#### 12.1.1 Place CRT and delta compilation in the proof pipeline
 
 Let $Q_0$ be the `ContractTraceabilityGraph` compiled from the baseline
 repository:
@@ -3516,9 +3921,9 @@ Q_0=\operatorname{CompileTraceability}(R_0).
 Let $W_0=\operatorname{CompilePairBlocks}(R_0)$. The repository compiler
 lowers the requirements, verifier rules, owners, and tests in $Q_0$ into
 source-evidenced vertices and typed dependencies while it lowers the source
-inventory, Python analysis, context observations, and scheduling relationships
-from $W_0$. The result is the single graph
-$G_0=\mathcal C_{X,K}(R_0,Q_0,W_0)$.
+inventory, CodeQL source facts, context observations, and scheduling
+relationships from $W_0$. The result is the single graph
+$G_0=\mathcal C_{X,K}(F_0,Q_0,W_0)$.
 
 Let $c_\Delta$ be an instance of the planned `ContractChange` class. The
 change compiler runs after $G_0$ exists:
@@ -3534,7 +3939,8 @@ The two stages are:
 ```text
 R0 -> compile_contract_traceability() -> Q0: ContractTraceabilityGraph
 R0 -> compile_pair_blocks() -> W0: tuple[PairBlock, ...]
-(R0, K, X, Q0, W0) -> compile_system() -> G0: SystemGraph
+R0 + K -> analyze_source_with_codeql() -> F0: CodeQLSourceFacts
+(F0, K, X, Q0, W0) -> compile_system() -> G0: SystemGraph
 
 (c_Delta: ContractChange, G0) -> compile_contract_change() -> Delta: ContractDelta
 ```
@@ -3929,12 +4335,17 @@ conditions hold:
 
 1. $G_0$ has a canonical representation.
 2. Compiler context $X$ is frozen.
-3. Every node and edge anchor resolves uniquely.
-4. $\Delta$ has explicit operations, preconditions, application order, and
+3. `SystemCompilerIdentity` fixes CodeQL CLI `2.26.4`, the platform-bundle
+   digest, compatible Python extractor, VIPER QL pack, lockfile, result
+   schemas, and VIPER lowering digest.
+4. BQRS decoding, row-ID construction, and row ordering are deterministic, and
+   strict compilation rejects every unresolved site before impact analysis.
+5. Every node and edge anchor resolves uniquely.
+6. $\Delta$ has explicit operations, preconditions, application order, and
    conflict handling.
-5. $P$ is total and single-valued over $B$.
-6. `CompileTarget` uses a fixed translation and canonical ordering.
-7. Every unordered operation pair either commutes or has a deterministic
+7. $P$ is total and single-valued over $B$.
+8. `CompileTarget` uses a fixed translation and canonical ordering.
+9. Every unordered operation pair either commutes or has a deterministic
    conflict rule.
 
 These conditions establish deterministic constraint derivation:
@@ -4024,7 +4435,9 @@ Q_1=\operatorname{CompileTraceability}(R_1),
 \qquad
 W_1=\operatorname{CompilePairBlocks}(R_1),
 \qquad
-G_1=\mathcal C_{X,K}(R_1,Q_1,W_1).
+F_1=\operatorname{AnalyzeCodeQL}_K(R_1),
+\qquad
+G_1=\mathcal C_{X,K}(F_1,Q_1,W_1).
 ```
 
 The compiler inspects $R_1$ directly. Independent reconstruction keeps the
@@ -4108,9 +4521,9 @@ T^*=\operatorname{CompileTarget}(G_0,\Delta,P).
 By implementation and independent reconstruction:
 
 ```math
-R_1\longrightarrow(Q_1,W_1),
+R_1\longrightarrow(F_1,Q_1,W_1),
 \qquad
-G_1=\mathcal C_{X,K}(R_1,Q_1,W_1).
+G_1=\mathcal C_{X,K}(F_1,Q_1,W_1).
 ```
 
 Acceptance requires:
@@ -4124,8 +4537,10 @@ VIPER synthesis is:
 
 ```math
 \begin{aligned}
-R_0&\longrightarrow(Q_0,W_0)
-\xrightarrow{\mathcal C_{X,K}}G_0, \\
+R_0&\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_0,
+\quad Q_0=\operatorname{CompileTraceability}(R_0),
+\quad W_0=\operatorname{CompilePairBlocks}(R_0), \\
+(F_0,Q_0,W_0)&\xrightarrow{\mathcal C_{X,K}}G_0, \\
 (G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
 (\Delta,B)&\longrightarrow P, \\
 (G_0,\Delta,P)&\longrightarrow T^*, \\
@@ -4133,8 +4548,10 @@ H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi, \\
 (T^*,\Pi)&\longrightarrow\{U_i\}\longrightarrow U^*, \\
 U^*&\longrightarrow G^*\ \text{ when selection is frozen}, \\
 (T^*,\Pi,U^*)&\longrightarrow\text{PairBlocks}\longrightarrow R_1, \\
-R_1&\longrightarrow(Q_1,W_1)
-\xrightarrow{\mathcal C_{X,K}}G_1, \\
+R_1&\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_1,
+\quad Q_1=\operatorname{CompileTraceability}(R_1),
+\quad W_1=\operatorname{CompilePairBlocks}(R_1), \\
+(F_1,Q_1,W_1)&\xrightarrow{\mathcal C_{X,K}}G_1, \\
 G_1&\models T^*.
 \end{aligned}
 ```
@@ -4281,10 +4698,11 @@ assert dependency belongs in a separate evidence relation rather than being
 inserted into $E$ and filtered during reachability.
 
 Let $X$ be one fixed `SystemContextManifest` and $K$ one fixed
-`SystemCompilerIdentity`. Let $\mathcal C_{X,K}$ be `compile_system()` under
-those identities. Its explicit inputs are a repository revision, a
-`ContractTraceabilityGraph`, and the `PairBlock` records parsed from that same
-revision.
+`SystemCompilerIdentity`. Let $\operatorname{AnalyzeCodeQL}_K$ be
+`analyze_source_with_codeql()` under the CodeQL identity stored in $K$, and let
+$\mathcal C_{X,K}$ be `compile_system()` under those identities. Its explicit
+inputs are `CodeQLSourceFacts`, a `ContractTraceabilityGraph`, and the
+`PairBlock` records parsed from the same repository revision.
 
 **Definition A.3 (baseline and observed graphs).** When strict compilation
 succeeds,
@@ -4294,7 +4712,9 @@ Q_i=\operatorname{CompileTraceability}(R_i),
 \qquad
 W_i=\operatorname{CompilePairBlocks}(R_i),
 \qquad
-G_i=\mathcal C_{X,K}(R_i,Q_i,W_i)
+F_i=\operatorname{AnalyzeCodeQL}_K(R_i),
+\qquad
+G_i=\mathcal C_{X,K}(F_i,Q_i,W_i)
 \quad\text{for }i\in\{0,1\}.
 ```
 
@@ -4313,10 +4733,10 @@ Q_0=\operatorname{CompileTraceability}(R_0).
 ```
 
 $\mathcal C_{X,K}$ lowers $Q_0$ into the requirement, rule, owner, and test vertices and
-dependency edges represented in $G_0$. It also lowers source-analysis facts,
+dependency edges represented in $G_0$. It also lowers $F_0$,
 context observations, and the scheduling relationships in $W_0$. These inputs
-jointly produce $G_0=\mathcal C_{X,K}(R_0,Q_0,W_0)$; $Q_0$ is not compiled as a stand-alone
-`SystemGraph`.
+jointly produce $G_0=\mathcal C_{X,K}(F_0,Q_0,W_0)$. $Q_0$ remains one input
+to that graph compilation.
 
 Let $c_\Delta$ be a `ContractChange`. Change compilation is the later
 operation:
@@ -4845,7 +5265,9 @@ presence, absence, and baseline-preservation predicates over $\mathcal F$.
 Fixed inputs $(G_0,\Delta,P)$ determine one canonical $T^*$ when all of these
 conditions hold:
 
-1. $\mathcal C_{X,K}$ is deterministic and $G_0$ is canonical.
+1. $\operatorname{AnalyzeCodeQL}_K$ and $\mathcal C_{X,K}$ are deterministic;
+   $K$ fixes the CodeQL toolchain, query pack, result schemas, decoding, and
+   VIPER lowering; and $G_0$ is canonical.
 2. Every node and typed-edge anchor referenced by $\Delta$ or $P$ either
    resolves uniquely against $G_0$ or is declared fresh under a canonical
    identifier.
@@ -5001,8 +5423,9 @@ repair confluence or select the architecture.
 ### A.8 Implemented repository and observed graph
 
 Implementation applies the selected PairBlocks to $R_0$ and produces $R_1$.
-Strict recompilation derives $Q_1$ and $W_1$ from $R_1$, then uses the same
-context to produce $G_1=\mathcal C_{X,K}(R_1,Q_1,W_1)$.
+Strict recompilation derives $F_1$, $Q_1$, and $W_1$ from $R_1$, then uses the
+same compiler identity and context to produce
+$G_1=\mathcal C_{X,K}(F_1,Q_1,W_1)$.
 
 **Definition A.15 (target conformance).** The observed graph conforms to the
 authoritative target specification exactly when
@@ -5169,14 +5592,18 @@ is a local synthesis whose composition this appendix must prove:
 
 ```math
 \begin{aligned}
-R_0&\longrightarrow G_0, \\
+R_0&\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_0,
+\qquad
+(F_0,Q_0,W_0)\xrightarrow{\mathcal C_{X,K}}G_0, \\
 (G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
 (\Delta,B)&\longrightarrow P, \\
 (G_0,\Delta,P)&\longrightarrow T^*, \\
 H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi
 \longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
 (T^*,\Pi,\{U_i^*\})&\longrightarrow\mathcal Q
-\longrightarrow R_1\longrightarrow G_1, \\
+\longrightarrow R_1\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_1,
+\qquad
+(F_1,Q_1,W_1)\xrightarrow{\mathcal C_{X,K}}G_1, \\
 G_1&\models T^*.
 \end{aligned}
 ```
@@ -5198,7 +5625,8 @@ connectors remain planned code until their owning PairBlocks close:
 
 | Connector | Specified boundary | Implementation owner |
 | --- | --- | --- |
-| Baseline lowering | `compile_system(R, K, X, Q, W) -> SystemGraph` normalizes every `SystemEdge` in dependent-to-dependency direction. | `P0-SIG-01`–`P0-SIG-03` |
+| Source analysis | `analyze_source_with_codeql(R, K) -> CodeQLSourceFacts` runs the pinned CodeQL toolchain and validates every receipt and row. | `P0-SIG-02`–`P0-SIG-03` |
+| Baseline lowering | `compile_system(F, K, X, Q, W) -> SystemGraph` normalizes every `SystemEdge` in dependent-to-dependency direction. | `P0-SIG-01`–`P0-SIG-03` |
 | Change compilation | `compile_contract_change(ContractChange, SystemGraph) -> ContractDelta` resolves anchors and emits one canonical operation order. | `P0-SIG-04` |
 | Impact and planning | `ContractDelta -> (H_delta, S_delta, B)` followed by the total `PropagationPlan` check. | `P0-SIG-05`–`P0-SIG-08` |
 | Target and work compilation | `compile_target_constraints(G0, Delta, P) -> TargetSpecification` and `compile_work(T*, Pi, U*) -> PairBlocks`. | `P0-SIG-09` |
@@ -5229,6 +5657,11 @@ Models: Bridging the Gap between Design and Implementation.” *IEEE
 Transactions on Software Engineering* 27, issue 4 (2001): 364–380.
 [https://doi.org/10.1109/32.917525](https://doi.org/10.1109/32.917525).
 
+Avgustinov, Pavel, Oege de Moor, Simon Peyton Jones, and Max Schäfer. “QL:
+Object-oriented Queries on Relational Data.” In *30th European Conference on
+Object-Oriented Programming (ECOOP 2016)*, Article 2.
+[https://doi.org/10.4230/LIPIcs.ECOOP.2016.2](https://doi.org/10.4230/LIPIcs.ECOOP.2016.2).
+
 ---
 
 ## 14. Implementation plan and verification gates
@@ -5245,7 +5678,7 @@ own required fields.
 | Kind | Stable ID | Required evidence |
 | --- | --- | --- |
 | `repository_file` | `file:<path>` | Git path, byte count, complete-file SHA-256 |
-| `python_symbol` | `python:<path>:<qualified-name>` | declaration kind, four AST coordinates, exact-span SHA-256 |
+| `python_symbol` | `python:<path>:<qualified-name>` | declaration kind, four source coordinates, exact-span SHA-256 |
 | `document_anchor` | `anchor:<path>:<anchor-kind>:<stable-id>` | marker kind, stable ID, line range, exact-span SHA-256 |
 | `external_symbol` | `external:<external-kind>:<context-identity>` | external kind and identity present in `SystemContextManifest` |
 
@@ -5329,10 +5762,15 @@ Tests assert the stable code and structured fields.
 | `SGI001` | tracked file lacks an analysis receipt | reject |
 | `SGI002` | inventory or receipt digest mismatch | reject |
 | `SGI003` | behavior-bearing tracked file is opaque or excluded | reject |
-| `SGX001` | Python parse failure | reject |
-| `SGX002` | registered AST dependency site lacks a receipt | reject |
-| `SGX003` | unresolved import or name | reject when in `B` |
-| `SGX004` | dynamic call, star import, or computed registry target is unsupported | reject when in `B` |
+| `SGQ001` | CodeQL CLI, bundle, extractor, QL pack, or lockfile identity differs | reject |
+| `SGQ002` | database creation fails or its source revision differs | reject |
+| `SGQ003` | the executed query set, query digest, or result-schema digest differs | reject |
+| `SGQ004` | BQRS decoding fails or the decoded-byte digest differs from the receipt | reject |
+| `SGQ005` | row count, row ID, endpoint, or emitted-edge reference differs | reject |
+| `SGX001` | CodeQL extraction or Python parsing fails | reject |
+| `SGX002` | a dependency-bearing Python site lacks a `CodeQLDependencySiteRow` | reject |
+| `SGX003` | an import, name, or call target remains unresolved | reject globally before `B` |
+| `SGX004` | a dynamic call, star import, computed import, or registry target is unsupported | reject globally before `B` |
 | `SGC001` | malformed or duplicate contract declaration | reject |
 | `SGC002` | unknown requirement, rule, target, test, or PairBlock | reject |
 | `SGC003` | verifier rule lacks one owner or any observing test | reject |
@@ -5356,15 +5794,15 @@ Each turn implements one block, runs its focused gate, and stops for inspection.
 <!-- pair-block-definition: P0-SIG-01 -->
 ```toml pair-block
 id = "P0-SIG-01"
-requirements = ["SIG-01", "SIG-02"]
-targets = ["src/viper/system_graph.py:SystemNode", "src/viper/system_graph.py:SystemNodeAnchor", "src/viper/system_graph.py:PlannedNodeAnchor", "src/viper/system_graph.py:SystemEdge", "src/viper/system_graph.py:GraphFact", "src/viper/system_graph.py:TargetConstraint", "src/viper/system_graph.py:TargetSpecification", "src/viper/system_graph.py:ConstraintConformanceReceipt", "src/viper/system_graph.py:SystemDiagnostic"]
+requirements = ["SIG-01", "SIG-02", "SIG-05"]
+targets = ["src/viper/system_graph.py:SystemNode", "src/viper/system_graph.py:SystemNodeAnchor", "src/viper/system_graph.py:PlannedNodeAnchor", "src/viper/system_graph.py:SystemEdge", "src/viper/system_graph.py:CodeQLSourceFacts", "src/viper/system_graph.py:CodeQLAnalysisReceipt", "src/viper/system_graph.py:GraphFact", "src/viper/system_graph.py:TargetConstraint", "src/viper/system_graph.py:TargetSpecification", "src/viper/system_graph.py:ConstraintConformanceReceipt", "src/viper/system_graph.py:SystemDiagnostic"]
 tests = ["tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
 gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k 'system_graph_vocabulary_is_closed or system_target_language_is_closed' -q"
 depends_on = []
 ```
 
 Add the four node variants, finite roles, canonical dependency kinds, evidence
-variants, dependency-site receipts, diagnostics, stable anchors, four graph
+variants, CodeQL facts and receipts, dependency-site outcomes, diagnostics, stable anchors, four graph
 fact variants, three target operators, normalized Python signatures, target
 specification, conformance receipts, and canonical ID helpers. Write
 table-driven failures for every invalid kind-field, role-kind, fact-constraint,
@@ -5373,30 +5811,34 @@ and signature combination.
 <!-- pair-block-definition: P0-SIG-02 -->
 ```toml pair-block
 id = "P0-SIG-02"
-requirements = ["SIG-01"]
-targets = ["src/viper/system_graph.py:inventory_repository", "src/viper/system_graph.py:analyze_python"]
-tests = ["tests/test_validation_architecture.py:test_system_graph_inventory_and_sites_are_total"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k system_graph_inventory_and_sites_are_total -q"
+requirements = ["SIG-01", "SIG-05"]
+targets = ["src/viper/system_graph.py:inventory_repository", "src/viper/_system_graph/codeql.py:create_codeql_database"]
+tests = ["tests/test_system_graph_codeql.py:test_codeql_database_receipt_binds_source_and_toolchain"]
+gate = "conda run -n mantra python -m pytest tests/test_system_graph_codeql.py -k codeql_database_receipt_binds_source_and_toolchain -q"
 depends_on = ["P0-SIG-01"]
 ```
 
-Enumerate the selected Git tree, hash exact bytes, and emit one receipt per
-file. Move the existing AST parsing pattern from
-`tests/test_validation_architecture.py` behind `analyze_python()`. Combine AST
-coordinates with `symtable` scope information. Emit one
-`DependencySiteReceipt` for every registered site.
+Enumerate the selected Git tree and hash exact bytes. Install and verify CodeQL
+CLI `2.26.4` from the recorded platform bundle, create a database from the
+selected source commit, and emit `CodeQLDatabaseReceipt`. The receipt binds the
+source commit, CLI bundle, compatible Python extractor, database digest, and
+terminal status. The existing AST checker remains a test oracle.
 
 <!-- pair-block-definition: P0-SIG-03 -->
 ```toml pair-block
 id = "P0-SIG-03"
-requirements = ["SIG-01"]
-targets = ["src/viper/system_graph.py:extract_python_dependencies"]
-tests = ["tests/test_validation_architecture.py:test_python_dependency_matrix_is_complete"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k python_dependency_matrix_is_complete -q"
+requirements = ["SIG-01", "SIG-05"]
+targets = ["src/viper/_system_graph/codeql.py:analyze_source_with_codeql", "src/viper/_system_graph/codeql.py:decode_codeql_results", "src/viper/system_graph.py:lower_codeql_source_facts"]
+tests = ["tests/test_system_graph_codeql.py:test_codeql_source_queries_cover_registered_sites", "tests/test_system_graph_codeql.py:test_codeql_rows_lower_to_canonical_graph"]
+gate = "conda run -n mantra python -m pytest tests/test_system_graph_codeql.py -k 'source_queries_cover_registered_sites or rows_lower_to_canonical_graph' -q"
 depends_on = ["P0-SIG-02"]
 ```
 
-Implement the Master Phase 0 extraction matrix:
+Create `tools/codeql/viper-system-graph/qlpack.yml`, its lockfile, declared
+result schemas, and one query per cohesive source-fact family. Run the locked
+pack, persist BQRS, decode deterministic JSON, validate the receipts and row
+references, and lower the rows into `SystemNode` and `SystemEdge`. The query
+matrix covers:
 
 | Python site | Required result |
 | --- | --- |
@@ -5441,7 +5883,7 @@ conflicting operations, and invalid application order. This stage emits
 <!-- pair-block-definition: P0-SIG-05 -->
 ```toml pair-block
 id = "P0-SIG-05"
-requirements = ["SIG-03"]
+requirements = ["SIG-03", "SIG-05"]
 targets = ["src/viper/system_graph.py:compile_impact_overlay"]
 tests = ["tests/test_inspection.py:test_contract_delta_builds_conservative_overlay"]
 gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k contract_delta_builds_conservative_overlay -q"
@@ -5456,14 +5898,15 @@ node and edge fixture must prove that both enter the overlay.
 <!-- pair-block-definition: P0-SIG-06 -->
 ```toml pair-block
 id = "P0-SIG-06"
-requirements = ["SIG-03"]
-targets = ["src/viper/system_graph.py:compute_impact"]
-tests = ["tests/test_inspection.py:test_reverse_impact_is_least_predecessor_closed_superset"]
-gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k least_predecessor_closed_superset -q"
+requirements = ["SIG-03", "SIG-05"]
+targets = ["src/viper/_system_graph/codeql.py:query_impact_closure", "src/viper/system_graph.py:compute_impact"]
+tests = ["tests/test_system_graph_codeql.py:test_reverse_impact_is_least_predecessor_closed_superset"]
+gate = "conda run -n mantra python -m pytest tests/test_system_graph_codeql.py -k least_predecessor_closed_superset -q"
 depends_on = ["P0-SIG-05"]
 ```
 
-Compute reverse reachability from `S_delta` in `H_delta`. The test checks seed
+Pass validated `H_delta` edge rows and `S_delta` vertex rows to the locked QL
+graph query and compute reverse reachability. The test checks initial-vertex
 inclusion, predecessor closure, minimality against enumerated closed supersets
 in small graphs, introduced vertices, removed edges, self-reachability, and one
 mutant with an omitted semantic dependency.
@@ -5471,30 +5914,31 @@ mutant with an omitted semantic dependency.
 <!-- pair-block-definition: P0-SIG-07 -->
 ```toml pair-block
 id = "P0-SIG-07"
-requirements = ["SIG-02"]
+requirements = ["SIG-02", "SIG-05"]
 targets = ["src/viper/system_graph.py:validate_strict_impact"]
 tests = ["tests/test_validation_architecture.py:test_system_graph_diagnostics_fail_closed"]
 gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k system_graph_diagnostics_fail_closed -q"
 depends_on = ["P0-SIG-05", "P0-SIG-06"]
 ```
 
-Collect diagnostics across the complete file set. Sort by code, path, line, and
-diagnostic ID. Strict validation rejects any error and specifically
-rejects unresolved or unsupported dependency sites reached by `B`. Golden
+Collect diagnostics across the complete supported Python scope. Sort by code,
+path, line, and diagnostic ID. Strict validation runs before `B` and rejects
+every unresolved or unsupported dependency site globally. Golden
 tests assert every Master Phase 0 diagnostic code and its fields.
 
 <!-- pair-block-definition: P0-SIG-08 -->
 ```toml pair-block
 id = "P0-SIG-08"
-requirements = ["SIG-03"]
-targets = ["src/viper/system_graph.py:strongly_connected_components", "src/viper/system_graph.py:condense_affected_graph"]
-tests = ["tests/test_inspection.py:test_affected_graph_condensation_is_canonical"]
-gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k affected_graph_condensation_is_canonical -q"
+requirements = ["SIG-03", "SIG-05"]
+targets = ["src/viper/_system_graph/codeql.py:query_affected_components", "src/viper/system_graph.py:condense_affected_graph"]
+tests = ["tests/test_system_graph_codeql.py:test_affected_graph_condensation_is_canonical"]
+gate = "conda run -n mantra python -m pytest tests/test_system_graph_codeql.py -k affected_graph_condensation_is_canonical -q"
 depends_on = ["P0-SIG-06"]
 ```
 
-Run iterative Tarjan on `H_delta[B]` with sorted vertices and adjacency. Hash
-sorted component members, preserve typed crossing-edge witnesses, mark
+Query mutual reachability over `H_delta[B]`, validate the resulting equivalence
+classes with an independent iterative Tarjan oracle, and hash sorted component
+members. Preserve typed crossing-edge witnesses, mark
 multi-member and self-loop components as cyclic, and apply deterministic Kahn
 ordering. Test an import cycle, call cycle, self-loop, disconnected component,
 parallel crossing edge, shuffled input order, and a mutant that drops one SCC
@@ -5537,19 +5981,21 @@ Add `coverage` and `pytest-cov` to the test extra in this block.
 <!-- pair-block-definition: P0-SIG-11 -->
 ```toml pair-block
 id = "P0-SIG-11"
-requirements = ["SIG-01", "SIG-02", "SIG-03", "SIG-04"]
+requirements = ["SIG-01", "SIG-02", "SIG-03", "SIG-04", "SIG-05"]
 targets = ["src/viper/system_graph.py:compile_system_change", "src/viper/system_graph.py:evaluate_target_conformance"]
-tests = ["tests/test_inspection.py:test_system_change_compilation_is_deterministic", "tests/test_inspection.py:test_target_conformance_is_total"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py tests/test_inspection.py tests/test_documentation.py -k 'system_graph or contract_compiler or target or blast or condensation' -q"
+tests = ["tests/test_system_graph_codeql.py:test_system_change_uses_one_codeql_identity", "tests/test_inspection.py:test_system_change_compilation_is_deterministic", "tests/test_inspection.py:test_target_conformance_is_total"]
+gate = "conda run -n mantra python -m pytest tests/test_system_graph_codeql.py tests/test_validation_architecture.py tests/test_inspection.py tests/test_documentation.py -k 'codeql or system_graph or contract_compiler or target or blast or condensation' -q"
 depends_on = ["P0-SIG-07", "P0-SIG-08", "P0-SIG-09", "P0-SIG-10"]
 ```
 
-Orchestrate Master Phase 0 and serialize `graph.json`, `contract-delta.json`,
+Orchestrate Master Phase 0 and serialize CodeQL database and query receipts,
+`source-facts.json`, `graph.json`, `contract-delta.json`,
 `system-delta.json`, `impact.json`,
 `diagnostics.json`, `condensation.json`, `propagation.json`,
 `target-constraints.json`, and `blast-coverage.json` with canonical JSON. Compile
-twice from shuffled input order and require byte equality. Recompile `R1` under
-the same context and emit exactly one satisfied, violated, or unevaluable
+twice from shuffled decoded-row order and require byte equality. Re-run the
+same pinned CodeQL toolchain over `R1`, lower `F1` under the same context, and
+emit exactly one satisfied, violated, or unevaluable
 receipt per target constraint. Strict conformance accepts only all-satisfied
 reports.
 
@@ -5558,14 +6004,14 @@ reports.
 <!-- pair-block-definition: P0-PROOF-09 -->
 ```toml pair-block
 id = "P0-PROOF-09"
-requirements = ["SIG-01", "SIG-02"]
-targets = ["tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
-tests = ["tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k 'system_graph_ast_oracle_parity or system_target_language_is_closed' -q"
+requirements = ["SIG-01", "SIG-02", "SIG-05"]
+targets = ["tests/test_system_graph_codeql.py:test_codeql_source_fact_oracle_parity", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
+tests = ["tests/test_system_graph_codeql.py:test_codeql_source_fact_oracle_parity", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
+gate = "conda run -n mantra python -m pytest tests/test_system_graph_codeql.py tests/test_validation_architecture.py -k 'codeql_source_fact_oracle_parity or system_target_language_is_closed' -q"
 depends_on = ["P0-SIG-03", "P0-SIG-07"]
 ```
 
-Compare the production analyzer with the existing import/privacy AST oracle.
+Compare the CodeQL source facts with the existing import/privacy AST oracle.
 Delete each expected emitted edge in turn and require the parity or total-site
 gate to fail. Mutate each anchor, signature, graph-fact, and target-constraint
 variant and require the closed-vocabulary test to reject it.
@@ -5573,14 +6019,15 @@ variant and require the closed-vocabulary test to reject it.
 <!-- pair-block-definition: P0-PROOF-10 -->
 ```toml pair-block
 id = "P0-PROOF-10"
-requirements = ["SIG-03"]
+requirements = ["SIG-03", "SIG-05"]
 targets = ["tests/test_inspection.py:test_system_impact_replays_committed_changes", "tests/test_inspection.py:test_target_compilation_is_canonical", "tests/test_inspection.py:test_target_conformance_is_total"]
 tests = ["tests/test_inspection.py:test_system_impact_replays_committed_changes", "tests/test_inspection.py:test_target_compilation_is_canonical", "tests/test_inspection.py:test_target_conformance_is_total"]
 gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k 'system_impact_replays_committed_changes or target_compilation_is_canonical or target_conformance_is_total' -q"
 depends_on = ["P0-SIG-09", "P0-SIG-11"]
 ```
 
-Replay the local-store fixture and the fixed skill-manifest rename. Compare the
+Replay the local-store fixture and the fixed skill-manifest rename through the
+same pinned CodeQL backend before and after implementation. Compare the
 computed affected paths with the reviewed path sets. Record and justify every
 extra path through source evidence; fail on any missing path. Translate every
 delta and disposition fact, reject one presence/absence contradiction, shuffle
@@ -5619,14 +6066,19 @@ a complete `BlastCoverageReport`.
 
 Master Phase 0 closes only when all conditions hold:
 
-- every tracked behavior-bearing file has one matching receipt;
-- every registered Python dependency site has one terminal receipt;
+- the CodeQL CLI, bundle, extractor, QL pack, lockfile, and result schemas match
+  `SystemCompilerIdentity`;
+- every database and query has one successful, digest-verified receipt;
+- every tracked behavior-bearing file has one matching source-fact outcome;
+- every dependency-bearing Python site in the supported scope has one terminal
+  `CodeQLDependencySiteRow`;
 - every graph edge uses the canonical dependency direction and carries exact
   evidence;
 - the contract compiler resolves contract and rule declarations and generates
   the delta, overlay, impact closure, and rule lowering without reading a
   manually enumerated dependency or PairBlock list;
-- strict diagnostics are empty in `B`;
+- every dependency site in the supported Python scope resolves through a
+  supported rule before `B` is computed;
 - SCC condensation is canonical and acyclic;
 - the propagation plan covers every affected and introduced node exactly once;
 - target compilation emits only the three atomic operators over the four Phase
@@ -5654,9 +6106,12 @@ gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.
 depends_on = ["P0-SIG-11"]
 ```
 
-Observe importlib targets, decorator registrations, literal registries,
-reflection targets, and subprocess entrypoints under `SystemContextManifest`.
-Require exactly one observation or unresolved outcome per attempt.
+Add declared CodeQL model packs and context-bound runtime observations for
+importlib targets, decorator registrations, literal registries, reflection
+targets, and subprocess entrypoints. Require exactly one observation or
+unresolved outcome per attempt. Phase 0 continues to reject any unresolved
+site; Phase 1 may admit an observed edge only when its evidence and context are
+stored, or conservatively route a remaining site to an explicit unknown target.
 
 <!-- pair-block-definition: P1-SIG-02 -->
 ```toml pair-block
@@ -5704,8 +6159,8 @@ cohesion-aware partitioning later.
 
 ### 14.7 Commit boundaries
 
-1. `Define canonical SystemGraph vocabulary and diagnostics`
-2. `Extract source-evidenced Python dependencies`
+1. `Define canonical SystemGraph vocabulary and CodeQL identity`
+2. `Query source-evidenced Python dependencies with CodeQL`
 3. `Compile contract deltas into conservative impact graphs`
 4. `Condense affected cycles and compile target constraints`
 5. `Require selected tests to cover the executable blast`
@@ -5713,13 +6168,20 @@ cohesion-aware partitioning later.
 
 ### 14.8 Design sources
 
-- Python [`ast`](https://docs.python.org/3/library/ast.html) supplies syntax
-  classes and exact source coordinates.
-- Python [`symtable`](https://docs.python.org/3/library/symtable.html) supplies
-  compiler-derived identifier scopes.
+- The [CodeQL overview](https://codeql.github.com/docs/codeql-overview/about-codeql/)
+  defines source extraction into a queryable database.
+- Avgustinov et al.'s [QL language
+  paper](https://doi.org/10.4230/LIPIcs.ECOOP.2016.2) supplies the relational
+  query model; [QL recursion](https://codeql.github.com/docs/ql-language-reference/recursion/)
+  supplies least-fixed-point reachability.
+- The [CodeQL Python libraries](https://codeql.github.com/docs/codeql-language-guides/codeql-for-python/)
+  supply Python syntax, scope, type, control-flow, and data-flow relations.
+- The CodeQL CLI [query-run](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/query-run)
+  and [BQRS-decode](https://docs.github.com/en/code-security/reference/code-scanning/codeql/codeql-cli-manual/bqrs-decode)
+  contracts supply persisted query results and deterministic decoding.
 - Tarjan's [depth-first search and SCC
-  algorithm](https://doi.org/10.1137/0201010) supplies the linear-time cycle
-  decomposition.
+  algorithm](https://doi.org/10.1137/0201010) supplies the independent cycle
+  decomposition oracle.
 - Python [`graphlib`](https://docs.python.org/3/library/graphlib.html) supplies
   an independent DAG/topological-order oracle and documents insertion-sensitive
   ready ordering.
@@ -5755,15 +6217,19 @@ At the highest level, the intended research protocol is
 
 $$
 \begin{aligned}
-R_0&\longrightarrow(Q_0,W_0)
-\xrightarrow{\mathcal C_{X,K}}G_0, \\
+R_0&\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_0,
+\quad Q_0=\operatorname{CompileTraceability}(R_0),
+\quad W_0=\operatorname{CompilePairBlocks}(R_0), \\
+(F_0,Q_0,W_0)&\xrightarrow{\mathcal C_{X,K}}G_0, \\
 (G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
 (G_0,\Delta,P)&\xrightarrow{\operatorname{CompileTarget}}T^*, \\
 H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi
 \longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
 (T^*,\Pi,\{U_i^*\})&\xrightarrow{\operatorname{CompileWork}}\mathcal Q
-\longrightarrow R_1\longrightarrow(Q_1,W_1)
-\xrightarrow{\mathcal C_{X,K}}G_1, \\
+\longrightarrow R_1\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_1,
+\quad Q_1=\operatorname{CompileTraceability}(R_1),
+\quad W_1=\operatorname{CompilePairBlocks}(R_1), \\
+(F_1,Q_1,W_1)&\xrightarrow{\mathcal C_{X,K}}G_1, \\
 G_1&\models T^*.
 \end{aligned}
 $$
@@ -6228,15 +6694,19 @@ The complete research architecture is
 
 $$
 \begin{aligned}
-R_0&\longrightarrow(Q_0,W_0)
-\xrightarrow{\mathcal C_{X,K}}G_0, \\
+R_0&\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_0,
+\quad Q_0=\operatorname{CompileTraceability}(R_0),
+\quad W_0=\operatorname{CompilePairBlocks}(R_0), \\
+(F_0,Q_0,W_0)&\xrightarrow{\mathcal C_{X,K}}G_0, \\
 (G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
 (G_0,\Delta,P)&\longrightarrow T^*, \\
 H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi^*
 \longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
 (T^*,\Pi^*,\{U_i^*\})&\longrightarrow\mathcal Q
-\longrightarrow R_1\longrightarrow(Q_1,W_1)
-\xrightarrow{\mathcal C_{X,K}}G_1, \\
+\longrightarrow R_1\xrightarrow{\operatorname{AnalyzeCodeQL}_K}F_1,
+\quad Q_1=\operatorname{CompileTraceability}(R_1),
+\quad W_1=\operatorname{CompilePairBlocks}(R_1), \\
+(F_1,Q_1,W_1)&\xrightarrow{\mathcal C_{X,K}}G_1, \\
 G_1&\models T^*.
 \end{aligned}
 $$

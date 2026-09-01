@@ -261,18 +261,22 @@ SYSTEM_IMPACT_DAG_ROLES = (
     },
     {
         "Baseline": "input",
+        "Compiler": "input",
         "Context": "input",
         "Traceability": "input",
         "Change": "input",
         "Bootstrap": "input",
         "Inventory": "proposed",
-        "Analyze": "proposed",
+        "Database": "proposed",
+        "Queries": "proposed",
+        "Facts": "proposed",
         "Sites": "proposed",
         "Graph": "proposed",
         "ContractCompiler": "proposed",
         "Delta": "proposed",
         "Overlay": "proposed",
         "Support": "proposed",
+        "GraphQueries": "proposed",
         "Closure": "proposed",
         "SCC": "proposed",
         "DAG": "proposed",
@@ -284,16 +288,27 @@ SYSTEM_IMPACT_DAG_ROLES = (
     },
     {
         "R0": "input",
+        "K": "input",
         "X": "input",
         "Q0": "input",
         "W0": "input",
+        "Q1": "input",
+        "W1": "input",
         "Change": "input",
         "Decisions": "input",
+        "DB0": "evidence",
+        "Queries0": "evidence",
+        "F0": "evidence",
+        "DB1": "evidence",
+        "Queries1": "evidence",
+        "F1": "evidence",
         "CompileBase": "consumer",
         "CompileChange": "consumer",
+        "GraphQueries": "consumer",
         "CompileWork": "consumer",
         "Execute": "consumer",
         "Observe": "consumer",
+        "CheckTarget": "consumer",
         "Review": "consumer",
         "G0": "evidence",
         "PairBlocks": "evidence",
@@ -301,6 +316,7 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "G1": "evidence",
         "Delta": "output",
         "Impact": "output",
+        "Closure": "output",
         "SCC": "output",
         "Tests": "output",
         "Coverage": "output",
@@ -327,11 +343,16 @@ SYSTEM_IMPACT_DAG_EDGES = (
     },
     {
         ("Baseline", "Inventory"),
-        ("Context", "Analyze"),
-        ("Inventory", "Analyze"),
-        ("Analyze", "Sites"),
-        ("Analyze", "Graph"),
+        ("Baseline", "Database"),
+        ("Compiler", "Database"),
+        ("Database", "Queries"),
+        ("Compiler", "Queries"),
+        ("Queries", "Facts"),
+        ("Queries", "Sites"),
         ("Sites", "Graph"),
+        ("Facts", "Graph"),
+        ("Inventory", "Graph"),
+        ("Context", "Graph"),
         ("Traceability", "Graph"),
         ("Bootstrap", "Graph"),
         ("Change", "ContractCompiler"),
@@ -340,9 +361,10 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Graph", "Overlay"),
         ("Delta", "Overlay"),
         ("Delta", "Support"),
-        ("Overlay", "Closure"),
-        ("Support", "Closure"),
-        ("Closure", "SCC"),
+        ("Overlay", "GraphQueries"),
+        ("Support", "GraphQueries"),
+        ("GraphQueries", "Closure"),
+        ("GraphQueries", "SCC"),
         ("SCC", "DAG"),
         ("Closure", "Select"),
         ("Select", "Coverage"),
@@ -354,7 +376,13 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("DAG", "Work"),
     },
     {
-        ("R0", "CompileBase"),
+        ("R0", "DB0"),
+        ("K", "DB0"),
+        ("DB0", "Queries0"),
+        ("K", "Queries0"),
+        ("Queries0", "F0"),
+        ("F0", "CompileBase"),
+        ("K", "CompileBase"),
         ("X", "CompileBase"),
         ("Q0", "CompileBase"),
         ("W0", "CompileBase"),
@@ -364,10 +392,13 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("CompileChange", "Delta"),
         ("G0", "Impact"),
         ("Delta", "Impact"),
-        ("Impact", "SCC"),
-        ("Impact", "Tests"),
+        ("Impact", "GraphQueries"),
+        ("K", "GraphQueries"),
+        ("GraphQueries", "Closure"),
+        ("GraphQueries", "SCC"),
+        ("Closure", "Tests"),
         ("Tests", "Coverage"),
-        ("Impact", "Plan"),
+        ("Closure", "Plan"),
         ("Decisions", "Plan"),
         ("G0", "Target"),
         ("Delta", "Target"),
@@ -379,11 +410,20 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("CompileWork", "PairBlocks"),
         ("PairBlocks", "Execute"),
         ("Execute", "R1"),
-        ("R1", "Observe"),
+        ("R1", "DB1"),
+        ("K", "DB1"),
+        ("DB1", "Queries1"),
+        ("K", "Queries1"),
+        ("Queries1", "F1"),
+        ("F1", "Observe"),
         ("X", "Observe"),
+        ("K", "Observe"),
+        ("Q1", "Observe"),
+        ("W1", "Observe"),
         ("Observe", "G1"),
-        ("G1", "Conformance"),
-        ("Target", "Conformance"),
+        ("G1", "CheckTarget"),
+        ("Target", "CheckTarget"),
+        ("CheckTarget", "Conformance"),
         ("Coverage", "Review"),
         ("Conformance", "Review"),
     },
@@ -1464,8 +1504,10 @@ def test_system_impact_compiler_is_the_single_active_specification() -> None:
     pipeline = _MERMAID_FENCE.search(opening)
 
     assert pipeline is not None
-    assert "block-beta" in pipeline.group("body")
-    assert "G1 models T*" in pipeline.group("body")
+    assert "flowchart TB" in pipeline.group("body")
+    assert 'F0["CodeQLSourceFacts F0"]' in pipeline.group("body")
+    assert 'F1["CodeQLSourceFacts F1"]' in pipeline.group("body")
+    assert 'Check["evaluate_target_conformance()"]' in pipeline.group("body")
     assert all(not path.exists() for path in RETIRED_SYSTEM_IMPACT_DOCUMENTS)
     for required_section in (
         "## 1. Status",
@@ -1630,7 +1672,8 @@ def test_system_graph_stages_traceability_before_contract_change() -> None:
 
     assert "Q_0=\\operatorname{CompileTraceability}(R_0)" in proof
     assert "\\operatorname{CompileContractChange}(c_\\Delta,G_0)" in proof
-    assert "(R0, K, X, Q0, W0) -> compile_system() -> G0" in crt_guide
+    assert "R0 + K -> analyze_source_with_codeql() -> F0" in crt_guide
+    assert "(F0, K, X, Q0, W0) -> compile_system() -> G0" in crt_guide
     assert "(ContractChange, G0)" in crt_guide
     assert "only traceability input accepted" not in crt_guide
 
@@ -1659,12 +1702,18 @@ def test_system_impact_proof_uses_complete_compiler_boundary() -> None:
         1,
     )[0]
 
-    baseline = "R_0&\\longrightarrow(Q_0,W_0)\n\\xrightarrow{\\mathcal C_{X,K}}G_0"
-    observed = "R_1\\longrightarrow(Q_1,W_1)\n\\xrightarrow{\\mathcal C_{X,K}}G_1"
+    baseline = "R_0&\\xrightarrow{\\operatorname{AnalyzeCodeQL}_K}F_0"
+    baseline_lowering = "(F_0,Q_0,W_0)&\\xrightarrow{\\mathcal C_{X,K}}G_0"
+    observed = "R_1\\xrightarrow{\\operatorname{AnalyzeCodeQL}_K}F_1"
+    observed_lowering = "(F_1,Q_1,W_1)&\\xrightarrow{\\mathcal C_{X,K}}G_1"
     assert research.count(baseline) == 2
+    assert research.count(baseline_lowering) == 2
     assert research.count(observed) == 2
+    assert research.count(observed_lowering) == 2
     assert baseline in core
+    assert baseline_lowering in core
     assert observed.replace("R_1", "R_1&", 1) in core
+    assert observed_lowering in core
     assert "\\longrightarrow(Q_0,W_0)\\longrightarrow G_0" not in proof
     assert "\\longrightarrow(Q_1,W_1)\\longrightarrow G_1" not in proof
 
@@ -2059,10 +2108,41 @@ def test_phase_zero_system_models_match_contract() -> None:
     assert "source depends on target" in specification
     assert 'ContractCompiler -->|"PairBlocks"| Plan' not in specification
     assert "PairReference" not in specification
-    assert 'Impact -->|"affected graph"| SCC' in specification
+    assert 'GraphQueries -->|"mutual reachability"| SCC' in specification
     assert 'Target -->|"hard constraints"| Repairs' in specification
     assert "compile_work()" in specification
     assert 'Execute -->|"writes"| R1' in specification
+
+
+def test_system_impact_codeql_backend_is_end_to_end() -> None:
+    """Keep the pinned CodeQL backend at both compiler boundaries."""
+    specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+
+    for value in (
+        'cli_version: Literal["2.26.4"]',
+        "class CodeQLSourceFacts(ProtocolModel)",
+        "class CodeQLAnalysisReceipt(ProtocolModel)",
+        "source_analysis: CodeQLAnalysisReceipt",
+        "def analyze_source_with_codeql(",
+        "F_0=\\operatorname{AnalyzeCodeQL}_K(R_0)",
+        "F_1=\\operatorname{AnalyzeCodeQL}_K(R_1)",
+        "reject every unsupported or unresolved dependency site",
+        "tests/test_system_graph_codeql.py:test_codeql_source_fact_oracle_parity",
+    ):
+        assert value in specification
+
+    for rule in (
+        "system.codeql.identity",
+        "system.codeql.database",
+        "system.codeql.queries",
+        "system.codeql.facts",
+        "system.codeql.parity",
+    ):
+        assert f"rule={rule}" in checklist
+
+    assert "Production extraction owns\nthe parser" not in checklist
+    assert "reject every\n      unsupported or unresolved dependency site" in checklist
 
 
 def _worked_example_runtime_failures(
@@ -2328,8 +2408,9 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
 
     planned_test_paths = {
         value.partition(":")[0]
+        for guide in (CONTRACT_TRACEABILITY_PAIR_CODING, SYSTEM_IMPACT_COMPILER)
         for definition in _PAIR_BLOCK_DEFINITION.finditer(
-            CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+            guide.read_text(encoding="utf-8")
         )
         for value in tomllib.loads(definition.group("manifest"))["targets"]
         if value.startswith("tests/")

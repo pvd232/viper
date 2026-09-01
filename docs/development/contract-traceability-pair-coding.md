@@ -1372,7 +1372,8 @@ traversal, propagation coverage, and target constraints.
 ```text
 R0 -> compile_contract_traceability() -> Q0: ContractTraceabilityGraph
 R0 -> compile_pair_blocks() -> W0: tuple[PairBlock, ...]
-(R0, K, X, Q0, W0) -> compile_system() -> G0: SystemGraph
+R0 + K -> analyze_source_with_codeql() -> F0: CodeQLSourceFacts
+(F0, K, X, Q0, W0) -> compile_system() -> G0: SystemGraph
 
 (ContractChange, G0) -> compile_contract_change() -> ContractDelta
 ```

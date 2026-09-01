@@ -225,8 +225,10 @@ ExternalInputDraft
 One development change crosses the review system like this:
 
 ```text
-baseline source + fixed context
--> canonical SystemGraph
+baseline source + pinned CodeQL identity
+-> CodeQLSourceFacts and execution receipts
+-> compile with fixed context, ContractTraceabilityGraph, and PairBlocks
+-> canonical SystemGraph G0
 
 contract delta + rule declarations
 -> ContractChange + normalized rule dependencies
@@ -239,8 +241,10 @@ contract delta + rule declarations
 -> canonical target specification
 -> selected repairs packaged as SCC-ordered PairBlocks
 
-implemented source + same fixed context
--> observed SystemGraph
+implemented source + same CodeQL identity
+-> independently extracted CodeQLSourceFacts and receipts
+-> compile with the same fixed context
+-> observed SystemGraph G1
 -> target-constraint conformance
 ```
 
@@ -271,7 +275,7 @@ scheduled phase and dependency order.
 | [Contract Traceability](contract-traceability.md) | Draft after audit | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
 | [Project data root](project-data-root.md) | Draft after audit | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design | One defining module for API operations, verification operations, and verification types |
-| [System Impact Compiler](system-impact-compiler.md) | Audited design; implementation pending | Defined dependency types, automatic `ContractChange` compilation, conservative impact overlay, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and observed conformance |
+| [System Impact Compiler](system-impact-compiler.md) | Audited design; implementation pending | Pinned CodeQL source analysis, normalized `SystemGraph`, automatic `ContractChange` compilation, conservative impact closure, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and independently observed conformance |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Draft after audit | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -327,7 +331,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=4abf108ccf295d9de7e2a2edc2f98e221a6a418cbd838dac401cb1127f74b693 -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=2e82f87886dcceb6a9967dc92d94891532cae4fabf02b2c77db209923f3ce683 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=a1aa1954215f013a9b434a864eaffd01aabf58aaf4c6fa39d94e0df8abe4b882 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=11677edf79da1b5a6ce34e85aca143412af0ea4e43f7381d03e45ef0e36f271f -->
@@ -390,7 +394,7 @@ The review found and repaired these schema conflicts:
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
 | Project root | `viper init ROOT` or explicit `root=` | Local `viper.toml` marker; absolute path omitted from protocol identity | One resolved absolute root per operation | Root resolver, path-boundary checks, local store, and every local consumer |
-| System impact | Baseline repository, fixed `SystemContextManifest`, structured contract delta, rule declarations, and PairBlocks | Canonical `SystemGraph`, contract delta, impact overlay, `ImpactReport`, affected-graph condensation, `PropagationPlan`, target constraints, diagnostics, and blast-coverage report | Automatic reverse closure, SCC-safe work units, selected tests, and post-implementation `G1` conformance | Strict graph, contract, coverage, and conformance verifiers |
+| System impact | Baseline repository, `SystemCompilerIdentity` with pinned CodeQL identity, fixed `SystemContextManifest`, `ContractTraceabilityGraph`, `ContractChange`, and PairBlocks | `CodeQLAnalysisReceipt`, `CodeQLSourceFacts`, canonical `SystemGraph`, `ContractDelta`, impact overlay, `ImpactReport`, affected-graph condensation, `PropagationPlan`, `TargetSpecification`, diagnostics, and `BlastCoverageReport` | CodeQL reverse closure and SCC queries, SCC-safe work units, selected tests, independent `R1` extraction, and `G1` conformance | CodeQL identity and receipt checks plus strict graph, contract, coverage, and conformance verifiers |
 | Local dataset | `ExternalInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
 | HTTP dataset | `HttpRequestSpec` plus file artifact draft | `DownloadSpec` | `ResolvedHttpRetrieval` and `ResolvedSingleFileArtifact` sharing one file | Download verifier and later input compiler |
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
@@ -587,9 +591,10 @@ from the observed result.
 owner, populated trace, and exact test. `viper init ROOT` creates the complete
 protocol tree and every later local operation resolves that same root. Public
 API and verification imports then identify their defining modules. VIPER can
-compile that stable source tree under one fixed context, publish canonical
-dependency graphs, and return the exact affected requirements and observing
-tests before later phases change code.
+analyze that stable source tree with one pinned CodeQL toolchain, lower the
+validated source facts under one fixed context, publish canonical dependency
+graphs, and return the exact affected requirements and observing tests before
+later phases change code.
 
 ### 7.1 Contract Traceability
 
@@ -736,30 +741,39 @@ the new owner.
 
 ### 7.4 System graph compiler
 
+Production source analysis lives in `src/viper/_system_graph/codeql.py`.
+Its focused contract tests live in `tests/test_system_graph_codeql.py`.
+
 - [ ] Add the canonical four-variant `SystemNode` union, stable planned anchors,
       normalized Python signature facts, finite role-kind matrix,
       dependent-to-dependency `SystemEdge` vocabulary, four `GraphFact`
-      variants, three target-constraint operators, conformance receipts,
-      evidence, dependency-site receipts, and structured diagnostics.
-      <!-- implements: SIG-01, SIG-02 -->
+      variants, three target-constraint operators, CodeQL fact and receipt
+      models, conformance receipts, evidence, dependency-site outcomes, and
+      structured diagnostics.
+      <!-- implements: SIG-01, SIG-02, SIG-05 -->
       <!-- pair-block: P0-SIG-01 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.node.vocabulary state=planned owner=src/viper/system_graph.py:SystemNode -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.edge.vocabulary state=planned owner=src/viper/system_graph.py:SystemEdge -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.edge.evidence state=planned owner=src/viper/system_graph.py:SystemEdge -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.signature.canonical state=planned owner=src/viper/system_graph.py:PythonSignatureFact -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.diagnostics.complete state=planned owner=src/viper/system_graph.py:SystemDiagnostic -->
-- [ ] Enumerate every tracked file, emit one matching analysis receipt, and
-      combine AST coordinates with compiler symbol tables to classify every
-      registered Python dependency site.
+      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.identity state=planned owner=src/viper/system_graph.py:CodeQLToolchainIdentity -->
+- [ ] Enumerate every tracked file, verify CodeQL CLI `2.26.4` and the locked
+      extractor and VIPER QL-pack identities, create a database from the
+      selected source commit, and persist `CodeQLDatabaseReceipt`.
       <!-- pair-block: P0-SIG-02 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.inventory.complete state=planned owner=src/viper/system_graph.py:compile_system -->
-      <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.total state=planned owner=src/viper/system_graph.py:analyze_python -->
-- [ ] Implement the Master Phase 0 Python extraction matrix for imports, direct calls
-      and construction, inheritance, annotations, decorators, registries,
-      symbol reads and writes, and exports. Emit unresolved diagnostics for
-      star imports and computed targets.
+      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.database state=planned owner=src/viper/_system_graph/codeql.py:create_codeql_database -->
+- [ ] Run the locked VIPER QL pack, persist and decode every BQRS result,
+      validate `CodeQLAnalysisReceipt` and every source-fact row, and lower the
+      Python extraction matrix into canonical `SystemNode` and `SystemEdge`
+      records. Emit a terminal `CodeQLDependencySiteRow` for every supported
+      dependency-bearing site.
       <!-- pair-block: P0-SIG-03 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.anchored state=planned owner=src/viper/system_graph.py:compile_system -->
+      <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.total state=planned owner=src/viper/_system_graph/codeql.py:analyze_source_with_codeql -->
+      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.queries state=planned owner=src/viper/_system_graph/codeql.py:analyze_source_with_codeql -->
+      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.facts state=planned owner=src/viper/system_graph.py:lower_codeql_source_facts -->
 - [ ] Ingest `ContractTraceabilityGraph` from `P0-CRT-05` and
       lower its source-evidenced requirements, rules, owners, and tests into
       `G0`. Parse bootstrap PairBlocks separately into scheduling traceability.
@@ -776,18 +790,19 @@ the new owner.
       introduced dependency. Retain removed baseline dependencies.
       <!-- pair-block: P0-SIG-05 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.impact.overlay state=planned owner=src/viper/system_graph.py:compile_impact_overlay -->
-- [ ] Compute reverse reachability from `S_delta` in `H_delta` and require the
-      result to be the least predecessor-closed superset of the direct support.
+- [ ] Submit validated `H_delta` and `S_delta` rows to the locked QL graph
+      query, compute reverse reachability, and require the result to be the
+      least predecessor-closed superset of the direct support.
       <!-- pair-block: P0-SIG-06 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.impact.closure state=planned owner=src/viper/system_graph.py:compute_impact -->
-- [ ] Collect stable diagnostics across inventory, extraction, contract,
-      impact, SCC, and coverage phases. Reject unsupported or unresolved
-      dependency sites reached by the blast in strict mode.
+- [ ] Collect stable diagnostics across inventory, CodeQL, contract, impact,
+      SCC, and coverage phases. Before computing the blast radius, reject every
+      unsupported or unresolved dependency site in the supported Python scope.
       <!-- pair-block: P0-SIG-07 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.strict state=planned owner=src/viper/system_graph.py:compile_system -->
-- [ ] Run deterministic iterative Tarjan over `H_delta[B]`; preserve typed
-      crossing-edge witnesses; hash sorted component membership; and require a
-      canonical, acyclic condensation order.
+- [ ] Query mutual reachability over `H_delta[B]`, validate the returned SCCs
+      against an independent Tarjan oracle, preserve typed crossing-edge
+      witnesses, hash sorted membership, and require a canonical acyclic order.
       <!-- pair-block: P0-SIG-08 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.dag.components state=planned owner=src/viper/system_graph.py:condense_system_graph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.dag.canonical state=planned owner=src/viper/system_graph.py:condense_system_graph -->
@@ -808,11 +823,11 @@ the new owner.
       <!-- contract-implementation: requirement=SIG-04 rule=system.blast.test_selection state=planned owner=src/viper/system_graph.py:select_blast_tests -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.blast.statement_coverage state=planned owner=src/viper/system_graph.py:verify_blast_coverage -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.blast.branch_coverage state=planned owner=src/viper/system_graph.py:verify_blast_coverage -->
-- [ ] Orchestrate the strict compiler and serialize canonical graph, contract
-      delta, impact, diagnostics, condensation, propagation, target-constraint,
-      blast-coverage, and conformance artifacts. Recompile with shuffled input
-      order and require byte equality. Emit exactly one terminal conformance
-      receipt per target constraint.
+- [ ] Orchestrate the strict compiler and serialize CodeQL database and query
+      receipts, source facts, graph, contract delta, impact, diagnostics,
+      condensation, propagation, target-constraint, blast-coverage, and
+      conformance artifacts. Re-run the same CodeQL identity over `R1`, lower
+      `G1`, and emit exactly one terminal conformance receipt per constraint.
       <!-- pair-block: P0-SIG-11 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.context.identity state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.compiler.identity state=planned owner=src/viper/system_graph.py:compile_system -->
@@ -822,18 +837,19 @@ the new owner.
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.context state=planned owner=src/viper/system_graph.py:compare_observed_graph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.delta.identity state=planned owner=src/viper/system_graph.py:compare_observed_graph -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.conformance.total state=planned owner=src/viper/system_graph.py:evaluate_target_conformance -->
+      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.parity state=planned owner=src/viper/system_graph.py:compile_system_change -->
 
 <details>
 <summary>Hints</summary>
 
-**Hint 1:** Use the existing AST checks as oracles. Production extraction owns
-the parser and receipt ledger.
+**Hint 1:** Use the existing AST checks only as independent fixture oracles.
+`analyze_source_with_codeql()` owns production extraction and receipts.
 
 **Hint 2:** `RuleEdge` is a declaration. Lower it into the canonical dependency
 direction before impact traversal.
 
-**Hint 3:** Compute SCCs on `H_delta[B]`. Preserve original edge IDs on every
-crossing component edge.
+**Hint 3:** Give the QL graph queries exactly `H_delta[B]`. Preserve original
+edge IDs on every crossing component edge.
 
 </details>
 
@@ -905,14 +921,14 @@ crossing component edge.
       `tests/test_documentation.py`. <!-- verifies: PDR-04 -->
       <!-- pair-block: P0-PROOF-08 -->
       <!-- contract-verification: requirement=PDR-04 rule=project.root.vocabulary state=planned test=tests/test_documentation.py:test_project_root_vocabulary -->
-- [ ] Compare the production analyzer with the existing import/privacy AST
-      oracle. Delete each expected edge in turn and require the parity or
+- [ ] Compare `CodeQLSourceFacts` with the existing import/privacy AST oracle.
+      Delete each expected edge in turn and require the parity or
       dependency-site-totality gate to fail.
       <!-- pair-block: P0-PROOF-09 -->
-      <!-- verifies: SIG-01, SIG-02 -->
-      <!-- contract-verification: requirement=SIG-01 rule=system.inventory.complete state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
-      <!-- contract-verification: requirement=SIG-01 rule=system.analysis.anchored state=planned test=tests/test_validation_architecture.py:test_system_graph_inventory_and_edges_are_auditable -->
-      <!-- contract-verification: requirement=SIG-01 rule=system.analysis.total state=planned test=tests/test_validation_architecture.py:test_system_graph_ast_oracle_parity -->
+      <!-- verifies: SIG-01, SIG-02, SIG-05 -->
+      <!-- contract-verification: requirement=SIG-01 rule=system.inventory.complete state=planned test=tests/test_system_graph_codeql.py:test_codeql_database_receipt_binds_source_and_toolchain -->
+      <!-- contract-verification: requirement=SIG-01 rule=system.analysis.anchored state=planned test=tests/test_system_graph_codeql.py:test_codeql_rows_lower_to_canonical_graph -->
+      <!-- contract-verification: requirement=SIG-01 rule=system.analysis.total state=planned test=tests/test_system_graph_codeql.py:test_codeql_source_fact_oracle_parity -->
       <!-- contract-verification: requirement=SIG-01 rule=system.signature.canonical state=planned test=tests/test_validation_architecture.py:test_system_target_language_is_closed -->
       <!-- contract-verification: requirement=SIG-01 rule=system.node.vocabulary state=planned test=tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed -->
       <!-- contract-verification: requirement=SIG-01 rule=system.edge.vocabulary state=planned test=tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed -->
@@ -924,6 +940,11 @@ crossing component edge.
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.canonical state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.references state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
       <!-- contract-verification: requirement=SIG-02 rule=system.graph.strict state=planned test=tests/test_validation_architecture.py:test_system_graph_resolution_is_total_and_strict -->
+      <!-- contract-verification: requirement=SIG-05 rule=system.codeql.identity state=planned test=tests/test_system_graph_codeql.py:test_codeql_database_receipt_binds_source_and_toolchain -->
+      <!-- contract-verification: requirement=SIG-05 rule=system.codeql.database state=planned test=tests/test_system_graph_codeql.py:test_codeql_database_receipt_binds_source_and_toolchain -->
+      <!-- contract-verification: requirement=SIG-05 rule=system.codeql.queries state=planned test=tests/test_system_graph_codeql.py:test_codeql_source_queries_cover_registered_sites -->
+      <!-- contract-verification: requirement=SIG-05 rule=system.codeql.facts state=planned test=tests/test_system_graph_codeql.py:test_codeql_rows_lower_to_canonical_graph -->
+      <!-- contract-verification: requirement=SIG-05 rule=system.codeql.parity state=planned test=tests/test_system_graph_codeql.py:test_codeql_source_fact_oracle_parity -->
 - [ ] Replay the local-store fixture and committed `model_support` to `models`
       rename. Require complete reviewed-path reproduction and source evidence
       for every additional path.
@@ -978,7 +999,7 @@ python -m pytest \
 1. `Trace contract requirements to code and tests`
 2. `Bind every local operation to one project root`
 3. `Give public modules one implementation owner`
-4. `Compile deterministic system impact graphs`
+4. `Compile source-evidenced changes with the System Impact Compiler`
 
 Every later phase begins by compiling its contract delta against the baseline
 graph under the reviewed context manifest. Its selected tests must cover every
@@ -999,7 +1020,9 @@ new publisher boundary. Cloud implementation begins in Master Phase 9.
 
 - [ ] Observe importlib targets, decorator registrations, literal registries,
       reflection targets, and subprocess entrypoints under the fixed context.
-      Require exactly one observation or unresolved outcome per attempt.
+      Add declared CodeQL model packs and store exactly one observation or
+      unresolved outcome per attempt. Preserve global Phase 0 rejection unless
+      a stored observation or conservative unknown-target edge closes the site.
       <!-- pair-block: P1-SIG-01 -->
 - [ ] Add TOML, YAML, JSON, and non-contract Markdown analyzers only for
       identifiers named by active contracts, protocol models, configuration,
