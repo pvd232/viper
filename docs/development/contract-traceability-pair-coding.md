@@ -10,8 +10,7 @@ The identifier for this subsystem is `CRT`.
 
 ## 1. Status and boundary
 
-**Guide status:** proposed implementation, reviewed against `main` at commit
-`9868783`.
+**Guide status:** audited; execution pending contract approval.
 
 The records in `src/viper/_contract_traceability.py` already exist. The
 parsers, compiler operations, and focused acceptance tests remain proposed.

@@ -10,7 +10,7 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** draft after change-impact review; owner review pending.
+**Contract status:** audited; owner approval pending.
 
 These requirements bind the contract to the master checklist:
 

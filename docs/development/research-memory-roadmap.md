@@ -8,8 +8,7 @@ silently retrain or promote the agent that proposed it.
 
 ## 1. Status
 
-**Contract status:** planned after literature and specification-system review;
-owner review pending.
+**Contract status:** audited; owner approval pending.
 
 These requirements bind this contract to the master checklist:
 

@@ -183,6 +183,9 @@ _RESEARCH_PAIR_BLOCK_DEFINITION = re.compile(
     r"```",
     re.DOTALL,
 )
+_RESEARCH_PAIR_BLOCK_MARKER = re.compile(
+    r"<!-- pair-block: (?P<id>P(?:18|19|20)-RML-\d{2}) -->"
+)
 _PAIR_PLACEHOLDER = re.compile(
     r"(?:\bTBD\b|\bTODO\b|^\s*\.\.\.\s*$|=\s*\.\.\.\s*$)",
     re.MULTILINE,
@@ -1307,8 +1310,6 @@ def test_research_pair_guide_has_executable_ordered_blocks() -> None:
             assert (ROOT / test).is_file()
             assert test in manifest["gate"]
         for dependency in manifest["depends_on"]:
-            if dependency == "P17 terminal gate":
-                continue
             assert dependency in prior_ids
         prior_ids.add(block_id)
         covered_requirements.update(manifest["requirements"])
@@ -1327,6 +1328,56 @@ def test_research_pair_guide_has_executable_ordered_blocks() -> None:
     assert "owns the `P18-RML`, `P19-RML`, and" in checklist
     for phase in (18, 19, 20):
         assert f"Master Phase {phase} " in checklist
+
+
+def test_research_checklist_tasks_resolve_to_pair_blocks() -> None:
+    """Give every research PairBlock one checklist-owned task."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    research_sections = checklist.split("## 25. Master Phase 18", 1)[1].split(
+        "## 28. Master Phase 21",
+        1,
+    )[0]
+    marker_ids = [
+        match.group("id")
+        for match in _RESEARCH_PAIR_BLOCK_MARKER.finditer(research_sections)
+    ]
+    definition_ids = [
+        tomllib.loads(match.group("manifest"))["id"]
+        for match in _RESEARCH_PAIR_BLOCK_DEFINITION.finditer(
+            RESEARCH_MEMORY_PAIR_CODING.read_text(encoding="utf-8")
+        )
+    ]
+
+    assert marker_ids == definition_ids
+    assert len(marker_ids) == len(set(marker_ids))
+    for checkbox in _CHECKBOX_BLOCK.finditer(research_sections):
+        markers = tuple(_RESEARCH_PAIR_BLOCK_MARKER.finditer(checkbox.group(0)))
+        assert len(markers) <= 1, checkbox.group(0).splitlines()[0]
+
+
+def test_contract_statuses_match_the_master_checklist() -> None:
+    """Keep each governing contract's approval state in one vocabulary."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    rows = {
+        match.group("path"): match.group("status")
+        for match in re.finditer(
+            r"^\| \[[^]]+\]\((?P<path>[a-z0-9-]+\.md)\) "
+            r"\| (?P<status>[^|]+?) \|",
+            checklist,
+            re.MULTILINE,
+        )
+    }
+
+    assert set(rows) >= {contract.name for contract in IMPLEMENTATION_CONTRACTS}
+    for contract in IMPLEMENTATION_CONTRACTS:
+        status = re.search(
+            r"^\*\*Contract status:\*\* (?P<status>.+)$",
+            contract.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+        assert status is not None, contract
+        documented = status.group("status").removesuffix(".").casefold()
+        assert documented == rows[contract.name].casefold()
 
 
 def test_protocol_uses_renderer_safe_math_fences() -> None:
@@ -2857,6 +2908,38 @@ def test_system_impact_status_matches_the_master_checklist() -> None:
         "| [System Impact Compiler](system-impact-compiler.md) "
         "| Approved design; implementation pending |" in checklist
     )
+
+
+def test_system_impact_rule_owners_use_pair_block_nomenclature() -> None:
+    """Keep verifier owners on the exact planned implementation symbols."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    required_owners = {
+        "src/viper/system_graph.py:condense_affected_graph",
+        "src/viper/system_graph.py:compile_propagation_plan",
+        "src/viper/system_graph.py:compile_system_change",
+    }
+    retired_owners = {
+        "src/viper/system_graph.py:condense_system_graph",
+        "src/viper/system_graph.py:verify_propagation",
+        "src/viper/system_graph.py:compare_observed_graph",
+    }
+
+    owners = set(
+        re.findall(r"contract-implementation: [^>]+ owner=([^ ]+) -->", checklist)
+    )
+    assert required_owners <= owners
+    assert retired_owners.isdisjoint(owners)
+
+
+def test_system_impact_code_change_ledger_covers_codeql_boundary() -> None:
+    """Keep every CodeQL-owned implementation surface in the master ledger."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    for path in (
+        "src/viper/_system_graph/codeql.py",
+        "tools/codeql/viper-system-graph/",
+        "tests/test_system_graph_codeql.py",
+    ):
+        assert f"| `{path}` |" in checklist
 
 
 def test_master_checklist_names_existing_test_modules() -> None:

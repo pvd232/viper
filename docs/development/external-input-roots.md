@@ -24,7 +24,7 @@ attempt-owned input file, supplies that file to the stage, and records it in
 
 ## 1. Status and decision
 
-**Contract status:** draft after system review; owner review pending.
+**Contract status:** audited; owner approval pending.
 
 These requirements bind the contract to the master checklist:
 

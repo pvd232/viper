@@ -7,7 +7,7 @@ contract will define explicit harness mode.
 
 ## 1. Status
 
-**Contract status:** draft after system review; owner review pending.
+**Contract status:** audited; owner approval pending.
 
 These requirements bind the contract to the master checklist:
 

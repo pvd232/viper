@@ -273,21 +273,21 @@ scheduled phase and dependency order.
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Draft after audit | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
-| [Project data root](project-data-root.md) | Draft after audit | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
-| [Public module ownership](module-ownership.md) | Approved design | One defining module for API operations, verification operations, and verification types |
+| [Contract Traceability](contract-traceability.md) | Audited; owner approval pending | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
+| [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
+| [Public module ownership](module-ownership.md) | Approved design; implementation pending | One defining module for API operations, verification operations, and verification types |
 | [System Impact Compiler](system-impact-compiler.md) | Approved design; implementation pending | Pinned CodeQL source analysis, normalized `SystemGraph`, automatic `ContractChange` compilation, conservative impact closure, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and independently observed conformance |
-| [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
-| [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
-| [Unified metric drafting](unified-metric-drafting.md) | Draft after audit | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
-| [Automatic input resolution](automatic-input-resolution.md) | Draft after audit | Python stage authoring and compilation of local, same-run, and prior-run inputs |
-| [Frozen plan Git identity](frozen-plan-git-identity.md) | Draft after audit | Separate source and generated-plan commits between freezing and execution |
-| [Direct Viper Cloud publication](remote-storage.md) | Draft after audit | Destination-neutral publication, cloud references, retrieval, and restore |
-| [Experiment expansion](experiment-expansion.md) | Draft after audit | Deterministic variant-replicate expansion and bounded multi-run execution |
-| [Provenance catalog and MCP](provenance-catalog-mcp.md) | Draft after audit | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
-| [Verified stage reuse](stage-reuse.md) | Draft after audit | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
-| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Draft after audit | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
-| [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned after literature and system review | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
+| [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
+| [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
+| [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
+| [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
+| [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
+| [Direct Viper Cloud publication](remote-storage.md) | Audited; owner approval pending | Destination-neutral publication, cloud references, retrieval, and restore |
+| [Experiment expansion](experiment-expansion.md) | Audited; owner approval pending | Deterministic variant-replicate expansion and bounded multi-run execution |
+| [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
+| [Verified stage reuse](stage-reuse.md) | Audited; owner approval pending | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
+| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Audited; owner approval pending | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
+| [Research Memory and Agent Learning](research-memory-roadmap.md) | Audited; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
 The contracts share models. One contract owns each shared decision:
 
@@ -328,22 +328,22 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=c87072bbad5767cd914708cc5369985f0fe00927ad10ed5ed205f7672ee2954f -->
+<!-- contract-baseline: contract-traceability.md sha256=37cbd0da1c3297068d3cf25bc8eca4ff980021db850c7104a524d354df4099ec -->
 
-<!-- contract-baseline: project-data-root.md sha256=4abf108ccf295d9de7e2a2edc2f98e221a6a418cbd838dac401cb1127f74b693 -->
+<!-- contract-baseline: project-data-root.md sha256=be4656fdf8a74d78b537c7d13ce907b6de1afc42fbc95e0093d0d9f761ae8bfd -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=d3eada451c50ea6469e963df71f0f772d8a948f8ec97c43e9b76d146356014de -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
-<!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=11677edf79da1b5a6ce34e85aca143412af0ea4e43f7381d03e45ef0e36f271f -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=20b6e2301d52d83b397e503aa2341c09aafd22d46b5683d25e76c33f466e6a34 -->
-<!-- contract-baseline: frozen-plan-git-identity.md sha256=361b78746b4f72567517e1672cf2997ede22d8c107e28685ed82125df9586c84 -->
-<!-- contract-baseline: remote-storage.md sha256=a38a9a743f488619acee0d55785b9689b41ec78231d8bfb03eb815f9d3fe132c -->
-<!-- contract-baseline: experiment-expansion.md sha256=e8edfe2d0c1b4841aaa639b5721bb0eb5612f01d2cf30aade8813e86c2e2c9cb -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=cbda0436044aedca13cb080819a6098f27501362c22bfc5e48b6881d35833ae1 -->
-<!-- contract-baseline: stage-reuse.md sha256=e0b7572ab0e842cdbd24ed93b9cf6776e0abc3acfbef886d3c881d06c62ae231 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=6dea07a22aad0127f769f1127e2f05e2a92c751f435a70ca6e3b265b18008b0b -->
-<!-- contract-baseline: research-memory-roadmap.md sha256=c9bcb5d3c180f67da1bb7d4badab16ac492eab98f256957fe6c37888ecca6329 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=904b42e0cd68aa6063f638ff702e6e802edf3a5ea91f0ee0d0a665ee3f7e10b8 -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=c6d9eb733483e526f3d5f48a6ee7d9286dd0eb9aff872ba6eb8d6936dcf61eed -->
+<!-- contract-baseline: external-input-roots.md sha256=e392471c58db799b0766dc1607a9a0821d6df66fa194fc2c391c7a0d3335ccc8 -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=2a783dbb3d348516f647efb837fccdb0917de008705c142144fbd6b8a9fd1b03 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=0bcd5fba467acee497220a99085663e085706caf4d3b93ea28b865d3879a5c78 -->
+<!-- contract-baseline: frozen-plan-git-identity.md sha256=a36055d171989130aa625df16866fcafdcaa5d7aa01a942041ae3a88c2323ed4 -->
+<!-- contract-baseline: remote-storage.md sha256=bb7ec5224ec46daf389293c4504236816ba05c58e3fefb63e721dcbad846556d -->
+<!-- contract-baseline: experiment-expansion.md sha256=4fcbd2e40e16651f697544f41923d331d04b99e631b6072e42fbcad96cafcc98 -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=968f506e9db6cee6db4f27459a978b9dbe59427171b459f081e4154099688a88 -->
+<!-- contract-baseline: stage-reuse.md sha256=30345396844be978a004167e27af5fc6b38e83dbc32a3b19a94e0ed030d89ed8 -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=728758e2ffe67b5aba4d6a2b7d09a682090bbb48e429645045ca694b43796348 -->
+<!-- contract-baseline: research-memory-roadmap.md sha256=e03136aa388fc4cfb52ebea9554c52198be4d8353eb9bb687f2187a8865bc29c -->
 
 ## 4. Specification-system review
 
@@ -810,16 +810,16 @@ Its focused contract tests live in `tests/test_system_graph_codeql.py`.
       against an independent Tarjan oracle, preserve typed crossing-edge
       witnesses, hash sorted membership, and require a canonical acyclic order.
       <!-- pair-block: P0-SIG-08 -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.dag.components state=planned owner=src/viper/system_graph.py:condense_system_graph -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.dag.canonical state=planned owner=src/viper/system_graph.py:condense_system_graph -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.dag.acyclic state=planned owner=src/viper/system_graph.py:condense_system_graph -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.dag.components state=planned owner=src/viper/system_graph.py:condense_affected_graph -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.dag.canonical state=planned owner=src/viper/system_graph.py:condense_affected_graph -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.dag.acyclic state=planned owner=src/viper/system_graph.py:condense_affected_graph -->
 - [ ] Validate one typed propagation disposition per affected node; compile the
       three-operator `TargetSpecification` from `(G0, Delta, P)`; and package
       selected repairs as SCC-ordered PairBlocks. Keep admissible implementation
       choices open until repair selection freezes one.
       <!-- pair-block: P0-SIG-09 -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.coverage state=planned owner=src/viper/system_graph.py:verify_propagation -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.additions state=planned owner=src/viper/system_graph.py:verify_propagation -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.coverage state=planned owner=src/viper/system_graph.py:compile_propagation_plan -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.propagation.additions state=planned owner=src/viper/system_graph.py:compile_propagation_plan -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.target.language state=planned owner=src/viper/system_graph.py:TargetConstraint -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.target.canonical state=planned owner=src/viper/system_graph.py:compile_target_constraints -->
 - [ ] Select at least one pytest node ID for every executable affected symbol.
@@ -840,8 +840,8 @@ Its focused contract tests live in `tests/test_system_graph_codeql.py`.
       <!-- contract-implementation: requirement=SIG-02 rule=system.resolution.total state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.canonical state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.graph.references state=planned owner=src/viper/system_graph.py:SystemGraph -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.delta.context state=planned owner=src/viper/system_graph.py:compare_observed_graph -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.delta.identity state=planned owner=src/viper/system_graph.py:compare_observed_graph -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.delta.context state=planned owner=src/viper/system_graph.py:compile_system_change -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.delta.identity state=planned owner=src/viper/system_graph.py:compile_system_change -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.conformance.total state=planned owner=src/viper/system_graph.py:evaluate_target_conformance -->
       <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.parity state=planned owner=src/viper/system_graph.py:compile_system_change -->
 
@@ -2620,33 +2620,39 @@ reviewed conclusion, and immutable `ResearchEpisode`.
 
 ### 25.1 Research protocol records
 
-- [ ] Add `src/viper/research.py` with the exact identifiers,
-      `ResearchConstraint`, `ResearchObjective`, `AnalysisPlan`,
-      `HypothesisSpec`, `ResourceLimit`, `ResourceBudget`,
-      `ExperimentCandidate`, `SelectionPolicyIdentity`, `CandidateScore`,
-      `ExperimentSelection`, agent invocation receipts, observations,
-      `ResearchReview`, and `ResearchEpisode`.
+- [ ] Add `ResearchConstraint`, `ResearchObjective`, `AnalysisPlan`,
+      `HypothesisSpec`, `ResourceLimit`, and `ResourceBudget` to
+      `src/viper/research.py` with the exact identifiers and validators from
+      the contract.
+      <!-- pair-block: P18-RML-01 -->
+- [ ] Add `ExperimentCandidate`, `SelectionPolicyIdentity`, `CandidateScore`,
+      and `ExperimentSelection`. Require complete candidate and score sets,
+      selected-candidate membership, eligibility, declared budget coverage,
+      and the random seed and selection probability for stochastic policies.
+      <!-- pair-block: P18-RML-02 -->
+- [ ] Add `AgentPolicyIdentity`, `AgentModelInvocationReceipt`,
+      `AgentToolInvocationReceipt`, `ResearchObservation`, `ResearchReview`,
+      and `ResearchEpisode`. Bind code-changing candidates to System Impact
+      Compiler records and generated PairBlocks. Bind executed candidates to
+      verified `ResolvedRunRef` values. <!-- implements: RML-01 -->
+      <!-- pair-block: P18-RML-03 -->
 - [ ] Add `ResearchRecordKind`, `ResearchRecord`,
       `ResearchRecordEnvelope`, `ResearchManifest`, and canonical publication
-      under `.viper/research/head.json`.
-- [ ] Bind code-changing candidates to the System Impact Compiler records and
-      their generated PairBlocks. Bind executed candidates to verified
-      `ResolvedRunRef` values. <!-- implements: RML-01 -->
+      under `.viper/research/head.json`. Extend `Catalog.refresh()` with
+      research-manifest discovery, exact rows, closed research edges, and
+      immutable source references.
+      <!-- pair-block: P18-RML-04 -->
 
 ### 25.2 Selection and scientific validity
 
-- [ ] Verify registration time, candidate completeness, unique IDs, named
-      feasibility and safety constraints, selected eligibility, selection
-      probabilities and random seed, supporting evidence, budget totals, and
-      agent/tool receipt identities and digests.
-- [ ] Recompute fixed-budget and fixed-sample conclusions from the referenced
-      measurements and effects.
-- [ ] Reject optional stopping unless the declared interval method is
-      anytime-valid. Validate the selected multiplicity rule and keep
-      exploratory results labeled as exploratory.
+- [ ] Verify registration time, named feasibility and safety constraints,
+      supporting evidence, budget totals, and agent/tool receipt identities
+      and digests. Recompute fixed-budget and fixed-sample conclusions from
+      referenced measurements and effects. Reject optional stopping unless the
+      declared interval method is anytime-valid. Validate the selected
+      multiplicity rule and preserve exploratory labels.
       <!-- implements: RML-02 -->
-- [ ] Extend `Catalog.refresh()` with research-manifest discovery, exact rows,
-      closed research edges, and immutable source references.
+      <!-- pair-block: P18-RML-05 -->
 
 ### 25.3 Focused proof
 
@@ -2654,11 +2660,12 @@ reviewed conclusion, and immutable `ResearchEpisode`.
       Publish, discover, verify, and rebuild one complete fixed-budget research
       episode.
       <!-- verifies: RML-01 -->
-- [ ] In `tests/test_verification_acceptance.py`, reject a late hypothesis,
+      In `tests/test_verification_acceptance.py`, reject a late hypothesis,
       missing candidate score, ineligible selection, budget overrun, unresolved
       receipt, mismatched PairBlock or conformance record, fixed interval under
       optional stopping, and unrecomputed multiplicity claim.
       <!-- verifies: RML-02 -->
+      <!-- pair-block: P18-RML-06 -->
 
 ```bash
 python -m pytest \
@@ -2688,37 +2695,35 @@ promoted with explicit approval, and rolled back.
 - [ ] Add `LearningExample`, `DatasetMember`, `DatasetSplit`, `LeakageCheck`, and
       `LearningDatasetManifest` with origin, synthetic ancestry, policy-time
       context, inclusion decision, group identity, catalog snapshot, and data
-      cutoff.
-- [ ] Keep every `group_id` inside one split. Reject post-cutoff evidence,
+      cutoff. Keep every `group_id` inside one split. Reject post-cutoff evidence,
       incomplete source lineage, hidden synthetic ancestry, failed leakage
-      checks, and inconsistent origin counts. <!-- implements: RML-03 -->
+      checks, and inconsistent origin counts. In `tests/test_protocol.py` and
+      `tests/test_verification_acceptance.py`, accept one group-safe manifest
+      and reject cross-split family, dataset, paper, and time leakage.
+      <!-- implements: RML-03 -->
+      <!-- verifies: RML-03 -->
+      <!-- pair-block: P19-RML-01 -->
 
 ### 26.2 Update, evaluation, promotion, and rollback
 
 - [ ] Add `LearningUpdateSpec`, `LearningUpdateReceipt`, `EvaluationMetric`,
       `AgentEvaluationPlan`, `AgentEvaluationResult`, and
-      `PolicyPromotionDecision`.
-- [ ] Implement retrieval-memory publication and workflow induction before any
-      parameter update. Store the complete `AgentPolicyIdentity` for baseline
-      and challenger.
-- [ ] Evaluate identical task, budget, tool-schema, and seed fixtures. Require
-      primary improvement or noninferiority, backward retention, leakage,
-      cost, and safety gates by task and context slice.
+      the baseline and challenger `AgentPolicyIdentity` records. Implement
+      retrieval-memory publication and workflow induction before any parameter
+      update. Evaluate identical task, budget, tool-schema, and seed fixtures.
+      Require primary improvement or noninferiority, backward retention,
+      leakage, cost, and safety gates by task and context slice.
+      <!-- pair-block: P19-RML-02 -->
 - [ ] Require an explicit `decision="promote"` review and a loadable,
       smoke-tested rollback policy
-      before promotion. <!-- implements: RML-04 -->
-
-### 26.3 Focused proof
-
-- [ ] In `tests/test_protocol.py`, accept one group-safe manifest and reject
-      cross-split family, dataset, paper, and time leakage. Verify source-origin
-      and synthetic-lineage counts after catalog rebuild.
-      <!-- verifies: RML-03 -->
-- [ ] In `tests/test_verification_acceptance.py`, run one baseline and
-      retrieval-memory challenger over frozen fixtures. Accept a passing
-      promotion; reject aggregate improvement with a failed retention slice;
-      and execute the recorded rollback target.
+      before promotion. In `tests/test_verification_acceptance.py`, accept one
+      passing promotion, reject aggregate improvement with a failed retention
+      slice, and execute the recorded rollback target.
+      <!-- implements: RML-04 -->
       <!-- verifies: RML-04 -->
+      <!-- pair-block: P19-RML-03 -->
+
+### 26.3 Focused gate
 
 ```bash
 python -m pytest \
@@ -2745,15 +2750,17 @@ catalog also carries anchored, versioned primary-source literature claims.
 
 - [ ] Add `--access learn`. Keep read and execute behavior unchanged. Generate
       learning tools from typed API request and success models.
-- [ ] Add research resources, templates, and prompts. Add client-controlled
+      Add research resources, templates, and prompts. Add client-controlled
       sampling with `AgentModelInvocationReceipt` and form-mode elicitation
       that compiles accepted responses into typed review or promotion records.
       <!-- implements: RML-05, PCM-06 -->
+      <!-- pair-block: P20-RML-01 -->
 - [ ] Add task augmentation for `catalog_refresh`, `run_many`,
       `run_learning_update`, and `evaluate_agent_policy` only after capability
       negotiation. Map each task ID to one durable VIPER operation identity;
       preserve ordinary status, cancellation, result retrieval, progress, and
       logging for clients without tasks. <!-- implements: PCM-07 -->
+      <!-- pair-block: P20-RML-02 -->
 
 ### 27.2 Literature evidence
 
@@ -2761,11 +2768,12 @@ catalog also carries anchored, versioned primary-source literature claims.
       `LiteratureClaim` with primary-source identity, content digest, exact
       locator, extraction origin and policy, review state, version chain, and
       correction or retraction state.
-- [ ] Add catalog rows and exact queries for current and historical versions.
+      Add catalog rows and exact queries for current and historical versions.
       Add `motivates`, `supports`, `qualifies`, and `contradicts` edges to
       hypotheses and observations. <!-- implements: RML-06 -->
-- [ ] Export a verified research episode and literature bundle as a derived
+      Export a verified research episode and literature bundle as a derived
       RO-Crate without changing the authoritative VIPER records.
+      <!-- pair-block: P20-RML-03 -->
 
 ### 27.3 Focused proof
 
@@ -2774,14 +2782,15 @@ catalog also carries anchored, versioned primary-source literature claims.
       omission, root narrowing, sampling custody, review decline, approval
       receipt, and learning-access isolation.
       <!-- verifies: RML-05, PCM-06 -->
-- [ ] In `tests/test_cli.py`, execute each long operation with and without MCP
+      In `tests/test_cli.py`, execute each long operation with and without MCP
       tasks. Require the same durable VIPER identity, terminal status,
       cancellation effect, and result. <!-- verifies: PCM-07 -->
-- [ ] In `tests/test_verification_acceptance.py`, ingest one published paper,
+      In `tests/test_verification_acceptance.py`, ingest one published paper,
       one corrected version, one accepted anchored
       claim, and one retracted claim. Reject a changed content digest, broken
       version chain, missing anchor, and unreviewed claim used as an accepted
       scientific conclusion. <!-- verifies: RML-06 -->
+      <!-- pair-block: P20-RML-04 -->
 
 ```bash
 python -m pytest \
@@ -2873,6 +2882,8 @@ old contract.
 | --- | --- | --- |
 | `src/viper/project.py` | Project marker schema, root discovery, explicit-root validation, and path-boundary errors | 0 |
 | `src/viper/system_graph.py` | Fixed-context system compiler, typed graph, SCC condensation DAG, graph delta, and impact closure | 0 |
+| `src/viper/_system_graph/codeql.py` | CodeQL database creation, locked-query execution, BQRS decoding, reverse closure, and affected-graph SCC queries | 0, 1 |
+| `tools/codeql/viper-system-graph/` | Locked QL pack, query schemas, source-fact queries, graph queries, and dependency lockfile | 0 |
 | `src/viper/_schema.py` | New parameter-source path scalar; replace old stage-key constants | 4, 5 |
 | `src/viper/keys.py` | Add `Train` and `Eval` enums | 5 |
 | `src/viper/parameters.py` | Rename `HttpTransport` to `Http`; owner-aware `ParameterModelRef`; delete `Download`; public alias support | 2, 4 |
@@ -2949,6 +2960,7 @@ old contract.
 | `tests/test_cli.py` | Commands, JSON results, restore, batch, catalog, knowledge, research, and MCP syntax | 10–20 |
 | `tests/test_project_init.py` | Root marker, discovery, complete protocol tree, rollback, and generated source layout | 0, 11 |
 | `tests/test_validation_architecture.py` | Fixed-context system compilation, observed dynamic edges, SCC DAGs, strict unresolved-input failure, and root-resolver boundaries | 0 |
+| `tests/test_system_graph_codeql.py` | CodeQL identity, source-fact coverage, AST-oracle parity, reverse closure, SCC condensation, and same-compiler reconstruction | 0 |
 | `tests/test_generated_project_acceptance.py` | Installed public workflow and terminal contract-stack acceptance | 11, 21 |
 | `tests/test_stage_invocation.py` | New keys, objective context, and owner-aware parameter binding | 4, 5 |
 | `tests/test_worker.py` | Project-stage worker after download removal and context changes | 2, 4, 5 |

@@ -8,7 +8,7 @@ boundary also follows [Provenance catalog and MCP](provenance-catalog-mcp.md).
 
 ## 1. Status and prerequisite gate
 
-**Status:** ready for implementation after Master Phase 17 passes.
+**Guide status:** audited; execution pending contract approval and Master Phase 17.
 
 Tomorrow's first repository action remains the first open block in the master
 checklist. Do not start `P18-RML-01` until these facts are true:
@@ -51,6 +51,11 @@ For each PairBlock:
 Do not combine a failing block with the next block. Record a contract gap when
 the implementation cannot represent or verify a required value.
 
+`depends_on` contains PairBlock IDs only. The master checklist owns
+cross-phase entry gates; the first Master Phase 18 block therefore has no
+PairBlock predecessor even though Master Phase 18 cannot start until its
+listed Master Phase prerequisites pass.
+
 ## 3. Dependency graph
 
 ```mermaid
@@ -87,7 +92,7 @@ flowchart TB
 id = "P18-RML-01"
 master_phase = 18
 requirements = ["RML-01"]
-depends_on = ["P17 terminal gate"]
+depends_on = []
 targets = ["src/viper/research.py", "tests/test_protocol.py"]
 produces = ["ResearchConstraint", "ResearchObjective", "AnalysisPlan", "HypothesisSpec", "ResourceLimit", "ResourceBudget"]
 tests = ["tests/test_protocol.py"]
