@@ -336,7 +336,7 @@ conda run -n mantra python -m pytest tests/test_verification_acceptance.py -q
 
 ## 6. Research MCP and literature (Master Phase 20)
 
-### P20-RML-01 — research resources, prompts, sampling, and elicitation
+### P20-RML-01 — research resources, prompts, model invocation, and elicitation
 
 ```toml pair-block
 id = "P20-RML-01"
@@ -349,8 +349,10 @@ gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py
 
 Add the exact research operations to the typed API registry. Add `learn`
 access, research `viper://` resources and templates, research prompts,
-client-controlled sampling, and form-mode review elicitation. Prove omission
-when capabilities or access are absent. Decline authorizes nothing.
+provider-backed model invocation with `AgentModelInvocationReceipt`, and MRTR
+form-mode review elicitation. Add stateless request metadata and
+`server/discover`; prove omission when capabilities or access are absent.
+Decline authorizes nothing.
 The CLI boundary is `viper mcp --root <path> --access learn`.
 
 Focused check:
@@ -370,10 +372,11 @@ tests = ["tests/test_api.py:test_research_tasks_preserve_operation_identity", "t
 gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q"
 ```
 
-Add task augmentation only to the four operations named by the MCP contract.
-Map each MCP task to the existing durable VIPER operation ID. Execute each
-fixture with and without tasks and compare status, cancellation, result, and
-side effects.
+Advertise `io.modelcontextprotocol/tasks` only for the four operations named by
+the MCP contract. Map each MCP task to the existing durable VIPER operation ID.
+Route `tasks/get`, `tasks/update`, and `tasks/cancel` through the same operation
+state. Execute each fixture with and without the extension and compare status,
+cancellation, result, and side effects.
 
 Focused check:
 

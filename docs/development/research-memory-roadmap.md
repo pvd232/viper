@@ -18,7 +18,7 @@ These requirements bind this contract to the master checklist:
 | RML-02 <!-- contract-requirement: RML-02 phase=18 test=tests/test_verification_acceptance.py --> | Reject an experiment selection or scientific conclusion when its declared feasibility, safety, scope, budget, comparison, stopping, multiplicity, or evidence rules cannot be recomputed from verified records. |
 | RML-03 <!-- contract-requirement: RML-03 phase=19 test=tests/test_protocol.py --> | Curate reviewed `LearningExample` records into an immutable `LearningDatasetManifest` that preserves origin, policy-time context, group-safe splits, synthetic lineage, inclusion decisions, and leakage checks. |
 | RML-04 <!-- contract-requirement: RML-04 phase=19 test=tests/test_verification_acceptance.py --> | Publish `LearningUpdateReceipt`, `AgentEvaluationResult`, and `PolicyPromotionDecision` records; promote a challenger only after frozen evaluation gates pass, and preserve a tested rollback target. |
-| RML-05 <!-- contract-requirement: RML-05 phase=20 test=tests/test_api.py --> | Expose research evidence through typed catalog queries, MCP resources, and user-selected prompts; expose agent sampling, review elicitation, and learning operations only through negotiated capabilities and explicit access. |
+| RML-05 <!-- contract-requirement: RML-05 phase=20 test=tests/test_api.py --> | Expose research evidence through typed catalog queries, MCP resources, and user-selected prompts; expose provider-backed model invocation, MRTR review elicitation, and learning operations only through typed operations, per-request capabilities, and explicit access. |
 | RML-06 <!-- contract-requirement: RML-06 phase=20 test=tests/test_verification_acceptance.py --> | Ingest versioned primary-source literature records with claim-level anchors, source and extraction provenance, review state, correction/retraction state, and explicit links to the experiments they motivate or qualify. |
 
 The concrete classes in this document are planned additions to
@@ -786,25 +786,25 @@ truth.
 
 ```mermaid
 flowchart TB
-    Client["MCP client"] --> Roots["Roots"]
+    Client["MCP client"] --> Discover["Discovery"]
     Client --> Resources["Resources"]
     Client --> Prompts["Prompts"]
     Client --> Tools["Tools"]
-    Client --> Sampling["Sampling"]
-    Client --> Elicitation["Elicitation"]
-    Client --> Tasks["Tasks"]
-    Roots --> Server["viper.mcp"]
+    Client --> Elicitation["MRTR elicitation"]
+    Client --> Tasks["Tasks extension"]
+    Client --> Subscriptions["Subscriptions"]
+    Discover --> Server["viper.mcp"]
     Resources --> Server
     Prompts --> Server
     Tools --> Server
-    Sampling --> Server
     Elicitation --> Server
     Tasks --> Server
+    Subscriptions --> Server
     Server --> API["viper.api.dispatch()"]
     API --> Catalog["Catalog and immutable records"]
 
     class Client input
-    class Roots,Resources,Prompts,Tools,Sampling,Elicitation,Tasks contract
+    class Discover,Resources,Prompts,Tools,Elicitation,Tasks,Subscriptions contract
     class Server,API implementation
     class Catalog evidence
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
@@ -816,28 +816,25 @@ flowchart TB
 
 | MCP feature | VIPER use | Authority rule |
 | --- | --- | --- |
-| Roots | Intersect client roots with the server's startup `--root` | A root can narrow access; it cannot widen startup custody |
+| Discovery | Advertise the protocol version, server identity, capabilities, and extensions through `server/discover` | Every request still carries its own version, identity, and capabilities |
 | Resources | Read immutable evidence and catalog snapshots through `viper://` URIs | Resource bytes come from verified records or identified derived projections |
 | Resource templates | Address runs, episodes, policies, literature, and catalog heads | URI arguments validate through typed reference models |
 | Prompts | User-selected review and comparison workflows | A prompt is a convenience view, never a verifier rule |
 | Tools | Typed search, execution, publication, evaluation, and promotion operations | Schemas come from API request/success models and calls use `dispatch()` |
-| Sampling | Ask the client-controlled model to propose, critique, or summarize | Every call creates `AgentModelInvocationReceipt`; no server provider key is required |
-| Elicitation | Collect structured review and promotion decisions | Form responses never carry secrets; review is published as a typed receipt |
-| Tasks | Poll long-running experiments, catalog rebuilds, and learning updates | Experimental MCP feature; capability-gated with a normal VIPER status fallback |
-| Progress, cancellation, logging | Report and control long operations | Messages point to the same VIPER operation or task identity |
+| Model invocation | Call a configured provider through a typed VIPER research operation | Every call creates `AgentModelInvocationReceipt`; credentials remain outside MCP messages and receipts |
+| Elicitation | Collect structured review and promotion decisions through MRTR | Form responses never carry secrets; review is published as a typed receipt |
+| Tasks | Poll long-running experiments, catalog rebuilds, and learning updates | Official extension; `tasks/get`, `tasks/update`, and `tasks/cancel` map to one VIPER operation identity |
+| Subscriptions | Observe mutable catalog heads through `subscriptions/listen` | Immutable digest resources never change under one URI |
+| Progress and cancellation | Report and control long operations | Messages point to the same VIPER operation or task identity; stdio diagnostics use `stderr` |
 
-The official MCP specification assigns different interaction control to these
-features: resources are application-driven, prompts are user-controlled, and
-tools are model-controlled. It also requires capability negotiation. See the
-official 2025-11-25 specifications for
-[resources](https://modelcontextprotocol.io/specification/2025-11-25/server/resources),
-[prompts](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts),
-[tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools),
-[roots](https://modelcontextprotocol.io/specification/2025-11-25/client/roots),
-[sampling](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling),
-and [elicitation](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation).
-MCP tasks were introduced in that revision and remain experimental, so VIPER
-does not make evidence validity depend on task support.
+The [MCP 2026-07-28
+specification](https://modelcontextprotocol.io/specification/2026-07-28) makes
+requests stateless and self-contained, requires `server/discover`, uses MRTR
+for additional client input, and defines Tasks as an opt-in extension. It
+deprecates Roots, Sampling, and MCP Logging for new implementations. VIPER uses
+the startup `--root` as its sole repository boundary, calls model providers
+through its typed research API, and writes stdio diagnostics to `stderr`.
+Evidence validity never depends on MCP task support.
 
 The server has three cumulative access modes:
 
@@ -985,7 +982,7 @@ challenger improves objective score
 | `src/viper/research.py` | Define research, learning, evaluation, promotion, literature, envelope, manifest, publication, and query models. |
 | `src/viper/catalog.py` | Discover research heads; derive exact rows and closed edges; preserve every source reference. |
 | `src/viper/api.py` | Add typed research publication, curation, evaluation, promotion, literature, and query operations. |
-| `src/viper/mcp.py` | Add research resources, templates, prompts, learning tools, sampling receipts, review elicitation, and task parity. |
+| `src/viper/mcp.py` | Add research resources, templates, prompts, learning tools, stateless discovery, MRTR review elicitation, subscriptions, and Tasks extension parity. |
 | `src/viper/cli.py` | Add research commands and `mcp --access learn`. |
 | `src/viper/verification/__init__.py` | Dispatch every research record verifier. |
 | `src/viper/_verification/research.py` | Recompute links, budgets, validity rules, leakage, evaluation gates, promotion, rollback, and literature anchors. |
@@ -993,7 +990,7 @@ challenger improves objective score
 | `tests/test_inspection.py` | Cover manifest discovery, catalog rebuilds, exact queries, graph edges, and RO-Crate projection. |
 | `tests/test_verification_acceptance.py` | Sever each reference and reject every invalid scientific, learning, promotion, and literature claim before publication. |
 | `tests/test_api.py` | Compare Python, typed API, and MCP schemas and structured results. |
-| `tests/test_cli.py` | Cover research commands, access modes, roots, sampling, elicitation, tasks, and fallback. |
+| `tests/test_cli.py` | Cover research commands, access modes, startup-root custody, provider-backed model invocation, MRTR elicitation, tasks, and fallback. |
 | `tests/test_documentation.py` | Bind requirement coverage, exact model shapes, MCP feature ownership, PairBlocks, and contract baselines. |
 | `pyproject.toml` | Add any optional learning dependencies only when their first implemented algorithm requires them. |
 
@@ -1008,10 +1005,11 @@ challenger improves objective score
    `LearningDatasetManifest`.
 5. Implement learning-update, evaluation, promotion, and rollback records.
 6. Add retrieval-memory and workflow challengers before any weight update.
-7. Extend MCP resources, templates, prompts, roots, access modes, sampling
-   receipts, review elicitation, progress, cancellation, and logging.
-8. Add experimental task support behind capability negotiation and preserve
-   the ordinary VIPER status fallback.
+7. Extend MCP resources, templates, prompts, discovery, access modes,
+   provider-backed model-invocation receipts, MRTR review elicitation,
+   subscriptions, progress, cancellation, and `stderr` diagnostics.
+8. Add the Tasks extension behind per-request capability negotiation and
+   preserve the ordinary VIPER status fallback.
 9. Implement literature work, version, anchor, and claim records; then add
    primary-source ingestion and review queues.
 10. Measure learned classifiers, outcome models, acquisition policies, and

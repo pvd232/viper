@@ -5796,7 +5796,7 @@ requirements = ["SIG-01", "SIG-02", "SIG-05"]
 targets = ["src/viper/system_graph.py:SystemNode", "src/viper/system_graph.py:SystemNodeAnchor", "src/viper/system_graph.py:PlannedNodeAnchor", "src/viper/system_graph.py:SystemEdge", "src/viper/system_graph.py:PythonSignatureFact", "src/viper/system_graph.py:CodeQLToolchainIdentity", "src/viper/system_graph.py:CodeQLSourceFacts", "src/viper/system_graph.py:CodeQLAnalysisReceipt", "src/viper/system_graph.py:GraphFact", "src/viper/system_graph.py:TargetConstraint", "src/viper/system_graph.py:TargetSpecification", "src/viper/system_graph.py:ConstraintConformanceReceipt", "src/viper/system_graph.py:SystemDiagnostic"]
 tests = ["tests/test_validation_architecture.py:test_system_graph_vocabulary_is_closed", "tests/test_validation_architecture.py:test_system_target_language_is_closed"]
 gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k 'system_graph_vocabulary_is_closed or system_target_language_is_closed' -q"
-depends_on = []
+depends_on = ["P0-MOD-04"]
 ```
 
 Add the four node variants, finite roles, canonical dependency kinds, evidence

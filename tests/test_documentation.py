@@ -1250,15 +1250,16 @@ def test_research_contract_preserves_learning_and_promotion_boundaries() -> None
 
     text = RESEARCH_MEMORY.read_text(encoding="utf-8")
     for feature in (
-        "Roots",
+        "Discovery",
         "Resources",
         "Prompts",
         "Tools",
-        "Sampling",
-        "Elicitation",
-        "Tasks",
+        "MRTR elicitation",
+        "Tasks extension",
+        "Subscriptions",
     ):
         assert f'["{feature}"]' in text
+    assert "provider-backed model invocation" in text
     assert "--access learn" in RESEARCH_MEMORY_PAIR_CODING.read_text(encoding="utf-8")
 
 

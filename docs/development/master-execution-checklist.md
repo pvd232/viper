@@ -261,7 +261,7 @@ The documentation uses one name for each artifact family:
 | Pair-coding guide | `<Capability> Pair-Coding Guide` | [Contract Traceability Pair-Coding Guide](contract-traceability-pair-coding.md) |
 | Cross-contract schedule | `VIPER Master Execution Checklist` | This document |
 | Scheduled phase | `Master Phase N` | Master Phase 0 |
-| Stable work identity | Existing PairBlock ID | `P0-CRT-01` |
+| Stable work identity | Existing PairBlock ID | `P0-PDR-01` |
 | Contract-local sequence | `Implementation Step N` | Implementation Step 1 |
 | Research sequence | `Research Stage N` | Research Stage I |
 
@@ -312,7 +312,7 @@ The contracts share models. One contract owns each shared decision:
 | One experiment expands into ordinary `RunPlanDraft` values | Experiment expansion |
 | A skipped stage records `StageReuseReceipt` and a new target snapshot | Verified stage reuse |
 | Cross-run search rows remain derived from immutable references | Provenance catalog and MCP |
-| MCP tools, resources, prompts, roots, sampling, elicitation, tasks, and utilities reuse VIPER identities and negotiated protocol capabilities | Provenance catalog and MCP |
+| MCP tools, resources, prompts, discovery, subscriptions, MRTR elicitation, Tasks extension calls, and utilities reuse VIPER identities and per-request protocol capabilities | Provenance catalog and MCP |
 | Scientific labels keep declared, inferred, and reviewed origins separate | Experiment knowledge primitives |
 | Controlled comparisons use verified run and measurement references | Experiment knowledge primitives |
 | Exact filters run before vector ranking; exact identity or reviewed equivalence rejects a duplicate | Experiment knowledge primitives |
@@ -332,7 +332,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=be4656fdf8a74d78b537c7d13ce907b6de1afc42fbc95e0093d0d9f761ae8bfd -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=904b42e0cd68aa6063f638ff702e6e802edf3a5ea91f0ee0d0a665ee3f7e10b8 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=a4633fe87d789eed2ccf53e086dc3effb4700aaa44c4416a7b2e7b40affe05c9 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=c6d9eb733483e526f3d5f48a6ee7d9286dd0eb9aff872ba6eb8d6936dcf61eed -->
 <!-- contract-baseline: external-input-roots.md sha256=e392471c58db799b0766dc1607a9a0821d6df66fa194fc2c391c7a0d3335ccc8 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=2a783dbb3d348516f647efb837fccdb0917de008705c142144fbd6b8a9fd1b03 -->
@@ -340,10 +340,10 @@ a new digest.
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=a36055d171989130aa625df16866fcafdcaa5d7aa01a942041ae3a88c2323ed4 -->
 <!-- contract-baseline: remote-storage.md sha256=bb7ec5224ec46daf389293c4504236816ba05c58e3fefb63e721dcbad846556d -->
 <!-- contract-baseline: experiment-expansion.md sha256=4fcbd2e40e16651f697544f41923d331d04b99e631b6072e42fbcad96cafcc98 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=968f506e9db6cee6db4f27459a978b9dbe59427171b459f081e4154099688a88 -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=727ffd1aab1859a38af0738dce210225a5b701071f0df41e89bbb549f1d31932 -->
 <!-- contract-baseline: stage-reuse.md sha256=30345396844be978a004167e27af5fc6b38e83dbc32a3b19a94e0ed030d89ed8 -->
 <!-- contract-baseline: experiment-knowledge-primitives.md sha256=728758e2ffe67b5aba4d6a2b7d09a682090bbb48e429645045ca694b43796348 -->
-<!-- contract-baseline: research-memory-roadmap.md sha256=e03136aa388fc4cfb52ebea9554c52198be4d8353eb9bb687f2187a8865bc29c -->
+<!-- contract-baseline: research-memory-roadmap.md sha256=df705a3646fc1ed81bd36564477b06650ccd465a01d7ecfa74affa411d7e8eb4 -->
 
 ## 4. Specification-system review
 
@@ -539,30 +539,66 @@ Each contract has one case that must fail:
 
 ## 5. Dependency order
 
-```text
-Master Phase 0 -> Master Phase 1
-Master Phase 1 -> Master Phase 2 -> Master Phase 3
-Master Phase 1 -> Master Phase 4
-Master Phase 2 + Master Phase 4 -> Master Phase 5 -> Master Phase 6
-Master Phase 3 + Master Phase 6 -> Master Phase 7 -> Master Phase 8 -> Master Phase 9 -> Master Phase 10 -> Master Phase 11
-Master Phase 11 -> Master Phase 12 -> Master Phase 13 -> Master Phase 14 -> Master Phase 15
-Master Phase 15 -> Master Phase 16 -> Master Phase 17 -> Master Phase 18
-Master Phase 18 -> Master Phase 19 -> Master Phase 20 -> Master Phase 21
+```mermaid
+flowchart TB
+    subgraph Phase0["Master Phase 0 — foundation"]
+        PDR["PDR<br/>Project root"] --> CRT["CRT<br/>ContractTraceabilityGraph"]
+        CRT --> MOD["MOD<br/>Module ownership"]
+        MOD --> SIG["SIG<br/>SystemGraph and impact compiler"]
+    end
+
+    SIG --> P1["1 Local publication"]
+    P1 --> P2["2 Download stages"]
+    P2 --> P3["3 External roots"]
+    P1 --> P4["4 Metric runtime"]
+    P2 --> P5["5 Python drafts"]
+    P4 --> P5
+    P5 --> P6["6 Experiments"]
+    P3 --> P7["7 Input compilation"]
+    P6 --> P7
+    P7 --> P8["8 Benchmarks"]
+    P8 --> P9["9 Cloud publication"]
+    P9 --> P10["10 Restore"]
+    P10 --> P11["11 Workflow migration"]
+    P11 --> P12["12 Bounded execution"]
+    P12 --> P13["13 Provenance catalog"]
+    P13 --> P14["14 Stage reuse"]
+    P14 --> P15["15 Local MCP"]
+    P15 --> P16["16 Scientific evidence"]
+    P16 --> P17["17 Agent search"]
+    P17 --> P18["18 Research episodes"]
+    P18 --> P19["19 Policy learning"]
+    P19 --> P20["20 Research MCP"]
+    P20 --> P21["21 Release gate"]
+
+    class PDR,CRT,MOD,SIG foundation
+    class P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11,P12 implementation
+    class P13,P14,P15,P16,P17 evidence
+    class P18,P19,P20 research
+    class P21 release
+    classDef foundation fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef research fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
+    classDef release fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-Master Phase 0 first establishes contract traceability and the root used by every
-later local path. It then gives public API and verification symbols one owner
-before compiling those relationships into the system graph. Master Phases 2 and 4 may
-occur on separate branches after Master Phase 1. The pair-coding sequence in this
-document keeps one active branch and completes them in order.
+Master Phase 0 establishes the project root first. The
+`ContractTraceabilityGraph` then resolves contract requirements to source and
+tests inside that root. Module ownership gives each public symbol one defining
+module. `compile_system()` combines the CodeQL source facts and the
+`ContractTraceabilityGraph` into baseline `SystemGraph` `G0`. Master Phases 2
+and 4 may occur on separate branches after Master Phase 1; both feed Master
+Phase 5. Master Phases 3 and 6 both feed Master Phase 7.
 
 ## 6. Pair-coding protocol
 
-The [Contract Traceability Pair-Coding
+The [Foundation Pair-Coding Guide](foundation-pair-coding.md) owns the
+project-root and module work. The [Contract Traceability Pair-Coding
 Guide](contract-traceability-pair-coding.md) owns every `P0-CRT` block
-and `P0-PROOF-01` through `P0-PROOF-04`. The
-[Foundation Pair-Coding Guide](foundation-pair-coding.md) owns the project-root
-and module work. The [System Impact Compiler](system-impact-compiler.md#14-implementation-plan-and-verification-gates)
+and `P0-PROOF-01` through `P0-PROOF-04`. The [System Impact
+Compiler](system-impact-compiler.md#14-implementation-plan-and-verification-gates)
 owns every `P0-SIG`,
 `P0-PROOF-09` through `P0-PROOF-12`, and `P1-SIG` block. Every marked checkbox
 resolves to one block containing requirements, prerequisites, targets, tests,
@@ -584,25 +620,72 @@ Each pair-coding turn changes one bounded behavior. The user writes the code.
 Codex inspects the live file, explains the next edit, and chooses the next test
 from the observed result.
 
-## 7. Master Phase 0 — traceability, project root, module ownership, and system impact
+## 7. Master Phase 0 — project root, traceability, module ownership, and system impact
 
 **Depends on:** Module-privacy work already implemented.
 
-**Contracts:** [Contract Traceability](contract-traceability.md),
-[project data root](project-data-root.md),
+**Contracts:** [Project data root](project-data-root.md),
+[Contract Traceability](contract-traceability.md),
 [public module ownership](module-ownership.md), and
 [System Impact Compiler](system-impact-compiler.md)
 
-**Outcome:** Every contract requirement has a named rule, exact implementation
-owner, populated trace, and exact test. `viper init ROOT` creates the complete
-protocol tree and every later local operation resolves that same root. Public
-API and verification imports then identify their defining modules. VIPER can
+**Outcome:** `viper init ROOT` creates the complete protocol tree and every
+later local operation resolves that same root. Every contract requirement then
+has a named rule, exact implementation owner, populated trace, and exact test.
+Public API and verification imports identify their defining modules. VIPER can
 analyze that stable source tree with one pinned CodeQL toolchain, lower the
 validated source facts under one fixed context, publish canonical dependency
 graphs, and return the exact affected requirements and observing tests before
 later phases change code.
 
-### 7.1 Contract Traceability
+### 7.1 Project root
+
+- [ ] Add `ProjectSettings`, `ProjectRootError`, `find_project_root()`, and
+      `resolve_project_root()` in `src/viper/project.py`.
+      <!-- pair-block: P0-PDR-01 -->
+      <!-- implements: PDR-01 -->
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=planned owner=src/viper/project.py:resolve_project_root -->
+- [ ] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
+      staged project scaffold in `src/viper/project_init.py`.
+      <!-- pair-block: P0-PDR-02 -->
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=planned owner=src/viper/project_init.py:initialize_project -->
+- [ ] Route public default roots through `resolve_project_root()` and pass the
+      resolved value into internal operations exactly once.
+      <!-- pair-block: P0-PDR-03 -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=planned owner=src/viper/project.py:resolve_project_root -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=planned owner=src/viper/project.py:resolve_project_root -->
+- [ ] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
+      as the root-selection operation. <!-- implements: PDR-04 -->
+      <!-- pair-block: P0-PDR-04 -->
+      <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=planned owner=src/viper/cli.py:add_root -->
+- [ ] Add `resolve_project_path()` and reject every descendant symlink, logical
+      traversal, and final resolved escape before any local read, write,
+      capture, publication, or restore. <!-- implements: PDR-03 -->
+      <!-- pair-block: P0-PDR-06 -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_project_path -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
+- [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
+      at their protocol paths and preserve separate immutable copies.
+      <!-- pair-block: P0-PDR-05 -->
+      <!-- implements: PDR-02 -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=planned owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
+
+<details>
+<summary>Hints</summary>
+
+**Hint 1:** The root is the directory containing `viper.toml`. Keep the absolute
+root path in runtime memory and outside the marker.
+
+**Hint 2:** Resolve the root at the public operation boundary. Internal helpers
+receive the resolved value. The public resolver owns parent search.
+
+**Hint 3:** Keep `.viper/store` separate from user-visible artifact paths. One
+working-file edit must leave the immutable copy retrievable.
+
+</details>
+
+### 7.2 Contract Traceability
 
 - [ ] Add the exact traceability models and parsers in
       `src/viper/_contract_traceability.py`; compile current requirement rows
@@ -665,53 +748,6 @@ Guide](contract-traceability-pair-coding.md) owns the complete
 `P0-CRT-01` through `P0-CRT-05` production edits and
 `P0-PROOF-01` through `P0-PROOF-04` acceptance edits. The checklist owns
 their order and state; the guide owns their exact code and focused gates.
-
-### 7.2 Project root
-
-- [ ] Add `ProjectSettings`, `ProjectRootError`, `find_project_root()`, and
-      `resolve_project_root()` in `src/viper/project.py`.
-      <!-- pair-block: P0-PDR-01 -->
-      <!-- implements: PDR-01 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=planned owner=src/viper/project.py:resolve_project_root -->
-- [ ] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
-      staged project scaffold in `src/viper/project_init.py`.
-      <!-- pair-block: P0-PDR-02 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=planned owner=src/viper/project_init.py:initialize_project -->
-- [ ] Route public default roots through `resolve_project_root()` and pass the
-      resolved value into internal operations exactly once.
-      <!-- pair-block: P0-PDR-03 -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=planned owner=src/viper/project.py:resolve_project_root -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=planned owner=src/viper/project.py:resolve_project_root -->
-- [ ] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
-      as the root-selection operation. <!-- implements: PDR-04 -->
-      <!-- pair-block: P0-PDR-04 -->
-      <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=planned owner=src/viper/cli.py:add_root -->
-- [ ] Add `resolve_project_path()` and reject every descendant symlink, logical
-      traversal, and final resolved escape before any local read, write,
-      capture, publication, or restore. <!-- implements: PDR-03 -->
-      <!-- pair-block: P0-PDR-06 -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_project_path -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=planned owner=src/viper/project.py:resolve_project_path -->
-- [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
-      at their protocol paths and preserve separate immutable copies.
-      <!-- pair-block: P0-PDR-05 -->
-      <!-- implements: PDR-02 -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=planned owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** The root is the directory containing `viper.toml`. Keep the absolute
-root path in runtime memory and outside the marker.
-
-**Hint 2:** Resolve the root at the public operation boundary. Internal helpers
-receive the resolved value. The public resolver owns parent search.
-
-**Hint 3:** Keep `.viper/store` separate from user-visible artifact paths. One
-working-file edit must leave the immutable copy retrievable.
-
-</details>
 
 ### 7.3 Public module ownership
 
@@ -1002,8 +1038,8 @@ python -m pytest \
 
 **Commit boundaries:**
 
-1. `Trace contract requirements to code and tests`
-2. `Bind every local operation to one project root`
+1. `Bind every local operation to one project root`
+2. `Trace contract requirements to code and tests`
 3. `Give public modules one implementation owner`
 4. `Compile source-evidenced changes with the System Impact Compiler`
 
@@ -2305,6 +2341,9 @@ adds the existing execution operations.
 
 - [ ] Add `mcp = ["mcp>=2,<3"]` to project optional dependencies.
 - [ ] Add `src/viper/mcp.py` using the stable official Python SDK version 2.
+- [ ] Implement stateless request validation, required `resultType` values,
+      per-request protocol version and client capability metadata, and
+      `server/discover`.
 - [ ] Generate one tool for each allowed typed API operation.
 - [ ] Use the API request model's JSON Schema as the tool input schema.
 - [ ] Use the success model's JSON Schema as the output schema.
@@ -2316,9 +2355,9 @@ adds the existing execution operations.
       that resolves outside it.
 - [ ] Add `viper://` immutable resource URIs, typed resource templates, and the
       six user-selected prompts declared by the contract.
-- [ ] Intersect client roots with the startup root. Add deterministic resource
-      and prompt listing, catalog-head subscriptions, list-change
-      notifications, progress, cancellation, and logging.
+- [ ] Add deterministic resource and prompt listings with `ttlMs` and
+      `cacheScope`, catalog-head subscriptions through `subscriptions/listen`,
+      request-scoped progress, cancellation, and `stderr` diagnostics.
       <!-- implements: PCM-05 -->
 
 <details>
@@ -2359,9 +2398,10 @@ operations and immutable-reference operations.
 - [ ] Prove a path outside the fixed root fails before the handler runs.
 - [ ] Exercise one stdio discovery, list, and call sequence.
 - [ ] List and read one immutable resource; expand one resource template; get
-      one prompt; narrow the startup root; refresh the catalog head; and verify
-      equal ordering, one update notification, progress, cancellation, and log
-      custody.
+      one prompt; reject one path outside the startup root; refresh the catalog
+      head; and verify equal ordering, cache metadata, one
+      `resourcesListChanged` event through `subscriptions/listen`, progress,
+      cancellation, and `stderr` custody.
 - [ ] Run: <!-- verifies: PCM-03, PCM-04, PCM-05 -->
 
 ```bash
@@ -2753,16 +2793,18 @@ catalog also carries anchored, versioned primary-source literature claims.
 
 - [ ] Add `--access learn`. Keep read and execute behavior unchanged. Generate
       learning tools from typed API request and success models.
-      Add research resources, templates, and prompts. Add client-controlled
-      sampling with `AgentModelInvocationReceipt` and form-mode elicitation
-      that compiles accepted responses into typed review or promotion records.
+      Add research resources, templates, and prompts. Add provider-backed model
+      invocation with `AgentModelInvocationReceipt` and MRTR form-mode
+      elicitation that compiles accepted responses into typed review or
+      promotion records.
       <!-- implements: RML-05, PCM-06 -->
       <!-- pair-block: P20-RML-01 -->
-- [ ] Add task augmentation for `catalog_refresh`, `run_many`,
-      `run_learning_update`, and `evaluate_agent_policy` only after capability
-      negotiation. Map each task ID to one durable VIPER operation identity;
-      preserve ordinary status, cancellation, result retrieval, progress, and
-      logging for clients without tasks. <!-- implements: PCM-07 -->
+- [ ] Add the `io.modelcontextprotocol/tasks` extension for `catalog_refresh`,
+      `run_many`, `run_learning_update`, and `evaluate_agent_policy`. Map each
+      task ID to one durable VIPER operation identity; route `tasks/get`,
+      `tasks/update`, and `tasks/cancel` through that identity; preserve the
+      ordinary status path for clients without the extension.
+      <!-- implements: PCM-07 -->
       <!-- pair-block: P20-RML-02 -->
 
 ### 27.2 Literature evidence
@@ -2782,8 +2824,8 @@ catalog also carries anchored, versioned primary-source literature claims.
 
 - [ ] In `tests/test_api.py`, prove equal schemas and results through Python,
       typed API, CLI, MCP tools, resources, and prompts. Prove capability
-      omission, root narrowing, sampling custody, review decline, approval
-      receipt, and learning-access isolation.
+      omission, startup-root rejection, model-invocation receipt custody, MRTR
+      review decline, approval receipt, and learning-access isolation.
       <!-- verifies: RML-05, PCM-06 -->
       In `tests/test_cli.py`, execute each long operation with and without MCP
       tasks. Require the same durable VIPER identity, terminal status,
@@ -2904,7 +2946,7 @@ old contract.
 | `src/viper/catalog.py` | Rebuildable SQLite catalog, exact queries, lineage rows, stage-reuse lookup, knowledge and research graphs, literature rows, and vector-view indexes | 13, 14, 17–20 |
 | `src/viper/knowledge.py` | Ontology, assignments, modulations, effects, impacts, diagnostics, journals, vectors, and immutable publication | 16–20 |
 | `src/viper/research.py` | Research objectives, hypotheses, candidates, selections, episodes, learning datasets, updates, evaluations, promotions, literature, manifests, and immutable publication | 18–20 |
-| `src/viper/mcp.py` | Typed tools, resources, templates, prompts, roots, sampling, elicitation, tasks, progress, cancellation, logging, and access modes | 15, 17, 20 |
+| `src/viper/mcp.py` | Stateless discovery, typed tools, resources, templates, prompts, cache metadata, subscriptions, MRTR elicitation, Tasks extension calls, progress, cancellation, `stderr` diagnostics, and access modes | 15, 17, 20 |
 | `src/viper/workspace.py` | Captured input paths and destination binding | 3, 9 |
 | `src/viper/paths.py` | Remove separate retrieval body path; add the canonical captured-input path helper | 2, 3 |
 | `src/viper/preflight.py` | Renamed HTTP implementation checks, runner-owned download checks, owner-aware parameter refs, compiled input order, and plan-commit identity | 2, 4, 6, 7 |
@@ -2973,7 +3015,7 @@ old contract.
 | `docs/development/project-data-root.md` | Root selection, discovery, path custody, verification, propagation, and acceptance cases | 0 |
 | `docs/development/system-impact-compiler.md` | Fixed context, graph schema, compilation, delta, impact closure, proof, implementation blocks, verification, and acceptance cases | 0 |
 | `docs/development/experiment-expansion.md` | Expansion, aggregate execution, and acceptance cases | 12 |
-| `docs/development/provenance-catalog-mcp.md` | Catalog; MCP tools, resources, prompts, roots, sampling, elicitation, tasks, utilities, access boundary, and acceptance cases | 13, 15, 20 |
+| `docs/development/provenance-catalog-mcp.md` | Catalog; MCP stateless discovery, tools, resources, prompts, subscriptions, provider-backed model invocation, MRTR elicitation, Tasks extension calls, utilities, access boundary, and acceptance cases | 13, 15, 20 |
 | `docs/development/stage-reuse.md` | Reuse key, receipt, runtime, metric, storage, and verifier contract | 14 |
 | `docs/development/experiment-knowledge-primitives.md` | Ontology, controlled comparisons, diagnostics, journals, graph, vectors, and agent operations | 16, 17 |
 | `docs/development/research-memory-roadmap.md` | Research episodes, adaptive validity, learning datasets, policy evaluation and promotion, literature evidence, and MCP boundaries | 18–20 |

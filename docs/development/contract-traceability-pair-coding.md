@@ -2,7 +2,7 @@
 
 This is the implementation authority for contract-requirement traceability.
 The [contract](contract-traceability.md) defines what must become
-true. The [master checklist](master-execution-checklist.md#71-contract-traceability)
+true. The [master checklist](master-execution-checklist.md#72-contract-traceability)
 owns order and completion. This guide supplies the exact edit for each pair
 cycle.
 

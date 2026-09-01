@@ -17,9 +17,9 @@ These requirements bind the contract to the master checklist:
 | PCM-02 <!-- contract-requirement: PCM-02 phase=13 test=tests/test_verification_acceptance.py --> | Search runs, artifacts, measurements, benchmarks, and lineage edges while keeping immutable records authoritative. |
 | PCM-03 <!-- contract-requirement: PCM-03 phase=15 test=tests/test_api.py --> | Generate deterministic MCP tool schemas from VIPER's typed operation models and route calls through the same handlers. |
 | PCM-04 <!-- contract-requirement: PCM-04 phase=15 test=tests/test_cli.py --> | Ship a local stdio MCP command with read-only default access and explicit execution access. |
-| PCM-05 <!-- contract-requirement: PCM-05 phase=15 test=tests/test_api.py --> | Expose immutable evidence as `viper://` resources, typed resource templates, and user-selected prompts; negotiate roots and utilities without creating a second path or authority model. |
-| PCM-06 <!-- contract-requirement: PCM-06 phase=20 test=tests/test_api.py --> | Add explicit learning access, client-controlled sampling, and structured review elicitation with immutable VIPER receipts for every model call and human decision. |
-| PCM-07 <!-- contract-requirement: PCM-07 phase=20 test=tests/test_cli.py --> | Add MCP tasks for declared long-running operations only behind 2025-11-25 capability negotiation, and preserve ordinary VIPER operation identity, status, cancellation, and result retrieval when tasks are unavailable. |
+| PCM-05 <!-- contract-requirement: PCM-05 phase=15 test=tests/test_api.py --> | Expose immutable evidence as `viper://` resources, typed resource templates, and user-selected prompts through stateless MCP requests, `server/discover`, cacheable listings, and `subscriptions/listen`; keep the startup `--root` as the only repository boundary. |
+| PCM-06 <!-- contract-requirement: PCM-06 phase=20 test=tests/test_api.py --> | Add explicit learning access, provider-backed model invocation through typed VIPER operations, and structured MRTR review elicitation with immutable VIPER receipts for every model call and human decision. |
+| PCM-07 <!-- contract-requirement: PCM-07 phase=20 test=tests/test_cli.py --> | Add the official MCP Tasks extension for declared long-running operations, map `tasks/get`, `tasks/update`, and `tasks/cancel` to durable VIPER operation identity, and preserve the ordinary VIPER status path when the extension is unavailable. |
 
 **Current:** `verify_run_result()` returns one connected verified run.
 `lineage()` builds one graph from that result. `compare_runs()` compares two
@@ -324,25 +324,25 @@ record, or authorization model.
 
 ```mermaid
 flowchart TB
-    Client["MCP client"] --> Roots["Roots"]
+    Client["MCP client"] --> Discover["Discovery"]
     Client --> Resources["Resources"]
     Client --> Prompts["Prompts"]
     Client --> Tools["Tools"]
-    Client --> Sampling["Sampling"]
-    Client --> Elicitation["Elicitation"]
-    Client --> Tasks["Tasks"]
-    Roots --> Server["viper.mcp"]
+    Client --> Elicitation["MRTR elicitation"]
+    Client --> Tasks["Tasks extension"]
+    Client --> Subscriptions["Subscriptions"]
+    Discover --> Server["viper.mcp"]
     Resources --> Server
     Prompts --> Server
     Tools --> Server
-    Sampling --> Server
     Elicitation --> Server
     Tasks --> Server
+    Subscriptions --> Server
     Server --> Dispatch["viper.api.dispatch()"]
     Dispatch --> Evidence["Catalog and immutable records"]
 
     class Client input
-    class Roots,Resources,Prompts,Tools,Sampling,Elicitation,Tasks protocol
+    class Discover,Resources,Prompts,Tools,Elicitation,Tasks,Subscriptions protocol
     class Server,Dispatch implementation
     class Evidence evidence
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
@@ -352,11 +352,13 @@ flowchart TB
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-The official MCP specification distinguishes server features—resources,
-prompts, and tools—from client features—roots, sampling, and elicitation. The
-2025-11-25 revision also defines experimental tasks and the shared progress,
-cancellation, and logging utilities. VIPER negotiates each capability during
-initialization and omits every unsupported path.
+The [MCP 2026-07-28
+specification](https://modelcontextprotocol.io/specification/2026-07-28) uses
+stateless, self-contained requests. Every request carries the protocol version,
+client identity, and client capabilities in `_meta`. `viper.mcp` implements
+`server/discover`, returns `resultType` on every result, and advertises only the
+resources, prompts, tools, subscriptions, elicitation, and extensions it can
+serve. There is no initialization session or `Mcp-Session-Id`.
 
 The first server uses stdio:
 
@@ -382,7 +384,7 @@ mcp = ["mcp>=2,<3"]
 ```
 
 The [official MCP tool
-contract](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
+contract](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)
 requires valid input schemas and supports output schemas, structured content,
 resource links, and tool annotations. Annotations are untrusted hints; VIPER's
 access mode and handler validation remain authoritative. The
@@ -390,14 +392,13 @@ access mode and handler validation remain authoritative. The
 generates protocol schemas from Python types. VIPER still compares every
 generated schema with the owning request or success model in tests.
 
-### Roots and repository custody
+### Repository custody
 
-The server starts with one explicit `--root`. If the client supports
-[roots](https://modelcontextprotocol.io/specification/2025-11-25/client/roots),
-`viper.mcp` requests `roots/list` and intersects the returned `file://` roots
-with that startup root. Client roots may narrow the visible tree. They never
-widen startup custody. A root-list change invalidates cached path decisions and
-triggers another intersection before the next path-bearing operation.
+The server starts with one explicit `--root`. That path is the sole repository
+boundary for the process. Every path-bearing resource URI, prompt argument, and
+tool argument passes through `resolve_project_path()` before dispatch. The MCP
+2026-07-28 revision deprecates Roots for new implementations; VIPER therefore
+does not accept a second client-supplied root model.
 
 ### Evidence resources
 
@@ -420,12 +421,15 @@ viper://catalog/head
 `resources/read` resolves the URI through typed VIPER references and verifies
 immutable evidence before returning bytes. `viper://catalog/head` is explicitly
 derived and includes the catalog identity and refresh sources. The server emits
-list-changed notifications after a successful catalog replacement and supports
-subscriptions only for mutable derived heads. Immutable digest resources never
-change under one URI.
+one `resourcesListChanged` event through `subscriptions/listen` after a
+successful catalog replacement and accepts resource subscriptions only for
+mutable derived heads. Immutable digest resources never change under one URI.
+Every list and read result includes the required `ttlMs` and `cacheScope`;
+immutable evidence may use a long private cache lifetime, while the derived
+catalog head uses a short private lifetime.
 
 The [MCP resource
-contract](https://modelcontextprotocol.io/specification/2025-11-25/server/resources)
+contract](https://modelcontextprotocol.io/specification/2026-07-28/server/resources)
 defines URI identity, templates, pagination, optional subscriptions, and list
 change notifications. VIPER maps those mechanisms onto its existing immutable
 and derived records.
@@ -447,7 +451,7 @@ Each prompt argument validates through an existing query or reference model.
 The prompt body contains resolved resource links and a plain-language review
 task. Prompts never execute work or approve a result. They are user-selected
 views, consistent with the [MCP prompt interaction
-model](https://modelcontextprotocol.io/specification/2025-11-25/server/prompts).
+model](https://modelcontextprotocol.io/specification/2026-07-28/server/prompts).
 
 ### Read-access tools
 
@@ -519,29 +523,28 @@ process. `catalog_refresh` belongs to execution access because it replaces the
 local derived database. `promote_agent_policy` belongs to learning access and
 also requires a structured human approval receipt.
 
-### Sampling and elicitation
+### Model invocation and elicitation
 
-When the client declares `sampling`, VIPER may ask the client's model to
-propose candidates, critique a plan, or summarize verified evidence. The
-[sampling contract](https://modelcontextprotocol.io/specification/2025-11-25/client/sampling)
-keeps model access, selection, and permissions in the client and requires
-separate negotiation for tool-enabled sampling. VIPER sends no tool-enabled
-request without `sampling.tools` and does not use the soft-deprecated automatic
-context-inclusion path. Every completed request publishes the
-`AgentModelInvocationReceipt` defined by the research contract.
+VIPER invokes a configured model provider through a typed research operation.
+Provider credentials stay in the server process and never enter an MCP request,
+resource, prompt, or receipt. Every completed call publishes the
+`AgentModelInvocationReceipt` defined by the research contract. MCP Sampling is
+deprecated for new implementations in revision 2026-07-28, so `viper.mcp` does
+not expose or depend on it.
 
-When the client declares form-mode `elicitation`, VIPER may request a flat,
-structured research review or policy-promotion decision. The
-[elicitation contract](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation)
-requires reviewable, declineable requests and prohibits secrets in form mode.
-VIPER never requests credentials through elicitation. Accepted responses
-compile into the corresponding typed review or promotion record before
-publication.
+When a request needs a structured research review or policy-promotion decision,
+the server returns an MRTR `InputRequiredResult`. The client retries the original
+request with `inputResponses` and the server-owned `requestState`. Form-mode
+elicitation remains reviewable and declineable and never requests credentials.
+An accepted response compiles into the corresponding typed review or promotion
+record before publication. A declined or cancelled request publishes no
+approval and authorizes no promotion.
 
 ### Long-running tasks and utilities
 
-MCP [tasks](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks)
-are experimental in revision 2025-11-25. VIPER advertises task support only
+The official [MCP Tasks
+extension](https://modelcontextprotocol.io/extensions/tasks/overview) is
+opt-in. VIPER advertises `io.modelcontextprotocol/tasks` only
 for operations whose API handler already returns a durable operation identity:
 
 ```text
@@ -551,12 +554,15 @@ run_learning_update
 evaluate_agent_policy
 ```
 
-The MCP task ID maps one-to-one to that VIPER identity. Task status and result
-retrieval read the same durable state used by Python and CLI callers. Clients
-without task support receive the ordinary typed operation response and can use
-the existing VIPER status operation. Progress, cancellation, and logging carry
-the same operation identity. Losing an MCP session never changes the evidence
-state or makes a task receipt authoritative.
+The MCP task ID maps one-to-one to that VIPER identity. `tasks/get` reads the
+same durable state used by Python and CLI callers. `tasks/update` supplies
+mid-flight typed input. `tasks/cancel` invokes the owning VIPER cancellation
+path. Clients without the extension receive the ordinary typed operation
+response and can use the existing VIPER `status` operation. Request-scoped
+progress carries the same operation identity. Stdio diagnostics go to `stderr`;
+distributed tracing may use OpenTelemetry. VIPER does not implement deprecated
+MCP Logging. A disconnected client never changes evidence state or makes a task
+receipt authoritative.
 
 Streamable HTTP stays deferred until VIPER defines authentication,
 authorization, rate limits, and deployment ownership. The MCP specification
@@ -624,23 +630,24 @@ structured content validates against its API success model.
 The read server omits `run`, `retry`, `run_many`, `execute_benchmark`, and
 `restore`. The execution server exposes them and omits every learning tool. The
 learning server exposes all three sets. Every mode rejects a repository path
-outside the intersection of the startup root and current client roots.
+outside the startup root.
 
 ### Resource and prompt equality
 
 Two server starts over the same catalog list equal resources, resource
 templates, prompts, argument schemas, and order. Reading one immutable resource
-verifies its source reference. Refreshing the catalog updates the derived head
-and emits exactly one list-changed notification without changing an immutable
-resource URI.
+verifies its source reference. Every list and read result has deterministic
+cache metadata. Refreshing the catalog updates the derived head and emits
+exactly one `resourcesListChanged` event through `subscriptions/listen` without
+changing an immutable resource URI.
 
-### Sampling and review custody
+### Model invocation and review custody
 
-A client without sampling or elicitation capabilities receives no request of
-either kind. A supporting client returns one proposed experiment and one
-review. VIPER publishes the exact `AgentModelInvocationReceipt` and typed
-review record. Decline and cancellation publish no approval and authorize no
-promotion.
+A configured provider returns one proposed experiment and VIPER publishes its
+exact `AgentModelInvocationReceipt`. A request whose client omits elicitation
+capability returns no input request. A supporting client completes one MRTR
+review. VIPER publishes the typed review record. Decline and cancellation
+publish no approval and authorize no promotion.
 
 ### Task fallback
 
@@ -657,15 +664,15 @@ adds MCP polling metadata only.
 | `src/viper/inspection.py` | Share normalized lineage extraction with catalog refresh. |
 | `src/viper/api.py` | Add catalog refresh and run, artifact, measurement, and benchmark search request and success models. |
 | `src/viper/_api/handlers.py` | Route catalog requests through `Catalog`. |
-| `src/viper/mcp.py` | Generate tools from typed operation registries; expose verified resources, typed templates, and user-selected prompts; negotiate roots, sampling, elicitation, tasks, progress, cancellation, and logging. |
-| `src/viper/research.py` | Own sampling receipts, review records, learning records, and policy promotion semantics consumed by MCP. |
+| `src/viper/mcp.py` | Generate tools from typed operation registries; implement stateless request metadata, `server/discover`, verified resources, cache metadata, `subscriptions/listen`, typed templates, user-selected prompts, MRTR elicitation, and the Tasks extension. |
+| `src/viper/research.py` | Own provider-backed model invocation receipts, review records, learning records, and policy-promotion semantics consumed by MCP. |
 | `src/viper/cli.py` | Add `catalog refresh`, catalog search commands, and `mcp --access read|execute|learn`. |
 | `src/viper/__init__.py` | Export `catalog` and public query and result models. |
 | `pyproject.toml` | Add the optional `mcp` dependency group. |
 | `tests/test_inspection.py` | Cover rebuild equality, ordering, pagination, filters, and lineage extraction. |
 | `tests/test_verification_acceptance.py` | Reject invalid sources and require source references on every result. |
-| `tests/test_api.py` | Compare API and MCP schemas, resources, prompts, capability negotiation, receipts, and structured results. |
-| `tests/test_cli.py` | Cover catalog commands, stdio startup, three access modes, roots, task fallback, progress, cancellation, and logging. |
+| `tests/test_api.py` | Compare API and MCP schemas, resources, prompts, per-request metadata, discovery, cache metadata, subscriptions, MRTR receipts, and structured results. |
+| `tests/test_cli.py` | Cover catalog commands, stdio startup, three access modes, startup-root custody, task fallback, progress, cancellation, and `stderr` diagnostics. |
 | Public documentation | Explain local MCP setup, tool authority, and exact catalog queries. |
 
 ## 12. Legacy cleanup
@@ -686,14 +693,16 @@ wrapper converts only the MCP result envelope.
 4. Add catalog typed operations and CLI commands.
 5. Add the optional MCP dependency and stdio server.
 6. Generate tools from the typed operation registry.
-7. Add roots, immutable resources, resource templates, prompts, progress,
-   cancellation, and logging.
+7. Add `server/discover`, immutable resources, cache metadata, resource
+   templates, prompts, `subscriptions/listen`, progress, cancellation, and
+   `stderr` diagnostics.
 8. Add access-mode, schema-equality, structured-result, resource, prompt, and
    path-boundary tests.
-9. After the research records exist, add learning access, sampling receipts,
-   review elicitation, and the task-capable operations.
-10. Prove capability omission, decline, cancellation, task fallback, and
-    equal operation identities through the in-process client.
+9. After the research records exist, add learning access, provider-backed model
+   invocation receipts, MRTR review elicitation, and the task-capable
+   operations.
+10. Prove per-request capability omission, decline, cancellation, task
+    fallback, and equal operation identities through the in-process client.
 
 The verified-stage-reuse contract adds reuse-key indexing and lookup in Phase
 14. The catalog contract supplies the database, refresh, and query machinery
