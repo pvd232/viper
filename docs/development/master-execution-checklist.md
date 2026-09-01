@@ -330,7 +330,7 @@ a new digest.
 
 <!-- contract-baseline: contract-traceability.md sha256=1cc97a63c2ca715f71abff02084b8bf81ba40dc7da6b6cc5121e9de8d7f813da -->
 
-<!-- contract-baseline: project-data-root.md sha256=e6c57427b0a7cc335452dea786546dfc91805f29414b0882472f6ffe516287ae -->
+<!-- contract-baseline: project-data-root.md sha256=d873368c2ea9b9c8ddd3bb9dbe8a8d6ff8b86aa17951a92ef65f36ecd30746f3 -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
 <!-- contract-baseline: system-impact-compiler.md sha256=a4633fe87d789eed2ccf53e086dc3effb4700aaa44c4416a7b2e7b40affe05c9 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=1e3b082c70675f1b8c93b900749eb52b69644760b1eeb5aec58af55a60a1436d -->
@@ -616,36 +616,36 @@ later phases change code.
 
 ### 7.1 Project root
 
-- [ ] Add `Settings`, `RootError`, `find_root()`, and `resolve_root()` in
+- [x] Add `Settings`, `RootError`, `find_root()`, and `resolve_root()` in
       `src/viper/project.py`.
       <!-- pair-block: P0-PDR-01 -->
       <!-- implements: PDR-01 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=planned owner=src/viper/project.py:resolve_root -->
-- [ ] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=implemented owner=src/viper/project.py:resolve_root -->
+- [x] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
       staged project scaffold in `src/viper/project.py`.
       <!-- pair-block: P0-PDR-02 -->
-      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=planned owner=src/viper/project.py:init -->
-- [ ] Route public default roots through `resolve_root()` and pass the
+      <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=implemented owner=src/viper/project.py:init -->
+- [x] Route public default roots through `resolve_root()` and pass the
       resolved value into internal operations exactly once.
       <!-- pair-block: P0-PDR-03 -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=planned owner=src/viper/project.py:resolve_root -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=planned owner=src/viper/project.py:resolve_root -->
-- [ ] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
+      <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=implemented owner=src/viper/project.py:resolve_root -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=implemented owner=src/viper/project.py:resolve_root -->
+- [x] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
       as the root-selection operation. <!-- implements: PDR-04 -->
       <!-- pair-block: P0-PDR-04 -->
-      <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=planned owner=src/viper/cli.py:add_root -->
-- [ ] Add `resolve_path()` and reject every descendant symlink, logical
+      <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=implemented owner=src/viper/cli.py:add_root -->
+- [x] Add `resolve_path()` and reject every descendant symlink, logical
       traversal, and final resolved escape before any local read, write,
       capture, publication, or restore. <!-- implements: PDR-03 -->
       <!-- pair-block: P0-PDR-06 -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=planned owner=src/viper/project.py:resolve_path -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=planned owner=src/viper/project.py:resolve_path -->
-      <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=planned owner=src/viper/project.py:resolve_path -->
-- [ ] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=implemented owner=src/viper/project.py:resolve_path -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=implemented owner=src/viper/project.py:resolve_path -->
+      <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=implemented owner=src/viper/project.py:resolve_path -->
+- [x] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
       at their protocol paths and preserve separate immutable copies.
       <!-- pair-block: P0-PDR-05 -->
       <!-- implements: PDR-02 -->
-      <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=planned owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
+      <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=implemented owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
 
 <details>
 <summary>Hints</summary>
@@ -914,31 +914,30 @@ edge IDs on every crossing component edge.
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.declaration.anchored state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
 
-- [ ] In `tests/test_project_init.py`, initialize outside the current directory,
+- [x] In `tests/test_project_init.py`, initialize outside the current directory,
       discover the root from a child directory, and assert the complete tree.
-      <!-- pair-block: P0-PROOF-05 -->
+      Run the existing generated-project acceptance test against the public
+      `--root` interface. <!-- pair-block: P0-PROOF-05 -->
       <!-- verifies: PDR-01 -->
-      <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=planned test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
-      <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=planned test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
-- [ ] In `tests/test_storage.py`, publish beneath the selected root, mutate the
+      <!-- verifies: PDR-04 -->
+      <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=implemented test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
+      <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=implemented test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
+      <!-- contract-verification: requirement=PDR-04 rule=project.root.vocabulary state=implemented test=tests/test_generated_project_acceptance.py:test_generated_project_executes_five_stage_benchmark -->
+- [x] In `tests/test_storage.py`, publish beneath the selected root, mutate the
       working artifact, retrieve the original immutable bytes, and reject an
       escaping store. In `tests/test_validation_architecture.py`, require each
       operation to resolve every selected root once. <!-- verifies: PDR-02 -->
       <!-- pair-block: P0-PROOF-06 -->
-      <!-- contract-verification: requirement=PDR-02 rule=project.root.git state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
-      <!-- contract-verification: requirement=PDR-02 rule=project.store.boundary state=planned test=tests/test_storage.py:test_store_uses_selected_project_root -->
-      <!-- contract-verification: requirement=PDR-02 rule=project.root.stability state=planned test=tests/test_validation_architecture.py:test_operations_resolve_project_root_once -->
-- [ ] In `tests/test_validation_architecture.py`, reject descendant symlinks,
+      <!-- contract-verification: requirement=PDR-02 rule=project.root.git state=implemented test=tests/test_storage.py:test_store_uses_selected_project_root -->
+      <!-- contract-verification: requirement=PDR-02 rule=project.store.boundary state=implemented test=tests/test_storage.py:test_store_uses_selected_project_root -->
+      <!-- contract-verification: requirement=PDR-02 rule=project.root.stability state=implemented test=tests/test_validation_architecture.py:test_operations_resolve_project_root_once -->
+- [x] In `tests/test_validation_architecture.py`, reject descendant symlinks,
       logical traversal, and resolved path escapes.
       <!-- pair-block: P0-PROOF-07 -->
       <!-- verifies: PDR-03 -->
-      <!-- contract-verification: requirement=PDR-03 rule=project.path.logical_boundary state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
-      <!-- contract-verification: requirement=PDR-03 rule=project.path.symlink_free state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
-      <!-- contract-verification: requirement=PDR-03 rule=project.path.resolved_boundary state=planned test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
-- [ ] Compare root vocabulary and the protocol tree in
-      `tests/test_documentation.py`. <!-- verifies: PDR-04 -->
-      <!-- pair-block: P0-PROOF-08 -->
-      <!-- contract-verification: requirement=PDR-04 rule=project.root.vocabulary state=planned test=tests/test_documentation.py:test_project_root_vocabulary -->
+      <!-- contract-verification: requirement=PDR-03 rule=project.path.logical_boundary state=implemented test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
+      <!-- contract-verification: requirement=PDR-03 rule=project.path.symlink_free state=implemented test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
+      <!-- contract-verification: requirement=PDR-03 rule=project.path.resolved_boundary state=implemented test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
 - [ ] Compare `CodeQLSourceFacts` with the existing import/privacy AST oracle.
       Delete each expected edge in turn and require the parity or
       dependency-site-totality gate to fail.

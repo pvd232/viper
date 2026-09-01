@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic import Field, ValidationError
 
-from ._schema import ProtocolModel
+from ._schema import ProtocolModel, RepoRelPath
 
 PACKAGE_PATTERN = re.compile(r"[a-z][a-z0-9_]*\Z")
 ROOT_FILES: dict[str, str] = {
@@ -35,6 +35,13 @@ class Settings(ProtocolModel):
 
 class RootError(ValueError):
     """Report failure to discover or validate a VIPER project root."""
+
+
+class PathError(RootError):
+    """Report a project path that escapes its root or uses a symlink."""
+
+
+PathOperation = Literal["read", "write"]
 
 
 def find_root(start: Path) -> Path:
@@ -74,6 +81,35 @@ def resolve_root(root: Path | None = None) -> Path:
         raise RootError(f"invalid project marker: {marker}") from error
 
     _require_git_work_tree(resolved)
+    return resolved
+
+
+def resolve_path(
+    project_root: Path,
+    path: RepoRelPath,
+    *,
+    operation: PathOperation,
+) -> Path:
+    """Resolve one symlink-free project path for a local read or write."""
+    root = project_root.resolve(strict=True)
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise PathError(f"project path escapes ROOT: {path}")
+
+    candidate = root / relative
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise PathError(f"project path contains a symlink: {path}")
+        if not current.exists():
+            break
+
+    resolved = candidate.resolve(strict=False)
+    if not resolved.is_relative_to(root):
+        raise PathError(f"resolved project path escapes ROOT: {path}")
+    if operation == "read" and not resolved.is_file():
+        raise PathError(f"project file is missing: {path}")
     return resolved
 
 

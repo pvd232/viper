@@ -69,6 +69,7 @@ from ..preflight import preflight_plan
 from ..project import InitError, RootError, init, resolve_root
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
+from ..storage import LocalArtifactStore
 from ..verification import (
     StorageFetcher,
     VerificationError,
@@ -413,12 +414,24 @@ def _policy(repositories: frozenset[str]) -> VerificationPolicy:
     return VerificationPolicy(trusted_source_repositories=repositories)
 
 
+def _local_fetcher(
+    project_root: Path,
+    fetcher: StorageFetcher | None,
+) -> StorageFetcher:
+    """Use an injected fetcher or bind the selected project's local store."""
+    if fetcher is not None:
+        return fetcher
+    return LocalArtifactStore(project_root).fetch
+
+
 def verify_run(
     request: VerifyRunRequest,
     *,
     fetcher: StorageFetcher | None = None,
 ) -> VerifyRunSuccess:
     """Verify one terminal run and summarize the connected evidence."""
+    project_root = _root(request.root, "verify_run")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         resolved = _load_model(request.path, ResolvedRun)
         assert isinstance(resolved, ResolvedRun)
@@ -453,6 +466,8 @@ def lineage(
     fetcher: StorageFetcher | None = None,
 ) -> LineageSuccess:
     """Verify one terminal run and return its upstream lineage graph."""
+    project_root = _root(request.root, "lineage")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         resolved = _load_model(request.path, ResolvedRun)
         assert isinstance(resolved, ResolvedRun)
@@ -487,6 +502,10 @@ def compare_runs(
     right_fetcher: StorageFetcher | None = None,
 ) -> CompareRunsSuccess:
     """Verify two terminal runs and compare all of their connected evidence."""
+    left_root = _root(request.left_root, "compare_runs")
+    right_root = _root(request.right_root, "compare_runs")
+    left_fetcher = _local_fetcher(left_root, left_fetcher)
+    right_fetcher = _local_fetcher(right_root, right_fetcher)
     try:
         left_resolved = _load_model(request.left_path, ResolvedRun)
         right_resolved = _load_model(request.right_path, ResolvedRun)
@@ -544,6 +563,8 @@ def verify_benchmark(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyBenchmarkSuccess:
     """Verify one benchmark result and summarize its confirmation."""
+    project_root = _root(request.root, "verify_benchmark")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         result = _load_model(request.path, BenchmarkResult)
         assert isinstance(result, BenchmarkResult)
@@ -579,6 +600,8 @@ def verify_pointer(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyPointerSuccess:
     """Verify one promoted artifact and report its physical file count."""
+    project_root = _root(request.root, "verify_pointer")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         pointer = _load_model(request.path, ArtifactPointer)
         assert isinstance(pointer, ArtifactPointer)

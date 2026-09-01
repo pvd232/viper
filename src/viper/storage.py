@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ._schema import RepoRelPath
+from .project import PathError, resolve_path
 from .references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
@@ -37,13 +38,14 @@ def _content_commit(files: Mapping[RepoRelPath, bytes]) -> str:
 class LocalArtifactStore:
     """Manage content-addressed output revisions beneath one repository root."""
 
-    def __init__(self, repository_root: Path, store: RepoRelPath = ".viper/store"):
-        """Bind the store to one repository and validate its configured root."""
-        self.repository_root = repository_root.resolve()
+    def __init__(self, project_root: Path, store: RepoRelPath = ".viper/store"):
+        """Bind the immutable store beneath one canonical project root."""
+        self.project_root = project_root.resolve(strict=True)
         self.store = store
-        self.store_root = (self.repository_root / store).resolve()
-        if not self.store_root.is_relative_to(self.repository_root):
-            raise LocalStoreError("local store escapes the repository root")
+        try:
+            self.store_root = resolve_path(self.project_root, store, operation="write")
+        except PathError as error:
+            raise LocalStoreError("local store escapes the project root") from error
 
     def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
         """Write one immutable revision and return its content-derived identity."""
@@ -109,12 +111,15 @@ class LocalArtifactStore:
         """Retrieve one local-store file after validating its revision path."""
         if not isinstance(location, LocalFileRef):
             raise TypeError("LocalArtifactStore can retrieve only LocalFileRef")
+
         if location.store != self.store:
             raise LocalStoreError("local file belongs to a different store")
+
         revision_root = (self.store_root / location.commit).resolve()
         target = (revision_root / location.path).resolve()
         if not target.is_relative_to(revision_root) or not target.is_file():
             raise LocalStoreError("local immutable file is missing")
+
         return target.read_bytes()
 
     def list_snapshot_files(
@@ -124,9 +129,11 @@ class LocalArtifactStore:
         """List every regular file in one immutable local snapshot."""
         if snapshot.store != self.store:
             raise LocalStoreError("local snapshot belongs to a different store")
+
         revision_root = (self.store_root / snapshot.commit).resolve()
         if not revision_root.is_dir():
             raise LocalStoreError("local snapshot revision is missing")
+
         paths: list[RepoRelPath] = []
         for path in sorted(revision_root.rglob("*")):
             if path.is_symlink():

@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
 from viper.references import LocalFileRef
-from viper.storage import LocalArtifactStore
+from viper.storage import LocalArtifactStore, LocalStoreError
 
 
 def test_storage_publishes_and_retrieves_one_content_revision(
@@ -44,3 +46,19 @@ def test_storage_resolved_files_share_one_revision(tmp_path: Path) -> None:
     commits = {reference.stored_at.commit for reference in references}
     assert len(commits) == 1
     assert all(store.fetch(reference.stored_at) for reference in references)
+
+
+def test_store_uses_selected_project_root(tmp_path: Path) -> None:
+    """Keep immutable bytes beneath the selected root after a working edit."""
+    root = tmp_path / "project"
+    root.mkdir()
+    source = root / "artifacts" / "model.bin"
+    source.parent.mkdir()
+    source.write_bytes(b"original")
+    store = LocalArtifactStore(root)
+    reference = store.resolved_files({"artifacts/model.bin": source.read_bytes()})[0]
+    source.write_bytes(b"changed")
+    assert store.store_root == root / ".viper" / "store"
+    assert store.fetch(reference.stored_at) == b"original"
+    with pytest.raises(LocalStoreError):
+        LocalArtifactStore(root, "../escape")

@@ -517,8 +517,8 @@ binds their default local fetchers to `request.root`, `request.left_root`, or
 id = "P0-PDR-04"
 requirements = ["PDR-04"]
 targets = ["src/viper/cli.py:add_root", "src/viper/cli.py:build_parser", "src/viper/api.py:_stage_parser", "src/viper/api.py:run", "src/viper/api.py:retry"]
-tests = ["tests/test_documentation.py:test_project_root_vocabulary"]
-gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k project_root_vocabulary -q"
+tests = ["tests/test_generated_project_acceptance.py:test_generated_project_executes_five_stage_benchmark"]
+gate = "conda run -n mantra python -m pytest tests/test_generated_project_acceptance.py -k generated_project_executes_five_stage_benchmark -q"
 depends_on = ["P0-PDR-03"]
 ```
 
@@ -863,38 +863,40 @@ class LocalArtifactStore:
 
 ```python pair-edit
 def _local_fetcher(
-    root: Path,
-    operation: OperationName,
+    project_root: Path,
     fetcher: StorageFetcher | None,
 ) -> StorageFetcher:
     """Use an injected fetcher or bind the selected project's local store."""
     if fetcher is not None:
         return fetcher
-    project_root = _root(root, operation)
     return LocalArtifactStore(project_root).fetch
 
 
 # verify_run()
-fetcher = _local_fetcher(request.root, "verify_run", fetcher)
+project_root = _root(request.root, "verify_run")
+fetcher = _local_fetcher(project_root, fetcher)
 
 # lineage()
-fetcher = _local_fetcher(request.root, "lineage", fetcher)
+project_root = _root(request.root, "lineage")
+fetcher = _local_fetcher(project_root, fetcher)
 
 # verify_benchmark()
-fetcher = _local_fetcher(request.root, "verify_benchmark", fetcher)
+project_root = _root(request.root, "verify_benchmark")
+fetcher = _local_fetcher(project_root, fetcher)
 
 # verify_pointer()
-fetcher = _local_fetcher(request.root, "verify_pointer", fetcher)
+project_root = _root(request.root, "verify_pointer")
+fetcher = _local_fetcher(project_root, fetcher)
 
 # compare_runs()
+left_root = _root(request.left_root, "compare_runs")
+right_root = _root(request.right_root, "compare_runs")
 left_fetcher = _local_fetcher(
-    request.left_root,
-    "compare_runs",
+    left_root,
     left_fetcher,
 )
 right_fetcher = _local_fetcher(
-    request.right_root,
-    "compare_runs",
+    right_root,
     right_fetcher,
 )
 ```
@@ -904,7 +906,7 @@ persisted `LocalFileRef.store` value `.viper/store`. Import
 `LocalArtifactStore` in `_api/handlers.py`, add `_local_fetcher()` beside
 `_root()`, and place each shown binding before its verifier call. Pass those
 bound values to the existing verifier calls. An explicitly injected fetcher
-remains active while the request root stays required.
+replaces immutable-file retrieval after the operation validates its root.
 
 ## 3. Contract traceability
 
@@ -2031,14 +2033,12 @@ def _root(root: Path, operation: OperationName) -> Path:
 
 
 def _local_fetcher(
-    root: Path,
-    operation: OperationName,
+    project_root: Path,
     fetcher: StorageFetcher | None,
 ) -> StorageFetcher:
     """Use an injected fetcher or bind the selected project's local store."""
     if fetcher is not None:
         return fetcher
-    project_root = _root(root, operation)
     return LocalArtifactStore(project_root).fetch
 
 
@@ -2334,7 +2334,8 @@ def verify_run(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyRunSuccess:
     """Verify one terminal run and summarize the connected evidence."""
-    fetcher = _local_fetcher(request.root, "verify_run", fetcher)
+    project_root = _root(request.root, "verify_run")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         resolved = _load_model(request.path, ResolvedRun)
         assert isinstance(resolved, ResolvedRun)
@@ -2369,7 +2370,8 @@ def lineage(
     fetcher: StorageFetcher | None = None,
 ) -> LineageSuccess:
     """Verify one terminal run and return its upstream lineage graph."""
-    fetcher = _local_fetcher(request.root, "lineage", fetcher)
+    project_root = _root(request.root, "lineage")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         resolved = _load_model(request.path, ResolvedRun)
         assert isinstance(resolved, ResolvedRun)
@@ -2404,14 +2406,14 @@ def compare_runs(
     right_fetcher: StorageFetcher | None = None,
 ) -> CompareRunsSuccess:
     """Verify two terminal runs and compare all of their connected evidence."""
+    left_root = _root(request.left_root, "compare_runs")
+    right_root = _root(request.right_root, "compare_runs")
     left_fetcher = _local_fetcher(
-        request.left_root,
-        "compare_runs",
+        left_root,
         left_fetcher,
     )
     right_fetcher = _local_fetcher(
-        request.right_root,
-        "compare_runs",
+        right_root,
         right_fetcher,
     )
     try:
@@ -2471,7 +2473,8 @@ def verify_benchmark(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyBenchmarkSuccess:
     """Verify one benchmark result and summarize its confirmation."""
-    fetcher = _local_fetcher(request.root, "verify_benchmark", fetcher)
+    project_root = _root(request.root, "verify_benchmark")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         result = _load_model(request.path, BenchmarkResult)
         assert isinstance(result, BenchmarkResult)
@@ -2507,7 +2510,8 @@ def verify_pointer(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyPointerSuccess:
     """Verify one promoted artifact and report its physical file count."""
-    fetcher = _local_fetcher(request.root, "verify_pointer", fetcher)
+    project_root = _root(request.root, "verify_pointer")
+    fetcher = _local_fetcher(project_root, fetcher)
     try:
         pointer = _load_model(request.path, ArtifactPointer)
         assert isinstance(pointer, ArtifactPointer)
@@ -2772,11 +2776,11 @@ owns `P0-PROOF-01` through `P0-PROOF-04`.
 <!-- pair-block-definition: P0-PROOF-05 -->
 ```toml pair-block
 id = "P0-PROOF-05"
-requirements = ["PDR-01"]
+requirements = ["PDR-01", "PDR-04"]
 targets = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
-tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
-gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
-depends_on = ["P0-PDR-01", "P0-PDR-02"]
+tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root", "tests/test_generated_project_acceptance.py:test_generated_project_executes_five_stage_benchmark"]
+gate = "conda run -n mantra python -m pytest tests/test_project_init.py tests/test_generated_project_acceptance.py -k 'establishes_discoverable_root or generated_project_executes_five_stage_benchmark' -q"
+depends_on = ["P0-PDR-01", "P0-PDR-02", "P0-PDR-04"]
 ```
 
 ```python pair-edit
@@ -2821,6 +2825,11 @@ def test_operations_resolve_project_root_once() -> None:
         "retry_request": 1,
         "execute_benchmark": 1,
         "plan_diff": 2,
+        "verify_run": 1,
+        "lineage": 1,
+        "compare_runs": 2,
+        "verify_benchmark": 1,
+        "verify_pointer": 1,
     }
     functions = {
         node.name: node
@@ -2876,53 +2885,6 @@ def test_project_paths_reject_symlinks(tmp_path: Path) -> None:
         resolve_path(root, "inputs/link.csv", operation="read")
     with pytest.raises(PathError, match="escapes"):
         resolve_path(root, "../outside.csv", operation="read")
-```
-
-<!-- pair-block-definition: P0-PROOF-08 -->
-```toml pair-block
-id = "P0-PROOF-08"
-requirements = ["PDR-04"]
-targets = ["tests/test_documentation.py:test_project_root_vocabulary"]
-tests = ["tests/test_documentation.py:test_project_root_vocabulary"]
-gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k project_root_vocabulary -q"
-depends_on = ["P0-PDR-04"]
-```
-
-```python pair-edit
-def test_project_root_vocabulary() -> None:
-    api = ast.parse((ROOT / "src/viper/api.py").read_text(encoding="utf-8"))
-    request_names = {
-        "FreezeRunRequest",
-        "PreflightRequest",
-        "ExecuteStageRequest",
-        "RunRequest",
-        "ExecuteBenchmarkRequest",
-        "PlanDiffRequest",
-        "VerificationRequest",
-        "CompareRunsRequest",
-    }
-    fields = {
-        node.name: {
-            member.target.id
-            for member in node.body
-            if isinstance(member, ast.AnnAssign)
-            and isinstance(member.target, ast.Name)
-        }
-        for node in api.body
-        if isinstance(node, ast.ClassDef) and node.name in request_names
-    }
-    assert all("repository_root" not in names for names in fields.values())
-    assert fields["PlanDiffRequest"] >= {"left_root", "right_root"}
-    assert fields["CompareRunsRequest"] >= {"left_root", "right_root"}
-    assert all(
-        "root" in fields[name]
-        for name in request_names - {"PlanDiffRequest", "CompareRunsRequest"}
-    )
-
-    cli = (ROOT / "src/viper/cli.py").read_text(encoding="utf-8")
-    assert "--repository-root" not in cli
-    assert "--left-repository-root" not in cli
-    assert "--right-repository-root" not in cli
 ```
 
 ## 6. Foundation gate
