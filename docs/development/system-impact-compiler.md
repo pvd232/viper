@@ -5,6 +5,9 @@
 
 **Purpose.** VIPER is intended to compile declarative software-change intent against a source-evidenced repository model, derive a complete set of represented implementation obligations before coding begins, decompose those obligations into bounded work units, and independently verify the resulting repository after implementation. Phase 0 establishes the smallest complete end-to-end system capable of testing that proposition. Later phases improve the formal model, semantic representation, decomposition objective, repair search, and selection policy without changing the core protocol.
 
+The formal definitions and starter proofs are in
+[Appendix A: Graph-transformation foundations](proof/graph_transformation/appendix-a-foundations.md).
+
 ---
 
 ## 1. Motivation and research objective
@@ -16,25 +19,36 @@ VIPER separates those responsibilities. The system should transform a current re
 At the highest level, the intended research protocol is
 
 $$
-R_0 \xrightarrow{\mathcal C} G_0
-\xrightarrow{\{\Delta_i\}} B
-\xrightarrow{P} T^*
-\xrightarrow{\text{decompose / select}} \mathcal W
-\xrightarrow{\text{implement}} R_1
-\xrightarrow{\mathcal C} G_1
-\xrightarrow{\text{verify}} \{\text{accept},\text{reject}\}.
+\begin{aligned}
+R_0&\xrightarrow{\mathcal C_X}G_0, \\
+(G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
+(G_0,\Delta,P)&\xrightarrow{\operatorname{CompileTarget}}T^*, \\
+H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi
+\longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
+(T^*,\Pi,\{U_i^*\})&\xrightarrow{\operatorname{CompileWork}}\mathcal Q
+\longrightarrow R_1\xrightarrow{\mathcal C_X}G_1, \\
+G_1&\models T^*.
+\end{aligned}
 $$
 
-Here, $R_0$ is the current repository, $G_0$ is its compiled system graph, $\{\Delta_i\}$ is the set of proposed contract-owned changes, $B$ is the conservative represented impact closure, $P$ is a total disposition map over $B$, $T^*$ is an executable target specification, $\mathcal W$ is the bounded implementation work, $R_1$ is the implemented repository, and $G_1$ is the independently reconstructed post-implementation graph.
+Here, $R_0$ is the current repository, $G_0$ is its compiled system graph,
+$\Delta$ is the composed family of proposed contract-owned changes,
+$H_\Delta$ is the impact overlay, $S_\Delta$ is the delta-induced initial
+vertex set, $B$ is the conservative represented impact closure, $P$ is a
+total disposition map over $B$, $T^*$ is an executable target specification,
+$D_B$ is the SCC condensation of the affected graph, $\Pi$ is its work
+partition, $\mathcal R_i$ is a component repair space, $U_i^*$ is a selected
+repair, $\mathcal Q$ is the ordered PairBlock work, $R_1$ is the implemented
+repository, and $G_1$ is the independently reconstructed graph.
 
-The core hypothesis is deliberately narrower than the full research program. A proposed change should be expanded into a conservative represented impact set, and every entity in that set should receive exactly one explicit disposition before coding begins:
+The core hypothesis is deliberately narrower than the full research program. A proposed change should be expanded into a conservative represented impact set, and every entity in that set should receive exactly one explicit disposition before coding begins. Let $\mathcal D$ be the set of disposition records:
 
 $$
 B = \operatorname{ImpactClosure}(G_0,\Delta),
 $$
 
 $$
-P:B\rightarrow\{\mathrm{CHANGE},\mathrm{REMOVE},\mathrm{RETAIN}\},
+P:V_H\rightharpoonup\mathcal D,
 $$
 
 $$
@@ -83,27 +97,33 @@ $$
 
 In general, implementation freedom should be preserved wherever the specification does not require a particular structural choice. Later phases may select a specific planned realization $G^*\in\mathcal A(T^*)$ when deterministic bounded execution requires one.
 
-### 2.3 Four distinct jobs
+### 2.3 Five distinct jobs
 
-The full system separates four jobs that should not be conflated:
-
-$$
-\textbf{Completeness:}\qquad \{\Delta_i\}\rightarrow B\rightarrow P,
-$$
+The full system separates five jobs:
 
 $$
-\textbf{Decomposition:}\qquad P\rightarrow \operatorname{SCC}\rightarrow \Pi^*,
+\textbf{Completeness:}\qquad (G_0,\Delta)\rightarrow(H_\Delta,S_\Delta)\rightarrow B\rightarrow P,
 $$
 
 $$
-\textbf{Choice:}\qquad \Pi^*\rightarrow\{\mathcal R_i\}\rightarrow\{U_i^*\},
+\textbf{Target compilation:}\qquad (G_0,\Delta,P)\rightarrow T^*,
 $$
 
 $$
-\textbf{Verification:}\qquad G^*\rightarrow R_1\rightarrow G_1.
+\textbf{Decomposition:}\qquad H_\Delta[B]\rightarrow D_B\rightarrow\Pi,
 $$
 
-Phase 0 implements a deliberately simple version of all four jobs so that the end-to-end proposition can be tested before the research program expands.
+$$
+\textbf{Choice:}\qquad (T^*,\Pi)\rightarrow\{\mathcal R_i\}\rightarrow\{U_i^*\},
+$$
+
+$$
+\textbf{Execution and verification:}\qquad
+(T^*,\Pi,\{U_i^*\})\rightarrow\mathcal Q\rightarrow R_1\rightarrow G_1
+\models T^*.
+$$
+
+Phase 0 implements a deliberately simple version of all five jobs so that the end-to-end proposition can be tested before the research program expands.
 
 ---
 
@@ -134,7 +154,7 @@ B=\operatorname{ImpactClosure}(G_0,\Delta),
 $$
 
 $$
-P:B\rightarrow\{\mathrm{CHANGE},\mathrm{REMOVE},\mathrm{RETAIN}\},
+P:V_H\rightharpoonup\mathcal D,
 $$
 
 $$
@@ -148,10 +168,37 @@ Phase 0 is successful if this protocol detects meaningful omissions or structura
 Phase 0 should support only graph facts that can be extracted reliably. Let
 
 $$
-G_0=(V_0,E_0).
+G_0=(V_0,E_0,\tau_V,\alpha_V,\alpha_E),
 $$
 
-The initial node classes are `File`, `Class`, `Function`, `Method`, `PublicSymbol`, `Test`, and `ContractRequirement`; `Field` may be included where extraction is straightforward. The initial typed relationships are `contains`, `imports`, `calls`, `constructs`, `typed_by`, `tests`, and `constrained_by`.
+where $V_0$ is a finite set of stable repository-entity identifiers and
+
+$$
+E_0\subseteq V_0\times\mathcal K_E\times V_0.
+$$
+
+Every $(u,k,v)\in E_0$ means that entity $u$ depends on entity $v$ through
+dependency kind $k$. The reachability projection removes the kind:
+
+$$
+D_{G_0}
+=
+\left\{
+(u,v)\in V_0\times V_0
+\;\middle|\;
+\exists k\in\mathcal K_E:\;(u,k,v)\in E_0
+\right\}.
+$$
+
+Every typed edge contributes to $D_{G_0}$. Evidence that does not assert a
+dependency belongs in a separate evidence relation. Compiler adapters
+normalize source relationships into `dependent -> dependency` orientation
+before emitting $E_0$.
+
+The initial node classes are `File`, `Class`, `Function`, `Method`,
+`PublicSymbol`, `Test`, and `ContractRequirement`; `Field` may be included
+where extraction is straightforward. Initial dependency kinds include
+`imports`, `calls`, `constructs`, `typed_by`, `tests`, and `constrained_by`.
 
 Every relationship must retain source evidence. Stable identities should be canonical and source-addressable, for example:
 
@@ -179,10 +226,17 @@ Delta(
 )
 ```
 
-For several simultaneous proposed changes, define the direct seed set
+For each delta operation $o$, let $\operatorname{support}_V(o)$ contain every
+vertex that the operation creates, removes, reads, updates, or names as an edge
+endpoint. For several simultaneous proposed changes, define the delta-induced
+initial vertex set
 
 $$
-S_{\Delta}=\bigcup_{i=1}^{k}S_{\Delta_i},
+S_{\Delta}
+=
+\bigcup_{i=1}^{k}
+\bigcup_{o\in O_{\Delta_i}}
+\operatorname{support}_V(o),
 $$
 
 while retaining per-entity provenance
@@ -201,10 +255,33 @@ $$
 A\rightarrow B
 $$
 
-means that $A$ depends on $B$. A change to $B$ therefore causes $A$ to enter the reverse-reachable impact set. Define
+means that $A$ depends on $B$. A change to $B$ therefore causes $A$ to enter
+the reverse-reachable impact set.
+
+Let $V_\Delta^+$ contain vertices introduced by $\Delta$, and let
+$D_\Delta^+$ contain the untyped dependency pairs introduced by added or
+updated typed edges. Define the impact overlay
 
 $$
-B=\operatorname{PredClosure}_{G_0}(S_{\Delta}).
+H_\Delta=(V_H,D_H),
+\qquad
+V_H=V_0\cup V_\Delta^+,
+\qquad
+D_H=D_{G_0}\cup D_\Delta^+.
+$$
+
+The overlay retains every baseline dependency, including dependencies that
+$\Delta$ removes, and adds every dependency that $\Delta$ introduces. The
+blast radius is
+
+$$
+B
+=
+\left\{
+x\in V_H
+\;\middle|\;
+\exists s\in S_\Delta:\;x\rightarrow_{H_\Delta}^*s
+\right\}.
 $$
 
 The closure should preserve both change provenance and witness paths. A representative record is:
@@ -221,19 +298,24 @@ The reachability computation itself is deterministic.
 
 ### 6.1 Conditional soundness
 
-Assume the represented dependency relation is conservative in the following sense: whenever changing represented entity $y$ can require reconsidering represented entity $x$, the graph contains a path
+Let $D_X^{\mathrm{sem}}$ be the semantic dependency relation under the frozen
+compiler context $X$. Assume
 
 $$
-x\rightarrow^* y.
+D_X^{\mathrm{sem}}\subseteq D_H.
 $$
 
-Under this assumption,
+Under this assumption, every semantic path into $S_\Delta$ is also a path in
+$H_\Delta$, so
 
 $$
 \operatorname{Affected}(\Delta)\subseteq B.
 $$
 
-If an affected entity $x$ were not in $B$, conservativeness would imply a path $x\rightarrow^*s$ to some changed seed $s\in S_{\Delta}$. But membership in $B$ is defined exactly by the existence of such a path, yielding a contradiction. This theorem does not prove completeness of arbitrary Python dependency extraction; it states precisely what follows from a conservative represented relation.
+For $x\in\operatorname{Affected}(\Delta)$, choose a semantic path from $x$ to
+some $s\in S_\Delta$. Edge inclusion places that same path in $H_\Delta$, so
+the definition of $B$ gives $x\in B$. The theorem is conditional on the
+compiler representing every contract-relevant semantic dependency.
 
 ### 6.2 Minimality of consideration
 
@@ -259,16 +341,19 @@ $$
 \mathrm{affected}\neq\mathrm{must\ edit}.
 $$
 
-Every entity in the impact closure receives exactly one disposition:
+Every entity in the impact closure receives exactly one disposition record.
+A record carries a decision in `ADD`, `CHANGE`, `REMOVE`, or `RETAIN`, plus
+required postconditions, forbidden postconditions, preservation predicates,
+and rationale:
 
 $$
-P:B\rightarrow\{\mathrm{CHANGE},\mathrm{REMOVE},\mathrm{RETAIN}\}.
+P:V_H\rightharpoonup\mathcal D.
 $$
 
 The accepted plan must satisfy
 
 $$
-\boxed{\forall v\in B,\ \exists!\,P(v)}
+\boxed{\forall v\in B,\ \exists!d\in\mathcal D:\;P(v)=d}
 $$
 
 or equivalently
@@ -277,7 +362,11 @@ $$
 \boxed{\operatorname{dom}(P)=B.}
 $$
 
-An impacted test may legitimately be retained if its behavioral obligation remains correct. A compatibility alias may be removed. A constructor may change. The guarantee is not that the entire blast radius is edited; it is that no represented affected surface is omitted from planning.
+An impacted test may receive `RETAIN` when its behavioral obligation remains
+correct. A compatibility alias may receive `REMOVE`. A constructor may receive
+`CHANGE`. Domain equality ensures that every represented affected surface is
+explicitly considered; the disposition determines whether a source mutation
+is required.
 
 ### 7.1 Agent-assisted disposition generation
 
@@ -286,7 +375,7 @@ For each $v\in B$, the planning agent receives the original proposed change, the
 ```python
 Disposition(
     node_id="...",
-    action="change",  # change | remove | retain
+    action="change",  # add | change | remove | retain
     reason="...",
     required_postconditions=(...),
     forbidden_postconditions=(...),
@@ -380,10 +469,18 @@ These are agent estimates used as Phase 0 policy inputs, not formal truths. Thei
 
 ## 11. SCC condensation
 
-The affected graph may contain cycles. Compute its strongly connected components and condensation DAG:
+The affected graph may contain cycles. Restrict the impact overlay to $B$:
 
 $$
-D_B=\operatorname{Condensation}(B).
+H_\Delta[B]
+=
+\left(B,D_H\cap(B\times B)\right).
+$$
+
+Compute its strongly connected components and condensation DAG:
+
+$$
+D_B=\operatorname{Condensation}\!\left(H_\Delta[B]\right).
 $$
 
 Each SCC is atomic for Phase 0 scheduling. Members of the same SCC must not be assigned to independent agents as though no cyclic coordination exists. Standard deterministic algorithms such as Tarjan's or Kosaraju's algorithm should be used, with stable component identifiers.
@@ -416,6 +513,15 @@ $$
 
 not $\Pi^*$, because no claim of global optimality is made in Phase 0.
 
+If $\lambda(c)\subseteq B$ is the SCC represented by condensation vertex $c$,
+the repository vertices owned by work component $C_i$ are
+
+$$
+W_i=\bigcup_{c\in C_i}\lambda(c).
+$$
+
+The $W_i$ sets partition $B$.
+
 ## 13. Bounded implementation-choice resolution
 
 A total disposition can still leave several valid implementations. Phase 0 should not enumerate the entire graph-repair universe. Instead, an implementation-planning agent generates a small candidate set inside each work component:
@@ -426,7 +532,36 @@ candidate B
 candidate C
 ```
 
-Each candidate must satisfy the hard obligations compiled from $P$ and $T^*$. Candidate reduction proceeds in a fixed order.
+Assign each predicate in $T^*$ to one work component and call the resulting
+subset $T_i^*$. Let $\Gamma_i$ contain the external boundary vertices that
+component $i$ may read. Let $N_i$ contain the canonically identified fresh
+vertices required by $T_i^*$ and define
+
+$$
+\widehat W_i=W_i\cup N_i.
+$$
+
+The $N_i$ sets are pairwise disjoint, and $\Gamma_i$ is read-only. The
+write support contains anchors created, removed, or updated by $U$, including
+the endpoints of changed edges. Read support contains additional anchors used
+by matches, preconditions, and postconditions. The generated set must satisfy
+
+$$
+\mathcal R_i^{(0)}
+\subseteq
+\left\{
+U\;\middle|\;
+\begin{array}{l}
+\operatorname{write}_V(U)\subseteq\widehat W_i,\\
+\operatorname{read}_V(U)\subseteq\widehat W_i\cup\Gamma_i,\\
+\operatorname{Apply}(G_0,U)\text{ exists},\\
+\operatorname{Apply}(G_0,U)\models T_i^*
+\end{array}
+\right\}.
+$$
+
+Phase 0 bounds the generated set instead of claiming complete enumeration.
+Candidate reduction proceeds in a fixed order.
 
 ### 13.1 Hard validity
 
@@ -460,15 +595,48 @@ Selection(
 
 The selector is not permitted to omit a member of $B$, override $\Delta$, waive a hard constraint, or silently invent additional affected surfaces. The formal layer determines what is complete and valid; the agent layer determines what is preferred among the admitted alternatives.
 
+Record the selected repair for each component as
+
+$$
+U_i^*=\sigma_i(\mathcal R_i^{(0)},T_i^*,X).
+$$
+
+When the local repairs are conflict-free and interface-compatible, compose
+
+$$
+U^*=\bigoplus_i U_i^*.
+$$
+
+If selection freezes a complete structural realization, define the optional
+planned graph
+
+$$
+G^*=\operatorname{Apply}(G_0,U^*)
+$$
+
+and require $G^*\models T^*$. The selector is the point where repository
+evidence, estimated complexity, risk, verification burden, and bounded agent
+judgment choose one admitted implementation. Partitioning has already assigned
+work ownership; it does not make this structural choice.
+
 ## 14. PairBlocks and bounded execution
 
-Each selected partition is compiled into one or more executable `PairBlock`s containing owned obligations, source targets, originating deltas, required and forbidden postconditions, execution dependencies, tests, verification requirements, and expected effort:
+The target, partition, and selected repairs compile into ordered work:
+
+$$
+\mathcal Q
+=
+\operatorname{CompileWork}(T^*,\Pi_0,\{U_i^*\}).
+$$
+
+Each member of $\mathcal Q$ is an executable `PairBlock` containing owned obligations, selected repair operations, source targets, originating deltas, required and forbidden postconditions, execution dependencies, tests, verification requirements, and expected effort:
 
 ```python
 PairBlock(
     id="artifact-api",
     owned_nodes=(...),
     dispositions=(...),
+    selected_operations=(...),
     source_targets=(...),
     originating_deltas=(...),
     required_postconditions=(...),
@@ -479,7 +647,10 @@ PairBlock(
 )
 ```
 
-PairBlocks are derived from the obligation graph rather than manually grouped by file name. Coding agents receive one PairBlock, the relevant source slice, and project instructions. Their job is to realize already-compiled obligations rather than rediscover the global task.
+The PairBlocks collectively carry every hard obligation in $T^*$ and partition
+the operations in $U^*$. Coding agents receive one PairBlock, the relevant
+source slice, and project instructions. Their job is to realize its compiled
+obligations.
 
 Execution follows the condensation and partition dependencies. If $A$ and $B$ feed $C$ while $D$ is independent, $A$, $B$, and $D$ may execute concurrently and $C$ begins when its predecessors complete. Phase 0 uses the graph as a scheduling constraint, not as a mandate to maximize raw concurrency.
 
@@ -635,7 +806,14 @@ $$
 G=(V,E,X),
 $$
 
-where $V$ contains represented repository entities, $E$ contains typed dependency or evidence relations, and $X$ contains source-evidenced semantic state attached to nodes and edges. The complete graph may include files, modules, classes, functions, methods, fields, parameters, public symbols, schemas, serialization surfaces, tests, assertions, contract requirements, documentation examples, runtime registrations, build targets, generated artifacts, external interfaces, and PairBlock obligations.
+where $V$ contains represented repository entities,
+$E\subseteq V\times\mathcal K_E\times V$ contains typed dependency edges,
+and $X$ contains source-evidenced semantic state and non-dependency evidence
+attached to nodes and edges. The complete graph may include files, modules,
+classes, functions, methods, fields, parameters, public symbols, schemas,
+serialization surfaces, tests, assertions, contract requirements,
+documentation examples, runtime registrations, build targets, generated
+artifacts, external interfaces, and PairBlock obligations.
 
 Possible relationship types include imports, calls, reads, writes, construction, typing, implementation, exposure, serialization, observation, testing, documentation, contract constraints, registration, dynamic resolution, generation, and general dependency. Each relationship must retain provenance sufficient to explain why it exists. Runtime-dependent relationships should be represented through explicit resolution attempts and observations rather than silently inferred.
 
@@ -643,7 +821,9 @@ The central limitation remains visible: no graph algorithm can recover a depende
 
 ## 22. Multi-delta semantics
 
-For $\Delta_1,\ldots,\Delta_k$, the compiler should distinguish disjoint, commuting, reinforcing, overlapping, and conflicting changes. The combined seed set may collapse cleanly for impact analysis,
+For $\Delta_1,\ldots,\Delta_k$, the compiler should distinguish disjoint,
+commuting, reinforcing, overlapping, and conflicting changes. The combined
+delta-induced initial vertex set is
 
 $$
 S_{\Delta}=\bigcup_i S_{\Delta_i},
@@ -692,7 +872,7 @@ $$
 and
 
 $$
-\forall v\in B,\ \exists!\,P(v).
+\forall v\in B,\ \exists!d\in\mathcal D:\;P(v)=d.
 $$
 
 These theorems formalize the first research claim: all represented potentially affected entities are considered, and none can disappear from the plan silently.
@@ -773,10 +953,18 @@ Phase III replaces the Phase 0 greedy partition with a principled optimization o
 
 ## 29. SCC-safe work graph
 
-For the complete impact graph, compute
+For the induced affected graph
 
 $$
-D_B=\operatorname{Condensation}(B).
+H_\Delta[B]
+=
+\left(B,D_H\cap(B\times B)\right),
+$$
+
+compute
+
+$$
+D_B=\operatorname{Condensation}\!\left(H_\Delta[B]\right).
 $$
 
 The SCCs remain atomic scheduling units. Candidate future graphs are not required to preserve the same SCC structure; breaking a large cycle may itself be a desirable repair.
@@ -824,12 +1012,20 @@ Phase IV addresses the implementation freedom left after completeness and decomp
 
 ## 32. Component repair spaces
 
-For partition component $C_i$, define
+For partition component $C_i$, use its writable ownership set
+$\widehat W_i=W_i\cup N_i$, read-only boundary $\Gamma_i$, and assigned target
+predicates $T_i^*$. Define
 
 $$
 \mathcal R_i=
 \left\{
-U\mid \operatorname{Apply}(C_i,U)\models T_i^*
+U\;\middle|\;
+\begin{array}{l}
+\operatorname{write}_V(U)\subseteq\widehat W_i,\\
+\operatorname{read}_V(U)\subseteq\widehat W_i\cup\Gamma_i,\\
+\operatorname{Apply}(G_0,U)\text{ exists},\\
+\operatorname{Apply}(G_0,U)\models T_i^*
+\end{array}
 \right\}.
 $$
 
@@ -860,7 +1056,7 @@ Candidate reduction should remain ordered. Hard validity first removes every rep
 The local repair validity and minimality obligations are:
 
 $$
-U\in\mathcal R_i\Rightarrow \operatorname{Apply}(C_i,U)\models T_i^*,
+U\in\mathcal R_i\Rightarrow \operatorname{Apply}(G_0,U)\models T_i^*,
 $$
 
 and for every retained least-changing repair $U$ there exists no strict valid sub-update $U'\subset U$ satisfying the same local constraints.
@@ -946,10 +1142,13 @@ $$
 establishes structural realization of all represented target obligations. If $G^*$ fixed additional structural choices, those choices must also be checked. Exact equality
 
 $$
-G_1=G^*
+\mathcal F_\Sigma(G_1)=\mathcal F_\Sigma(G^*)
 $$
 
-should be required only for properties the plan actually intended to determine. Structural conformance remains distinct from behavioral correctness, so builds, tests, runtime checks, and benchmarks remain separate acceptance evidence.
+applies only to the represented facts in the declared scope $\Sigma$ that
+selection intended to freeze. Structural conformance remains distinct from
+behavioral correctness, so builds, tests, runtime checks, and benchmarks remain
+separate acceptance evidence.
 
 ---
 
@@ -958,17 +1157,26 @@ should be required only for properties the plan actually intended to determine. 
 The complete research architecture is
 
 $$
-\{\Delta_i\}
-\rightarrow B
-\rightarrow P
-\rightarrow \text{semantic obligation enrichment}
-\rightarrow \operatorname{SCC}(B)
-\rightarrow \Pi^*
-\rightarrow \{\mathcal R_i\}
-\rightarrow \{U_i^*\}
-\rightarrow G^*
-\rightarrow R_1
-\rightarrow G_1.
+\begin{aligned}
+R_0&\xrightarrow{\mathcal C_X}G_0, \\
+(G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
+(G_0,\Delta,P)&\longrightarrow T^*, \\
+H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi^*
+\longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
+(T^*,\Pi^*,\{U_i^*\})&\longrightarrow\mathcal Q
+\longrightarrow R_1\xrightarrow{\mathcal C_X}G_1, \\
+G_1&\models T^*.
+\end{aligned}
+$$
+
+A fully frozen repair selection also defines
+
+$$
+U^*=\bigoplus_i U_i^*,
+\qquad
+G^*=\operatorname{Apply}(G_0,U^*),
+\qquad
+G^*\models T^*.
 $$
 
 Expanded operationally:
@@ -982,11 +1190,13 @@ conservative impact closure
     ↓
 total disposition map
     ↓
+executable target specification
+    ↓
 repository-conditioned obligation representation
     ↓
 operation-conditioned effort / risk / verification / coordination estimates
     ↓
-SCC condensation
+SCC condensation of the induced affected graph
     ↓
 cohesion-aware optimized partition
     ↓
@@ -1006,7 +1216,7 @@ selected local repairs
     ↓
 global composition
     ↓
-planned structural realization
+optional planned structural realization
     ↓
 PairBlocks and bounded implementation
     ↓
@@ -1047,21 +1257,31 @@ The architecture intentionally composes established ideas rather than renaming t
 
 Accordingly, VIPER should not claim novelty for dependency graphs, reverse-reachability impact analysis, delta modeling, graph transformation, graph repair, repair planning, graph partitioning, multi-agent scheduling, intended-versus-observed architecture comparison, deterministic repository IR, or closed plan/verify loops.
 
-The current candidate contribution is narrower. First, VIPER proposes the explicit pre-implementation invariant
+The current candidate contribution is the composed protocol. It begins with
+the explicit pre-implementation invariant
 
 $$
 B=\operatorname{ConservativeImpactClosure}(G_0,\Delta),
 $$
 
 $$
-P:B\rightarrow\{\mathrm{CHANGE},\mathrm{REMOVE},\mathrm{RETAIN}\},
+P:V_H\rightharpoonup\mathcal D,
 $$
 
 $$
 \operatorname{dom}(P)=B,
 $$
 
-so that no conservatively affected represented repository entity may be omitted silently from planning. Second, it maintains a strict formal/agentic boundary: formal machinery determines completeness and admissibility, repository-aware semantic machinery estimates engineering consequences, agents resolve only residual underdetermined choices, and the verifier independently checks realization. Third, the research system proposes a persistent semantic representation $e(v)$ that is reused to derive operation-conditioned effort, risk, verification burden, and coordination cost rather than introducing a single isolated LLM ranking step after planning.
+and continues through target compilation, SCC-safe repository-weighted work
+decomposition, formally admissible repair candidates, bounded agent selection,
+PairBlock execution, and independent reconstruction. Formal machinery
+determines completeness and admissibility. Repository-aware semantic machinery
+estimates effort, risk, verification burden, and coordination cost. Agents
+resolve residual underdetermined choices. The verifier independently checks
+realization. Co-Coder's communication-to-computation partition objective is the
+decomposition baseline; VIPER's hypothesis concerns this full change-planning
+and verification composition plus its operation-conditioned repository
+evidence.
 
 These remain contribution hypotheses, not established novelty claims. Novelty should be treated as a hypothesis to falsify continuously against prior work.
 
@@ -1071,15 +1291,15 @@ These remain contribution hypotheses, not established novelty claims. Novelty sh
 
 The following sources provide the principal theoretical and systems foundations for the specification.
 
-1. **Horwitz, Susan; Reps, Thomas; Binkley, David.** “Interprocedural Slicing Using Dependence Graphs.” *ACM Transactions on Programming Languages and Systems*, 12(1), 1990. DOI: 10.1145/77606.77608. This work provides the dependence-graph and slicing foundation for conservative impact reasoning.
-2. **Clarke, Dave; Helvensteijn, Michiel; Schaefer, Ina.** “Abstract Delta Modeling.” *GPCE*, 2010. DOI: 10.1145/1868294.1868298. This work formalizes a core model plus explicit deltas and addresses composition and ambiguity.
-3. **Ehrig et al. and the algebraic graph-transformation literature.** The double-pushout tradition provides a formal basis for graph rewriting, preservation, applicability conditions, dangling conditions, confluence, and composition.
-4. **Murphy, Gail C.; Notkin, David; Sullivan, Kevin.** “Software Reflexion Models: Bridging the Gap between Design and Implementation.” *FSE*, 1995; later expanded in *IEEE Transactions on Software Engineering*. This line of work provides the intended-versus-observed structural comparison primitive.
+1. **Horwitz, Susan; Reps, Thomas; Binkley, David.** [“Interprocedural Slicing Using Dependence Graphs.”](https://doi.org/10.1145/77606.77608) *ACM Transactions on Programming Languages and Systems*, 12(1), 1990. This work provides the dependence-graph and slicing foundation for conservative impact reasoning.
+2. **Clarke, Dave; Helvensteijn, Michiel; Schaefer, Ina.** [“Abstract Delta Modeling.”](https://doi.org/10.1145/1868294.1868298) *GPCE*, 2010. This work formalizes a core model plus explicit deltas and addresses composition and ambiguity.
+3. **Ehrig, Hartmut; Ehrig, Karsten; Prange, Ulrike; Taentzer, Gabriele.** [*Fundamentals of Algebraic Graph Transformation.*](https://doi.org/10.1007/3-540-31188-2) Springer, 2006. The double-pushout framework provides graph-rewrite rules, preservation, applicability and gluing conditions, dangling conditions, confluence, and composition.
+4. **Murphy, Gail C.; Notkin, David; Sullivan, Kevin.** [“Software Reflexion Models: Bridging the Gap between Design and Implementation.”](https://doi.org/10.1109/32.917525) *IEEE Transactions on Software Engineering*, 27(4), 2001. This line of work provides the intended-versus-observed structural comparison primitive.
 5. **Dam, Hoa Khanh; Winikoff, Michael.** “Generation of Repair Plans for Change Propagation.” This work establishes automated repair-plan generation for consistency-preserving change propagation.
 6. **Logic-based graph-repair literature.** Modern graph-repair work establishes sound and complete repair generation under graph constraints, least-changing repair notions, delta-preserving repairs, and the possibility of multiple incomparable minimal repairs.
 7. **Bairi et al.** “CodePlan: Repository-level Coding using LLMs and Planning.” arXiv:2309.12499. CodePlan provides a close repository-level precedent for dependency analysis, may-impact propagation, planning, and LLM editing.
 8. **Archbird.** Public system documentation, 2026. Archbird provides a close contemporary systems comparator for deterministic repository mapping, planning, isolated candidate realization, fresh remapping, and verification.
-9. **Yang, Xu; Nie, Lunyiu; Chandra, Ethan; Gannutin, Stanislav; Lin, Fangru; Chaudhuri, Swarat.** “When Parallelism Pays Off: Cohesion-Aware Task Partitioning for Multi-Agent Coding.” arXiv:2606.00953, 2026. Co-Coder formalizes repository-level task partitioning as a communication-to-computation tradeoff and supplies the immediate baseline for VIPER's decomposition layer.
+9. **Yang, Xu; Nie, Lunyiu; Chandra, Ethan; Gannutin, Stanislav; Lin, Fangru; Chaudhuri, Swarat.** [“When Parallelism Pays Off: Cohesion-Aware Task Partitioning for Multi-Agent Coding.”](https://arxiv.org/abs/2606.00953) arXiv:2606.00953, 2026. Co-Coder formalizes repository-level task partitioning as a communication-to-computation tradeoff and supplies the immediate baseline for VIPER's decomposition layer.
 10. **Code-representation and repository-graph representation literature.** GraphCodeBERT, UniXcoder, CodeT5+, RepoGraph, and recent code-graph models establish practical baselines for combining code semantics with structural context. VIPER should reuse pretrained representations before considering custom model training.
 
 ---
@@ -1102,7 +1322,8 @@ The immediate engineering work is the Phase 0 implementation order defined above
 2. strengthening dynamic-resolution coverage and unresolved-dependency semantics;
 3. formalizing multi-delta conflict, compatibility, and provenance semantics;
 4. completing the soundness, minimality, and total-disposition proofs against the implemented graph model;
-5. defining precise semantics and evidence requirements for `CHANGE`, `REMOVE`, and especially `RETAIN`;
+5. defining precise semantics and evidence requirements for `ADD`, `CHANGE`,
+   `REMOVE`, and especially `RETAIN`;
 6. testing whether prior work already states the exact global total-disposition invariant over a conservative repository impact closure;
 7. defining and evaluating persistent repository-context representations $e(v)$;
 8. calibrating operation-conditioned effort $w$, risk $r$, verification burden $h$, and coordination cost $c$ from collected traces;

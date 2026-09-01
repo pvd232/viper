@@ -3,24 +3,26 @@
 This appendix defines the graph-transformation claim that VIPER must establish
 before implementing planned-system compilation. A contract delta identifies
 the mandatory mutations. Reverse dependency closure identifies every graph
-entity that must receive a disposition. A propagation plan, carried by ordered
-`PairBlock` records, supplies the decisions that the contract delta leaves
-open. The planned graph therefore has the form
+entity that must receive a disposition. A propagation plan supplies the
+decisions that the contract delta leaves open. The baseline graph, delta, and
+plan compile into executable target constraints:
 
 ```math
-G^* = \operatorname{Apply}(G_0,\Delta \oplus \Theta(P)),
+T^*=\operatorname{CompileTarget}(G_0,\Delta,P).
 ```
 
-where $\Theta(P)$ compiles the propagation plan into graph operations. A
-complete $G^*$ generally depends on both $\Delta$ and $P$.
+The model set $\mathcal A(T^*)=\{G\mid G\models T^*\}$ may contain several
+valid future graphs. When bounded implementation requires one structural
+realization, repair selection chooses graph operations $U^*$ satisfying
+$\operatorname{Apply}(G_0,U^*)\models T^*$ and thereby fixes an optional
+planned graph $G^*$. Selected work compiles into ordered `PairBlock` records
+only after that choice.
 
 This document is a starter proof. Its definitions and propositions are local
-design proposals that leave the active contracts unchanged. The existing
-[`SystemGraphDelta`](../../system-impact-graph.md#graph-delta-and-impact-report)
-is an observed difference between two compiled source revisions. The
-contract delta $\Delta$ below is a normative input that describes required
-future mutations. A later contract revision must keep those two objects
-distinct.
+design proposals that leave the active contracts unchanged. The contract
+delta $\Delta$ below is a normative input that describes required future
+mutations. It is distinct from an observed difference between two compiled
+source revisions.
 
 ## A.1 Proof contract
 
@@ -29,12 +31,14 @@ The proof has four targets:
 1. **Soundness:** the blast radius contains every entity that the contract
    change can affect, subject to a conservative dependency-extraction
    assumption.
-2. **Minimality:** reverse reachability returns the smallest
-   predecessor-closed set that contains the directly changed seeds.
-3. **Target determinism:** a valid contract delta plus a complete propagation
-   plan produces one planned graph.
-4. **Conformance:** the post-implementation comparison classifies every
-   represented fact as convergence, absence, or divergence.
+2. **Minimality:** reverse reachability returns the least
+   predecessor-closed set that contains the delta-induced initial vertices.
+3. **Target determinism:** fixed, valid inputs produce one canonical target
+   constraint set; a concrete planned graph is deterministic only after repair
+   selection fixes every required structural choice.
+4. **Conformance:** the observed graph satisfies the target constraints;
+   planned-versus-observed fact comparison applies when selection fixed a
+   concrete planned graph.
 
 The domain contains finite repository states, finite typed attributed graphs,
 finite graph-operation sequences, and finite propagation plans. Finiteness
@@ -48,7 +52,7 @@ The proof dependency structure is:
 conservative blast-radius theorem
 ├── dependency orientation
 ├── impact overlay
-├── direct seed set
+├── delta-induced initial vertex set
 └── dependency-conservativeness assumption
 
 minimal-closure theorem
@@ -57,15 +61,13 @@ minimal-closure theorem
 
 target-determinism theorem
 ├── total propagation plan
-├── PairBlock dependency order
-├── plan-to-operation compilation
-├── unique anchors and satisfied preconditions
-└── ordered or confluent conflicting operations
+├── canonical target-constraint compilation
+└── optional deterministic repair selection
 
 post-implementation conformance
 ├── common compiler and context
-├── canonical represented-fact projection
-└── stable identity or an explicit correspondence map
+├── target-constraint satisfaction
+└── optional canonical represented-fact projection
 ```
 
 The resulting lifecycle preserves the decomposition developed before this
@@ -73,13 +75,15 @@ appendix:
 
 ```text
 1. Repository compilation       R0 -> G0
-2. Contract transformation      Delta defines mandatory mutation seeds
+2. Contract transformation      Delta defines mandatory operations
 3. Conservative impact          (G0, Delta) -> B
 4. Total propagation planning   (Delta, B) -> P
-5. Planned-system compilation   (G0, Delta, P) -> G*
-6. Implementation               P -> R1
-7. Repository recompilation     R1 -> G1
-8. Conformance                  G1 <-> G*
+5. Target compilation           (G0, Delta, P) -> T*
+6. Decomposition and selection  T* -> Pi -> U* -> optional G*
+7. Execution compilation        (T*, Pi, U*) -> PairBlocks
+8. Implementation               PairBlocks -> R1
+9. Repository recompilation     R1 -> G1
+10. Conformance                 G1 models T*
 ```
 
 Stages 3 and 4 are separate obligations. Impact analysis discovers what must
@@ -104,31 +108,44 @@ with equal current files and different committed histories may identify
 different review inputs.
 
 Let $\mathcal I$ be a universe of stable entity identifiers, $\mathcal K_V$ a
-finite set of node kinds, $\mathcal K_E$ a finite set of edge kinds, and
+finite set of node kinds, $\mathcal K_E$ a finite set of dependency kinds, and
 $\mathcal A$ a set of canonical attribute maps.
 
 **Definition A.2 (system graph).** A system graph is a finite typed attributed
-directed multigraph
+directed graph
 
 ```math
-G=(V,E,s,t,\tau_V,\tau_E,\alpha_V,\alpha_E),
+G=(V,E,\tau_V,\alpha_V,\alpha_E),
 ```
 
 with:
 
 - $V\subseteq\mathcal I$, a finite set of node identifiers;
-- $E\subseteq\mathcal I$, a finite set of edge identifiers disjoint from $V$;
-- $s,t:E\rightarrow V$, the source and target functions;
-- $\tau_V:V\rightarrow\mathcal K_V$ and
-  $\tau_E:E\rightarrow\mathcal K_E$, the node and edge type functions; and
+- $E\subseteq V\times\mathcal K_E\times V$, a finite set of typed dependency
+  edges;
+- $\tau_V:V\rightarrow\mathcal K_V$, the node type function; and
 - $\alpha_V:V\rightarrow\mathcal A$ and
   $\alpha_E:E\rightarrow\mathcal A$, the canonical attribute functions.
 
-Edge identifiers permit two edges with equal endpoints and different kinds or
-evidence. Stable node identifiers preserve exact revision comparison. The
-existing [system-impact contract](../../system-impact-graph.md#identifiers-and-kinds)
-already distinguishes file, span, and external nodes and records typed edge
-evidence.
+An edge $(u,k,v)\in E$ means that $u$ depends on $v$ through dependency kind
+$k$. Edge attributes retain the evidence and provenance supporting that
+relationship. Stable node identifiers preserve exact revision comparison.
+
+Define the untyped dependency projection used for reachability:
+
+```math
+D_G
+=
+\left\{
+(u,v)\in V\times V
+\;\middle|\;
+\exists k\in\mathcal K_E:\;(u,k,v)\in E
+\right\}.
+```
+
+Every member of $E$ contributes to $D_G$. Repository evidence that does not
+assert dependency belongs in a separate evidence relation rather than being
+inserted into $E$ and filtered during reachability.
 
 Let $X$ be one fixed `SystemContextManifest`. Let $C_X$ be the repository
 compiler under that context.
@@ -142,36 +159,24 @@ G_0=C_X(R_0)
 G_1=C_X(R_1).
 ```
 
-The compilation result includes the inventory, one analysis receipt per
-tracked file, edge evidence, resolution observations, and the unresolved set.
-The strict proof boundary requires the unresolved set to be empty. Equal
-inputs must produce equal canonical graphs; target determinism otherwise fails
-before transformation begins.
+The compilation result must include the analyzed inventory, coverage evidence,
+dependency evidence, resolution observations, and an unresolved set. The
+strict proof boundary requires the unresolved set to be empty. Equal inputs
+must produce equal canonical graphs; target determinism otherwise fails before
+transformation begins.
 
 ### Dependency orientation
 
-`SystemEdgeKind` contains relations with different surface directions. A
-`defines` edge and a `calls` edge require relation-specific traversal rules.
-
-**Definition A.4 (dependency interpretation).** A dependency policy is a
-partial function
-
-```math
-\rho_X : \mathcal K_E \times V \times V
-\rightharpoonup V\times V.
-```
-
-For an edge $e$, if
-$\rho_X(\tau_E(e),s(e),t(e))=(x,y)$, then $x$ is the dependent and $y$ is the
-dependency. Write $x\rightarrow_G y$. An edge kind outside the domain of
-$\rho_X$ carries evidence only. Each included edge kind declares its
-orientation in the contract, and the proof uses that declaration.
+**Definition A.4 (dependency relation).** For vertices $x,y\in V$, write
+$x\rightarrow_G y$ exactly when $(x,y)\in D_G$. The source $x$ is the
+dependent and the target $y$ is the dependency. Every compiler adapter must
+normalize its source-level relation into this orientation before emitting an
+edge in $E$.
 
 Let $\rightarrow_G^*$ denote the reflexive transitive closure of
-$\rightarrow_G$. Reflexivity makes every seed a member of its own blast
-radius.
+$\rightarrow_G$.
 
-## A.3 Contract delta and direct seeds
+## A.3 Contract delta and initial vertices
 
 Let $\mathcal O$ contain these primitive operations over stable anchors:
 
@@ -179,9 +184,9 @@ Let $\mathcal O$ contain these primitive operations over stable anchors:
 AddNode(id, kind, attributes)
 RemoveNode(id, expected-kind, expected-attributes)
 SetNodeAttributes(id, expected, replacement)
-AddEdge(id, source, target, kind, attributes)
-RemoveEdge(id, source, target, kind, expected-attributes)
-SetEdgeAttributes(id, expected, replacement)
+AddEdge(source, kind, target, attributes)
+RemoveEdge(source, kind, target, expected-attributes)
+SetEdgeAttributes(source, kind, target, expected, replacement)
 ```
 
 The algebraic interpretation compiles each primitive operation or compatible
@@ -224,25 +229,25 @@ $G_0$ when every anchor resolves uniquely, every operation precondition holds,
 and at least one linear extension of $\prec_\Delta$ can execute while
 preserving the graph constraints.
 
-**Definition A.6 (direct seed set).** The support of an operation is the set of
-node anchors that it creates, removes, reads, updates, or names as an edge
-endpoint. The direct seed set is
+**Definition A.6 (delta-induced initial vertex set).** The vertex support of an
+operation is the set of node anchors that it creates, removes, reads, updates,
+or names as an edge endpoint. The initial vertex set is
 
 ```math
 S_\Delta
 =
-\bigcup_{o\in O_\Delta}\operatorname{support}(o).
+\bigcup_{o\in O_\Delta}\operatorname{support}_V(o).
 ```
 
-An edge edit therefore seeds both endpoints. A removal retains its old anchor
-and old incident dependencies during impact analysis; otherwise deletion would
-erase the evidence needed to find existing dependents.
+An edge edit contributes both endpoints. A removal retains its old anchor and
+old incident dependencies during impact analysis so the overlay still
+represents the structure being disrupted.
 
 ### Impact overlay
 
 Let $V_\Delta^+$ be the nodes added by $\Delta$, and let
 $D_\Delta^+$ be the dependency pairs introduced by added or updated edges in
-$\Delta$ after applying $\rho_X$.
+$\Delta$ after removing their dependency-kind component.
 
 **Definition A.7 (impact overlay).** The impact overlay
 $H_\Delta=(V_H,D_H)$ is the dependency graph with
@@ -253,9 +258,9 @@ V_H=V_0\cup V_\Delta^+,
 D_H=D_{G_0}\cup D_\Delta^+.
 ```
 
-The union deliberately retains baseline edges that $\Delta$ removes and adds
-new contract relationships. The overlay serves impact analysis only. Definition
-A.13 constructs the planned target graph.
+The union retains baseline edges that $\Delta$ removes and adds new contract
+relationships. The overlay serves impact analysis only. Section A.7 defines
+target compilation and optional planned-graph selection.
 
 ## A.4 Blast radius
 
@@ -275,9 +280,11 @@ x\in V_H
 Write $B$ when the inputs are fixed. Membership in $B$ requires the plan to
 consider the entity. The plan may assign `retain` after that review.
 
-Take $\rightsquigarrow_X$ as the semantic may-affect relation under context
-$X$: $x\rightsquigarrow_X y$ means that changing the represented obligation
-of $y$ can require reconsidering the represented obligation of $x$.
+Let $D_X^{\mathrm{sem}}\subseteq V_H\times V_H$ be the semantic dependency
+relation under context $X$. A pair $(x,y)\in D_X^{\mathrm{sem}}$ means that a
+contract-relevant change to $y$ may require changing or checking $x$. Write
+$x\rightarrow_{\mathrm{sem}}y$ for membership in this relation and
+$\rightarrow_{\mathrm{sem}}^*$ for its reflexive transitive closure.
 
 **Definition A.9 (potentially affected entity).** The semantic affected set is
 
@@ -287,7 +294,7 @@ A_\Delta
 \left\{
 x\in V_H
 \;\middle|\;
-\exists s\in S_\Delta:\;x\rightsquigarrow_X s
+\exists s\in S_\Delta:\;x\rightarrow_{\mathrm{sem}}^*s
 \right\}.
 ```
 
@@ -295,19 +302,18 @@ The relation includes possible changes to existence, type, represented
 attributes, and represented relationships. It is a semantic proof primitive;
 the algorithm computes $B$ from extracted graph dependencies.
 
-**Assumption A.1 (dependency conservativeness).** For every
-$x\in A_\Delta$, the impact overlay contains a path from $x$ to a direct seed:
+**Assumption A.1 (dependency conservativeness).** The impact overlay contains
+every semantic dependency edge:
 
 ```math
-\forall x\in A_\Delta\;\exists s\in S_\Delta:
-x\rightarrow_{H_\Delta}^*s.
+D_X^{\mathrm{sem}}\subseteq D_H.
 ```
 
-The `FileAnalysisReceipt`, `ResolutionAttempt`, and
-`UnresolvedDependency` records establish the evidence boundary for this
-assumption. Empty unresolved output establishes total resolution for the
-compiler's declared analyzers and fixed context. Completeness over arbitrary
-Python semantics requires the analyzer set to model every relevant dependency.
+Per-input analysis receipts, resolution attempts, and explicit unresolved
+records establish the evidence boundary for this assumption. Empty unresolved
+output establishes total resolution for the compiler's declared analyzers and
+fixed context. Completeness over arbitrary Python semantics requires the
+analyzer set to model every relevant dependency.
 
 ### Theorem A.1: conservative blast radius
 
@@ -317,14 +323,17 @@ Under Assumption A.1,
 A_\Delta\subseteq B.
 ```
 
-**Proof.** Let $x\in A_\Delta$. Assumption A.1 supplies
-$s\in S_\Delta$ such that $x\rightarrow_{H_\Delta}^*s$. Definition A.8 then
-gives $x\in B$. Since $x$ was arbitrary, $A_\Delta\subseteq B$. $\square$
+**Proof.** Let $x\in A_\Delta$. Definition A.9 supplies a semantic path
+$x=v_0\rightarrow_{\mathrm{sem}}v_1\rightarrow_{\mathrm{sem}}\cdots
+\rightarrow_{\mathrm{sem}}v_n=s$ with $s\in S_\Delta$. Assumption A.1 places
+every edge of that path in $D_H$, so the same vertex sequence is an
+$H_\Delta$ path from $x$ to $s$. Definition A.8 gives $x\in B$. Since $x$
+was arbitrary, $A_\Delta\subseteq B$. $\square$
 
-This theorem locates the guarantee. Reverse reachability is exact for the
-extracted dependency relation. Missing reflection targets, registry edges,
-subprocess entrypoints, generated artifacts, contract links, or other
-relationships invalidate Assumption A.1 for the omitted entities.
+Reverse reachability is exact for the extracted dependency relation. Missing
+reflection targets, registry edges, subprocess entrypoints, generated
+artifacts, contract links, or other semantic dependencies can invalidate
+Assumption A.1.
 
 ### Theorem A.2: minimal predecessor-closed set
 
@@ -335,11 +344,12 @@ predecessor closed when
 \forall(x,y)\in D_H:\;y\in Q\Longrightarrow x\in Q.
 ```
 
-The blast radius $B$ is the unique smallest predecessor-closed subset of
+The blast radius $B$ is the unique least predecessor-closed subset of
 $V_H$ that contains $S_\Delta$.
 
 **Proof.** Reflexivity of $\rightarrow^*$ gives $S_\Delta\subseteq B$. If
-$y\in B$ and $(x,y)\in D_H$, then $y\rightarrow^*s$ for some seed $s$.
+$y\in B$ and $(x,y)\in D_H$, then $y\rightarrow^*s$ for some
+$s\in S_\Delta$.
 Prepending $(x,y)$ gives $x\rightarrow^*s$, so $x\in B$. Thus $B$ is
 predecessor closed.
 
@@ -348,8 +358,9 @@ $x\in B$, choose a path
 $x=v_0\rightarrow v_1\rightarrow\cdots\rightarrow v_n=s$ with
 $s\in S_\Delta$. Since $s\in Q$, predecessor closure applied backward along
 the finite path gives $v_{n-1},\ldots,v_0=x\in Q$. Hence $B\subseteq Q$.
-Every admissible $Q$ contains $B$, so $B$ is the unique smallest one.
-$\square$
+Every admissible $Q$ contains $B$, so $B$ is a least element under set
+inclusion. If $L$ were another least element, then $B\subseteq L$ and
+$L\subseteq B$, hence $B=L$ by set extensionality. $\square$
 
 Minimality is relative to $H_\Delta$. Adding a conservative dependency edge
 can enlarge $B$. Removing a real dependency edge can make the computed set
@@ -357,91 +368,54 @@ unsound even though it remains minimal for the defective overlay.
 
 ## A.5 Propagation plan and PairBlocks
 
-The active [propagation-plan contract](../../system-impact-graph.md#graph-delta-and-impact-report)
-groups affected nodes by repository path. Let
-$D_1,\ldots,D_m$ be its `PropagationDisposition` records, and let
-$N_1,\ldots,N_k$ be its `PlannedAddition` records.
+Let $\mathcal D$ be the set of admissible disposition records. A disposition
+record contains:
 
-Partition the blast radius into existing and introduced entities:
-
-```math
-B_0=B\cap V_0,
-\qquad
-B_+=B\setminus V_0.
+```text
+vertex
+decision in {add, change, remove, retain}
+required postconditions
+forbidden postconditions
+preservation predicates
+rationale
 ```
 
-**Definition A.11 (total disposition).** A propagation plan is disposition
-total over $B_0$ when the affected-node sets form a partition of $B_0$:
+The record states the required treatment of one affected vertex. It does not
+specify agent ownership or execution order.
+
+**Definition A.11 (propagation plan and total disposition).** A candidate
+propagation plan is a finite partial function
 
 ```math
-\bigcup_{i=1}^{m}\operatorname{nodes}(D_i)=B_0
+P:V_H\rightharpoonup\mathcal D.
 ```
 
-and
+The plan is accepted exactly when
 
 ```math
-i\neq j
-\Longrightarrow
-\operatorname{nodes}(D_i)\cap\operatorname{nodes}(D_j)=\varnothing.
+\operatorname{dom}(P)=B
 ```
 
-Each existing path has one action in
-$\{\mathrm{change},\mathrm{remove},\mathrm{retain}\}$. Every retained path
-states why its represented obligation remains satisfied. Planned additions
-cover newly introduced paths, and their represented node sets partition $B_+$.
+and each record $P(v)$ identifies $v$ as its subject. The equality requires a
+plan entry for every affected vertex and excludes disposition keys outside the
+computed blast radius. A disposition may still require additional target
+structure through its postconditions.
 
-The path-level records induce a node-level function
+**Proposition A.3 (total-disposition property).** Every vertex in $B$ receives
+exactly one disposition in an accepted plan.
 
-```math
-p_P:B_0\rightarrow
-\{\mathrm{change},\mathrm{remove},\mathrm{retain}\},
-```
+**Proof.** Domain equality gives existence: for every $b\in B$, $P(b)$ is
+defined. A function has at most one value for each input, which gives
+uniqueness. $\square$
 
-where $p_P(b)$ is the action of the unique disposition containing $b$. With
-planned additions included, the extended function
+Total disposition establishes planning coverage. It does not establish that
+the selected decisions are mutually consistent, that their postconditions are
+satisfiable, or that every vertex requires a source edit. Target compilation
+checks consistency and satisfiability; a `retain` disposition can discharge an
+affected vertex through a preservation predicate.
 
-```math
-\overline p_P:B\rightarrow
-\{\mathrm{add},\mathrm{change},\mathrm{remove},\mathrm{retain}\}
-```
-
-is total. This is the well-typed form of the earlier shorthand
-$P:B\rightarrow\{\mathrm{change},\mathrm{remove},\mathrm{retain}\}$.
-
-**Proposition A.3 (total-disposition property).** If Definition A.11 holds,
-then every existing entity in $B_0$ receives exactly one implementation
-disposition. If planned additions partition $B_+$, every entity in $B$ receives
-exactly one extended action.
-
-**Proof.** Union equality gives existence: every $b\in B_0$ belongs to at least
-one disposition. Pairwise disjointness gives uniqueness because membership in
-two dispositions would place $b$ in their empty intersection. The same
-argument applies to the planned-addition partition of $B_+$. $\square$
-
-The [Phase 0 PairBlock contract](../../phase-0-pair-coding.md#1-pairblock-contract)
-provides the concrete plan carrier. Each checklist task owns one `PairBlock`
-with stable requirements, exact source targets, exact tests, one gate, and
-dependencies on earlier blocks. Let $\mathcal Q_P$ be the finite set of blocks
-selected by plan $P$, and let $\prec_P$ be the transitive closure of their
-`depends_on` edges.
-
-For planned-system compilation, a PairBlock must also have a deterministic
-interpretation as graph postconditions or primitive graph operations. Define
-
-```math
-\Theta(P)
-=
-\operatorname{compile\_plan}(\mathcal Q_P,\prec_P).
-```
-
-The complete marked PairBlock supplies the exact bounded code edit in addition
-to target spans, tests, gates, and order. PairBlocks therefore carry the
-planned-propagation component developed in the prior derivation. Target
-derivation requires `compile_plan` to give that marked content a deterministic
-graph interpretation: either extract the resulting graph postconditions from
-the complete code edit or record those postconditions explicitly. This
-appendix defines that formal connector while leaving the existing contract
-unchanged.
+PairBlocks appear after target compilation, decomposition, and repair
+selection. Section A.7 defines that execution connector.
 
 ## A.6 Why the contract delta is insufficient
 
@@ -592,7 +566,7 @@ ArtifactRef.path
       `-- api.verify
 ```
 
-The direct seeds are approximately:
+The delta-induced initial vertices are approximately:
 
 ```text
 ArtifactRef.path
@@ -638,72 +612,219 @@ complete definition requires $P_A$ or $P_B$.
 The constructor has the same ambiguity. The delta requires `api.verify` to stop
 constructing `ArtifactRef(path=path)` and leaves the choice among
 `ArtifactRef(source=LocalSource(path))`, changing the public API to accept a
-`LocalSource`, or another contract-compatible boundary. A PairBlock must record
-that propagation decision before planned-system compilation.
+`LocalSource`, or another contract-compatible boundary. The propagation plan
+must state the target obligation, and repair selection must choose a concrete
+construction when bounded execution requires one.
 
-## A.7 Planned graph and deterministic target derivation
+## A.7 Target compilation, decomposition, and repair selection
 
-**Definition A.12 (combined operation family).** Let
-
-```math
-\Omega(\Delta,P)
-=
-\operatorname{normalize}(O_\Delta\cup\Theta(P),
-\prec_\Delta\cup\prec_P\cup\prec_{\mathrm{cross}}),
-```
-
-where $\prec_{\mathrm{cross}}$ orders plan operations whose preconditions
-depend on contract operations. Normalization rejects duplicate operation IDs,
-incompatible postconditions, and unsatisfied references.
-
-**Definition A.13 (planned graph).** If the normalized operation family has a
-valid derivation from $G_0$, then
+**Definition A.12 (target specification).** Target compilation translates the
+canonical baseline graph, valid delta, and accepted propagation plan into a
+finite canonical set of executable graph predicates:
 
 ```math
-G^*=\operatorname{Apply}(G_0,\Omega(\Delta,P)).
+T^*=\operatorname{CompileTarget}(G_0,\Delta,P).
 ```
 
-Nodes and edges outside the operation support are inherited from $G_0$.
+The predicates include mandatory additions and removals from $\Delta$,
+required and forbidden relationships from $P$, and every preservation
+predicate attached to a `retain` disposition. Define the admissible future
+graph family
 
-### Theorem A.4: deterministic target derivation
+```math
+\mathcal A(T^*)=\left\{G\;\middle|\;G\models T^*\right\}.
+```
 
-The inputs $(G_0,\Delta,P)$ determine one canonical $G^*$ when all of these
+Target consistency requires $\mathcal A(T^*)\neq\varnothing$.
+
+### Theorem A.4: deterministic target-constraint derivation
+
+Fixed inputs $(G_0,\Delta,P)$ determine one canonical $T^*$ when all of these
 conditions hold:
 
 1. $C_X$ is deterministic and $G_0$ is canonical.
-2. Every referenced node and edge anchor resolves uniquely.
-3. $P$ is disposition total over $B_0$, its planned additions partition $B_+$,
-   and each plan action compiles to explicit graph postconditions through
-   $\Theta$.
-4. The combined dependency order is acyclic and therefore has a linear
-   extension.
-5. Every operation precondition holds at its application point.
-6. Every DPO match satisfies its application and gluing conditions, including
-   the dangling condition for deletions.
-7. Every pair of operations unordered by the dependency order either commutes
-   or has a specified conflict-resolving operation that gives the same normal
-   form.
-8. Every derivation terminates and preserves the declared graph constraints.
-9. Canonical serialization erases irrelevant execution-order differences.
+2. Every node and typed-edge anchor referenced by $\Delta$ or $P$ either
+   resolves uniquely against $G_0$ or is declared fresh under a canonical
+   identifier.
+3. $\Delta$ is valid for $G_0$ and every operation precondition is explicit.
+4. $P$ satisfies $\operatorname{dom}(P)=B$.
+5. Every delta operation and disposition record has one deterministic
+   translation into target predicates.
+6. Target normalization rejects contradictory predicates and applies a fixed
+   canonical ordering.
 
-**Proof.** Conditions 1 and 2 fix the initial graph and the denotation of every
-anchor. Conditions 3 and 4 produce a finite executable operation family.
-Condition 5 makes each anchored operation eligible. Condition 6 makes each DPO
-rewrite defined. Condition 7 makes every permitted ordering produce the same
-graph before canonicalization. Condition 8 ensures that each derivation reaches
-a valid terminal graph. Condition 9 gives that terminal
-graph one serialized identity. Hence every valid derivation of
-$\Omega(\Delta,P)$ from $G_0$ yields the same canonical $G^*$. $\square$
+**Proof.** Conditions 1 and 2 fix the baseline facts and every referenced
+entity. Conditions 3 and 4 fix the accepted delta and plan inputs. Condition 5
+maps each input record to one predicate family. Condition 6 rejects
+inconsistent output and gives every consistent predicate set one canonical
+representation. `CompileTarget` therefore returns the same $T^*$ for equal
+inputs. $\square$
 
-Condition 7 may be established by a fixed total order, by pairwise commutation,
-or by a confluence argument with conflict-resolution rules. An acyclic
-PairBlock dependency graph establishes Condition 4 alone. Operation
-commutation or confluence requires separate evidence.
+The theorem establishes deterministic constraint derivation. It does not
+assert that $\mathcal A(T^*)$ contains one graph.
+
+**Definition A.13 (affected work graph and partition).** Restrict the impact
+overlay to the blast radius:
+
+```math
+H_\Delta[B]
+=
+\left(B,D_H\cap(B\times B)\right).
+```
+
+Compute its strongly connected components and condensation DAG:
+
+```math
+D_B=\operatorname{Condensation}\!\left(H_\Delta[B]\right).
+```
+
+A work partition $\Pi=\{C_1,\ldots,C_m\}$ partitions the vertices of $D_B$.
+Each vertex of $D_B$ represents one SCC and remains atomic for scheduling.
+The partition selects agent ownership and execution boundaries; it does not
+select the future repository structure.
+
+Let $\lambda(c)\subseteq B$ be the original vertices represented by
+condensation vertex $c$. Lift each work component back to repository vertices:
+
+```math
+W_i
+=
+\bigcup_{c\in C_i}\lambda(c).
+```
+
+The sets $W_1,\ldots,W_m$ partition $B$. Let $\Gamma_i\subseteq V_H\setminus
+W_i$ contain every boundary vertex named by a crossing dependency or by a
+target predicate owned by component $i$.
+
+An ownership function $\omega:T^*\rightarrow\{1,\ldots,m\}$ assigns every
+target predicate to one component, and
+
+```math
+T_i^*=\{t\in T^*\mid\omega(t)=i\}.
+```
+
+Let $N_i$ be the fresh vertex anchors introduced by predicates in $T_i^*$
+that were not already present in $V_H$. Target compilation requires the
+$N_i$ sets to be pairwise disjoint. Define the writable ownership set
+
+```math
+\widehat W_i=W_i\cup N_i.
+```
+
+The boundary $\Gamma_i$ remains read-only.
+
+For an operation sequence $U$, $\operatorname{write}_V(U)$ contains every
+vertex anchor it creates, removes, or updates, including endpoints of changed
+edges. The set $\operatorname{read}_V(U)$ contains every additional vertex
+anchor used by a match, precondition, or postcondition.
+
+**Definition A.14 (component repair space).** The admissible repair space for
+component $i$ is
+
+```math
+\mathcal R_i
+=
+\left\{
+U\;\middle|\;
+\begin{array}{l}
+\operatorname{write}_V(U)\subseteq\widehat W_i,\\
+\operatorname{read}_V(U)\subseteq\widehat W_i\cup\Gamma_i,\\
+\operatorname{Apply}(G_0,U)\text{ exists, and}\\
+\operatorname{Apply}(G_0,U)\models T_i^*
+\end{array}
+\right\}.
+```
+
+Hard validity removes every $U\notin\mathcal R_i$. Least-change and structural
+dominance may remove formally inferior survivors. If several admissible,
+non-dominated candidates remain, a bounded selector $\sigma_i$ chooses one
+repair using repository evidence, operation estimates, tests, contracts, and
+recorded tradeoffs:
+
+```math
+U_i^*=\sigma_i(\mathcal R_i,T_i^*,X).
+```
+
+An agent may generate candidates and compare the surviving alternatives. The
+hard-validity layer determines membership in $\mathcal R_i$ and remains
+authoritative.
+
+When selected local repairs are conflict-free and interface-compatible, define
+
+```math
+U^*=\bigoplus_{i=1}^{m}U_i^*
+```
+
+and, when the selected repairs fix a complete structural realization,
+
+```math
+G^*=\operatorname{Apply}(G_0,U^*).
+```
+
+Selection must verify $G^*\models T^*$. A canonical $G^*$ additionally
+requires unique anchors, satisfied DPO application and gluing conditions,
+termination, deterministic conflict resolution or confluence, and canonical
+serialization. Without complete structural selection, $T^*$ remains the
+authoritative target and no singleton $G^*$ is asserted.
+
+### Execution compilation
+
+The Phase 0 master checklist already uses a parseable
+[`PairBlock` contract](../../phase-0-pair-coding.md#1-pairblock-contract) to bind
+each checklist item to its requirements, dependencies, source targets, tests,
+and completion gate. This appendix keeps that established execution unit and
+defines the additional information required when graph-derived repair
+selection produces its contents.
+
+Let $\mathcal Q$ be the ordered PairBlocks produced from the target,
+partition, and selected repairs:
+
+```math
+\mathcal Q
+=
+\operatorname{CompileWork}(T^*,\Pi,\{U_i^*\}_{i=1}^{m}).
+```
+
+Each PairBlock records owned dispositions, selected repair operations, source
+targets, originating deltas, required and forbidden postconditions, execution
+dependencies, tests, verification requirements, and effort estimates. The
+owned repair-operation sets must partition the operations in $U^*$, and the
+PairBlocks must collectively carry every hard obligation in $T^*.
+
+PairBlock dependency order constrains execution scheduling. It does not prove
+repair confluence or select the architecture.
 
 ## A.8 Implemented repository and observed graph
 
 Implementation applies the selected PairBlocks to $R_0$ and produces $R_1$.
 Strict recompilation under the same context gives $G_1=C_X(R_1)$.
+
+**Definition A.15 (target conformance).** The observed graph conforms to the
+authoritative target specification exactly when
+
+```math
+G_1\models T^*.
+```
+
+This judgment evaluates every required, forbidden, and preservation predicate
+in $T^*$ against facts reconstructed from $R_1$. It remains defined when
+$\mathcal A(T^*)$ contains several graphs and no concrete $G^*$ was selected.
+
+**Proposition A.5 (represented target conformance).** Assume that $C_X$
+soundly extracts every graph fact referenced by $T^*$ and that the target
+predicate evaluator implements the semantics assigned by `CompileTarget`.
+Then $G_1\models T^*$ establishes that every represented target obligation is
+realized in $R_1$.
+
+**Proof.** Each member of $T^*$ is an executable predicate over represented
+graph facts. By the definition of satisfaction, $G_1\models T^*$ holds exactly
+when every predicate evaluates to true on $G_1$. Sound extraction maps those
+true graph predicates to the corresponding represented facts in $R_1$.
+$\square$
+
+Target conformance does not require one fully selected planned graph. When
+repair selection fixed a concrete $G^*$, VIPER may additionally compare the
+planned and observed represented facts that selection intended to freeze.
 
 Let $\Sigma$ be the declared conformance scope, and let
 $\mathcal F_\Sigma(G)$ be the canonical set of represented facts inside that
@@ -711,14 +832,15 @@ scope. A fact records one of these forms:
 
 ```text
 node(id, kind, canonical attributes)
-edge(id, dependent, dependency, kind, canonical attributes)
+edge(dependent, kind, dependency, canonical attributes)
 ```
 
 The scope excludes evidence fields whose values may legitimately differ
 between planned and observed compilation, such as source line numbers, while
 retaining every field that the plan claims as a postcondition.
 
-**Definition A.14 (conformance partition).** Let
+**Definition A.16 (optional planned-versus-observed partition).** When $G^*$
+exists, let
 
 ```math
 F^*=\mathcal F_\Sigma(G^*)
@@ -740,12 +862,12 @@ Then define:
 \operatorname{Div}=F_1\setminus F^*.
 ```
 
-Convergences are planned facts observed after implementation. Absences are
-planned facts missing from the implementation. Divergences are observed facts
-outside the plan.
+Convergences are frozen planned facts observed after implementation. Absences
+are frozen planned facts missing from the implementation. Divergences are
+observed facts outside the frozen planned projection.
 
-**Proposition A.5 (represented structural conformance).** The observed graph
-conforms to the planned graph in scope $\Sigma$ exactly when
+**Proposition A.6 (scoped planned-graph equality).** The observed graph equals
+the selected planned graph in scope $\Sigma$ exactly when
 
 ```math
 \operatorname{Abs}=\varnothing
@@ -757,27 +879,29 @@ conforms to the planned graph in scope $\Sigma$ exactly when
 $F_1\subseteq F^*$. By set extensionality, those inclusions hold exactly when
 $F^*=F_1$. $\square$
 
-Phase 0 uses stable identities and exact set difference. If a future comparison
-lacks shared identities, the comparison must first provide an explicit
-correspondence map or a normalized graph isomorphism. The conformance theorem
-therefore requires more than an implicit name match.
+Phase 0 uses stable identities and exact set difference. A comparison without
+shared identities requires an explicit correspondence map or a normalized
+graph isomorphism before computing the partition.
 
 ### Limits of the comparison
 
-The comparison proves equality only for facts emitted by $C_X$ and retained by
-$\mathcal F_\Sigma$. Arbitrary functional correctness, program termination,
-numerical correctness, security, and behavior under an undeclared context
-remain outside that result. A compiler omission leaves the corresponding
-implementation defect unobservable.
+Target satisfaction and optional planned-graph comparison cover only facts
+emitted by $C_X$ and predicates implemented by the verifier. Arbitrary
+functional correctness, program termination, numerical correctness, security,
+and behavior under an undeclared context remain outside those results. A
+compiler omission leaves the corresponding implementation defect
+unobservable.
 
 The same compiler and context must produce $G_0$ and $G_1$. A compiler-version
 change or context change introduces another independent delta and makes a raw
 set comparison ambiguous.
 
-Absence and divergence also require policy. Some observed implementation facts
-may be intentionally unconstrained by the plan; the comparison scope must
-exclude them before the partition is interpreted as failure. Conversely, every
-claimed target postcondition must remain inside the scope.
+Absence and divergence also require an explicit comparison policy. Some
+observed implementation facts may be intentionally unconstrained by the
+selected plan. They are failures only when $\Sigma$ declares them frozen.
+Every claimed selected-graph postcondition must remain inside $\Sigma$.
+Behavioral acceptance continues through builds, tests, runtime checks, and
+benchmarks outside structural conformance.
 
 ## A.9 Relationship to prior work
 
@@ -785,10 +909,10 @@ The proof imports one primitive from each source family:
 
 | Source | Imported primitive | VIPER proof role |
 | --- | --- | --- |
-| [Clarke, Helvensteijn, and Schaefer 2010](https://doi.org/10.1145/1868294.1868298) | Explicit deltas, composition, conflict resolution, and unambiguous derivation | Definition of $\Delta$ and target-determinism Condition 7 |
-| [Ehrig et al. 2006](https://doi.org/10.1007/3-540-31188-2) | DPO rule application, application and gluing conditions, preservation, constraints, confluence, and termination | Semantics of $\operatorname{Apply}(G_0,\Delta\oplus\Theta(P))$ |
+| [Clarke, Helvensteijn, and Schaefer 2010](https://doi.org/10.1145/1868294.1868298) | Explicit deltas, composition, conflict resolution, and unambiguous derivation | Definition of $\Delta$ and target-determinism Conditions 3, 5, and 6 |
+| [Ehrig et al. 2006](https://doi.org/10.1007/3-540-31188-2) | DPO rule application, application and gluing conditions, preservation, constraints, confluence, and termination | Semantics of applying $\Delta$ and selected repair operations $U^*$ |
 | [Horwitz, Reps, and Binkley 1990](https://doi.org/10.1145/77606.77608) | Dependence-graph representation and interprocedural slicing | Dependency relation, reverse closure, and blast-radius argument |
-| [Murphy, Notkin, and Sullivan 2001](https://doi.org/10.1109/32.917525) | Intended-versus-extracted structural comparison | Convergence, absence, and divergence for $G^*$ versus $G_1$ |
+| [Murphy, Notkin, and Sullivan 2001](https://doi.org/10.1109/32.917525) | Intended-versus-extracted structural comparison | Optional convergence, absence, and divergence for selected $G^*$ versus observed $G_1$ |
 
 Delta modeling supplies the core-plus-modifications structure. Clarke,
 Helvensteijn, and Schaefer define deltas as modifications applied incrementally
@@ -818,9 +942,11 @@ Sections 2–4).
 
 Software reflexion models compare an expected high-level model with an
 extracted source model and classify relations as convergence, absence, or
-divergence. VIPER applies that comparison vocabulary to canonical planned and
-observed graph facts. The equality claim remains limited to the represented
-scope ([Murphy, Notkin, and Sullivan 2001](https://doi.org/10.1109/32.917525),
+divergence. VIPER applies that comparison vocabulary when repair selection
+freezes a planned graph projection. The authoritative general comparison is
+$G_1\models T^*$; planned-versus-observed equality remains limited to the
+represented scope
+([Murphy, Notkin, and Sullivan 2001](https://doi.org/10.1109/32.917525),
 Sections 2–3).
 
 These sources establish separate primitives. The complete VIPER construction
@@ -828,28 +954,46 @@ is a local synthesis whose composition this appendix must prove:
 
 ```math
 \begin{aligned}
-R_0&\longrightarrow G_0,
-& (G_0,\Delta)&\longrightarrow B,
-& (\Delta,B)&\longrightarrow P, \\
-(G_0,\Delta,P)&\longrightarrow G^*,
-& R_1&\longrightarrow G_1,
-& G_1&\longleftrightarrow G^*.
+R_0&\longrightarrow G_0, \\
+(G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
+(\Delta,B)&\longrightarrow P, \\
+(G_0,\Delta,P)&\longrightarrow T^*, \\
+H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi
+\longrightarrow\{\mathcal R_i\}\longrightarrow\{U_i^*\}, \\
+(T^*,\Pi,\{U_i^*\})&\longrightarrow\mathcal Q
+\longrightarrow R_1\longrightarrow G_1, \\
+G_1&\models T^*.
 \end{aligned}
+```
+
+When selection freezes all structural choices, the additional branch is
+
+```math
+\{U_i^*\}\longrightarrow U^*\longrightarrow G^*,
+\qquad
+G^*\models T^*,
+\qquad
+\mathcal F_\Sigma(G_1)=\mathcal F_\Sigma(G^*).
 ```
 
 ## A.10 Required next formal connectors
 
 These definitions are sufficient to state soundness, graph-relative
 minimality, target determinism, and represented conformance. Implementation
-still requires four explicit connectors:
+still requires five explicit connectors:
 
-1. The system-impact contract must assign every propagating `SystemEdgeKind`
-   one dependency orientation through $\rho_X$.
+1. Compiler adapters must normalize every typed dependency edge into
+   `dependent -> dependency` orientation and store non-dependency evidence
+   outside $E$.
 2. The contract-delta schema must represent mandatory operations separately
    from the observed revision-difference `SystemGraphDelta`.
-3. `PropagationPlan` and its ordered PairBlocks must compile into explicit
-   graph postconditions through $\Theta$.
-4. The conformance contract must declare $\mathcal F_\Sigma$, including which
+3. `CompileTarget` must translate delta operations and total dispositions into
+   canonical predicates and reject inconsistent target specifications.
+4. The decomposition, repair-selection, and `CompileWork` connectors must
+   preserve every target obligation, selected repair operation, and execution
+   dependency in the generated PairBlocks.
+5. The conformance contract must define target-predicate evaluation and, when
+   a concrete $G^*$ exists, declare $\mathcal F_\Sigma$, including which
    evidence fields are compared and which are intentionally ignored.
 
 These connectors should be added after the foundation receives review. That
