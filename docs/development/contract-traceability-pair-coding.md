@@ -83,8 +83,14 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-PDR-05"]
 ```
 
+**Context:** Contract requirements and verifier rules are still Markdown text.
+These parsers turn them into typed, source-anchored records and reject duplicate
+IDs, mismatched labels, orphan rules, and requirements with no rule.
+
 Add the imports, error, private row type, patterns, and both complete parsers
 after `ContractTraceabilityGraph`.
+
+`src/viper/_contract_traceability.py`
 
 ```python pair-edit
 import hashlib
@@ -245,7 +251,13 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-01"]
 ```
 
+**Context:** A rule does not identify the code that enforces it or the test that
+observes it. This parser joins checklist markers to exact Python symbols and
+rejects missing, duplicate, or inconsistent links.
+
 Add the checklist edge parser after the declaration parsers.
+
+`src/viper/_contract_traceability.py`
 
 ```python pair-edit
 import ast
@@ -404,9 +416,15 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-02"]
 ```
 
+**Context:** The documentation test currently checks traces, worked examples,
+and diagrams without producing reusable records. These operations move those
+checks into the compiler while preserving the existing test as a parity oracle.
+
 Move the existing trace-fence, model-construction, and Mermaid checks from the
 documentation oracle into these production operations. Keep the oracle until
 parity passes.
+
+`src/viper/_contract_traceability.py`
 
 ```python pair-edit
 import ast
@@ -703,6 +721,10 @@ gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k phas
 depends_on = ["P0-CRT-03"]
 ```
 
+**Context:** Only migrated contracts can enter the compiled traceability graph.
+This block adds each contract after its diagrams, models, worked example, and
+accepted and rejected traces satisfy the shared contract structure.
+
 Expand the validated contract set only after every contract has the required
 three diagrams and complete worked example.
 
@@ -726,6 +748,8 @@ accepted trace, and rejected trace before adding its path to the validated
 tuple. The contract-gap skill defines the required contents of those sections;
 this block controls only their repository-wide migration and acceptance gate.
 
+`tests/test_documentation.py`
+
 ```python pair-edit
 CONTRACTS_WITH_COMPLETE_EXAMPLES = IMPLEMENTATION_CONTRACTS
 ```
@@ -740,7 +764,13 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-03", "P0-CRT-04"]
 ```
 
+**Context:** Parsed requirements, rules, edges, and traces remain separate
+collections until one operation joins and orders them. This block creates the
+complete graph and emits stable bytes for later comparison and verification.
+
 Compile the joined records and serialize their canonical representation.
+
+`src/viper/_contract_traceability.py`
 
 ```python pair-edit
 import json
@@ -823,8 +853,14 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-01"]
 ```
 
+**Context:** The declaration parsers need one connected repository fixture and
+both acceptance and rejection evidence. These tests prove valid rows compile
+and duplicate or orphan IDs fail at the declaration boundary.
+
 Create `tests/test_contract_traceability.py`. This first block owns the one
 connected fixture used by every later proof.
+
+`tests/test_contract_traceability.py`
 
 ```python pair-edit
 from pathlib import Path
@@ -1067,8 +1103,14 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-02", "P0-PROOF-01"]
 ```
 
+**Context:** Parsed checklist edges must reach one real implementation and at
+least one real test. These cases prove valid joins resolve and missing symbols
+or owners fail before graph construction.
+
 Extend the imports in `tests/test_contract_traceability.py`, then add both
 tests below the requirement-row tests.
+
+`tests/test_contract_traceability.py`
 
 ```python pair-edit
 from viper._contract_traceability import (
@@ -1124,7 +1166,13 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-03", "P0-PROOF-02"]
 ```
 
+**Context:** A structurally valid contract can still contain an incomplete
+trace or worked example. These cases require complete evidence and reject the
+exact omissions that would make the compiled graph overclaim support.
+
 Extend the imports, then add these tests.
+
+`tests/test_contract_traceability.py`
 
 ```python pair-edit
 from viper._contract_traceability import (
@@ -1226,7 +1274,13 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-05", "P0-PROOF-03"]
 ```
 
+**Context:** The final compiler must produce the same bytes for the same
+repository and reject identities that would make graph joins ambiguous. These
+tests close canonical ordering and duplicate-ID behavior end to end.
+
 Extend the imports, then add the final compiler tests.
+
+`tests/test_contract_traceability.py`
 
 ```python pair-edit
 from viper._contract_traceability import (

@@ -1950,8 +1950,17 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
         assert manifest["tests"]
         assert str(manifest["gate"]).startswith("conda run -n mantra ")
 
-        edits = tuple(_PAIR_EDIT.finditer(definition.group("body")))
+        body = definition.group("body")
+        assert body.count("**Context:**") == 1, block_id
+
+        edits = tuple(_PAIR_EDIT.finditer(body))
         assert len(edits) == 1, block_id
+        file_edits = tuple(_FILE_PAIR_EDIT.finditer(body))
+        assert len(file_edits) == len(edits), block_id
+        target_paths = {
+            target.partition(":")[0] for target in manifest["targets"]
+        }
+        assert {edit.group("path") for edit in file_edits} <= target_paths, block_id
         code = edits[0].group("code")
         assert _PAIR_PLACEHOLDER.search(code) is None, block_id
         tree = ast.parse(
