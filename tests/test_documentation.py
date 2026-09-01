@@ -113,7 +113,7 @@ _PHASE_CAPABILITY = re.compile(
     r"(?P<symbols>[A-Za-z0-9_., ]+) -->"
 )
 _CHECKBOX_BLOCK = re.compile(
-    r"^- \[[ x]\] .*?(?=^- \[[ x]\] |^### |^## |\Z)",
+    r"^- \[ \] .*?(?=^- \[ \] |^### |^## |\Z)",
     re.MULTILINE | re.DOTALL,
 )
 _ORDERED_CAPABILITIES = {
@@ -2686,7 +2686,7 @@ def test_phase_zero_contract_traces_use_typed_outcomes() -> None:
 
 
 def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
-    """Bind every governing contract requirement to one plan phase and test."""
+    """Bind every pending contract requirement to one plan phase and test."""
     declarations: dict[str, tuple[Path, int, Path]] = {}
     declaration_counts: Counter[str] = Counter()
     for contract in IMPLEMENTATION_CONTRACTS:
