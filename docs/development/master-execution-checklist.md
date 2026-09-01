@@ -275,7 +275,7 @@ scheduled phase and dependency order.
 | [Contract Traceability](contract-traceability.md) | Draft after audit | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
 | [Project data root](project-data-root.md) | Draft after audit | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design | One defining module for API operations, verification operations, and verification types |
-| [System Impact Compiler](system-impact-compiler.md) | Audited design; implementation pending | Pinned CodeQL source analysis, normalized `SystemGraph`, automatic `ContractChange` compilation, conservative impact closure, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and independently observed conformance |
+| [System Impact Compiler](system-impact-compiler.md) | Approved design; implementation pending | Pinned CodeQL source analysis, normalized `SystemGraph`, automatic `ContractChange` compilation, conservative impact closure, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and independently observed conformance |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Draft after audit | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -327,11 +327,11 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=6415fdefd9c692e1569ef180a8a0c78dc36013b5e4d9002f5267c9e8241f9d47 -->
+<!-- contract-baseline: contract-traceability.md sha256=c87072bbad5767cd914708cc5369985f0fe00927ad10ed5ed205f7672ee2954f -->
 
 <!-- contract-baseline: project-data-root.md sha256=4abf108ccf295d9de7e2a2edc2f98e221a6a418cbd838dac401cb1127f74b693 -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=a1aa1954215f013a9b434a864eaffd01aabf58aaf4c6fa39d94e0df8abe4b882 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=d3eada451c50ea6469e963df71f0f772d8a948f8ec97c43e9b76d146356014de -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=11677edf79da1b5a6ce34e85aca143412af0ea4e43f7381d03e45ef0e36f271f -->
@@ -1021,7 +1021,7 @@ new publisher boundary. Cloud implementation begins in Master Phase 9.
 - [ ] Observe importlib targets, decorator registrations, literal registries,
       reflection targets, and subprocess entrypoints under the fixed context.
       Add declared CodeQL model packs and store exactly one observation or
-      unresolved outcome per attempt. Preserve global Phase 0 rejection unless
+      unresolved outcome per attempt. Preserve global Master Phase 0 rejection unless
       a stored observation or conservative unknown-target edge closes the site.
       <!-- pair-block: P1-SIG-01 -->
 - [ ] Add TOML, YAML, JSON, and non-contract Markdown analyzers only for
@@ -2776,7 +2776,7 @@ These items stay outside this implementation sequence:
 - Global contract-system extraction after VIPER's contract and checklist
   procedures pass their complete traceability and documentation gates. Classify
   each rule as portable or VIPER-specific, extract the portable contracts,
-  schemas, validators, and skill evaluations into `/Users/machina/.agents`, and
+  schemas, validators, and skill evaluations into `~/.agents`, and
   establish parity case by case. Keep VIPER unchanged during the initial
   extraction. Evaluate a project-profile conversion only after the global
   system and VIPER both pass their own checks.

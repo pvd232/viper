@@ -805,7 +805,7 @@ named test function. The traceability graph joins those three representations.
 | `tests/test_documentation.py` | Compare the compiler output with the current requirement, phase, test-file, and baseline oracle; require each contract's three DAGs and complete Section 4 example. |
 | `docs/development/master-execution-checklist.md` | Add the foundational Master Phase 0 work before project-root and system-graph implementation. |
 | `docs/development/*.md` pending contracts | Add verifier-rule markers, three DAGs, one complete worked example, and populated success and rejection traces per contract. |
-| `/Users/machina/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, complete Section 4 example, populated traces, and requirement-rule-owner-test chain. |
+| `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, complete Section 4 example, populated traces, and requirement-rule-owner-test chain. |
 | `docs/development/system-impact-compiler.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
 | `docs/development/testing.md` | Document the focused traceability check and the meaning of each marker. |
 

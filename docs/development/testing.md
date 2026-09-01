@@ -92,6 +92,11 @@ The marker declarations in `pyproject.toml` are authoritative.
 GitHub Actions starts with the fast Python 3.14 gate. A successful fast gate
 starts four independent jobs:
 
+Every external action is pinned to a full commit SHA. The adjacent comment
+records the corresponding release line. GitHub identifies a full commit SHA as
+the immutable action reference in its [secure-use
+guidance](https://docs.github.com/en/actions/reference/security/secure-use#using-third-party-actions).
+
 | Job | Required evidence |
 | --- | --- |
 | Integration | Every integration test under Python 3.14 |
@@ -167,7 +172,7 @@ gates. CodeQL is an external toolchain; install it from the reviewed release
 bundle and verify the recorded digest before running those tests.
 
 The pre-implementation and post-implementation compiles must use the same
-`SystemCompilerIdentity`. Strict Phase 0 rejects every unsupported or
+`SystemCompilerIdentity`. Strict Master Phase 0 rejects every unsupported or
 unresolved dependency-bearing Python site before computing the blast radius.
 Selected pytest node IDs then run with coverage.py branch measurement and
 pytest-cov contexts. The `BlastCoverageReport` must contain zero missing

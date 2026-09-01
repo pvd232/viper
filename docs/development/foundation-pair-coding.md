@@ -72,6 +72,8 @@ depends_on = []
 Create `src/viper/project.py` with the root marker model and resolver.
 
 ```python pair-edit
+"""Discover and validate the root of a Git-backed VIPER project."""
+
 from __future__ import annotations
 
 import subprocess
@@ -79,15 +81,17 @@ import tomllib
 from pathlib import Path
 from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
 from ._schema import ProtocolModel
 
 
 class ProjectSettings(ProtocolModel):
-    """Validate the required project marker settings."""
+    """Represent the ``[project]`` table stored in ``viper.toml``."""
 
-    schema_version: Literal[1]
+    schema_version: Literal[1] = Field(
+        description="Version of the project-marker schema."
+    )
 
 
 class ProjectRootError(ValueError):
@@ -95,7 +99,7 @@ class ProjectRootError(ValueError):
 
 
 def find_project_root(start: Path) -> Path:
-    """Return the nearest ancestor marked by `viper.toml`."""
+    """Return the nearest ancestor of ``start`` that contains ``viper.toml``."""
     candidate = start.resolve()
     if candidate.is_file():
         candidate = candidate.parent
@@ -106,7 +110,7 @@ def find_project_root(start: Path) -> Path:
 
 
 def _require_git_work_tree(root: Path) -> None:
-    """Require the marker directory to equal its Git work-tree root."""
+    """Require ``root`` to equal the top level of its Git work tree."""
     completed = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
         check=False,
@@ -116,11 +120,11 @@ def _require_git_work_tree(root: Path) -> None:
     if completed.returncode != 0:
         raise ProjectRootError(f"project root is not in a Git work tree: {root}")
     if Path(completed.stdout.strip()).resolve() != root:
-        raise ProjectRootError(f"viper.toml must be at the Git work-tree root: {root}")
+        raise ProjectRootError(f"viper.toml must be a Git work-tree root: {root}")
 
 
 def resolve_project_root(root: Path | None = None) -> Path:
-    """Validate an explicit or discovered project root."""
+    """Return a project root with a valid marker at its Git work-tree boundary."""
     resolved = find_project_root(root if root is not None else Path.cwd())
     marker = resolved / "viper.toml"
     try:

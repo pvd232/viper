@@ -7,8 +7,6 @@ gates, and research boundary. The
 [master execution checklist](master-execution-checklist.md) schedules these
 requirements and inherits their definitions from this document.
 
-**Status:** audited design; implementation and owner approval pending.
-
 The compiler uses CodeQL to analyze the repository before and after the
 change. VIPER owns the graph schema, change protocol, work compiler, and
 acceptance decision:
@@ -58,7 +56,7 @@ program that begins only after Master Phase 0 clears its kill gate.
 
 ## 1. Status
 
-**Contract status:** audited design; implementation and owner approval pending.
+**Contract status:** approved design; implementation pending.
 
 These requirements bind the contract to the master checklist:
 
@@ -3320,7 +3318,7 @@ The implementation adds these checks:
 | `system.codeql.database` <!-- verifier-rule: system.codeql.database requirement=SIG-05 --> | Require a successful `CodeQLDatabaseReceipt` whose source commit and toolchain digest match the graph being compiled. |
 | `system.codeql.queries` <!-- verifier-rule: system.codeql.queries requirement=SIG-05 --> | Require exactly one successful receipt for every locked query; recompute query, result-schema, BQRS, and decoded-row digests and row counts. |
 | `system.codeql.facts` <!-- verifier-rule: system.codeql.facts requirement=SIG-05 --> | Recompute every source-fact row ID, require every endpoint and emitted-edge reference to resolve, and reject duplicate or undeclared query rows. |
-| `system.codeql.parity` <!-- verifier-rule: system.codeql.parity requirement=SIG-05 --> | Require `G0` and `G1` to use the same CodeQL identity and result schemas; in the Phase 0 fixture, require the CodeQL result to contain every edge found by the independent AST oracle. |
+| `system.codeql.parity` <!-- verifier-rule: system.codeql.parity requirement=SIG-05 --> | Require `G0` and `G1` to use the same CodeQL identity and result schemas; in the Master Phase 0 fixture, require the CodeQL result to contain every edge found by the independent AST oracle. |
 | `system.context.identity` <!-- verifier-rule: system.context.identity requirement=SIG-02 --> | Recompute the canonical manifest digest. |
 | `system.compiler.identity` <!-- verifier-rule: system.compiler.identity requirement=SIG-02 --> | Rebuild `SystemCompilerIdentity`; require schema version 1, the `compile_system` symbol, package version, and implementation digest to match across `G0`, `T*`, `G1`, and the conformance report. |
 | `system.resolution.total` <!-- verifier-rule: system.resolution.total requirement=SIG-02 --> | Require each resolution attempt to produce exactly one observation or unresolved dependency. |
@@ -3717,7 +3715,7 @@ VIPER reports three separate coverage claims:
 | Coverage | Mechanical evidence | Limitation |
 | --- | --- | --- |
 | File coverage | Every tracked Git-tree file has a file node and terminal source-fact outcome. | Untracked files are outside the selected source revision. |
-| CodeQL query coverage | Every dependency-bearing construct in the declared query scope emits a `CodeQLDependencySiteRow` and zero or more referenced edges. | A construct absent from the declared query scope remains unsupported and therefore rejects strict Phase 0. |
+| CodeQL query coverage | Every dependency-bearing construct in the declared query scope emits a `CodeQLDependencySiteRow` and zero or more referenced edges. | A construct absent from the declared query scope remains unsupported and therefore rejects strict Master Phase 0. |
 | Resolution coverage | Every attempted dynamic lookup has exactly one observed or unresolved outcome. | The result is conditional on the fixed context manifest. |
 | Blast statement coverage | Selected tests execute every coverage.py statement inside every affected executable symbol. | Assertion sufficiency remains a separate obligation. |
 | Blast branch coverage | Selected tests execute every coverage.py branch arc sourced inside every affected executable symbol. | Semantic correctness and graph completeness remain separate obligations. |
@@ -6109,7 +6107,7 @@ depends_on = ["P0-SIG-11"]
 Add declared CodeQL model packs and context-bound runtime observations for
 importlib targets, decorator registrations, literal registries, reflection
 targets, and subprocess entrypoints. Require exactly one observation or
-unresolved outcome per attempt. Phase 0 continues to reject any unresolved
+unresolved outcome per attempt. Master Phase 0 continues to reject any unresolved
 site; Phase 1 may admit an observed edge only when its evidence and context are
 stored, or conservatively route a remaining site to an explicit unknown target.
 
