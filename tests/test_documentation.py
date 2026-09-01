@@ -11,12 +11,15 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import unquote
 
+import pytest
+
 import viper._contract_traceability as traceability
 from viper._contract_traceability import (
     AcceptedTraceOutcome,
     ContractRequirement,
     ContractTrace,
     ContractTraceabilityGraph,
+    DeclarationRef,
     RejectedTraceOutcome,
     RepoSymbolRef,
     RuleEdge,
@@ -41,6 +44,9 @@ CONTRACT_TRACEABILITY = (
 )
 MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
 SYSTEM_IMPACT_GRAPH = ROOT / "docs/development/system-impact-graph.md"
+SYSTEM_IMPACT_CORE_PROOF = (
+    ROOT / "docs/development/proof/graph_transformation/core-proof.md"
+)
 PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/phase-0-pair-coding.md"
 CONTRACT_TRACEABILITY_PAIR_CODING = (
     ROOT / "docs/development/contract-traceability-phase-0-pair-coding.md"
@@ -72,6 +78,7 @@ PHASE_ZERO_CONTRACTS = (
     ROOT / "docs/development/system-impact-graph.md",
 )
 TRACEABILITY_MODELS = (
+    DeclarationRef,
     RepoSymbolRef,
     ContractRequirement,
     VerifierRule,
@@ -255,7 +262,9 @@ SYSTEM_IMPACT_DAG_ROLES = (
     {
         "Baseline": "input",
         "Context": "input",
-        "ContractDocs": "input",
+        "Traceability": "input",
+        "DeltaDocs": "input",
+        "Bootstrap": "input",
         "Inventory": "proposed",
         "Analyze": "proposed",
         "Sites": "proposed",
@@ -276,7 +285,9 @@ SYSTEM_IMPACT_DAG_ROLES = (
     {
         "Baseline": "input",
         "Context": "input",
-        "Contract": "input",
+        "Traceability": "input",
+        "DeltaDocs": "input",
+        "Bootstrap": "input",
         "Decisions": "input",
         "CompileBase": "consumer",
         "CompileContract": "consumer",
@@ -320,7 +331,9 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Analyze", "Sites"),
         ("Analyze", "Graph"),
         ("Sites", "Graph"),
-        ("ContractDocs", "ContractCompiler"),
+        ("Traceability", "Graph"),
+        ("Bootstrap", "Graph"),
+        ("DeltaDocs", "ContractCompiler"),
         ("Graph", "ContractCompiler"),
         ("ContractCompiler", "Delta"),
         ("Graph", "Overlay"),
@@ -342,8 +355,10 @@ SYSTEM_IMPACT_DAG_EDGES = (
     {
         ("Baseline", "CompileBase"),
         ("Context", "CompileBase"),
+        ("Traceability", "CompileBase"),
+        ("Bootstrap", "CompileBase"),
         ("CompileBase", "BaseGraph"),
-        ("Contract", "CompileContract"),
+        ("DeltaDocs", "CompileContract"),
         ("BaseGraph", "CompileContract"),
         ("CompileContract", "Delta"),
         ("BaseGraph", "Impact"),
@@ -1562,6 +1577,37 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
     }
 
 
+def test_system_graph_stages_traceability_before_contract_delta() -> None:
+    """Keep CRT lowering inside G0 compilation and delta compilation after G0."""
+    proof = SYSTEM_IMPACT_CORE_PROOF.read_text(encoding="utf-8")
+    crt_guide = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+    system_guide = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+
+    assert "Q_0=\\operatorname{CompileTraceability}(R_0)" in proof
+    assert (
+        "\\operatorname{CompileContractDelta}(d_\\Delta,G_0)"
+        in proof
+    )
+    assert "Q0 -> compile_system() -> G0" in crt_guide
+    assert "(contract-delta declaration, G0)" in crt_guide
+    assert "only traceability input accepted" not in crt_guide
+
+    definition = next(
+        item
+        for item in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(system_guide)
+        if item.group("id") == "P0-SIG-04"
+    )
+    manifest = tomllib.loads(definition.group("manifest"))
+    assert manifest["depends_on"] == ["P0-CRT-05", "P0-SIG-03"]
+    assert "ingest_contract_traceability" in " ".join(manifest["targets"])
+    assert "compile_contract_delta" in " ".join(manifest["targets"])
+    body = " ".join(definition.group("body").split())
+    assert "Derive `ContractTraceabilityGraph`" not in body
+    assert body.index("Consume the canonical `ContractTraceabilityGraph`") < (
+        body.index("After `G0` exists")
+    )
+
+
 def test_contract_traceability_pair_guide_executes_as_one_workflow(
     tmp_path: Path,
 ) -> None:
@@ -2098,6 +2144,17 @@ def test_contract_traceability_schema_describes_every_field() -> None:
             missing[model.__name__] = undescribed
 
     assert missing == {}
+
+
+def test_traceability_declaration_ref_rejects_reversed_span() -> None:
+    """Reject declaration evidence whose final line precedes its first line."""
+    with pytest.raises(ValueError, match="end_line must be greater"):
+        DeclarationRef(
+            path="docs/development/example.md",
+            start_line=2,
+            end_line=1,
+            sha256="0" * 64,
+        )
 
 
 def test_phase_zero_contract_traces_use_typed_outcomes() -> None:

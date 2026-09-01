@@ -11,7 +11,7 @@ The identifier for this subsystem is `CRT`.
 ## 1. Status and boundary
 
 **Guide status:** proposed implementation, reviewed against `main` at commit
-`1821b8c`.
+`9868783`.
 
 The records in `src/viper/_contract_traceability.py` already exist. The
 parsers, compiler operations, and focused acceptance tests remain proposed.
@@ -28,6 +28,11 @@ existing ContractRequirement, VerifierRule, RuleEdge, and ContractTrace models
 -> compile ContractTraceabilityGraph
 -> serialize canonical JSON bytes
 ```
+
+Every compiled requirement, rule, binding, and trace retains the exact source
+path, line span, and digest of its authored declaration. SystemGraph can then
+lower traceability into $G_0$ without reparsing Markdown or inventing source
+coordinates.
 
 Project-root work precedes `P0-CRT-01` because the compiler accepts one
 resolved project root. SystemGraph work follows `P0-CRT-05` because it
@@ -83,6 +88,7 @@ Add the imports, error, private row type, patterns, and both complete parsers
 after `ContractTraceabilityGraph`.
 
 ```python pair-edit
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -97,6 +103,22 @@ class _RequirementMarker:
     requirement: ContractRequirement
     phase: int
     test_path: str
+
+
+def _declaration_ref(
+    root: Path,
+    path: Path,
+    text: str,
+    start: int,
+    end: int,
+) -> DeclarationRef:
+    raw = text[start:end].encode("utf-8")
+    return DeclarationRef(
+        path=path.relative_to(root).as_posix(),
+        start_line=text.count("\n", 0, start) + 1,
+        end_line=text.count("\n", 0, end) + 1,
+        sha256=hashlib.sha256(raw).hexdigest(),
+    )
 
 
 _REQUIREMENT_ROW = re.compile(
@@ -123,8 +145,9 @@ def _parse_requirement_markers(
     contract: Path,
 ) -> tuple[_RequirementMarker, ...]:
     contract_path = contract.relative_to(root).as_posix()
+    text = contract.read_text(encoding="utf-8")
     markers: list[_RequirementMarker] = []
-    for match in _REQUIREMENT_ROW.finditer(contract.read_text(encoding="utf-8")):
+    for match in _REQUIREMENT_ROW.finditer(text):
         label = match.group("label")
         requirement_id = match.group("requirement")
         if label != requirement_id:
@@ -136,6 +159,13 @@ def _parse_requirement_markers(
                 requirement=ContractRequirement(
                     requirement_id=requirement_id,
                     contract=contract_path,
+                    declaration=_declaration_ref(
+                        root,
+                        contract,
+                        text,
+                        match.start(),
+                        match.end(),
+                    ),
                 ),
                 phase=int(match.group("phase")),
                 test_path=match.group("test"),
@@ -161,11 +191,12 @@ def _parse_verifier_rules(
     requirements: tuple[_RequirementMarker, ...],
 ) -> tuple[VerifierRule, ...]:
     contract_path = contract.relative_to(root).as_posix()
+    text = contract.read_text(encoding="utf-8")
     requirement_ids = {
         marker.requirement.requirement_id for marker in requirements
     }
     rules: list[VerifierRule] = []
-    for match in _VERIFIER_RULE_ROW.finditer(contract.read_text(encoding="utf-8")):
+    for match in _VERIFIER_RULE_ROW.finditer(text):
         label = match.group("label")
         rule_id = match.group("rule")
         requirement_id = match.group("requirement")
@@ -183,6 +214,13 @@ def _parse_verifier_rules(
                 requirement_id=requirement_id,
                 contract=contract_path,
                 statement=match.group("statement"),
+                declaration=_declaration_ref(
+                    root,
+                    contract,
+                    text,
+                    match.start(),
+                    match.end(),
+                ),
             )
         )
     duplicate_ids = _duplicates([rule.rule_id for rule in rules])
@@ -301,12 +339,20 @@ def _parse_rule_edges(
             state = match.group("state")
             if state == "implemented":
                 _require_python_symbol(root, target)
+            declaration_start = phase_match.end() + match.start()
+            declaration_end = phase_match.end() + match.end()
             edges.append(
                 RuleEdge(
                     kind=kind,
                     rule_id=rule_id,
                     phase=phase,
-                    checklist_line=text.count("\n", 0, phase_match.end() + match.start()) + 1,
+                    declaration=_declaration_ref(
+                        root,
+                        checklist,
+                        text,
+                        declaration_start,
+                        declaration_end,
+                    ),
                     state=state,
                     target=target,
                 )
@@ -420,6 +466,7 @@ def parse_contract_traces(
     edges: tuple[RuleEdge, ...],
 ) -> tuple[ContractTrace, ...]:
     contract_ref = contract.relative_to(root).as_posix()
+    text = contract.read_text(encoding="utf-8")
     requirement_ids = {
         item.requirement_id
         for item in requirements
@@ -436,15 +483,21 @@ def parse_contract_traces(
     }
 
     traces: list[ContractTrace] = []
-    for match in _TRACE_FENCE.finditer(contract.read_text(encoding="utf-8")):
+    for match in _TRACE_FENCE.finditer(text):
         body = match.group("body")
         if _PLACEHOLDER.search(body):
             raise ContractTraceabilityError(
                 f"trace contains a placeholder: {contract_ref}"
             )
-        trace = ContractTrace.model_validate(
-            _trace_mapping(tomllib.loads(body))
+        trace_value = _trace_mapping(tomllib.loads(body))
+        trace_value["declaration"] = _declaration_ref(
+            root,
+            contract,
+            text,
+            match.start(),
+            match.end(),
         )
+        trace = ContractTrace.model_validate(trace_value)
         rule = rule_by_id.get(trace.rule_id)
         if trace.requirement_id not in requirement_ids:
             raise ContractTraceabilityError(
@@ -1206,6 +1259,25 @@ def test_contract_traceability_graph_is_canonical(tmp_path: Path) -> None:
         assert sum(edge.kind == "implementation" for edge in links) == 1
         assert sum(edge.kind == "verification" for edge in links) >= 1
 
+    declaration = left.requirements[0].declaration
+    assert declaration.path == "docs/development/example.md"
+    assert declaration.start_line == declaration.end_line
+    original_sha256 = declaration.sha256
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            "test=tests/test_contract_traceability.py",
+            "test=tests/test_changed.py",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    changed = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        contracts,
+    )
+    assert changed.requirements[0].declaration.sha256 != original_sha256
+
 
 def test_contract_traceability_graph_rejects_duplicate_ids(
     tmp_path: Path,
@@ -1276,8 +1348,8 @@ Phase 0 contract traceability closes only when:
 
 ## 7. SystemGraph handoff
 
-`compile_contract_traceability()` returns the only traceability input accepted
-by `compile_contract_delta()`:
+`compile_contract_traceability()` returns the canonical traceability input to
+baseline `compile_system()`:
 
 ```text
 ContractTraceabilityGraph.requirements
@@ -1286,6 +1358,21 @@ ContractTraceabilityGraph.edges
 ContractTraceabilityGraph.traces
 ```
 
-Contract traceability owns declaration parsing, joins, cardinality, worked
-examples, and canonical bytes. SystemGraph owns dependency lowering, impact
+Each record includes its exact `DeclarationRef`, so SystemGraph can lower the
+graph into source-backed $G_0$ nodes and dependencies without reparsing the
+contract or checklist. Contract traceability owns declaration parsing, source
+spans and digests, joins, cardinality, worked examples, and canonical bytes.
+SystemGraph owns traceability lowering, baseline dependency compilation, impact
 traversal, propagation coverage, and target constraints.
+
+The explicit delta remains a separate proof input:
+
+```text
+R0 -> compile_contract_traceability() -> Q0 -> compile_system() -> G0
+
+(contract-delta declaration, G0) -> compile_contract_delta() -> Delta
+```
+
+Bootstrap PairBlocks are parsed separately and contribute scheduling
+traceability to $G_0$. They never produce `ContractDelta`, `S_delta`, or
+`H_delta`.

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from ._schema import NonEmptyStr, ProtocolModel, RepoRelPath
+from ._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 RequirementId = Annotated[
     str,
@@ -23,6 +23,32 @@ TraceId = Annotated[
 
 RuleEdgeKind = Literal["implementation", "verification"]
 TraceState = Literal["planned", "implemented"]
+
+
+class DeclarationRef(ProtocolModel):
+    """Locate and identify one authored traceability declaration."""
+
+    path: RepoRelPath = Field(
+        description="Repository-relative document containing the declaration."
+    )
+    start_line: int = Field(
+        ge=1,
+        description="One-based first line occupied by the declaration.",
+    )
+    end_line: int = Field(
+        ge=1,
+        description="One-based final line occupied by the declaration.",
+    )
+    sha256: SHA256 = Field(
+        description="SHA-256 digest of the exact UTF-8 declaration bytes."
+    )
+
+    @model_validator(mode="after")
+    def validate_line_order(self) -> Self:
+        """Require the final line to include or follow the first line."""
+        if self.end_line < self.start_line:
+            raise ValueError("end_line must be greater than or equal to start_line")
+        return self
 
 
 class RepoSymbolRef(ProtocolModel):
@@ -45,6 +71,9 @@ class ContractRequirement(ProtocolModel):
     contract: RepoRelPath = Field(
         description="Repository-relative contract that declares the requirement."
     )
+    declaration: DeclarationRef = Field(
+        description="Exact authored requirement marker used to reconstruct this record."
+    )
 
 
 class VerifierRule(ProtocolModel):
@@ -62,6 +91,11 @@ class VerifierRule(ProtocolModel):
     statement: NonEmptyStr = Field(
         description="Testable invariant enforced by the rule."
     )
+    declaration: DeclarationRef = Field(
+        description=(
+            "Exact authored verifier-rule marker used to reconstruct this record."
+        )
+    )
 
 
 class RuleEdge(ProtocolModel):
@@ -77,9 +111,8 @@ class RuleEdge(ProtocolModel):
         ge=0,
         description="Checklist phase that schedules this relationship.",
     )
-    checklist_line: int = Field(
-        ge=1,
-        description="One-based checklist line that declares this relationship.",
+    declaration: DeclarationRef = Field(
+        description="Exact checklist marker that declares this relationship."
     )
     state: TraceState = Field(
         description="Whether the referenced symbol is planned or implemented."
@@ -159,13 +192,16 @@ class ContractTrace(ProtocolModel):
     outcome: TraceOutcome = Field(
         description="Accepted result or rejected failure expected from the trace."
     )
+    declaration: DeclarationRef = Field(
+        description="Exact contract-trace fence used to reconstruct this record."
+    )
 
 
 class ContractTraceabilityGraph(ProtocolModel):
     """Store the complete ordered traceability graph."""
 
-    schema_version: Literal[1] = Field(
-        default=1,
+    schema_version: Literal[2] = Field(
+        default=2,
         description="Format version of the serialized traceability graph.",
     )
     requirements: tuple[ContractRequirement, ...] = Field(

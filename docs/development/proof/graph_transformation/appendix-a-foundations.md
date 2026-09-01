@@ -1,5 +1,9 @@
 # Appendix A: Graph-transformation foundations
 
+The [core proof](core-proof.md) presents the complete end-to-end derivation and
+pipeline. This appendix supplies its formal graph-transformation definitions,
+theorem statements, and detailed proof obligations.
+
 This appendix defines the graph-transformation claim that VIPER must establish
 before implementing planned-system compilation. A contract delta identifies
 the mandatory mutations. Reverse dependency closure identifies every graph
@@ -164,6 +168,33 @@ dependency evidence, resolution observations, and an unresolved set. The
 strict proof boundary requires the unresolved set to be empty. Equal inputs
 must produce equal canonical graphs; target determinism otherwise fails before
 transformation begins.
+
+### Compiler staging for traceability and normative change
+
+Let $Q_0$ be the canonical contract-traceability graph derived from $R_0$:
+
+```math
+Q_0=\operatorname{CompileTraceability}(R_0).
+```
+
+$C_X$ lowers $Q_0$ into the requirement, rule, owner, and test vertices and
+dependency edges represented in $G_0$. A separate bootstrap-PairBlock parser
+contributes current scheduling-traceability facts to the same baseline graph.
+Both operations are internal stages of $G_0=C_X(R_0)$.
+
+Let $d_\Delta$ be the explicit normative-change declaration. Contract-delta
+compilation is the later operation:
+
+```math
+\Delta
+=
+\operatorname{CompileContractDelta}(d_\Delta,G_0).
+```
+
+Therefore `CompileContractDelta` resolves and validates the explicit change
+against $G_0$; it does not compile $Q_0$. Bootstrap `PairBlock` declarations
+may contribute scheduling-traceability facts to $G_0$, but they do not create
+delta operations, $S_\Delta$, or $H_\Delta$.
 
 ### Dependency orientation
 

@@ -3111,35 +3111,38 @@ def ingest_contract_traceability(
     nodes: dict[str, SystemNode] = {}
     edges: list[SystemEdge] = []
     for requirement in traceability.requirements:
-        node_id = f"span:{requirement.contract}:requirement:{requirement.requirement_id}"
+        source = requirement.declaration
+        node_id = f"span:{source.path}:requirement:{requirement.requirement_id}"
         nodes[node_id] = SystemNode(
             node_id=node_id,
             kind="span",
             roles=("contract_requirement",),
-            path=requirement.contract,
+            path=source.path,
             symbol=requirement.requirement_id,
-            start_line=1,
-            end_line=1,
-            sha256=canonical_sha256(requirement),
+            start_line=source.start_line,
+            end_line=source.end_line,
+            sha256=source.sha256,
         )
     for rule in traceability.rules:
-        rule_id = f"span:{rule.contract}:rule:{rule.rule_id}"
+        source = rule.declaration
+        rule_id = f"span:{source.path}:rule:{rule.rule_id}"
         requirement = next(
             item for item in traceability.requirements
             if item.requirement_id == rule.requirement_id
         )
         requirement_id = (
-            f"span:{requirement.contract}:requirement:{requirement.requirement_id}"
+            f"span:{requirement.declaration.path}:requirement:"
+            f"{requirement.requirement_id}"
         )
         nodes[rule_id] = SystemNode(
             node_id=rule_id,
             kind="span",
             roles=("verifier_rule",),
-            path=rule.contract,
+            path=source.path,
             symbol=rule.rule_id,
-            start_line=1,
-            end_line=1,
-            sha256=canonical_sha256(rule),
+            start_line=source.start_line,
+            end_line=source.end_line,
+            sha256=source.sha256,
         )
         payload = {
             "source": rule_id,
@@ -3147,17 +3150,18 @@ def ingest_contract_traceability(
             "kind": "enforces",
             "origin": "declared",
             "evidence": SourceEvidence(
-                path=rule.contract,
-                start_line=1,
-                end_line=1,
+                path=source.path,
+                start_line=source.start_line,
+                end_line=source.end_line,
                 expression=rule.rule_id,
             ).model_dump(mode="json"),
         }
         edges.append(SystemEdge(edge_id=canonical_sha256(payload), **payload))
     for link in traceability.edges:
+        source = link.declaration
         target_id = f"span:{link.target.path}:{link.target.symbol}"
         rule = next(item for item in traceability.rules if item.rule_id == link.rule_id)
-        rule_id = f"span:{rule.contract}:rule:{rule.rule_id}"
+        rule_id = f"span:{rule.declaration.path}:rule:{rule.rule_id}"
         relation = "implements" if link.kind == "implementation" else "tests"
         payload = {
             "source": target_id,
@@ -3165,9 +3169,9 @@ def ingest_contract_traceability(
             "kind": relation,
             "origin": "declared",
             "evidence": SourceEvidence(
-                path=link.target.path,
-                start_line=link.checklist_line,
-                end_line=link.checklist_line,
+                path=source.path,
+                start_line=source.start_line,
+                end_line=source.end_line,
                 expression=link.target.symbol,
             ).model_dump(mode="json"),
         }

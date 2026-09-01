@@ -303,11 +303,11 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-requirement-traceability.md sha256=cd5b0cc06e85ca2b651e11f0ba606f971527b45a8523fa266fe80c42f6db3f0d -->
+<!-- contract-baseline: contract-requirement-traceability.md sha256=20e000c6b0ea77809e11260ae9949f195e03f83e26897e4b321c963823f2dfbd -->
 
 <!-- contract-baseline: project-data-root.md sha256=74acbb87c68fa1849d6bd82bafe49bb5fd367b046dd47f8a678b3c456c40f8a4 -->
 <!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
-<!-- contract-baseline: system-impact-graph.md sha256=67bcd9150a0cb79b1339b36a4a2ba41cccd7b10148827b63873dc6788e0f9188 -->
+<!-- contract-baseline: system-impact-graph.md sha256=0a29ee7ae38ece2f61e517640d647d765474916f2e4542fce05f43a2ae59c920 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=ad7ed3b8fc334bd0f1c5bb0207b90bcafc03b5f0403592b77d7bb0074c9619e1 -->
@@ -602,12 +602,15 @@ tests before later phases change code.
       `PHASE_ZERO_CONTRACTS` to `IMPLEMENTATION_CONTRACTS` before Phase 0
       closes.
       <!-- pair-block: P0-CRT-04 -->
-- [ ] Serialize one ordered `ContractTraceabilityGraph` and compare its
-      requirement and phase coverage with the current documentation oracle.
+- [ ] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
+      compare its requirement and phase coverage with the current documentation
+      oracle. Require every requirement, rule, binding, and trace to retain its
+      exact `DeclarationRef` path, line span, and digest.
       <!-- pair-block: P0-CRT-05 -->
       <!-- implements: CRT-04 -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.canonical state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.complete state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-04 rule=contract.declaration.anchored state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
 
 <details>
 <summary>Hints</summary>
@@ -737,15 +740,16 @@ the new owner.
       star imports and computed targets.
       <!-- pair-block: P0-SIG-03 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.anchored state=planned owner=src/viper/system_graph.py:compile_system -->
-- [ ] Compile requirements, verifier rules, rule bindings, and fenced
-      contract-delta operations directly from repository documents. Lower each
-      `RuleEdge` into normalized owner-to-rule or test-to-rule dependency
-      edges. Parse bootstrap PairBlocks separately for work traceability.
+- [ ] Ingest the canonical `ContractTraceabilityGraph` from `P0-CRT-05` and
+      lower its source-evidenced requirements, rules, owners, and tests into
+      `G0`. Parse bootstrap PairBlocks separately into scheduling traceability.
+      After `G0` exists, compile the explicit fenced contract delta against its
+      anchors and preconditions.
       <!-- implements: SIG-03, SIG-04 -->
       <!-- pair-block: P0-SIG-04 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.contract.delta state=planned owner=src/viper/system_graph.py:compile_contract_delta -->
-      <!-- contract-implementation: requirement=SIG-04 rule=system.requirement.coverage state=planned owner=src/viper/system_graph.py:compile_contract_delta -->
-      <!-- contract-implementation: requirement=SIG-04 rule=system.rule.lowering state=planned owner=src/viper/system_graph.py:lower_rule_edges -->
+      <!-- contract-implementation: requirement=SIG-04 rule=system.requirement.coverage state=planned owner=src/viper/system_graph.py:ingest_contract_traceability -->
+      <!-- contract-implementation: requirement=SIG-04 rule=system.rule.lowering state=planned owner=src/viper/system_graph.py:ingest_contract_traceability -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.plan.coverage state=planned owner=src/viper/system_graph.py:compile_work -->
 - [ ] Derive `S_delta` and introduced dependency pairs, then build the
       conservative impact overlay from every baseline dependency plus every
@@ -853,6 +857,7 @@ crossing component edge.
       <!-- verifies: CRT-04 -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
+      <!-- contract-verification: requirement=CRT-04 rule=contract.declaration.anchored state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
 
 - [ ] In `tests/test_project_init.py`, initialize outside the current directory,
       discover the root from a child directory, and assert the complete tree.

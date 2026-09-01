@@ -20,7 +20,7 @@ These requirements bind the contract to the master checklist:
 | SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_validation_architecture.py --> | Inventory every tracked file; emit canonical, source-anchored nodes and dependency edges; and classify every supported Python dependency site. |
 | SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_validation_architecture.py --> | Produce stable diagnostics, hold declared external inputs fixed, and fail closed on unsupported or unresolved dependencies in the affected surface. |
 | SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_inspection.py --> | Compile the declared contract delta into the conservative impact overlay, reverse closure, affected-graph SCC condensation, and total propagation plan. |
-| SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Compile requirements, verifier rules, rule bindings, checklist tasks, and PairBlocks automatically; select tests for every executable affected node; and require complete statement and branch execution over that surface. |
+| SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Ingest canonical requirements, verifier rules, and rule bindings from CRT; compile checklist tasks and bootstrap PairBlocks into $G_0$; select tests for every executable affected node; and require complete statement and branch execution over that surface. |
 
 ## 2. Required claim
 
@@ -37,8 +37,14 @@ G_0 = \mathcal C_X(R_0)
 ```
 
 ```math
-\Delta = \operatorname{CompileContract}(R_0, G_0, \text{contract declarations})
+\Delta
+=
+\operatorname{CompileContractDelta}(d_\Delta,G_0)
 ```
+
+Here $d_\Delta$ is the explicit normative-change declaration. The canonical
+traceability graph is lowered into $G_0$ during $\mathcal C_X(R_0)$; it is not
+the input that defines $\Delta$.
 
 The conservative impact graph retains every baseline dependency and adds every
 dependency introduced by the delta:
@@ -185,9 +191,13 @@ source revision + fixed context
 -> observed G1 conformance
 ```
 
-The compiler derives `ContractTraceabilityGraph` from the declarations owned by
-[`contract-requirement-traceability.md`](contract-requirement-traceability.md)
-and lowers its `RuleEdge` declarations into normalized dependencies.
+The CRT compiler derives `ContractTraceabilityGraph` from the declarations
+owned by
+[`contract-requirement-traceability.md`](contract-requirement-traceability.md).
+Baseline SystemGraph compilation lowers that canonical graph into normalized
+requirement, rule, owner, and test dependencies in $G_0$. Contract-delta
+compilation is a later stage that resolves one explicit delta declaration
+against $G_0$.
 
 ### Proposed-change DAG
 
@@ -199,7 +209,9 @@ proves test execution over the affected surface before implementation.
 flowchart TD
     Baseline["Proposed baseline<br/>SystemSource"]
     Context["Proposed SystemContextManifest<br/>fixed external inputs"]
-    ContractDocs["Proposed contract declarations<br/>delta + rules"]
+    Traceability["Canonical ContractTraceabilityGraph"]
+    DeltaDocs["Explicit contract-delta declaration"]
+    Bootstrap["Bootstrap PairBlock declarations"]
     Inventory["Proposed tracked-file inventory"]
     Analyze["Proposed AST + symbol analyzers"]
     Sites["Proposed dependency-site receipts"]
@@ -223,7 +235,9 @@ flowchart TD
     Analyze -->|"classifies sites"| Sites
     Analyze -->|"emits nodes + dependencies"| Graph
     Sites -->|"proves analyzer coverage"| Graph
-    ContractDocs -->|"structured declarations"| ContractCompiler
+    Traceability -->|"source-evidenced rule links"| Graph
+    Bootstrap -->|"scheduling traceability"| Graph
+    DeltaDocs -->|"normative operations"| ContractCompiler
     Graph -->|"resolves anchors"| ContractCompiler
     ContractCompiler -->|"checked operations"| Delta
     Graph -->|"all baseline dependencies"| Overlay
@@ -242,7 +256,7 @@ flowchart TD
     Target -->|"hard obligations"| Work
     DAG -->|"execution order"| Work
 
-    class Baseline,Context,ContractDocs input
+    class Baseline,Context,Traceability,DeltaDocs,Bootstrap input
     class Inventory,Analyze,Sites,Graph,ContractCompiler,Delta,Overlay,Support,Closure,SCC,DAG,Select,Coverage,Plan,Target,Work proposed
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
@@ -258,7 +272,9 @@ repository and conformance verifier.
 flowchart TD
     Baseline["Baseline source revision"]
     Context["Shared SystemContextManifest"]
-    Contract["Contract delta + rule declarations"]
+    Traceability["Canonical ContractTraceabilityGraph"]
+    DeltaDocs["Explicit contract-delta declaration"]
+    Bootstrap["Bootstrap PairBlock declarations"]
     Decisions["Accepted propagation decisions"]
     CompileBase["compile_system(R0, X)"]
     BaseGraph["Baseline SystemGraph G0"]
@@ -281,8 +297,10 @@ flowchart TD
 
     Baseline -->|"baseline commit"| CompileBase
     Context -->|"fixed inputs"| CompileBase
+    Traceability -->|"source-evidenced rule links"| CompileBase
+    Bootstrap -->|"scheduling traceability"| CompileBase
     CompileBase -->|"canonical result"| BaseGraph
-    Contract -->|"structured declarations"| CompileContract
+    DeltaDocs -->|"normative operations"| CompileContract
     BaseGraph -->|"anchor resolution"| CompileContract
     CompileContract -->|"checked operations"| Delta
     BaseGraph -->|"baseline dependencies"| Impact
@@ -308,7 +326,7 @@ flowchart TD
     Coverage -->|"pre-implementation gate"| Review
     Conformance -->|"post-implementation gate"| Review
 
-    class Baseline,Context,Contract,Decisions input
+    class Baseline,Context,Traceability,DeltaDocs,Bootstrap,Decisions input
     class CompileBase,CompileContract,CompileWork,Implementation,CompileObserved,Review consumer
     class BaseGraph,PairBlocks,Candidate,CandidateGraph evidence
     class Delta,Impact,Condensation,Tests,Coverage,Plan,Target,Conformance output
@@ -605,11 +623,13 @@ context; codes and fields form the stable interface.
 
 ### Contract declarations and automatic lowering
 
-The compiler reads contracts and their traceability declarations directly.
-The normative-change grammar consists of `contract-requirement`,
-`verifier-rule`, `contract-implementation`, `contract-verification`, and one
-structured delta block. PairBlock declarations are parsed separately for work
-traceability; they do not create delta operations or impact edges.
+The CRT compiler reads `contract-requirement`, `verifier-rule`,
+`contract-implementation`, `contract-verification`, and `contract-trace`
+declarations and emits one canonical `ContractTraceabilityGraph`. Baseline
+SystemGraph compilation consumes that graph and parses bootstrap PairBlocks as
+a separate scheduling input. The contract-delta compiler reads one structured
+delta block only after $G_0$ exists. PairBlock declarations do not create delta
+operations or impact edges.
 
 ```toml contract-delta
 id = "artifact-source"
@@ -663,9 +683,11 @@ an unknown target, stale precondition, duplicate operation, incompatible pair
 of operations, or declaration outside the canonical node, edge, and graph-fact
 vocabularies.
 
-The compiler derives `ContractTraceabilityGraph`, `ContractDelta`, `S_delta`,
-`D_delta_plus`, `H_delta`, `B`, and the initial propagation obligations from the
-declared contract inputs. Human authors declare the intended contract change.
+The CRT compiler derives `ContractTraceabilityGraph`. Baseline SystemGraph
+compilation lowers that graph and bootstrap PairBlocks into $G_0$. The
+contract-delta compiler derives `ContractDelta` from the explicit delta block
+and resolves its anchors against $G_0$. Subsequent stages derive `S_delta`,
+`D_delta_plus`, `H_delta`, `B`, and the initial propagation obligations.
 Graph expansion, reverse reachability, SCC condensation, test selection, and
 completeness checks are mechanical. An accepted propagation plan supplies the
 implementation decisions that the delta leaves open.
@@ -1378,8 +1400,8 @@ these total translation rules:
 These rule names and Python class names are VIPER conventions. The established
 mathematical basis is graph-constraint satisfaction: graph constraints express
 properties that a graph must satisfy, while application conditions restrict a
-transformation rule's applicability. VIPER uses the former for post-change
-acceptance and retains DPO application conditions for applying delta rules;
+transformation rule's applicability. VIPER uses graph constraints for
+post-change acceptance and retains DPO application conditions for applying delta rules;
 see [Ehrig et al., *Fundamentals of Algebraic Graph
 Transformation*](https://doi.org/10.1007/3-540-31188-2) and [Ehrig, Ehrig,
 Habel, and Pennemann, “Theory of Constraints and Application
@@ -1419,6 +1441,7 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from viper._contract_traceability import (
+    DeclarationRef,
     RepoSymbolRef,
     RuleEdge,
 )
@@ -2079,11 +2102,23 @@ with TemporaryDirectory() as temporary_directory:
         path="tests/test_storage.py",
         symbol="test_store_uses_declared_location",
     )
+    implementation_declaration = DeclarationRef(
+        path="docs/development/master-execution-checklist.md",
+        start_line=2,
+        end_line=2,
+        sha256=hashlib.sha256(b"implementation-link").hexdigest(),
+    )
+    verification_declaration = DeclarationRef(
+        path="docs/development/master-execution-checklist.md",
+        start_line=3,
+        end_line=3,
+        sha256=hashlib.sha256(b"verification-link").hexdigest(),
+    )
     implementation_link = RuleEdge(
         kind="implementation",
         rule_id="project.store.boundary",
         phase=0,
-        checklist_line=2,
+        declaration=implementation_declaration,
         state="implemented",
         target=implementation_location,
     )
@@ -2091,7 +2126,7 @@ with TemporaryDirectory() as temporary_directory:
         kind="verification",
         rule_id="project.store.boundary",
         phase=0,
-        checklist_line=3,
+        declaration=verification_declaration,
         state="implemented",
         target=test_location,
     )

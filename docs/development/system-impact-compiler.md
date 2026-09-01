@@ -5,8 +5,32 @@
 
 **Purpose.** VIPER is intended to compile declarative software-change intent against a source-evidenced repository model, derive a complete set of represented implementation obligations before coding begins, decompose those obligations into bounded work units, and independently verify the resulting repository after implementation. Phase 0 establishes the smallest complete end-to-end system capable of testing that proposition. Later phases improve the formal model, semantic representation, decomposition objective, repair search, and selection policy without changing the core protocol.
 
-The formal definitions and starter proofs are in
-[Appendix A: Graph-transformation foundations](proof/graph_transformation/appendix-a-foundations.md).
+The complete derivation is in the
+[core proof](proof/graph_transformation/core-proof.md). The
+[formal appendix](proof/graph_transformation/appendix-a-foundations.md)
+supplies the typed graph-transformation definitions and detailed theorem
+statements.
+
+The complete proof pipeline is:
+
+```text
+G0 + Delta -> B -> P -> T*
+                        |
+                        v
+SCC condensation -> work partition Pi -> candidate repairs {Ui}
+                        |
+                        v
+hard-validity filtering: Apply(G0, U) models T*
+                        |
+                        v
+least-change / structural / semantic filtering -> selector chooses U*
+                        |
+                        v
+optional G* = Apply(G0, U*) -> PairBlocks -> R1 -> independent G1
+                                                   |
+                                                   v
+                             G1 models T* and, when frozen, conforms to G*
+```
 
 ---
 

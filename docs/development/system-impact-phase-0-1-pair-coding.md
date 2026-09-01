@@ -8,15 +8,15 @@ historical draft until Phase 0 removes them.
 ## 1. Status and boundary
 
 **Guide status:** working-tree contract correction based on commit
-`1821b8c`; implementation pending.
+`9868783`; implementation pending.
 
 Phase 0 must produce one strict, deterministic path:
 
 ```text
-R0 + X
--> G0
-contract delta + RuleEdge declarations
--> Delta + normalized rule dependencies
+R0 + X + canonical ContractTraceabilityGraph + bootstrap PairBlocks
+-> G0 with normalized rule and scheduling dependencies
+explicit contract-delta declaration + G0
+-> Delta
 -> S_delta + D_delta_plus
 -> H_delta
 -> B
@@ -235,19 +235,24 @@ star imports, `importlib.import_module`, and an intentionally unresolved target.
 ```toml pair-block
 id = "P0-SIG-04"
 requirements = ["SIG-03", "SIG-04"]
-targets = ["src/viper/system_graph.py:compile_contract_delta", "src/viper/system_graph.py:lower_rule_edges"]
-tests = ["tests/test_documentation.py:test_contract_compiler_lowers_delta_and_rule_edges"]
-gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k contract_compiler_lowers_delta_and_rule_edges -q"
-depends_on = ["P0-SIG-01"]
+targets = ["src/viper/system_graph.py:ingest_contract_traceability", "src/viper/system_graph.py:compile_pair_blocks", "src/viper/system_graph.py:ingest_pair_blocks", "src/viper/system_graph.py:compile_contract_delta"]
+tests = ["tests/test_documentation.py:test_system_graph_preserves_contract_traceability", "tests/test_documentation.py:test_contract_delta_compiles_against_g0", "tests/test_documentation.py:test_phase_zero_checkboxes_have_complete_ordered_pair_blocks"]
+gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k 'system_graph_preserves_contract_traceability or contract_delta_compiles_against_g0 or complete_ordered_pair_blocks' -q"
+depends_on = ["P0-CRT-05", "P0-SIG-03"]
 ```
 
-Parse existing requirement, verifier-rule, implementation, and verification
-declarations plus fenced `contract-delta` TOML. Resolve all anchors against
-`G0` or an explicit `PlannedNodeAnchor`. Derive
-`ContractTraceabilityGraph` and normalized rule dependency edges in one pass.
-Reject duplicate IDs, unknown anchors, stale digests, phase mismatches, missing
-bindings, and conflicting operations. The compiler derives `D_delta_plus`.
-Parse bootstrap PairBlocks separately for work traceability.
+Consume the canonical `ContractTraceabilityGraph` produced by `P0-CRT-05`.
+Lower its source-evidenced requirement, rule, owner, and test bindings into
+baseline nodes and dependencies while compiling `G0`; do not parse those
+declarations again. Parse bootstrap PairBlocks separately and lower their work
+traceability into `G0`.
+
+After `G0` exists, parse the fenced `contract-delta` TOML and resolve each
+baseline anchor against `G0` or each addition against an explicit
+`PlannedNodeAnchor`. Reject unknown anchors, stale digests, duplicate or
+conflicting operations, and invalid application order. This stage emits
+`ContractDelta`; `P0-SIG-05` derives `S_delta`, `D_delta_plus`, and the impact
+overlay.
 
 <!-- pair-block-definition: P0-SIG-05 -->
 ```toml pair-block

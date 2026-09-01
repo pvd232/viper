@@ -19,7 +19,7 @@ These requirements bind the contract to the master checklist:
 | CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_contract_traceability.py --> | Parse every contract requirement and named verifier rule into one canonical traceability model. |
 | CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_contract_traceability.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
 | CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs; one worked example that constructs every contract model; and populated success and rejection traces. |
-| CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical traceability graph that the system-impact compiler ingests directly. |
+| CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph that baseline SystemGraph compilation lowers into $G_0$. |
 
 ## 2. Required claim
 
@@ -236,6 +236,32 @@ RuleEdgeKind = Literal["implementation", "verification"]
 TraceState = Literal["planned", "implemented"]
 
 
+class DeclarationRef(ProtocolModel):
+    """Locate and identify one authored traceability declaration."""
+
+    path: RepoRelPath = Field(
+        description="Repository-relative document containing the declaration."
+    )
+    start_line: int = Field(
+        ge=1,
+        description="One-based first line occupied by the declaration.",
+    )
+    end_line: int = Field(
+        ge=1,
+        description="One-based final line occupied by the declaration.",
+    )
+    sha256: SHA256 = Field(
+        description="SHA-256 digest of the exact UTF-8 declaration bytes."
+    )
+
+    @model_validator(mode="after")
+    def validate_line_order(self) -> Self:
+        """Require the final line to include or follow the first line."""
+        if self.end_line < self.start_line:
+            raise ValueError("end_line must be greater than or equal to start_line")
+        return self
+
+
 class RepoSymbolRef(ProtocolModel):
     """Reference one qualified symbol in one repository file."""
 
@@ -256,6 +282,9 @@ class ContractRequirement(ProtocolModel):
     contract: RepoRelPath = Field(
         description="Repository-relative contract that declares the requirement."
     )
+    declaration: DeclarationRef = Field(
+        description="Exact authored requirement marker used to reconstruct this record."
+    )
 
 
 class VerifierRule(ProtocolModel):
@@ -273,6 +302,9 @@ class VerifierRule(ProtocolModel):
     statement: NonEmptyStr = Field(
         description="Testable invariant enforced by the rule."
     )
+    declaration: DeclarationRef = Field(
+        description="Exact authored verifier-rule marker used to reconstruct this record."
+    )
 
 
 class RuleEdge(ProtocolModel):
@@ -288,9 +320,8 @@ class RuleEdge(ProtocolModel):
         ge=0,
         description="Checklist phase that schedules this relationship.",
     )
-    checklist_line: int = Field(
-        ge=1,
-        description="One-based checklist line that declares this relationship.",
+    declaration: DeclarationRef = Field(
+        description="Exact checklist marker that declares this relationship."
     )
     state: TraceState = Field(
         description="Whether the referenced symbol is planned or implemented."
@@ -376,13 +407,16 @@ class ContractTrace(ProtocolModel):
     outcome: TraceOutcome = Field(
         description="Accepted result or rejected failure expected from the trace."
     )
+    declaration: DeclarationRef = Field(
+        description="Exact contract-trace fence used to reconstruct this record."
+    )
 
 
 class ContractTraceabilityGraph(ProtocolModel):
     """Store the complete ordered traceability graph."""
 
-    schema_version: Literal[1] = Field(
-        default=1,
+    schema_version: Literal[2] = Field(
+        default=2,
         description="Format version of the serialized traceability graph.",
     )
     requirements: tuple[ContractRequirement, ...] = Field(
@@ -453,7 +487,9 @@ The focused-test task adds a precise verification marker:
 ```
 
 The traceability parser derives `contract` from the requirement marker's file.
-It derives `phase` and `checklist_line` from each precise checklist marker. The
+It derives `phase` from each precise checklist marker. Every requirement, rule,
+binding, and trace also stores one `DeclarationRef` containing the exact source
+path, line span, and declaration digest. The
 legacy requirement-level `phase` and `test` values remain only until the new
 traceability graph passes parity with the existing documentation checker. The
 cleanup step then removes both fields.
@@ -500,6 +536,7 @@ the source and test symbols, so both links begin in the `planned` state.
 <!-- contract-worked-example: start -->
 
 ```python
+import hashlib
 import json
 from pathlib import Path
 
@@ -508,6 +545,7 @@ from viper._contract_traceability import (
     ContractRequirement,
     ContractTrace,
     ContractTraceabilityGraph,
+    DeclarationRef,
     RejectedTraceOutcome,
     RequirementId,
     RepoSymbolRef,
@@ -539,9 +577,23 @@ def marker_line(path: Path, marker: str) -> int:
     raise ValueError(f"missing marker: {marker}")
 
 
+def declaration_ref(path: Path, marker: str) -> DeclarationRef:
+    """Identify the exact authored line containing one marker."""
+    text = path.read_text(encoding="utf-8")
+    line = next(value for value in text.splitlines() if marker in value)
+    line_number = marker_line(path, marker)
+    return DeclarationRef(
+        path=path.as_posix(),
+        start_line=line_number,
+        end_line=line_number,
+        sha256=hashlib.sha256(line.encode("utf-8")).hexdigest(),
+    )
+
+
 requirement = ContractRequirement(
     requirement_id=REQUIREMENT_ID,
     contract=CONTRACT.as_posix(),
+    declaration=declaration_ref(CONTRACT, "contract-requirement: PDR-03"),
 )
 
 rule = VerifierRule(
@@ -551,6 +603,10 @@ rule = VerifierRule(
     statement=(
         "Reject every symlink from the first descendant of ROOT through the "
         "governed source or target."
+    ),
+    declaration=declaration_ref(
+        CONTRACT,
+        "verifier-rule: project.path.symlink_free",
     ),
 )
 
@@ -568,7 +624,7 @@ implementation = RuleEdge(
     kind=implementation_kind,
     rule_id=rule.rule_id,
     phase=CHECKLIST_PHASE,
-    checklist_line=marker_line(
+    declaration=declaration_ref(
         CHECKLIST,
         "requirement=PDR-03 rule=project.path.symlink_free",
     ),
@@ -581,7 +637,7 @@ verification = RuleEdge(
     kind=verification_kind,
     rule_id=rule.rule_id,
     phase=CHECKLIST_PHASE,
-    checklist_line=marker_line(
+    declaration=declaration_ref(
         CHECKLIST,
         "contract-verification: requirement=PDR-03 "
         "rule=project.path.symlink_free",
@@ -612,6 +668,7 @@ success = ContractTrace(
     implementation=implementation_location,
     test=test_location,
     outcome=accepted_outcome,
+    declaration=declaration_ref(CONTRACT, 'trace_id = "ordinary-project-file"'),
 )
 
 rejected_outcome: TraceOutcome = RejectedTraceOutcome(
@@ -638,6 +695,10 @@ rejection = ContractTrace(
     implementation=implementation_location,
     test=test_location,
     outcome=rejected_outcome,
+    declaration=declaration_ref(
+        CONTRACT,
+        'trace_id = "project-path-symlink-rejection"',
+    ),
 )
 
 traceability = ContractTraceabilityGraph(
@@ -730,6 +791,7 @@ machine's absolute checkout path.
 | `contract.model.documented` <!-- verifier-rule: contract.model.documented requirement=CRT-03 --> | Every direct field in each persisted traceability model has a non-empty generated-schema description that states its role. |
 | `contract.graph.canonical` <!-- verifier-rule: contract.graph.canonical requirement=CRT-04 --> | Repeated compilation produces identical ordered JSON bytes. |
 | `contract.graph.complete` <!-- verifier-rule: contract.graph.complete requirement=CRT-04 --> | Every requirement and rule reaches its owner and tests. |
+| `contract.declaration.anchored` <!-- verifier-rule: contract.declaration.anchored requirement=CRT-04 --> | Every requirement, rule, binding, and trace retains the exact declaration path, line span, and SHA-256 digest used to reconstruct it. |
 
 These named rules are logical entities only after the parser reads their
 markers. Their implementation is ordinary source code. Their proof is the

@@ -4,13 +4,15 @@
 
 This review covers the SystemGraph slice of the VIPER specification stack on
 the working tree based on commit
-`1821b8c`:
+`9868783`:
 
 - [`system-impact-graph.md`](system-impact-graph.md), the concrete contract;
 - [`system-impact-compiler.md`](system-impact-compiler.md), the research and
   phase model;
 - [`appendix-a-foundations.md`](proof/graph_transformation/appendix-a-foundations.md),
   the formal foundation;
+- [`core-proof.md`](proof/graph_transformation/core-proof.md), the complete
+  proof derivation and pipeline;
 - [`contract-requirement-traceability.md`](contract-requirement-traceability.md),
   the `RuleEdge` declaration contract;
 - [`master-execution-checklist.md`](master-execution-checklist.md), the
@@ -24,10 +26,10 @@ the working tree based on commit
   `tests/test_documentation.py`, and `tests/test_inspection.py`; and
 - `pyproject.toml` and the current package tree.
 
-Reference and archive directories are outside the active design state unless
-an active contract links to a specific artifact. The historical SystemGraph
-PairBlocks remain readable and are explicitly excluded from the active
-PairBlock set by the new guide and documentation validator.
+The SystemGraph section in `phase-0-pair-coding.md` remains a core repository
+compatibility surface. The PairBlock resolver selects the newer canonical
+guide to avoid duplicate active block IDs, while this review still checks and
+updates proof-sensitive examples in the older section.
 
 ## 2. Mechanical comparison results
 
@@ -53,7 +55,7 @@ Executed check:
 ```text
 /Users/machina/miniconda3/bin/conda run -n mantra \
   python -m pytest tests/test_documentation.py -q
-39 passed
+43 passed
 ```
 
 ## 3. Value-lifecycle findings
@@ -61,9 +63,9 @@ Executed check:
 | Value | Producer | First available | Runtime form | Persisted form | Verifier reconstruction |
 | --- | --- | --- | --- | --- | --- |
 | `G0` | `compile_system(R0, X)` | after inventory and strict extraction | canonical `SystemGraph` | `graph.json` | recompile the same Git tree and context; compare canonical bytes |
-| `RuleEdge` declarations | contract/checklist compiler | after marker parsing | `RuleEdge` tuple | included in contract compilation evidence | reparse declarations; require one owner and at least one test per rule |
-| normalized rule dependencies | `lower_rule_edges()` | after target resolution | typed `SystemEdge` values | part of `graph.json` | lower again and compare owner-to-rule and test-to-rule edges |
-| contract `Delta` | `compile_contract_delta()` | after parsing and precondition checks | closed typed operation tuple | `delta.json` | reparse the fenced TOML and validate each baseline identity |
+| `ContractTraceabilityGraph` | CRT compiler | before baseline SystemGraph assembly | source-evidenced requirements, rules, bindings, and traces | canonical traceability JSON | reparse declarations; compare source spans and digests; require one owner and at least one test per rule |
+| normalized rule dependencies | `ingest_contract_traceability()` inside `compile_system()` | while constructing `G0` | typed `SystemEdge` values | part of baseline `graph.json` | lower the canonical traceability graph again and compare owner-to-rule and test-to-rule edges |
+| contract `Delta` | `compile_contract_delta(delta_declaration, G0)` | after baseline graph compilation and delta precondition checks | closed typed operation tuple | `delta.json` | reparse the fenced delta TOML and validate each baseline identity against `G0` |
 | `S_delta` | delta support projection | after delta validation | node-ID set | part of `impact.json` | collect every named baseline endpoint and introduced node |
 | `D_delta_plus` | delta edge projection | after delta validation | endpoint-pair set | part of `impact.json` | project every added or replacement dependency edge |
 | `H_delta` | `compile_impact_overlay()` | after `G0` and delta compilation | `D0 union D_delta_plus` | `impact.json` evidence | rebuild the union and retain removed baseline edges |
@@ -106,10 +108,11 @@ dependents. `system.analysis.total` and the AST-oracle mutant reject the graph.
 ### Contract compilation
 
 Initial plan: remove one import edge while a separate call dependency remains.
-Mutation: project `RuleEdge` or contract operations directly in their declared
-direction. False result: reverse traversal walks from the rule toward the owner
-and misses the owner as a dependent. `system.rule.lowering` rejects the edge
-direction and recomputes `owner -> rule` or `test -> rule`.
+Mutation: lower a traceability binding or contract operation in its authored
+reading direction. False result: reverse traversal walks from the rule toward
+the owner and misses the owner as a dependent. `system.rule.lowering` rejects
+the edge direction and recomputes `owner -> rule` or `test -> rule` while
+baseline `G0` is assembled.
 
 ### Conservative overlay
 
@@ -167,14 +170,14 @@ PairBlock explicitly freezes the relevant construction.
 | cycle handling | SCC scope and canonical ordering were underspecified | Repaired: iterative Tarjan runs on `H_delta[B]`; SCCs are atomic; crossing witnesses and deterministic Kahn order are required |
 | test completeness | “Reached tests” established a graph path only | Repaired: selected tests must cover every affected statement and branch arc with per-test contexts |
 | target language | `T*` was named without an executable closed schema | Repaired: four Phase 0 graph facts combine with presence, absence, and preservation; compilation merges equal predicates and rejects contradictions |
-| PairBlock lifecycle | Contract compilation appeared to consume human-authored PairBlocks | Repaired: contract declarations produce `Delta`; accepted decisions produce `P`; `(G0, Delta, P)` produces `T*`; `compile_work()` then packages selected repairs into SCC-ordered PairBlocks |
-| `phase-0-pair-coding.md` | Embedded SystemGraph blocks contain the superseded model | Classified as historical and excluded from the active PairBlock validator; Phase 0 removes the section after oracle parity |
+| PairBlock lifecycle | Contract compilation appeared to treat bootstrap PairBlocks as delta input | Repaired: bootstrap PairBlocks contribute scheduling traceability to `G0`; the explicit delta declaration produces `Delta`; accepted decisions produce `P`; `(G0, Delta, P)` produces `T*`; `compile_work()` packages selected repairs into generated SCC-ordered PairBlocks |
+| `phase-0-pair-coding.md` | Embedded SystemGraph blocks contain an earlier implementation draft | Retained as a core compatibility surface; the resolver selects the canonical guide for active block IDs, and proof-sensitive source-evidence examples remain synchronized until oracle parity permits removal |
 | source package | `src/viper/system_graph.py` is absent | Planned implementation lag owned by `P0-SIG-01` through `P0-SIG-11` |
 | test dependencies | coverage.py and pytest-cov are absent from the test extra | Planned change owned by `P0-SIG-10`; dependency addition occurs in its implementation block |
 
 The canonical guide and validator routing align every active SystemGraph
-specification. The historical block is visibly marked and mechanically
-excluded.
+specification. The older core guide remains synchronized where its examples
+state proof or schema behavior.
 
 ## 7. Status decision for each contract
 
@@ -184,7 +187,7 @@ excluded.
 | `system-impact-phase-0-1-pair-coding.md` | Audited | The active PairBlocks cover Phase 0 and the bounded Phase 1 extensions with explicit dependencies and gates |
 | SystemGraph slice of `master-execution-checklist.md` | Audited | Requirement ownership, execution order, evidence, tests, kill gate, and Phase 1 boundary are explicit |
 | formal appendix and `system-impact-compiler.md` | Audited inputs | The concrete contract preserves the formal correction that `Delta` alone underdetermines a complete future graph |
-| historical SystemGraph section in `phase-0-pair-coding.md` | Draft, non-authoritative | Retained only as a migration oracle and scheduled for removal after parity |
+| earlier SystemGraph section in `phase-0-pair-coding.md` | Draft compatibility surface | Retained as a migration oracle, kept synchronized for proof-sensitive examples, and scheduled for removal after parity |
 | SystemGraph implementation | Draft | The module, runtime compiler, persisted artifacts, and acceptance tests remain planned |
 
 The reviewed design is ready for owner approval and bounded Phase 0
@@ -201,7 +204,7 @@ The isolated task snapshot passed:
   tests/test_validation_architecture.py \
   tests/test_public_api.py \
   tests/test_inspection.py -q
-60 passed
+62 passed
 
 /Users/machina/miniconda3/bin/conda run -n mantra \
   python -m ruff check tests/test_documentation.py
