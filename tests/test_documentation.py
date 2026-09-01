@@ -170,6 +170,11 @@ _PAIR_BLOCK_DEFINITION = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 _PAIR_EDIT = re.compile(r"```python pair-edit\n(?P<code>.*?)\n```", re.DOTALL)
+_FILE_PAIR_EDIT = re.compile(
+    r"`(?P<path>(?:src|tests)/[a-z0-9_/]+\.py)`\s*\n\s*"
+    r"```python pair-edit\n(?P<code>.*?)\n```",
+    re.DOTALL,
+)
 _SYSTEM_PAIR_BLOCK_DEFINITION = re.compile(
     r"<!-- pair-block-definition: "
     r"(?P<id>P[01]-SIG-\d{2}|P0-PROOF-(?:09|10|11|12)) -->\n"
@@ -2232,7 +2237,8 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         )
         assert str(manifest["gate"]).startswith("conda run -n mantra ")
 
-        edits = tuple(_PAIR_EDIT.finditer(definition.group("body")))
+        body = definition.group("body")
+        edits = tuple(_PAIR_EDIT.finditer(body))
         edit_tree: ast.Module | None = None
         if block_id.startswith("P0-SIG-") or block_id in {
             "P0-PROOF-09",
@@ -2243,12 +2249,32 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
             assert not edits, block_id
             assert _PAIR_PLACEHOLDER.search(definition.group("body")) is None
         else:
-            assert len(edits) == 1, block_id
-            code = edits[0].group("code")
-            assert _PAIR_PLACEHOLDER.search(code) is None, block_id
-            edit_tree = ast.parse(
-                code,
-                filename=f"{MASTER_PHASE_ZERO_PAIR_CODING.name}:{block_id}",
+            assert edits, block_id
+            if len(edits) > 1:
+                file_edits = tuple(_FILE_PAIR_EDIT.finditer(body))
+                assert len(file_edits) == len(edits), block_id
+                edit_paths = [edit.group("path") for edit in file_edits]
+                assert len(edit_paths) == len(set(edit_paths)), block_id
+                target_paths = {
+                    target.partition(":")[0] for target in manifest["targets"]
+                }
+                assert set(edit_paths) <= target_paths, block_id
+
+            trees: list[ast.Module] = []
+            for edit in edits:
+                code = edit.group("code")
+                assert _PAIR_PLACEHOLDER.search(code) is None, block_id
+                trees.append(
+                    ast.parse(
+                        code,
+                        filename=(
+                            f"{MASTER_PHASE_ZERO_PAIR_CODING.name}:{block_id}"
+                        ),
+                    )
+                )
+            edit_tree = ast.Module(
+                body=[node for tree in trees for node in tree.body],
+                type_ignores=[],
             )
         if block_id not in implemented_ids and edits:
             assert edit_tree is not None
@@ -2403,7 +2429,7 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
         "verify_benchmark",
         "verify_pointer",
     }
-    added_helpers = {"_project_root", "_local_fetcher"}
+    added_helpers = {"_root", "_local_fetcher"}
     assert target_handlers.keys() == source_handlers.keys() | added_helpers
     unchanged = source_handlers.keys() - root_migration
     assert {name: _normalized(source_handlers[name]) for name in unchanged} == {

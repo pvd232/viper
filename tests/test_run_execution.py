@@ -478,7 +478,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             str(frozen.files[-1]),
             "--stage",
             "train",
-            "--repository-root",
+            "--root",
             str(root),
         ),
     )
@@ -604,6 +604,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         CompareRunsRequest(
             left_path=result.resolved_run_path,
             right_path=result.resolved_run_path,
+            left_root=root,
+            right_root=root,
             trusted_source_repositories=frozenset({REPOSITORY}),
         ),
         left_fetcher=fetcher,

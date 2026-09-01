@@ -163,7 +163,7 @@ Insert `**ROOT_FILES` as the first entry in its `files` mapping.
 ```toml pair-block
 id = "P0-PDR-03"
 requirements = ["PDR-02", "PDR-04"]
-targets = ["src/viper/api.py:FreezeRunRequest", "src/viper/api.py:PreflightRequest", "src/viper/api.py:ExecuteStageRequest", "src/viper/api.py:RunRequest", "src/viper/api.py:ExecuteBenchmarkRequest", "src/viper/api.py:PlanDiffRequest", "src/viper/api.py:VerificationRequest", "src/viper/api.py:CompareRunsRequest", "src/viper/_api/handlers.py:_project_root", "src/viper/_api/handlers.py:freeze_run", "src/viper/_api/handlers.py:preflight", "src/viper/_api/handlers.py:execute_stage", "src/viper/_api/handlers.py:run_request", "src/viper/_api/handlers.py:retry_request", "src/viper/_api/handlers.py:execute_benchmark", "src/viper/_api/handlers.py:plan_diff"]
+targets = ["src/viper/api.py:FreezeRunRequest", "src/viper/api.py:PreflightRequest", "src/viper/api.py:ExecuteStageRequest", "src/viper/api.py:RunRequest", "src/viper/api.py:ExecuteBenchmarkRequest", "src/viper/api.py:PlanDiffRequest", "src/viper/api.py:VerificationRequest", "src/viper/api.py:CompareRunsRequest", "src/viper/_api/handlers.py:_root", "src/viper/_api/handlers.py:freeze_run", "src/viper/_api/handlers.py:preflight", "src/viper/_api/handlers.py:execute_stage", "src/viper/_api/handlers.py:run_request", "src/viper/_api/handlers.py:retry_request", "src/viper/_api/handlers.py:execute_benchmark", "src/viper/_api/handlers.py:plan_diff"]
 tests = ["tests/test_validation_architecture.py:test_operations_resolve_project_root_once"]
 gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k operations_resolve_project_root_once -q"
 depends_on = ["P0-PDR-01"]
@@ -174,19 +174,21 @@ requests use `left_root` and `right_root`. Resolve each value once in the
 current operation body and pass the canonical `project_root` to internal code.
 `P0-MOD-03` later moves these completed bodies into `api.py` unchanged.
 
+`src/viper/api.py`
+
 ```python pair-edit
 class FreezeRunRequest(APIModel):
     """Select one run-plan draft and project root."""
 
     draft: Path
-    root: Path | None = None
+    root: Path
 
 
 class PreflightRequest(APIModel):
     """Select one frozen plan for pre-execution inspection."""
 
     run_spec: Path
-    root: Path | None = None
+    root: Path
 
 
 class ExecuteStageRequest(APIModel):
@@ -194,7 +196,7 @@ class ExecuteStageRequest(APIModel):
 
     run_spec: Path
     stage_id: StageId
-    root: Path | None = None
+    root: Path
     timeout_seconds: float | None = Field(default=None, gt=0)
 
 
@@ -202,7 +204,7 @@ class RunRequest(APIModel):
     """Select one frozen plan for complete local execution."""
 
     run_spec: Path
-    root: Path | None = None
+    root: Path
     timeout_seconds: float | None = Field(default=None, gt=0)
 
 
@@ -211,7 +213,7 @@ class ExecuteBenchmarkRequest(APIModel):
 
     resolved_run: Path
     benchmark_spec: Path
-    root: Path | None = None
+    root: Path
     timeout_seconds: float | None = Field(default=None, gt=0)
 
 
@@ -220,14 +222,14 @@ class PlanDiffRequest(APIModel):
 
     left_run_spec: Path
     right_run_spec: Path
-    left_root: Path | None = None
-    right_root: Path | None = None
+    left_root: Path
+    right_root: Path
 
 
 class VerificationRequest(PathRequest):
     """Select evidence, its project root, and trusted source repositories."""
 
-    root: Path | None = None
+    root: Path
     trusted_source_repositories: frozenset[str] = Field(min_length=1)
 
 
@@ -236,12 +238,16 @@ class CompareRunsRequest(APIModel):
 
     left_path: Path
     right_path: Path
-    left_root: Path | None = None
-    right_root: Path | None = None
+    left_root: Path
+    right_root: Path
     trusted_source_repositories: frozenset[str] = Field(min_length=1)
+```
 
 
-def _project_root(root: Path | None, operation: OperationName) -> Path:
+`src/viper/_api/handlers.py`
+
+```python pair-edit
+def _root(root: Path, operation: OperationName) -> Path:
     """Resolve one operation root or raise its stable API failure."""
     try:
         return resolve_root(root)
@@ -253,7 +259,7 @@ def _project_root(root: Path | None, operation: OperationName) -> Path:
                 code="invalid_document",
                 message="project root is invalid",
                 details={
-                    "root": None if root is None else root.as_posix(),
+                    "root": root.as_posix(),
                 },
             )
         ) from error
@@ -261,7 +267,7 @@ def _project_root(root: Path | None, operation: OperationName) -> Path:
 
 def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
     """Freeze one draft into canonical stage and run documents."""
-    project_root = _project_root(request.root, "freeze_run")
+    project_root = _root(request.root, "freeze_run")
     try:
         draft = load_run_plan_draft(request.draft)
         frozen = freeze_run_plan(project_root, draft)
@@ -272,7 +278,7 @@ def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
 
 def preflight(request: PreflightRequest) -> PreflightSuccess:
     """Inspect one complete local plan before allocating a run attempt."""
-    project_root = _project_root(request.root, "preflight")
+    project_root = _root(request.root, "preflight")
     report = preflight_plan(project_root, request.run_spec)
     return PreflightSuccess(
         run_id=report.run_id,
@@ -283,7 +289,7 @@ def preflight(request: PreflightRequest) -> PreflightSuccess:
 
 def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
     """Execute one selected stage and identify its declared outputs."""
-    project_root = _project_root(request.root, "execute_stage")
+    project_root = _root(request.root, "execute_stage")
     try:
         run = _load_model(request.run_spec, RunSpec)
         assert isinstance(run, RunSpec)
@@ -324,7 +330,7 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
 
 def run_request(request: RunRequest) -> RunSuccess:
     """Execute, publish, and verify one complete run on the active host."""
-    project_root = _project_root(request.root, "run")
+    project_root = _root(request.root, "run")
     try:
         result = execute_run(
             project_root,
@@ -370,7 +376,7 @@ def run_request(request: RunRequest) -> RunSuccess:
 
 def retry_request(request: RetryRequest) -> RetrySuccess:
     """Append one attempt to a failed frozen run and verify its result."""
-    project_root = _project_root(request.root, "retry")
+    project_root = _root(request.root, "retry")
     try:
         result = execute_run(
             project_root,
@@ -413,7 +419,7 @@ def execute_benchmark(
     request: ExecuteBenchmarkRequest,
 ) -> ExecuteBenchmarkSuccess:
     """Execute and verify one independent benchmark confirmation."""
-    project_root = _project_root(request.root, "execute_benchmark")
+    project_root = _root(request.root, "execute_benchmark")
     try:
         execution = execute_benchmark_run(
             project_root,
@@ -462,8 +468,8 @@ def execute_benchmark(
 
 def plan_diff(request: PlanDiffRequest) -> PlanDiffSuccess:
     """Compare two frozen plans and their referenced stage specs."""
-    left_root = _project_root(request.left_root, "plan_diff")
-    right_root = _project_root(request.right_root, "plan_diff")
+    left_root = _root(request.left_root, "plan_diff")
+    right_root = _root(request.right_root, "plan_diff")
     try:
         result = compare_frozen_plans(
             left_root,
@@ -492,13 +498,16 @@ def plan_diff(request: PlanDiffRequest) -> PlanDiffSuccess:
     )
 ```
 
-Verification requests require a root. Verification functions may still receive an injected StorageFetcher for tests and custom storage access. `P0-PDR-05` binds their default local fetchers to `request.root`,`request.left_root`, or `request.right_root` after the store accepts canonical project roots.
+Verification requests require a root. Verification functions may still receive
+an injected `StorageFetcher` for tests and custom storage access. `P0-PDR-05`
+binds their default local fetchers to `request.root`, `request.left_root`, or
+`request.right_root` after the store accepts canonical project roots.
 
 <!-- pair-block-definition: P0-PDR-04 -->
 ```toml pair-block
 id = "P0-PDR-04"
 requirements = ["PDR-04"]
-targets = ["src/viper/cli.py:add_root", "src/viper/api.py:_stage_parser", "src/viper/api.py:run", "src/viper/api.py:retry"]
+targets = ["src/viper/cli.py:add_root", "src/viper/cli.py:build_parser", "src/viper/api.py:_stage_parser", "src/viper/api.py:run", "src/viper/api.py:retry"]
 tests = ["tests/test_documentation.py:test_project_root_vocabulary"]
 gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k project_root_vocabulary -q"
 depends_on = ["P0-PDR-03"]
@@ -507,28 +516,159 @@ depends_on = ["P0-PDR-03"]
 Use one CLI helper for the ordinary, left, and right forms. Its `name` selects
 both the option spelling and request-field destination.
 
+`src/viper/cli.py`
+
 ```python pair-edit
 RootArg = Literal["root", "left_root", "right_root"]
 
 
 def add_root(parser: argparse.ArgumentParser, name: RootArg = "root") -> None:
-    """Add one optional project-root override to a command parser."""
+    """Add one project-root option with current-directory discovery."""
     option = f"--{name.replace('_', '-')}"
     parser.add_argument(
         option,
         dest=name,
         type=Path,
-        default=None,
+        default=Path.cwd(),
         help="VIPER project root; defaults to discovery from the current directory",
     )
 
 
+def build_parser() -> ArgumentParser:
+    """Build the VIPER command parser and its API subcommands."""
+    parser = ViperArgumentParser(prog="viper")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="emit one machine-readable result document",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    for name, help_text in (
+        ("validate-stage", "validate one authored stage specification"),
+        ("validate-resolved-stage", "validate one resolved stage specification"),
+        ("validate-run", "validate one frozen run specification"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+
+    freeze = commands.add_parser(
+        "freeze-run",
+        help="write canonical stage specs and a hash-bound RunSpec",
+    )
+    freeze.add_argument("draft", type=Path)
+    add_root(freeze)
+
+    preflight = commands.add_parser(
+        "preflight",
+        help="inspect every applicable check before local execution",
+    )
+    preflight.add_argument("run_spec", type=Path)
+    add_root(preflight)
+
+    execute = commands.add_parser(
+        "execute-stage",
+        help="run one stage from a frozen local run plan",
+    )
+    execute.add_argument("run_spec", type=Path)
+    execute.add_argument("stage_id")
+    add_root(execute)
+    execute.add_argument("--timeout-seconds", type=float)
+
+    run_command = commands.add_parser(
+        "run",
+        help="execute and verify one complete run on this host",
+    )
+    run_command.add_argument("run_spec", type=Path)
+    add_root(run_command)
+    run_command.add_argument("--timeout-seconds", type=float)
+
+    retry_command = commands.add_parser(
+        "retry",
+        help="append one attempt to a failed frozen run",
+    )
+    retry_command.add_argument("run_spec", type=Path)
+    add_root(retry_command)
+    retry_command.add_argument("--timeout-seconds", type=float)
+
+    benchmark_command = commands.add_parser(
+        "execute-benchmark",
+        help="execute and verify one independent benchmark confirmation",
+    )
+    benchmark_command.add_argument("resolved_run", type=Path)
+    benchmark_command.add_argument("benchmark_spec", type=Path)
+    add_root(benchmark_command)
+    benchmark_command.add_argument("--timeout-seconds", type=float)
+
+    plan_diff = commands.add_parser(
+        "plan-diff",
+        help="compare two complete frozen run plans",
+    )
+    plan_diff.add_argument("left_run_spec", type=Path)
+    plan_diff.add_argument("right_run_spec", type=Path)
+    add_root(plan_diff, "left_root")
+    add_root(plan_diff, "right_root")
+
+    status = commands.add_parser(
+        "status",
+        help="read the latest durable state of one local attempt",
+    )
+    status.add_argument("path", type=Path)
+
+    compare_runs = commands.add_parser(
+        "compare-runs",
+        help="compare all connected evidence from two verified runs",
+    )
+    compare_runs.add_argument("left_path", type=Path)
+    compare_runs.add_argument("right_path", type=Path)
+    add_root(compare_runs, "left_root")
+    add_root(compare_runs, "right_root")
+    compare_runs.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
+    for name, help_text in (
+        ("verify-run", "verify one terminal resolved run"),
+        ("verify-benchmark", "verify one benchmark result"),
+        ("verify-pointer", "verify one promoted artifact pointer"),
+        ("lineage", "return the verified upstream lineage of one run"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+        add_root(command)
+        command.add_argument(
+            "--trust-source",
+            action="append",
+            required=True,
+            help="source repository URL approved to supply executable loaders",
+        )
+
+    schema = commands.add_parser("schema", help="return one public JSON Schema")
+    schema.add_argument("name")
+    commands.add_parser("capabilities", help="list installed VIPER capabilities")
+    initialize = commands.add_parser(
+        "init",
+        help="create a five-stage starter project",
+    )
+    initialize.add_argument("path", type=Path)
+    initialize.add_argument("--package", required=True)
+    return parser
+```
+
+
+`src/viper/api.py`
+
+```python pair-edit
 def _stage_parser() -> argparse.ArgumentParser:
     """Build the parser used by one project stage entrypoint."""
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("--run", required=True, dest="run_spec", type=Path)
     parser.add_argument("--stage", required=True)
-    parser.add_argument("--root", type=Path, default=None)
+    parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--timeout-seconds", type=float)
     return parser
 
@@ -596,7 +736,7 @@ def run(
 def retry(
     run_spec: Path,
     *,
-    root: Path | None = None,
+    root: Path,
     timeout_seconds: float | None = None,
 ) -> RetrySuccess:
     """Append one attempt to a failed frozen run."""
@@ -685,6 +825,8 @@ depends_on = ["P0-PDR-04", "P0-PDR-06"]
 
 Replace the store constructor with the shared project-path boundary.
 
+`src/viper/storage.py`
+
 ```python pair-edit
 class LocalArtifactStore:
     def __init__(self, project_root: Path, store: RepoRelPath = ".viper/store"):
@@ -699,17 +841,21 @@ class LocalArtifactStore:
             )
         except PathError as error:
             raise LocalStoreError("local store escapes the project root") from error
+```
 
 
+`src/viper/_api/handlers.py`
+
+```python pair-edit
 def _local_fetcher(
-    root: Path | None,
+    root: Path,
     operation: OperationName,
     fetcher: StorageFetcher | None,
 ) -> StorageFetcher:
     """Use an injected fetcher or bind the selected project's local store."""
     if fetcher is not None:
         return fetcher
-    project_root = _project_root(root, operation)
+    project_root = _root(root, operation)
     return LocalArtifactStore(project_root).fetch
 
 
@@ -741,9 +887,9 @@ right_fetcher = _local_fetcher(
 Rename internal `repository_root` attributes to `project_root`. Preserve the
 persisted `LocalFileRef.store` value `.viper/store`. Import
 `LocalArtifactStore` in `_api/handlers.py`, add `_local_fetcher()` beside
-`_project_root()`, and place each shown binding before its verifier call.
-Pass those bound values to the existing verifier calls. An explicitly injected
-fetcher stays active; its local project root remains optional.
+`_root()`, and place each shown binding before its verifier call. Pass those
+bound values to the existing verifier calls. An explicitly injected fetcher
+stays active without making the request root optional.
 
 ## 3. Contract traceability
 
@@ -1851,7 +1997,7 @@ def _document_error(
     )
 
 
-def _project_root(root: Path | None, operation: OperationName) -> Path:
+def _root(root: Path, operation: OperationName) -> Path:
     """Resolve one operation root or raise its stable API failure."""
     try:
         return resolve_root(root)
@@ -1863,21 +2009,21 @@ def _project_root(root: Path | None, operation: OperationName) -> Path:
                 code="invalid_document",
                 message="project root is invalid",
                 details={
-                    "root": None if root is None else root.as_posix(),
+                    "root": root.as_posix(),
                 },
             )
         ) from error
 
 
 def _local_fetcher(
-    root: Path | None,
+    root: Path,
     operation: OperationName,
     fetcher: StorageFetcher | None,
 ) -> StorageFetcher:
     """Use an injected fetcher or bind the selected project's local store."""
     if fetcher is not None:
         return fetcher
-    project_root = _project_root(root, operation)
+    project_root = _root(root, operation)
     return LocalArtifactStore(project_root).fetch
 
 
@@ -1917,7 +2063,7 @@ def validate_run_spec(request: ValidateRunSpecRequest) -> ValidateRunSpecSuccess
 
 def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
     """Freeze one draft into canonical stage and run documents."""
-    project_root = _project_root(request.root, "freeze_run")
+    project_root = _root(request.root, "freeze_run")
     try:
         draft = load_run_plan_draft(request.draft)
         frozen = freeze_run_plan(project_root, draft)
@@ -1928,7 +2074,7 @@ def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
 
 def preflight(request: PreflightRequest) -> PreflightSuccess:
     """Inspect one complete local plan before allocating a run attempt."""
-    project_root = _project_root(request.root, "preflight")
+    project_root = _root(request.root, "preflight")
     report = preflight_plan(project_root, request.run_spec)
     return PreflightSuccess(
         run_id=report.run_id,
@@ -1939,7 +2085,7 @@ def preflight(request: PreflightRequest) -> PreflightSuccess:
 
 def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
     """Execute one selected stage and identify its declared outputs."""
-    project_root = _project_root(request.root, "execute_stage")
+    project_root = _root(request.root, "execute_stage")
     try:
         run = _load_model(request.run_spec, RunSpec)
         assert isinstance(run, RunSpec)
@@ -1980,7 +2126,7 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
 
 def run_request(request: RunRequest) -> RunSuccess:
     """Execute, publish, and verify one complete run on the active host."""
-    project_root = _project_root(request.root, "run")
+    project_root = _root(request.root, "run")
     try:
         result = execute_run(
             project_root,
@@ -2026,7 +2172,7 @@ def run_request(request: RunRequest) -> RunSuccess:
 
 def retry_request(request: RetryRequest) -> RetrySuccess:
     """Append one attempt to a failed frozen run and verify its terminal result."""
-    project_root = _project_root(request.root, "retry")
+    project_root = _root(request.root, "retry")
     try:
         result = execute_run(
             project_root,
@@ -2069,7 +2215,7 @@ def execute_benchmark(
     request: ExecuteBenchmarkRequest,
 ) -> ExecuteBenchmarkSuccess:
     """Execute and verify one independent benchmark confirmation."""
-    project_root = _project_root(request.root, "execute_benchmark")
+    project_root = _root(request.root, "execute_benchmark")
     try:
         execution = execute_benchmark_run(
             project_root,
@@ -2114,8 +2260,8 @@ def execute_benchmark(
 
 def plan_diff(request: PlanDiffRequest) -> PlanDiffSuccess:
     """Compare two frozen plans, including their referenced stage specs."""
-    left_root = _project_root(request.left_root, "plan_diff")
-    right_root = _project_root(request.right_root, "plan_diff")
+    left_root = _root(request.left_root, "plan_diff")
+    right_root = _root(request.right_root, "plan_diff")
     try:
         result = compare_frozen_plans(
             left_root,
@@ -2590,7 +2736,7 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
         "verify_benchmark",
         "verify_pointer",
     }
-    added_helpers = {"_project_root", "_local_fetcher"}
+    added_helpers = {"_root", "_local_fetcher"}
     assert target_handlers.keys() == source_handlers.keys() | added_helpers
     unchanged = source_handlers.keys() - root_migration
     assert {
@@ -2672,7 +2818,7 @@ def test_operations_resolve_project_root_once() -> None:
             for node in ast.walk(functions[name])
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
-            and node.func.id == "_project_root"
+            and node.func.id == "_root"
         )
         assert len(calls) == expected, name
 

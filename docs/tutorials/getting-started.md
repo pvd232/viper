@@ -87,7 +87,7 @@ The entrypoint receives the selected plan and stage through command arguments:
 python train.py \
   --run experiments/example/runs/run-001/spec.yaml \
   --stage train \
-  --repository-root .
+  --root .
 ```
 
 `run(fit)` checks that `fit` matches the implementation selected by
@@ -99,9 +99,9 @@ Commit the project source before freezing. The source commit becomes part of
 the run identity.
 
 ```bash
-viper freeze-run path/to/draft.yaml --repository-root .
+viper freeze-run path/to/draft.yaml --root .
 viper validate-run experiments/example/runs/run-001/spec.yaml
-viper preflight experiments/example/runs/run-001/spec.yaml --repository-root .
+viper preflight experiments/example/runs/run-001/spec.yaml --root .
 ```
 
 `freeze-run` writes canonical stage specifications and the `RunSpec` that
@@ -114,7 +114,7 @@ host.
 Run the complete plan through the installed command:
 
 ```bash
-viper run experiments/example/runs/run-001/spec.yaml --repository-root .
+viper run experiments/example/runs/run-001/spec.yaml --root .
 ```
 
 Inspect the durable attempt and terminal result:
@@ -133,7 +133,7 @@ one machine-readable document with stable operation and failure identifiers.
 Retry appends another attempt to the same frozen plan:
 
 ```bash
-viper retry experiments/example/runs/run-001/spec.yaml --repository-root .
+viper retry experiments/example/runs/run-001/spec.yaml --root .
 ```
 
 VIPER preserves the earlier attempt document, failure evidence, journal, and
@@ -149,7 +149,7 @@ criteria:
 viper execute-benchmark \
   path/to/candidate/resolved.yaml \
   benchmarks/example/spec.yaml \
-  --repository-root .
+  --root .
 ```
 
 The benchmark verifies the confirmation attempt, compares the trained-model

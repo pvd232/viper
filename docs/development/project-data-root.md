@@ -251,7 +251,9 @@ viper init ROOT --package PACKAGE
 `ROOT` maps to `InitProjectRequest.path`.
 `InitProjectSuccess.project_root` returns the resolved absolute root.
 
-Other local requests expose optional roots with one vocabulary:
+Other local requests require roots with one vocabulary. The CLI supplies the
+current directory when the user omits a root option, and the operation resolves
+that path to the canonical project root:
 
 | Request shape | Public field | Resolved runtime value |
 | --- | --- | --- |
@@ -604,7 +606,7 @@ digests and byte counts through the existing storage rules.
 
 | Current occurrence | Disposition |
 | --- | --- |
-| Public `Path.cwd()` defaults that bypass root discovery | Replace with `root: Path | None = None` and `resolve_root()`. |
+| Public request models that default roots from `Path.cwd()` | Require `root`, `left_root`, or `right_root`; let the CLI supply `Path.cwd()` for discovery. |
 | CLI `--repository-root` spelling | Replace with `--root`; delete the old spelling during this alpha migration. |
 | `_verification/storage.py` use of `Path.cwd()` | Delete and require the verifier's resolved root. |
 | Internal `repository_root` parameters | Retain where the name distinguishes the resolved Git/project root from another runtime path. |

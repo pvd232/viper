@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.git_repository import run_git
 from tests.test_verification_acceptance import build_benchmark_fixture
 from viper.api import ExecuteBenchmarkRequest
 from viper.api import execute_benchmark as execute_benchmark_application
@@ -46,6 +47,11 @@ def test_api_returns_the_verified_benchmark_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Return the result and canonical path produced by the benchmark executor."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    run_git(tmp_path, "init")
     result, _, _ = build_benchmark_fixture()
     result_path = tmp_path / "benchmark.result.yaml"
     monkeypatch.setattr(
@@ -60,7 +66,7 @@ def test_api_returns_the_verified_benchmark_result(
         ExecuteBenchmarkRequest(
             resolved_run=tmp_path / "resolved.yaml",
             benchmark_spec=tmp_path / "benchmark.spec.yaml",
-            repository_root=tmp_path,
+            root=tmp_path,
         )
     )
 

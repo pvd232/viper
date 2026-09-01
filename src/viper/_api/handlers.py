@@ -90,9 +90,7 @@ def _root(root: Path, operation: OperationName) -> Path:
                 origin="application",
                 code="invalid_document",
                 message="project root is invalid",
-                details={
-                    "root": None if root is None else root.as_posix(),
-                },
+                details={"root": root.as_posix()},
             )
         ) from error
 

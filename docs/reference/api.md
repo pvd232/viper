@@ -93,7 +93,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python train.py --run path/to/spec.yaml --stage train --repository-root .
+python train.py --run path/to/spec.yaml --stage train --root .
 ```
 
 Before the complete plan starts, `run()` checks that the launched callable
@@ -101,7 +101,7 @@ matches the selected `StageImplementationRef`, decorator kind, and parameter
 class. The function returns `RunSuccess` after the terminal run passes
 verification.
 
-`viper.api.retry(run_spec, repository_root=...)` allocates the next attempt for the
+`viper.api.retry(run_spec, root=...)` allocates the next attempt for the
 same frozen plan and returns `RetrySuccess`.
 
 Administrative Python callers can execute complete plans directly through the
@@ -171,7 +171,7 @@ result = dispatch(
     "run",
     {
         "run_spec": "path/to/spec.yaml",
-        "repository_root": ".",
+        "root": ".",
     },
 )
 ```
@@ -187,15 +187,18 @@ these fields:
 
 | Request | Required fields | Optional fields |
 | --- | --- | --- |
-| `FreezeRunRequest` | `draft`, `repository_root` | — |
-| `PreflightRequest` | `run_spec`, `repository_root` | — |
-| `ExecuteStageRequest` | `run_spec`, `stage_id`, `repository_root` | `timeout_seconds` |
-| `RunRequest` | `run_spec`, `repository_root` | `timeout_seconds` |
-| `RetryRequest` | `run_spec`, `repository_root` | `timeout_seconds` |
-| `ExecuteBenchmarkRequest` | `resolved_run`, `benchmark_spec`, `repository_root` | `timeout_seconds` |
-| `VerifyRunRequest` | `path`, `trusted_source_repositories` | — |
-| `VerifyBenchmarkRequest` | `path`, `trusted_source_repositories` | — |
-| `VerifyPointerRequest` | `path`, `trusted_source_repositories` | — |
+| `FreezeRunRequest` | `draft`, `root` | — |
+| `PreflightRequest` | `run_spec`, `root` | — |
+| `ExecuteStageRequest` | `run_spec`, `stage_id`, `root` | `timeout_seconds` |
+| `RunRequest` | `run_spec`, `root` | `timeout_seconds` |
+| `RetryRequest` | `run_spec`, `root` | `timeout_seconds` |
+| `ExecuteBenchmarkRequest` | `resolved_run`, `benchmark_spec`, `root` | `timeout_seconds` |
+| `PlanDiffRequest` | `left_run_spec`, `right_run_spec`, `left_root`, `right_root` | — |
+| `CompareRunsRequest` | `left_path`, `right_path`, `left_root`, `right_root`, `trusted_source_repositories` | — |
+| `VerifyRunRequest` | `path`, `root`, `trusted_source_repositories` | — |
+| `LineageRequest` | `path`, `root`, `trusted_source_repositories` | — |
+| `VerifyBenchmarkRequest` | `path`, `root`, `trusted_source_repositories` | — |
+| `VerifyPointerRequest` | `path`, `root`, `trusted_source_repositories` | — |
 
 Every success contains `status="ok"`, its operation name, and `warnings`.
 Execution successes add the canonical output paths and identities produced by
