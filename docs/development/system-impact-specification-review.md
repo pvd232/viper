@@ -214,7 +214,8 @@ git diff --check
 passed
 ```
 
-The direct-prose advisory checker reports 38 findings across the formal
-contract and appendix, mostly mathematical negations required to state absence,
-non-conformance, and proof conditions. The repository's mechanical prose gate
-does not consume that advisory result.
+The direct-prose advisory checker reports no findings in the new core proof.
+It reports 33 findings across the formal contract and appendix, mostly
+mathematical negations required to state absence, non-conformance, and proof
+conditions. The repository's mechanical prose gate does not consume that
+advisory result.

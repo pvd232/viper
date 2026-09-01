@@ -307,7 +307,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=74acbb87c68fa1849d6bd82bafe49bb5fd367b046dd47f8a678b3c456c40f8a4 -->
 <!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
-<!-- contract-baseline: system-impact-graph.md sha256=0a29ee7ae38ece2f61e517640d647d765474916f2e4542fce05f43a2ae59c920 -->
+<!-- contract-baseline: system-impact-graph.md sha256=f9a03938f99deeac765616d2ef8b76b098e1853109dc532717d873fc3a9d1396 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=ad7ed3b8fc334bd0f1c5bb0207b90bcafc03b5f0403592b77d7bb0074c9619e1 -->

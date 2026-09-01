@@ -816,8 +816,8 @@ and, when the selected repairs fix a complete structural realization,
 G^*=\operatorname{Apply}(G_0,U^*).
 ```
 
-Selection must verify $G^*\models T^*$. A canonical $G^*$ additionally
-requires unique anchors, satisfied DPO application and gluing conditions,
+Selection must verify $G^*\models T^*$. A canonical $G^*$ requires unique
+anchors, satisfied DPO application and gluing conditions,
 termination, deterministic conflict resolution or confluence, and canonical
 serialization. Without complete structural selection, $T^*$ remains the
 authoritative target and no singleton $G^*$ is asserted.
@@ -878,8 +878,8 @@ true graph predicates to the corresponding represented facts in $R_1$.
 $\square$
 
 Target conformance does not require one fully selected planned graph. When
-repair selection fixed a concrete $G^*$, VIPER may additionally compare the
-planned and observed represented facts that selection intended to freeze.
+repair selection fixed a concrete $G^*$, VIPER may compare the planned and
+observed represented facts that selection intended to freeze.
 
 Let $\Sigma$ be the declared conformance scope, and let
 $\mathcal F_\Sigma(G)$ be the canonical set of represented facts inside that

@@ -1401,7 +1401,8 @@ These rule names and Python class names are VIPER conventions. The established
 mathematical basis is graph-constraint satisfaction: graph constraints express
 properties that a graph must satisfy, while application conditions restrict a
 transformation rule's applicability. VIPER uses graph constraints for
-post-change acceptance and retains DPO application conditions for applying delta rules;
+post-change acceptance and retains DPO application conditions for applying
+delta rules;
 see [Ehrig et al., *Fundamentals of Algebraic Graph
 Transformation*](https://doi.org/10.1007/3-540-31188-2) and [Ehrig, Ehrig,
 Habel, and Pennemann, “Theory of Constraints and Application
