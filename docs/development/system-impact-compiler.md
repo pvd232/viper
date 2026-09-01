@@ -4124,7 +4124,8 @@ VIPER synthesis is:
 
 ```math
 \begin{aligned}
-R_0&\longrightarrow(Q_0,W_0)\longrightarrow G_0, \\
+R_0&\longrightarrow(Q_0,W_0)
+\xrightarrow{\mathcal C_{X,K}}G_0, \\
 (G_0,\Delta)&\longrightarrow(H_\Delta,S_\Delta)\longrightarrow B, \\
 (\Delta,B)&\longrightarrow P, \\
 (G_0,\Delta,P)&\longrightarrow T^*, \\
@@ -4132,7 +4133,8 @@ H_\Delta[B]&\longrightarrow D_B\longrightarrow\Pi, \\
 (T^*,\Pi)&\longrightarrow\{U_i\}\longrightarrow U^*, \\
 U^*&\longrightarrow G^*\ \text{ when selection is frozen}, \\
 (T^*,\Pi,U^*)&\longrightarrow\text{PairBlocks}\longrightarrow R_1, \\
-R_1&\longrightarrow(Q_1,W_1)\longrightarrow G_1, \\
+R_1&\longrightarrow(Q_1,W_1)
+\xrightarrow{\mathcal C_{X,K}}G_1, \\
 G_1&\models T^*.
 \end{aligned}
 ```

@@ -1650,6 +1650,28 @@ def test_system_graph_stages_traceability_before_contract_change() -> None:
     )
 
 
+def test_system_impact_proof_uses_complete_compiler_boundary() -> None:
+    """Keep every proof compiler step explicit and every subsection numbered."""
+    proof = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
+    research = proof.split("## 15. Research program", 1)[1]
+    core = proof.split("## 12. Core proof", 1)[1].split(
+        "## 13. Detailed graph-transformation foundations",
+        1,
+    )[0]
+
+    baseline = "R_0&\\longrightarrow(Q_0,W_0)\n\\xrightarrow{\\mathcal C_{X,K}}G_0"
+    observed = "R_1\\longrightarrow(Q_1,W_1)\n\\xrightarrow{\\mathcal C_{X,K}}G_1"
+    assert research.count(baseline) == 2
+    assert research.count(observed) == 2
+    assert baseline in core
+    assert observed.replace("R_1", "R_1&", 1) in core
+    assert "\\longrightarrow(Q_0,W_0)\\longrightarrow G_0" not in proof
+    assert "\\longrightarrow(Q_1,W_1)\\longrightarrow G_1" not in proof
+
+    subsection_numbers = re.findall(r"^### (12\.\d+) ", core, re.MULTILINE)
+    assert subsection_numbers == [f"12.{number}" for number in range(1, 14)]
+
+
 def test_contract_traceability_pair_guide_executes_as_one_workflow(
     tmp_path: Path,
 ) -> None:
