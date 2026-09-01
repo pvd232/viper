@@ -2238,6 +2238,8 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         assert str(manifest["gate"]).startswith("conda run -n mantra ")
 
         body = definition.group("body")
+        if block_id.startswith("P0-PDR-"):
+            assert body.count("**Context:**") == 1, block_id
         edits = tuple(_PAIR_EDIT.finditer(body))
         edit_tree: ast.Module | None = None
         if block_id.startswith("P0-SIG-") or block_id in {

@@ -330,7 +330,7 @@ a new digest.
 
 <!-- contract-baseline: contract-traceability.md sha256=1cc97a63c2ca715f71abff02084b8bf81ba40dc7da6b6cc5121e9de8d7f813da -->
 
-<!-- contract-baseline: project-data-root.md sha256=1e7132936ce12857c4369c18abae61dbce05b711c3e782a9ee5aff012cc260d5 -->
+<!-- contract-baseline: project-data-root.md sha256=e6c57427b0a7cc335452dea786546dfc91805f29414b0882472f6ffe516287ae -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
 <!-- contract-baseline: system-impact-compiler.md sha256=a4633fe87d789eed2ccf53e086dc3effb4700aaa44c4416a7b2e7b40affe05c9 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=1e3b082c70675f1b8c93b900749eb52b69644760b1eeb5aec58af55a60a1436d -->

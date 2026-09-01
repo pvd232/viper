@@ -11,12 +11,12 @@ of treating the current working directory as an unrelated default.
 
 These requirements bind the contract to the master checklist:
 
-| ID | Implementation obligation |
-| --- | --- |
-| PDR-01 <!-- contract-requirement: PDR-01 phase=0 test=tests/test_project_init.py --> | Make `viper init ROOT` create the complete protocol tree and one root marker at the selected location. |
-| PDR-02 <!-- contract-requirement: PDR-02 phase=0 test=tests/test_storage.py --> | Resolve explicit and discovered roots through one function and bind local immutable publication to `ROOT/.viper/store`. |
-| PDR-03 <!-- contract-requirement: PDR-03 phase=0 test=tests/test_validation_architecture.py --> | Reject every symlink below the canonical project root and require every logical and resolved filesystem path to remain beneath it. |
-| PDR-04 <!-- contract-requirement: PDR-04 phase=0 test=tests/test_documentation.py --> | Publish one root vocabulary across the protocol, Python API, typed operations, CLI, generated project, and documentation. |
+| ID | Context | Implementation obligation |
+| --- | --- | --- |
+| PDR-01 <!-- contract-requirement: PDR-01 phase=0 test=tests/test_project_init.py --> | Later commands must rediscover the directory created by `viper init`. | Make `viper init ROOT` create the complete protocol tree and one root marker at the selected location. |
+| PDR-02 <!-- contract-requirement: PDR-02 phase=0 test=tests/test_storage.py --> | Working files and immutable copies share one root and occupy separate locations. | Resolve explicit and discovered roots through one function and bind local immutable publication to `ROOT/.viper/store`. |
+| PDR-03 <!-- contract-requirement: PDR-03 phase=0 test=tests/test_validation_architecture.py --> | A relative file name can escape `ROOT` through traversal or a symlink. | Reject every symlink below the canonical project root and require every logical and resolved filesystem path to remain beneath it. |
+| PDR-04 <!-- contract-requirement: PDR-04 phase=0 test=tests/test_documentation.py --> | The same project-root input currently appears under several public names. | Publish one root vocabulary across the protocol, Python API, typed operations, CLI, generated project, and documentation. |
 
 ## 2. Required claim
 

@@ -9,6 +9,9 @@ focused test, and completion gate for one checkbox.
 
 Each checklist checkbox owns exactly one `PairBlock`. A block may change
 several targets when splitting the edit leaves the code unable to compile.
+Each block begins with a short **Context** paragraph written in everyday
+English. It states why the change is necessary, what the change adds, and which
+next operation needs it. Keep the manifest and implementation steps separate.
 Every dependency names an earlier block. The documentation
 validator rejects duplicate ownership, missing blocks, unknown requirements,
 unknown targets, dependency cycles, placeholders, and invalid Python.
@@ -69,7 +72,9 @@ gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k estab
 depends_on = []
 ```
 
-Create `src/viper/project.py` with the root marker model and resolver.
+**Context:** Later commands currently choose their working directory
+independently. `viper.toml`, `find_root()`, and `resolve_root()` let every
+command select the same validated Git project root.
 
 ```python pair-edit
 """Discover and validate the root of a Git-backed VIPER project."""
@@ -146,8 +151,9 @@ gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k estab
 depends_on = ["P0-PDR-01"]
 ```
 
-Define the reserved root files once, then unpack them at the start of the
-mapping returned by `_project_files()`.
+**Context:** A generated project needs the root marker and reserved input
+directory before later commands can discover or use it. `ROOT_FILES` adds those
+paths to every scaffold from one definition.
 
 ```python pair-edit
 ROOT_FILES: dict[str, str] = {
@@ -169,10 +175,13 @@ gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.
 depends_on = ["P0-PDR-01"]
 ```
 
-Replace every public `repository_root` field with `root`. Comparison
-requests use `left_root` and `right_root`. Resolve each value once in the
-current operation body and pass the canonical `project_root` to internal code.
-`P0-MOD-03` later moves these completed bodies into `api.py` unchanged.
+**Context:** Public operations currently resolve supplied paths through
+different boundaries. Each operation must resolve its supplied `root` once and
+pass the resulting `project_root` to every internal consumer.
+
+Replace every public `repository_root` field with `root`. Comparison requests
+use `left_root` and `right_root`. `P0-MOD-03` later moves these completed bodies
+into `api.py` unchanged.
 
 `src/viper/api.py`
 
@@ -513,8 +522,9 @@ gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k proj
 depends_on = ["P0-PDR-03"]
 ```
 
-Use one CLI helper for the ordinary, left, and right forms. Its `name` selects
-both the option spelling and request-field destination.
+**Context:** The CLI and Python API have used different names for the same
+project-root input. `add_root()` gives ordinary and comparison commands the
+same `root`, `left_root`, and `right_root` vocabulary as their request models.
 
 `src/viper/cli.py`
 
@@ -771,7 +781,10 @@ gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.
 depends_on = ["P0-PDR-01"]
 ```
 
-Add the path error, operation vocabulary, and resolver to `src/viper/project.py`.
+**Context:** `resolve_root()` validates only the project directory. A relative
+file path can traverse outside the project or pass through a symlink.
+`resolve_path()` blocks those paths before storage and other local operations
+use them.
 
 ```python pair-edit
 class PathError(RootError):
@@ -823,7 +836,9 @@ gate = "conda run -n mantra python -m pytest tests/test_storage.py -k uses_selec
 depends_on = ["P0-PDR-04", "P0-PDR-06"]
 ```
 
-Replace the store constructor with the shared project-path boundary.
+**Context:** A valid project root leaves the local store path unchecked.
+`LocalArtifactStore` uses `resolve_path()` before it writes or retrieves
+immutable files.
 
 `src/viper/storage.py`
 
@@ -889,7 +904,7 @@ persisted `LocalFileRef.store` value `.viper/store`. Import
 `LocalArtifactStore` in `_api/handlers.py`, add `_local_fetcher()` beside
 `_root()`, and place each shown binding before its verifier call. Pass those
 bound values to the existing verifier calls. An explicitly injected fetcher
-stays active without making the request root optional.
+remains active while the request root stays required.
 
 ## 3. Contract traceability
 
