@@ -1348,7 +1348,7 @@ Phase 0 contract traceability closes only when:
 
 ## 7. SystemGraph handoff
 
-`compile_contract_traceability()` returns the canonical traceability input to
+`compile_contract_traceability()` returns `ContractTraceabilityGraph` to
 baseline `compile_system()`:
 
 ```text
@@ -1365,12 +1365,14 @@ spans and digests, joins, cardinality, worked examples, and canonical bytes.
 SystemGraph owns traceability lowering, baseline dependency compilation, impact
 traversal, propagation coverage, and target constraints.
 
-The explicit delta remains a separate proof input:
+`ContractChange` remains a separate proof input:
 
 ```text
-R0 -> compile_contract_traceability() -> Q0 -> compile_system() -> G0
+R0 -> compile_contract_traceability() -> Q0: ContractTraceabilityGraph
+R0 -> compile_pair_blocks() -> W0: tuple[PairBlock, ...]
+(R0, X, Q0, W0) -> compile_system() -> G0: SystemGraph
 
-(contract-delta declaration, G0) -> compile_contract_delta() -> Delta
+(ContractChange, G0) -> compile_contract_change() -> ContractDelta
 ```
 
 Bootstrap PairBlocks are parsed separately and contribute scheduling

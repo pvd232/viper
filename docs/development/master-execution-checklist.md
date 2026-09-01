@@ -228,7 +228,7 @@ baseline source + fixed context
 -> canonical SystemGraph
 
 contract delta + rule declarations
--> explicit contract delta + normalized rule dependencies
+-> ContractChange + normalized rule dependencies
 -> conservative impact overlay
 -> reverse dependency closure
 -> SCC condensation of the affected graph
@@ -251,7 +251,7 @@ implemented source + same fixed context
 | [Contract requirement traceability](contract-requirement-traceability.md) | Draft after audit | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
 | [Project data root](project-data-root.md) | Draft after audit | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design | One defining module for API operations, verification operations, and verification types |
-| [Deterministic system impact graph](system-impact-graph.md) | Audited design; implementation pending | Canonical dependency vocabulary, automatic contract-delta compilation, conservative impact overlay, SCC condensation, strict diagnostics, blast coverage, total propagation, and observed conformance |
+| [System-Impact Compiler](system-impact-compiler.md) | Audited design; implementation pending | Defined dependency types, automatic `ContractChange` compilation, conservative impact overlay, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and observed conformance |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Draft after audit | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Draft after audit | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Draft after audit | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -303,11 +303,11 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-requirement-traceability.md sha256=20e000c6b0ea77809e11260ae9949f195e03f83e26897e4b321c963823f2dfbd -->
+<!-- contract-baseline: contract-requirement-traceability.md sha256=db25ff9facce59d513ba164ac76096fa7c85169d97645e41b869c58a5e85d836 -->
 
 <!-- contract-baseline: project-data-root.md sha256=74acbb87c68fa1849d6bd82bafe49bb5fd367b046dd47f8a678b3c456c40f8a4 -->
 <!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
-<!-- contract-baseline: system-impact-graph.md sha256=f9a03938f99deeac765616d2ef8b76b098e1853109dc532717d873fc3a9d1396 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=739d3ca017febb64eece0586f8474721226931433c34186b368711f4d1c8cdb1 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=176fde192378792f19a19b02afb7ba6c66502dc0206b1596e2030c5422d651e3 -->
 <!-- contract-baseline: external-input-roots.md sha256=0666f904e5a2ed7735ddf9f71a5a33bcf2c1cd09d1e3a0994265649636182a70 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=ad7ed3b8fc334bd0f1c5bb0207b90bcafc03b5f0403592b77d7bb0074c9619e1 -->
@@ -534,8 +534,9 @@ The [contract traceability Phase 0 pair-coding
 guide](contract-traceability-phase-0-pair-coding.md) owns every `P0-CRT` block
 and `P0-PROOF-01` through `P0-PROOF-04`. The
 [Phase 0 pair-coding reference](phase-0-pair-coding.md) owns the project-root
-and module work. The [SystemGraph Phase 0 and Phase 1 pair-coding
-guide](system-impact-phase-0-1-pair-coding.md) owns every `P0-SIG`,
+and module work. The [System-Impact Compiler
+specification](system-impact-compiler.md#14-implementation-plan-and-verification-gates)
+owns every `P0-SIG`,
 `P0-PROOF-09` through `P0-PROOF-12`, and `P1-SIG` block. Every marked checkbox
 resolves to one block containing requirements, prerequisites, targets, tests,
 and a completion gate.
@@ -561,7 +562,7 @@ from the observed result.
 **Contracts:** [Contract requirement traceability](contract-requirement-traceability.md),
 [project data root](project-data-root.md),
 [public module ownership](module-ownership.md), and
-[deterministic system impact graph](system-impact-graph.md)
+[System-Impact Compiler](system-impact-compiler.md)
 
 **Outcome:** Every contract requirement has a named rule, exact implementation
 owner, populated trace, and exact test. `viper init ROOT` creates the complete
@@ -740,14 +741,14 @@ the new owner.
       star imports and computed targets.
       <!-- pair-block: P0-SIG-03 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.analysis.anchored state=planned owner=src/viper/system_graph.py:compile_system -->
-- [ ] Ingest the canonical `ContractTraceabilityGraph` from `P0-CRT-05` and
+- [ ] Ingest `ContractTraceabilityGraph` from `P0-CRT-05` and
       lower its source-evidenced requirements, rules, owners, and tests into
       `G0`. Parse bootstrap PairBlocks separately into scheduling traceability.
-      After `G0` exists, compile the explicit fenced contract delta against its
-      anchors and preconditions.
+      After `G0` exists, compile the fenced `ContractChange` against its
+      anchors and preconditions to produce `ContractDelta`.
       <!-- implements: SIG-03, SIG-04 -->
       <!-- pair-block: P0-SIG-04 -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.contract.delta state=planned owner=src/viper/system_graph.py:compile_contract_delta -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.contract.delta state=planned owner=src/viper/system_graph.py:compile_contract_change -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.requirement.coverage state=planned owner=src/viper/system_graph.py:ingest_contract_traceability -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.rule.lowering state=planned owner=src/viper/system_graph.py:ingest_contract_traceability -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.plan.coverage state=planned owner=src/viper/system_graph.py:compile_work -->
@@ -991,8 +992,9 @@ new publisher boundary. Cloud implementation begins in Phase 9.
       of the blast and prohibit splitting an SCC.
       <!-- pair-block: P1-SIG-04 -->
 
-These blocks are defined in the [SystemGraph Phase 0 and Phase 1 pair-coding
-guide](system-impact-phase-0-1-pair-coding.md). Cohesion-aware optimized
+These blocks are defined in the [System-Impact Compiler
+specification](system-impact-compiler.md#14-implementation-plan-and-verification-gates).
+Cohesion-aware optimized
 partitioning remains a later research comparison over the same condensation
 DAG.
 
@@ -2695,7 +2697,7 @@ old contract.
 | `tests/test_process_startup.py` | Owner-aware parameter source checks | 4 |
 | `tests/test_documentation.py` | System-graph coverage parity, root vocabulary, schema mirrors, links, examples, operations, exact contract models, and deterministic contract-to-checklist coverage | 0, 11–18 |
 | `docs/development/project-data-root.md` | Root selection, discovery, path custody, verification, propagation, and acceptance cases | 0 |
-| `docs/development/system-impact-graph.md` | Fixed context, graph schema, compilation, delta, impact closure, verification, and acceptance cases | 0 |
+| `docs/development/system-impact-compiler.md` | Fixed context, graph schema, compilation, delta, impact closure, proof, implementation blocks, verification, and acceptance cases | 0 |
 | `docs/development/experiment-expansion.md` | Expansion, aggregate execution, and acceptance cases | 12 |
 | `docs/development/provenance-catalog-mcp.md` | Catalog, MCP tools, access boundary, and acceptance cases | 13, 15 |
 | `docs/development/stage-reuse.md` | Reuse key, receipt, runtime, metric, storage, and verifier contract | 14 |

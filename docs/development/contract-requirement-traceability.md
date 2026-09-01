@@ -16,7 +16,7 @@ These requirements bind the contract to the master checklist:
 
 | ID | Implementation obligation |
 | --- | --- |
-| CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_contract_traceability.py --> | Parse every contract requirement and named verifier rule into one canonical traceability model. |
+| CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_contract_traceability.py --> | Parse every contract requirement and named verifier rule into `ContractTraceabilityGraph`, with each collection serialized in canonical order. |
 | CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_contract_traceability.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
 | CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs; one worked example that constructs every contract model; and populated success and rejection traces. |
 | CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph that baseline SystemGraph compilation lowers into $G_0$. |
@@ -124,7 +124,7 @@ contract requirement row
 -> implementation-link marker in the checklist
 -> verification-link marker in the checklist
 -> exact source and test symbols
--> canonical ContractTraceabilityGraph
+-> ContractTraceabilityGraph
 ```
 
 The existing `implements`, `verifies`, and baseline markers remain as the
@@ -806,7 +806,7 @@ named test function. The traceability graph joins those three representations.
 | `docs/development/master-execution-checklist.md` | Add the foundational Phase 0 work before project-root and system-graph implementation. |
 | `docs/development/*.md` pending contracts | Add verifier-rule markers, three DAGs, one complete worked example, and populated success and rejection traces per contract. |
 | `/Users/machina/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, complete Section 4 example, populated traces, and requirement-rule-owner-test chain. |
-| `docs/development/system-impact-graph.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
+| `docs/development/system-impact-compiler.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
 | `docs/development/testing.md` | Document the focused traceability check and the meaning of each marker. |
 
 ### Legacy cleanup
@@ -837,7 +837,7 @@ implementation = "src/viper/_contract_traceability.py:compile_contract_traceabil
 test = "tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests"
 outcome.kind = "accepted"
 outcome.result = "one implementation RuleEdge for contract.rule.implemented"
-outcome.evidence = ["canonical ContractTraceabilityGraph JSON bytes"]
+outcome.evidence = ["ContractTraceabilityGraph serialized as canonical JSON bytes"]
 ````
 
 ### Rejection

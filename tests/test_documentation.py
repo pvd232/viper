@@ -43,22 +43,24 @@ CONTRACT_TRACEABILITY = (
     ROOT / "docs/development/contract-requirement-traceability.md"
 )
 MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
-SYSTEM_IMPACT_GRAPH = ROOT / "docs/development/system-impact-graph.md"
-SYSTEM_IMPACT_CORE_PROOF = (
-    ROOT / "docs/development/proof/graph_transformation/core-proof.md"
+SYSTEM_IMPACT_COMPILER = ROOT / "docs/development/system-impact-compiler.md"
+RETIRED_SYSTEM_IMPACT_DOCUMENTS = (
+    ROOT / "docs/development/system-impact-graph.md",
+    ROOT / "docs/development/system-impact-phase-0-1-pair-coding.md",
+    ROOT / "docs/development/system-impact-specification-review.md",
+    ROOT / "docs/development/proof/graph_transformation/core-proof.md",
+    ROOT
+    / "docs/development/proof/graph_transformation/appendix-a-foundations.md",
 )
 PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/phase-0-pair-coding.md"
 CONTRACT_TRACEABILITY_PAIR_CODING = (
     ROOT / "docs/development/contract-traceability-phase-0-pair-coding.md"
 )
-SYSTEM_IMPACT_PAIR_CODING = (
-    ROOT / "docs/development/system-impact-phase-0-1-pair-coding.md"
-)
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
     MODULE_OWNERSHIP,
-    ROOT / "docs/development/system-impact-graph.md",
+    SYSTEM_IMPACT_COMPILER,
     ROOT / "docs/development/download-retrieval-artifacts.md",
     ROOT / "docs/development/external-input-roots.md",
     ROOT / "docs/development/unified-metric-drafting.md",
@@ -75,7 +77,7 @@ PHASE_ZERO_CONTRACTS = (
     ROOT / "docs/development/contract-requirement-traceability.md",
     ROOT / "docs/development/project-data-root.md",
     MODULE_OWNERSHIP,
-    ROOT / "docs/development/system-impact-graph.md",
+    SYSTEM_IMPACT_COMPILER,
 )
 TRACEABILITY_MODELS = (
     DeclarationRef,
@@ -263,7 +265,7 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "Baseline": "input",
         "Context": "input",
         "Traceability": "input",
-        "DeltaDocs": "input",
+        "Change": "input",
         "Bootstrap": "input",
         "Inventory": "proposed",
         "Analyze": "proposed",
@@ -284,28 +286,18 @@ SYSTEM_IMPACT_DAG_ROLES = (
     },
     {
         "Baseline": "input",
-        "Context": "input",
-        "Traceability": "input",
-        "DeltaDocs": "input",
-        "Bootstrap": "input",
-        "Decisions": "input",
+        "Change": "input",
         "CompileBase": "consumer",
-        "CompileContract": "consumer",
-        "CompileWork": "consumer",
-        "Implementation": "consumer",
-        "CompileObserved": "consumer",
+        "CompileChange": "consumer",
+        "Observe": "consumer",
         "Review": "consumer",
         "BaseGraph": "evidence",
-        "PairBlocks": "evidence",
         "Candidate": "evidence",
         "CandidateGraph": "evidence",
         "Delta": "output",
-        "Impact": "output",
-        "Condensation": "output",
-        "Tests": "output",
+        "Complete": "output",
         "Coverage": "output",
-        "Plan": "output",
-        "Target": "output",
+        "Select": "output",
         "Conformance": "output",
     },
 )
@@ -333,7 +325,7 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Sites", "Graph"),
         ("Traceability", "Graph"),
         ("Bootstrap", "Graph"),
-        ("DeltaDocs", "ContractCompiler"),
+        ("Change", "ContractCompiler"),
         ("Graph", "ContractCompiler"),
         ("ContractCompiler", "Delta"),
         ("Graph", "Overlay"),
@@ -354,33 +346,19 @@ SYSTEM_IMPACT_DAG_EDGES = (
     },
     {
         ("Baseline", "CompileBase"),
-        ("Context", "CompileBase"),
-        ("Traceability", "CompileBase"),
-        ("Bootstrap", "CompileBase"),
         ("CompileBase", "BaseGraph"),
-        ("DeltaDocs", "CompileContract"),
-        ("BaseGraph", "CompileContract"),
-        ("CompileContract", "Delta"),
-        ("BaseGraph", "Impact"),
-        ("Delta", "Impact"),
-        ("Impact", "Condensation"),
-        ("Impact", "Tests"),
-        ("Tests", "Coverage"),
-        ("Impact", "Plan"),
-        ("Decisions", "Plan"),
-        ("BaseGraph", "Target"),
-        ("Delta", "Target"),
-        ("Plan", "Target"),
-        ("Target", "CompileWork"),
-        ("Condensation", "CompileWork"),
-        ("CompileWork", "PairBlocks"),
-        ("PairBlocks", "Implementation"),
-        ("Implementation", "Candidate"),
-        ("Candidate", "CompileObserved"),
-        ("Context", "CompileObserved"),
-        ("CompileObserved", "CandidateGraph"),
+        ("Change", "CompileChange"),
+        ("BaseGraph", "CompileChange"),
+        ("CompileChange", "Delta"),
+        ("BaseGraph", "Complete"),
+        ("Delta", "Complete"),
+        ("Complete", "Coverage"),
+        ("Complete", "Select"),
+        ("Select", "Candidate"),
+        ("Candidate", "Observe"),
+        ("Observe", "CandidateGraph"),
         ("CandidateGraph", "Conformance"),
-        ("Target", "Conformance"),
+        ("Complete", "Conformance"),
         ("Coverage", "Review"),
         ("Conformance", "Review"),
     },
@@ -1420,7 +1398,7 @@ def test_module_ownership_dags_preserve_semantic_topology() -> None:
 def test_system_impact_dags_preserve_semantic_topology() -> None:
     """Keep each system-impact DAG edge and role aligned with its contract."""
     current_gap = _numbered_contract_section(
-        SYSTEM_IMPACT_GRAPH.read_text(),
+        SYSTEM_IMPACT_COMPILER.read_text(),
         3,
     )
     diagrams = tuple(
@@ -1454,6 +1432,34 @@ def test_system_impact_dags_preserve_semantic_topology() -> None:
         assert actual_roles == expected_roles
         assert actual_palette == expected_palette
         assert TRACEABILITY_LINK_STYLE in diagram
+
+
+def test_system_impact_compiler_is_the_single_active_specification() -> None:
+    """Keep the contract, proof, PairBlocks, and gates in one document."""
+    text = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
+    opening = text.split("## 1. Status", 1)[0]
+    pipeline = _MERMAID_FENCE.search(opening)
+
+    assert pipeline is not None
+    assert "block-beta" in pipeline.group("body")
+    assert "G1 models T*" in pipeline.group("body")
+    assert all(not path.exists() for path in RETIRED_SYSTEM_IMPACT_DOCUMENTS)
+    for required_section in (
+        "## 1. Status",
+        "## 7. Verification",
+        "## 12. Core proof",
+        "## 13. Detailed graph-transformation foundations",
+        "## 14. Implementation plan and verification gates",
+        "## 15. Research program",
+    ):
+        assert required_section in text
+
+    documentation = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "docs").rglob("*.md")
+    )
+    for retired in RETIRED_SYSTEM_IMPACT_DOCUMENTS:
+        assert retired.name not in documentation
 
 
 def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
@@ -1577,19 +1583,19 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
     }
 
 
-def test_system_graph_stages_traceability_before_contract_delta() -> None:
-    """Keep CRT lowering inside G0 compilation and delta compilation after G0."""
-    proof = SYSTEM_IMPACT_CORE_PROOF.read_text(encoding="utf-8")
+def test_system_graph_stages_traceability_before_contract_change() -> None:
+    """Keep CRT lowering inside G0 compilation and change compilation after G0."""
+    proof = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     crt_guide = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
-    system_guide = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+    system_guide = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
 
     assert "Q_0=\\operatorname{CompileTraceability}(R_0)" in proof
     assert (
-        "\\operatorname{CompileContractDelta}(d_\\Delta,G_0)"
+        "\\operatorname{CompileContractChange}(c_\\Delta,G_0)"
         in proof
     )
-    assert "Q0 -> compile_system() -> G0" in crt_guide
-    assert "(contract-delta declaration, G0)" in crt_guide
+    assert "(R0, X, Q0, W0) -> compile_system() -> G0" in crt_guide
+    assert "(ContractChange, G0)" in crt_guide
     assert "only traceability input accepted" not in crt_guide
 
     definition = next(
@@ -1600,10 +1606,10 @@ def test_system_graph_stages_traceability_before_contract_delta() -> None:
     manifest = tomllib.loads(definition.group("manifest"))
     assert manifest["depends_on"] == ["P0-CRT-05", "P0-SIG-03"]
     assert "ingest_contract_traceability" in " ".join(manifest["targets"])
-    assert "compile_contract_delta" in " ".join(manifest["targets"])
+    assert "compile_contract_change" in " ".join(manifest["targets"])
     body = " ".join(definition.group("body").split())
     assert "Derive `ContractTraceabilityGraph`" not in body
-    assert body.index("Consume the canonical `ContractTraceabilityGraph`") < (
+    assert body.index("Consume the `ContractTraceabilityGraph`") < (
         body.index("After `G0` exists")
     )
 
@@ -1711,7 +1717,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         definition
         for definition in _PAIR_BLOCK_DEFINITION.finditer(contract_reference)
     )
-    system_reference = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+    system_reference = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     system_definitions = tuple(
         definition
         for definition in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(system_reference)
@@ -1847,7 +1853,7 @@ def test_system_graph_phase_one_tasks_have_pair_blocks() -> None:
     marker_ids = re.findall(r"<!-- pair-block: (P1-SIG-\d{2}) -->", section)
     assert marker_ids == ["P1-SIG-01", "P1-SIG-02", "P1-SIG-03", "P1-SIG-04"]
 
-    reference = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+    reference = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     definitions = {
         match.group("id"): tomllib.loads(match.group("manifest"))
         for match in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(reference)
@@ -1968,9 +1974,8 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
 
 
 def test_phase_zero_system_models_match_contract() -> None:
-    """Keep the canonical SystemGraph vocabulary equal in both active guides."""
-    contract = SYSTEM_IMPACT_GRAPH.read_text(encoding="utf-8")
-    guide = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
+    """Keep the unified SystemGraph vocabulary complete and internally equal."""
+    specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     node_kinds = {
         "repository_file",
         "python_symbol",
@@ -2003,14 +2008,14 @@ def test_phase_zero_system_models_match_contract() -> None:
     fact_kinds = {"node_identity", "node_roles", "python_signature", "edge"}
     constraint_kinds = {"presence", "absence", "preservation"}
     for value in node_kinds | edge_kinds | fact_kinds | constraint_kinds:
-        assert f'"{value}"' in contract
-        assert value in guide
-    assert "source depends on the target" in contract
-    assert "source depends on target" in guide
-    assert "ContractCompiler -->|\"PairBlocks\"| Plan" not in contract
-    assert "PairReference" not in contract
-    assert 'CompileWork -->|"ordered work"| PairBlocks' in contract
-    assert 'PairBlocks -->|"bounded work"| Implementation' in contract
+        assert f'"{value}"' in specification
+    assert "source depends on the target" in specification
+    assert "source depends on target" in specification
+    assert "ContractCompiler -->|\"PairBlocks\"| Plan" not in specification
+    assert "PairReference" not in specification
+    assert "Complete --> Select" in specification
+    assert "compile_work()" in specification
+    assert "Select --> Candidate" in specification
 
 
 def _worked_example_runtime_failures(
@@ -2395,7 +2400,7 @@ def test_master_checklist_names_existing_test_modules() -> None:
     pair_guides = (
         PHASE_ZERO_PAIR_CODING,
         CONTRACT_TRACEABILITY_PAIR_CODING,
-        SYSTEM_IMPACT_PAIR_CODING,
+        SYSTEM_IMPACT_COMPILER,
     )
     planned_tests = {
         value.partition(":")[0]

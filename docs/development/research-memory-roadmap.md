@@ -18,7 +18,7 @@ immutable run evidence
 -> MCP access to exact queries and operations
 ```
 
-[`system-impact-graph.md`](system-impact-graph.md) supports development of
+[`system-impact-compiler.md`](system-impact-compiler.md) supports development of
 those layers. It compares VIPER source revisions and reports affected code,
 contracts, and tests. A separate experiment graph represents a user's frozen
 plans.
