@@ -1,6 +1,9 @@
 {
   "name": "viper-docs-tooling",
   "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "mermaid": "mmdc"
   },

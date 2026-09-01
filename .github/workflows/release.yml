@@ -106,7 +106,7 @@ jobs:
             --no-deps \
             "viper-provenance==$VERSION"
           python -m pip install "pytest>=9,<10"
-          python -I -c "from importlib import resources; import viper; assert resources.files(viper).joinpath('py.typed').is_file(); assert all(getattr(viper, name) for name in viper.__all__)"
+          python -I -m pytest tests/test_public_api.py -q
           viper --json capabilities
           ACCEPTANCE_ROOT="$(mktemp -d)"
           cp -R tests pyproject.toml "$ACCEPTANCE_ROOT/"
@@ -173,7 +173,7 @@ jobs:
             --index-url https://test.pypi.org/simple/ \
             --no-deps \
             "viper-provenance==$VERSION"
-          python -I -c "from importlib import resources; import viper; assert resources.files(viper).joinpath('py.typed').is_file(); assert all(getattr(viper, name) for name in viper.__all__)"
+          python -I -m pytest tests/test_public_api.py -q
           viper --json capabilities
           ACCEPTANCE_ROOT="$(mktemp -d)"
           cp -R tests pyproject.toml "$ACCEPTANCE_ROOT/"

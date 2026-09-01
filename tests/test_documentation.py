@@ -2835,6 +2835,16 @@ def test_workflows_limit_token_and_checkout_credentials() -> None:
         assert len(checkout.findall(text)) == text.count("uses: actions/checkout@")
 
 
+def test_wheel_smoke_gates_use_the_public_module_contract() -> None:
+    """Run the installed-package inventory instead of expecting root exports."""
+    workflows = "\n".join(
+        workflow.read_text(encoding="utf-8") for workflow in WORKFLOWS
+    )
+
+    assert "viper.__all__" not in workflows
+    assert workflows.count("python -I -m pytest tests/test_public_api.py -q") >= 4
+
+
 def test_system_impact_status_matches_the_master_checklist() -> None:
     """Keep the approved design state distinct from pending implementation."""
     specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
@@ -2918,6 +2928,16 @@ def test_changelog_starts_with_the_package_version() -> None:
 
     assert first_release is not None
     assert first_release.group(1) == package_version
+
+
+def test_explanation_names_the_current_release() -> None:
+    """Keep the explanatory guide linked to the package's current release report."""
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    package_version = metadata["project"]["version"]
+    explanation = (ROOT / "docs/explanation/how-viper-works.md").read_text()
+
+    assert f"VIPER `{package_version}` is available from PyPI." in explanation
+    assert f"[release report](../releases/{package_version}.md)" in explanation
 
 
 def test_public_examples_distinguish_weights_from_the_artifact_key() -> None:

@@ -319,7 +319,7 @@ selected callable. Each project tests how its callable uses individual fields.
 Epoch-completion receipts and an optional heightened-oversight policy remain
 future work.
 
-VIPER `0.1.0a1` is available from PyPI. Its
-[release report](../releases/0.1.0a1.md) records the source tag, distribution
+VIPER `0.1.0a2` is available from PyPI. Its
+[release report](../releases/0.1.0a2.md) records the source tag, distribution
 digests, clean installation checks, generated-project execution, and live
 NVIDIA L4 run.

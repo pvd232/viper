@@ -117,7 +117,5 @@ jobs:
       - name: Smoke-test the built wheel
         run: |
           python -m pip install --force-reinstall --no-deps dist/*.whl
-          python -I -c "import viper; assert all(getattr(viper, name) for name in viper.__all__)"
-          python -I -c "from importlib import resources; import viper; assert resources.files(viper).joinpath('py.typed').is_file()"
-          python -I -c "import viper; import viper.api; import viper.parameters"
+          python -I -m pytest tests/test_public_api.py -q
           viper --json capabilities
