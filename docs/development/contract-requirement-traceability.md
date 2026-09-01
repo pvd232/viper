@@ -16,10 +16,10 @@ These requirements bind the contract to the master checklist:
 
 | ID | Implementation obligation |
 | --- | --- |
-| CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_documentation.py --> | Parse every contract requirement and named verifier rule into one canonical traceability model. |
-| CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_documentation.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
-| CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_documentation.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs; one worked example that constructs every contract model; and populated success and rejection traces. |
-| CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_documentation.py --> | Publish a canonical traceability graph that the system-impact compiler ingests directly. |
+| CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_contract_traceability.py --> | Parse every contract requirement and named verifier rule into one canonical traceability model. |
+| CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_contract_traceability.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
+| CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs; one worked example that constructs every contract model; and populated success and rejection traces. |
+| CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical traceability graph that the system-impact compiler ingests directly. |
 
 ## 2. Required claim
 

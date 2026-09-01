@@ -11,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import unquote
 
+import viper._contract_traceability as traceability
 from viper._contract_traceability import (
     AcceptedTraceOutcome,
     ContractRequirement,
@@ -1441,23 +1442,22 @@ def test_system_impact_dags_preserve_semantic_topology() -> None:
 
 
 def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
-    """Keep the dedicated CRT guide complete and dependency ordered."""
+    """Require every CRT cycle to carry one exact parseable edit and gate."""
     text = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
     headings = (
         "## 1. Status and boundary",
-        "## 2. Compiler path",
-        "## 3. Pair-coding cycles",
-        "## 4. Pairing rule",
-        "## 5. Phase gate",
-        "## 6. SystemGraph handoff",
+        "## 2. Pair-cycle contract",
+        "## 3. Production PairBlocks",
+        "## 4. Acceptance PairBlocks",
+        "## 5. Pair execution",
+        "## 6. Phase gate",
+        "## 7. SystemGraph handoff",
     )
     positions = tuple(text.index(heading) for heading in headings)
     assert positions == tuple(sorted(positions))
 
-    cycle_ids = tuple(
-        re.findall(r"<!-- pair-cycle: ([A-Z0-9-]+) -->", text)
-    )
-    assert cycle_ids == (
+    definitions = tuple(_PAIR_BLOCK_DEFINITION.finditer(text))
+    expected_ids = (
         "P0-CRT-01",
         "P0-CRT-02",
         "P0-CRT-03",
@@ -1468,7 +1468,167 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
         "P0-PROOF-03",
         "P0-PROOF-04",
     )
+    assert tuple(item.group("id") for item in definitions) == expected_ids
 
+    manifests: dict[str, dict[str, object]] = {}
+    declarations: dict[str, set[str]] = {}
+    for definition in definitions:
+        block_id = definition.group("id")
+        manifest = tomllib.loads(definition.group("manifest"))
+        assert manifest["id"] == block_id
+        assert set(manifest) == {
+            "id",
+            "requirements",
+            "targets",
+            "tests",
+            "gate",
+            "depends_on",
+        }
+        assert manifest["requirements"]
+        assert manifest["targets"]
+        assert manifest["tests"]
+        assert str(manifest["gate"]).startswith("conda run -n mantra ")
+
+        edits = tuple(_PAIR_EDIT.finditer(definition.group("body")))
+        assert len(edits) == 1, block_id
+        code = edits[0].group("code")
+        assert _PAIR_PLACEHOLDER.search(code) is None, block_id
+        tree = ast.parse(
+            code,
+            filename=f"{CONTRACT_TRACEABILITY_PAIR_CODING.name}:{block_id}",
+        )
+        names: set[str] = set()
+        for node in tree.body:
+            if isinstance(
+                node,
+                (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+            ):
+                names.add(node.name)
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = (
+                    node.targets
+                    if isinstance(node, ast.Assign)
+                    else (node.target,)
+                )
+                names.update(
+                    target.id for target in targets if isinstance(target, ast.Name)
+                )
+        declarations[block_id] = names
+        manifests[block_id] = manifest
+
+    target_pattern = re.compile(
+        r"^(?:src|tests)/[a-z0-9_/]+\.py:[A-Za-z_][A-Za-z0-9_.]*$"
+    )
+    all_targets = {
+        target
+        for manifest in manifests.values()
+        for target in manifest["targets"]
+    }
+    order = {block_id: index for index, block_id in enumerate(expected_ids)}
+    for block_id, manifest in manifests.items():
+        assert all(
+            target_pattern.fullmatch(target) for target in manifest["targets"]
+        )
+        for target in manifest["targets"]:
+            assert target.partition(":")[2] in declarations[block_id], (
+                block_id,
+                target,
+            )
+        for test in manifest["tests"]:
+            test_path = test.partition(":")[0]
+            assert (ROOT / test_path).is_file() or any(
+                target.partition(":")[0] == test_path
+                for target in all_targets
+            )
+
+        dependencies = manifest["depends_on"]
+        assert len(dependencies) == len(set(dependencies)), block_id
+        for dependency in dependencies:
+            if dependency == "P0-PDR-05":
+                continue
+            assert dependency in manifests, (block_id, dependency)
+            assert order[dependency] < order[block_id], (
+                block_id,
+                dependency,
+            )
+
+    pending_contracts = {
+        contract.name for contract in IMPLEMENTATION_CONTRACTS[4:]
+    }
+    assert pending_contracts == {
+        name
+        for name in pending_contracts
+        if f"`{name}`" in text
+    }
+
+
+def test_contract_traceability_pair_guide_executes_as_one_workflow(
+    tmp_path: Path,
+) -> None:
+    """Execute the proposed CRT code and every focused acceptance case."""
+    text = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+    definitions = {
+        definition.group("id"): _PAIR_EDIT.search(
+            definition.group("body")
+        ).group("code")
+        for definition in _PAIR_BLOCK_DEFINITION.finditer(text)
+    }
+
+    namespace = dict(vars(traceability))
+    for block_id in (
+        "P0-CRT-01",
+        "P0-CRT-02",
+        "P0-CRT-03",
+        "P0-CRT-05",
+    ):
+        exec(
+            compile(definitions[block_id], f"<{block_id}>", "exec"),
+            namespace,
+        )
+
+    documentation_namespace = {
+        "IMPLEMENTATION_CONTRACTS": IMPLEMENTATION_CONTRACTS,
+    }
+    exec(
+        compile(definitions["P0-CRT-04"], "<P0-CRT-04>", "exec"),
+        documentation_namespace,
+    )
+    assert documentation_namespace["CONTRACTS_WITH_COMPLETE_EXAMPLES"] == (
+        IMPLEMENTATION_CONTRACTS
+    )
+
+    for block_id in (
+        "P0-PROOF-01",
+        "P0-PROOF-02",
+        "P0-PROOF-03",
+        "P0-PROOF-04",
+    ):
+        tree = ast.parse(definitions[block_id], filename=f"<{block_id}>")
+        tree.body = [
+            node
+            for node in tree.body
+            if not (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "viper._contract_traceability"
+            )
+        ]
+        exec(compile(tree, f"<{block_id}>", "exec"), namespace)
+
+    tests = (
+        "test_requirement_rows_and_rules_compile",
+        "test_requirement_rows_reject_duplicate_and_orphan_ids",
+        "test_rule_edges_resolve_one_owner_and_tests",
+        "test_rule_edges_reject_missing_symbols",
+        "test_contract_traces_compile",
+        "test_contract_traces_reject_incomplete_evidence",
+        "test_contract_examples_reject_incomplete_structure",
+        "test_contract_traceability_graph_is_canonical",
+        "test_contract_traceability_graph_rejects_duplicate_ids",
+    )
+    for index, test_name in enumerate(tests):
+        case_root = tmp_path / str(index)
+        case_root.mkdir()
+        namespace[test_name](case_root)
 
 def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     """Bind every Phase 0 task to one parseable dependency-ordered edit."""
@@ -1491,9 +1651,19 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     legacy_definitions = tuple(
         definition
         for definition in _PAIR_BLOCK_DEFINITION.finditer(reference)
-        if not definition.group("id").startswith("P0-SIG-")
+        if not definition.group("id").startswith("P0-CRT-")
+        and definition.group("id")
+        not in {"P0-PROOF-01", "P0-PROOF-02", "P0-PROOF-03", "P0-PROOF-04"}
+        and not definition.group("id").startswith("P0-SIG-")
         and definition.group("id")
         not in {"P0-PROOF-09", "P0-PROOF-10", "P0-PROOF-11", "P0-PROOF-12"}
+    )
+    contract_reference = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(
+        encoding="utf-8"
+    )
+    contract_definitions = tuple(
+        definition
+        for definition in _PAIR_BLOCK_DEFINITION.finditer(contract_reference)
     )
     system_reference = SYSTEM_IMPACT_PAIR_CODING.read_text(encoding="utf-8")
     system_definitions = tuple(
@@ -1501,7 +1671,22 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         for definition in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(system_reference)
         if definition.group("id").startswith("P0-")
     )
-    definitions = legacy_definitions + system_definitions
+    root_definitions = tuple(
+        definition
+        for definition in legacy_definitions
+        if definition.group("id").startswith("P0-PDR-")
+    )
+    downstream_definitions = tuple(
+        definition
+        for definition in legacy_definitions
+        if not definition.group("id").startswith("P0-PDR-")
+    )
+    definitions = (
+        root_definitions
+        + contract_definitions
+        + downstream_definitions
+        + system_definitions
+    )
     definition_ids = [definition.group("id") for definition in definitions]
     assert len(definition_ids) == len(set(definition_ids))
     assert set(definition_ids) == set(marker_ids)
@@ -1515,6 +1700,11 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     }
     manifests: dict[str, dict[str, object]] = {}
     order: dict[str, int] = {}
+    planned_target_paths = {
+        value.partition(":")[0]
+        for definition in definitions
+        for value in tomllib.loads(definition.group("manifest"))["targets"]
+    }
     target_pattern = re.compile(
         r"^(?:src|tests)/[a-z0-9_/]+\.py:[A-Za-z_][A-Za-z0-9_.]*$"
     )
@@ -1538,6 +1728,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         assert all(target_pattern.fullmatch(value) for value in manifest["tests"])
         assert all(
             (ROOT / value.partition(":")[0]).is_file()
+            or value.partition(":")[0] in planned_target_paths
             for value in manifest["tests"]
         )
         assert str(manifest["gate"]).startswith("conda run -n mantra ")
@@ -2034,6 +2225,14 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
     assert set(mappings["implements"]) == declared
     assert set(mappings["verifies"]) == declared
 
+    planned_test_paths = {
+        value.partition(":")[0]
+        for definition in _PAIR_BLOCK_DEFINITION.finditer(
+            CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+        )
+        for value in tomllib.loads(definition.group("manifest"))["targets"]
+        if value.startswith("tests/")
+    }
     for requirement, (contract, expected_phase, test_path) in declarations.items():
         implementation = mappings["implements"][requirement]
         verification = mappings["verifies"][requirement]
@@ -2041,7 +2240,9 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
         assert len(verification) == 1, requirement
         assert implementation[0][0] == expected_phase, requirement
         assert verification[0][0] == expected_phase, requirement
-        assert test_path.is_file(), test_path.relative_to(ROOT)
+        assert test_path.is_file() or (
+            test_path.relative_to(ROOT).as_posix() in planned_test_paths
+        ), test_path.relative_to(ROOT)
         assert test_path.relative_to(ROOT).as_posix() in verification[0][1], requirement
 
         owner_section = phase_text[expected_phase]
@@ -2127,16 +2328,34 @@ def test_terminal_release_gate_follows_every_implementation_phase() -> None:
 
 
 def test_master_checklist_names_existing_test_modules() -> None:
-    """Require every test module named by the implementation plan to exist."""
+    """Require each named test module to exist or have one exact PairBlock."""
     named_tests = set(
         re.findall(
             r"tests/[a-z0-9_/]+\.py",
             MASTER_EXECUTION_CHECKLIST.read_text(),
         )
     )
+    pair_guides = (
+        PHASE_ZERO_PAIR_CODING,
+        CONTRACT_TRACEABILITY_PAIR_CODING,
+        SYSTEM_IMPACT_PAIR_CODING,
+    )
+    planned_tests = {
+        value.partition(":")[0]
+        for guide in pair_guides
+        for definition in _PAIR_BLOCK_DEFINITION.finditer(
+            guide.read_text(encoding="utf-8")
+        )
+        for value in tomllib.loads(definition.group("manifest"))["targets"]
+        if value.startswith("tests/")
+    }
 
     assert named_tests
-    assert {name for name in named_tests if not (ROOT / name).is_file()} == set()
+    assert {
+        name
+        for name in named_tests
+        if not (ROOT / name).is_file() and name not in planned_tests
+    } == set()
 
 
 def test_api_operation_table_matches_python_and_cli_surfaces() -> None:

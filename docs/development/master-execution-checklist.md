@@ -303,7 +303,7 @@ and populated traces. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-requirement-traceability.md sha256=2bf7c2512e5b3a9d993badc393c10c556e9557c16c37930fec544ea398154f72 -->
+<!-- contract-baseline: contract-requirement-traceability.md sha256=cd5b0cc06e85ca2b651e11f0ba606f971527b45a8523fa266fe80c42f6db3f0d -->
 
 <!-- contract-baseline: project-data-root.md sha256=74acbb87c68fa1849d6bd82bafe49bb5fd367b046dd47f8a678b3c456c40f8a4 -->
 <!-- contract-baseline: module-ownership.md sha256=48f0cc4dd438dd6de4ec7533cc597b42b57f38dec4ef8803bc77af4b0bba6524 -->
@@ -626,331 +626,11 @@ system graph consumes its ownership links directly.
 
 #### Pair-coding blocks
 
-The following blocks define the complete CRT-01 through CRT-04 implementation
-sequence. Read all six before starting. Apply one block per pair-coding cycle,
-inspect the saved code, and run the named check before advancing.
-
-##### Block 1 — requirement rows
-
-**File:** `src/viper/_contract_traceability.py`
-
-Add `re`, `dataclass`, and `Path` imports. Add
-`ContractTraceabilityError`, `_RequirementMarker`, and
-`_parse_requirement_markers()` after the persisted models.
-
-```python
-class ContractTraceabilityError(ValueError):
-    """Report an invalid or incomplete contract traceability declaration."""
-
-
-@dataclass(frozen=True)
-class _RequirementMarker:
-    """Retain one requirement row plus its temporary legacy fields."""
-
-    requirement: ContractRequirement
-    phase: int
-    test_path: str
-
-
-_REQUIREMENT_ROW = re.compile(
-    r"^\| (?P<label>[A-Z]{3}-\d{2}) "
-    r"<!-- contract-requirement: (?P<requirement>[A-Z]{3}-\d{2}) "
-    r"phase=(?P<phase>\d+) test=(?P<test>tests/[a-z0-9_/]+\.py) -->",
-    re.MULTILINE,
-)
-
-
-def _parse_requirement_markers(
-    root: Path,
-    contract: Path,
-) -> tuple[_RequirementMarker, ...]:
-    """Parse every requirement row declared by one contract."""
-    contract_path = contract.relative_to(root).as_posix()
-    markers: list[_RequirementMarker] = []
-
-    for match in _REQUIREMENT_ROW.finditer(contract.read_text()):
-        label = match.group("label")
-        requirement_id = match.group("requirement")
-        if label != requirement_id:
-            raise ContractTraceabilityError(
-                f"requirement label {label} does not match {requirement_id}"
-            )
-
-        markers.append(
-            _RequirementMarker(
-                requirement=ContractRequirement(
-                    requirement_id=requirement_id,
-                    contract=contract_path,
-                ),
-                phase=int(match.group("phase")),
-                test_path=match.group("test"),
-            )
-        )
-
-    if not markers:
-        raise ContractTraceabilityError(
-            f"{contract_path} declares no contract requirements"
-        )
-
-    requirement_ids = [
-        marker.requirement.requirement_id for marker in markers
-    ]
-    duplicate_ids = sorted(
-        requirement_id
-        for requirement_id in set(requirement_ids)
-        if requirement_ids.count(requirement_id) > 1
-    )
-    if duplicate_ids:
-        raise ContractTraceabilityError(
-            f"duplicate requirements in {contract_path}: {duplicate_ids}"
-        )
-
-    return tuple(
-        sorted(
-            markers,
-            key=lambda marker: marker.requirement.requirement_id,
-        )
-    )
-```
-
-The table-row anchor excludes the illustrative standalone marker from the
-requirement set. Keep `_CONTRACT_REQUIREMENT` in
-`tests/test_documentation.py` unchanged as the migration oracle.
-
-**Check:** compile `src/viper/_contract_traceability.py` in `mantra`.
-
-##### Block 2 — verifier rules
-
-**File:** `src/viper/_contract_traceability.py`
-
-Add `_VERIFIER_RULE_ROW` and `_parse_verifier_rules()`. The row parser must:
-
-1. require the visible table label to equal the marker's `rule_id`;
-2. construct `VerifierRule` with the contract's repository-relative path;
-3. reject duplicate `rule_id` values;
-4. reject a rule whose `requirement_id` is absent from that contract; and
-5. require every requirement to own at least one rule.
-
-```python
-_VERIFIER_RULE_ROW = re.compile(
-    r"^\| `(?P<label>[a-z][a-z0-9_.]+)` "
-    r"<!-- verifier-rule: (?P<rule>[a-z][a-z0-9_.]+) "
-    r"requirement=(?P<requirement>[A-Z]{3}-\d{2}) --> "
-    r"\| (?P<statement>.+?) \|$",
-    re.MULTILINE,
-)
-
-
-def _parse_verifier_rules(
-    root: Path,
-    contract: Path,
-    requirements: tuple[_RequirementMarker, ...],
-) -> tuple[VerifierRule, ...]:
-    """Parse and join every verifier-rule row in one contract."""
-    contract_path = contract.relative_to(root).as_posix()
-    requirement_ids = {
-        marker.requirement.requirement_id for marker in requirements
-    }
-    rules: list[VerifierRule] = []
-
-    for match in _VERIFIER_RULE_ROW.finditer(contract.read_text()):
-        label = match.group("label")
-        rule_id = match.group("rule")
-        requirement_id = match.group("requirement")
-        if label != rule_id:
-            raise ContractTraceabilityError(
-                f"verifier-rule label {label} does not match {rule_id}"
-            )
-        if requirement_id not in requirement_ids:
-            raise ContractTraceabilityError(
-                f"{rule_id} names unknown requirement {requirement_id}"
-            )
-
-        rules.append(
-            VerifierRule(
-                rule_id=rule_id,
-                requirement_id=requirement_id,
-                contract=contract_path,
-                statement=match.group("statement"),
-            )
-        )
-
-    rule_ids = [rule.rule_id for rule in rules]
-    duplicate_ids = sorted(
-        rule_id
-        for rule_id in set(rule_ids)
-        if rule_ids.count(rule_id) > 1
-    )
-    if duplicate_ids:
-        raise ContractTraceabilityError(
-            f"duplicate verifier rules in {contract_path}: {duplicate_ids}"
-        )
-
-    covered_requirements = {rule.requirement_id for rule in rules}
-    uncovered_requirements = sorted(requirement_ids - covered_requirements)
-    if uncovered_requirements:
-        raise ContractTraceabilityError(
-            "requirements without verifier rules in "
-            f"{contract_path}: {uncovered_requirements}"
-        )
-
-    return tuple(sorted(rules, key=lambda rule: rule.rule_id))
-```
-
-**Check:** parse the four `PHASE_ZERO_CONTRACTS` and inspect their ordered
-requirement and rule IDs.
-
-##### Block 3 — checklist edges and Python symbols
-
-**File:** `src/viper/_contract_traceability.py`
-
-Add `_PHASE_HEADING`, `_RULE_EDGE_MARKER`, `_parse_repo_symbol()`,
-`_python_symbols()`, `_require_python_symbol()`, and `_parse_rule_edges()`.
-The checklist parser reads one current phase while scanning lines. For each
-selected requirement, it constructs one `implementation` edge from `owner=`
-or one `verification` edge from `test=`.
-
-The parser must reject:
-
-- a marker outside a phase;
-- a requirement, rule, or requirement-rule join absent from the selected
-  contracts;
-- a checklist phase that differs from the requirement row;
-- a duplicate implementation edge;
-- a rule lacking an implementation edge;
-- a rule lacking a verification edge; and
-- an `implemented` edge whose file or qualified Python symbol is absent.
-
-Resolve module functions and classes by their top-level names. Resolve methods
-as `ClassName.method_name`. Keep planned targets unresolved because their files
-or symbols may belong to later implementation blocks.
-
-```python
-def _parse_repo_symbol(value: str) -> RepoSymbolRef:
-    """Split one repository path and qualified Python symbol."""
-    path, separator, symbol = value.partition(":")
-    if not separator or not path or not symbol:
-        raise ContractTraceabilityError(
-            f"source reference must use path:symbol: {value}"
-        )
-    return RepoSymbolRef(path=path, symbol=symbol)
-```
-
-`_parse_rule_edges()` returns edges ordered by requirement, rule, edge kind,
-target path, and target symbol. Place implementation before verification for
-the same rule.
-
-**Check:** compile Phase 0 edges while every planned location remains valid;
-change one implemented test symbol in a temporary checklist and require a
-`ContractTraceabilityError`.
-
-##### Block 4 — populated traces and worked examples
-
-**File:** `src/viper/_contract_traceability.py`
-
-Add `tomllib`, `_CONTRACT_TRACE_FENCE`, `parse_contract_traces()`, and
-`validate_contract_example()`. `parse_contract_traces()` must:
-
-- parse triple- or quadruple-backtick `toml contract-trace` fences;
-- convert `implementation`, `test`, and `outcome.rejected_at` from
-  `path:symbol` strings into `RepoSymbolRef`;
-- validate each mapping through `ContractTrace`;
-- reject duplicate trace IDs, empty values, ellipses, `TBD`, `TODO`, angle
-  bracket placeholders, and fake padded hashes;
-- require at least one accepted and one rejected trace per contract;
-- require each trace's rule to belong to its requirement and contract; and
-- resolve every source location carried by an `implemented` trace.
-
-`validate_contract_example()` reads Section 3 and Section 4. It requires three
-acyclic Mermaid DAGs in current, proposed-change, and integrated order. It then
-parses the one `contract-worked-example` region and requires the example to
-construct every Section 4 class, realize every type alias, and call every
-Section 4 operation.
-
-Reuse the current AST and Mermaid checks in `tests/test_documentation.py` as
-the migration oracle. Move shared parsing into production after the new
-functions pass parity. Keep test helpers inside the test suite.
-
-**Check:** run the populated-trace and worked-example tests for all four Phase
-0 contracts, including one omitted-trace fixture and one placeholder fixture.
-
-##### Block 5 — canonical compiler and bytes
-
-**File:** `src/viper/_contract_traceability.py`
-
-Add `json`, `compile_contract_traceability()`, and
-`serialize_contract_traceability()`. The compiler defaults to the four Phase
-0 contracts during bootstrap and accepts explicit contract paths for fixture
-tests.
-
-```python
-def serialize_contract_traceability(
-    graph: ContractTraceabilityGraph,
-) -> bytes:
-    """Serialize one traceability graph into canonical JSON bytes."""
-    return json.dumps(
-        graph.model_dump(mode="json"),
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-```
-
-`compile_contract_traceability()` performs this exact join:
-
-```text
-requirement rows
--> verifier-rule rows
--> checklist implementation and verification markers
--> populated contract traces
--> ContractTraceabilityGraph
--> canonical JSON bytes
-```
-
-Sort requirements by `requirement_id`, rules by `rule_id`, edges by the Block 3
-key, and traces by `trace_id`. Reject duplicate IDs across contracts. Compare
-the resulting requirement IDs, phases, and legacy test files with the current
-documentation oracle before returning the graph.
-
-**Check:** compile twice and require identical graph objects and serialized
-bytes.
-
-##### Block 6 — acceptance tests and status propagation
-
-**File:** `tests/test_documentation.py`
-
-Add these exact acceptance-test owners:
-
-```python
-def test_contract_rules_map_to_owners_and_tests() -> None:
-    """Resolve every Phase 0 rule to one owner and one or more tests."""
-
-
-def test_contract_traceability_rejects_orphan_rule() -> None:
-    """Reject a verifier rule without a checklist verification edge."""
-
-
-def test_contract_traces_are_populated() -> None:
-    """Require accepted and rejected traces with concrete values."""
-
-
-def test_contract_traceability_graph_is_canonical() -> None:
-    """Produce identical complete traceability bytes on repeated compilation."""
-```
-
-Keep one connected temporary repository builder for rejected compiler cases.
-Vary only the marker or symbol under test. Assert the exact rule ID or source
-reference so each error identifies the failed relationship.
-
-After the focused tests pass:
-
-1. change the completed CRT checklist boxes to `[x]`;
-2. change their precise implementation and verification markers to
-   `state=implemented`;
-3. compile once more so implemented-state symbol resolution checks the new
-   functions themselves;
-4. run the contract model parity, schema-description, prose, and complete
-   documentation suites; and
-5. inspect, commit, and push the complete CRT review cycle.
+The [contract traceability Phase 0 pair-coding
+guide](contract-traceability-phase-0-pair-coding.md) owns the complete
+`P0-CRT-01` through `P0-CRT-05` production edits and
+`P0-PROOF-01` through `P0-PROOF-04` acceptance edits. The checklist owns
+their order and state; the guide owns their exact code and focused gates.
 
 ### 7.2 Project root
 
@@ -1145,34 +825,34 @@ crossing component edge.
       <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
 
-- [ ] In `tests/test_documentation.py`, reject duplicate requirements and
+- [ ] In `tests/test_contract_traceability.py`, reject duplicate requirements and
       orphan rules; require canonical declarations.
       <!-- pair-block: P0-PROOF-01 -->
       <!-- verifies: CRT-01 -->
-      <!-- contract-verification: requirement=CRT-01 rule=contract.requirement.unique state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
-      <!-- contract-verification: requirement=CRT-01 rule=contract.rule.declared state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
-- [ ] In `tests/test_documentation.py`, reject a missing implementation symbol
+      <!-- contract-verification: requirement=CRT-01 rule=contract.requirement.unique state=planned test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
+      <!-- contract-verification: requirement=CRT-01 rule=contract.rule.declared state=planned test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
+- [ ] In `tests/test_contract_traceability.py`, reject a missing implementation symbol
       and a missing test function.
       <!-- pair-block: P0-PROOF-02 -->
       <!-- verifies: CRT-02 -->
-      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
-      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=planned test=tests/test_documentation.py:test_contract_rules_map_to_owners_and_tests -->
-- [ ] In `tests/test_documentation.py`, reject an omitted trace, placeholder
+      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=planned test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
+      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=planned test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
+- [ ] In `tests/test_contract_traceability.py`, reject an omitted trace, placeholder
       value, unresolved source location, missing DAG, and Section 4 model absent
       from the worked example.
       <!-- pair-block: P0-PROOF-03 -->
       <!-- verifies: CRT-03 -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.trace.populated state=planned test=tests/test_documentation.py:test_contract_traces_are_populated -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=planned test=tests/test_documentation.py:test_phase_zero_contracts_show_three_dags_and_instantiate_models -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.trace.populated state=planned test=tests/test_contract_traceability.py:test_contract_traces_reject_incomplete_evidence -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=planned test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
-- [ ] In `tests/test_documentation.py`, compile twice, require identical graph
+- [ ] In `tests/test_contract_traceability.py`, compile twice, require identical graph
       bytes, and require every rule to reach its owner and tests.
       <!-- pair-block: P0-PROOF-04 -->
       <!-- verifies: CRT-04 -->
-      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=planned test=tests/test_documentation.py:test_contract_traceability_graph_is_canonical -->
-      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=planned test=tests/test_documentation.py:test_contract_traceability_graph_is_canonical -->
+      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
+      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
 
 - [ ] In `tests/test_project_init.py`, initialize outside the current directory,
       discover the root from a child directory, and assert the complete tree.
