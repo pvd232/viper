@@ -111,5 +111,6 @@
     "accessibility.signals.notebookCellCompleted": {
         "sound": "off",
         "announcement": "off"
-    }
+    },
+    "python.defaultInterpreterPath": "/Users/machina/miniconda3/envs/mantra/bin/python"
 }

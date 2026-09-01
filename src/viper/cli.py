@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from argparse import ArgumentParser
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn
 
 from .api import (
     APIModel,
@@ -16,12 +17,14 @@ from .api import (
     result_json_bytes,
 )
 
+RootArg = Literal["root", "left_root", "right_root"]
+
 
 class CliParseError(ValueError):
     """Carry one command-line syntax failure into the result renderer."""
 
 
-class ViperArgumentParser(argparse.ArgumentParser):
+class ViperArgumentParser(ArgumentParser):
     """Raise parser failures so JSON mode retains one-document output."""
 
     def error(self, message: str) -> NoReturn:
@@ -29,7 +32,19 @@ class ViperArgumentParser(argparse.ArgumentParser):
         raise CliParseError(message)
 
 
-def build_parser() -> argparse.ArgumentParser:
+def add_root(parser: ArgumentParser, name: RootArg = "root") -> None:
+    """Add one project-root option with current-directory discovery."""
+    option = f"--{name.replace('_', '-')}"
+    parser.add_argument(
+        option,
+        dest=name,
+        type=Path,
+        default=Path.cwd(),
+        help="VIPER project root; defaults to discovery from the current directory",
+    )
+
+
+def build_parser() -> ArgumentParser:
     """Build the VIPER command parser and its API subcommands."""
     parser = ViperArgumentParser(prog="viper")
     parser.add_argument(
@@ -53,14 +68,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="write canonical stage specs and a hash-bound RunSpec",
     )
     freeze.add_argument("draft", type=Path)
-    freeze.add_argument("--repository-root", type=Path, default=Path.cwd())
+    add_root(freeze)
 
     preflight = commands.add_parser(
         "preflight",
         help="inspect every applicable check before local execution",
     )
     preflight.add_argument("run_spec", type=Path)
-    preflight.add_argument("--repository-root", type=Path, default=Path.cwd())
+    add_root(preflight)
 
     execute = commands.add_parser(
         "execute-stage",
@@ -68,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     execute.add_argument("run_spec", type=Path)
     execute.add_argument("stage_id")
-    execute.add_argument("--repository-root", type=Path, default=Path.cwd())
+    add_root(execute)
     execute.add_argument("--timeout-seconds", type=float)
 
     run_command = commands.add_parser(
@@ -76,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="execute and verify one complete run on this host",
     )
     run_command.add_argument("run_spec", type=Path)
-    run_command.add_argument("--repository-root", type=Path, default=Path.cwd())
+    add_root(run_command)
     run_command.add_argument("--timeout-seconds", type=float)
 
     retry_command = commands.add_parser(
@@ -84,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="append one attempt to a failed frozen run",
     )
     retry_command.add_argument("run_spec", type=Path)
-    retry_command.add_argument("--repository-root", type=Path, default=Path.cwd())
+    add_root(retry_command)
     retry_command.add_argument("--timeout-seconds", type=float)
 
     benchmark_command = commands.add_parser(
@@ -93,11 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     benchmark_command.add_argument("resolved_run", type=Path)
     benchmark_command.add_argument("benchmark_spec", type=Path)
-    benchmark_command.add_argument(
-        "--repository-root",
-        type=Path,
-        default=Path.cwd(),
-    )
+    add_root(benchmark_command)
     benchmark_command.add_argument("--timeout-seconds", type=float)
 
     plan_diff = commands.add_parser(
@@ -106,8 +117,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     plan_diff.add_argument("left_run_spec", type=Path)
     plan_diff.add_argument("right_run_spec", type=Path)
-    plan_diff.add_argument("--left-repository-root", type=Path, default=Path.cwd())
-    plan_diff.add_argument("--right-repository-root", type=Path, default=Path.cwd())
+    add_root(plan_diff, "left_root")
+    add_root(plan_diff, "right_root")
 
     status = commands.add_parser(
         "status",
@@ -121,6 +132,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare_runs.add_argument("left_path", type=Path)
     compare_runs.add_argument("right_path", type=Path)
+    add_root(compare_runs, "left_root")
+    add_root(compare_runs, "right_root")
     compare_runs.add_argument(
         "--trust-source",
         action="append",
@@ -136,6 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("path", type=Path)
+        add_root(command)
         command.add_argument(
             "--trust-source",
             action="append",

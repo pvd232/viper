@@ -66,7 +66,7 @@ from ..inspection import compare_runs as compare_verified_runs
 from ..inspection import lineage as build_lineage
 from ..inspection import plan_diff as compare_frozen_plans
 from ..preflight import preflight_plan
-from ..project import InitError, init
+from ..project import InitError, RootError, init, resolve_root
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import load_resolved_stage, load_stage_spec, parse_yaml_bytes
 from ..verification import (
@@ -77,6 +77,24 @@ from ..verification import (
     verify_promoted_artifact,
     verify_run_result,
 )
+
+
+def _root(root: Path, operation: OperationName) -> Path:
+    """Resolve one operation root or raise its stable API failure."""
+    try:
+        return resolve_root(root)
+    except RootError as error:
+        raise ViperError(
+            ViperFailure(
+                operation=operation,
+                origin="application",
+                code="invalid_document",
+                message="project root is invalid",
+                details={
+                    "root": None if root is None else root.as_posix(),
+                },
+            )
+        ) from error
 
 
 def _load_model(path: Path, model_type: type[BaseModel]) -> BaseModel:
@@ -146,9 +164,10 @@ def validate_run_spec(request: ValidateRunSpecRequest) -> ValidateRunSpecSuccess
 
 def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
     """Freeze one draft into canonical stage and run documents."""
+    project_root = _root(request.root, "freeze_run")
     try:
         draft = load_run_plan_draft(request.draft)
-        frozen = freeze_run_plan(request.repository_root, draft)
+        frozen = freeze_run_plan(project_root, draft)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise _document_error("freeze_run", request.draft, exc) from exc
     return FreezeRunSuccess(run_id=frozen.run.run_id, files=frozen.files)
@@ -156,7 +175,9 @@ def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
 
 def preflight(request: PreflightRequest) -> PreflightSuccess:
     """Inspect one complete local plan before allocating a run attempt."""
-    report = preflight_plan(request.repository_root, request.run_spec)
+    project_root = _root(request.root, "preflight")
+
+    report = preflight_plan(project_root, request.run_spec)
     return PreflightSuccess(
         run_id=report.run_id,
         ready=report.ready,
@@ -166,6 +187,7 @@ def preflight(request: PreflightRequest) -> PreflightSuccess:
 
 def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
     """Execute one selected stage and identify its declared outputs."""
+    project_root = _root(request.root, "execute_stage")
     try:
         run = _load_model(request.run_spec, RunSpec)
         assert isinstance(run, RunSpec)
@@ -175,9 +197,9 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
         )
         if reference is None:
             raise ValueError("selected stage is absent from the run plan")
-        stage = load_stage_spec(request.repository_root / reference.spec)
+        stage = load_stage_spec(project_root / reference.spec)
         result = execute_stage_process(
-            request.repository_root,
+            project_root,
             run,
             reference,
             stage,
@@ -206,9 +228,10 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
 
 def run_request(request: RunRequest) -> RunSuccess:
     """Execute, publish, and verify one complete run on the active host."""
+    project_root = _root(request.root, "run")
     try:
         result = execute_run(
-            request.repository_root,
+            project_root,
             request.run_spec,
             timeout_seconds=request.timeout_seconds,
         )
@@ -251,9 +274,10 @@ def run_request(request: RunRequest) -> RunSuccess:
 
 def retry_request(request: RetryRequest) -> RetrySuccess:
     """Append one attempt to a failed frozen run and verify its terminal result."""
+    project_root = _root(request.root, "retry")
     try:
         result = execute_run(
-            request.repository_root,
+            project_root,
             request.run_spec,
             timeout_seconds=request.timeout_seconds,
             retry=True,
@@ -293,9 +317,10 @@ def execute_benchmark(
     request: ExecuteBenchmarkRequest,
 ) -> ExecuteBenchmarkSuccess:
     """Execute and verify one independent benchmark confirmation."""
+    project_root = _root(request.root, "execute_benchmark")
     try:
         execution = execute_benchmark_run(
-            request.repository_root,
+            project_root,
             request.resolved_run,
             request.benchmark_spec,
             timeout_seconds=request.timeout_seconds,
@@ -337,11 +362,13 @@ def execute_benchmark(
 
 def plan_diff(request: PlanDiffRequest) -> PlanDiffSuccess:
     """Compare two frozen plans, including their referenced stage specs."""
+    left_root = _root(request.left_root, "plan_diff")
+    right_root = _root(request.right_root, "plan_diff")
     try:
         result = compare_frozen_plans(
-            request.left_repository_root,
+            left_root,
             request.left_run_spec,
-            request.right_repository_root,
+            right_root,
             request.right_run_spec,
         )
     except (InspectionError, OSError, ValueError, yaml.YAMLError) as exc:

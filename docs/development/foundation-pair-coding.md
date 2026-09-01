@@ -169,7 +169,7 @@ gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.
 depends_on = ["P0-PDR-01"]
 ```
 
-Replace every public `repository_root` field with an optional `root`. Comparison
+Replace every public `repository_root` field with `root`. Comparison
 requests use `left_root` and `right_root`. Resolve each value once in the
 current operation body and pass the canonical `project_root` to internal code.
 `P0-MOD-03` later moves these completed bodies into `api.py` unchanged.
@@ -492,10 +492,7 @@ def plan_diff(request: PlanDiffRequest) -> PlanDiffSuccess:
     )
 ```
 
-The existing verification operation bodies keep their optional injected
-fetchers. `P0-PDR-05` binds their default local fetchers to `request.root`,
-`request.left_root`, or `request.right_root` after the store accepts canonical
-project roots.
+Verification requests require a root. Verification functions may still receive an injected StorageFetcher for tests and custom storage access. `P0-PDR-05` binds their default local fetchers to `request.root`,`request.left_root`, or `request.right_root` after the store accepts canonical project roots.
 
 <!-- pair-block-definition: P0-PDR-04 -->
 ```toml pair-block

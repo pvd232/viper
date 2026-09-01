@@ -205,7 +205,7 @@ class FreezeRunRequest(APIModel):
     """Select one run-plan draft and its repository root."""
 
     draft: Path
-    repository_root: Path
+    root: Path
 
 
 class FreezeRunSuccess(SuccessModel):
@@ -220,7 +220,7 @@ class PreflightRequest(APIModel):
     """Select one local frozen plan for complete pre-execution inspection."""
 
     run_spec: Path
-    repository_root: Path
+    root: Path
 
 
 class PreflightSuccess(SuccessModel):
@@ -237,7 +237,7 @@ class ExecuteStageRequest(APIModel):
 
     run_spec: Path
     stage_id: StageId
-    repository_root: Path
+    root: Path
     timeout_seconds: float | None = Field(default=None, gt=0)
 
 
@@ -256,7 +256,7 @@ class RunRequest(APIModel):
     """Select one frozen plan for complete execution on the active host."""
 
     run_spec: Path
-    repository_root: Path
+    root: Path
     timeout_seconds: float | None = Field(default=None, gt=0)
 
 
@@ -290,7 +290,7 @@ class ExecuteBenchmarkRequest(APIModel):
 
     resolved_run: Path
     benchmark_spec: Path
-    repository_root: Path
+    root: Path
     timeout_seconds: float | None = Field(default=None, gt=0)
 
 
@@ -306,9 +306,9 @@ class PlanDiffRequest(APIModel):
     """Select two complete frozen plans for deterministic comparison."""
 
     left_run_spec: Path
-    left_repository_root: Path
     right_run_spec: Path
-    right_repository_root: Path
+    left_root: Path
+    right_root: Path
 
 
 class PlanDiffSuccess(SuccessModel):
@@ -342,6 +342,7 @@ class StatusSuccess(SuccessModel):
 class VerificationRequest(PathRequest):
     """Select a document and source repositories trusted to supply code."""
 
+    root: Path
     trusted_source_repositories: frozenset[str] = Field(min_length=1)
 
 
@@ -378,6 +379,8 @@ class CompareRunsRequest(APIModel):
 
     left_path: Path
     right_path: Path
+    left_root: Path
+    right_root: Path
     trusted_source_repositories: frozenset[str] = Field(min_length=1)
 
 
@@ -809,7 +812,7 @@ def run(
 ) -> RunSuccess:
     """Bind one launched callable to a frozen stage and execute its complete run."""
     arguments = _stage_parser().parse_args(None if argv is None else list(argv))
-    root = arguments.repository_root.resolve()
+    root = arguments.root.resolve()
     run_spec_path = arguments.run_spec
     if not run_spec_path.is_absolute():
         run_spec_path = root / run_spec_path
@@ -856,7 +859,7 @@ def run(
     return run_request(
         RunRequest(
             run_spec=run_spec_path,
-            repository_root=root,
+            root=root,
             timeout_seconds=arguments.timeout_seconds,
         )
     )
@@ -865,11 +868,11 @@ def run(
 def retry(
     run_spec: Path,
     *,
-    repository_root: Path = Path.cwd(),
+    root: Path = Path.cwd(),
     timeout_seconds: float | None = None,
 ) -> RetrySuccess:
     """Append one attempt to a failed frozen run."""
-    root = repository_root.resolve()
+    root = root.resolve()
     selected = run_spec if run_spec.is_absolute() else root / run_spec
     selected = selected.resolve()
     if not selected.is_relative_to(root):
@@ -877,7 +880,7 @@ def retry(
     return retry_request(
         RetryRequest(
             run_spec=selected,
-            repository_root=root,
+            root=root,
             timeout_seconds=timeout_seconds,
         )
     )
