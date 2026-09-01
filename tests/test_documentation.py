@@ -2780,10 +2780,8 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
         ), requirement
 
 
-def test_contract_propagation_paths_enter_the_code_change_ledger() -> None:
-    """Require every concrete propagation owner in the authoritative ledger."""
-    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
-    missing: dict[str, list[str]] = {}
+def test_contracts_retain_propagation_sections() -> None:
+    """Require every governing contract to retain its propagation section."""
     for contract in IMPLEMENTATION_CONTRACTS:
         text = contract.read_text()
         match = re.search(
@@ -2792,16 +2790,7 @@ def test_contract_propagation_paths_enter_the_code_change_ledger() -> None:
             re.M | re.S,
         )
         assert match is not None, contract.name
-        paths = {
-            value
-            for value in re.findall(r"`([^`]+)`", match.group("body"))
-            if value.startswith(("src/", "tests/")) or value == "pyproject.toml"
-        }
-        absent = sorted(path for path in paths if f"`{path}`" not in checklist)
-        if absent:
-            missing[contract.name] = absent
-
-    assert missing == {}
+        assert match.group("body").strip(), contract.name
 
 
 def test_master_checklist_orders_capability_producers_before_consumers() -> None:
@@ -2945,15 +2934,15 @@ def test_system_impact_rule_owners_use_pair_block_nomenclature() -> None:
     assert retired_owners.isdisjoint(owners)
 
 
-def test_system_impact_code_change_ledger_covers_codeql_boundary() -> None:
-    """Keep every CodeQL-owned implementation surface in the master ledger."""
-    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+def test_system_impact_contract_covers_codeql_boundary() -> None:
+    """Keep every CodeQL-owned implementation surface in its contract."""
+    contract = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     for path in (
         "src/viper/_system_graph/codeql.py",
         "tools/codeql/viper-system-graph/",
         "tests/test_system_graph_codeql.py",
     ):
-        assert f"| `{path}` |" in checklist
+        assert f"`{path}`" in contract
 
 
 def test_master_checklist_names_existing_test_modules() -> None:
