@@ -165,10 +165,11 @@ graph and documentation checks run together.
 
 Master Phase 0 pins one CodeQL CLI and VIPER QL-pack identity. The planned
 `tests/test_system_graph.py` gate covers CodeQL receipts, canonical graph
-serialization, source evidence, edge endpoints, traceability lowering, and
-supported-row rejection. The planned `tests/test_system_impact.py` gate covers
-the six `TargetConstraint` operators, canonical `TargetSpecification`
-compilation, fresh `G1` analysis, and complete conformance receipts.
+serialization, source evidence, edge endpoints, and supported-row rejection.
+The planned `tests/test_system_impact.py` gate covers one-contract traceability
+resolution, the six `TargetConstraint` operators, canonical
+`TargetSpecification` compilation, fresh `G1` analysis, and complete
+conformance receipts.
 
 The planned `tests/test_system_impact_experiment.py` gate first evaluates
 deterministic conforming and violating fixtures, then checks the immutable

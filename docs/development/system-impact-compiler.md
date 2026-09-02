@@ -14,33 +14,38 @@ enough value to justify more protocol machinery.
 
 ```mermaid
 flowchart TB
+    Contract["Change contract"] -->|"compile one contract"| Q0["ContractTraceabilityGraph"]
+    Contract -->|"declare outcomes"| Change["ContractChange"]
+
     R0["Repository R0"] -->|"source"| Analyze0["CodeQL analysis"]
-    R0 -->|"contract compile"| Q0["ContractTraceabilityGraph"]
-    Q0 -->|"contract facts"| Compile0["compile_system()"]
-    Analyze0 -->|"rows + receipt"| Compile0
+    Analyze0 -->|"rows + receipt"| Compile0["compile_system()"]
     Compile0 -->|"canonical graph"| G0["SystemGraph G0"]
 
-    Change["ContractChange"] -->|"requested outcomes"| Target["compile_target()"]
+    Change -->|"outcomes"| Target["compile_target()"]
+    Q0 -->|"rules + owners + tests"| Target
     G0 -->|"baseline facts"| Target
     Target -->|"validated constraints"| T["TargetSpecification T*"]
 
-    Change -->|"task"| Task["Agent execution"]
-    G0 -->|"localized context · B/C"| Task
+    G0 -->|"source graph"| Localize["localize_change()"]
+    Q0 -->|"source targets"| Localize
+    T -->|"target nodes"| Localize
+    Localize -->|"source context"| Task
+    Change -->|"task"| Task["Agent or existing PairBlock"]
     T -->|"terminal gate · C"| Task
+    T -.->|"future work input"| Work["compile_work() → PairBlocks"]
+
     Task -->|"patch"| R1["Repository R1"]
     R1 -->|"source"| Analyze1["CodeQL analysis"]
-    R1 -->|"contract compile"| Q1["Updated ContractTraceabilityGraph"]
-    Q1 -->|"contract facts"| Compile1["compile_system()"]
-    Analyze1 -->|"rows + receipt"| Compile1
+    Analyze1 -->|"rows + receipt"| Compile1["compile_system()"]
     Compile1 -->|"canonical graph"| G1["SystemGraph G1"]
 
     T -->|"constraints"| Check["evaluate_target_conformance()"]
     G1 -->|"observed facts"| Check
     Check -->|"receipts"| Report["TargetConformanceReport"]
 
-    class R0,Q0,Change input
-    class Analyze0,Analyze1,Compile0,Compile1,Target,Task,Check operation
-    class G0,T,R1,Q1,G1 evidence
+    class Contract,R0,Q0,Change input
+    class Analyze0,Analyze1,Compile0,Compile1,Target,Localize,Task,Work,Check operation
+    class G0,T,R1,G1 evidence
     class Report output
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef operation fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
@@ -58,8 +63,8 @@ No source implementation exists on this branch.
 
 | ID | Implementation obligation |
 | --- | --- |
-| SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_system_graph.py --> | Run one pinned CodeQL query pack over a selected repository revision and lower the validated rows and `ContractTraceabilityGraph` into a canonical `SystemGraph`, including defining-module facts observed from source. |
-| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_system_impact.py --> | Compile one authored `ContractChange` into a canonical `TargetSpecification` containing only the six supported structural constraints. |
+| SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_system_graph.py --> | Run one pinned CodeQL query pack over a selected repository revision and lower the validated source rows into a canonical `SystemGraph`, including defining-module facts. |
+| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_system_impact.py --> | Compile one `ContractChange` and the `ContractTraceabilityGraph` for its single change contract against `G0`, producing a canonical `TargetSpecification` and bounded source context. |
 | SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_system_impact.py --> | Compile the resulting repository independently and emit one terminal `ConstraintConformanceReceipt` for every target constraint. |
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_system_impact_experiment.py --> | Compare ordinary agent execution, CodeQL localization, and CodeQL localization plus target conformance on the same committed tasks, inputs, tests, and acceptance oracle. |
 
@@ -74,13 +79,14 @@ The exact implementation order is:
 
 For a repository revision accepted by the supported Python profile, VIPER can
 compile the same normalized graph whenever the source revision, CodeQL CLI,
-query pack, traceability graph, supported profile, and lowering version are
-unchanged. Defining-module facts are part of the CodeQL-derived source rows.
+query pack, supported profile, and lowering version are unchanged.
+Defining-module facts are part of the CodeQL-derived source rows.
 
 Let `G0` be the `SystemGraph` compiled from the repository before an agent
-edits it. Let `T*` be the `TargetSpecification` compiled from a
-`ContractChange` against `G0`. Let `G1` be a fresh `SystemGraph` compiled from
-the repository after the agent finishes. The acceptance relation is:
+edits it. Let `T*` be the `TargetSpecification` compiled from one
+`ContractChange`, its `ContractTraceabilityGraph`, and `G0`. Let `G1` be a
+fresh `SystemGraph` compiled from the repository after the agent finishes. The
+acceptance relation is:
 
 ```math
 G_1 \models T^*.
@@ -152,6 +158,7 @@ after implementation.
 ```mermaid
 flowchart TB
     Baseline["SystemGraph G0"]
+    Trace["ContractTraceabilityGraph"]
     Change["ContractChange"]
     Compile["compile_target()"]
     Target["TargetSpecification T*"]
@@ -161,6 +168,7 @@ flowchart TB
     Check["evaluate_target_conformance()"]
     Receipt["TargetConformanceReport"]
     Baseline -->|"facts"| Compile
+    Trace -->|"rules + source targets"| Compile
     Change -->|"outcomes"| Compile
     Compile -->|"constraints"| Target
     Result -->|"fresh source"| Observe
@@ -169,7 +177,7 @@ flowchart TB
     Graph -->|"observed facts"| Check
     Check -->|"receipts"| Receipt
 
-    class Baseline,Change,Result input
+    class Baseline,Trace,Change,Result input
     class Compile,Observe,Check proposed
     class Target,Graph,Receipt proposed
     classDef input fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
@@ -216,10 +224,18 @@ nine new classes. Existing `ContractTraceabilityGraph` is imported from
 `viper._contract_traceability` during Phase 0 and moves only if the public
 module-ownership contract assigns it a different owner.
 
+One active change contract supplies two records. `ContractTraceabilityGraph`
+records each requirement, verifier rule, implementation owner, and observing
+test. `ContractChange` records the six kinds of source facts that the change
+requires or forbids. The records bind through `ContractChange.contract`,
+`ContractChange.traceability_sha256`, and each `TargetConstraint.rule_id`.
+`SystemGraph G0` supplies the current source nodes against which VIPER resolves
+those contract references.
+
 `SystemNodeId` is deterministic text with the form
-`python:<path>:<qualified-name>` for Python symbols and
-`contract:<path>:<declaration-id>` for contract facts. `SystemEdge` always
-points from the dependent to its dependency.
+`python:<path>:<qualified-name>`. `SystemEdge` always points from the dependent
+to its dependency. Contract declarations remain in `ContractTraceabilityGraph`;
+they are not `SystemNode` records.
 
 The initial implementation pins CodeQL CLI `2.26.4`. Owner review may change
 that choice before `P0-SIG-01`; after approval, every trial uses the approved
@@ -231,19 +247,17 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
-from viper._contract_traceability import ContractTraceabilityGraph
+from viper._contract_traceability import ContractTraceabilityGraph, VerifierRuleId
 from viper._schema import GitCommit, SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 SystemNodeId = Annotated[
     str,
-    Field(pattern=r"^(python|contract):[^:\n]+:[^:\n]+$"),
+    Field(pattern=r"^python:[^:\n]+:[^:\n]+$"),
 ]
 CodeQLCliVersion = Literal["2.26.4"]
 SystemNodeKind = Literal[
     "repository_file",
     "python_symbol",
-    "contract_requirement",
-    "verifier_rule",
     "test_symbol",
 ]
 SystemEdgeKind = Literal[
@@ -253,9 +267,6 @@ SystemEdgeKind = Literal[
     "reads_symbol",
     "constructs",
     "uses_type",
-    "refines_requirement",
-    "implements_rule",
-    "verifies_rule",
 ]
 TargetConstraintKind = Literal[
     "symbol_exists",
@@ -270,7 +281,7 @@ AnalysisProfile = Literal["python-static-v1"]
 
 
 class SystemNode(ProtocolModel):
-    """One source or contract entity in a compiled repository revision."""
+    """One source entity in a compiled repository revision."""
 
     node_id: SystemNodeId = Field(description="Stable repository-local identity.")
     kind: SystemNodeKind = Field(description="Closed entity category.")
@@ -319,13 +330,10 @@ class CodeQLAnalysisReceipt(ProtocolModel):
 
 
 class SystemGraph(ProtocolModel):
-    """Canonical source and contract facts for one repository revision."""
+    """Canonical source facts for one repository revision."""
 
     schema_version: Literal[1] = 1
     lowering_version: NonEmptyStr = Field(description="VIPER lowering version.")
-    traceability_sha256: SHA256 = Field(
-        description="Digest of the consumed ContractTraceabilityGraph."
-    )
     compiler_sha256: SHA256 = Field(
         description="Digest of CLI, query pack, profile, and lowering identity."
     )
@@ -370,6 +378,9 @@ class TargetConstraint(ProtocolModel):
     """One structural fact required or forbidden in the observed graph."""
 
     constraint_id: NonEmptyStr = Field(description="Stable change-local identity.")
+    rule_id: VerifierRuleId = Field(
+        description="VerifierRule that requires this structural outcome."
+    )
     kind: TargetConstraintKind = Field(description="Closed comparison operator.")
     subject: SystemNodeId = Field(description="Primary node identity.")
     edge_kind: SystemEdgeKind | None = Field(
@@ -407,9 +418,13 @@ class TargetConstraint(ProtocolModel):
 
 
 class ContractChange(ProtocolModel):
-    """Author the structural outcomes requested for one baseline graph."""
+    """Author one contract's structural outcomes for one baseline graph."""
 
     change_id: NonEmptyStr = Field(description="Stable experiment-task identity.")
+    contract: RepoRelPath = Field(description="Contract that requests the change.")
+    traceability_sha256: SHA256 = Field(
+        description="Digest of that contract's ContractTraceabilityGraph."
+    )
     baseline_graph_sha256: SHA256 = Field(description="Required baseline graph digest.")
     constraints: tuple[TargetConstraint, ...] = Field(
         min_length=1,
@@ -422,6 +437,10 @@ class TargetSpecification(ProtocolModel):
 
     schema_version: Literal[1] = 1
     change_id: NonEmptyStr = Field(description="Originating change identity.")
+    contract: RepoRelPath = Field(description="Contract that requests the change.")
+    traceability_sha256: SHA256 = Field(
+        description="Validated ContractTraceabilityGraph digest."
+    )
     baseline_graph_sha256: SHA256 = Field(description="Validated baseline graph digest.")
     compiler_sha256: SHA256 = Field(description="Required observed-graph compiler identity.")
     constraints: tuple[TargetConstraint, ...] = Field(
@@ -482,25 +501,26 @@ class TargetConformanceReport(ProtocolModel):
 def compile_system(
     root: Path,
     source_commit: GitCommit,
-    traceability: ContractTraceabilityGraph,
 ) -> SystemGraph:
-    """Run CodeQL and lower source and traceability facts."""
+    """Run CodeQL and lower source facts."""
     raise NotImplementedError
 
 
 def compile_target(
     change: ContractChange,
     baseline: SystemGraph,
+    traceability: ContractTraceabilityGraph,
 ) -> TargetSpecification:
-    """Validate and canonicalize one authored structural target."""
+    """Resolve one change contract and canonicalize its structural target."""
     raise NotImplementedError
 
 
 def localize_change(
     baseline: SystemGraph,
-    change: ContractChange,
+    target: TargetSpecification,
+    traceability: ContractTraceabilityGraph,
 ) -> tuple[SystemNodeId, ...]:
-    """Return the canonical bounded source context for Protocol B or C."""
+    """Return source context for one traced target specification."""
     raise NotImplementedError
 
 
@@ -524,8 +544,7 @@ def evaluate_target_conformance(
 
 `P0-SIG-01` must also implement these normalization rules:
 
-- A Python symbol ID is `python:<RepoRelPath>:<qualified-name>`. A contract
-  declaration ID is `contract:<RepoRelPath>:<declaration-id>`. IDs containing
+- A Python symbol ID is `python:<RepoRelPath>:<qualified-name>`. IDs containing
   an empty component or a newline are invalid.
 - `SystemNode.signature` contains the parameters only. It preserves source
   order, `/` and `*` separators, parameter names, `*` and `**` prefixes,
@@ -546,10 +565,8 @@ checking the source.
 
 | `SystemNode.kind` | Represented entity |
 | --- | --- |
-| `repository_file` | One analyzed Python file or one lowered contract document. |
+| `repository_file` | One analyzed Python file. |
 | `python_symbol` | One module, class, function, method, field, or other resolved Python declaration. |
-| `contract_requirement` | One `ContractRequirement` from `ContractTraceabilityGraph`. |
-| `verifier_rule` | One `VerifierRule` from `ContractTraceabilityGraph`. |
 | `test_symbol` | One resolved pytest test function or method. |
 
 | `SystemEdge.kind` | `source` → `target` |
@@ -560,13 +577,11 @@ checking the source.
 | `reads_symbol` | reader → referenced symbol |
 | `constructs` | constructor caller → constructed type |
 | `uses_type` | annotated symbol → referenced type |
-| `refines_requirement` | verifier rule → contract requirement |
-| `implements_rule` | implementation symbol → verifier rule |
-| `verifies_rule` | test symbol → verifier rule |
 
-No other CodeQL or `ContractTraceabilityGraph` relationship enters
-`SystemGraph` under `python-static-v1`. An unrecognized supported-row kind is
-an error; the lowerer cannot silently discard it.
+No other CodeQL relationship enters `SystemGraph` under `python-static-v1`.
+An unrecognized supported-row kind is an error; the lowerer cannot silently
+discard it. `ContractTraceabilityGraph` remains a separate input to
+`compile_target()` and `localize_change()`.
 
 <!-- contract-symbols:
 {"models":["CodeQLAnalysisReceipt","ConstraintConformanceReceipt","ContractChange","SystemEdge","SystemGraph","SystemNode","TargetConformanceReport","TargetConstraint","TargetSpecification"],"aliases":["AnalysisProfile","CodeQLCliVersion","ConstraintOutcome","SystemEdgeKind","SystemNodeId","SystemNodeKind","TargetConstraintKind"],"functions":["compile_system","compile_target","evaluate_target_conformance","localize_change"]}
@@ -641,7 +656,6 @@ receipt_g0 = CodeQLAnalysisReceipt(
 )
 g0 = SystemGraph(
     lowering_version="1",
-    traceability_sha256="4" * 64,
     compiler_sha256="8" * 64,
     analysis=receipt_g0,
     nodes=(path_node, load_node),
@@ -650,16 +664,21 @@ g0 = SystemGraph(
 )
 constraint = TargetConstraint(
     constraint_id="source-exists",
+    rule_id="fixture.source_exists",
     kind=constraint_kind,
     subject=future_node_id,
 )
 change = ContractChange(
     change_id="artifact-source",
+    contract="change-contract.md",
+    traceability_sha256="4" * 64,
     baseline_graph_sha256=g0.graph_sha256,
     constraints=(constraint,),
 )
 target = TargetSpecification(
     change_id=change.change_id,
+    contract=change.contract,
+    traceability_sha256=change.traceability_sha256,
     baseline_graph_sha256=g0.graph_sha256,
     compiler_sha256=g0.compiler_sha256,
     constraints=change.constraints,
@@ -670,7 +689,6 @@ receipt_g1 = receipt_g0.model_copy(
 )
 g1 = SystemGraph(
     lowering_version=g0.lowering_version,
-    traceability_sha256=g0.traceability_sha256,
     compiler_sha256=g0.compiler_sha256,
     analysis=receipt_g1,
     nodes=(source_node, load_node),
@@ -691,10 +709,10 @@ report = TargetConformanceReport(
 )
 
 traceability: ContractTraceabilityGraph = ...
-compiled_g0 = compile_system(Path("."), "0" * 40, traceability)
-compiled_target = compile_target(change, compiled_g0)
-localized = localize_change(compiled_g0, change)
-compiled_g1 = compile_system(Path("."), "a" * 40, traceability)
+compiled_g0 = compile_system(Path("."), "0" * 40)
+compiled_target = compile_target(change, compiled_g0, traceability)
+localized = localize_change(compiled_g0, compiled_target, traceability)
+compiled_g1 = compile_system(Path("."), "a" * 40)
 checked = evaluate_target_conformance(compiled_target, compiled_g1)
 assert localized and report.accepted and checked.accepted
 ```
@@ -715,12 +733,9 @@ rows, and rejects malformed or unresolved rows in the supported query profile.
 It then:
 
 1. derives `SystemNode` and `SystemEdge` records from the CodeQL rows;
-2. verifies that the supplied `ContractTraceabilityGraph` matches the graph
-   compiled from the selected revision, then lowers its requirement, rule,
-   owner, and test records;
-3. records each source symbol's defining path in `SystemNode.path`;
-4. sorts and deduplicates nodes and edges; and
-5. computes `SystemGraph.graph_sha256` from all content except that field.
+2. records each source symbol's defining path in `SystemNode.path`;
+3. sorts and deduplicates nodes and edges; and
+4. computes `SystemGraph.graph_sha256` from all content except that field.
 
 The QL pack emits three named result sets. The internal adapter validates these
 columns before constructing a public model:
@@ -748,21 +763,30 @@ symbols: each public symbol has one defining module. `SystemGraph` does not
 introduce a second ownership registry or duplicate those paths in another
 digest.
 
-Traceability lowering includes every `ContractRequirement`, every
-`VerifierRule`, and their `refines_requirement` edges. An `implementation` or
-`verification` `RuleEdge` enters the graph only when its `state` is
-`implemented` and CodeQL resolves its target in the selected revision. Planned
-targets remain in `traceability_sha256`; they do not become observed source
-nodes or edges in `G0` or `G1`.
-
 ### 5.2 Compile `T*`
 
-`compile_target()` requires
+The harness compiles exactly one change contract for each experiment run. Its
+fixture-local checklist contains only that contract's markers:
+
+```python
+traceability = compile_contract_traceability(root, checklist, (contract,))
+```
+
+`compile_target()` verifies that every requirement, rule, and symbol in
+`traceability` belongs to `ContractChange.contract` and that every `RuleEdge`
+refers to one of those rules. It also requires the SHA-256 digest of
+`serialize_contract_traceability(traceability)` to equal
+`ContractChange.traceability_sha256` and requires every
+`TargetConstraint.rule_id` to identify one `VerifierRule` in `traceability`.
+These checks connect each structural constraint to the requirement, owner, and
+test recorded by the active change contract.
+
+`compile_target()` also requires
 `ContractChange.baseline_graph_sha256 == SystemGraph.graph_sha256`. It validates
 the operand matrix, rejects duplicate constraint IDs and duplicate semantic
-constraints, sorts constraints by `constraint_id`, copies
-`SystemGraph.compiler_sha256`, and computes `target_sha256` from every target
-field except that digest.
+constraints, sorts constraints by `constraint_id`, copies the contract path,
+traceability digest, and `SystemGraph.compiler_sha256`, and computes
+`target_sha256` from every target field except that digest.
 
 Reference validation is operator-specific:
 
@@ -792,13 +816,20 @@ predicates. They do not prove that the requested Python implementation exists.
 
 ### 5.3 Build the Protocol B and C context
 
-`localize_change()` starts from every existing `subject` and `object` named by
-`ContractChange`. When an ID names a future symbol, it starts from that
-symbol's existing repository-file node. It returns:
+`localize_change()` first verifies that `TargetSpecification.traceability_sha256`
+matches the supplied `ContractTraceabilityGraph`. It starts from every existing
+`subject` and `object` named by `TargetSpecification`. When an ID names a future
+symbol, it starts from that symbol's existing repository-file node. It also
+resolves the implementation and verification `RuleEdge.target` values for the
+rules named by `TargetConstraint.rule_id`. An existing target resolves to its
+`SystemNode`; a planned target resolves to its existing repository-file node.
+The function returns:
 
 1. each starting node;
 2. both endpoints of every edge incident to a starting node; and
-3. each `test_symbol` that depends on a starting node, plus the nodes on one
+3. every resolved implementation owner and observing test named by the active
+   contract; and
+4. each `test_symbol` that depends on a starting node, plus the nodes on one
    shortest dependency path between them.
 
 Shortest-path ties resolve by `SystemNodeId`, and the returned tuple is sorted
@@ -810,15 +841,17 @@ selection.
 ### 5.4 Produce `R1`
 
 The ordinary coding agent or an existing PairBlock execution edits the fixture
-repository. The System Impact Compiler experiment does not generate, reorder, or mutate
-that work. This keeps the experiment focused on localization and verification.
+repository. `TargetSpecification` is the target input for future
+`compile_work()` and generated PairBlocks. This experiment passes the same
+`TargetSpecification` to an ordinary agent or existing PairBlock and uses it as
+the terminal gate; it does not implement `compile_work()`.
 
 ### 5.5 Compile `G1` and check it
 
 After execution, `compile_system()` analyzes the committed `R1` revision with
 the same CodeQL CLI version, query-pack digest, lowering version, and supported
-profile used for `G0`. It consumes the `ContractTraceabilityGraph` compiled
-from `R1`, then produces `G1` without applying the requested change to `G0`.
+profile used for `G0`. It produces `G1` from the observed `R1` source without
+applying `ContractChange` or `TargetSpecification` to `G0`.
 
 `evaluate_target_conformance()` emits exactly one receipt per constraint. Any
 `fail` or `error` outcome sets `TargetConformanceReport.accepted` to `False`.
@@ -852,6 +885,7 @@ Each experiment run stores:
 | Artifact | Required content |
 | --- | --- |
 | `g0.json` | Canonical `SystemGraph` before execution. |
+| `contract-traceability.json` | `ContractTraceabilityGraph` compiled from the single active change contract. |
 | `contract-change.json` | Authored `ContractChange`. |
 | `localization.json` | Sorted node IDs and supporting edges supplied to Protocol B or C. |
 | `target-specification.json` | Canonical `TargetSpecification`. |
@@ -870,11 +904,11 @@ written.
 
 | Rule | Statement |
 | --- | --- |
-| `system.graph.canonical` <!-- verifier-rule: system.graph.canonical requirement=SIG-01 --> | Equal source, traceability, toolchain, query-pack, profile, and lowering inputs produce byte-identical `SystemGraph` artifacts. |
+| `system.graph.canonical` <!-- verifier-rule: system.graph.canonical requirement=SIG-01 --> | Equal source, toolchain, query-pack, profile, and lowering inputs produce byte-identical `SystemGraph` artifacts. |
 | `system.graph.evidenced` <!-- verifier-rule: system.graph.evidenced requirement=SIG-01 --> | Every node and edge has a repository-relative source location, and every edge endpoint exists in the same graph. |
-| `system.localization.canonical` <!-- verifier-rule: system.localization.canonical requirement=SIG-01 --> | `localize_change()` returns the sorted direct nodes, their one-edge neighborhood, and shortest paths to observing tests. |
+| `system.localization.canonical` <!-- verifier-rule: system.localization.canonical requirement=SIG-02 --> | `localize_change()` resolves one active contract's owners and tests against `G0`, then returns them with the sorted direct nodes, one-edge neighborhood, and shortest paths to observing tests. |
 | `system.target.closed` <!-- verifier-rule: system.target.closed requirement=SIG-02 --> | `TargetConstraint` accepts only the six declared kinds and exactly the operands required by its kind. |
-| `system.target.canonical` <!-- verifier-rule: system.target.canonical requirement=SIG-02 --> | `compile_target()` rejects baseline drift, duplicate obligations, and the declared contradictions, then emits constraints in canonical order with a reproducible digest. |
+| `system.target.canonical` <!-- verifier-rule: system.target.canonical requirement=SIG-02 --> | `compile_target()` rejects baseline or traceability drift, unknown verifier rules, duplicate obligations, and the declared contradictions, then emits constraints in canonical order with a reproducible digest. |
 | `system.conformance.total` <!-- verifier-rule: system.conformance.total requirement=SIG-03 --> | The report contains exactly one terminal receipt for every target constraint and no receipt for an unknown constraint. |
 | `system.conformance.independent` <!-- verifier-rule: system.conformance.independent requirement=SIG-03 --> | `G1` comes from a fresh CodeQL analysis of `R1` under the same compiler identity used for `G0`. |
 | `system.experiment.controlled` <!-- verifier-rule: system.experiment.controlled requirement=SIG-04 --> | Protocols A, B, and C receive the same committed fixture, requested outcomes, tests, model settings, and independent oracle. |
@@ -907,12 +941,12 @@ implementation surfaces.
 | `tests/test_system_impact.py` | Verify target compilation and complete conformance receipts. |
 | `tests/test_system_impact_experiment.py` | Verify deterministic fixtures and the controlled trial contract. |
 
-`ContractTraceabilityGraph` remains the source of contract requirements,
-verifier rules, implementation owners, and tests. `compile_system()` consumes
-it with CodeQL source facts; it does not ingest it in isolation. The completed
-module-ownership work ensures that each public symbol observed by CodeQL has
-one defining path. Neither source analysis nor traceability is a
-`ContractChange`.
+`ContractTraceabilityGraph` records the active change contract's requirements,
+verifier rules, implementation owners, and tests. `compile_target()` binds its
+rules to `TargetConstraint` records, and `localize_change()` resolves its owner
+and test references against `G0`. `compile_system()` receives only repository
+source and CodeQL identity. The completed module-ownership work ensures that
+each public symbol observed by CodeQL has one defining path.
 
 ## 9. Acceptance case
 
@@ -921,9 +955,9 @@ one defining path. Neither source analysis nor traceability is a
 `P0-SIG-04` adds three tracked fixture templates beneath
 `tests/fixtures/system_impact/`. The harness copies one template into a new
 temporary directory, initializes a Git repository with fixed author and time
-metadata, compiles its `ContractTraceabilityGraph`, and records the baseline
-commit. Each protocol receives a separate copy with the same commit ID and
-bytes.
+metadata, compiles a `ContractTraceabilityGraph` from that fixture's one change
+contract, and records the baseline commit. Each protocol receives a separate
+copy with the same commit ID and bytes.
 
 | Fixture ID | Source change | Structural target |
 | --- | --- | --- |
@@ -1048,8 +1082,8 @@ promotion threshold for localization.
 ```toml pair-block
 id = "P0-SIG-01"
 requirements = ["SIG-01"]
-targets = ["src/viper/system_graph.py:SystemNode", "src/viper/system_graph.py:SystemEdge", "src/viper/system_graph.py:CodeQLAnalysisReceipt", "src/viper/system_graph.py:SystemGraph", "src/viper/system_graph.py:compile_system", "src/viper/system_graph.py:localize_change", "src/viper/_system_graph/codeql.py:analyze_source_with_codeql", "tests/test_system_graph.py:test_compile_system_is_canonical", "tests/test_system_graph.py:test_python_fact_normalization_is_canonical", "tests/test_system_graph.py:test_compile_system_rejects_unresolved_supported_rows", "tests/test_system_graph.py:test_localize_change_is_canonical"]
-tests = ["tests/test_system_graph.py:test_compile_system_is_canonical", "tests/test_system_graph.py:test_python_fact_normalization_is_canonical", "tests/test_system_graph.py:test_compile_system_rejects_unresolved_supported_rows", "tests/test_system_graph.py:test_localize_change_is_canonical"]
+targets = ["src/viper/system_graph.py:SystemNode", "src/viper/system_graph.py:SystemEdge", "src/viper/system_graph.py:CodeQLAnalysisReceipt", "src/viper/system_graph.py:SystemGraph", "src/viper/system_graph.py:compile_system", "src/viper/_system_graph/codeql.py:analyze_source_with_codeql", "tests/test_system_graph.py:test_compile_system_is_canonical", "tests/test_system_graph.py:test_python_fact_normalization_is_canonical", "tests/test_system_graph.py:test_compile_system_rejects_unresolved_supported_rows"]
+tests = ["tests/test_system_graph.py:test_compile_system_is_canonical", "tests/test_system_graph.py:test_python_fact_normalization_is_canonical", "tests/test_system_graph.py:test_compile_system_rejects_unresolved_supported_rows"]
 gate = "conda run -n mantra python -m pytest tests/test_system_graph.py -q"
 depends_on = ["P0-CRT-05", "P0-MOD-04"]
 ```
@@ -1057,23 +1091,23 @@ depends_on = ["P0-CRT-05", "P0-MOD-04"]
 Implement the four graph and analysis models, the internal CodeQL adapter, and
 `compile_system()`. Pin the toolchain and QL-pack identities in the test
 fixture. Cover canonical serialization, endpoint integrity, source locations,
-traceability lowering, defining-module observations, and supported-row
-rejection. Verify the exact bounded localization rule in the same block.
+defining-module observations, and supported-row rejection.
 
 <!-- pair-block-definition: P0-SIG-02 -->
 ```toml pair-block
 id = "P0-SIG-02"
 requirements = ["SIG-02"]
-targets = ["src/viper/system_graph.py:TargetConstraint", "src/viper/system_graph.py:ContractChange", "src/viper/system_graph.py:TargetSpecification", "src/viper/system_graph.py:compile_target", "tests/test_system_impact.py:test_target_constraint_operand_matrix", "tests/test_system_impact.py:test_compile_target_is_canonical"]
-tests = ["tests/test_system_impact.py:test_target_constraint_operand_matrix", "tests/test_system_impact.py:test_compile_target_is_canonical"]
+targets = ["src/viper/system_graph.py:TargetConstraint", "src/viper/system_graph.py:ContractChange", "src/viper/system_graph.py:TargetSpecification", "src/viper/system_graph.py:compile_target", "src/viper/system_graph.py:localize_change", "tests/test_system_impact.py:test_target_constraint_operand_matrix", "tests/test_system_impact.py:test_compile_target_is_canonical", "tests/test_system_impact.py:test_localize_change_is_canonical"]
+tests = ["tests/test_system_impact.py:test_target_constraint_operand_matrix", "tests/test_system_impact.py:test_compile_target_is_canonical", "tests/test_system_impact.py:test_localize_change_is_canonical"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -q"
 depends_on = ["P0-SIG-01"]
 ```
 
-Implement the six constraint operators in one validated class. Compile the
-authored constraints against `G0`, permit deterministic future symbol IDs,
-reject baseline drift, duplicate obligations, and declared contradictions, and
-serialize one canonical target.
+Implement the six constraint operators in one validated class. Compile one
+change contract's traceability graph and authored constraints against `G0`,
+permit deterministic future symbol IDs, reject baseline or traceability drift,
+unknown verifier rules, duplicate obligations, and declared contradictions,
+and serialize one canonical target. Verify the bounded localization rule.
 
 <!-- pair-block-definition: P0-SIG-03 -->
 ```toml pair-block

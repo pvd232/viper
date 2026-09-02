@@ -227,14 +227,24 @@ ExternalInputDraft
 One development change crosses the review system like this:
 
 ```text
-baseline source + ContractTraceabilityGraph
+baseline source
 -> pinned CodeQL analysis
 -> compile_system()
 -> canonical SystemGraph G0
 
-ContractChange + G0
+change contract
+-> ContractTraceabilityGraph + ContractChange
+
+ContractTraceabilityGraph + ContractChange + G0
 -> compile_target()
 -> TargetSpecification T*
+
+TargetSpecification T*
+-> current experiment: existing PairBlock execution
+
+TargetSpecification T*
+-> future compile_work()
+-> generated PairBlocks
 
 agent implementation
 -> repository R1
@@ -326,7 +336,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
-<!-- contract-baseline: system-impact-compiler.md sha256=bf0c26582f4d0746a7f67dfb253222287ce8118130a195f610f72337f205253c -->
+<!-- contract-baseline: system-impact-compiler.md sha256=bfbf080d454c2b766972e5886f466d665b92b269e63738dbc6e8971ce6447437 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
 <!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->
@@ -372,7 +382,7 @@ with `60 passed` on this specification branch.
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
 | Project root | `viper init ROOT` or explicit `root=` | Local `viper.toml` marker; absolute path omitted from protocol identity | One resolved absolute root per operation | Root resolver, path-boundary checks, local store, and every local consumer |
-| System impact experiment | Baseline repository, pinned CodeQL identity, `ContractTraceabilityGraph`, and `ContractChange` | Canonical `SystemGraph G0`, `TargetSpecification`, fresh `SystemGraph G1`, and `TargetConformanceReport` | CodeQL extraction at both graph boundaries and six structural constraint checks | Canonical-graph, closed-target, complete-receipt, and controlled-experiment rules |
+| System impact experiment | Baseline repository, pinned CodeQL identity, one change contract's `ContractTraceabilityGraph`, and its `ContractChange` | Canonical `SystemGraph G0`, `TargetSpecification`, fresh `SystemGraph G1`, and `TargetConformanceReport` | CodeQL extraction at both graph boundaries, contract-target resolution, and six structural constraint checks | Canonical-graph, closed-target, complete-receipt, and controlled-experiment rules |
 | Local dataset | `ExternalInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
 | HTTP dataset | `HttpRequestSpec` plus file artifact draft | `DownloadSpec` | `ResolvedHttpRetrieval` and `ResolvedSingleFileArtifact` sharing one file | Download verifier and later input compiler |
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
@@ -557,10 +567,11 @@ flowchart TB
 Master Phase 0 establishes the project root first. The
 `ContractTraceabilityGraph` then resolves contract requirements to source and
 tests inside that root. Module ownership gives each public symbol one defining
-module. The System Impact Compiler experiment consumes both outputs after their gates;
-its kill-gate result does not block Master Phase 1. Master Phases 2 and 4 may
-occur on separate branches after Master Phase 1; both feed Master Phase 5.
-Master Phases 3 and 6 both feed Master Phase 7.
+module. The System Impact Compiler compiles `G0` from repository source, then
+resolves one change contract's traceability targets against `G0`. Its kill-gate
+result does not block Master Phase 1. Master Phases 2 and 4 may occur on
+separate branches after Master Phase 1; both feed Master Phase 5. Master Phases
+3 and 6 both feed Master Phase 7.
 
 ## 6. Pair-coding protocol
 
@@ -602,9 +613,10 @@ from the observed result.
 later local operation resolves that same root. Every contract requirement then
 has a named rule, exact implementation owner, and exact test.
 Public API and verification imports identify their defining modules. The
-System Impact Compiler experiment can then compile source and contract facts into a
-canonical graph, compile six structural outcomes into a target specification,
-and compare a freshly observed result with that target.
+System Impact Compiler experiment can then compile source facts into a
+canonical graph, resolve one change contract's traceability against that graph,
+compile six structural outcomes into a target specification, and compare a
+freshly observed result with that target.
 
 ### 7.1 Project root
 
@@ -778,28 +790,30 @@ public experiment types and operations live in `src/viper/system_graph.py`.
 
 - [ ] Run the pinned CodeQL query pack and implement canonical `SystemNode`,
       `SystemEdge`, `CodeQLAnalysisReceipt`, `SystemGraph`, and
-      `compile_system()`. Lower `ContractTraceabilityGraph` and the actual
-      defining-module facts into the same graph.
+      `compile_system()`. Lower the CodeQL source rows and defining-module facts
+      into the graph.
       <!-- implements: SIG-01 -->
       <!-- verifies: SIG-01 -->
       <!-- pair-block: P0-SIG-01 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.graph.canonical state=planned owner=src/viper/system_graph.py:compile_system -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.graph.evidenced state=planned owner=src/viper/system_graph.py:SystemGraph -->
-      <!-- contract-implementation: requirement=SIG-01 rule=system.localization.canonical state=planned owner=src/viper/system_graph.py:localize_change -->
       <!-- contract-verification: requirement=SIG-01 rule=system.graph.canonical state=planned test=tests/test_system_graph.py:test_compile_system_is_canonical -->
       <!-- contract-verification: requirement=SIG-01 rule=system.graph.canonical state=planned test=tests/test_system_graph.py:test_python_fact_normalization_is_canonical -->
       <!-- contract-verification: requirement=SIG-01 rule=system.graph.evidenced state=planned test=tests/test_system_graph.py:test_compile_system_rejects_unresolved_supported_rows -->
-      <!-- contract-verification: requirement=SIG-01 rule=system.localization.canonical state=planned test=tests/test_system_graph.py:test_localize_change_is_canonical -->
 - [ ] Implement the six `TargetConstraint` kinds, `ContractChange`,
-      `TargetSpecification`, and `compile_target()`. Reject operand errors,
-      duplicate obligations, declared contradictions, and baseline-graph drift.
+      `TargetSpecification`, `compile_target()`, and `localize_change()`. Accept
+      one change contract's `ContractTraceabilityGraph`; reject operand errors,
+      unknown verifier rules, duplicate obligations, declared contradictions,
+      baseline-graph drift, and traceability drift.
       <!-- implements: SIG-02 -->
       <!-- verifies: SIG-02 -->
       <!-- pair-block: P0-SIG-02 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.target.closed state=planned owner=src/viper/system_graph.py:TargetConstraint -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.target.canonical state=planned owner=src/viper/system_graph.py:compile_target -->
+      <!-- contract-implementation: requirement=SIG-02 rule=system.localization.canonical state=planned owner=src/viper/system_graph.py:localize_change -->
       <!-- contract-verification: requirement=SIG-02 rule=system.target.closed state=planned test=tests/test_system_impact.py:test_target_constraint_operand_matrix -->
       <!-- contract-verification: requirement=SIG-02 rule=system.target.canonical state=planned test=tests/test_system_impact.py:test_compile_target_is_canonical -->
+      <!-- contract-verification: requirement=SIG-02 rule=system.localization.canonical state=planned test=tests/test_system_impact.py:test_localize_change_is_canonical -->
 - [ ] Recompile `R1` with the same analysis identity and implement
       `ConstraintConformanceReceipt`, `TargetConformanceReport`, and
       `evaluate_target_conformance()`.

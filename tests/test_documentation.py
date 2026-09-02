@@ -266,6 +266,7 @@ SYSTEM_IMPACT_DAG_ROLES = (
     },
     {
         "Baseline": "input",
+        "Trace": "input",
         "Change": "input",
         "Result": "input",
         "Compile": "proposed",
@@ -294,6 +295,7 @@ SYSTEM_IMPACT_DAG_EDGES = (
     },
     {
         ("Baseline", "Compile"),
+        ("Trace", "Compile"),
         ("Change", "Compile"),
         ("Compile", "Target"),
         ("Result", "Observe"),
@@ -1712,7 +1714,7 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
         "## 4. Acceptance PairBlocks",
         "## 5. Pair execution",
         "## 6. Guide gate",
-        "## 7. SystemGraph handoff",
+        "## 7. System Impact handoff",
     )
     positions = tuple(text.index(heading) for heading in headings)
     assert positions == tuple(sorted(positions))
@@ -1914,18 +1916,34 @@ def test_module_ownership_pair_guide_covers_each_cycle() -> None:
             assert order[dependency] < order[block_id], (block_id, dependency)
 
 
-def test_system_graph_stages_traceability_before_contract_change() -> None:
-    """Compile G0 from source and traceability before target compilation."""
+def test_system_graph_separates_source_from_change_contract() -> None:
+    """Keep G0 source-only and apply active-contract traceability to T*."""
     crt_guide = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
     system_guide = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
 
-    assert "R0 + Q0 -> compile_system() -> G0" in crt_guide
-    assert "(ContractChange, G0) -> compile_target()" in crt_guide
-    assert "only traceability input accepted" not in crt_guide
+    assert "R0 -> compile_system() -> G0" in crt_guide
+    assert "(ContractChange, Q, G0) -> compile_target()" in crt_guide
+    assert "(T*, Q, G0) -> localize_change()" in crt_guide
     assert "ContractTraceabilityGraph" in system_guide
     assert "ContractChange" in system_guide
+    assert (
+        "traceability: ContractTraceabilityGraph,"
+        not in system_guide[
+            system_guide.index("def compile_system(") : system_guide.index(
+                ") -> SystemGraph:", system_guide.index("def compile_system(")
+            )
+        ]
+    )
+    assert (
+        "traceability: ContractTraceabilityGraph,"
+        in system_guide[
+            system_guide.index("def compile_target(") : system_guide.index(
+                ") -> TargetSpecification:", system_guide.index("def compile_target(")
+            )
+        ]
+    )
     assert system_guide.index("SystemGraph G0") < system_guide.index(
-        'Change["ContractChange"]'
+        'Target["compile_target()"]'
     )
 
     definition = next(
@@ -2356,8 +2374,6 @@ def test_phase_zero_system_models_match_contract() -> None:
     node_kinds = {
         "repository_file",
         "python_symbol",
-        "contract_requirement",
-        "verifier_rule",
         "test_symbol",
     }
     edge_kinds = {
@@ -2367,9 +2383,6 @@ def test_phase_zero_system_models_match_contract() -> None:
         "constructs",
         "uses_type",
         "reads_symbol",
-        "refines_requirement",
-        "implements_rule",
-        "verifies_rule",
     }
     constraint_kinds = {
         "symbol_exists",
@@ -2381,10 +2394,15 @@ def test_phase_zero_system_models_match_contract() -> None:
     }
     for value in node_kinds | edge_kinds | constraint_kinds:
         assert f'"{value}"' in specification
-    assert "points from the dependent to its dependency" in specification
+    assert "points from the dependent to its dependency" in " ".join(
+        specification.split()
+    )
     assert "class ContractDelta" not in specification
     assert "class PropagationPlan" not in specification
     assert "class SystemCondensationDAG" not in specification
+    assert 'Field(pattern=r"^python:' in specification
+    assert "traceability_sha256: SHA256" in specification
+    assert "rule_id: VerifierRuleId" in specification
     assert "def compile_target(" in specification
     assert "def evaluate_target_conformance(" in specification
 

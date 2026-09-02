@@ -30,13 +30,13 @@ existing ContractRequirement, VerifierRule, and RuleEdge models
 ```
 
 Every compiled requirement, rule, edge, and symbol retains the exact source
-path, line span, and digest of its authored declaration. SystemGraph can then
-lower traceability into $G_0$ without reparsing Markdown or inventing source
-coordinates.
+path, line span, and digest of its authored declaration. The System Impact
+Compiler can then resolve one change contract's owners and tests against
+`SystemGraph G0` without reparsing Markdown or inventing source coordinates.
 
 Project-root work precedes `P0-CRT-01` because the compiler accepts one
-resolved project root. SystemGraph work follows `P0-CRT-05` because it
-consumes the compiled traceability graph.
+resolved project root. System Impact target compilation follows `P0-CRT-05`
+because `compile_target()` consumes the active contract's traceability graph.
 
 ## 2. Pair-cycle contract
 
@@ -1526,10 +1526,10 @@ The contract-traceability work in Master Phase 0 closes only when:
 - the SystemGraph consumer boundary passes; and
 - the review-cycle commit is synchronized with its upstream.
 
-## 7. SystemGraph handoff
+## 7. System Impact handoff
 
-`compile_contract_traceability()` returns `ContractTraceabilityGraph` to
-baseline `compile_system()`:
+`compile_contract_traceability()` returns the active change contract's
+`ContractTraceabilityGraph` to `compile_target()` and `localize_change()`:
 
 ```text
 ContractTraceabilityGraph.requirements
@@ -1538,21 +1538,25 @@ ContractTraceabilityGraph.edges
 ContractTraceabilityGraph.symbols
 ```
 
-Each record includes its exact `DeclarationRef`, so `compile_system()` can lower
-the graph into source-backed `G0` nodes and edges without reparsing the
-contract or checklist. Contract traceability owns declaration parsing, source
-spans and digests, joins, cardinality, worked examples, and canonical bytes.
-The System Impact Compiler experiment owns CodeQL analysis, traceability lowering,
-`SystemGraph`, target compilation, and conformance.
+Each record includes its exact `DeclarationRef`. `compile_target()` can bind
+each `TargetConstraint.rule_id` to its contract rule, and `localize_change()`
+can resolve the rule's implementation and verification targets against `G0`
+without reparsing the contract or checklist. Contract traceability owns
+declaration parsing, source spans and digests, joins, cardinality, worked
+examples, and canonical bytes. The System Impact Compiler experiment owns
+CodeQL analysis, `SystemGraph`, target compilation, localization, and
+conformance.
 
 `ContractChange` remains a separate input:
 
 ```text
-R0 -> compile_contract_traceability() -> Q0: ContractTraceabilityGraph
-R0 + Q0 -> compile_system() -> G0: SystemGraph
-(ContractChange, G0) -> compile_target() -> T*: TargetSpecification
+R0 -> compile_system() -> G0: SystemGraph
+change contract -> compile_contract_traceability() -> Q: ContractTraceabilityGraph
+(ContractChange, Q, G0) -> compile_target() -> T*: TargetSpecification
+(T*, Q, G0) -> localize_change() -> source context
 ```
 
 Existing PairBlocks may execute the requested change, but this experiment does
-not generate or schedule them. They do not create `ContractChange` or
+not generate or schedule them. A later `compile_work()` may consume `T*` and
+`Q` to generate PairBlocks. PairBlocks do not create `ContractChange` or
 `TargetSpecification`.
