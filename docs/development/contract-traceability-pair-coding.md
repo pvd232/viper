@@ -1538,24 +1538,21 @@ ContractTraceabilityGraph.edges
 ContractTraceabilityGraph.symbols
 ```
 
-Each record includes its exact `DeclarationRef`, so SystemGraph can lower the
-graph into source-backed $G_0$ nodes and dependencies without reparsing the
+Each record includes its exact `DeclarationRef`, so `compile_system()` can lower
+the graph into source-backed `G0` nodes and edges without reparsing the
 contract or checklist. Contract traceability owns declaration parsing, source
 spans and digests, joins, cardinality, worked examples, and canonical bytes.
-SystemGraph owns traceability lowering, baseline dependency compilation, impact
-traversal, propagation coverage, and target constraints.
+The System Impact Compiler experiment owns CodeQL analysis, traceability lowering,
+`SystemGraph`, target compilation, and conformance.
 
-`ContractChange` remains a separate proof input:
+`ContractChange` remains a separate input:
 
 ```text
 R0 -> compile_contract_traceability() -> Q0: ContractTraceabilityGraph
-R0 -> compile_pair_blocks() -> W0: tuple[PairBlock, ...]
-R0 + K -> analyze_source_with_codeql() -> F0: CodeQLSourceFacts
-(F0, K, X, Q0, W0) -> compile_system() -> G0: SystemGraph
-
-(ContractChange, G0) -> compile_contract_change() -> ContractDelta
+R0 + Q0 -> compile_system() -> G0: SystemGraph
+(ContractChange, G0) -> compile_target() -> T*: TargetSpecification
 ```
 
-Bootstrap PairBlocks are parsed separately and contribute scheduling
-traceability to $G_0$. They never produce `ContractDelta`, `S_delta`, or
-`H_delta`.
+Existing PairBlocks may execute the requested change, but this experiment does
+not generate or schedule them. They do not create `ContractChange` or
+`TargetSpecification`.

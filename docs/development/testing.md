@@ -163,20 +163,17 @@ graph and documentation checks run together.
 
 ### System Impact Compiler validation
 
-Master Phase 0 pins CodeQL CLI `2.26.4`, its platform-bundle digest, the
-compatible Python extractor, and the locked VIPER QL pack in
-`SystemCompilerIdentity.codeql`. `tests/test_system_graph_codeql.py` owns the
-database, BQRS, decoded-row, source-fact, reverse-closure, SCC, and AST-oracle
-gates. CodeQL is an external toolchain; install it from the reviewed release
-bundle and verify the recorded digest before running those tests.
+Master Phase 0 pins one CodeQL CLI and VIPER QL-pack identity. The planned
+`tests/test_system_graph.py` gate covers CodeQL receipts, canonical graph
+serialization, source evidence, edge endpoints, traceability lowering, and
+supported-row rejection. The planned `tests/test_system_impact.py` gate covers
+the six `TargetConstraint` operators, canonical `TargetSpecification`
+compilation, fresh `G1` analysis, and complete conformance receipts.
 
-The pre-implementation and post-implementation compiles must use the same
-`SystemCompilerIdentity`. Strict Master Phase 0 rejects every unsupported or
-unresolved dependency-bearing Python site before computing the blast radius.
-Selected pytest node IDs then run with coverage.py branch measurement and
-pytest-cov contexts. The `BlastCoverageReport` must contain zero missing
-statements and zero missing branch arcs inside every executable symbol in the
-blast radius.
+The planned `tests/test_system_impact_experiment.py` gate first evaluates
+deterministic conforming and violating fixtures, then checks the immutable
+three-protocol trial manifest and result schema. Complete blast-radius
+planning, SCC scheduling, and blast coverage are not active Phase 0 gates.
 
 Planned links name exact future symbols. Implemented links must resolve in the
 candidate source tree. Phase closure requires every link to use the implemented

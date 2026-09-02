@@ -14,7 +14,7 @@ Tomorrow's first repository action remains the first open block in the master
 checklist. Do not start `P18-RML-01` until these facts are true:
 
 ```text
-Master Phase 0 System Impact Compiler passes
+Master Phase 0 System Impact Compiler experiment has a terminal report
 Master Phase 12 experiment expansion and bounded execution pass
 Master Phase 15 MCP server passes
 Master Phase 16 scientific evidence records pass
@@ -22,8 +22,8 @@ Master Phase 17 knowledge graph and agent search pass
 ```
 
 This ordering is functional, not administrative. `ResearchEpisode` cites the
-verified runs, knowledge records, catalog snapshots, MCP receipts, System
-Impact Compiler records, and PairBlocks produced by those phases.
+verified runs, knowledge records, catalog snapshots, MCP receipts, available
+System Impact Compiler records, and PairBlocks produced by those phases.
 
 Run repository-owned Python commands through:
 

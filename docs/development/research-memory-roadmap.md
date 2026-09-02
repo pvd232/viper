@@ -436,11 +436,12 @@ them into every catalog row. Publication policy decides whether the underlying
 bytes remain local, remote, redacted, or unavailable. The immutable receipt
 still states which bytes and policy produced the episode.
 
-Code changes use the System Impact Compiler at both ends. A research episode
-links its initial `SystemGraph`, `ContractDelta`, impact report,
-`TargetSpecification`, PairBlocks, observed `SystemGraph`, and
-`TargetConformanceReport`. CodeQL supplies the independently extracted source
-facts. It does not evaluate the scientific hypothesis.
+When the System Impact Compiler experiment passes its kill gate, a research episode may
+link its initial `SystemGraph`, `TargetSpecification`, implementing work,
+observed `SystemGraph`, and `TargetConformanceReport`. CodeQL supplies the
+independently extracted source facts. It does not evaluate the scientific
+hypothesis. `ContractDelta`, complete impact reports, and total propagation
+plans remain deferred research objects.
 
 ## 9. Episode and review records
 
