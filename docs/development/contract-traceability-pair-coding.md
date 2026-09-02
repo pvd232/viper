@@ -21,14 +21,14 @@ edit.
 This guide changes only contract traceability during Master Phase 0:
 
 ```text
-existing ContractRequirement, VerifierRule, RuleEdge, and ContractTrace models
+existing ContractRequirement, VerifierRule, and RuleEdge models
 -> parse authored contract and checklist declarations
 -> validate their joins and concrete examples
 -> compile ContractTraceabilityGraph
 -> serialize canonical JSON bytes
 ```
 
-Every compiled requirement, rule, binding, and trace retains the exact source
+Every compiled requirement, rule, and edge retains the exact source
 path, line span, and digest of its authored declaration. SystemGraph can then
 lower traceability into $G_0$ without reparsing Markdown or inventing source
 coordinates.
@@ -410,33 +410,26 @@ def _parse_rule_edges(
 ```toml pair-block
 id = "P0-CRT-03"
 requirements = ["CRT-03"]
-targets = ["src/viper/_contract_traceability.py:parse_contract_traces", "src/viper/_contract_traceability.py:validate_contract_example"]
-tests = ["tests/test_contract_traceability.py:test_contract_traces_compile", "tests/test_contract_traceability.py:test_contract_traces_reject_incomplete_evidence", "tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'contract_traces or contract_examples' -q"
+targets = ["src/viper/_contract_traceability.py:validate_contract_example"]
+tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
+gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k contract_examples -q"
 depends_on = ["P0-CRT-02"]
 ```
 
-**Context:** The documentation test currently checks traces, worked examples,
-and diagrams without producing reusable records. These operations move those
-checks into the compiler while preserving the existing test as a parity oracle.
+**Context:** The documentation test currently checks worked examples and
+diagrams without exposing one reusable validation operation. This block moves
+those checks into the compiler while preserving the existing test as a parity
+oracle.
 
-Move the existing trace-fence, model-construction, and Mermaid checks from the
-documentation oracle into these production operations. Keep the oracle until
-parity passes.
+Move the existing model-construction and Mermaid checks from the documentation
+oracle into this production operation. Keep the oracle until parity passes.
 
 `src/viper/_contract_traceability.py`
 
 ```python pair-edit
 import ast
-import tomllib
-from collections.abc import Mapping
 
 
-_TRACE_FENCE = re.compile(
-    r"(?P<fence>\`{3,4})toml contract-trace\n"
-    r"(?P<body>.*?)\n(?P=fence)",
-    re.DOTALL,
-)
 _PYTHON_FENCE = re.compile(r"\`\`\`python\n(?P<body>.*?)\n\`\`\`", re.DOTALL)
 _MERMAID_FENCE = re.compile(
     r"\`\`\`mermaid\n(?P<body>.*?)\n\`\`\`",
@@ -464,112 +457,6 @@ def _section(text: str, number: int) -> str:
             f"contract is missing numbered section {number}"
         )
     return match.group("body")
-
-
-def _trace_mapping(raw: Mapping[str, object]) -> dict[str, object]:
-    value = dict(raw)
-    value["implementation"] = _parse_repo_symbol(str(value["implementation"]))
-    value["test"] = _parse_repo_symbol(str(value["test"]))
-    outcome = dict(value["outcome"])
-    if outcome.get("kind") == "rejected":
-        outcome["rejected_at"] = _parse_repo_symbol(str(outcome["rejected_at"]))
-    value["outcome"] = outcome
-    return value
-
-
-def parse_contract_traces(
-    root: Path,
-    contract: Path,
-    requirements: tuple[ContractRequirement, ...],
-    rules: tuple[VerifierRule, ...],
-    edges: tuple[RuleEdge, ...],
-) -> tuple[ContractTrace, ...]:
-    contract_ref = contract.relative_to(root).as_posix()
-    text = contract.read_text(encoding="utf-8")
-    requirement_ids = {
-        item.requirement_id
-        for item in requirements
-        if item.contract == contract_ref
-    }
-    rule_by_id = {
-        item.rule_id: item
-        for item in rules
-        if item.contract == contract_ref
-    }
-    edges_by_rule = {
-        rule_id: tuple(edge for edge in edges if edge.rule_id == rule_id)
-        for rule_id in rule_by_id
-    }
-
-    traces: list[ContractTrace] = []
-    for match in _TRACE_FENCE.finditer(text):
-        body = match.group("body")
-        if _PLACEHOLDER.search(body):
-            raise ContractTraceabilityError(
-                f"trace contains a placeholder: {contract_ref}"
-            )
-        trace_value = _trace_mapping(tomllib.loads(body))
-        trace_value["declaration"] = _declaration_ref(
-            root,
-            contract,
-            text,
-            match.start(),
-            match.end(),
-        )
-        trace = ContractTrace.model_validate(trace_value)
-        rule = rule_by_id.get(trace.rule_id)
-        if trace.requirement_id not in requirement_ids:
-            raise ContractTraceabilityError(
-                f"{trace.trace_id} names unknown requirement "
-                f"{trace.requirement_id}"
-            )
-        if rule is None or rule.requirement_id != trace.requirement_id:
-            raise ContractTraceabilityError(
-                f"{trace.trace_id} has an invalid requirement-rule join"
-            )
-
-        rule_edges = edges_by_rule[trace.rule_id]
-        owners = {
-            (edge.target.path, edge.target.symbol)
-            for edge in rule_edges
-            if edge.kind == "implementation"
-        }
-        tests = {
-            (edge.target.path, edge.target.symbol)
-            for edge in rule_edges
-            if edge.kind == "verification"
-        }
-        implementation = (
-            trace.implementation.path,
-            trace.implementation.symbol,
-        )
-        test = (trace.test.path, trace.test.symbol)
-        if implementation not in owners:
-            raise ContractTraceabilityError(
-                f"{trace.trace_id} names an unowned implementation"
-            )
-        if test not in tests:
-            raise ContractTraceabilityError(
-                f"{trace.trace_id} names an unlinked test"
-            )
-        if trace.state == "implemented":
-            _require_python_symbol(root, trace.implementation)
-            _require_python_symbol(root, trace.test)
-            if trace.outcome.kind == "rejected":
-                _require_python_symbol(root, trace.outcome.rejected_at)
-        traces.append(trace)
-
-    duplicate_ids = _duplicates([trace.trace_id for trace in traces])
-    if duplicate_ids:
-        raise ContractTraceabilityError(
-            f"duplicate trace IDs in {contract_ref}: {duplicate_ids}"
-        )
-    kinds = {trace.outcome.kind for trace in traces}
-    if kinds != {"accepted", "rejected"}:
-        raise ContractTraceabilityError(
-            f"{contract_ref} requires accepted and rejected traces"
-        )
-    return tuple(sorted(traces, key=lambda item: item.trace_id))
 
 
 def _assert_dag(diagram: str, contract: Path, index: int) -> None:
@@ -722,8 +609,8 @@ depends_on = ["P0-CRT-03"]
 ```
 
 **Context:** Only migrated contracts can enter the compiled traceability graph.
-This block adds each contract after its diagrams, models, worked example, and
-accepted and rejected traces satisfy the shared contract structure.
+This block adds each contract after its diagrams, models, and worked example
+satisfy the shared contract structure.
 
 Expand the validated contract set only after every contract has the required
 three diagrams and complete worked example.
@@ -743,10 +630,10 @@ Migrate these contracts one at a time, in checklist order:
 11. `research-memory-roadmap.md`
 
 For each contract, add its verifier-rule rows, current DAG, proposed-change
-DAG, integrated DAG, complete Section 4 declarations, marked worked example,
-accepted trace, and rejected trace before adding its path to the validated
-tuple. The contract-gap skill defines the required contents of those sections;
-this block controls only their repository-wide migration and acceptance gate.
+DAG, integrated DAG, complete Section 4 declarations, and marked worked example
+before adding its path to the validated tuple. The contract-gap skill defines
+the required contents of those sections; this block controls only their
+repository-wide migration and acceptance gate.
 
 `tests/test_documentation.py`
 
@@ -764,9 +651,9 @@ gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py
 depends_on = ["P0-CRT-03", "P0-CRT-04"]
 ```
 
-**Context:** Parsed requirements, rules, edges, and traces remain separate
-collections until one operation joins and orders them. This block creates the
-complete graph and emits stable bytes for later comparison and verification.
+**Context:** Parsed requirements, rules, and edges remain separate collections
+until one operation joins and orders them. This block creates the complete graph
+and emits stable bytes for later comparison and verification.
 
 Compile the joined records and serialize their canonical representation.
 
@@ -815,24 +702,10 @@ def compile_contract_traceability(
     edges = _parse_rule_edges(root, checklist, markers, rules)
     for contract in contracts:
         validate_contract_example(contract)
-    traces = tuple(
-        trace
-        for contract in contracts
-        for trace in parse_contract_traces(
-            root,
-            contract,
-            requirements,
-            rules,
-            edges,
-        )
-    )
-    if _duplicates([item.trace_id for item in traces]):
-        raise ContractTraceabilityError("trace ID belongs to several contracts")
     graph = ContractTraceabilityGraph(
         requirements=tuple(sorted(requirements, key=lambda item: item.requirement_id)),
         rules=tuple(sorted(rules, key=lambda item: item.rule_id)),
         edges=edges,
-        traces=tuple(sorted(traces, key=lambda item: item.trace_id)),
     )
     serialize_contract_traceability(graph)
     return graph
@@ -993,42 +866,9 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
 
             ## 9. Acceptance case
 
-            ```toml contract-trace
-            trace_id = "accepted-rule"
-            requirement_id = "CRT-01"
-            rule_id = "contract.rule"
-            state = "implemented"
-            scenario = "The compiler accepts one complete rule."
-            setup = "The contract and checklist contain matching markers."
-            input = "contract.rule"
-            invocation = "compile_contract_traceability(root, checklist, contracts)"
-            implementation = "src/owner.py:enforce"
-            test = "tests/test_owner.py:test_enforce"
-
-            [outcome]
-            kind = "accepted"
-            result = "The graph contains the rule, owner, and test."
-            evidence = [".viper/system/contracts/traceability.json"]
-            ```
-
-            ```toml contract-trace
-            trace_id = "rejected-rule"
-            requirement_id = "CRT-01"
-            rule_id = "contract.rule"
-            state = "implemented"
-            scenario = "The compiler rejects a missing rule owner."
-            setup = "The rule lacks a matching implementation marker."
-            input = "contract.rule"
-            invocation = "compile_contract_traceability(root, checklist, contracts)"
-            implementation = "src/owner.py:enforce"
-            test = "tests/test_owner.py:test_enforce"
-
-            [outcome]
-            kind = "rejected"
-            rejected_at = "src/owner.py:enforce"
-            error_type = "ContractTraceabilityError"
-            message_match = "requires exactly one implementation edge"
-            ```
+            The accepted case compiles one implementation edge and one
+            verification edge. The rejected case removes or corrupts one exact
+            marker and requires ContractTraceabilityError in pytest.
 
             ## 10. Implementation order
 
@@ -1154,21 +994,21 @@ def test_rule_edges_reject_missing_symbols(tmp_path: Path) -> None:
         _parse_rule_edges(tmp_path, checklist, markers, rules)
 ```
 
-**Stop:** both edge tests pass. Trace parsing begins in the next cycle.
+**Stop:** both edge tests pass. Contract-example validation begins next.
 
 <!-- pair-block-definition: P0-PROOF-03 -->
 ```toml pair-block
 id = "P0-PROOF-03"
 requirements = ["CRT-03"]
-targets = ["tests/test_contract_traceability.py:test_contract_traces_compile", "tests/test_contract_traceability.py:test_contract_traces_reject_incomplete_evidence", "tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
-tests = ["tests/test_contract_traceability.py:test_contract_traces_compile", "tests/test_contract_traceability.py:test_contract_traces_reject_incomplete_evidence", "tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'contract_traces or contract_examples' -q"
+targets = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
+tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
+gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k contract_examples -q"
 depends_on = ["P0-CRT-03", "P0-PROOF-02"]
 ```
 
-**Context:** A structurally valid contract can still contain an incomplete
-trace or worked example. These cases require complete evidence and reject the
-exact omissions that would make the compiled graph overclaim support.
+**Context:** A contract can declare rules while omitting a required DAG or model
+use from its worked example. This test rejects the exact structural omission
+before the contract enters the compiled graph.
 
 Extend the imports, then add these tests.
 
@@ -1176,72 +1016,8 @@ Extend the imports, then add these tests.
 
 ```python pair-edit
 from viper._contract_traceability import (
-    parse_contract_traces,
     validate_contract_example,
 )
-
-
-def _fixture_graph_parts(
-    root: Path,
-    contract: Path,
-    checklist: Path,
-):
-    markers = _parse_requirement_markers(root, contract)
-    requirements = tuple(marker.requirement for marker in markers)
-    rules = _parse_verifier_rules(root, contract, markers)
-    edges = _parse_rule_edges(root, checklist, markers, rules)
-    return requirements, rules, edges
-
-
-def test_contract_traces_compile(tmp_path: Path) -> None:
-    contract, checklist = _write_fixture(tmp_path)
-    requirements, rules, edges = _fixture_graph_parts(
-        tmp_path,
-        contract,
-        checklist,
-    )
-
-    traces = parse_contract_traces(
-        tmp_path,
-        contract,
-        requirements,
-        rules,
-        edges,
-    )
-    validate_contract_example(contract)
-
-    assert {trace.outcome.kind for trace in traces} == {
-        "accepted",
-        "rejected",
-    }
-
-
-def test_contract_traces_reject_incomplete_evidence(tmp_path: Path) -> None:
-    contract, checklist = _write_fixture(tmp_path)
-    contract.write_text(
-        contract.read_text(encoding="utf-8").replace(
-            'scenario = "The compiler accepts one complete rule."',
-            'scenario = "' + "TO" + 'DO"',
-        ),
-        encoding="utf-8",
-    )
-    requirements, rules, edges = _fixture_graph_parts(
-        tmp_path,
-        contract,
-        checklist,
-    )
-
-    with pytest.raises(
-        ContractTraceabilityError,
-        match="trace contains a placeholder",
-    ):
-        parse_contract_traces(
-            tmp_path,
-            contract,
-            requirements,
-            rules,
-            edges,
-        )
 
 
 def test_contract_examples_reject_incomplete_structure(tmp_path: Path) -> None:
@@ -1261,8 +1037,8 @@ def test_contract_examples_reject_incomplete_structure(tmp_path: Path) -> None:
         validate_contract_example(contract)
 ```
 
-**Stop:** the accepted trace and both targeted rejections pass. Complete graph
-compilation begins in the next cycle.
+**Stop:** the targeted contract-example rejection passes. Complete graph
+compilation begins next.
 
 <!-- pair-block-definition: P0-PROOF-04 -->
 ```toml pair-block
@@ -1373,8 +1149,8 @@ to import. The block stays within its current behavior and test.
 
 Cycle `P0-CRT-04` is the only repeated migration. Add one contract to
 `CONTRACTS_WITH_COMPLETE_EXAMPLES` after that contract receives all three
-DAGs, its complete worked example, verifier-rule markers, and accepted and
-rejected traces. Run the focused gate after each contract.
+DAGs, its complete worked example, and verifier-rule markers. Run the focused
+gate after each contract.
 
 ## 6. Guide gate
 
@@ -1411,7 +1187,6 @@ baseline `compile_system()`:
 ContractTraceabilityGraph.requirements
 ContractTraceabilityGraph.rules
 ContractTraceabilityGraph.edges
-ContractTraceabilityGraph.traces
 ```
 
 Each record includes its exact `DeclarationRef`, so SystemGraph can lower the

@@ -16,12 +16,9 @@ import pytest
 
 import viper._contract_traceability as traceability
 from viper._contract_traceability import (
-    AcceptedTraceOutcome,
     ContractRequirement,
-    ContractTrace,
     ContractTraceabilityGraph,
     DeclarationRef,
-    RejectedTraceOutcome,
     RepoSymbolRef,
     RuleEdge,
     VerifierRule,
@@ -88,9 +85,6 @@ TRACEABILITY_MODELS = (
     ContractRequirement,
     VerifierRule,
     RuleEdge,
-    AcceptedTraceOutcome,
-    RejectedTraceOutcome,
-    ContractTrace,
     ContractTraceabilityGraph,
 )
 
@@ -113,7 +107,7 @@ _PHASE_CAPABILITY = re.compile(
     r"(?P<symbols>[A-Za-z0-9_., ]+) -->"
 )
 _CHECKBOX_BLOCK = re.compile(
-    r"^- \[ \] .*?(?=^- \[ \] |^### |^## |\Z)",
+    r"^- \[[ xX]\] .*?(?=^- \[[ xX]\] |^### |^## |\Z)",
     re.MULTILINE | re.DOTALL,
 )
 _ORDERED_CAPABILITIES = {
@@ -134,10 +128,6 @@ _CONTRACT_WORKED_EXAMPLE = re.compile(
     r"<!-- contract-worked-example: start -->"
     r"(?P<body>.*?)"
     r"<!-- contract-worked-example: end -->",
-    re.DOTALL,
-)
-_CONTRACT_TRACE_FENCE = re.compile(
-    r"```toml contract-trace\n(?P<body>.*?)\n```",
     re.DOTALL,
 )
 _PYTHON_FENCE = re.compile(r"```python\n(?P<body>.*?)\n```", re.DOTALL)
@@ -2134,8 +2124,6 @@ def test_contract_traceability_pair_guide_executes_as_one_workflow(
         "test_requirement_rows_reject_duplicate_and_orphan_ids",
         "test_rule_edges_resolve_one_owner_and_tests",
         "test_rule_edges_reject_missing_symbols",
-        "test_contract_traces_compile",
-        "test_contract_traces_reject_incomplete_evidence",
         "test_contract_examples_reject_incomplete_structure",
         "test_contract_traceability_graph_is_canonical",
         "test_contract_traceability_graph_rejects_duplicate_ids",
@@ -2659,67 +2647,6 @@ def test_traceability_declaration_ref_rejects_reversed_span() -> None:
             end_line=1,
             sha256="0" * 64,
         )
-
-
-def test_phase_zero_contract_traces_use_typed_outcomes() -> None:
-    """Require concrete setup plus distinct accepted and rejected outcomes."""
-    common_fields = {
-        "trace_id",
-        "requirement_id",
-        "rule_id",
-        "state",
-        "scenario",
-        "setup",
-        "input",
-        "invocation",
-        "implementation",
-        "test",
-        "outcome",
-    }
-    retired_fields = {
-        "declaration",
-        "runtime",
-        "persisted_evidence",
-        "verifier",
-        "expected",
-    }
-
-    for contract in MASTER_PHASE_ZERO_CONTRACTS:
-        traces = tuple(
-            tomllib.loads(match.group("body"))
-            for match in _CONTRACT_TRACE_FENCE.finditer(contract.read_text())
-        )
-        assert len(traces) == 2, contract.name
-        assert {trace["outcome"]["kind"] for trace in traces} == {
-            "accepted",
-            "rejected",
-        }
-
-        for trace in traces:
-            assert set(trace) == common_fields, (contract.name, trace["trace_id"])
-            assert retired_fields.isdisjoint(trace)
-            assert all(
-                isinstance(trace[field], str) and trace[field].strip()
-                for field in common_fields - {"outcome"}
-            )
-
-            outcome = trace["outcome"]
-            if outcome["kind"] == "accepted":
-                assert set(outcome) == {"kind", "result", "evidence"}
-                assert outcome["result"].strip()
-                assert outcome["evidence"]
-            else:
-                assert set(outcome) == {
-                    "kind",
-                    "rejected_at",
-                    "error_type",
-                    "message_match",
-                }
-                assert all(
-                    isinstance(outcome[field], str) and outcome[field].strip()
-                    for field in outcome
-                    if field != "kind"
-                )
 
 
 def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:

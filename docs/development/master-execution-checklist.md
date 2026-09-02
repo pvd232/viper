@@ -273,7 +273,7 @@ scheduled phase and dependency order.
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Audited; owner approval pending | Requirement, verifier-rule, implementation-owner, concrete-trace, and acceptance-test links |
+| [Contract Traceability](contract-traceability.md) | Audited; owner approval pending | Requirement, verifier-rule, implementation-owner, and acceptance-test links |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design; implementation pending | One defining module for API operations, verification operations, and verification types |
 | [System Impact Compiler](system-impact-compiler.md) | Approved design; implementation pending | Pinned CodeQL source analysis, normalized `SystemGraph`, automatic `ContractChange` compilation, conservative impact closure, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and independently observed conformance |
@@ -293,7 +293,7 @@ The contracts share models. One contract owns each shared decision:
 
 | Shared decision | Owner |
 | --- | --- |
-| Each contract requirement reaches named verifier rules, exact implementation owners, populated traces, and exact test functions | Contract Traceability |
+| Each contract requirement reaches named verifier rules, exact implementation owners, and exact test functions | Contract Traceability |
 | `viper init ROOT` selects the source, protocol, working-data, and local-state tree | Project data root |
 | `.viper/store` remains a separate immutable subtree beneath the selected root | Project data root |
 | Public API and verification symbols are implemented in the modules callers import | Public module ownership |
@@ -323,12 +323,12 @@ The contracts share models. One contract owns each shared decision:
 Each pending contract declares stable requirement IDs with an owning phase and
 focused test. The matching phase contains one requirement-level `implements`
 marker and one requirement-level `verifies` marker for every ID. The contract
-traceability phase adds rule-level implementation owners, exact test functions,
-and populated traces. The baselines below bind this checklist to the exact
+traceability phase adds rule-level implementation owners and exact test
+functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=1cc97a63c2ca715f71abff02084b8bf81ba40dc7da6b6cc5121e9de8d7f813da -->
+<!-- contract-baseline: contract-traceability.md sha256=e0dd89dcb71aea9d15b2ef339f791106843aabbd21ac8b1ce4519b0eea12ab7d -->
 
 <!-- contract-baseline: project-data-root.md sha256=d873368c2ea9b9c8ddd3bb9dbe8a8d6ff8b86aa17951a92ef65f36ecd30746f3 -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
@@ -607,7 +607,7 @@ from the observed result.
 
 **Outcome:** `viper init ROOT` creates the complete protocol tree and every
 later local operation resolves that same root. Every contract requirement then
-has a named rule, exact implementation owner, populated trace, and exact test.
+has a named rule, exact implementation owner, and exact test.
 Public API and verification imports identify their defining modules. VIPER can
 analyze that stable source tree with one pinned CodeQL toolchain, lower the
 validated source facts under one fixed context, publish canonical dependency
@@ -676,13 +676,11 @@ working-file edit must leave the immutable copy retrievable.
       <!-- implements: CRT-02 -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.tested state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-- [ ] Parse `toml contract-trace` blocks and marked worked examples. Require
-      current, proposed-change, and integrated DAGs; reject placeholders,
-      unresolved source locations, unconstructed Section 4 models, missing
-      success cases, and missing rejection cases.
+- [ ] Validate marked worked examples and require current, proposed-change, and
+      integrated DAGs. Reject unconstructed Section 4 models and incomplete
+      graph structure.
       <!-- pair-block: P0-CRT-03 -->
       <!-- implements: CRT-03 -->
-      <!-- contract-implementation: requirement=CRT-03 rule=contract.trace.populated state=planned owner=src/viper/_contract_traceability.py:parse_contract_traces -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=planned owner=src/viper/_contract_traceability.py:validate_contract_example -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.diagram.palette state=implemented owner=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented owner=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
@@ -694,7 +692,7 @@ working-file edit must leave the immutable copy retrievable.
       <!-- pair-block: P0-CRT-04 -->
 - [ ] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
       compare its requirement and phase coverage with the current documentation
-      oracle. Require every requirement, rule, binding, and trace to retain its
+      oracle. Require every requirement, rule, and edge to retain its
       exact `DeclarationRef` path, line span, and digest.
       <!-- pair-block: P0-CRT-05 -->
       <!-- implements: CRT-04 -->
@@ -708,9 +706,8 @@ working-file edit must leave the immutable copy retrievable.
 **Hint 1:** Preserve the current requirement, checklist, and baseline parsers as
 the migration oracle. Add rule-level links beside them.
 
-**Hint 2:** Use `tomllib` for populated trace blocks. Resolve Python symbols
-through the AST. Resolve Markdown requirement and rule symbols through their
-stable marker IDs.
+**Hint 2:** Resolve Python symbols through the AST. Resolve Markdown requirement
+and rule identities through their stable marker IDs.
 
 **Hint 3:** Compile the traceability graph before the broader system graph. The
 system graph consumes its ownership links directly.
@@ -896,12 +893,10 @@ edge IDs on every crossing component edge.
       <!-- verifies: CRT-02 -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=planned test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=planned test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
-- [ ] In `tests/test_contract_traceability.py`, reject an omitted trace, placeholder
-      value, unresolved source location, missing DAG, and Section 4 model absent
-      from the worked example.
+- [ ] In `tests/test_contract_traceability.py`, reject a missing DAG and a
+      Section 4 model absent from the worked example.
       <!-- pair-block: P0-PROOF-03 -->
       <!-- verifies: CRT-03 -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.trace.populated state=planned test=tests/test_contract_traceability.py:test_contract_traces_reject_incomplete_evidence -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=planned test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
