@@ -641,6 +641,10 @@ to skip execution.
 | `mcp.learning.custody` <!-- verifier-rule: mcp.learning.custody requirement=PCM-06 --> | Learning access records every provider call and human decision as immutable VIPER evidence. |
 | `mcp.tasks.identity` <!-- verifier-rule: mcp.tasks.identity requirement=PCM-07 --> | MCP task operations retain durable VIPER operation identity and preserve ordinary status fallback. |
 
+<!-- contract-symbols:
+{"models":["ArtifactQuery","BenchmarkQuery","CatalogArtifact","CatalogBenchmark","CatalogEdge","CatalogFile","CatalogMeasurement","CatalogRun","MeasurementQuery","RunQuery"],"aliases":[],"functions":["catalog"]}
+-->
+
 <!-- contract-example-symbols:
 ["catalog", "RunQuery", "MeasurementQuery", "ArtifactQuery", "BenchmarkQuery"]
 -->

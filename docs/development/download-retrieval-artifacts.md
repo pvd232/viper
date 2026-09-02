@@ -328,6 +328,10 @@ and timing evidence. See
 
 ### 4.4 Complete public authoring example
 
+<!-- contract-symbols:
+{"models":["BaseSpec","DownloadSpec","HttpRequestSpec","HttpRetrievalPolicy","ParameterizedSpec","ResolvedDownloadSpec","ResolvedHttpRetrieval","ResolvedSingleFileArtifact","SnapshotFileRef"],"aliases":["DATASET_PATH","artifacts","authoring","download","retrievals"],"functions":["artifact"]}
+-->
+
 <!-- contract-example-symbols:
 ["authoring", "artifact", "HttpRequestSpec", "HttpRetrievalPolicy", "DATASET_PATH", "download"]
 -->

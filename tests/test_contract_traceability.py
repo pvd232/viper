@@ -8,9 +8,11 @@ import pytest
 
 from viper._contract_traceability import (
     ContractTraceabilityError,
+    _parse_contract_symbols,
     _parse_requirement_markers,
     _parse_rule_edges,
     _parse_verifier_rules,
+    _python_symbols,
     compile_contract_traceability,
     serialize_contract_traceability,
     validate_contract_example,
@@ -52,7 +54,9 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
             rule=contract.rule state=implemented
             test=tests/test_owner.py:test_enforce -->
             """
-        ).replace("\nrule=", " rule=").replace("\nowner=", " owner=")
+        )
+        .replace("\nrule=", " rule=")
+        .replace("\nowner=", " owner=")
         .replace("\ntest=", " test="),
         encoding="utf-8",
     )
@@ -114,6 +118,10 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 return ExampleRecord(value)
             [END]
 
+            <!-- contract-symbols:
+            {"models":["ExampleRecord"],"aliases":[],"functions":["build_record"]}
+            -->
+
             <!-- contract-example-symbols: ["ExampleRecord", "build_record"] -->
             <!-- contract-worked-example: start -->
             [PYTHON]
@@ -151,17 +159,21 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
 
             Parse declarations before edges.
             """
-        ).replace(
+        )
+        .replace(
             "[PYTHON]",
             chr(96) * 3 + "python",
-        ).replace(
+        )
+        .replace(
             "[END]",
             chr(96) * 3,
-        ).replace(
+        )
+        .replace(
             "[REQUIREMENT_ROW]",
             "| CRT-01 <!-- contract-requirement: CRT-01 phase=0 "
             "test=tests/test_contract_traceability.py --> | Compile one exact rule. |",
-        ).replace(
+        )
+        .replace(
             "[RULE_ROW]",
             "| `contract.rule` <!-- verifier-rule: contract.rule "
             "requirement=CRT-01 --> | One owner and one test exist. |",
@@ -234,6 +246,8 @@ def test_rule_edges_resolve_one_owner_and_tests(tmp_path: Path) -> None:
         ("implementation", "enforce"),
         ("verification", "test_enforce"),
     ]
+    empty_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    assert all(edge.declaration.sha256 != empty_sha256 for edge in edges)
 
 
 def test_rule_edges_reject_missing_symbols(tmp_path: Path) -> None:
@@ -254,6 +268,17 @@ def test_rule_edges_reject_missing_symbols(tmp_path: Path) -> None:
         match="source symbol is missing: src/owner.py:absent",
     ):
         _parse_rule_edges(tmp_path, checklist, markers, rules)
+
+
+def test_python_symbols_include_module_assignments(tmp_path: Path) -> None:
+    """Resolve module registries such as ``__all__`` as implementation owners."""
+    source = tmp_path / "module.py"
+    source.write_text(
+        '__all__ = ["public"]\nVERSION: int = 1\n',
+        encoding="utf-8",
+    )
+
+    assert {"__all__", "VERSION"} <= _python_symbols(source)
 
 
 def test_contract_examples_reject_incomplete_structure(tmp_path: Path) -> None:
@@ -280,9 +305,14 @@ def test_contract_examples_reject_undeclared_inventory_symbol(
     """Reject an inventory entry that has no contract declaration."""
     contract, _ = _write_fixture(tmp_path)
     contract.write_text(
-        contract.read_text(encoding="utf-8").replace(
+        contract.read_text(encoding="utf-8")
+        .replace(
             '["ExampleRecord", "build_record"]',
             '["ExampleRecord", "build_record", "MissingRecord"]',
+        )
+        .replace(
+            '"models":["ExampleRecord"]',
+            '"models":["ExampleRecord","MissingRecord"]',
         ),
         encoding="utf-8",
     )
@@ -290,6 +320,54 @@ def test_contract_examples_reject_undeclared_inventory_symbol(
     with pytest.raises(
         ContractTraceabilityError,
         match="inventory names undeclared symbols: \\['MissingRecord'\\]",
+    ):
+        validate_contract_example(contract)
+
+
+def test_contract_symbols_compile_complete_inventory(tmp_path: Path) -> None:
+    """Compile every Section 4 declaration and every example symbol."""
+    contract, _ = _write_fixture(tmp_path)
+
+    symbols = _parse_contract_symbols(tmp_path, contract)
+
+    assert [(symbol.kind, symbol.name) for symbol in symbols] == [
+        ("model", "ExampleRecord"),
+        ("function", "build_record"),
+    ]
+
+
+def test_contract_symbols_reject_missing_section_model(tmp_path: Path) -> None:
+    """Reject a Section 4 model omitted from the formal inventory."""
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            '"models":["ExampleRecord"]',
+            '"models":[]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="omits Section 4 models: \\['ExampleRecord'\\]",
+    ):
+        _parse_contract_symbols(tmp_path, contract)
+
+
+def test_contract_examples_require_registered_symbols(tmp_path: Path) -> None:
+    """Reject an example symbol absent from the contract inventory."""
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            ',"functions":["build_record"]',
+            ',"functions":[]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="example symbols absent from contract-symbols: \\['build_record'\\]",
     ):
         validate_contract_example(contract)
 
@@ -336,6 +414,10 @@ def test_contract_traceability_graph_is_canonical(tmp_path: Path) -> None:
         links = tuple(edge for edge in left.edges if edge.rule_id == rule.rule_id)
         assert sum(edge.kind == "implementation" for edge in links) == 1
         assert sum(edge.kind == "verification" for edge in links) >= 1
+    assert [(symbol.kind, symbol.name) for symbol in left.symbols] == [
+        ("function", "build_record"),
+        ("model", "ExampleRecord"),
+    ]
 
     declaration = left.requirements[0].declaration
     assert declaration.path == "docs/development/example.md"

@@ -161,6 +161,36 @@ src/viper/verification/
                   dataclasses, StorageFetcher, and StageSnapshot
 ```
 
+`src/viper/verification/models.py` exports exactly:
+
+```python contract-exports
+__all__ = [
+    "StageSnapshot",
+    "StorageFetcher",
+    "VerificationError",
+    "VerificationPolicy",
+    "VerifiedArtifact",
+    "VerifiedBenchmarkResult",
+    "VerifiedInput",
+    "VerifiedRunPlan",
+    "VerifiedRunResult",
+    "VerifiedSnapshotFile",
+]
+```
+
+`src/viper/verification/__init__.py` exports exactly:
+
+```python contract-exports
+__all__ = [
+    "verify_attempt_future_inputs",
+    "verify_benchmark_result",
+    "verify_promoted_artifact",
+    "verify_run_result",
+    "verify_stored_input_selections",
+    "verify_stored_inputs",
+]
+```
+
 Callers import operations and types from their defining modules:
 
 ```python
@@ -210,6 +240,10 @@ private API helpers need that package.
 
 The example uses one existing fixture to prove that ownership changes while
 behavior remains stable.
+
+<!-- contract-symbols:
+{"models":[],"aliases":["HANDLER_REGISTRY"],"functions":[]}
+-->
 
 <!-- contract-example-symbols: ["HANDLER_REGISTRY"] -->
 
@@ -283,6 +317,8 @@ because this refactor preserves every runtime model and operation result.
 | --- | --- |
 | `module.api.owner` <!-- verifier-rule: module.api.owner requirement=MOD-01 --> | Every callable in `HANDLER_REGISTRY` has `__module__ == "viper.api"`, and `src/viper/_api/handlers.py` is absent. |
 | `module.verification.owner` <!-- verifier-rule: module.verification.owner requirement=MOD-01 --> | Every public verification operation has `__module__ == "viper.verification"`; every public verification type has `__module__ == "viper.verification.models"`; `src/viper/verification.py` is absent. |
+| `module.verification.model_exports` <!-- verifier-rule: module.verification.model_exports requirement=MOD-01 --> | `viper.verification.models.__all__` equals the exact ordered type list declared in Section 4. |
+| `module.verification.operation_exports` <!-- verifier-rule: module.verification.operation_exports requirement=MOD-01 --> | `viper.verification.__all__` equals the exact ordered operation list declared in Section 4. |
 
 The module-identity checks establish ownership. Existing API and verification
 tests establish that each moved body still returns the same value.
@@ -315,6 +351,8 @@ match it.
 | `src/viper/preflight.py` | Change | Import `VerificationError` from `viper.verification.models`. |
 | `tests/fixtures.py` | Change | Import `VerificationPolicy` from its defining module. |
 | `tests/test_public_api.py` | Change | Replace wrapper parity with exact module-owner and retired-file checks. |
+| `tests/test_validation_architecture.py` | Change | Point the root-boundary AST check at `src/viper/api.py`. |
+| `tests/test_benchmark_execution.py` | Change | Patch `viper.api.execute_benchmark_run` after the handler body moves. |
 | `tests/test_verification.py` | Change | Import operations and models from their defining modules. |
 | `tests/test_verification_acceptance.py` | Change | Import operations and models from their defining modules. |
 | `tests/test_metric_provenance.py` | Change | Split operation and model imports. |
@@ -325,7 +363,8 @@ match it.
 | `tests/test_inspection.py` | Change | Import verified result types from their defining module. |
 | `docs/development/module-privacy.md` | Change | Replace the superseded private-handler explanation with the one-owner rule. |
 | `docs/development/master-execution-checklist.md` | Change | Insert this contract before the system graph and assign future API operations to `viper.api`. |
-| `docs/development/foundation-pair-coding.md` | Change | Supply the exact verification and API migration blocks. |
+| `docs/development/foundation-pair-coding.md` | Change | Link to the dedicated module-ownership guide. |
+| `docs/development/module-ownership-pair-coding.md` | Add | Supply the exact file-separated verification and API migration blocks. |
 
 Any additional importer found during implementation receives the same direct
 import update before `MOD-01` closes.

@@ -20,6 +20,7 @@ These requirements bind the contract to the master checklist:
 | CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_contract_traceability.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
 | CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs plus one explicit example-symbol inventory and one worked example that exercises every inventoried symbol. |
 | CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph that baseline SystemGraph compilation lowers into $G_0$. |
+| CRT-05 <!-- contract-requirement: CRT-05 phase=0 test=tests/test_contract_traceability.py --> | Inventory every normative Section 4 Python symbol, require every worked-example symbol to belong to that inventory, and publish the inventory in `ContractTraceabilityGraph`. |
 
 ## 2. Required claim
 
@@ -38,6 +39,9 @@ Which source symbol implements that invariant?
 
 Which test proves the accepted and rejected behavior?
 -> RuleEdge(kind="verification")
+
+Which Python symbols does the contract define or depend on?
+-> ContractSymbol
 ```
 
 The resulting chain is:
@@ -77,11 +81,14 @@ and once in a `verifies` marker. It also requires the named test file to exist
 and appear in the verification checkbox.
 
 That check proves phase placement and document coverage. It leaves two
-relationships implicit:
+relationships implicit, and it does not inventory the contract's normative
+Python symbols:
 
 ```text
 requirement -> named verifier rule
 named verifier rule -> exact implementation symbol
+contract model section -> complete contract-symbol inventory
+worked-example symbols -> subset of contract-symbol inventory
 ```
 
 ### Current DAG
@@ -97,6 +104,7 @@ flowchart TD
     Phase["Master Phase 0 checkbox"]
     TestFile["Test file<br/>tests/test_validation_architecture.py"]
     Missing["Unsupported links<br/>rule · source symbol · test function"]
+    Symbols["Example-symbol list<br/>selected coverage only"]
 
     Requirement -->|"requirement ID"| Implements
     Requirement -->|"requirement ID"| Verifies
@@ -104,9 +112,10 @@ flowchart TD
     Verifies -->|"names"| TestFile
     Phase -->|"stops before"| Missing
     TestFile -->|"stops before"| Missing
+    Symbols -->|"does not inventory all models"| Missing
 
     class Requirement current
-    class Implements,Verifies,Phase,TestFile evidence
+    class Implements,Verifies,Phase,TestFile,Symbols evidence
     class Missing gap
     classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
@@ -160,6 +169,7 @@ flowchart TD
     Rule["Proposed<br/>VerifierRule"]
     Owner["Proposed<br/>implementation RuleEdge"]
     Test["Proposed<br/>verification RuleEdge"]
+    Symbol["Proposed<br/>ContractSymbol"]
     Graph["Proposed<br/>ContractTraceabilityGraph"]
 
     Requirement -->|"requirement_id"| Rule
@@ -167,8 +177,9 @@ flowchart TD
     Rule -->|"kind=verification"| Test
     Owner -->|"exact source location"| Graph
     Test -->|"exact test location"| Graph
+    Symbol -->|"contract · kind · name"| Graph
 
-    class Requirement,Rule,Owner,Test,Graph proposed
+    class Requirement,Rule,Owner,Test,Symbol,Graph proposed
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
@@ -188,6 +199,8 @@ flowchart TD
     Source["Source symbol<br/>resolve_path"]
     TestMarker["Checklist verification marker<br/>planned test owner"]
     Test["Test function<br/>test_project_paths_reject_symlinks"]
+    Inventory["Contract symbol marker<br/>models · aliases · functions"]
+    Symbol["ContractSymbol<br/>RuleEdge · model"]
     Graph["ContractTraceabilityGraph"]
     System["System impact compiler"]
 
@@ -198,12 +211,14 @@ flowchart TD
     TestMarker -->|"test"| Test
     Source -->|"resolved location"| Graph
     Test -->|"resolved location"| Graph
+    Inventory -->|"declares"| Symbol
+    Symbol -->|"canonical record"| Graph
     Graph -->|"canonical JSON"| System
 
-    class Contract,Rule contract
+    class Contract,Rule,Inventory contract
     class Task,TestMarker checklist
     class Source,Test implementation
-    class Graph,System output
+    class Symbol,Graph,System output
     classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
     classDef checklist fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
@@ -227,6 +242,11 @@ VerifierRuleId = Annotated[
 ]
 RuleEdgeKind = Literal["implementation", "verification"]
 TraceState = Literal["planned", "implemented"]
+ContractSymbolKind = Literal["model", "alias", "function"]
+ContractSymbolName = Annotated[
+    str,
+    Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$"),
+]
 
 
 class DeclarationRef(ProtocolModel):
@@ -324,11 +344,28 @@ class RuleEdge(ProtocolModel):
     )
 
 
+class ContractSymbol(ProtocolModel):
+    """Identify one normative Python symbol named by one contract."""
+
+    kind: ContractSymbolKind = Field(
+        description="Symbol category declared by the contract inventory."
+    )
+    name: ContractSymbolName = Field(
+        description="Python identifier used for the symbol in the contract."
+    )
+    contract: RepoRelPath = Field(
+        description="Repository-relative contract that inventories the symbol."
+    )
+    declaration: DeclarationRef = Field(
+        description="Exact contract-symbols marker that inventories the symbol."
+    )
+
+
 class ContractTraceabilityGraph(ProtocolModel):
     """Store the complete ordered traceability graph."""
 
-    schema_version: Literal[3] = Field(
-        default=3,
+    schema_version: Literal[4] = Field(
+        default=4,
         description="Format version of the serialized traceability graph.",
     )
     requirements: tuple[ContractRequirement, ...] = Field(
@@ -342,6 +379,10 @@ class ContractTraceabilityGraph(ProtocolModel):
     edges: tuple[RuleEdge, ...] = Field(
         min_length=1,
         description="Ordered implementation and verification relationships.",
+    )
+    symbols: tuple[ContractSymbol, ...] = Field(
+        min_length=1,
+        description="Ordered normative symbols inventoried by the contracts.",
     )
 ```
 
@@ -394,6 +435,19 @@ cleanup step then removes both fields.
 Marker and TOML values use `path:symbol` strings. The parser splits the first
 colon after the repository path and constructs `RepoSymbolRef`.
 
+Each contract also declares one exact symbol inventory:
+
+```text
+contract-symbols:
+{"models":["RuleEdge"],"aliases":["RuleEdgeKind"],"functions":[]}
+```
+
+The three arrays are sorted and disjoint. They include every top-level model,
+alias, and function in Section 4. They may also include symbols imported for
+the worked example. Every `contract-example-symbols` entry must appear in this
+larger inventory. The compiler rejects an omitted Section 4 declaration, an
+unresolved inventory name, or an example-only name.
+
 ### Illustrative worked example
 
 The inventory explicitly names the contract symbols this workflow must
@@ -404,8 +458,12 @@ reference aliases. Document position does not define coverage.
 Master Phase 0 will create the source and test symbols, so both links begin in
 the `planned` state.
 
+<!-- contract-symbols:
+{"models":["ContractRequirement","ContractSymbol","ContractTraceabilityGraph","DeclarationRef","RepoSymbolRef","RuleEdge","VerifierRule"],"aliases":["ContractSymbolKind","ContractSymbolName","RequirementId","RuleEdgeKind","TraceState","VerifierRuleId"],"functions":[]}
+-->
+
 <!-- contract-example-symbols:
-["RequirementId", "VerifierRuleId", "RuleEdgeKind", "TraceState", "DeclarationRef", "RepoSymbolRef", "ContractRequirement", "VerifierRule", "RuleEdge", "ContractTraceabilityGraph"]
+["ContractSymbolKind", "ContractSymbolName", "RequirementId", "VerifierRuleId", "RuleEdgeKind", "TraceState", "DeclarationRef", "RepoSymbolRef", "ContractRequirement", "VerifierRule", "RuleEdge", "ContractSymbol", "ContractTraceabilityGraph"]
 -->
 
 <!-- contract-worked-example: start -->
@@ -417,6 +475,9 @@ from pathlib import Path
 
 from viper._contract_traceability import (
     ContractRequirement,
+    ContractSymbol,
+    ContractSymbolKind,
+    ContractSymbolName,
     ContractTraceabilityGraph,
     DeclarationRef,
     RequirementId,
@@ -514,10 +575,20 @@ verification = RuleEdge(
     target=test_location,
 )
 
+symbol_kind: ContractSymbolKind = "model"
+symbol_name: ContractSymbolName = "RuleEdge"
+symbol = ContractSymbol(
+    kind=symbol_kind,
+    name=symbol_name,
+    contract=requirement.contract,
+    declaration=declaration_ref(CONTRACT, "contract-symbols:"),
+)
+
 traceability = ContractTraceabilityGraph(
     requirements=(requirement,),
     rules=(rule,),
     edges=(implementation, verification),
+    symbols=(symbol,),
 )
 
 canonical_bytes = json.dumps(
@@ -552,7 +623,8 @@ The documentation check compiles the graph in four passes:
 1. enumerate implementation contracts
 2. parse requirement and verifier-rule declarations
 3. parse checklist implementation and verification links
-4. validate contract examples, planned locations, and implemented repository symbols
+4. validate complete contract-symbol inventories and worked examples
+5. validate planned locations and implemented repository symbols
 ```
 
 It then applies these cardinality rules:
@@ -565,7 +637,9 @@ It then applies these cardinality rules:
 6. Each implementation and test link uses the phase containing its checklist
    marker.
 7. Each contract contains the required DAGs and one complete worked example.
-8. Phase closure requires every implementation and verification link to
+8. Every Section 4 declaration is inventoried, and every worked-example symbol
+   belongs to that inventory.
+9. Phase closure requires every implementation and verification link to
    use `state="implemented"`.
 
 The compiler sorts requirements by ID, rules by rule ID, implementation links
@@ -601,6 +675,7 @@ machine's absolute checkout path.
 | `contract.graph.canonical` <!-- verifier-rule: contract.graph.canonical requirement=CRT-04 --> | Repeated compilation produces identical ordered JSON bytes. |
 | `contract.graph.complete` <!-- verifier-rule: contract.graph.complete requirement=CRT-04 --> | Every requirement and rule reaches its owner and tests. |
 | `contract.declaration.anchored` <!-- verifier-rule: contract.declaration.anchored requirement=CRT-04 --> | Every requirement, rule, and edge retains the exact declaration path, line span, and SHA-256 digest used to reconstruct it. |
+| `contract.symbol.complete` <!-- verifier-rule: contract.symbol.complete requirement=CRT-05 --> | Each contract declares one sorted, disjoint `contract-symbols` inventory containing every Section 4 model, alias, and function; each name resolves in the contract; and `contract-example-symbols` is a subset. |
 
 These named rules are logical entities only after the parser reads their
 markers. Their implementation is ordinary source code. Their proof is the
@@ -610,10 +685,10 @@ named test function. The traceability graph joins those three representations.
 
 | Surface | Required statement |
 | --- | --- |
-| `src/viper/_contract_traceability.py` | Add exact models, marker parsers, symbol resolution, cardinality checks, contract-example validation, and canonical serialization for developer tooling. |
+| `src/viper/_contract_traceability.py` | Add exact models, marker parsers, symbol resolution, cardinality checks, contract-symbol and example validation, and canonical serialization for developer tooling. |
 | `tests/test_contract_traceability.py` and `tests/test_documentation.py` | Compile every baselined contract into one graph, compare the result with the requirement, phase, test-file, and baseline oracle, and require each contract's three DAGs, symbol inventory, and complete worked example. |
 | `docs/development/master-execution-checklist.md` | Add the foundational Master Phase 0 work before project-root and system-graph implementation. |
-| `docs/development/*.md` implementation contracts | Retain verifier-rule markers, three DAGs, and one complete worked example per contract. |
+| `docs/development/*.md` implementation contracts | Retain verifier-rule markers, three DAGs, one formal symbol inventory, and one complete worked example per contract. |
 | `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, explicit example-symbol inventory, complete worked example, and requirement-rule-owner-test chain. |
 | `docs/development/system-impact-compiler.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
 | `docs/development/testing.md` | Document the focused traceability check and the meaning of each marker. |

@@ -17,6 +17,7 @@ import pytest
 import viper._contract_traceability as traceability
 from viper._contract_traceability import (
     ContractRequirement,
+    ContractSymbol,
     ContractTraceabilityGraph,
     DeclarationRef,
     RepoSymbolRef,
@@ -55,6 +56,7 @@ MASTER_PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/foundation-pair-coding.
 CONTRACT_TRACEABILITY_PAIR_CODING = (
     ROOT / "docs/development/contract-traceability-pair-coding.md"
 )
+MODULE_OWNERSHIP_PAIR_CODING = ROOT / "docs/development/module-ownership-pair-coding.md"
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-traceability.md",
     ROOT / "docs/development/project-data-root.md",
@@ -81,6 +83,7 @@ TRACEABILITY_MODELS = (
     ContractRequirement,
     VerifierRule,
     RuleEdge,
+    ContractSymbol,
     ContractTraceabilityGraph,
 )
 
@@ -127,6 +130,10 @@ _CONTRACT_WORKED_EXAMPLE = re.compile(
     re.DOTALL,
 )
 _PYTHON_FENCE = re.compile(r"```python\n(?P<body>.*?)\n```", re.DOTALL)
+_CONTRACT_EXPORTS = re.compile(
+    r"```python contract-exports\n(?P<body>.*?)\n```",
+    re.DOTALL,
+)
 _MERMAID_FENCE = re.compile(r"```mermaid\n(?P<body>.*?)\n```", re.DOTALL)
 _MERMAID_EDGE = re.compile(
     r"^\s*(?P<source>[A-Za-z][A-Za-z0-9_]*)\s+-->"
@@ -1665,9 +1672,7 @@ def test_contracts_exclude_retired_trace_records() -> None:
         assert "```toml contract-trace" not in text, document
         assert re.search(r"\bContractTrace\b", text) is None, document
 
-    assert "concrete trace" not in (ROOT / "docs/README.md").read_text(
-        encoding="utf-8"
-    )
+    assert "concrete trace" not in (ROOT / "docs/README.md").read_text(encoding="utf-8")
 
 
 def test_contract_traceability_dags_use_semantic_palette() -> None:
@@ -1796,6 +1801,7 @@ def test_contract_and_schedule_names_are_canonical() -> None:
         CONTRACT_TRACEABILITY_PAIR_CODING: (
             "# Contract Traceability Pair-Coding Guide"
         ),
+        MODULE_OWNERSHIP_PAIR_CODING: ("# Public Module Ownership Pair-Coding Guide"),
         MASTER_PHASE_ZERO_PAIR_CODING: "# Foundation Pair-Coding Guide",
         MASTER_EXECUTION_CHECKLIST: "# VIPER Master Execution Checklist",
         SYSTEM_IMPACT_COMPILER: "# System Impact Compiler",
@@ -1874,9 +1880,7 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
         assert len(edits) == 1, block_id
         file_edits = tuple(_FILE_PAIR_EDIT.finditer(body))
         assert len(file_edits) == len(edits), block_id
-        target_paths = {
-            target.partition(":")[0] for target in manifest["targets"]
-        }
+        target_paths = {target.partition(":")[0] for target in manifest["targets"]}
         assert {edit.group("path") for edit in file_edits} <= target_paths, block_id
         code = edits[0].group("code")
         assert _PAIR_PLACEHOLDER.search(code) is None, block_id
@@ -1936,6 +1940,101 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
     assert pending_contracts == {
         name for name in pending_contracts if f"`{name}`" in text
     }
+
+
+def test_module_ownership_pair_guide_covers_each_cycle() -> None:
+    """Require every MOD cycle to carry file-separated code and one gate."""
+    text = MODULE_OWNERSHIP_PAIR_CODING.read_text(encoding="utf-8")
+    headings = (
+        "## 1. Status and boundary",
+        "## 2. Pair-cycle contract",
+        "## 3. Production PairBlocks",
+        "## 4. Pair execution",
+        "## 5. Guide gate",
+        "## 6. SystemGraph handoff",
+    )
+    positions = tuple(text.index(heading) for heading in headings)
+    assert positions == tuple(sorted(positions))
+
+    definitions = tuple(_PAIR_BLOCK_DEFINITION.finditer(text))
+    expected_ids = (
+        "P0-MOD-01",
+        "P0-MOD-02",
+        "P0-MOD-03",
+        "P0-MOD-04",
+    )
+    assert tuple(item.group("id") for item in definitions) == expected_ids
+
+    manifests: dict[str, dict[str, Any]] = {}
+    order = {block_id: index for index, block_id in enumerate(expected_ids)}
+    for definition in definitions:
+        block_id = definition.group("id")
+        manifest = tomllib.loads(definition.group("manifest"))
+        assert manifest["id"] == block_id
+        assert set(manifest) == {
+            "id",
+            "requirements",
+            "targets",
+            "tests",
+            "gate",
+            "depends_on",
+        }
+        assert manifest["requirements"] == ["MOD-01"]
+        assert manifest["targets"]
+        assert manifest["tests"]
+        assert str(manifest["gate"]).startswith("conda run -n mantra ")
+
+        body = definition.group("body")
+        assert body.count("**Context:**") == 1, block_id
+        edits = tuple(_PAIR_EDIT.finditer(body))
+        file_edits = tuple(_FILE_PAIR_EDIT.finditer(body))
+        assert edits, block_id
+        assert len(file_edits) == len(edits), block_id
+        assert len({edit.group("path") for edit in file_edits}) == len(edits)
+        target_paths = {target.partition(":")[0] for target in manifest["targets"]}
+        assert {edit.group("path") for edit in file_edits} <= target_paths, block_id
+        symbols_by_path: dict[str, set[str]] = {}
+        for edit in edits:
+            assert _PAIR_PLACEHOLDER.search(edit.group("code")) is None, block_id
+            ast.parse(
+                edit.group("code"),
+                filename=f"{MODULE_OWNERSHIP_PAIR_CODING.name}:{block_id}",
+            )
+        for edit in file_edits:
+            tree = ast.parse(edit.group("code"))
+            symbols: set[str] = set()
+            for node in tree.body:
+                if isinstance(
+                    node,
+                    (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+                ):
+                    symbols.add(node.name)
+                if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    targets = (
+                        node.targets if isinstance(node, ast.Assign) else (node.target,)
+                    )
+                    symbols.update(
+                        target.id for target in targets if isinstance(target, ast.Name)
+                    )
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    symbols.update(
+                        alias.asname or alias.name.rpartition(".")[2]
+                        for alias in node.names
+                    )
+            symbols_by_path[edit.group("path")] = symbols
+        for target in manifest["targets"]:
+            path, _, symbol = target.partition(":")
+            assert symbol in symbols_by_path[path], (block_id, target)
+        manifests[block_id] = manifest
+
+    for block_id, manifest in manifests.items():
+        dependencies = manifest["depends_on"]
+        assert len(dependencies) == len(set(dependencies)), block_id
+        for dependency in dependencies:
+            if dependency == "P0-CRT-05":
+                continue
+            assert dependency in manifests, (block_id, dependency)
+            assert order[dependency] < order[block_id], (block_id, dependency)
 
 
 def test_system_graph_stages_traceability_before_contract_change() -> None:
@@ -2054,6 +2153,9 @@ def test_contract_traceability_pair_guide_executes_as_one_workflow(
         "test_contract_examples_reject_incomplete_structure",
         "test_contract_examples_reject_undeclared_inventory_symbol",
         "test_contract_examples_reject_unused_inventory_symbol",
+        "test_contract_symbols_compile_complete_inventory",
+        "test_contract_symbols_reject_missing_section_model",
+        "test_contract_examples_require_registered_symbols",
         "test_contract_traceability_graph_is_canonical",
         "test_contract_traceability_graph_rejects_duplicate_ids",
     )
@@ -2085,6 +2187,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         definition
         for definition in _PAIR_BLOCK_DEFINITION.finditer(reference)
         if not definition.group("id").startswith("P0-CRT-")
+        and not definition.group("id").startswith("P0-MOD-")
         and definition.group("id")
         not in {"P0-PROOF-01", "P0-PROOF-02", "P0-PROOF-03", "P0-PROOF-04"}
         and not definition.group("id").startswith("P0-SIG-")
@@ -2094,6 +2197,10 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     contract_reference = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
     contract_definitions = tuple(
         definition for definition in _PAIR_BLOCK_DEFINITION.finditer(contract_reference)
+    )
+    module_reference = MODULE_OWNERSHIP_PAIR_CODING.read_text(encoding="utf-8")
+    module_definitions = tuple(
+        definition for definition in _PAIR_BLOCK_DEFINITION.finditer(module_reference)
     )
     system_reference = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     system_definitions = tuple(
@@ -2114,6 +2221,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     definitions = (
         root_definitions
         + contract_definitions
+        + module_definitions
         + downstream_definitions
         + system_definitions
     )
@@ -2195,9 +2303,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
                 trees.append(
                     ast.parse(
                         code,
-                        filename=(
-                            f"{MASTER_PHASE_ZERO_PAIR_CODING.name}:{block_id}"
-                        ),
+                        filename=(f"{MASTER_PHASE_ZERO_PAIR_CODING.name}:{block_id}"),
                     )
                 )
             edit_tree = ast.Module(
@@ -2228,6 +2334,11 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
                     )
                     declarations.update(
                         target.id for target in targets if isinstance(target, ast.Name)
+                    )
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    declarations.update(
+                        alias.asname or alias.name.rpartition(".")[2]
+                        for alias in node.names
                     )
             for target in manifest["targets"]:
                 symbol = target.partition(":")[2]
@@ -2276,7 +2387,24 @@ def test_system_graph_phase_one_tasks_have_pair_blocks() -> None:
 
 def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
     """Keep each planned move equal to the complete current definition set."""
-    reference = MASTER_PHASE_ZERO_PAIR_CODING.read_text(encoding="utf-8")
+    reference = MODULE_OWNERSHIP_PAIR_CODING.read_text(encoding="utf-8")
+
+    def exports(tree: ast.Module) -> tuple[str, ...]:
+        assignment = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in node.targets
+            )
+        )
+        assert isinstance(assignment.value, (ast.List, ast.Tuple))
+        return tuple(
+            value.value
+            for value in assignment.value.elts
+            if isinstance(value, ast.Constant) and isinstance(value.value, str)
+        )
 
     def planned_tree(block_id: str) -> ast.Module:
         definition = next(
@@ -2292,6 +2420,15 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
         (ROOT / "src/viper/verification.py").read_text(encoding="utf-8")
     )
     verification_target = planned_tree("P0-MOD-02")
+    operation_exports = (
+        "verify_attempt_future_inputs",
+        "verify_benchmark_result",
+        "verify_promoted_artifact",
+        "verify_run_result",
+        "verify_stored_input_selections",
+        "verify_stored_inputs",
+    )
+    assert exports(verification_target) == operation_exports
     source_operations = {
         node.name: node
         for node in verification_source.body
@@ -2318,6 +2455,19 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
         "VerifiedBenchmarkResult",
     }
     model_target = planned_tree("P0-MOD-01")
+    model_exports = (
+        "StageSnapshot",
+        "StorageFetcher",
+        "VerificationError",
+        "VerificationPolicy",
+        "VerifiedArtifact",
+        "VerifiedBenchmarkResult",
+        "VerifiedInput",
+        "VerifiedRunPlan",
+        "VerifiedRunResult",
+        "VerifiedSnapshotFile",
+    )
+    assert exports(model_target) == model_exports
     source_models = {
         node.name: node
         for node in verification_source.body
@@ -2332,6 +2482,14 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
     assert {name: _normalized(node) for name, node in source_models.items()} == {
         name: _normalized(node) for name, node in target_models.items()
     }
+
+    contract_exports = tuple(
+        exports(ast.parse(match.group("body")))
+        for match in _CONTRACT_EXPORTS.finditer(
+            MODULE_OWNERSHIP.read_text(encoding="utf-8")
+        )
+    )
+    assert contract_exports == (model_exports, operation_exports)
 
     api_source = ast.parse(
         (ROOT / "src/viper/_api/handlers.py").read_text(encoding="utf-8")

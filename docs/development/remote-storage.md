@@ -1095,6 +1095,10 @@ direct function, typed handler, and CLI then call one restore engine.
 
 ## 11. Public workflow
 
+<!-- contract-symbols:
+{"models":["LocalStorageDestination","StorageSettings","ViperCloudDestination"],"aliases":["StorageDestination"],"functions":["bind_run_destination","publish_resolved_files"]}
+-->
+
 <!-- contract-example-symbols:
 ["LocalStorageDestination", "ViperCloudDestination", "StorageSettings", "bind_run_destination", "publish_resolved_files"]
 -->

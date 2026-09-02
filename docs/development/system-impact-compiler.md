@@ -65,7 +65,7 @@ These requirements bind the contract to the master checklist:
 | SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_validation_architecture.py --> | Inventory every tracked file; emit canonical, source-anchored nodes and dependency edges; and classify every supported Python dependency site. |
 | SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_validation_architecture.py --> | Produce stable diagnostics, hold declared external inputs fixed, and fail closed on every unsupported or unresolved dependency in the complete supported Python analysis scope before impact closure. |
 | SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_inspection.py --> | Compile a `ContractChange` into a `ContractDelta`, then derive the conservative impact overlay, reverse closure, affected-graph SCC condensation, and total propagation plan. |
-| SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Ingest canonical requirements, verifier rules, and rule bindings from CRT; compile checklist tasks and bootstrap PairBlocks into $G_0$; select tests for every executable affected node; and require complete statement and branch execution over that surface. |
+| SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_documentation.py --> | Ingest canonical requirements, verifier rules, rule bindings, and contract symbols from CRT; compile checklist tasks and bootstrap PairBlocks into $G_0$; select tests for every executable affected node; and require complete statement and branch execution over that surface. |
 | SIG-05 <!-- contract-requirement: SIG-05 phase=0 test=tests/test_system_graph_codeql.py --> | Pin CodeQL CLI `2.26.4`, the compatible Python extractor pack, and one locked VIPER QL pack; persist one receipt for database creation and every query; lower the validated rows into both $G_0$ and $G_1$; and reject toolchain, query, schema, decoding, or source-revision drift. |
 
 The master checklist carries one marker for each block named below. Section 14
@@ -138,7 +138,7 @@ Here `ContractChange` is the authored request. The planned
 returns a validated `ContractDelta`, represented by $\Delta$. The implemented
 [`ContractTraceabilityGraph`](../../src/viper/_contract_traceability.py)
 records the requirements, verifier rules, implementation owners, tests, and
-worked traces extracted from the contract and checklist files in `R0`.
+contract symbols extracted from the contract and checklist files in `R0`.
 The compiler orchestrator invokes `analyze_source_with_codeql()`, validates its
 `CodeQLAnalysisReceipt`, and passes the returned rows to `compile_system()`
 alongside context `X`,
@@ -1553,8 +1553,9 @@ The planned private function
 runs the locked QL pack, decodes each BQRS result, validates every row, and
 returns `CodeQLSourceFacts`. `compile_system()` lowers those rows into file,
 symbol, import, call, type, and other code-dependency facts.
-`contract_traceability` contributes `ContractRequirement`, `VerifierRule`, and
-`RuleEdge` facts. `pair_blocks` contributes scheduling dependencies.
+`contract_traceability` contributes `ContractRequirement`, `VerifierRule`,
+`RuleEdge`, and `ContractSymbol` facts. `pair_blocks` contributes scheduling
+dependencies.
 `compile_system()` normalizes all three sources into the `nodes` and `edges`
 fields of one `SystemGraph`.
 
@@ -1824,6 +1825,10 @@ successful dynamic resolution, records one unresolved resolution for the
 exploratory path, publishes both graphs, creates their condensation DAG, and
 builds the resulting impact report. It then assigns every affected path a
 disposition and reconciles one planned addition with the candidate delta.
+
+<!-- contract-symbols:
+{"models":["AbsenceConstraint","AddEdgeOperation","AddNodeOperation","AffectedSymbolCoverage","BlastCoverageReport","ChangedNode","CodeQLAnalysisReceipt","CodeQLDatabaseReceipt","CodeQLDependencySiteRow","CodeQLEdgeRow","CodeQLNodeRow","CodeQLPackIdentity","CodeQLQueryReceipt","CodeQLSignatureRow","CodeQLSourceFacts","CodeQLSourceLocation","CodeQLToolchainIdentity","ConstraintConformanceReceipt","ContextCommand","ContextFile","ContextPackage","ContextVariable","ContractChange","ContractDelta","DocumentAnchorNode","DocumentAnchorRef","EdgeFact","ExternalSymbolAnchor","ExternalSymbolNode","FileAnalysisReceipt","ImpactReport","NodeIdentityFact","NodeRolesFact","OperationPrecedence","PairBlock","PlannedAddition","PlannedNodeAnchor","PresenceConstraint","PreservationConstraint","PropagationDisposition","PropagationPlan","PythonParameterFact","PythonSignatureFact","PythonSymbolAnchor","PythonSymbolNode","RemoveEdgeOperation","RemoveNodeOperation","RepositoryFile","RepositoryFileAnchor","RepositoryFileNode","ResolutionAttempt","ResolutionEvidence","ResolutionObservation","SourceEvidence","SystemCompilerIdentity","SystemComponent","SystemComponentEdge","SystemCondensationDAG","SystemContextManifest","SystemDiagnostic","SystemEdge","SystemEdgeAnchor","SystemGraph","SystemGraphDelta","SystemSource","TargetConformanceReport","TargetConstraintOrigin","TargetSpecification","UnresolvedDependency","UpdateEdgeOperation","UpdateNodeOperation"],"aliases":["CodeQLSourceFact","ConstraintOutcome","DeltaOperation","DeltaOperationKind","DependencySiteOutcome","DiagnosticSeverity","EdgeEvidence","EdgeOrigin","FileAnalysisStatus","GraphFact","PairBlockId","PropagationAction","PythonParameterKind","ResolutionKind","SystemComponentId","SystemEdgeKind","SystemNode","SystemNodeAnchor","SystemNodeId","SystemNodeKind","SystemNodeRole","TargetConstraint"],"functions":[]}
+-->
 
 <!-- contract-example-symbols:
 [
@@ -3918,8 +3923,8 @@ Q_0=\operatorname{CompileTraceability}(R_0).
 ```
 
 Let $W_0=\operatorname{CompilePairBlocks}(R_0)$. The repository compiler
-lowers the requirements, verifier rules, owners, and tests in $Q_0$ into
-source-evidenced vertices and typed dependencies while it lowers the source
+lowers the requirements, verifier rules, owners, tests, and contract symbols
+in $Q_0$ into source-evidenced vertices and typed dependencies while it lowers the source
 inventory, CodeQL source facts, context observations, and scheduling
 relationships from $W_0$. The result is the single graph
 $G_0=\mathcal C_{X,K}(F_0,Q_0,W_0)$.
@@ -5866,10 +5871,10 @@ depends_on = ["P0-CRT-05", "P0-SIG-03"]
 ```
 
 Consume the `ContractTraceabilityGraph` produced by `P0-CRT-05`.
-Lower its source-evidenced requirement, rule, owner, and test bindings into
-baseline nodes and dependencies while compiling `G0`; do not parse those
-declarations again. Parse bootstrap PairBlocks separately and lower their work
-traceability into `G0`.
+Lower its source-evidenced requirements, rules, owners, tests, and contract
+symbols into baseline nodes and dependencies while compiling `G0`; do not
+parse those declarations again. Parse bootstrap PairBlocks separately and
+lower their work traceability into `G0`.
 
 After `G0` exists, parse the fenced `contract-change` TOML into
 `ContractChange`. Resolve each

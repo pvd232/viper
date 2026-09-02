@@ -942,6 +942,10 @@ publish_vector
 
 ## 12. Acceptance cases
 
+<!-- contract-symbols:
+{"models":["ArtifactKnowledgeTarget","DeclaredPrimitiveAssignment","MeasurementKnowledgeTarget","OntologySpec","PrimitiveRef","PrimitiveSpec","RunKnowledgeTarget","StageKnowledgeTarget"],"aliases":["AssertionId","KnowledgeTarget","OntologyId","OntologyVersion","PrimitiveId","VectorViewId"],"functions":[]}
+-->
+
 <!-- contract-example-symbols:
 ["PrimitiveSpec", "OntologySpec", "PrimitiveRef", "RunKnowledgeTarget", "DeclaredPrimitiveAssignment"]
 -->

@@ -227,6 +227,10 @@ Runs already in progress finish and keep their actual result.
 
 ### Complete example
 
+<!-- contract-symbols:
+{"models":["ExperimentExecutionResult","ExperimentRunResult"],"aliases":["ExperimentRunStatus","RunIdMap","execution"],"functions":["expand","freeze"]}
+-->
+
 <!-- contract-example-symbols: ["execution", "expand", "freeze"] -->
 <!-- contract-worked-example: start -->
 

@@ -311,6 +311,10 @@ verified run plan.
 
 ## 9. Acceptance cases
 
+<!-- contract-symbols:
+{"models":["FrozenPlanFiles","GitFileRef","ResolvedRunSpecRef"],"aliases":[],"functions":["freeze"]}
+-->
+
 <!-- contract-example-symbols: ["freeze", "GitFileRef", "ResolvedRunSpecRef"] -->
 <!-- contract-worked-example: start -->
 

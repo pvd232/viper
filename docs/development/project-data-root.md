@@ -341,6 +341,10 @@ This target workflow initializes one temporary project, rediscovers its root
 from a child directory, resolves one ordinary input, and publishes the same
 artifact bytes through both local reference types.
 
+<!-- contract-symbols:
+{"models":["InitProjectRequest","InitProjectSuccess","LocalFileRef","LocalStageResultSnapshotRef","Settings","ViperConfig"],"aliases":[],"functions":["find_root","resolve_path","resolve_root"]}
+-->
+
 <!-- contract-example-symbols:
 ["Settings", "ViperConfig", "InitProjectRequest", "InitProjectSuccess", "find_root", "resolve_root", "resolve_path", "LocalFileRef", "LocalStageResultSnapshotRef"]
 -->

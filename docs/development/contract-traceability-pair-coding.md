@@ -23,12 +23,13 @@ This guide changes only contract traceability during Master Phase 0:
 ```text
 existing ContractRequirement, VerifierRule, and RuleEdge models
 -> parse authored contract and checklist declarations
--> validate their joins and concrete examples
+-> inventory contract symbols and validate example coverage
+-> validate requirement-rule joins and concrete examples
 -> compile ContractTraceabilityGraph
 -> serialize canonical JSON bytes
 ```
 
-Every compiled requirement, rule, and edge retains the exact source
+Every compiled requirement, rule, edge, and symbol retains the exact source
 path, line span, and digest of its authored declaration. SystemGraph can then
 lower traceability into $G_0$ without reparsing Markdown or inventing source
 coordinates.
@@ -261,6 +262,7 @@ Add the checklist edge parser after the declaration parsers.
 
 ```python pair-edit
 import ast
+from typing import cast
 
 
 _PHASE_HEADING = re.compile(
@@ -290,6 +292,11 @@ def _python_symbols(path: Path) -> set[str]:
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             symbols.add(node.name)
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+            symbols.update(
+                target.id for target in targets if isinstance(target, ast.Name)
+            )
         if isinstance(node, ast.ClassDef):
             for member in node.body:
                 if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -409,17 +416,17 @@ def _parse_rule_edges(
 <!-- pair-block-definition: P0-CRT-03 -->
 ```toml pair-block
 id = "P0-CRT-03"
-requirements = ["CRT-03"]
-targets = ["src/viper/_contract_traceability.py:validate_contract_example"]
-tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
+requirements = ["CRT-03", "CRT-05"]
+targets = ["src/viper/_contract_traceability.py:_parse_contract_symbols", "src/viper/_contract_traceability.py:validate_contract_example"]
+tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure", "tests/test_contract_traceability.py:test_contract_symbols_compile_complete_inventory", "tests/test_contract_traceability.py:test_contract_symbols_reject_missing_section_model", "tests/test_contract_traceability.py:test_contract_examples_require_registered_symbols"]
 gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k contract_examples -q"
 depends_on = ["P0-CRT-02"]
 ```
 
-**Context:** The documentation test currently checks worked examples and
-diagrams without exposing one reusable validation operation. This block moves
-those checks into the compiler while preserving the existing test as a parity
-oracle.
+**Context:** The documentation test checks selected worked-example symbols but
+does not inventory every Section 4 declaration. This block adds the complete
+contract inventory, requires example symbols to be a subset, and keeps the DAG
+and worked-example checks in one reusable compiler boundary.
 
 Move the existing model-construction and Mermaid checks from the documentation
 oracle into this production operation. Keep the oracle until parity passes.
@@ -428,11 +435,16 @@ oracle into this production operation. Keep the oracle until parity passes.
 
 ```python pair-edit
 import ast
+from typing import cast
 
 
 _PYTHON_FENCE = re.compile(r"\`\`\`python\n(?P<body>.*?)\n\`\`\`", re.DOTALL)
 _CONTRACT_EXAMPLE_SYMBOLS = re.compile(
     r"<!-- contract-example-symbols:\s*(?P<body>\[.*?\])\s*-->",
+    re.DOTALL,
+)
+_CONTRACT_SYMBOLS = re.compile(
+    r"<!-- contract-symbols:\s*(?P<body>\{.*?\})\s*-->",
     re.DOTALL,
 )
 _CONTRACT_WORKED_EXAMPLE = re.compile(
@@ -467,6 +479,133 @@ def _section(text: str, number: int) -> str:
             f"contract is missing numbered section {number}"
         )
     return match.group("body")
+
+
+def _python_declarations(text: str, filename: str) -> dict[str, set[str]]:
+    declarations = {"models": set(), "aliases": set(), "functions": set()}
+    declarations["imports"] = set()
+    for match in _PYTHON_FENCE.finditer(text):
+        tree = ast.parse(match.group("body"), filename=filename)
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                declarations["models"].add(node.name)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                declarations["functions"].add(node.name)
+            elif isinstance(node, ast.Assign):
+                declarations["aliases"].update(
+                    target.id
+                    for target in node.targets
+                    if isinstance(target, ast.Name)
+                )
+            elif isinstance(node, ast.AnnAssign) and isinstance(
+                node.target, ast.Name
+            ):
+                declarations["aliases"].add(node.target.id)
+            elif isinstance(node, ast.Import):
+                declarations["imports"].update(
+                    alias.asname or alias.name.split(".", maxsplit=1)[0]
+                    for alias in node.names
+                )
+            elif isinstance(node, ast.ImportFrom):
+                declarations["imports"].update(
+                    alias.asname or alias.name for alias in node.names
+                )
+    return declarations
+
+
+def _load_symbol_inventory(contract: Path) -> dict[str, tuple[str, ...]]:
+    text = contract.read_text(encoding="utf-8")
+    markers = tuple(_CONTRACT_SYMBOLS.finditer(text))
+    if len(markers) != 1:
+        raise ContractTraceabilityError(
+            f"{contract.name} requires one contract-symbols inventory"
+        )
+    try:
+        loaded = json.loads(markers[0].group("body"))
+    except json.JSONDecodeError as error:
+        raise ContractTraceabilityError(
+            f"{contract.name} has an invalid contract-symbols inventory"
+        ) from error
+    keys = ("models", "aliases", "functions")
+    if not isinstance(loaded, dict) or set(loaded) != set(keys):
+        raise ContractTraceabilityError(
+            f"{contract.name} contract-symbols requires models, aliases, and functions"
+        )
+    inventory: dict[str, tuple[str, ...]] = {}
+    for key in keys:
+        values = loaded[key]
+        if (
+            not isinstance(values, list)
+            or any(
+                not isinstance(value, str) or not value.isidentifier()
+                for value in values
+            )
+            or values != sorted(set(values))
+        ):
+            raise ContractTraceabilityError(
+                f"{contract.name} contract-symbols {key} must be sorted unique "
+                "Python identifiers"
+            )
+        inventory[key] = tuple(values)
+    all_names = [name for values in inventory.values() for name in values]
+    if not all_names or len(all_names) != len(set(all_names)):
+        raise ContractTraceabilityError(
+            f"{contract.name} contract-symbols must inventory each symbol once"
+        )
+    return inventory
+
+
+def _parse_contract_symbols(
+    root: Path,
+    contract: Path,
+) -> tuple[ContractSymbol, ...]:
+    text = contract.read_text(encoding="utf-8")
+    inventory = _load_symbol_inventory(contract)
+    marker = next(_CONTRACT_SYMBOLS.finditer(text))
+    marker_ref = _declaration_ref(
+        root,
+        contract,
+        text,
+        marker.start(),
+        marker.end(),
+    )
+
+    available = _python_declarations(text, str(contract))
+    available_names = set().union(*available.values())
+    inventoried_names = set().union(
+        *(set(values) for values in inventory.values())
+    )
+    missing = sorted(inventoried_names - available_names)
+    if missing:
+        raise ContractTraceabilityError(
+            f"{contract.name} contract-symbols names undeclared symbols: {missing}"
+        )
+
+    models = _section(text, 4)
+    example = _CONTRACT_WORKED_EXAMPLE.search(models)
+    if example is not None:
+        models = models[: example.start()] + models[example.end() :]
+    required = _python_declarations(models, f"{contract}:section-4")
+    for key in ("models", "aliases", "functions"):
+        omitted = sorted(required[key] - set(inventory[key]))
+        if omitted:
+            raise ContractTraceabilityError(
+                f"{contract.name} contract-symbols omits Section 4 {key}: "
+                f"{omitted}"
+            )
+
+    kinds = {"models": "model", "aliases": "alias", "functions": "function"}
+    contract_path = contract.relative_to(root).as_posix()
+    return tuple(
+        ContractSymbol(
+            kind=cast(ContractSymbolKind, kinds[key]),
+            name=name,
+            contract=contract_path,
+            declaration=marker_ref,
+        )
+        for key in ("models", "aliases", "functions")
+        for name in inventory[key]
+    )
 
 
 def _assert_dag(diagram: str, contract: Path, index: int) -> None:
@@ -559,6 +698,13 @@ def validate_contract_example(contract: Path) -> None:
             "array of unique Python identifiers"
         )
     symbols = set(loaded_symbols)
+    contract_symbols = set().union(*_load_symbol_inventory(contract).values())
+    uncovered_symbols = sorted(symbols - contract_symbols)
+    if uncovered_symbols:
+        raise ContractTraceabilityError(
+            f"{contract.name} example symbols absent from contract-symbols: "
+            f"{uncovered_symbols}"
+        )
 
     examples = tuple(_CONTRACT_WORKED_EXAMPLE.finditer(text))
     if len(examples) != 1:
@@ -710,7 +856,7 @@ CONTRACTS_WITH_COMPLETE_EXAMPLES = IMPLEMENTATION_CONTRACTS
 <!-- pair-block-definition: P0-CRT-05 -->
 ```toml pair-block
 id = "P0-CRT-05"
-requirements = ["CRT-04"]
+requirements = ["CRT-04", "CRT-05"]
 targets = ["src/viper/_contract_traceability.py:compile_contract_traceability", "src/viper/_contract_traceability.py:serialize_contract_traceability"]
 tests = ["tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical", "tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids"]
 gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k contract_traceability_graph -q"
@@ -766,12 +912,23 @@ def compile_contract_traceability(
     if _duplicates([item.rule_id for item in rules]):
         raise ContractTraceabilityError("verifier-rule ID belongs to several contracts")
     edges = _parse_rule_edges(root, checklist, markers, rules)
+    symbols = tuple(
+        symbol
+        for contract in contracts
+        for symbol in _parse_contract_symbols(root, contract)
+    )
     for contract in contracts:
         validate_contract_example(contract)
     graph = ContractTraceabilityGraph(
         requirements=tuple(sorted(requirements, key=lambda item: item.requirement_id)),
         rules=tuple(sorted(rules, key=lambda item: item.rule_id)),
         edges=edges,
+        symbols=tuple(
+            sorted(
+                symbols,
+                key=lambda item: (item.contract, item.kind, item.name),
+            )
+        ),
     )
     serialize_contract_traceability(graph)
     return graph
@@ -903,6 +1060,10 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
             def build_record(value: str) -> ExampleRecord:
                 return ExampleRecord(value)
             [END]
+
+            <!-- contract-symbols:
+            {"models":["ExampleRecord"],"aliases":[],"functions":["build_record"]}
+            -->
 
             <!-- contract-example-symbols: ["ExampleRecord", "build_record"] -->
             <!-- contract-worked-example: start -->
@@ -1066,9 +1227,9 @@ def test_rule_edges_reject_missing_symbols(tmp_path: Path) -> None:
 <!-- pair-block-definition: P0-PROOF-03 -->
 ```toml pair-block
 id = "P0-PROOF-03"
-requirements = ["CRT-03"]
-targets = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure", "tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol", "tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol"]
-tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure", "tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol", "tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol"]
+requirements = ["CRT-03", "CRT-05"]
+targets = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure", "tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol", "tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol", "tests/test_contract_traceability.py:test_contract_symbols_compile_complete_inventory", "tests/test_contract_traceability.py:test_contract_symbols_reject_missing_section_model", "tests/test_contract_traceability.py:test_contract_examples_require_registered_symbols"]
+tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure", "tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol", "tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol", "tests/test_contract_traceability.py:test_contract_symbols_compile_complete_inventory", "tests/test_contract_traceability.py:test_contract_symbols_reject_missing_section_model", "tests/test_contract_traceability.py:test_contract_examples_require_registered_symbols"]
 gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k contract_examples -q"
 depends_on = ["P0-CRT-03", "P0-PROOF-02"]
 ```
@@ -1083,6 +1244,7 @@ Extend the imports, then add these tests.
 
 ```python pair-edit
 from viper._contract_traceability import (
+    _parse_contract_symbols,
     validate_contract_example,
 )
 
@@ -1112,6 +1274,9 @@ def test_contract_examples_reject_undeclared_inventory_symbol(
         contract.read_text(encoding="utf-8").replace(
             '["ExampleRecord", "build_record"]',
             '["ExampleRecord", "build_record", "MissingRecord"]',
+        ).replace(
+            '"models":["ExampleRecord"]',
+            '"models":["ExampleRecord","MissingRecord"]',
         ),
         encoding="utf-8",
     )
@@ -1136,6 +1301,51 @@ def test_contract_examples_reject_unused_inventory_symbol(tmp_path: Path) -> Non
     with pytest.raises(
         ContractTraceabilityError,
         match="operations=\\['build_record'\\]",
+    ):
+        validate_contract_example(contract)
+
+
+def test_contract_symbols_compile_complete_inventory(tmp_path: Path) -> None:
+    contract, _ = _write_fixture(tmp_path)
+
+    symbols = _parse_contract_symbols(tmp_path, contract)
+
+    assert [(symbol.kind, symbol.name) for symbol in symbols] == [
+        ("model", "ExampleRecord"),
+        ("function", "build_record"),
+    ]
+
+
+def test_contract_symbols_reject_missing_section_model(tmp_path: Path) -> None:
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            '"models":["ExampleRecord"]',
+            '"models":[]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="omits Section 4 models: \\['ExampleRecord'\\]",
+    ):
+        _parse_contract_symbols(tmp_path, contract)
+
+
+def test_contract_examples_require_registered_symbols(tmp_path: Path) -> None:
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            ',"functions":["build_record"]',
+            ',"functions":[]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="example symbols absent from contract-symbols: \\['build_record'\\]",
     ):
         validate_contract_example(contract)
 ```
@@ -1325,6 +1535,7 @@ baseline `compile_system()`:
 ContractTraceabilityGraph.requirements
 ContractTraceabilityGraph.rules
 ContractTraceabilityGraph.edges
+ContractTraceabilityGraph.symbols
 ```
 
 Each record includes its exact `DeclarationRef`, so SystemGraph can lower the

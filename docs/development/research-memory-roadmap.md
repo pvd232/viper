@@ -975,6 +975,10 @@ The verifier rejects:
 
 ## 16. Acceptance traces
 
+<!-- contract-symbols:
+{"models":["AnalysisPlan","HypothesisSpec","ResearchConstraint","ResearchObjective"],"aliases":[],"functions":[]}
+-->
+
 <!-- contract-example-symbols:
 ["ResearchConstraint", "ResearchObjective", "AnalysisPlan", "HypothesisSpec"]
 -->
