@@ -328,7 +328,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
-<!-- contract-baseline: system-impact-compiler.md sha256=5426e1d1a34d519bb3626b132157365275dfdc6c94135ca9079192238f9d0ae7 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=e1a7eeecdc926656f65a4fc36cb04362aab96fe577fcc4742d7ab444b2c432e5 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
 <!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->
@@ -577,19 +577,26 @@ and evidence. The [Research Memory Pair-Coding
 Guide](research-memory-pair-coding.md) owns the `P18-RML`, `P19-RML`, and
 `P20-RML` blocks and their completion gates.
 
-For each checkbox group:
+One contract session is the default guided boundary:
 
-1. Read the outcome and the first test.
-2. Try the edit before opening the hint.
-3. Open Hint 1 for the owner and data flow.
-4. Open Hint 2 for the exact symbols.
-5. Run the focused test.
-6. Inspect the diff.
-7. Commit at the stated boundary.
+1. Synchronize the repository and record the baseline commit.
+2. Compile the contract's starting PairBlocks and select its remaining work.
+3. Implement one bounded PairBlock edit at a time and run focused tests where
+   they provide useful feedback.
+4. Preserve intermediate review cycles as checkpoint commits while the
+   PairBlocks remain planned.
+5. At the end of pair coding, compare the complete Git diff with every selected
+   `ContractTarget`.
+6. Update the plan for an intentional discovery only after user approval;
+   remove accidental changes or move them to a separately approved plan.
+7. Freeze the reconciled plan and candidate source, run one strict System
+   Impact check, and mark the contract complete only after it passes.
+8. Commit and push the exact accepted state.
 
-Each pair-coding turn changes one bounded behavior. The user writes the code.
-Codex inspects the live file, explains the next edit, and chooses the next test
-from the observed result.
+The user writes the code during guided PairBlocks. Codex inspects each bounded
+edit, explains the next change, and performs the final reconciliation. A user
+may request a narrower strict close for one PairBlock that needs independent
+acceptance.
 
 ## 7. Master Phase 0 — project root, traceability, module ownership, and system impact
 
@@ -605,8 +612,8 @@ later local operation resolves that same root. Every contract requirement then
 has a named rule, exact implementation owner, and exact test.
 Public API and verification imports identify their defining modules. VIPER can
 analyze that source tree with one pinned CodeQL identity, report baseline
-dependents of the declared targets, and reject a candidate source change that
-the CTG plan did not authorize.
+dependents of the declared targets, and reject candidate declarations absent
+from the CTG plan.
 
 ### 7.1 Project root
 

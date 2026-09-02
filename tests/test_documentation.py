@@ -2406,9 +2406,15 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
         "end_col: int",
         "def extract_declaration_bytes(",
         "### Guided work and strict closure",
+        "The default guided boundary is one contract session",
+        "Every changed declaration receives one result",
         "test_plan_check_rejects_post_freeze_edit",
     ):
         assert boundary in specification
+
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    assert "One contract session is the default guided boundary" in checklist
+    assert "performs the final reconciliation" in checklist
     for retired in ("SystemGraph", "ContractDelta", "PropagationPlan", "SCC"):
         assert f"class {retired}" not in specification
 

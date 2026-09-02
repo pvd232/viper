@@ -467,22 +467,41 @@ small local AST pass.
 under the configured source and test roots, including untracked files named by
 `add` targets. Each row contains the repository-relative path and raw-file
 digest. The freeze copies exactly that manifest into an immutable temporary
-directory; CodeQL and declaration extraction read the copy, not the changing
-working tree.
+directory. CodeQL and declaration extraction read that immutable copy.
 
 ### Guided work and strict closure
 
-Guided pair coding does not run AST extraction or CodeQL after every edit. The
-developer may revise PairBlocks and source freely while running focused tests
-and reviewing the Git diff.
+The default guided boundary is one contract session. At the start, the
+developer synchronizes the repository, records baseline commit
+$R_0$, compiles the starting contract and PairBlocks, and selects the contract's
+remaining blocks. PairBlocks retain the edit order inside the session.
 
-Strict closure runs once when the selected work is ready:
+During guided work, the developer may revise any selected PairBlock and its
+source while running focused tests and reviewing Git diffs. AST extraction and
+CodeQL run during strict closure. Intermediate commits preserve review
+checkpoints while each PairBlock and the contract remain planned.
+
+After pair coding, the agent reconciles the complete difference from $R_0$ to
+the candidate. Every changed declaration receives one result:
+
+1. An existing `ContractTarget` already describes the change.
+2. An intentional discovery requires an updated `ContractTarget` and explicit
+   user approval.
+3. An accidental or unrelated change leaves this candidate or enters a
+   separately approved plan.
+
+The reconciliation updates PairBlocks, targets, dependencies, tests, and gates
+before acceptance. An observed source change enters the approved plan only
+after explicit user approval.
+
+Strict closure then runs once for the reconciled contract:
 
 ```text
 fix baseline R0
--> select PairBlocks
+-> select the contract's remaining PairBlocks
 -> edit PairBlocks and source
 -> run focused tests
+-> reconcile every changed declaration with the selected plan
 -> freeze selected PairBlock bytes and candidate source bytes
 -> compute plan_sha256
 -> extract exact planned and candidate declarations
@@ -494,8 +513,11 @@ fix baseline R0
 Changing a selected PairBlock, target declaration, dependency, gate, test, or
 candidate source file after the freeze changes its digest and invalidates the
 `PlanCheck`. The next strict attempt reuses $R_0$, freezes the revised plan and
-candidate once, and reruns the closing checks. A PairBlock closes only through
-this strict path; guided mode changes iteration cost, not the final guarantee.
+candidate once, and reruns the closing checks. Strict closure supplies the
+completion evidence. Guided work reduces iteration cost while preserving that
+final guarantee.
+The developer may request a narrower PairBlock-level strict close when one
+block needs independent acceptance before the rest of the contract continues.
 
 ## 6. Persisted evidence
 
