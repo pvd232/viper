@@ -328,22 +328,22 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=72158f573e201a385ed14662ab64db23a916c1d08e9caa8f6737f3765fa4c1e0 -->
+<!-- contract-baseline: contract-traceability.md sha256=2cffd18d05ff6cc9e3507fad97f8319717c885d17dace8c71ee6d9963c32b0b2 -->
 
 <!-- contract-baseline: project-data-root.md sha256=7a45e84116ade463f23150baf95b052d01b0c75c7ed93a82124ea70f45d0b8d7 -->
 <!-- contract-baseline: module-ownership.md sha256=dc6ae1ee057dd594435bcc2444c5838c828b0475fb6a27f97711fcbf4bbf4d92 -->
 <!-- contract-baseline: system-impact-compiler.md sha256=2e07cf13c901ae5dfc1d684bb4a7d42a46a141610187654ac7a35f4e2ed9a13c -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=70ea937d7f8a51b14f848bcfa2a3ad9ca3a31714daf08809a341bde0a4e6b7b7 -->
-<!-- contract-baseline: external-input-roots.md sha256=34fd4a5112f8d1558880636cd0752144a1f5cee062bb193fc8bdcd1ff6819d07 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=7289fe8b145abf492faf766bea19830aacb12710fff3e58334314043fe841058 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=2ba326fb38f504435bc609794a7ccf8892b291a054e1a84b8d076522506f0458 -->
-<!-- contract-baseline: frozen-plan-git-identity.md sha256=4da2149e8297fc29ac6d7db4cfcf874457f724e5b7a02f2aa0af66ab32451a9b -->
-<!-- contract-baseline: remote-storage.md sha256=249b977ff7525b0d5e2365544042fcb0f328a98465edee36109babe503b0d11c -->
-<!-- contract-baseline: experiment-expansion.md sha256=1f2ee3371482e73118cd7e91c8ee9fd8097eeda4c1159f63140af7a361e3b53f -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=61b3f30e9f5230dd4148a9c759e1a4ade34c5b42cadcdc71adf4b589e29456cc -->
-<!-- contract-baseline: stage-reuse.md sha256=8f7bb57e8c7b839beda46aa2e2d24e3ed3f5d8cb9330856c272b53c82e0d5121 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=6d0009516e08c3200b49f146b28d6c1dc1a0ccf61cbc1c52d894f030046e1780 -->
-<!-- contract-baseline: research-memory-roadmap.md sha256=56d008dd6a5ee86eb6a4de087a3e03c8a1a34be8eb2ffbfe21674f650f9f4e7e -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=5d6e12db061d755267816fd24e60059e41ae929e8c0ce34ee75a8883181c541c -->
+<!-- contract-baseline: external-input-roots.md sha256=f8e4162e3dba88a50f00b6af66ab6a003aceb7c1fca9260977f6e50acd07aee3 -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=34c7121ab4f1ec3a2999facfff6bfa354d74bb2450f12c2fc610236ad199deef -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=07d384bed3bc1a945ca704171b250df6f67c2ac02e24ccab12b16f16e6c7ae96 -->
+<!-- contract-baseline: frozen-plan-git-identity.md sha256=639c743d25de8decdde4a4a7e1f74104033ea4f278d0951f335eddd889c9317f -->
+<!-- contract-baseline: remote-storage.md sha256=73f9ded176bdebe63da4483961cbd916d69b20fc2a64a6496799fe2da3e8a6e8 -->
+<!-- contract-baseline: experiment-expansion.md sha256=3612ebdd9d7336cc1584abb6187825421a81bf5de7e99a00169924b2844198d9 -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=7ada3fa190771a94757e47d73e03b1a3358cf36c27eec87e5477632a87e51825 -->
+<!-- contract-baseline: stage-reuse.md sha256=3040cfb8b6b66c81b4c1652329257d0b52383ee0e31cd41a05e7b5555a2c311a -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=92ba227451b41b0148b596063091585d608e68f18cab8aae74f6d75716f5f5b5 -->
+<!-- contract-baseline: research-memory-roadmap.md sha256=2bb637173fe9b9f65e70055907243dfa1bb579a86b3e04cf4ea184fba30b660a -->
 
 ## 4. Specification-system review
 
@@ -892,11 +892,14 @@ edge IDs on every crossing component edge.
       <!-- verifies: CRT-02 -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
-- [x] In `tests/test_contract_traceability.py`, reject a missing DAG and a
-      Section 4 model absent from the worked example.
+- [x] In `tests/test_contract_traceability.py`, reject a missing DAG, an
+      undeclared inventory symbol, and an inventoried symbol absent from the
+      worked example.
       <!-- pair-block: P0-PROOF-03 -->
       <!-- verifies: CRT-03 -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
@@ -1020,6 +1023,11 @@ its `PropagationPlan` covers every affected and introduced node and the observed
 
 ## 8. Master Phase 1 — destination-neutral local publication
 
+<!-- contract-implementation: requirement=RSP-01 rule=storage.publisher.local state=planned owner=src/viper/storage.py:SnapshotPublisher -->
+<!-- contract-verification: requirement=RSP-01 rule=storage.publisher.local state=planned test=tests/test_storage.py:test_local_publishers_share_destination_neutral_interface -->
+<!-- contract-implementation: requirement=RSP-02 rule=storage.destination.bound state=planned owner=src/viper/execution/_attempt.py:execute_attempt -->
+<!-- contract-verification: requirement=RSP-02 rule=storage.destination.bound state=planned test=tests/test_run_execution.py:test_attempt_binds_one_storage_destination -->
+
 **Depends on:** Module-privacy work already implemented.
 
 **Contract:** [Direct Viper Cloud publication](remote-storage.md)
@@ -1122,6 +1130,17 @@ python -m pytest \
 **Commit boundary:** `Add destination-neutral local publication`
 
 ## 9. Master Phase 2 — runner-owned download stages
+
+<!-- contract-implementation: requirement=DRA-01 rule=download.model.complete state=planned owner=src/viper/protocol.py:DownloadSpec -->
+<!-- contract-verification: requirement=DRA-01 rule=download.model.complete state=planned test=tests/test_protocol.py:test_download_models_use_runner_owned_hierarchy -->
+<!-- contract-implementation: requirement=DRA-02 rule=download.runner.custody state=planned owner=src/viper/execution/_attempt.py:execute_attempt -->
+<!-- contract-verification: requirement=DRA-02 rule=download.runner.custody state=planned test=tests/test_run_execution.py:test_download_runs_inside_attempt_process -->
+<!-- contract-implementation: requirement=DRA-03 rule=download.artifact.identity state=planned owner=src/viper/execution/_downloads.py:publish_download_body -->
+<!-- contract-verification: requirement=DRA-03 rule=download.artifact.identity state=planned test=tests/test_execution_acceptance.py:test_download_body_becomes_declared_artifact -->
+<!-- contract-implementation: requirement=DRA-04 rule=download.verification.identity state=planned owner=src/viper/_verification/attempt.py:verify_download -->
+<!-- contract-verification: requirement=DRA-04 rule=download.verification.identity state=planned test=tests/test_verification_acceptance.py:test_download_verification_binds_receipt_to_artifact -->
+<!-- contract-implementation: requirement=DRA-05 rule=download.legacy.removed state=planned owner=src/viper/project.py:init -->
+<!-- contract-verification: requirement=DRA-05 rule=download.legacy.removed state=planned test=tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads -->
 
 **Depends on:** Master Phase 1.
 
@@ -1236,6 +1255,13 @@ python -m pytest \
 
 ## 10. Master Phase 3 — captured local external roots
 
+<!-- contract-implementation: requirement=EIR-01 rule=input.local.model state=planned owner=src/viper/inputs.py:ExternalInputRef -->
+<!-- contract-verification: requirement=EIR-01 rule=input.local.model state=planned test=tests/test_protocol.py:test_external_inputs_are_local_only -->
+<!-- contract-implementation: requirement=EIR-02 rule=input.local.capture state=planned owner=src/viper/execution/_materialization.py:capture_external_input -->
+<!-- contract-verification: requirement=EIR-02 rule=input.local.capture state=planned test=tests/test_run_execution.py:test_local_input_is_captured_by_attempt -->
+<!-- contract-implementation: requirement=EIR-03 rule=input.local.identity state=planned owner=src/viper/_verification/attempt.py:verify_external_input -->
+<!-- contract-verification: requirement=EIR-03 rule=input.local.identity state=planned test=tests/test_verification_acceptance.py:test_external_input_identity_survives_execution -->
+
 **Depends on:** Master Phase 2.
 
 **Contract:** [External input roots](external-input-roots.md)
@@ -1315,6 +1341,15 @@ python -m pytest \
 **Commit boundary:** `Bind local input bytes to stage custody`
 
 ## 11. Master Phase 4 — unified metric runtime and protocol
+
+<!-- contract-implementation: requirement=UMD-01 rule=metric.authoring.complete state=planned owner=src/viper/metrics.py:measure -->
+<!-- contract-verification: requirement=UMD-01 rule=metric.authoring.complete state=planned test=tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors -->
+<!-- contract-implementation: requirement=UMD-02 rule=metric.params.delivered state=planned owner=src/viper/metrics.py:invoke_metric -->
+<!-- contract-verification: requirement=UMD-02 rule=metric.params.delivered state=planned test=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
+<!-- contract-implementation: requirement=UMD-03 rule=metric.objective.enforced state=planned owner=src/viper/protocol.py:MetricObjectiveSpec -->
+<!-- contract-verification: requirement=UMD-03 rule=metric.objective.enforced state=planned test=tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction -->
+<!-- contract-implementation: requirement=RSP-03 rule=metric.reference.reused state=planned owner=src/viper/storage.py:resolve_metric_dependency -->
+<!-- contract-verification: requirement=RSP-03 rule=metric.reference.reused state=planned test=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
 
 **Depends on:** Master Phase 1.
 
@@ -1418,6 +1453,13 @@ python -m pytest \
 **Commit boundary:** `Unify metric drafting and runtime context`
 
 ## 12. Master Phase 5 — Python stage, artifact, and HTTP drafts
+
+<!-- contract-implementation: requirement=AIR-01 rule=stage.api.complete state=planned owner=src/viper/keys.py:Train -->
+<!-- contract-verification: requirement=AIR-01 rule=stage.api.complete state=planned test=tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys -->
+<!-- contract-implementation: requirement=AIR-02 rule=artifact.http.authoring state=planned owner=src/viper/authoring.py:http -->
+<!-- contract-verification: requirement=AIR-02 rule=artifact.http.authoring state=planned test=tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity -->
+<!-- contract-implementation: requirement=AIR-03 rule=stage.draft.complete state=planned owner=src/viper/authoring.py:stage -->
+<!-- contract-verification: requirement=AIR-03 rule=stage.draft.complete state=planned test=tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring -->
 
 **Depends on:** Master Phases 2 and 4.
 
@@ -1565,6 +1607,21 @@ python -m pytest \
 
 ## 13. Master Phase 6 — experiments, variants, replicates, and freezing
 
+<!-- contract-implementation: requirement=UMD-04 rule=experiment.authoring.complete state=planned owner=src/viper/experiments.py:ExperimentDraft -->
+<!-- contract-verification: requirement=UMD-04 rule=experiment.authoring.complete state=planned test=tests/test_authoring.py:test_experiment_draft_derives_metric_registry -->
+<!-- contract-implementation: requirement=AIR-04 rule=plan.freeze.complete state=planned owner=src/viper/authoring.py:freeze -->
+<!-- contract-verification: requirement=AIR-04 rule=plan.freeze.complete state=planned test=tests/test_authoring.py:test_plan_freezes_complete_protocol_graph -->
+<!-- contract-implementation: requirement=FPG-01 rule=plan.files.complete state=planned owner=src/viper/authoring.py:FrozenPlanFiles -->
+<!-- contract-verification: requirement=FPG-01 rule=plan.files.complete state=planned test=tests/test_authoring.py:test_freeze_returns_every_generated_path -->
+<!-- contract-implementation: requirement=FPG-02 rule=plan.commit.head state=planned owner=src/viper/preflight.py:preflight -->
+<!-- contract-verification: requirement=FPG-02 rule=plan.commit.head state=planned test=tests/test_preflight.py:test_preflight_loads_plan_documents_from_head -->
+<!-- contract-implementation: requirement=FPG-03 rule=plan.callable.commit state=planned owner=src/viper/loading.py:load_python_symbol -->
+<!-- contract-verification: requirement=FPG-03 rule=plan.callable.commit state=planned test=tests/test_preflight.py:test_project_python_resolves_from_plan_commit -->
+<!-- contract-implementation: requirement=FPG-04 rule=run.plan.commit state=planned owner=src/viper/verification/__init__.py:verify_run_result -->
+<!-- contract-verification: requirement=FPG-04 rule=run.plan.commit state=planned test=tests/test_verification.py:test_terminal_verification_uses_plan_commit -->
+<!-- contract-implementation: requirement=FPG-05 rule=benchmark.plan.commit state=planned owner=src/viper/execution/_benchmark.py:execute_benchmark -->
+<!-- contract-verification: requirement=FPG-05 rule=benchmark.plan.commit state=planned test=tests/test_benchmark_execution.py:test_benchmark_loads_from_candidate_plan_commit -->
+
 **Depends on:** Master Phase 5.
 
 **Contracts:** [Unified metric drafting](unified-metric-drafting.md),
@@ -1653,6 +1710,11 @@ python -m pytest \
 
 ## 14. Master Phase 7 — automatic input compilation
 
+<!-- contract-implementation: requirement=EIR-04 rule=input.authoring.routes state=planned owner=src/viper/authoring.py:run_artifact -->
+<!-- contract-verification: requirement=EIR-04 rule=input.authoring.routes state=planned test=tests/test_authoring.py:test_input_authoring_compiles_all_three_routes -->
+<!-- contract-implementation: requirement=AIR-05 rule=input.pointer.complete state=planned owner=src/viper/authoring.py:compile_input -->
+<!-- contract-verification: requirement=AIR-05 rule=input.pointer.complete state=planned test=tests/test_verification_acceptance.py:test_prior_run_input_publishes_verified_pointer -->
+
 **Depends on:** Master Phases 3 and 6.
 
 **Contracts:** [Automatic input resolution](automatic-input-resolution.md),
@@ -1724,6 +1786,9 @@ python -m pytest \
 
 ## 15. Master Phase 8 — benchmark drafting and complete results
 
+<!-- contract-implementation: requirement=UMD-05 rule=benchmark.result.complete state=planned owner=src/viper/benchmark.py:benchmark -->
+<!-- contract-verification: requirement=UMD-05 rule=benchmark.result.complete state=planned test=tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria -->
+
 **Depends on:** Master Phase 7.
 
 **Contract:** [Unified metric drafting](unified-metric-drafting.md)
@@ -1779,6 +1844,13 @@ python -m pytest \
 **Commit boundary:** `Record complete benchmark metric results`
 
 ## 16. Master Phase 9 — direct Viper Cloud publication
+
+<!-- contract-implementation: requirement=RSP-04 rule=storage.cloud.atomic state=planned owner=src/viper/storage.py:ViperCloudClient -->
+<!-- contract-verification: requirement=RSP-04 rule=storage.cloud.atomic state=planned test=tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable -->
+<!-- contract-implementation: requirement=RSP-05 rule=storage.cloud.publish state=planned owner=src/viper/storage.py:publish_resolved_files -->
+<!-- contract-verification: requirement=RSP-05 rule=storage.cloud.publish state=planned test=tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination -->
+<!-- contract-implementation: requirement=RSP-06 rule=storage.cloud.verify state=planned owner=src/viper/verification/__init__.py:verify_run_result -->
+<!-- contract-verification: requirement=RSP-06 rule=storage.cloud.verify state=planned test=tests/test_verification_acceptance.py:test_cloud_verification_rejects_local_references -->
 
 **Depends on:** Master Phase 8.
 
@@ -1876,6 +1948,11 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 ## 17. Master Phase 10 — artifact restore
 
+<!-- contract-implementation: requirement=RSP-07 rule=storage.restore.atomic state=planned owner=src/viper/storage.py:restore -->
+<!-- contract-verification: requirement=RSP-07 rule=storage.restore.atomic state=planned test=tests/test_storage.py:test_restore_verifies_before_atomic_write -->
+<!-- contract-implementation: requirement=RSP-08 rule=storage.restore.public state=planned owner=src/viper/api.py:restore_artifacts -->
+<!-- contract-verification: requirement=RSP-08 rule=storage.restore.public state=planned test=tests/test_api.py:test_restore_result_matches_python_api_and_cli -->
+
 **Depends on:** Master Phase 9.
 
 **Contract:** [Direct Viper Cloud publication](remote-storage.md#104-restore)
@@ -1934,6 +2011,17 @@ python -m pytest tests/test_storage.py tests/test_cli.py tests/test_api.py -q
 **Commit boundary:** `Restore complete runs and selected artifacts`
 
 ## 18. Master Phase 11 — public workflow migration
+
+<!-- contract-implementation: requirement=DRA-06 rule=download.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-verification: requirement=DRA-06 rule=download.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-implementation: requirement=EIR-05 rule=input.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-verification: requirement=EIR-05 rule=input.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-implementation: requirement=UMD-06 rule=metric.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-verification: requirement=UMD-06 rule=metric.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-implementation: requirement=AIR-06 rule=authoring.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-verification: requirement=AIR-06 rule=authoring.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-implementation: requirement=RSP-09 rule=storage.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+<!-- contract-verification: requirement=RSP-09 rule=storage.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
 
 **Depends on:** Master Phases 1–10.
 
@@ -2000,6 +2088,13 @@ python -m pytest \
 **Commit boundary:** `Publish the Python-authored VIPER workflow`
 
 ## 19. Master Phase 12 — experiment expansion and bounded execution
+
+<!-- contract-implementation: requirement=EXP-01 rule=experiment.expansion.canonical state=planned owner=src/viper/authoring.py:expand -->
+<!-- contract-verification: requirement=EXP-01 rule=experiment.expansion.canonical state=planned test=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
+<!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=planned owner=src/viper/execution/_batch.py:run_many -->
+<!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=planned test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
+<!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=planned owner=src/viper/api.py:run_many -->
+<!-- contract-verification: requirement=EXP-03 rule=experiment.batch.public state=planned test=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
 
 **Depends on:** Master Phase 11.
 
@@ -2102,6 +2197,11 @@ python -m pytest \
 
 ## 20. Master Phase 13 — searchable provenance catalog
 
+<!-- contract-implementation: requirement=PCM-01 rule=catalog.refresh.atomic state=planned owner=src/viper/catalog.py:refresh -->
+<!-- contract-verification: requirement=PCM-01 rule=catalog.refresh.atomic state=planned test=tests/test_inspection.py:test_catalog_refresh_is_atomic_and_rebuildable -->
+<!-- contract-implementation: requirement=PCM-02 rule=catalog.search.evidenced state=planned owner=src/viper/catalog.py:Catalog -->
+<!-- contract-verification: requirement=PCM-02 rule=catalog.search.evidenced state=planned test=tests/test_verification_acceptance.py:test_catalog_results_retain_immutable_sources -->
+
 **Depends on:** Master Phase 12.
 
 **Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
@@ -2184,6 +2284,15 @@ python -m pytest \
 **Commit boundary:** `Index and search verified provenance`
 
 ## 21. Master Phase 14 — verified stage reuse
+
+<!-- contract-implementation: requirement=SRU-01 rule=reuse.model.complete state=planned owner=src/viper/protocol.py:StageReuseReceipt -->
+<!-- contract-verification: requirement=SRU-01 rule=reuse.model.complete state=planned test=tests/test_protocol.py:test_stage_reuse_models_form_valid_completion_union -->
+<!-- contract-implementation: requirement=SRU-02 rule=reuse.execution.verified state=planned owner=src/viper/execution/_attempt.py:reuse_stage -->
+<!-- contract-verification: requirement=SRU-02 rule=reuse.execution.verified state=planned test=tests/test_run_execution.py:test_verified_reuse_skips_stage_process -->
+<!-- contract-implementation: requirement=SRU-03 rule=reuse.verification.complete state=planned owner=src/viper/verification/__init__.py:verify_stage_reuse -->
+<!-- contract-verification: requirement=SRU-03 rule=reuse.verification.complete state=planned test=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
+<!-- contract-implementation: requirement=SRU-04 rule=reuse.inspection.complete state=planned owner=src/viper/inspection.py:lineage -->
+<!-- contract-verification: requirement=SRU-04 rule=reuse.inspection.complete state=planned test=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
 
 **Depends on:** Master Phases 9 and 13.
 
@@ -2298,6 +2407,13 @@ python -m pytest \
 
 ## 22. Master Phase 15 — local MCP server
 
+<!-- contract-implementation: requirement=PCM-03 rule=mcp.schema.parity state=planned owner=src/viper/mcp.py:tool_registry -->
+<!-- contract-verification: requirement=PCM-03 rule=mcp.schema.parity state=planned test=tests/test_api.py:test_mcp_tool_schemas_match_typed_operations -->
+<!-- contract-implementation: requirement=PCM-04 rule=mcp.stdio.access state=planned owner=src/viper/mcp.py:serve_stdio -->
+<!-- contract-verification: requirement=PCM-04 rule=mcp.stdio.access state=planned test=tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access -->
+<!-- contract-implementation: requirement=PCM-05 rule=mcp.resources.complete state=planned owner=src/viper/mcp.py:resource_registry -->
+<!-- contract-verification: requirement=PCM-05 rule=mcp.resources.complete state=planned test=tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root -->
+
 **Depends on:** Master Phases 12–14.
 
 **Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
@@ -2384,6 +2500,11 @@ python -m pytest \
 **Commit boundary:** `Expose VIPER through a typed local MCP server`
 
 ## 23. Master Phase 16 — scientific evidence records
+
+<!-- contract-implementation: requirement=EKP-01 rule=knowledge.ontology.complete state=planned owner=src/viper/knowledge.py:OntologySpec -->
+<!-- contract-verification: requirement=EKP-01 rule=knowledge.ontology.complete state=planned test=tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance -->
+<!-- contract-implementation: requirement=EKP-02 rule=knowledge.evidence.complete state=planned owner=src/viper/knowledge.py:KnowledgeStore -->
+<!-- contract-verification: requirement=EKP-02 rule=knowledge.evidence.complete state=planned test=tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence -->
 
 **Depends on:** Master Phases 9, 13, and 15.
 
@@ -2498,6 +2619,11 @@ python -m pytest tests/test_verification_acceptance.py -q
 **Commit boundary:** `Record verified experiment knowledge`
 
 ## 24. Master Phase 17 — knowledge graph and agent search
+
+<!-- contract-implementation: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned owner=src/viper/knowledge.py:search -->
+<!-- contract-verification: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned test=tests/test_inspection.py:test_knowledge_retrieval_keeps_exact_indexes_authoritative -->
+<!-- contract-implementation: requirement=EKP-04 rule=knowledge.public.complete state=planned owner=src/viper/api.py:search_knowledge -->
+<!-- contract-verification: requirement=EKP-04 rule=knowledge.public.complete state=planned test=tests/test_api.py:test_knowledge_operations_match_python_cli_and_mcp -->
 
 **Depends on:** Master Phase 16.
 
@@ -2615,6 +2741,11 @@ python -m pytest \
 
 ## 25. Master Phase 18 — research episodes and adaptive experiment validity
 
+<!-- contract-implementation: requirement=RML-01 rule=research.episode.complete state=planned owner=src/viper/research.py:ResearchEpisode -->
+<!-- contract-verification: requirement=RML-01 rule=research.episode.complete state=planned test=tests/test_protocol.py:test_research_episode_preserves_complete_decision_record -->
+<!-- contract-implementation: requirement=RML-02 rule=research.conclusion.verified state=planned owner=src/viper/verification/__init__.py:verify_research_episode -->
+<!-- contract-verification: requirement=RML-02 rule=research.conclusion.verified state=planned test=tests/test_verification_acceptance.py:test_research_conclusion_requires_recomputable_controls -->
+
 **Depends on:** Master Phases 0, 12, and 15–17.
 
 **Contract:**
@@ -2689,6 +2820,11 @@ python -m pytest \
 
 ## 26. Master Phase 19 — learning datasets and policy promotion
 
+<!-- contract-implementation: requirement=RML-03 rule=learning.dataset.complete state=planned owner=src/viper/research.py:LearningDatasetManifest -->
+<!-- contract-verification: requirement=RML-03 rule=learning.dataset.complete state=planned test=tests/test_protocol.py:test_learning_dataset_preserves_lineage_and_group_splits -->
+<!-- contract-implementation: requirement=RML-04 rule=learning.promotion.verified state=planned owner=src/viper/verification/__init__.py:verify_policy_promotion -->
+<!-- contract-verification: requirement=RML-04 rule=learning.promotion.verified state=planned test=tests/test_verification_acceptance.py:test_policy_promotion_requires_gates_and_rollback -->
+
 **Depends on:** Master Phase 18.
 
 **Contract:**
@@ -2747,6 +2883,15 @@ python -m pytest \
 **Commit boundary:** `Evaluate and promote reviewed research memory`
 
 ## 27. Master Phase 20 — research MCP and literature evidence
+
+<!-- contract-implementation: requirement=RML-05 rule=research.access.typed state=planned owner=src/viper/api.py:research -->
+<!-- contract-verification: requirement=RML-05 rule=research.access.typed state=planned test=tests/test_api.py:test_research_access_uses_typed_operations_and_capabilities -->
+<!-- contract-implementation: requirement=RML-06 rule=literature.evidence.complete state=planned owner=src/viper/research.py:LiteratureClaim -->
+<!-- contract-verification: requirement=RML-06 rule=literature.evidence.complete state=planned test=tests/test_verification_acceptance.py:test_literature_claims_preserve_versioned_source_evidence -->
+<!-- contract-implementation: requirement=PCM-06 rule=mcp.learning.custody state=planned owner=src/viper/mcp.py:learning_registry -->
+<!-- contract-verification: requirement=PCM-06 rule=mcp.learning.custody state=planned test=tests/test_api.py:test_mcp_learning_records_model_and_human_receipts -->
+<!-- contract-implementation: requirement=PCM-07 rule=mcp.tasks.identity state=planned owner=src/viper/mcp.py:task_registry -->
+<!-- contract-verification: requirement=PCM-07 rule=mcp.tasks.identity state=planned test=tests/test_cli.py:test_mcp_tasks_preserve_viper_operation_identity -->
 
 **Depends on:** Master Phases 15, 18, and 19.
 

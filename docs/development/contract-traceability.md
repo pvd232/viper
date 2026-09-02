@@ -611,9 +611,9 @@ named test function. The traceability graph joins those three representations.
 | Surface | Required statement |
 | --- | --- |
 | `src/viper/_contract_traceability.py` | Add exact models, marker parsers, symbol resolution, cardinality checks, contract-example validation, and canonical serialization for developer tooling. |
-| `tests/test_documentation.py` | Compare the compiler output with the current requirement, phase, test-file, and baseline oracle; require each contract's three DAGs, symbol inventory, and complete worked example. |
+| `tests/test_contract_traceability.py` and `tests/test_documentation.py` | Compile every baselined contract into one graph, compare the result with the requirement, phase, test-file, and baseline oracle, and require each contract's three DAGs, symbol inventory, and complete worked example. |
 | `docs/development/master-execution-checklist.md` | Add the foundational Master Phase 0 work before project-root and system-graph implementation. |
-| `docs/development/*.md` pending contracts | Add verifier-rule markers, three DAGs, and one complete worked example per contract. |
+| `docs/development/*.md` implementation contracts | Retain verifier-rule markers, three DAGs, and one complete worked example per contract. |
 | `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, explicit example-symbol inventory, complete worked example, and requirement-rule-owner-test chain. |
 | `docs/development/system-impact-compiler.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
 | `docs/development/testing.md` | Document the focused traceability check and the meaning of each marker. |

@@ -409,6 +409,13 @@ candidate and confirmation stage snapshots must differ.
 
 ## 9. Verification
 
+| Rule | Executable condition |
+| --- | --- |
+| `reuse.model.complete` <!-- verifier-rule: reuse.model.complete requirement=SRU-01 --> | The reuse policy, canonical key, receipt, completion union, and persisted references validate as one protocol. |
+| `reuse.execution.verified` <!-- verifier-rule: reuse.execution.verified requirement=SRU-02 --> | A verified candidate is remapped into a new snapshot and the target stage process does not run. |
+| `reuse.verification.complete` <!-- verifier-rule: reuse.verification.complete requirement=SRU-03 --> | Verification rebuilds the key and proves every source-run, artifact, and metric relationship. |
+| `reuse.inspection.complete` <!-- verifier-rule: reuse.inspection.complete requirement=SRU-04 --> | Lineage, comparison, catalog results, and attempt status expose the same reuse identity. |
+
 The verifier accepts a reused stage only after all of these checks pass:
 
 1. The target frozen spec permits `reuse="verified"`.

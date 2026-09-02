@@ -263,6 +263,14 @@ source. Together they preserve both identities and avoid a self-reference.
 
 ## 7. Verification
 
+| Rule | Executable condition |
+| --- | --- |
+| `plan.files.complete` <!-- verifier-rule: plan.files.complete requirement=FPG-01 --> | Freezing returns every generated path, including named run and benchmark paths. |
+| `plan.commit.head` <!-- verifier-rule: plan.commit.head requirement=FPG-02 --> | Preflight identifies `HEAD` as the plan commit and finds every generated plan document there. |
+| `plan.callable.commit` <!-- verifier-rule: plan.callable.commit requirement=FPG-03 --> | Project callables and Python definitions resolve from `RunSpec.source.commit`. |
+| `run.plan.commit` <!-- verifier-rule: run.plan.commit requirement=FPG-04 --> | `ResolvedRun.spec` preserves the plan commit used by terminal verification. |
+| `benchmark.plan.commit` <!-- verifier-rule: benchmark.plan.commit requirement=FPG-05 --> | Benchmark execution and verification load the selected benchmark from the candidate run's plan commit. |
+
 ### `plan.git_identity`
 
 Before execution, the working run document must equal the file at the same path

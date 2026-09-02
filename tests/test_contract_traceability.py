@@ -1,5 +1,6 @@
 """Verify contract declarations, rule edges, examples, and canonical graphs."""
 
+import re
 from pathlib import Path
 from textwrap import dedent
 
@@ -13,6 +14,12 @@ from viper._contract_traceability import (
     compile_contract_traceability,
     serialize_contract_traceability,
     validate_contract_example,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
+MASTER_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
+_CONTRACT_BASELINE = re.compile(
+    r"<!-- contract-baseline: (?P<name>[a-z0-9-]+\.md) sha256=[0-9a-f]{64} -->"
 )
 
 
@@ -365,3 +372,28 @@ def test_contract_traceability_graph_rejects_duplicate_ids(
             checklist,
             (contract, contract),
         )
+
+
+def test_contract_traceability_graph_covers_all_implementation_contracts() -> None:
+    """Compile every baselined contract and its checklist edges together."""
+    contract_names = tuple(
+        match.group("name")
+        for match in _CONTRACT_BASELINE.finditer(
+            MASTER_CHECKLIST.read_text(encoding="utf-8")
+        )
+    )
+    contracts = tuple(ROOT / "docs/development" / name for name in contract_names)
+
+    graph = compile_contract_traceability(
+        ROOT,
+        MASTER_CHECKLIST,
+        contracts,
+    )
+
+    assert {requirement.contract for requirement in graph.requirements} == {
+        contract.relative_to(ROOT).as_posix() for contract in contracts
+    }
+    assert all(
+        any(edge.rule_id == rule.rule_id for edge in graph.edges)
+        for rule in graph.rules
+    )

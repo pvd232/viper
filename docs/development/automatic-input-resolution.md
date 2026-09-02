@@ -2687,6 +2687,15 @@ bundle uses the sibling directory itself.
 
 ## 7. Verification
 
+| Rule | Executable condition |
+| --- | --- |
+| `stage.api.complete` <!-- verifier-rule: stage.api.complete requirement=AIR-01 --> | Public stage decorators, parameter classes, and `Train` and `Eval` keys freeze to their target protocol forms. |
+| `artifact.http.authoring` <!-- verifier-rule: artifact.http.authoring requirement=AIR-02 --> | Artifact and HTTP drafts preserve callable-backed identity through freezing. |
+| `stage.draft.complete` <!-- verifier-rule: stage.draft.complete requirement=AIR-03 --> | Python stage drafts replace YAML-backed stage drafting and expose typed artifact handles. |
+| `plan.freeze.complete` <!-- verifier-rule: plan.freeze.complete requirement=AIR-04 --> | One plan freezes its experiment, variant, replicate, metrics, stages, benchmark, and run documents. |
+| `input.pointer.complete` <!-- verifier-rule: input.pointer.complete requirement=AIR-05 --> | Local, same-run, and prior-run inputs compile to exact references, and prior-run selection publishes a resolved pointer. |
+| `authoring.docs.current` <!-- verifier-rule: authoring.docs.current requirement=AIR-06 --> | Public documentation presents the final Python workflow through freeze, run, benchmark, and restore. |
+
 The following checks cover each generated reference.
 
 ### Metric, objective, experiment, and benchmark rules

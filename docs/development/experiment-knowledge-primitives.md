@@ -789,6 +789,13 @@ class Catalog:
 
 ## 11. Publication, verification, and authority
 
+| Rule | Executable condition |
+| --- | --- |
+| `knowledge.ontology.complete` <!-- verifier-rule: knowledge.ontology.complete requirement=EKP-01 --> | Ontology versions and declared, inferred, and reviewed primitive assignments preserve exact provenance. |
+| `knowledge.evidence.complete` <!-- verifier-rule: knowledge.evidence.complete requirement=EKP-02 --> | Modulations, effects, impact assessments, diagnostic signatures, and journal assertions publish as immutable evidence. |
+| `knowledge.retrieval.complete` <!-- verifier-rule: knowledge.retrieval.complete requirement=EKP-03 --> | Exact filters and graph indexes remain authoritative while each vector view uses its declared optional HNSW index. |
+| `knowledge.public.complete` <!-- verifier-rule: knowledge.public.complete requirement=EKP-04 --> | Python, typed API, CLI, and MCP expose the same knowledge publication and search operations. |
+
 Knowledge records are standalone immutable files. They use the destination
 already bound for the current project:
 

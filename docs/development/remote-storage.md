@@ -822,6 +822,18 @@ and attempt recovery files remain in place.
 
 ## 10. Retrieval, verification, and restore
 
+| Rule | Executable condition |
+| --- | --- |
+| `storage.publisher.local` <!-- verifier-rule: storage.publisher.local requirement=RSP-01 --> | Destination-neutral stage and standalone publishers preserve current local behavior. |
+| `storage.destination.bound` <!-- verifier-rule: storage.destination.bound requirement=RSP-02 --> | Each run binds one destination and routes local publication through it. |
+| `metric.reference.reused` <!-- verifier-rule: metric.reference.reused requirement=RSP-03 --> | Metric dependencies reuse existing snapshot references and publish no duplicate payload bytes. |
+| `storage.cloud.atomic` <!-- verifier-rule: storage.cloud.atomic requirement=RSP-04 --> | Viper Cloud publication retries safely and exposes artifacts only after atomic sealing. |
+| `storage.cloud.publish` <!-- verifier-rule: storage.cloud.publish requirement=RSP-05 --> | Every stage snapshot and standalone evidence file is published directly to the selected destination. |
+| `storage.cloud.verify` <!-- verifier-rule: storage.cloud.verify requirement=RSP-06 --> | Cloud retrieval verifies byte identity, rejects reachable local references, and returns terminal handles. |
+| `storage.restore.atomic` <!-- verifier-rule: storage.restore.atomic requirement=RSP-07 --> | Restore verifies temporary files before atomically writing all selected artifacts. |
+| `storage.restore.public` <!-- verifier-rule: storage.restore.public requirement=RSP-08 --> | Python, typed API, and CLI restoration return the same typed result. |
+| `storage.docs.current` <!-- verifier-rule: storage.docs.current requirement=RSP-09 --> | Public documentation contains the final storage workflow and no retired sync or mirroring concepts. |
+
 ### 10.1 Stage file retrieval
 
 The verifier receives a `ResolvedStageRef` and one `SnapshotFileRef`:

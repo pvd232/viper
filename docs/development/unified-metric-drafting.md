@@ -1357,6 +1357,15 @@ differentiable objective interface to prove that relationship.
 
 ## 7. Verification
 
+| Rule | Executable condition |
+| --- | --- |
+| `metric.authoring.complete` <!-- verifier-rule: metric.authoring.complete requirement=UMD-01 --> | Metric, objective, and criterion drafts freeze through their public constructors. |
+| `metric.params.delivered` <!-- verifier-rule: metric.params.delivered requirement=UMD-02 --> | Live and recomputed metric execution receives the frozen parameter class, values, and dependency snapshots. |
+| `metric.objective.enforced` <!-- verifier-rule: metric.objective.enforced requirement=UMD-03 --> | Frozen objectives preserve metric identity and direction, and each stage satisfies its objective rule. |
+| `experiment.authoring.complete` <!-- verifier-rule: experiment.authoring.complete requirement=UMD-04 --> | Experiment, factor, variant, and replicate drafts freeze with one derived metric registry. |
+| `benchmark.result.complete` <!-- verifier-rule: benchmark.result.complete requirement=UMD-05 --> | Each benchmark records every metric under fixed inputs before applying optional criteria. |
+| `metric.docs.current` <!-- verifier-rule: metric.docs.current requirement=UMD-06 --> | Protocol and public documentation contain only the final metric, experiment, and benchmark shapes. |
+
 ### `metric.definition.binding`
 
 `metric_definition()` retrieves the `MetricDefinition` attached to the loaded

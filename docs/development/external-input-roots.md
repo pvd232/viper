@@ -612,6 +612,14 @@ Automatic selection and pointer generation remain implementation work.
 
 ## 8. Verification rules
 
+| Rule | Executable condition |
+| --- | --- |
+| `input.local.model` <!-- verifier-rule: input.local.model requirement=EIR-01 --> | External input models represent local roots without an HTTP source branch. |
+| `input.local.capture` <!-- verifier-rule: input.local.capture requirement=EIR-02 --> | Materialization validates the local source boundary and creates one attempt-owned captured input. |
+| `input.local.identity` <!-- verifier-rule: input.local.identity requirement=EIR-03 --> | The worker receives the captured path and verification proves its identity before and after execution. |
+| `input.authoring.routes` <!-- verifier-rule: input.authoring.routes requirement=EIR-04 --> | Authoring compiles local, same-run, and prior-run values into their exact references and pointers. |
+| `input.docs.current` <!-- verifier-rule: input.docs.current requirement=EIR-05 --> | Protocol and public documentation contain no retired HTTP-input branch. |
+
 The verifier must establish the complete chain appropriate to each route.
 
 ### Local source boundary

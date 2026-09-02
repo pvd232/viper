@@ -284,6 +284,12 @@ verification result.
 
 ## 7. Persistence and verification
 
+| Rule | Executable condition |
+| --- | --- |
+| `experiment.expansion.canonical` <!-- verifier-rule: experiment.expansion.canonical requirement=EXP-01 --> | Selected variants and replicates expand into one deterministically ordered tuple of run plans. |
+| `experiment.batch.complete` <!-- verifier-rule: experiment.batch.complete requirement=EXP-02 --> | Bounded execution retains one typed completion, failure, or skip result for every frozen plan. |
+| `experiment.batch.public` <!-- verifier-rule: experiment.batch.public requirement=EXP-03 --> | Python, typed API, and CLI batch execution return the same typed result. |
+
 The batch result exists as a returned operation result. The terminal
 `ResolvedRun` records remain the persisted source of truth for this migration.
 

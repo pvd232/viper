@@ -940,6 +940,15 @@ equivalence rule, or a reviewed exclusion rule may suppress it.
 
 ## 15. Verification rules
 
+| Rule | Executable condition |
+| --- | --- |
+| `research.episode.complete` <!-- verifier-rule: research.episode.complete requirement=RML-01 --> | Each research episode preserves its question, plan, decisions, receipts, executions, observations, costs, and review. |
+| `research.conclusion.verified` <!-- verifier-rule: research.conclusion.verified requirement=RML-02 --> | Scientific conclusions publish only when feasibility, safety, scope, budget, comparison, stopping, multiplicity, and evidence rules recompute. |
+| `learning.dataset.complete` <!-- verifier-rule: learning.dataset.complete requirement=RML-03 --> | Learning datasets preserve reviewed origin, policy-time context, group-safe splits, lineage, inclusion decisions, and leakage checks. |
+| `learning.promotion.verified` <!-- verifier-rule: learning.promotion.verified requirement=RML-04 --> | A challenger promotes only after frozen evaluation gates pass and a tested rollback target exists. |
+| `research.access.typed` <!-- verifier-rule: research.access.typed requirement=RML-05 --> | Catalog, MCP, provider, review, and learning access occurs through typed operations and explicit capabilities. |
+| `literature.evidence.complete` <!-- verifier-rule: literature.evidence.complete requirement=RML-06 --> | Literature records preserve versioned primary-source identity, claim anchors, provenance, review, corrections, and experiment links. |
+
 The verifier rejects:
 
 - a hypothesis registered after any result used to evaluate it;

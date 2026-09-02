@@ -632,6 +632,16 @@ to skip execution.
 
 ## 10. Acceptance cases
 
+| Rule | Executable condition |
+| --- | --- |
+| `catalog.refresh.atomic` <!-- verifier-rule: catalog.refresh.atomic requirement=PCM-01 --> | Catalog refresh rebuilds from immutable evidence and atomically replaces the local index. |
+| `catalog.search.evidenced` <!-- verifier-rule: catalog.search.evidenced requirement=PCM-02 --> | Every run, artifact, measurement, benchmark, and lineage result retains its immutable source reference. |
+| `mcp.schema.parity` <!-- verifier-rule: mcp.schema.parity requirement=PCM-03 --> | MCP tool schemas derive from typed operation models and dispatch through the same handlers. |
+| `mcp.stdio.access` <!-- verifier-rule: mcp.stdio.access requirement=PCM-04 --> | The local stdio server defaults to read-only access and requires explicit execution access. |
+| `mcp.resources.complete` <!-- verifier-rule: mcp.resources.complete requirement=PCM-05 --> | MCP resources, templates, prompts, discovery, caching, and subscriptions remain stateless inside the startup root. |
+| `mcp.learning.custody` <!-- verifier-rule: mcp.learning.custody requirement=PCM-06 --> | Learning access records every provider call and human decision as immutable VIPER evidence. |
+| `mcp.tasks.identity` <!-- verifier-rule: mcp.tasks.identity requirement=PCM-07 --> | MCP task operations retain durable VIPER operation identity and preserve ordinary status fallback. |
+
 <!-- contract-example-symbols:
 ["catalog", "RunQuery", "MeasurementQuery", "ArtifactQuery", "BenchmarkQuery"]
 -->

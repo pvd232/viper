@@ -336,7 +336,7 @@ def _python_symbols(path: Path) -> set[str]:
         if isinstance(node, ast.ClassDef):
             for member in node.body:
                 if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    symbols.add(member.name)
+                    symbols.add(f"{node.name}.{member.name}")
     return symbols
 
 

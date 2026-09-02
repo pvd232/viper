@@ -505,6 +505,15 @@ with the proposed shape.
 
 ## 7. Verification
 
+| Rule | Executable condition |
+| --- | --- |
+| `download.model.complete` <!-- verifier-rule: download.model.complete requirement=DRA-01 --> | Frozen and resolved download records use the runner-owned model hierarchy and shared-file schema. |
+| `download.runner.custody` <!-- verifier-rule: download.runner.custody requirement=DRA-02 --> | A successful download runs inside the attempt process without invoking a project download worker. |
+| `download.artifact.identity` <!-- verifier-rule: download.artifact.identity requirement=DRA-03 --> | The published artifact bytes, digest, and byte count equal the HTTP result body. |
+| `download.verification.identity` <!-- verifier-rule: download.verification.identity requirement=DRA-04 --> | Verification proves runner custody and exact receipt-artifact file equality. |
+| `download.legacy.removed` <!-- verifier-rule: download.legacy.removed requirement=DRA-05 --> | Fixtures, generated projects, and execution tests contain no callable-copy download path. |
+| `download.docs.current` <!-- verifier-rule: download.docs.current requirement=DRA-06 --> | Protocol and public documentation contain no retired callable-copy download path. |
+
 ### 7.1 HTTP receipt rule
 
 `ResolvedHttpRetrieval` continues to enforce:

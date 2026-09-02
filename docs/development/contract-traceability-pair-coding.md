@@ -697,8 +697,8 @@ Migrate these contracts one at a time, in checklist order:
 For each contract, add its verifier-rule rows, current DAG, proposed-change
 DAG, integrated DAG, explicit example-symbol inventory, and marked worked
 example before adding its path to the validated tuple. The inventory names the
-contract surface that the example must exercise; document position does not
-define coverage. The contract-gap skill defines the required contents; this
+contract surface that the example must exercise independently of document
+position. The contract-gap skill defines the required contents; this
 block controls only their repository-wide migration and acceptance gate.
 
 `tests/test_documentation.py`
@@ -1147,24 +1147,33 @@ begins next.
 ```toml pair-block
 id = "P0-PROOF-04"
 requirements = ["CRT-04"]
-targets = ["tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical", "tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids"]
-tests = ["tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical", "tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids"]
+targets = ["tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical", "tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids", "tests/test_contract_traceability.py:test_contract_traceability_graph_covers_all_implementation_contracts"]
+tests = ["tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical", "tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids", "tests/test_contract_traceability.py:test_contract_traceability_graph_covers_all_implementation_contracts"]
 gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k contract_traceability_graph -q"
 depends_on = ["P0-CRT-05", "P0-PROOF-03"]
 ```
 
 **Context:** The final compiler must produce the same bytes for the same
-repository and reject identities that would make graph joins ambiguous. These
-tests close canonical ordering and duplicate-ID behavior end to end.
+repository, reject identities that would make graph joins ambiguous, and
+compile every baselined implementation contract with its checklist edges.
 
 Extend the imports, then add the final compiler tests.
 
 `tests/test_contract_traceability.py`
 
 ```python pair-edit
+import re
+
 from viper._contract_traceability import (
     compile_contract_traceability,
     serialize_contract_traceability,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MASTER_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
+_CONTRACT_BASELINE = re.compile(
+    r"<!-- contract-baseline: (?P<name>[a-z0-9-]+\.md) sha256=[0-9a-f]{64} -->"
 )
 
 
@@ -1228,9 +1237,35 @@ def test_contract_traceability_graph_rejects_duplicate_ids(
             checklist,
             (contract, contract),
         )
+
+
+def test_contract_traceability_graph_covers_all_implementation_contracts() -> None:
+    contract_names = tuple(
+        match.group("name")
+        for match in _CONTRACT_BASELINE.finditer(
+            MASTER_CHECKLIST.read_text(encoding="utf-8")
+        )
+    )
+    contracts = tuple(ROOT / "docs/development" / name for name in contract_names)
+
+    graph = compile_contract_traceability(
+        ROOT,
+        MASTER_CHECKLIST,
+        contracts,
+    )
+
+    assert {requirement.contract for requirement in graph.requirements} == {
+        contract.relative_to(ROOT).as_posix() for contract in contracts
+    }
+    assert all(
+        any(edge.rule_id == rule.rule_id for edge in graph.edges)
+        for rule in graph.rules
+    )
 ```
 
-**Stop:** both graph tests pass with byte-identical repeated compilation.
+**Stop:** all graph tests pass. Repeated fixture compilation is byte-identical,
+duplicate IDs fail, and every baselined contract joins to its planned or
+implemented owner and test edges.
 
 ## 5. Pair execution
 
