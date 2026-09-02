@@ -17,19 +17,18 @@ validated ContractTraceabilityGraph
 ```
 
 The check does not generate a plan, choose repairs, rewrite PairBlocks, or claim
-that static source analysis proves runtime behavior. Pytest remains the
-behavioral acceptance boundary.
+that static source analysis proves runtime behavior. Each selected PairBlock
+gate remains the behavioral acceptance boundary.
 
 ## 1. Status
 
-**Contract status:** draft replacement design; acceptance-boundary update
-pending review.
+**Contract status:** approved replacement design; implementation pending.
 
 | ID | Implementation obligation |
 | --- | --- |
 | SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_system_impact.py --> | Run one pinned CodeQL query pack over an immutable source snapshot and return a canonical `SourceGraph` whose nodes retain exact UTF-8 byte spans and declaration digests. |
 | SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_system_impact.py --> | Resolve every `ContractTarget` against the baseline graph, reject an impossible action, and report every baseline source node that depends on an existing target. |
-| SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_system_impact.py --> | Freeze the selected PairBlocks and candidate source once; verify their plan digest, dependencies, tests, target actions, and exact declarations; reject unplanned source changes; and bind a passing check to the commit containing the checked source. |
+| SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_system_impact.py --> | Freeze the selected PairBlocks and candidate source once; verify their plan digest, dependencies, gates, target actions, and exact declarations; reject unplanned source changes; and bind a passing check to the commit containing the checked source and selected plan. |
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_system_impact.py --> | Replay the check over the committed `model_support` to `models` migration and one completed VIPER PairBlock, then compare its result with the exact Git diff. |
 | SIG-05 <!-- contract-requirement: SIG-05 phase=0 test=tests/test_system_impact.py --> | Persist the CodeQL command, version, query-pack digest, source-snapshot digest, optional commit, exit status, and decoded-result digest for both source graphs; reject identity or receipt drift. |
 
@@ -67,14 +66,17 @@ $$
 C=\operatorname{CheckPlan}(P,G_0,G_1).
 $$
 
+For the `ContractTarget` records owned by `PlanCheck.blocks`,
 `PlanCheck.passed` is true exactly when:
 
 1. every `add` target is absent from $G_0$ and present in $G_1$;
 2. every `update` target is present in both graphs and its realized declaration
    equals the declared target value;
 3. every `remove` target is present in $G_0$ and absent from $G_1$;
-4. every changed source declaration belongs to `Q.targets`;
-5. every selected PairBlock test has exactly one passing `TestResult`;
+4. every changed source declaration belongs to a `ContractTarget` whose
+   `block_id` appears in `PlanCheck.blocks`;
+5. VIPER runs every frozen selected `PairBlock.gate` once and every command
+   exits with code `0`;
 6. every omitted PairBlock dependency is supported by a referenced
    `Acceptance` whose commit is an ancestor of $R_0$;
 7. `plan_sha256` equals the digest recomputed from the frozen selected blocks,
@@ -88,10 +90,11 @@ of $R_0$. A checked checklist box supplies documented status; the referenced
 `Acceptance` supplies the required Git evidence.
 
 `PlanCheck` evaluates the frozen candidate before commit. After commit,
-`accept()` hashes the committed source with the same source-manifest rule and
-compares that digest with `PlanCheck.realized.source_sha256`. Equality produces
-an `Acceptance`; a mismatch rejects the commit. This final operation binds the
-passing check to the exact revision consumed by later dependency checks.
+`accept()` recomputes the source digest and selected-plan digest from the
+committed tree. Both values must equal `PlanCheck.realized.source_sha256` and
+`PlanCheck.plan_sha256`. Equality produces an `Acceptance`; either mismatch
+rejects the commit. This final operation binds the passing check to the exact
+source and PairBlocks consumed by later dependency checks.
 
 The reverse dependency set identifies source declarations that may need
 attention. The set supports review. A `ContractTarget` identifies each
@@ -144,7 +147,7 @@ flowchart TB
     Realized["Proposed SourceGraph G1"]
     Resolved["Proposed ResolvedContractTarget"]
     Target["Proposed TargetCheck"]
-    Tests["Proposed TestResult set"]
+    Gates["Run frozen PairBlock gates"]
     Prior["Prior Acceptance records"]
     Check["Proposed PlanCheck"]
     Commit["Commit checked source"]
@@ -162,14 +165,15 @@ flowchart TB
     Realized -->|"after facts"| Target
     Impact -->|"review evidence"| Check
     Target -->|"ordered checks"| Check
-    Tests -->|"focused results"| Check
+    Plan -->|"gate commands"| Gates
+    Gates -->|"exit code 0"| Check
     Prior -->|"dependency evidence"| Check
-    Freeze -->|"checked source bytes"| Commit
+    Freeze -->|"checked source and plan bytes"| Commit
     Check -->|"passed check"| Commit
-    Commit -->|"revision and source bytes"| Acceptance
+    Commit -->|"revision, source, and plan bytes"| Acceptance
     Check -->|"check digest"| Acceptance
 
-    class Plan,Freeze,Identity,Baseline,Impact,Realized,Resolved,Target,Tests,Prior,Check,Commit,Acceptance proposed
+    class Plan,Freeze,Identity,Baseline,Impact,Realized,Resolved,Target,Gates,Prior,Check,Commit,Acceptance proposed
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
@@ -195,7 +199,7 @@ flowchart TB
     G1["SourceGraph G1"]
     Resolved["ResolvedContractTarget<br/>exact expected digest"]
     Check["PlanCheck"]
-    Tests["Declared pytest gates"]
+    Gates["Run frozen PairBlock gates"]
     Prior["Prior Acceptance records"]
     Commit["Commit checked source"]
     Acceptance["Acceptance"]
@@ -222,19 +226,19 @@ flowchart TB
     G0 -->|"before facts"| Check
     G1 -->|"after facts"| Check
     Impact -->|"review evidence"| Check
-    Block -->|"tests and gate"| Tests
-    Tests -->|"behavioral result"| Check
+    Block -->|"gate command"| Gates
+    Gates -->|"exit code 0"| Check
     Prior -->|"dependency evidence"| Check
     Freeze -->|"plan digest"| Check
-    Freeze -->|"checked source bytes"| Commit
+    Freeze -->|"checked source and plan bytes"| Commit
     Check -->|"passed check"| Commit
-    Commit -->|"revision and source bytes"| Acceptance
+    Commit -->|"revision, source, and plan bytes"| Acceptance
     Check -->|"check digest"| Acceptance
 
     class Requirement,Target,Rule,CTG contract
     class Block checklist
     class CodeQL,G0,G1,Impact evidence
-    class Execute,Freeze,Tests,Commit implementation
+    class Execute,Freeze,Gates,Commit implementation
     class Resolved,Prior,Check,Acceptance output
     classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
     classDef checklist fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
@@ -365,17 +369,6 @@ class TargetCheck(ProtocolModel):
     message: NonEmptyStr = Field(description="Concrete reason for the check state.")
 
 
-class TestResult(ProtocolModel):
-    """Record one focused test executed for plan acceptance."""
-
-    test: RepoSymbolRef = Field(description="Declared pytest function observed by this result.")
-    command: tuple[NonEmptyStr, ...] = Field(min_length=1, description="Exact test argument vector.")
-    exit_code: int = Field(description="Terminal test-process exit code.")
-    stdout_sha256: SHA256 = Field(description="Digest of captured standard output bytes.")
-    stderr_sha256: SHA256 = Field(description="Digest of captured standard error bytes.")
-    passed: bool = Field(description="True only when this declared test completed successfully.")
-
-
 class PlanCheck(ProtocolModel):
     """Return the complete result of checking one CTG plan."""
 
@@ -386,28 +379,27 @@ class PlanCheck(ProtocolModel):
     acceptances: tuple[SHA256, ...] = Field(default=(), description="Prior Acceptance digests used to satisfy omitted dependencies.")
     plan_sha256: SHA256 = Field(description="Digest of the frozen selected blocks, targets, dependencies, tests, and gates.")
     impact: Impact = Field(description="Baseline reverse-dependency report.")
-    targets: tuple[TargetCheck, ...] = Field(description="One result per ContractTarget.")
-    unexpected: tuple[RepoSymbolRef, ...] = Field(description="Changed declarations absent from the CTG plan.")
-    tests: tuple[TestResult, ...] = Field(min_length=1, description="Results for every selected PairBlock test.")
-    passed: bool = Field(description="True only when targets, tests, dependencies, plan identity, and source receipts pass.")
+    targets: tuple[TargetCheck, ...] = Field(description="One result per selected ContractTarget.")
+    unexpected: tuple[RepoSymbolRef, ...] = Field(description="Changed declarations absent from the selected plan.")
+    passed: bool = Field(description="True only when targets, gates, dependencies, plan identity, and source receipts pass.")
 
 
 class Acceptance(ProtocolModel):
     """Bind a passing plan check to the commit containing its checked source."""
 
     check: SHA256 = Field(description="Digest of the accepted PlanCheck bytes.")
-    revision: CommitId = Field(description="Commit whose source digest equals the checked realized source digest.")
+    revision: CommitId = Field(description="Commit whose source and selected-plan digests equal the checked values.")
 ```
 
 Baseline and expected digests are optional because additions have no baseline
 declaration and removals have no expected or realized declaration.
 
 <!-- contract-symbols:
-{"models":["Acceptance","CodeQLIdentity","CodeQLReceipt","Impact","PlanCheck","ResolvedContractTarget","SourceEdge","SourceGraph","SourceNode","SourceSnapshot","TargetCheck","TestResult"],"aliases":["CheckState","CommitId","EdgeKind","NodeId"],"functions":[]}
+{"models":["Acceptance","CodeQLIdentity","CodeQLReceipt","Impact","PlanCheck","ResolvedContractTarget","SourceEdge","SourceGraph","SourceNode","SourceSnapshot","TargetCheck"],"aliases":["CheckState","CommitId","EdgeKind","NodeId"],"functions":[]}
 -->
 
 <!-- contract-example-symbols:
-["CommitId", "NodeId", "EdgeKind", "CheckState", "CodeQLIdentity", "SourceSnapshot", "CodeQLReceipt", "SourceNode", "SourceEdge", "SourceGraph", "Impact", "ResolvedContractTarget", "TargetCheck", "TestResult", "PlanCheck", "Acceptance"]
+["CommitId", "NodeId", "EdgeKind", "CheckState", "CodeQLIdentity", "SourceSnapshot", "CodeQLReceipt", "SourceNode", "SourceEdge", "SourceGraph", "Impact", "ResolvedContractTarget", "TargetCheck", "PlanCheck", "Acceptance"]
 -->
 
 ### Illustrative worked example
@@ -447,8 +439,7 @@ impact = Impact(baseline=baseline.snapshot, targets=(old_node.node_id,), affecte
 planned = ContractTarget(requirements=("SKE-01",), block_id="P0-SKE-01", action="update", target=RepoSymbolRef(path=new_node.path, symbol=new_node.symbol), declaration=target_declaration)
 resolved = ResolvedContractTarget(target=planned, baseline_node=old_node.node_id, baseline_sha256=old_node.sha256, expected_sha256=new_node.sha256)
 target = TargetCheck(resolved=resolved, after_sha256=new_node.sha256, state=check_state, message="The realized field declaration matches the planned replacement.")
-test_result = TestResult(test=RepoSymbolRef(path="tests/test_skill_contract.py", symbol="test_models_field_replaces_model_support"), command=("python", "-m", "pytest", "tests/test_skill_contract.py", "-q"), exit_code=0, stdout_sha256="d" * 64, stderr_sha256="e" * 64, passed=True)
-result = PlanCheck(baseline=baseline.snapshot, realized=realized.snapshot, blocks=(planned.block_id,), acceptances=(), plan_sha256="9" * 64, impact=impact, targets=(target,), unexpected=(), tests=(test_result,), passed=True)
+result = PlanCheck(baseline=baseline.snapshot, realized=realized.snapshot, blocks=(planned.block_id,), acceptances=(), plan_sha256="9" * 64, impact=impact, targets=(target,), unexpected=(), passed=True)
 acceptance = Acceptance(check="f" * 64, revision=realized_id)
 
 assert baseline.identity == realized.identity
@@ -469,7 +460,7 @@ inspect_plan(CTG, G0) -> baseline action checks + reverse dependency report
 execute the selected PairBlocks and their focused tests -> candidate source
 freeze selected plan + candidate source -> plan_sha256 + R1
 analyze_source(R1, K) -> G1 + receipt
-check_plan(selected CTG, G0, G1, test results) -> PlanCheck
+check_plan(selected CTG, G0, G1) -> PlanCheck
 commit the exact frozen R1 source -> revision
 accept(repository root, PlanCheck, revision) -> Acceptance
 ```
@@ -479,10 +470,12 @@ rows, hashes each declaration span, and performs traversal and equality checks.
 CodeQL never authors requirements, targets, or PairBlocks.
 
 `check_plan()` recomputes `plan_sha256`, resolves every referenced prior
-`Acceptance`, checks its Git ancestry, and evaluates every declared
-`TestResult`. `accept()` requires `PlanCheck.passed`, rebuilds the canonical
-source manifest from `revision`, and compares its digest with
-`PlanCheck.realized.source_sha256` before returning `Acceptance`.
+`Acceptance`, checks its Git ancestry, and runs every frozen selected
+`PairBlock.gate`. A gate passes when its process exits with code `0`.
+`accept()` requires `PlanCheck.passed`, rebuilds the canonical source manifest
+and selected plan from `revision`, and compares both digests with
+`PlanCheck.realized.source_sha256` and `PlanCheck.plan_sha256` before returning
+`Acceptance`.
 
 ### Exact declaration extraction
 
@@ -559,7 +552,7 @@ fix baseline R0
 -> analyze R0 and frozen R1 with one CodeQLIdentity
 -> check_plan()
 -> commit the exact checked candidate bytes
--> accept() the commit only when its source digest still equals R1
+-> accept() the commit only when its source and selected-plan digests match the check
 ```
 
 Changing a selected PairBlock, target declaration, dependency, gate, test, or
@@ -571,6 +564,21 @@ closure supplies the completion evidence. Guided work reduces iteration cost
 while preserving that final guarantee.
 The developer may request a narrower PairBlock-level strict close when one
 block needs independent acceptance before the rest of the contract continues.
+
+### Autonomous work
+
+Autonomous work freezes the selected PairBlocks before implementation. The
+agent stays within those targets, tests, dependencies, and gates. A necessary
+plan change starts a new freeze against the same baseline $R_0$ before work
+continues. The final `check_plan()`, commit, and `accept()` operations are
+identical to guided work.
+
+Guided and autonomous work therefore differ only during implementation:
+
+```text
+guided: start check -> flexible pair coding -> final check -> commit -> accept
+autonomous: freeze plan -> constrained execution -> final check -> commit -> accept
+```
 
 ## 6. Persisted evidence
 
@@ -600,7 +608,7 @@ digests of any prior acceptance records used to satisfy omitted dependencies.
 | `system.source.canonical` <!-- verifier-rule: system.source.canonical requirement=SIG-01 --> | Repeated analysis of one immutable source snapshot with one identity produces byte-identical `SourceGraph` JSON; each declaration span includes exact UTF-8 byte columns and hashes the original bytes. |
 | `system.plan.resolved` <!-- verifier-rule: system.plan.resolved requirement=SIG-02 --> | Every CTG target has a baseline state compatible with its action, and every existing target has one reverse-dependency result. |
 | `system.plan.realized` <!-- verifier-rule: system.plan.realized requirement=SIG-03 --> | Every selected target has the required after-state and exact declaration digest. |
-| `system.plan.closed` <!-- verifier-rule: system.plan.closed requirement=SIG-03 --> | `check_plan()` recomputes `plan_sha256`, requires every selected test to pass, and accepts an omitted dependency only through an ancestral `Acceptance`; `accept()` then requires the committed source digest to equal `PlanCheck.realized.source_sha256`. |
+| `system.plan.closed` <!-- verifier-rule: system.plan.closed requirement=SIG-03 --> | `check_plan()` recomputes `plan_sha256`, requires every selected PairBlock gate to exit with code `0`, and accepts an omitted dependency only through an ancestral `Acceptance`; `accept()` then requires the committed source and selected-plan digests to equal the checked values. |
 | `system.fixture.replayed` <!-- verifier-rule: system.fixture.replayed requirement=SIG-04 --> | Both committed fixtures reproduce their reviewed changed-path sets and target results. |
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 
@@ -611,7 +619,7 @@ digests of any prior acceptance records used to satisfy omitted dependencies.
 | `src/viper/system_impact.py` | Add the public records, baseline inspection, realized-plan checking, and post-commit `accept()` operation. |
 | `src/viper/_system_impact/codeql.py` | Create and query CodeQL databases and return validated canonical rows. |
 | `src/viper/_system_impact/source.py` | Resolve qualified Python symbols and extract exact UTF-8 declaration bytes, including decorators. |
-| `tests/test_system_impact.py` | Cover exact declaration extraction, action transitions, unexpected changes, reverse dependency reporting, plan-digest validation, focused tests, accepted dependencies, committed-source binding, identity drift, and both committed fixtures. |
+| `tests/test_system_impact.py` | Cover exact declaration extraction, action transitions, unexpected changes, reverse dependency reporting, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
 | `docs/development/contract-traceability.md` | Make `CRT-06` the sole owner of targets, PairBlocks, rule-block joins, and plan closure. |
 | `docs/development/master-execution-checklist.md` | Replace the old graph-transformation blocks with the five bounded blocks below. |
 
@@ -635,19 +643,21 @@ Two committed fixtures define the initial boundary:
 | VIPER `P0-PROOF-05` | `1e33d9a7bd12327702397c0e7aaf96e490dec46e` | `5c78ff5d33bdfa9c7b92b7bb9ff5c0fefdc7eef8` | `test_documentation.py:test_contract_requirements_map_to_plan_tasks_and_tests`; `test_project_init.py:test_init_project_establishes_discoverable_root` |
 
 The fixture plan must name every declaration in its expected set. Every target
-transition must match, the focused tests must pass, every dependency must be
-selected or supported by ancestral acceptance, and the Git diff must expose no
-additional changed Python declaration. `PlanCheck.passed` is then true.
+transition must match, every selected PairBlock gate must exit with code `0`,
+every dependency must be selected or supported by ancestral acceptance, and
+the Git diff must expose no additional changed Python declaration.
+`PlanCheck.passed` is then true.
 `accept()` binds that result to the fixture's realized commit.
 
 ### Rejection
 
-A focused fixture changes one additional function outside the CTG target set.
+A focused fixture changes one additional function outside the selected target
+set.
 `check_plan()` places that function in `PlanCheck.unexpected` and returns
 `passed=False`. Separate tests cover a stale baseline action, wrong declaration
-digest, missing target, failed test, invalid plan digest, unsatisfied
-dependency, CodeQL identity drift, and a commit whose source differs from the
-checked candidate.
+digest, missing target, failed gate, invalid plan digest, unsatisfied
+dependency, CodeQL identity drift, and a commit whose source or selected plan
+differs from the checked candidate.
 
 ## 10. Implementation order
 
@@ -685,8 +695,8 @@ depends_on = ["P0-SIG-02"]
 ```toml pair-block
 id = "P0-SIG-04"
 requirements = ["SIG-03"]
-targets = ["src/viper/system_impact.py:TargetCheck", "src/viper/system_impact.py:TestResult", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:Acceptance", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept"]
-tests = ["tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change", "tests/test_system_impact.py:test_plan_check_requires_tests_dependencies_and_digest", "tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source"]
+targets = ["src/viper/system_impact.py:TargetCheck", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:Acceptance", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept"]
+tests = ["tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change", "tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies", "tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'plan_check or acceptance' -q"
 depends_on = ["P0-SIG-03"]
 ```

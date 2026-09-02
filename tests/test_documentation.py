@@ -271,7 +271,7 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "Realized": "proposed",
         "Resolved": "proposed",
         "Target": "proposed",
-        "Tests": "proposed",
+        "Gates": "proposed",
         "Prior": "proposed",
         "Check": "proposed",
         "Commit": "proposed",
@@ -291,7 +291,7 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "Freeze": "implementation",
         "Commit": "implementation",
         "Resolved": "output",
-        "Tests": "implementation",
+        "Gates": "implementation",
         "Prior": "output",
         "Check": "output",
         "Acceptance": "output",
@@ -317,7 +317,8 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Realized", "Target"),
         ("Impact", "Check"),
         ("Target", "Check"),
-        ("Tests", "Check"),
+        ("Plan", "Gates"),
+        ("Gates", "Check"),
         ("Prior", "Check"),
         ("Freeze", "Commit"),
         ("Check", "Commit"),
@@ -347,8 +348,8 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("G0", "Check"),
         ("G1", "Check"),
         ("Impact", "Check"),
-        ("Block", "Tests"),
-        ("Tests", "Check"),
+        ("Block", "Gates"),
+        ("Gates", "Check"),
         ("Prior", "Check"),
         ("Freeze", "Check"),
         ("Freeze", "Commit"),
@@ -1967,10 +1968,7 @@ def test_system_impact_consumes_the_closed_ctg_plan() -> None:
 
     assert "compile_contract_traceability() -> closed CTG plan" in contract
     assert "analyze_source(R0, K) -> G0 + receipt" in contract
-    assert (
-        "check_plan(selected CTG, G0, G1, test results) -> PlanCheck"
-        in contract
-    )
+    assert "check_plan(selected CTG, G0, G1) -> PlanCheck" in contract
     assert "accept(repository root, PlanCheck, revision) -> Acceptance" in contract
     assert "accepts the closed CTG without reparsing" in crt_guide
 
@@ -1994,9 +1992,7 @@ def test_contract_target_declaration_has_one_meaning() -> None:
     )
 
     assert description in CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
-    assert description in CONTRACT_TRACEABILITY_PAIR_CODING.read_text(
-        encoding="utf-8"
-    )
+    assert description in CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
 
 
 def test_system_impact_check_has_one_bounded_proof_obligation() -> None:
@@ -2431,7 +2427,6 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
         "Impact",
         "ResolvedContractTarget",
         "TargetCheck",
-        "TestResult",
         "PlanCheck",
         "Acceptance",
     ):
@@ -2442,15 +2437,21 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
         "start_col: int",
         "end_col: int",
         "def extract_declaration_bytes(",
+        "block_id` appears in `PlanCheck.blocks`",
+        "runs every frozen selected `PairBlock.gate`",
+        "source digest and selected-plan digest from the",
         "### Guided work and strict closure",
+        "### Autonomous work",
         "The default guided boundary is one contract session",
         "Every changed declaration receives one result",
-        "test_acceptance_binds_commit_to_checked_source",
+        "test_acceptance_binds_commit_to_checked_source_and_plan",
     ):
         assert boundary in specification
+    assert "class TestResult(ProtocolModel)" not in specification
 
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
     assert "One contract session is the default guided boundary" in checklist
+    assert "Autonomous work freezes the selected PairBlocks" in checklist
     assert "performs the final reconciliation" in checklist
     for retired in ("SystemGraph", "ContractDelta", "PropagationPlan", "SCC"):
         assert f"class {retired}" not in specification
@@ -2838,13 +2839,12 @@ def test_system_impact_status_matches_the_master_checklist() -> None:
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
 
     assert (
-        "**Contract status:** draft replacement design; acceptance-boundary update"
+        "**Contract status:** approved replacement design; implementation pending."
         in specification
     )
     assert (
         "| [System Impact Check](system-impact-compiler.md) "
-        "| Draft replacement design; acceptance-boundary update pending review |"
-        in checklist
+        "| Approved replacement design; implementation pending |" in checklist
     )
 
 

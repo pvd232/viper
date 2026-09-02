@@ -2117,7 +2117,7 @@ R0 + CodeQLIdentity -> SourceGraph G0
 (CTG, G0) -> Impact
 execute CTG.blocks -> R1
 R1 + same CodeQLIdentity -> SourceGraph G1
-(CTG, G0, G1, test results) -> PlanCheck
+(CTG, G0, G1) -> PlanCheck
 ```
 
 System Impact reports reverse dependencies and rejects unplanned realized

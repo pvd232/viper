@@ -272,7 +272,7 @@ scheduled phase and dependency order.
 | [Contract Traceability](contract-traceability.md) | Implemented through `CRT-05`; `CRT-06` draft pending review | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design; implementation pending | One defining module for API operations, verification operations, and verification types |
-| [System Impact Check](system-impact-compiler.md) | Draft replacement design; acceptance-boundary update pending review | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, reverse-dependency reporting, and rejection of unplanned source changes |
+| [System Impact Check](system-impact-compiler.md) | Approved replacement design; implementation pending | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, reverse-dependency reporting, and rejection of unplanned source changes |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -328,7 +328,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
-<!-- contract-baseline: system-impact-compiler.md sha256=f032a0dda3067bb0a40e11323a8c4ed49f707ce0006b2a25dee9aac5566e7537 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=026ec08529fbf993dae9a5d3320503c0ff6c1df24357dec6c73e00a9060363fe -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
 <!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->
@@ -374,7 +374,7 @@ with `59 passed`.
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
 | Project root | `viper init ROOT` or explicit `root=` | Local `viper.toml` marker; absolute path omitted from protocol identity | One resolved absolute root per operation | Root resolver, path-boundary checks, local store, and every local consumer |
-| System impact | Baseline commit, selected PairBlocks, frozen candidate source, pinned `CodeQLIdentity`, and closed `ContractTraceabilityGraph` | Two `SourceGraph` records and receipts, one `Impact`, resolved target digests, and one `PlanCheck` | Exact AST declaration extraction, CodeQL source extraction, reverse reachability, action and declaration comparison, and unexpected-change detection | Same-identity receipts, frozen-plan digest, exact target transitions, no unplanned declaration changes, and passing PairBlock tests |
+| System impact | Baseline commit, selected PairBlocks, frozen candidate source, pinned `CodeQLIdentity`, and closed `ContractTraceabilityGraph` | Two `SourceGraph` records and receipts, one `Impact`, resolved target digests, and one `PlanCheck` | Exact AST declaration extraction, CodeQL source extraction, reverse reachability, action and declaration comparison, and unexpected-change detection | Same-identity receipts, frozen-plan digest, exact target transitions, no unplanned declaration changes, and successful PairBlock gates |
 | Local dataset | `ExternalInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
 | HTTP dataset | `HttpRequestSpec` plus file artifact draft | `DownloadSpec` | `ResolvedHttpRetrieval` and `ResolvedSingleFileArtifact` sharing one file | Download verifier and later input compiler |
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
@@ -598,6 +598,11 @@ edit, explains the next change, and performs the final reconciliation. A user
 may request a narrower strict close for one PairBlock that needs independent
 acceptance.
 
+Autonomous work freezes the selected PairBlocks before implementation. The
+agent stays within that plan. A necessary plan change starts a new freeze
+against the same baseline before work continues. Guided and autonomous work
+use the same final System Impact check, commit, and acceptance operation.
+
 ## 7. Master Phase 0 — project root, traceability, module ownership, and system impact
 
 **Depends on:** Module-privacy work already implemented.
@@ -808,17 +813,17 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_plan_targets_resolve_and_report_dependents -->
 - [ ] Freeze the selected PairBlocks and candidate source once, analyze that
       snapshot with the same CodeQL identity, check every planned transition,
-      record each focused `TestResult`, validate prior dependency acceptance,
+      run each frozen PairBlock gate, validate prior dependency acceptance,
       reject any unplanned declaration, and bind the passing check to the
-      commit containing the checked source.
+      commit containing the checked source and selected plan.
       <!-- pair-block: P0-SIG-04 -->
       <!-- implements: SIG-03 -->
       <!-- verifies: SIG-03 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.plan.realized state=planned owner=src/viper/system_impact.py:check_plan -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=planned owner=src/viper/system_impact.py:accept -->
       <!-- contract-verification: requirement=SIG-03 rule=system.plan.realized state=planned test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
-      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_requires_tests_dependencies_and_digest -->
-      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan -->
 - [ ] Replay the committed `model_support` to `models` migration and one
       completed VIPER PairBlock against their exact Git diffs.
       <!-- pair-block: P0-SIG-05 -->
