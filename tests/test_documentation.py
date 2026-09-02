@@ -931,6 +931,10 @@ def test_catalog_contract_exposes_every_promised_query_field() -> None:
 def test_knowledge_contract_exposes_exact_queries_and_tool_sets() -> None:
     """Bind scientific searches and agent tools to exact public models."""
     contract = ROOT / "docs/development/experiment-knowledge-primitives.md"
+    trees = tuple(
+        ast.parse(block, filename=str(contract))
+        for block in _python_blocks(contract.read_text())
+    )
     classes = {
         name: next(node for path, node in values if path == contract)
         for name, values in _contract_class_definitions().items()
@@ -1038,6 +1042,31 @@ def test_knowledge_contract_exposes_exact_queries_and_tool_sets() -> None:
         "retrieval_judgments",
         "similar",
     }
+
+    contract_functions = tuple(
+        node
+        for tree in trees
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+    )
+    refresh = next(
+        node
+        for node in contract_functions
+        if node.name == "refresh"
+        and any(argument.arg == "knowledge" for argument in node.args.kwonlyargs)
+    )
+    assert [argument.arg for argument in refresh.args.kwonlyargs] == [
+        "runs",
+        "knowledge",
+    ]
+    knowledge = next(
+        node
+        for node in contract_functions
+        if node.name == "knowledge"
+        and tuple(map(ast.unparse, node.decorator_list)) == ("property",)
+    )
+    assert tuple(map(ast.unparse, knowledge.decorator_list)) == ("property",)
+    assert _normalized(knowledge.returns) == "KnowledgeCatalog"
 
     text = contract.read_text()
     read_block = re.search(

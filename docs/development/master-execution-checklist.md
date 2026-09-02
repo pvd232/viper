@@ -340,9 +340,9 @@ a new digest.
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=639c743d25de8decdde4a4a7e1f74104033ea4f278d0951f335eddd889c9317f -->
 <!-- contract-baseline: remote-storage.md sha256=73f9ded176bdebe63da4483961cbd916d69b20fc2a64a6496799fe2da3e8a6e8 -->
 <!-- contract-baseline: experiment-expansion.md sha256=3612ebdd9d7336cc1584abb6187825421a81bf5de7e99a00169924b2844198d9 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=7ada3fa190771a94757e47d73e03b1a3358cf36c27eec87e5477632a87e51825 -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=fd9ee3ddabd688a0fe1941fdf19d5bcecf6ef5f19f9a74c3a1fb0ac005dd59fe -->
 <!-- contract-baseline: stage-reuse.md sha256=3040cfb8b6b66c81b4c1652329257d0b52383ee0e31cd41a05e7b5555a2c311a -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=92ba227451b41b0148b596063091585d608e68f18cab8aae74f6d75716f5f5b5 -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=198636cf6a7c9853fc03729f1d9c31529a3409e7a1e07aadfe31ae793a78e569 -->
 <!-- contract-baseline: research-memory-roadmap.md sha256=2bb637173fe9b9f65e70055907243dfa1bb579a86b3e04cf4ea184fba30b660a -->
 
 ## 4. Specification-system review
@@ -2209,6 +2209,9 @@ python -m pytest \
 **Outcome:** VIPER rebuilds one searchable local database from immutable run
 evidence and returns exact references with every result.
 
+Phase 13 uses Python's `sqlite3` module to build a disposable derived index.
+CodeQL remains exclusive to the System Impact Compiler's source analysis.
+
 ### 20.1 Catalog schema and extraction
 
 - [ ] Add `src/viper/catalog.py` with `CatalogRun`, `CatalogFile`,
@@ -2218,6 +2221,8 @@ evidence and returns exact references with every result.
       their page models, and `CatalogRefreshResult`.
 - [ ] Create schema-version 1 tables for sources, runs, stages, inputs,
       artifacts, files, measurements, benchmarks, and edges.
+- [ ] Implement the database with Python's standard-library `sqlite3` module;
+      `sqlite3` supplies the complete database dependency.
 - [ ] Extract normalized rows from one `VerifiedRunResult`.
 - [ ] Share lineage-node and edge extraction with `src/viper/inspection.py`.
 - [ ] Resolve discovered local terminal paths to immutable terminal references
@@ -2662,6 +2667,7 @@ as derived search aids outside the evidence and duplicate-rejection rules.
 - [ ] Add every exact query, catalog row, page, and `KnowledgeCatalog` method
       declared by the contract. Bind each cursor to the query and final sort
       key.
+- [ ] Add `Catalog.knowledge` after `KnowledgeCatalog` exists.
 - [ ] Add exhaustive cosine-distance search with stable distance and immutable
       reference ordering.
 - [ ] Add `knowledge = ["usearch>=2.26,<3"]` as an optional dependency. Use

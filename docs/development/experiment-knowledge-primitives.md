@@ -756,35 +756,18 @@ class KnowledgeCatalog:
     def similar(self, query: SimilarityQuery) -> SimilarityPage: ...
 
 
-class Catalog:
-    def refresh(
-        self,
-        *,
-        runs: tuple[ResolvedRunRef, ...] = (),
-        knowledge: tuple[ResolvedFileRef, ...] = (),
-    ) -> CatalogRefreshResult: ...
+# Phase 16 replaces the base Catalog.refresh() method with this signature.
+def refresh(
+    self,
+    *,
+    runs: tuple[ResolvedRunRef, ...] = (),
+    knowledge: tuple[ResolvedFileRef, ...] = (),
+) -> CatalogRefreshResult: ...
 
-    def runs(self, query: RunQuery = RunQuery()) -> RunPage: ...
 
-    def artifacts(
-        self,
-        query: ArtifactQuery = ArtifactQuery(),
-    ) -> ArtifactPage: ...
-
-    def measurements(
-        self,
-        query: MeasurementQuery = MeasurementQuery(),
-    ) -> MeasurementPage: ...
-
-    def benchmarks(
-        self,
-        query: BenchmarkQuery = BenchmarkQuery(),
-    ) -> BenchmarkPage: ...
-
-    def lineage(self, run: ResolvedRunRef) -> RunLineage: ...
-
-    @property
-    def knowledge(self) -> KnowledgeCatalog: ...
+# Phase 17 adds this property to Catalog.
+@property
+def knowledge(self) -> KnowledgeCatalog: ...
 ```
 
 ## 11. Publication, verification, and authority
@@ -914,8 +897,8 @@ modulations, effects, and journals. `manifest` is the portable starting point
 for catalog discovery. Every publish method validates referenced records
 before writing. Failed validation publishes nothing.
 
-`Catalog.refresh(knowledge=...)`, declared with the complete `Catalog` model
-above, follows the local head and any supplied manifest heads.
+The Phase 16 `Catalog.refresh(knowledge=...)` extension follows the local head
+and any supplied manifest heads.
 
 Refresh walks each manifest chain to its first record, rejects a cycle or an
 invalid envelope, and deduplicates records by immutable reference. Catalog

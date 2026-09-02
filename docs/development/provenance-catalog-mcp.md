@@ -25,11 +25,13 @@ These requirements bind the contract to the master checklist:
 `lineage()` builds one graph from that result. `compare_runs()` compares two
 verified runs. Current inspection covers one or two selected runs.
 
-**Target:** `catalog()` from `viper.catalog` opens `.viper/catalog.sqlite3`.
-`Catalog.refresh()`
-rebuilds searchable rows from terminal run references. Search results always
+**Target:** `catalog()` from `viper.catalog` opens the derived SQLite database
+at `.viper/catalog.sqlite3`. `Catalog.refresh()` uses Python's `sqlite3` module
+to rebuild searchable rows from terminal run references. Search results always
 retain the immutable reference that supplied each fact. Deleting the database
-and refreshing it produces the same searchable facts.
+and refreshing it produces the same searchable facts. CodeQL remains the
+source-analysis backend for the System Impact Compiler; catalog refresh and
+queries use SQLite exclusively.
 
 The MCP server is an adapter. It validates tool arguments with the same
 Pydantic request models used by `viper.api.dispatch()`. It returns the same
@@ -309,8 +311,7 @@ The database has these version-1 tables:
 
 ```text
 discover canonical local terminal paths and supplied ResolvedRunRef values
--> discover the local knowledge head and supplied knowledge manifest heads
--> verify each run and walk each manifest chain
+-> verify each run
 -> extract normalized rows
 -> write a new database in .viper/
 -> fsync the database
@@ -320,9 +321,8 @@ discover canonical local terminal paths and supplied ResolvedRunRef values
 An invalid run enters `sources` with its rejection. Trusted run, artifact,
 measurement, benchmark, lineage, and reuse-key tables accept verified sources.
 
-Catalog writes stay inside its SQLite database and derived vector-index
-directory. A stale or corrupt catalog can be deleted and rebuilt from immutable
-VIPER records and knowledge manifest heads.
+Catalog writes stay inside its SQLite database. A stale or corrupt catalog can
+be deleted and rebuilt from immutable VIPER run records.
 
 ## 7. Public catalog interface
 
@@ -332,7 +332,6 @@ class Catalog:
         self,
         *,
         runs: tuple[ResolvedRunRef, ...] = (),
-        knowledge: tuple[ResolvedFileRef, ...] = (),
     ) -> CatalogRefreshResult: ...
 
     def runs(self, query: RunQuery = RunQuery()) -> RunPage: ...
@@ -354,12 +353,12 @@ class Catalog:
 
     def lineage(self, run: ResolvedRunRef) -> RunLineage: ...
 
-    @property
-    def knowledge(self) -> KnowledgeCatalog: ...
-
-
 def catalog(*, root: Path | None = None) -> Catalog: ...
 ```
+
+This is the Phase 13 interface. Phase 16 adds explicit knowledge-manifest heads
+to `Catalog.refresh()`. Phase 17 adds `Catalog.knowledge` after
+`KnowledgeCatalog` exists.
 
 The typed API adds `catalog_refresh`, `search_runs`, `search_artifacts`,
 `search_measurements`, and `search_benchmarks`. Their request and success
@@ -651,7 +650,7 @@ to skip execution.
 from pathlib import Path
 
 
-index = catalog(Path.cwd())
+index = catalog(root=Path.cwd())
 index.refresh(runs=(verified_run,))
 runs = index.runs(RunQuery(input_sha256=dataset_sha256))
 measurements = index.measurements(
