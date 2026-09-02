@@ -239,205 +239,89 @@ MODULE_OWNERSHIP_DAG_EDGES = (
 MODULE_OWNERSHIP_DAG_PALETTES = TRACEABILITY_DAG_PALETTES
 SYSTEM_IMPACT_DAG_PALETTES = (
     {
-        "input": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
         "current": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
         "evidence": "fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px",
         "gap": "fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px",
     },
     {
-        "input": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
         "proposed": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
     },
     {
-        "input": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
+        "contract": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
+        "checklist": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
         "evidence": "fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px",
+        "implementation": "fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px",
         "output": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
-        "consumer": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
     },
 )
 SYSTEM_IMPACT_DAG_ROLES = (
     {
-        "Python": "input",
-        "Contracts": "input",
-        "Plans": "input",
-        "Runs": "input",
-        "Architecture": "current",
-        "Documentation": "current",
-        "PlanDiff": "current",
-        "Lineage": "current",
-        "LocalA": "evidence",
-        "LocalB": "evidence",
-        "LocalC": "evidence",
-        "LocalD": "evidence",
+        "Contract": "current",
+        "Edges": "evidence",
+        "Blocks": "evidence",
+        "Source": "evidence",
         "Gap": "gap",
     },
     {
-        "Baseline": "input",
-        "Compiler": "input",
-        "Context": "input",
-        "Traceability": "input",
-        "Change": "input",
-        "Bootstrap": "input",
-        "Inventory": "proposed",
-        "Database": "proposed",
-        "Queries": "proposed",
-        "Facts": "proposed",
-        "Sites": "proposed",
-        "Graph": "proposed",
-        "ContractCompiler": "proposed",
-        "Delta": "proposed",
-        "Overlay": "proposed",
-        "Support": "proposed",
-        "GraphQueries": "proposed",
-        "Closure": "proposed",
-        "SCC": "proposed",
-        "DAG": "proposed",
-        "Select": "proposed",
-        "Coverage": "proposed",
-        "Plan": "proposed",
+        "Identity": "proposed",
+        "Baseline": "proposed",
+        "Impact": "proposed",
+        "Realized": "proposed",
         "Target": "proposed",
-        "Work": "proposed",
+        "Check": "proposed",
     },
     {
-        "R0": "input",
-        "K": "input",
-        "X": "input",
-        "Q0": "input",
-        "W0": "input",
-        "Q1": "input",
-        "W1": "input",
-        "Change": "input",
-        "Decisions": "input",
-        "DB0": "evidence",
-        "Queries0": "evidence",
-        "F0": "evidence",
-        "DB1": "evidence",
-        "Queries1": "evidence",
-        "F1": "evidence",
-        "CompileBase": "consumer",
-        "CompileChange": "consumer",
-        "GraphQueries": "consumer",
-        "CompileWork": "consumer",
-        "Execute": "consumer",
-        "Observe": "consumer",
-        "CheckTarget": "consumer",
-        "Review": "consumer",
+        "Requirement": "contract",
+        "Target": "contract",
+        "Rule": "contract",
+        "CTG": "contract",
+        "Block": "checklist",
+        "CodeQL": "evidence",
         "G0": "evidence",
-        "PairBlocks": "evidence",
-        "R1": "evidence",
         "G1": "evidence",
-        "Delta": "output",
-        "Impact": "output",
-        "Closure": "output",
-        "SCC": "output",
-        "Tests": "output",
-        "Coverage": "output",
-        "Plan": "output",
-        "Target": "output",
-        "Repairs": "output",
-        "Conformance": "output",
+        "Impact": "evidence",
+        "Execute": "implementation",
+        "Tests": "implementation",
+        "Check": "output",
     },
 )
 SYSTEM_IMPACT_DAG_EDGES = (
     {
-        ("Python", "Architecture"),
-        ("Contracts", "Documentation"),
-        ("Plans", "PlanDiff"),
-        ("Runs", "Lineage"),
-        ("Architecture", "LocalA"),
-        ("Documentation", "LocalB"),
-        ("PlanDiff", "LocalC"),
-        ("Lineage", "LocalD"),
-        ("LocalA", "Gap"),
-        ("LocalB", "Gap"),
-        ("LocalC", "Gap"),
-        ("LocalD", "Gap"),
+        ("Contract", "Edges"),
+        ("Blocks", "Source"),
+        ("Edges", "Gap"),
+        ("Source", "Gap"),
     },
     {
-        ("Baseline", "Inventory"),
-        ("Baseline", "Database"),
-        ("Compiler", "Database"),
-        ("Database", "Queries"),
-        ("Compiler", "Queries"),
-        ("Queries", "Facts"),
-        ("Queries", "Sites"),
-        ("Sites", "Graph"),
-        ("Facts", "Graph"),
-        ("Inventory", "Graph"),
-        ("Context", "Graph"),
-        ("Traceability", "Graph"),
-        ("Bootstrap", "Graph"),
-        ("Change", "ContractCompiler"),
-        ("Graph", "ContractCompiler"),
-        ("ContractCompiler", "Delta"),
-        ("Graph", "Overlay"),
-        ("Delta", "Overlay"),
-        ("Delta", "Support"),
-        ("Overlay", "GraphQueries"),
-        ("Support", "GraphQueries"),
-        ("GraphQueries", "Closure"),
-        ("GraphQueries", "SCC"),
-        ("SCC", "DAG"),
-        ("Closure", "Select"),
-        ("Select", "Coverage"),
-        ("Closure", "Plan"),
-        ("Graph", "Target"),
-        ("Delta", "Target"),
-        ("Plan", "Target"),
-        ("Target", "Work"),
-        ("DAG", "Work"),
+        ("Identity", "Baseline"),
+        ("Baseline", "Impact"),
+        ("Identity", "Realized"),
+        ("Baseline", "Target"),
+        ("Realized", "Target"),
+        ("Impact", "Check"),
+        ("Target", "Check"),
     },
     {
-        ("R0", "DB0"),
-        ("K", "DB0"),
-        ("DB0", "Queries0"),
-        ("K", "Queries0"),
-        ("Queries0", "F0"),
-        ("F0", "CompileBase"),
-        ("K", "CompileBase"),
-        ("X", "CompileBase"),
-        ("Q0", "CompileBase"),
-        ("W0", "CompileBase"),
-        ("CompileBase", "G0"),
-        ("Change", "CompileChange"),
-        ("G0", "CompileChange"),
-        ("CompileChange", "Delta"),
+        ("Requirement", "Target"),
+        ("Requirement", "Rule"),
+        ("Target", "Block"),
+        ("Rule", "Block"),
+        ("Requirement", "CTG"),
+        ("Target", "CTG"),
+        ("Rule", "CTG"),
+        ("Block", "CTG"),
+        ("CodeQL", "G0"),
+        ("CTG", "G0"),
         ("G0", "Impact"),
-        ("Delta", "Impact"),
-        ("Impact", "GraphQueries"),
-        ("K", "GraphQueries"),
-        ("GraphQueries", "Closure"),
-        ("GraphQueries", "SCC"),
-        ("Closure", "Tests"),
-        ("Tests", "Coverage"),
-        ("Closure", "Plan"),
-        ("Decisions", "Plan"),
-        ("G0", "Target"),
-        ("Delta", "Target"),
-        ("Plan", "Target"),
-        ("SCC", "Repairs"),
-        ("Target", "Repairs"),
-        ("Repairs", "CompileWork"),
-        ("Target", "CompileWork"),
-        ("CompileWork", "PairBlocks"),
-        ("PairBlocks", "Execute"),
-        ("Execute", "R1"),
-        ("R1", "DB1"),
-        ("K", "DB1"),
-        ("DB1", "Queries1"),
-        ("K", "Queries1"),
-        ("Queries1", "F1"),
-        ("F1", "Observe"),
-        ("X", "Observe"),
-        ("K", "Observe"),
-        ("Q1", "Observe"),
-        ("W1", "Observe"),
-        ("Observe", "G1"),
-        ("G1", "CheckTarget"),
-        ("Target", "CheckTarget"),
-        ("CheckTarget", "Conformance"),
-        ("Coverage", "Review"),
-        ("Conformance", "Review"),
+        ("Block", "Execute"),
+        ("Execute", "G1"),
+        ("CodeQL", "G1"),
+        ("CTG", "Check"),
+        ("G0", "Check"),
+        ("G1", "Check"),
+        ("Impact", "Check"),
+        ("Block", "Tests"),
+        ("Tests", "Check"),
     },
 )
 
@@ -1765,27 +1649,30 @@ def test_system_impact_dags_preserve_semantic_topology() -> None:
         assert TRACEABILITY_LINK_STYLE in diagram
 
 
-def test_system_impact_compiler_is_the_single_active_specification() -> None:
-    """Keep the contract, proof, PairBlocks, and gates in one document."""
+def test_system_impact_check_is_the_single_active_specification() -> None:
+    """Keep the bounded check, PairBlocks, and gates in one document."""
     text = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
-    opening = text.split("## 1. Status", 1)[0]
-    pipeline = _MERMAID_FENCE.search(opening)
-
-    assert pipeline is not None
-    assert "flowchart TB" in pipeline.group("body")
-    assert 'F0["CodeQLSourceFacts F0"]' in pipeline.group("body")
-    assert 'F1["CodeQLSourceFacts F1"]' in pipeline.group("body")
-    assert 'Check["evaluate_target_conformance()"]' in pipeline.group("body")
     assert all(not path.exists() for path in RETIRED_SYSTEM_IMPACT_DOCUMENTS)
     for required_section in (
         "## 1. Status",
         "## 7. Verification",
-        "## 12. Core proof",
-        "## 13. Detailed graph-transformation foundations",
-        "## 14. Implementation plan and verification gates",
-        "## 15. Research program",
+        "## 10. Implementation order",
     ):
         assert required_section in text
+    for required_boundary in (
+        "validated ContractTraceabilityGraph",
+        "CodeQL baseline source graph",
+        "CodeQL realized source graph",
+        "reject unplanned source changes",
+    ):
+        assert required_boundary in text
+    for retired_design in (
+        "class ContractChange",
+        "class ContractDelta",
+        "class PropagationPlan",
+        "class CondensationDAG",
+    ):
+        assert retired_design not in text
 
     documentation = "\n".join(
         path.read_text(encoding="utf-8") for path in (ROOT / "docs").rglob("*.md")
@@ -1804,7 +1691,7 @@ def test_contract_and_schedule_names_are_canonical() -> None:
         MODULE_OWNERSHIP_PAIR_CODING: ("# Public Module Ownership Pair-Coding Guide"),
         MASTER_PHASE_ZERO_PAIR_CODING: "# Foundation Pair-Coding Guide",
         MASTER_EXECUTION_CHECKLIST: "# VIPER Master Execution Checklist",
-        SYSTEM_IMPACT_COMPILER: "# System Impact Compiler",
+        SYSTEM_IMPACT_COMPILER: "# System Impact Check",
         RESEARCH_MEMORY: "# Research Memory and Agent Learning",
         RESEARCH_MEMORY_PAIR_CODING: "# Research Memory Pair-Coding Guide",
     }
@@ -1835,7 +1722,7 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
         "## 4. Acceptance PairBlocks",
         "## 5. Pair execution",
         "## 6. Guide gate",
-        "## 7. SystemGraph handoff",
+        "## 7. System Impact handoff",
     )
     positions = tuple(text.index(heading) for heading in headings)
     assert positions == tuple(sorted(positions))
@@ -1847,10 +1734,13 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
         "P0-CRT-03",
         "P0-CRT-04",
         "P0-CRT-05",
+        "P0-CRT-06",
+        "P0-CRT-07",
         "P0-PROOF-01",
         "P0-PROOF-02",
         "P0-PROOF-03",
         "P0-PROOF-04",
+        "P0-PROOF-08",
     )
     assert tuple(item.group("id") for item in definitions) == expected_ids
 
@@ -1951,7 +1841,7 @@ def test_module_ownership_pair_guide_covers_each_cycle() -> None:
         "## 3. Production PairBlocks",
         "## 4. Pair execution",
         "## 5. Guide gate",
-        "## 6. SystemGraph handoff",
+        "## 6. System Impact handoff",
     )
     positions = tuple(text.index(heading) for heading in headings)
     assert positions == tuple(sorted(positions))
@@ -2031,67 +1921,40 @@ def test_module_ownership_pair_guide_covers_each_cycle() -> None:
         dependencies = manifest["depends_on"]
         assert len(dependencies) == len(set(dependencies)), block_id
         for dependency in dependencies:
-            if dependency == "P0-CRT-05":
+            if dependency == "P0-CRT-07":
                 continue
             assert dependency in manifests, (block_id, dependency)
             assert order[dependency] < order[block_id], (block_id, dependency)
 
 
-def test_system_graph_stages_traceability_before_contract_change() -> None:
-    """Keep CRT lowering inside G0 compilation and change compilation after G0."""
-    proof = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
+def test_system_impact_consumes_the_closed_ctg_plan() -> None:
+    """Keep plan authorship in CRT and source observation in System Impact."""
+    contract = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     crt_guide = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
-    system_guide = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
 
-    assert "Q_0=\\operatorname{CompileTraceability}(R_0)" in proof
-    assert "\\operatorname{CompileContractChange}(c_\\Delta,G_0)" in proof
-    assert "R0 + K -> analyze_source_with_codeql() -> F0" in crt_guide
-    assert "(F0, K, X, Q0, W0) -> compile_system() -> G0" in crt_guide
-    assert "(ContractChange, G0)" in crt_guide
-    assert "only traceability input accepted" not in crt_guide
+    assert "compile_contract_traceability() -> closed CTG plan" in contract
+    assert "analyze_source(R0, K) -> G0 + receipt" in contract
+    assert "check_plan(CTG, G0, G1, test results) -> PlanCheck" in contract
+    assert "accepts the closed CTG without reparsing" in crt_guide
 
     definition = next(
         item
-        for item in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(system_guide)
+        for item in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(contract)
         if item.group("id") == "P0-SIG-04"
     )
     manifest = tomllib.loads(definition.group("manifest"))
-    assert manifest["depends_on"] == ["P0-CRT-05", "P0-SIG-03"]
-    assert "ingest_contract_traceability" in " ".join(manifest["targets"])
-    assert "compile_contract_change" in " ".join(manifest["targets"])
-    body = " ".join(definition.group("body").split())
-    assert "Derive `ContractTraceabilityGraph`" not in body
-    assert body.index("Consume the `ContractTraceabilityGraph`") < (
-        body.index("After `G0` exists")
-    )
+    assert manifest["depends_on"] == ["P0-SIG-03"]
+    assert "src/viper/system_impact.py:check_plan" in manifest["targets"]
 
 
-def test_system_impact_proof_uses_complete_compiler_boundary() -> None:
-    """Keep every proof compiler step explicit and every subsection numbered."""
-    proof = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
-    research = proof.split("## 15. Research program", 1)[1]
-    core = proof.split("## 12. Core proof", 1)[1].split(
-        "## 13. Detailed graph-transformation foundations",
-        1,
-    )[0]
+def test_system_impact_check_has_one_bounded_proof_obligation() -> None:
+    """Keep the replacement centered on plan conformance, not plan synthesis."""
+    contract = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
 
-    baseline = "R_0&\\xrightarrow{\\operatorname{AnalyzeCodeQL}_K}F_0"
-    baseline_lowering = "(F_0,Q_0,W_0)&\\xrightarrow{\\mathcal C_{X,K}}G_0"
-    observed = "R_1\\xrightarrow{\\operatorname{AnalyzeCodeQL}_K}F_1"
-    observed_lowering = "(F_1,Q_1,W_1)&\\xrightarrow{\\mathcal C_{X,K}}G_1"
-    assert research.count(baseline) == 2
-    assert research.count(baseline_lowering) == 2
-    assert research.count(observed) == 2
-    assert research.count(observed_lowering) == 2
-    assert baseline in core
-    assert baseline_lowering in core
-    assert observed.replace("R_1", "R_1&", 1) in core
-    assert observed_lowering in core
-    assert "\\longrightarrow(Q_0,W_0)\\longrightarrow G_0" not in proof
-    assert "\\longrightarrow(Q_1,W_1)\\longrightarrow G_1" not in proof
-
-    subsection_numbers = re.findall(r"^### (12\.\d+) ", core, re.MULTILINE)
-    assert subsection_numbers == [f"12.{number}" for number in range(1, 14)]
+    assert "G_0=\\operatorname{Analyze}_{K}(R_0)" in contract
+    assert "G_1=\\operatorname{Analyze}_{K}(R_1)" in contract
+    assert "C=\\operatorname{CheckPlan}(P,G_0,G_1)" in contract
+    assert "The check does not generate a plan" in contract
 
 
 def test_contract_traceability_pair_guide_executes_as_one_workflow(
@@ -2355,34 +2218,14 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
             assert order[dependency] < order[block_id], (block_id, dependency)
 
 
-def test_system_graph_phase_one_tasks_have_pair_blocks() -> None:
-    """Bind each high-return Master Phase 1 task to one ordered block."""
+def test_retired_system_impact_hardening_is_not_scheduled() -> None:
+    """Keep the deferred graph-research program outside the active schedule."""
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
-    section = checklist.split("### 8.0 System Impact hardening", 1)[1].split(
-        "### 8.1 Local publication interface",
-        1,
-    )[0]
-    marker_ids = re.findall(r"<!-- pair-block: (P1-SIG-\d{2}) -->", section)
-    assert marker_ids == ["P1-SIG-01", "P1-SIG-02", "P1-SIG-03", "P1-SIG-04"]
+    contract = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
 
-    reference = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
-    definitions = {
-        match.group("id"): tomllib.loads(match.group("manifest"))
-        for match in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(reference)
-        if match.group("id").startswith("P1-SIG-")
-    }
-    assert set(definitions) == set(marker_ids)
-    available = {
-        match.group("id") for match in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(reference)
-    }
-    for block_id in marker_ids:
-        manifest = definitions[block_id]
-        assert manifest["id"] == block_id
-        assert manifest["requirements"]
-        assert manifest["targets"]
-        assert manifest["tests"]
-        assert str(manifest["gate"]).startswith("conda run -n mantra ")
-        assert set(manifest["depends_on"]) <= available
+    assert "P1-SIG-" not in checklist
+    assert "P1-SIG-" not in contract
+    assert "System Impact hardening" not in checklist
 
 
 def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
@@ -2523,81 +2366,50 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
     }
 
 
-def test_phase_zero_system_models_match_contract() -> None:
-    """Keep the unified SystemGraph vocabulary complete and internally equal."""
+def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
+    """Keep the source-observation and plan-check records complete."""
     specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
-    node_kinds = {
-        "repository_file",
-        "python_symbol",
-        "document_anchor",
-        "external_symbol",
-    }
-    edge_kinds = {
-        "contained_by",
-        "imports_module",
-        "imports_symbol",
-        "calls",
-        "constructs",
-        "inherits_from",
-        "uses_type",
-        "reads_symbol",
-        "writes_symbol",
-        "decorated_by",
-        "registers_with",
-        "exports_symbol",
-        "declared_by",
-        "implements_rule",
-        "verifies_rule",
-        "scheduled_by",
-        "targets",
-        "gated_by",
-        "block_depends_on",
-        "reads_context",
-        "launches",
-    }
-    fact_kinds = {"node_identity", "node_roles", "python_signature", "edge"}
-    constraint_kinds = {"presence", "absence", "preservation"}
-    for value in node_kinds | edge_kinds | fact_kinds | constraint_kinds:
-        assert f'"{value}"' in specification
-    assert "source depends on the target" in specification
-    assert "source depends on target" in specification
-    assert 'ContractCompiler -->|"PairBlocks"| Plan' not in specification
-    assert "PairReference" not in specification
-    assert 'GraphQueries -->|"mutual reachability"| SCC' in specification
-    assert 'Target -->|"hard constraints"| Repairs' in specification
-    assert "compile_work()" in specification
-    assert 'Execute -->|"writes"| R1' in specification
+    for model in (
+        "CodeQLIdentity",
+        "CodeQLReceipt",
+        "SourceNode",
+        "SourceEdge",
+        "SourceGraph",
+        "Impact",
+        "TargetCheck",
+        "PlanCheck",
+    ):
+        assert f"class {model}(ProtocolModel)" in specification
+    for operation in ("imports", "calls", "constructs", "inherits", "reads", "writes"):
+        assert f'"{operation}"' in specification
+    for retired in ("SystemGraph", "ContractDelta", "PropagationPlan", "SCC"):
+        assert f"class {retired}" not in specification
 
 
 def test_system_impact_codeql_backend_is_end_to_end() -> None:
-    """Keep the pinned CodeQL backend at both compiler boundaries."""
+    """Keep one pinned CodeQL identity at both observation boundaries."""
     specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
 
     for value in (
-        'cli_version: Literal["2.26.4"]',
-        "class CodeQLSourceFacts(ProtocolModel)",
-        "class CodeQLAnalysisReceipt(ProtocolModel)",
-        "source_analysis: CodeQLAnalysisReceipt",
-        "def analyze_source_with_codeql(",
-        "F_0=\\operatorname{AnalyzeCodeQL}_K(R_0)",
-        "F_1=\\operatorname{AnalyzeCodeQL}_K(R_1)",
-        "reject every unsupported or unresolved dependency site",
-        "tests/test_system_graph_codeql.py:test_codeql_source_fact_oracle_parity",
+        "class CodeQLIdentity(ProtocolModel)",
+        "class CodeQLReceipt(ProtocolModel)",
+        "class SourceGraph(ProtocolModel)",
+        "analyze_source(R0, K) -> G0 + receipt",
+        "analyze_source(R1, K) -> G1 + receipt",
+        "tests/test_system_impact.py:test_codeql_receipt_binds_revision_and_identity",
     ):
         assert value in specification
 
     for rule in (
         "system.codeql.identity",
-        "system.codeql.database",
-        "system.codeql.queries",
-        "system.codeql.facts",
-        "system.codeql.parity",
+        "system.source.canonical",
+        "system.plan.resolved",
+        "system.plan.realized",
+        "system.plan.closed",
+        "system.fixture.replayed",
     ):
         assert f"rule={rule}" in checklist
-
-    assert "Production extraction owns\nthe parser" not in checklist
-    assert "reject every\n      unsupported or unresolved dependency site" in checklist
 
 
 def _worked_example_runtime_failures(
@@ -2951,26 +2763,29 @@ def test_wheel_smoke_gates_use_the_public_module_contract() -> None:
 
 
 def test_system_impact_status_matches_the_master_checklist() -> None:
-    """Keep the approved design state distinct from pending implementation."""
+    """Keep the approved replacement state distinct from implementation."""
     specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
 
     assert (
-        "**Contract status:** approved design; implementation pending." in specification
+        "**Contract status:** approved replacement design; implementation pending."
+        in specification
     )
     assert (
-        "| [System Impact Compiler](system-impact-compiler.md) "
-        "| Approved design; implementation pending |" in checklist
+        "| [System Impact Check](system-impact-compiler.md) "
+        "| Approved replacement design; implementation pending |" in checklist
     )
 
 
-def test_system_impact_rule_owners_use_pair_block_nomenclature() -> None:
-    """Keep verifier owners on the exact planned implementation symbols."""
+def test_system_impact_rule_owners_match_the_bounded_check() -> None:
+    """Keep verifier owners on the exact source-check operations."""
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
     required_owners = {
-        "src/viper/system_graph.py:condense_affected_graph",
-        "src/viper/system_graph.py:compile_propagation_plan",
-        "src/viper/system_graph.py:compile_system_change",
+        "src/viper/system_impact.py:SourceGraph",
+        "src/viper/system_impact.py:CodeQLIdentity",
+        "src/viper/system_impact.py:inspect_plan",
+        "src/viper/system_impact.py:check_plan",
+        "tests/test_system_impact.py:test_committed_manifest_rename",
     }
     retired_owners = {
         "src/viper/system_graph.py:condense_system_graph",
@@ -2989,9 +2804,8 @@ def test_system_impact_contract_covers_codeql_boundary() -> None:
     """Keep every CodeQL-owned implementation surface in its contract."""
     contract = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     for path in (
-        "src/viper/_system_graph/codeql.py",
-        "tools/codeql/viper-system-graph/",
-        "tests/test_system_graph_codeql.py",
+        "src/viper/_system_impact/codeql.py",
+        "tests/test_system_impact.py",
     ):
         assert f"`{path}`" in contract
 

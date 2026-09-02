@@ -23,8 +23,7 @@ These requirements bind this contract to the master checklist:
 
 The concrete classes in this document are planned additions to
 `viper.research`. Existing names such as `ResolvedRunRef`, `ResolvedRunSpecRef`,
-`ResolvedFileRef`, `TargetSpecification`, and `TargetConformanceReport` retain
-their current or separately contracted meanings.
+and `ResolvedFileRef` retain their current or separately contracted meanings.
 
 ## 2. Required claim
 
@@ -436,11 +435,11 @@ them into every catalog row. Publication policy decides whether the underlying
 bytes remain local, remote, redacted, or unavailable. The immutable receipt
 still states which bytes and policy produced the episode.
 
-Code changes use the System Impact Compiler at both ends. A research episode
-links its initial `SystemGraph`, `ContractDelta`, impact report,
-`TargetSpecification`, PairBlocks, observed `SystemGraph`, and
-`TargetConformanceReport`. CodeQL supplies the independently extracted source
-facts. It does not evaluate the scientific hypothesis.
+Code changes use the System Impact Check at both ends. A research episode links
+its closed `ContractTraceabilityGraph`, baseline `SourceGraph`, `Impact`,
+PairBlocks, realized `SourceGraph`, and `PlanCheck`. CodeQL supplies the
+independently extracted source facts. It does not author the plan or evaluate
+the scientific hypothesis.
 
 ## 9. Episode and review records
 

@@ -10,7 +10,7 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** implemented.
+**Contract status:** implemented through `CRT-05`; `CRT-06` approved.
 
 These requirements bind the contract to the master checklist:
 
@@ -19,8 +19,9 @@ These requirements bind the contract to the master checklist:
 | CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_contract_traceability.py --> | Parse every contract requirement and named verifier rule into `ContractTraceabilityGraph`, with each collection serialized in canonical order. |
 | CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_contract_traceability.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
 | CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs plus one explicit example-symbol inventory and one worked example that exercises every inventoried symbol. |
-| CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph that baseline SystemGraph compilation lowers into $G_0$. |
+| CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph for downstream plan checks. |
 | CRT-05 <!-- contract-requirement: CRT-05 phase=0 test=tests/test_contract_traceability.py --> | Inventory every normative Section 4 Python symbol, require every worked-example symbol to belong to that inventory, and publish the inventory in `ContractTraceabilityGraph`. |
+| CRT-06 <!-- contract-requirement: CRT-06 phase=0 test=tests/test_contract_traceability.py --> | Compile every `ContractTarget` and `PairBlock` into `ContractTraceabilityGraph`; bind each rule edge to one block; require complete requirement, target, rule, test, and dependency closure; then remove the superseded symbol, export, and example inventories. |
 
 ## 2. Required claim
 
@@ -40,8 +41,12 @@ Which source symbol implements that invariant?
 Which test proves the accepted and rejected behavior?
 -> RuleEdge(kind="verification")
 
-Which Python symbols does the contract define or depend on?
--> ContractSymbol
+Which source declarations does the contract require the implementation to add,
+update, or remove?
+-> ContractTarget
+
+Which bounded implementation block owns each target and test?
+-> PairBlock
 ```
 
 The resulting chain is:
@@ -51,6 +56,11 @@ requirement
 -> verifier rule
 -> implementation owner
 -> acceptance test
+
+requirement
+-> contract target
+-> PairBlock
+-> exact edit and gate
 ```
 
 Each link names an exact file and symbol. While a contract remains planned, the
@@ -80,15 +90,17 @@ The test requires each requirement to appear once in an `implements` marker
 and once in a `verifies` marker. It also requires the named test file to exist
 and appear in the verification checkbox.
 
-That check proves phase placement and document coverage. It leaves two
-relationships implicit, and it does not inventory the contract's normative
-Python symbols:
+That check proves phase placement and document coverage. The implemented CRT
+compiler now adds rules, owners, tests, and documentation-symbol inventories.
+It still leaves the executable plan outside the graph:
 
 ```text
-requirement -> named verifier rule
-named verifier rule -> exact implementation symbol
-contract model section -> complete contract-symbol inventory
-worked-example symbols -> subset of contract-symbol inventory
+requirement -> exact source change
+exact source change -> one PairBlock
+rule edge -> owning PairBlock
+PairBlock target -> exact source change
+PairBlock test -> verification edge
+PairBlock dependency -> known acyclic predecessor
 ```
 
 ### Current DAG
@@ -161,64 +173,80 @@ the contract, checklist, implementation, and generated graph boundaries.
 
 ### Proposed-change DAG
 
-The proposed records make each missing relationship explicit.
+`CRT-06` adds the missing plan records and joins them before System Impact sees
+the plan.
 
 ```mermaid
 flowchart TD
     Requirement["Proposed<br/>ContractRequirement"]
+    Target["Proposed<br/>ContractTarget"]
     Rule["Proposed<br/>VerifierRule"]
     Owner["Proposed<br/>implementation RuleEdge"]
     Test["Proposed<br/>verification RuleEdge"]
-    Symbol["Proposed<br/>ContractSymbol"]
+    Block["Proposed<br/>PairBlock"]
     Graph["Proposed<br/>ContractTraceabilityGraph"]
 
+    Requirement -->|"requirements"| Target
     Requirement -->|"requirement_id"| Rule
-    Rule -->|"kind=implementation"| Owner
-    Rule -->|"kind=verification"| Test
-    Owner -->|"exact source location"| Graph
-    Test -->|"exact test location"| Graph
-    Symbol -->|"contract · kind · name"| Graph
+    Target -->|"block_id · target"| Block
+    Rule -->|"kind=implementation · block_id"| Owner
+    Rule -->|"kind=verification · block_id"| Test
+    Owner -->|"target in block.targets"| Block
+    Test -->|"target in block.tests"| Block
+    Requirement -->|"ordered record"| Graph
+    Target -->|"ordered record"| Graph
+    Rule -->|"ordered record"| Graph
+    Owner -->|"ordered record"| Graph
+    Test -->|"ordered record"| Graph
+    Block -->|"ordered record"| Graph
 
-    class Requirement,Rule,Owner,Test,Symbol,Graph proposed
+    class Requirement,Target,Rule,Owner,Test,Block,Graph proposed
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
 ### Integrated DAG
 
-The integrated path retains the readable contract and checklist markers. The
-compiler turns those markers into one graph that the system impact compiler can
-consume. Verification edges name the pytest functions that own accepted and
-rejected behavior.
+The integrated path shows one `MOD-01` target. `declaration` identifies the
+exact ordered `__all__` assignment required by the PairBlock. The implementation
+edge says that the same symbol enforces the rule. The verification edge names
+the test that observes it.
 
 ```mermaid
 flowchart TD
-    Contract["Contract row<br/>PDR-03"]
-    Rule["Verifier rule<br/>project.path.symlink_free"]
-    Task["Checklist implementation marker<br/>planned source owner"]
-    Source["Source symbol<br/>resolve_path"]
-    TestMarker["Checklist verification marker<br/>planned test owner"]
-    Test["Test function<br/>test_project_paths_reject_symlinks"]
-    Inventory["Contract symbol marker<br/>models · aliases · functions"]
-    Symbol["ContractSymbol<br/>RuleEdge · model"]
+    Contract["ContractRequirement<br/>MOD-01"]
+    Target["ContractTarget<br/>add verification/models.py:__all__"]
+    Declaration["DeclarationRef<br/>exact ordered __all__ assignment"]
+    Rule["VerifierRule<br/>module.verification.model_exports"]
+    Impl["RuleEdge<br/>implementation · P0-MOD-01"]
+    Verify["RuleEdge<br/>verification · P0-MOD-04"]
+    Build["PairBlock<br/>P0-MOD-01"]
+    Proof["PairBlock<br/>P0-MOD-04"]
+    Test["pytest function<br/>test_verification_namespace_..."]
     Graph["ContractTraceabilityGraph"]
-    System["System impact compiler"]
 
-    Contract -->|"requires"| Rule
-    Rule -->|"implementation link"| Task
-    Task -->|"owner"| Source
-    Rule -->|"verification link"| TestMarker
-    TestMarker -->|"test"| Test
-    Source -->|"resolved location"| Graph
-    Test -->|"resolved location"| Graph
-    Inventory -->|"declares"| Symbol
-    Symbol -->|"canonical record"| Graph
-    Graph -->|"canonical JSON"| System
+    Contract -->|"requirements"| Target
+    Target -->|"declaration"| Declaration
+    Target -->|"block_id"| Build
+    Contract -->|"requirement_id"| Rule
+    Rule -->|"implementation"| Impl
+    Rule -->|"verification"| Verify
+    Impl -->|"block_id · target"| Build
+    Verify -->|"block_id"| Proof
+    Verify -->|"target"| Test
+    Build -->|"depends_on"| Proof
+    Contract -->|"record"| Graph
+    Target -->|"record"| Graph
+    Rule -->|"record"| Graph
+    Impl -->|"record"| Graph
+    Verify -->|"record"| Graph
+    Build -->|"record"| Graph
+    Proof -->|"record"| Graph
 
-    class Contract,Rule,Inventory contract
-    class Task,TestMarker checklist
-    class Source,Test implementation
-    class Symbol,Graph,System output
+    class Contract,Rule contract
+    class Build,Proof checklist
+    class Test implementation
+    class Target,Declaration,Impl,Verify,Graph output
     classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
     classDef checklist fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
@@ -386,6 +414,131 @@ class ContractTraceabilityGraph(ProtocolModel):
     )
 ```
 
+The block above is the implemented `CRT-05` baseline. `CRT-06` replaces
+`ContractSymbol` and `symbols` with the following exact target model:
+
+```python target-model
+PairBlockId = Annotated[
+    str,
+    Field(pattern=r"^P[0-9]+-[A-Z]{3}-[0-9]{2}$"),
+]
+TargetAction = Literal["add", "update", "remove"]
+
+
+class ContractTarget(ProtocolModel):
+    """Bind one required source change to one implementation block."""
+
+    requirements: tuple[RequirementId, ...] = Field(
+        min_length=1,
+        description="Contract requirements that need this source change.",
+    )
+    block_id: PairBlockId = Field(
+        description="PairBlock that applies this source change."
+    )
+    action: TargetAction = Field(
+        description="Whether the PairBlock adds, updates, or removes the target."
+    )
+    target: RepoSymbolRef = Field(
+        description="Repository symbol changed by the PairBlock."
+    )
+    declaration: DeclarationRef = Field(
+        description=(
+            "Exact pair-edit code required for an add or update, or the exact "
+            "removal marker required for a removal."
+        )
+    )
+
+
+class PairBlock(ProtocolModel):
+    """Store one bounded, dependency-ordered implementation step."""
+
+    block_id: PairBlockId = Field(
+        description="Stable identifier used by checklist and target records."
+    )
+    requirements: tuple[RequirementId, ...] = Field(
+        min_length=1,
+        description="Contract requirements implemented by this block."
+    )
+    targets: tuple[RepoSymbolRef, ...] = Field(
+        min_length=1,
+        description="Repository symbols this block changes."
+    )
+    tests: tuple[RepoSymbolRef, ...] = Field(
+        min_length=1,
+        description="Exact pytest functions that observe this block."
+    )
+    gate: NonEmptyStr = Field(
+        description="Focused command that must pass before the block closes."
+    )
+    depends_on: tuple[PairBlockId, ...] = Field(
+        description="Blocks whose completed results this block consumes."
+    )
+    declaration: DeclarationRef = Field(
+        description="Exact pair-block manifest used to reconstruct this record."
+    )
+
+
+class RuleEdge(ProtocolModel):
+    """Connect one verifier rule to its implementation block or test block."""
+
+    kind: RuleEdgeKind = Field(
+        description="Relationship from the rule to an implementation or test."
+    )
+    rule_id: VerifierRuleId = Field(
+        description="Verifier rule at the source of this edge."
+    )
+    block_id: PairBlockId = Field(
+        description="PairBlock that owns the target of this relationship."
+    )
+    phase: int = Field(
+        ge=0,
+        description="Checklist phase that schedules this relationship."
+    )
+    declaration: DeclarationRef = Field(
+        description="Exact checklist marker that declares this relationship."
+    )
+    state: TraceState = Field(
+        description="Whether the referenced symbol is planned or implemented."
+    )
+    target: RepoSymbolRef = Field(
+        description="Repository symbol reached by this relationship."
+    )
+
+
+class ContractTraceabilityGraph(ProtocolModel):
+    """Store the complete ordered contract and implementation plan."""
+
+    schema_version: Literal[5] = Field(
+        default=5,
+        description="Format version of the serialized traceability graph."
+    )
+    requirements: tuple[ContractRequirement, ...] = Field(
+        min_length=1,
+        description="Ordered contract requirements represented by the graph."
+    )
+    rules: tuple[VerifierRule, ...] = Field(
+        min_length=1,
+        description="Ordered verifier rules represented by the graph."
+    )
+    edges: tuple[RuleEdge, ...] = Field(
+        min_length=1,
+        description="Ordered implementation and verification relationships."
+    )
+    targets: tuple[ContractTarget, ...] = Field(
+        min_length=1,
+        description="Ordered source changes required by the contracts."
+    )
+    blocks: tuple[PairBlock, ...] = Field(
+        min_length=1,
+        description="Ordered implementation blocks that apply the source changes."
+    )
+```
+
+`ContractTarget.declaration` does not describe a source location in general.
+It identifies the exact authored bytes that state the desired source value. For
+an `add` or `update`, those bytes are the associated `python pair-edit` block.
+For a `remove`, those bytes are the associated removal marker.
+
 `RepoSymbolRef.symbol` uses the qualified name found in the named file. A
 module-level function uses its function name. A method uses
 `ClassName.method_name`. A test uses its complete test-function name.
@@ -434,6 +587,39 @@ cleanup step then removes both fields.
 
 Marker and TOML values use `path:symbol` strings. The parser splits the first
 colon after the repository path and constructs `RepoSymbolRef`.
+
+`CRT-06` derives `RuleEdge.block_id` from the `pair-block` marker in the same
+checklist checkbox. Each PairBlock target receives one marker immediately
+before the exact code or removal declaration that owns it:
+
+```html
+<!-- contract-target: block=P0-MOD-01 action=add target=src/viper/verification/models.py:__all__ -->
+```
+
+```python contract-target
+__all__ = [
+    "StageSnapshot",
+    "StorageFetcher",
+    "VerificationError",
+    "VerificationPolicy",
+    "VerifiedArtifact",
+    "VerifiedBenchmarkResult",
+    "VerifiedInput",
+    "VerifiedRunPlan",
+    "VerifiedRunResult",
+    "VerifiedSnapshotFile",
+]
+```
+
+The containing PairBlock supplies `requirements`. The marker supplies
+`block_id`, `action`, and `target`. The following fenced block supplies
+`declaration`. A removal uses the same marker followed by
+`<!-- contract-remove -->`; its marker bytes become the declaration evidence.
+
+The implemented `contract-symbols` and `contract-example-symbols` markers remain
+active only until `P0-CRT-07` migrates every PairBlock target. `CRT-06` then
+removes both marker families, `ContractSymbol`, and the MOD-specific
+`contract-exports` fences.
 
 Each contract also declares one exact symbol inventory:
 
@@ -615,9 +801,127 @@ The compiler reads the corresponding repository data:
 
 <!-- contract-worked-example: end -->
 
+### CRT-06 target example
+
+This example instantiates every model added or changed by `CRT-06`. The
+`DeclarationRef` for `target` identifies the exact `__all__` assignment shown
+above; it is the value that the later CodeQL-backed plan check must find in the
+realized source.
+
+```python target-example
+target = ContractTarget(
+    requirements=("MOD-01",),
+    block_id="P0-MOD-01",
+    action="add",
+    target=RepoSymbolRef(
+        path="src/viper/verification/models.py",
+        symbol="__all__",
+    ),
+    declaration=declaration_ref(
+        Path("docs/development/contract-traceability.md"),
+        "contract-target: block=P0-MOD-01",
+    ),
+)
+
+build = PairBlock(
+    block_id="P0-MOD-01",
+    requirements=("MOD-01",),
+    targets=(target.target,),
+    tests=(
+        RepoSymbolRef(
+            path="tests/test_public_api.py",
+            symbol="test_verification_namespace_separates_operations_and_models",
+        ),
+    ),
+    gate=(
+        "conda run -n mantra python -m pytest tests/test_public_api.py "
+        "-k verification_namespace -q"
+    ),
+    depends_on=("P0-CRT-06",),
+    declaration=declaration_ref(
+        Path("docs/development/module-ownership-pair-coding.md"),
+        'id = "P0-MOD-01"',
+    ),
+)
+
+proof = PairBlock(
+    block_id="P0-MOD-04",
+    requirements=("MOD-01",),
+    targets=build.tests,
+    tests=build.tests,
+    gate=build.gate,
+    depends_on=(build.block_id,),
+    declaration=declaration_ref(
+        Path("docs/development/module-ownership-pair-coding.md"),
+        'id = "P0-MOD-04"',
+    ),
+)
+
+implementation = RuleEdge(
+    kind="implementation",
+    rule_id="module.verification.model_exports",
+    block_id=build.block_id,
+    phase=0,
+    declaration=declaration_ref(
+        CHECKLIST,
+        "rule=module.verification.model_exports state=planned owner=",
+    ),
+    state="planned",
+    target=target.target,
+)
+
+verification = RuleEdge(
+    kind="verification",
+    rule_id="module.verification.model_exports",
+    block_id=proof.block_id,
+    phase=0,
+    declaration=declaration_ref(
+        CHECKLIST,
+        "rule=module.verification.model_exports state=planned test=",
+    ),
+    state="planned",
+    target=proof.tests[0],
+)
+
+traceability = ContractTraceabilityGraph(
+    requirements=(
+        ContractRequirement(
+            requirement_id="MOD-01",
+            contract="docs/development/module-ownership.md",
+            declaration=declaration_ref(
+                Path("docs/development/module-ownership.md"),
+                "contract-requirement: MOD-01",
+            ),
+        ),
+    ),
+    rules=(
+        VerifierRule(
+            rule_id="module.verification.model_exports",
+            requirement_id="MOD-01",
+            contract="docs/development/module-ownership.md",
+            statement="The model module exposes the exact approved names.",
+            declaration=declaration_ref(
+                Path("docs/development/module-ownership.md"),
+                "verifier-rule: module.verification.model_exports",
+            ),
+        ),
+    ),
+    edges=(implementation, verification),
+    targets=(target,),
+    blocks=(build, proof),
+)
+
+assert target.target in build.targets
+assert implementation.target == target.target
+assert implementation.block_id == target.block_id
+assert verification.target in proof.tests
+assert proof.depends_on == (build.block_id,)
+```
+
 ## 5. Execution
 
-The documentation check compiles the graph in four passes:
+The implemented compiler runs the first five passes. `CRT-06` adds the final
+three:
 
 ```text
 1. enumerate implementation contracts
@@ -625,6 +929,9 @@ The documentation check compiles the graph in four passes:
 3. parse checklist implementation and verification links
 4. validate complete contract-symbol inventories and worked examples
 5. validate planned locations and implemented repository symbols
+6. parse PairBlock manifests and their exact target declarations
+7. attach each rule edge and contract target to one PairBlock
+8. validate target coverage and the acyclic PairBlock dependency graph
 ```
 
 It then applies these cardinality rules:
@@ -641,6 +948,15 @@ It then applies these cardinality rules:
    belongs to that inventory.
 9. Phase closure requires every implementation and verification link to
    use `state="implemented"`.
+10. Every `ContractTarget` belongs to at least one declared requirement, names
+    one known PairBlock, and appears in that block's `targets`.
+11. Every PairBlock target has exactly one `ContractTarget` in that block.
+12. Every `RuleEdge.block_id` resolves to one PairBlock whose requirements
+    contain the rule's requirement.
+13. Every implementation edge target appears in its PairBlock's `targets`.
+14. Every verification edge target appears in its PairBlock's `tests`.
+15. Every PairBlock dependency resolves to one known block, and the dependency
+    relation is acyclic.
 
 The compiler sorts requirements by ID, rules by rule ID, implementation links
 by `(requirement_id, rule_id)`, verification links by
@@ -675,7 +991,10 @@ machine's absolute checkout path.
 | `contract.graph.canonical` <!-- verifier-rule: contract.graph.canonical requirement=CRT-04 --> | Repeated compilation produces identical ordered JSON bytes. |
 | `contract.graph.complete` <!-- verifier-rule: contract.graph.complete requirement=CRT-04 --> | Every requirement and rule reaches its owner and tests. |
 | `contract.declaration.anchored` <!-- verifier-rule: contract.declaration.anchored requirement=CRT-04 --> | Every requirement, rule, and edge retains the exact declaration path, line span, and SHA-256 digest used to reconstruct it. |
-| `contract.symbol.complete` <!-- verifier-rule: contract.symbol.complete requirement=CRT-05 --> | Each contract declares one sorted, disjoint `contract-symbols` inventory containing every Section 4 model, alias, and function; each name resolves in the contract; and `contract-example-symbols` is a subset. |
+| `contract.symbol.complete` <!-- verifier-rule: contract.symbol.complete requirement=CRT-05 --> | Until `CRT-06` migration closes, each contract declares one sorted, disjoint `contract-symbols` inventory and every `contract-example-symbols` entry belongs to it. |
+| `contract.target.complete` <!-- verifier-rule: contract.target.complete requirement=CRT-06 --> | Every PairBlock target has exactly one requirement-owned `ContractTarget` in that block, with an action and exact declaration. |
+| `contract.block.complete` <!-- verifier-rule: contract.block.complete requirement=CRT-06 --> | Every rule edge resolves to one PairBlock; implementation targets occur in `PairBlock.targets`; verification targets occur in `PairBlock.tests`; and every referenced requirement belongs to the block. |
+| `contract.block.acyclic` <!-- verifier-rule: contract.block.acyclic requirement=CRT-06 --> | Every dependency resolves to a known PairBlock and the complete dependency relation is acyclic. |
 
 These named rules are logical entities only after the parser reads their
 markers. Their implementation is ordinary source code. Their proof is the
@@ -703,6 +1022,7 @@ named test function. The traceability graph joins those three representations.
 | Requirement marker `test=` field | Retain only while the old documentation checker remains active; remove after exact verification-edge parity. |
 | System-graph contract's independent contract-marker parser | Replace with `ContractTraceabilityGraph` ingestion. |
 | Prose-only verifier rules | Replace sentence-derived identity with stable rule markers. |
+| `contract-symbols`, `contract-example-symbols`, and `contract-exports` | Remove after every PairBlock target has one compiled `ContractTarget`; `ContractTarget` becomes the source-change inventory. |
 
 ## 9. Acceptance case
 
@@ -721,6 +1041,10 @@ points an implemented edge at a missing symbol. The test requires
 These pytest functions own the setup, invocation, assertion, and failure
 message. Verification `RuleEdge` records name their exact repository symbols.
 
+`CRT-06` adds focused rejections for an unknown block, a requirement absent
+from its block, a missing implementation target, a missing verification test,
+and a PairBlock dependency cycle.
+
 ## 10. Implementation order
 
 1. Add the traceability models and marker parsers beside the current
@@ -735,7 +1059,13 @@ message. Verification `RuleEdge` records name their exact repository symbols.
 6. Compare the new graph with the current requirement, phase, and baseline
    checks.
 7. Expose the canonical graph to the system-impact compiler.
-8. Remove duplicate parsing only after parity passes.
+8. Add `ContractTarget`, `PairBlock`, and `RuleEdge.block_id`; compile the
+   complete requirement-to-PairBlock closure as `CRT-06`.
+9. Classify and repair every existing PairBlock target before enabling strict
+   target closure.
+10. Remove `ContractSymbol`, `contract-symbols`,
+    `contract-example-symbols`, and `contract-exports` after target parity.
+11. Remove duplicate parsing only after parity passes.
 
 **Commit boundary:** `Trace contract requirements to code and tests`
 

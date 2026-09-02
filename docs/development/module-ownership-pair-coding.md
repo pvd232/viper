@@ -10,7 +10,7 @@ change.
 
 The guide owns `P0-MOD-01` through `P0-MOD-04`. The master checklist owns
 their order and completion state. `P0-MOD-01` starts only after
-`P0-CRT-05` passes.
+`P0-CRT-07` passes.
 
 ## 2. Pair-cycle contract
 
@@ -28,7 +28,7 @@ requirements = ["MOD-01"]
 targets = ["src/viper/verification/models.py:VerificationPolicy", "src/viper/verification/models.py:VerifiedRunResult", "src/viper/verification/models.py:__all__"]
 tests = ["tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
 gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k module_ownership_pair_blocks_cover_every_moved_definition -q"
-depends_on = ["P0-CRT-05"]
+depends_on = ["P0-CRT-07"]
 ```
 
 **Context:** `verification.py` mixes public data types with operation code and late imports. Stage the exact type declarations first; the next block activates the package and removes the old module atomically.
@@ -2174,8 +2174,8 @@ conda run -n mantra python -m pytest tests/test_public_api.py tests/test_api.py 
 
 Then run Ruff only on the Python files changed by these blocks.
 
-## 6. SystemGraph handoff
+## 6. System Impact handoff
 
-A passing `P0-MOD-04` gives the System Impact Compiler one defining module for
+A passing `P0-MOD-04` gives the System Impact Check one defining module for
 every public API and verification symbol. `P0-SIG-01` may start only after the
 checklist records that gate.

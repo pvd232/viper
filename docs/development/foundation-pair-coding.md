@@ -912,7 +912,7 @@ replaces immutable-file retrieval after the operation validates its root.
 
 The dedicated [Contract Traceability Pair-Coding
 guide](contract-traceability-pair-coding.md) owns `P0-CRT-01` through
-`P0-CRT-05` and `P0-PROOF-01` through `P0-PROOF-04`. It contains the
+`P0-CRT-07`, `P0-PROOF-01` through `P0-PROOF-04`, and `P0-PROOF-08`. It contains the
 complete proposed edits, focused tests, dependencies, stop conditions, and
 phase gate. This combined reference links to that single source.
 
@@ -921,7 +921,7 @@ phase gate. This combined reference links to that single source.
 The dedicated [Public Module Ownership Pair-Coding
 Guide](module-ownership-pair-coding.md) owns `P0-MOD-01` through
 `P0-MOD-04`. It contains the complete file-separated edits, focused tests,
-dependencies, stop conditions, and handoff to the System Impact Compiler.
+dependencies, stop conditions, and handoff to the System Impact Check.
 
 ## 5. Focused proof
 

@@ -29,9 +29,9 @@ verified runs. Current inspection covers one or two selected runs.
 at `.viper/catalog.sqlite3`. `Catalog.refresh()` uses Python's `sqlite3` module
 to rebuild searchable rows from terminal run references. Search results always
 retain the immutable reference that supplied each fact. Deleting the database
-and refreshing it produces the same searchable facts. CodeQL remains the
-source-analysis backend for the System Impact Compiler; catalog refresh and
-queries use SQLite exclusively.
+and refreshing it produces the same searchable facts. CodeQL belongs only to
+the developer-facing System Impact Check; catalog refresh and queries use
+SQLite exclusively.
 
 The MCP server is an adapter. It validates tool arguments with the same
 Pydantic request models used by `viper.api.dispatch()`. It returns the same
