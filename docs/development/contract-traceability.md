@@ -538,9 +538,8 @@ class ContractTraceabilityGraph(ProtocolModel):
 `ContractTarget.declaration` locates the authored PairBlock payload. For an
 `add` or `update`, it covers the associated `python pair-edit` fence. For a
 `remove`, it covers the associated removal marker. The reference covers the
-complete payload rather than one Python declaration. The System Impact Check
-later resolves the target's qualified symbol inside that payload and hashes
-only the exact declaration bytes.
+complete payload. The System Impact Check uses the target's qualified symbol
+to select one declaration inside that payload and hash its exact bytes.
 
 `RepoSymbolRef.symbol` uses the qualified name found in the named file. A
 module-level function uses its function name. A method uses

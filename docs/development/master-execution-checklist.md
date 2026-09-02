@@ -324,11 +324,11 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=95ea7e9104a87134eb612172bc593b4e108f73ca9d8eb0ee5dc0085f11178fea -->
+<!-- contract-baseline: contract-traceability.md sha256=74cea859e2307dd1ca981682ae5d227ab606464863abbaf938d6833fcb129fab -->
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
-<!-- contract-baseline: system-impact-compiler.md sha256=d092033a70eb3dcca13d97e689656aeca6f70239f3d1e1127be178e972437a02 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=f032a0dda3067bb0a40e11323a8c4ed49f707ce0006b2a25dee9aac5566e7537 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
 <!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->

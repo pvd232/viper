@@ -94,8 +94,8 @@ an `Acceptance`; a mismatch rejects the commit. This final operation binds the
 passing check to the exact revision consumed by later dependency checks.
 
 The reverse dependency set identifies source declarations that may need
-attention. The set remains review evidence rather than a requirement that every
-dependent change.
+attention. The set supports review. A `ContractTarget` identifies each
+dependent declaration that must change.
 The realized-delta check supplies the enforceable boundary: if implementation
 does change a dependent, that declaration must already be a `ContractTarget`.
 
