@@ -10,13 +10,13 @@ The identifier for this subsystem is `CRT`.
 
 ## 1. Status and boundary
 
-**Guide status:** audited; execution pending contract approval.
+**Guide status:** compiler and focused proofs implemented; `P0-CRT-04` pending.
 
-The records in `src/viper/_contract_traceability.py` already exist. The
-parsers, compiler operations, and focused acceptance tests remain proposed.
-Each `python pair-edit` fence contains code for the user to apply during its
-named pair cycle. Repository implementation begins when the user applies that
-edit.
+The compiler operations exist in `src/viper/_contract_traceability.py`, and
+their focused tests exist in `tests/test_contract_traceability.py`. The
+`P0-CRT-04` migration must still apply the shared contract structure to the
+remaining contracts. Each `python pair-edit` fence retains the approved code
+for its named pair cycle.
 
 This guide changes only contract traceability during Master Phase 0:
 

@@ -273,7 +273,7 @@ scheduled phase and dependency order.
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Audited; owner approval pending | Requirement, verifier-rule, implementation-owner, and acceptance-test links |
+| [Contract Traceability](contract-traceability.md) | Implementation partial; cross-contract migration pending | Requirement, verifier-rule, implementation-owner, and acceptance-test links |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design; implementation pending | One defining module for API operations, verification operations, and verification types |
 | [System Impact Compiler](system-impact-compiler.md) | Approved design; implementation pending | Pinned CodeQL source analysis, normalized `SystemGraph`, automatic `ContractChange` compilation, conservative impact closure, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and independently observed conformance |
@@ -328,7 +328,7 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=e0dd89dcb71aea9d15b2ef339f791106843aabbd21ac8b1ce4519b0eea12ab7d -->
+<!-- contract-baseline: contract-traceability.md sha256=e8b48bff93381b9d661137ece3ec33a118bb0bfe4c2460f417e4cbead2d2eca0 -->
 
 <!-- contract-baseline: project-data-root.md sha256=d873368c2ea9b9c8ddd3bb9dbe8a8d6ff8b86aa17951a92ef65f36ecd30746f3 -->
 <!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
@@ -663,25 +663,25 @@ working-file edit must leave the immutable copy retrievable.
 
 ### 7.2 Contract Traceability
 
-- [ ] Add the exact traceability models and parsers in
+- [x] Add the exact traceability models and parsers in
       `src/viper/_contract_traceability.py`; compile current requirement rows
       and verifier-rule markers into canonical declarations.
       <!-- pair-block: P0-CRT-01 -->
       <!-- implements: CRT-01 -->
-      <!-- contract-implementation: requirement=CRT-01 rule=contract.requirement.unique state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-      <!-- contract-implementation: requirement=CRT-01 rule=contract.rule.declared state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-- [ ] Resolve every rule to one exact source owner and at least one exact test
+      <!-- contract-implementation: requirement=CRT-01 rule=contract.requirement.unique state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-01 rule=contract.rule.declared state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+- [x] Resolve every rule to one exact source owner and at least one exact test
       function; reject missing files, symbols, and phase mismatches.
       <!-- pair-block: P0-CRT-02 -->
       <!-- implements: CRT-02 -->
-      <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-      <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.tested state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-- [ ] Validate marked worked examples and require current, proposed-change, and
+      <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.tested state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+- [x] Validate marked worked examples and require current, proposed-change, and
       integrated DAGs. Reject unconstructed Section 4 models and incomplete
       graph structure.
       <!-- pair-block: P0-CRT-03 -->
       <!-- implements: CRT-03 -->
-      <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=planned owner=src/viper/_contract_traceability.py:validate_contract_example -->
+      <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=implemented owner=src/viper/_contract_traceability.py:validate_contract_example -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.diagram.palette state=implemented owner=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented owner=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.documented state=implemented owner=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
@@ -690,15 +690,15 @@ working-file edit must leave the immutable copy retrievable.
       `MASTER_PHASE_ZERO_CONTRACTS` to `IMPLEMENTATION_CONTRACTS` before Master Phase 0
       closes.
       <!-- pair-block: P0-CRT-04 -->
-- [ ] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
+- [x] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
       compare its requirement and phase coverage with the current documentation
       oracle. Require every requirement, rule, and edge to retain its
       exact `DeclarationRef` path, line span, and digest.
       <!-- pair-block: P0-CRT-05 -->
       <!-- implements: CRT-04 -->
-      <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.canonical state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-      <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.complete state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-      <!-- contract-implementation: requirement=CRT-04 rule=contract.declaration.anchored state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.canonical state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-04 rule=contract.declaration.anchored state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
 
 <details>
 <summary>Hints</summary>
@@ -881,33 +881,33 @@ edge IDs on every crossing component edge.
       <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
 
-- [ ] In `tests/test_contract_traceability.py`, reject duplicate requirements and
+- [x] In `tests/test_contract_traceability.py`, reject duplicate requirements and
       orphan rules; require canonical declarations.
       <!-- pair-block: P0-PROOF-01 -->
       <!-- verifies: CRT-01 -->
-      <!-- contract-verification: requirement=CRT-01 rule=contract.requirement.unique state=planned test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
-      <!-- contract-verification: requirement=CRT-01 rule=contract.rule.declared state=planned test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
-- [ ] In `tests/test_contract_traceability.py`, reject a missing implementation symbol
+      <!-- contract-verification: requirement=CRT-01 rule=contract.requirement.unique state=implemented test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
+      <!-- contract-verification: requirement=CRT-01 rule=contract.rule.declared state=implemented test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
+- [x] In `tests/test_contract_traceability.py`, reject a missing implementation symbol
       and a missing test function.
       <!-- pair-block: P0-PROOF-02 -->
       <!-- verifies: CRT-02 -->
-      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=planned test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
-      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=planned test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
-- [ ] In `tests/test_contract_traceability.py`, reject a missing DAG and a
+      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
+      <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
+- [x] In `tests/test_contract_traceability.py`, reject a missing DAG and a
       Section 4 model absent from the worked example.
       <!-- pair-block: P0-PROOF-03 -->
       <!-- verifies: CRT-03 -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=planned test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
-- [ ] In `tests/test_contract_traceability.py`, compile twice, require identical graph
+- [x] In `tests/test_contract_traceability.py`, compile twice, require identical graph
       bytes, and require every rule to reach its owner and tests.
       <!-- pair-block: P0-PROOF-04 -->
       <!-- verifies: CRT-04 -->
-      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
-      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
-      <!-- contract-verification: requirement=CRT-04 rule=contract.declaration.anchored state=planned test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
+      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
+      <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
+      <!-- contract-verification: requirement=CRT-04 rule=contract.declaration.anchored state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
 
 - [x] In `tests/test_project_init.py`, initialize outside the current directory,
       discover the root from a child directory, and assert the complete tree.

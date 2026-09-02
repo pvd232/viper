@@ -10,7 +10,7 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** implementation partial; cross-contract migration pending.
 
 These requirements bind the contract to the master checklist:
 
