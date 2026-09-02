@@ -350,39 +350,6 @@ test fails when a registry callable belongs to `viper._api.handlers`, a public
 verification type belongs to `viper.verification`, or either retired source
 file remains.
 
-```toml contract-trace
-trace_id = "public-module-owner"
-requirement_id = "MOD-01"
-rule_id = "module.api.owner"
-state = "planned"
-scenario = "The typed API validates one authored download stage through its locally defined operation."
-setup = "tests/data/download_stage.yaml contains the existing valid download-stage fixture"
-input = "ValidateStageRequest(path=Path('tests/data/download_stage.yaml'))"
-invocation = "viper.api.validate_stage(request)"
-implementation = "src/viper/api.py:validate_stage"
-test = "tests/test_public_api.py:test_api_operations_are_locally_defined"
-outcome.kind = "accepted"
-outcome.result = "ValidateStageSuccess(stage_kind='download')"
-outcome.evidence = ["src/viper/api.py", "tests/test_public_api.py"]
-```
-
-```toml contract-trace
-trace_id = "private-handler-owner"
-requirement_id = "MOD-01"
-rule_id = "module.api.owner"
-state = "planned"
-scenario = "The ownership check encounters a registry callable defined by the retired private handler module."
-setup = "HANDLER_REGISTRY['validate_stage'] references a function whose __module__ is viper._api.handlers"
-input = "HANDLER_REGISTRY['validate_stage']"
-invocation = "test_api_operations_are_locally_defined()"
-implementation = "src/viper/api.py:HANDLER_REGISTRY"
-test = "tests/test_public_api.py:test_api_operations_are_locally_defined"
-outcome.kind = "rejected"
-outcome.rejected_at = "tests/test_public_api.py:test_api_operations_are_locally_defined"
-outcome.error_type = "AssertionError"
-outcome.message_match = "viper._api.handlers"
-```
-
 ## 10. Implementation order
 
 1. Create `viper.verification.models` and move every public verification type

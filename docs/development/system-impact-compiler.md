@@ -824,8 +824,8 @@ context; codes and fields form the stable interface.
 ### Contract declarations and automatic lowering
 
 The CRT compiler reads `contract-requirement`, `verifier-rule`,
-`contract-implementation`, `contract-verification`, and `contract-trace`
-declarations and emits `ContractTraceabilityGraph`. Baseline `compile_system()`
+`contract-implementation`, and `contract-verification` declarations and emits
+`ContractTraceabilityGraph`. Baseline `compile_system()`
 consumes that graph and parses bootstrap `PairBlock` records as a separate
 scheduling input. The planned `compile_contract_change()` function reads one
 `ContractChange` only after `G0` exists. `PairBlock` records do not create
@@ -1553,10 +1553,10 @@ The planned private function
 runs the locked QL pack, decodes each BQRS result, validates every row, and
 returns `CodeQLSourceFacts`. `compile_system()` lowers those rows into file,
 symbol, import, call, type, and other code-dependency facts.
-`contract_traceability` contributes `ContractRequirement`, `VerifierRule`,
-`RuleEdge`, and `ContractTrace` facts. `pair_blocks` contributes scheduling
-dependencies. `compile_system()` normalizes all three sources into the `nodes`
-and `edges` fields of one `SystemGraph`.
+`contract_traceability` contributes `ContractRequirement`, `VerifierRule`, and
+`RuleEdge` facts. `pair_blocks` contributes scheduling dependencies.
+`compile_system()` normalizes all three sources into the `nodes` and `edges`
+fields of one `SystemGraph`.
 
 `query_impact_closure()` and `query_affected_components()` write the validated
 edge and initial-vertex rows to CSV and pass them through CodeQL's
@@ -3453,26 +3453,10 @@ span:docs/reference/protocol.md:LocalFileRef
 8. Add `tests/test_storage_migration.py` through `PlannedAddition` and require
    the candidate delta to contain the same added path.
 
-The populated case distinguishes a detected syntactic dependency from a
+The worked case distinguishes a detected syntactic dependency from a
 declared contract dependency. `LocalArtifactStore.fetch()` reads
 `location.store`, which static analysis can observe. PDR-02's relationship to
 the same field comes from the contract traceability graph.
-
-```toml contract-trace
-trace_id = "local-store-default-impact"
-requirement_id = "SIG-03"
-rule_id = "system.impact.closure"
-state = "planned"
-scenario = "The candidate changes LocalFileRef.store from .viper/store to .viper/objects."
-setup = "baseline LocalFileRef.store='.viper/store'; candidate LocalFileRef.store='.viper/objects'; context=tests/fixtures/system-context.toml"
-input = "LocalFileRef.store: RepoRelPath = '.viper/store'"
-invocation = "system_diff(baseline, candidate, context) followed by reverse reachability"
-implementation = "src/viper/system_graph.py:compute_impact"
-test = "tests/test_inspection.py:test_system_impact_reaches_local_store_consumers"
-outcome.kind = "accepted"
-outcome.result = "affected nodes include PDR-02, project.store.boundary, LocalArtifactStore.__init__, LocalArtifactStore.fetch, fetch_local_file_bytes, RunFetcher.__call__, and the storage test"
-outcome.evidence = ["SystemGraphDelta.changed_nodes contains span:src/viper/references.py:LocalFileRef.store", "PropagationPlan covers every affected node"]
-```
 
 ### Rejection
 
@@ -3480,23 +3464,6 @@ A candidate reads `VIPER_BACKEND` during decorator registration. The context
 manifest omits that variable. Strict compilation emits an
 `UnresolvedDependency` whose `attempt.kind` is `"registry_entry"` and rejects
 the impact report through `system.graph.strict`.
-
-```toml contract-trace
-trace_id = "undeclared-registry-input"
-requirement_id = "SIG-02"
-rule_id = "system.graph.strict"
-state = "planned"
-scenario = "Decorator registration reads an environment variable absent from the fixed context."
-setup = "candidate expression=os.environ['VIPER_BACKEND']; SystemContextManifest.variables=()"
-input = "candidate fixture decorator branches on VIPER_BACKEND"
-invocation = "compile_system(candidate, context, strict=True)"
-implementation = "src/viper/system_graph.py:compile_system"
-test = "tests/test_validation_architecture.py:test_system_graph_rejects_unfixed_environment_resolution"
-outcome.kind = "rejected"
-outcome.rejected_at = "src/viper/system_graph.py:compile_system"
-outcome.error_type = "SystemGraphError"
-outcome.message_match = "VIPER_BACKEND"
-```
 
 ### Dynamic-change case
 

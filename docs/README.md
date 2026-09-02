@@ -24,7 +24,7 @@ Start with the task you need to complete.
 | [Contributing guide](../CONTRIBUTING.md) | Set up the repository and submit a validated change |
 | [Testing guide](development/testing.md) | Select a test tier, domain, CI gate, or live CUDA check |
 | [Contract implementation guide](development/master-execution-checklist.md) | Review and build the contracts in dependency order with pair-coding hints and acceptance gates |
-| [Contract Traceability](development/contract-traceability.md) | Link each contract requirement to its verifier rule, implementation owner, concrete trace, and acceptance test |
+| [Contract Traceability](development/contract-traceability.md) | Link each contract requirement to its verifier rule, implementation owner, and acceptance test |
 | [Project data root contract](development/project-data-root.md) | Bind initialization, protocol paths, local storage, and later commands to one selected project root |
 | [System Impact Compiler](development/system-impact-compiler.md) | Compile deterministic dependency graphs, complete change plans, bounded work, and post-implementation conformance evidence |
 | [Research Memory and Agent Learning](development/research-memory-roadmap.md) | Record auditable research episodes, curate leakage-safe learning data, evaluate policy changes, and connect literature through the full MCP layout |

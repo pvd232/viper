@@ -187,11 +187,6 @@ _MERMAID_EDGE = re.compile(
     r"^\s*(?P<source>[A-Za-z][A-Za-z0-9_]*)\s+-->"
     r"(?:\|[^|]+\|)?\s*(?P<target>[A-Za-z][A-Za-z0-9_]*)"
 )
-_PLACEHOLDER = re.compile(
-    r"(?:^\s*\.\.\.\s*$|=\s*\.\.\.\s*$|"
-    r"\bTBD\b|\bTODO\b|<[^>]+>)",
-    re.MULTILINE,
-)
 
 
 class ContractTraceabilityError(ValueError):

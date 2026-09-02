@@ -1627,6 +1627,20 @@ def test_contract_examples_are_complete() -> None:
     assert failures == {}
 
 
+def test_contracts_exclude_retired_trace_records() -> None:
+    """Keep executable tests as the sole expected-outcome evidence."""
+    documents = (*IMPLEMENTATION_CONTRACTS, ROOT / "docs/README.md")
+
+    for document in documents:
+        text = document.read_text(encoding="utf-8")
+        assert "```toml contract-trace" not in text, document
+        assert re.search(r"\bContractTrace\b", text) is None, document
+
+    assert "concrete trace" not in (ROOT / "docs/README.md").read_text(
+        encoding="utf-8"
+    )
+
+
 def test_contract_traceability_dags_use_semantic_palette() -> None:
     """Keep each traceability DAG role bound to its declared color."""
     text = CONTRACT_TRACEABILITY.read_text()

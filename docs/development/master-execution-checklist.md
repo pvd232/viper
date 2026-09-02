@@ -330,9 +330,9 @@ a new digest.
 
 <!-- contract-baseline: contract-traceability.md sha256=2cffd18d05ff6cc9e3507fad97f8319717c885d17dace8c71ee6d9963c32b0b2 -->
 
-<!-- contract-baseline: project-data-root.md sha256=7a45e84116ade463f23150baf95b052d01b0c75c7ed93a82124ea70f45d0b8d7 -->
-<!-- contract-baseline: module-ownership.md sha256=dc6ae1ee057dd594435bcc2444c5838c828b0475fb6a27f97711fcbf4bbf4d92 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=2e07cf13c901ae5dfc1d684bb4a7d42a46a141610187654ac7a35f4e2ed9a13c -->
+<!-- contract-baseline: project-data-root.md sha256=692b5c8b1e12472526b41497ef7dff07e3191a5953ede3d9d81778ef22b91014 -->
+<!-- contract-baseline: module-ownership.md sha256=9672d1401f0b32789378518dee98ffa127f35ca4cbdb1e61c805618ccd01e0a3 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=19219b2bbbcfdfb0a85bf61048427a601d8d242cf62a2143c1caf442e529b8ec -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=5d6e12db061d755267816fd24e60059e41ae929e8c0ce34ee75a8883181c541c -->
 <!-- contract-baseline: external-input-roots.md sha256=f8e4162e3dba88a50f00b6af66ab6a003aceb7c1fca9260977f6e50acd07aee3 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=34c7121ab4f1ec3a2999facfff6bfa354d74bb2450f12c2fc610236ad199deef -->

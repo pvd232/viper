@@ -636,22 +636,6 @@ digests and byte counts through the existing storage rules.
 6. Change the working artifact and require retrieval of the original published
    bytes through its `LocalFileRef`.
 
-```toml contract-trace
-trace_id = "selected-root-local-publication"
-requirement_id = "PDR-02"
-rule_id = "project.root.stability"
-state = "planned"
-scenario = "A command launched from a package child directory publishes one artifact."
-setup = "start=/tmp/weekend-models/src/weekend_models; artifact=experiments/tiny/model.pt; bytes=weights-v1"
-input = "viper.toml at /tmp/weekend-models/viper.toml"
-invocation = "resolve_root(start) returns /tmp/weekend-models once and passes it to LocalArtifactStore"
-implementation = "src/viper/project.py:resolve_root"
-test = "tests/test_storage.py:test_store_uses_selected_project_root"
-outcome.kind = "accepted"
-outcome.result = "working bytes and immutable bytes resolve beneath /tmp/weekend-models"
-outcome.evidence = ["LocalFileRef returned by LocalArtifactStore.publish()", "artifact SHA-256 c0ab742f68a24ef362b5529351eb13561e746b70a0f815efe7b64b570b477851"]
-```
-
 ### Rejection
 
 Create `ROOT/inputs/link` as a symbolic link to a file outside `ROOT`. A plan
@@ -659,23 +643,6 @@ selects `inputs/link`. `project.path.symlink_free` rejects the source before
 capture or publication. The same rule rejects a link whose target remains
 inside `ROOT`; one recorded project path must identify one ordinary file-tree
 location.
-
-```toml contract-trace
-trace_id = "project-path-symlink-rejection"
-requirement_id = "PDR-03"
-rule_id = "project.path.symlink_free"
-state = "planned"
-scenario = "A local training input names a symlink beneath the selected root."
-setup = "ROOT=/tmp/weekend-models; inputs/link.csv is a symlink to /tmp/source.csv"
-input = "ExternalInputRef(source=LocalSource(path='inputs/link.csv'))"
-invocation = "resolve_path(ROOT, 'inputs/link.csv', operation='read')"
-implementation = "src/viper/project.py:resolve_path"
-test = "tests/test_validation_architecture.py:test_project_paths_reject_symlinks"
-outcome.kind = "rejected"
-outcome.rejected_at = "src/viper/project.py:resolve_path"
-outcome.error_type = "PathError"
-outcome.message_match = "symlink"
-```
 
 ## 10. Implementation order
 
