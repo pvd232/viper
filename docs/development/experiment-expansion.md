@@ -72,6 +72,53 @@ This contract keeps `viper.authoring.plan()`, `viper.authoring.freeze()`, and
 `viper.execution.run()` as the single-run primitives. Expansion calls those
 primitives and preserves the existing frozen run format.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Experiment["ExperimentDraft"] --> Select["one variant + replicate"]
+    Select --> Plan["one RunPlanDraft"]
+    Plan --> Run["one run"]
+    Experiment --> Gap["remaining combinations not executed"]
+    class Experiment,Select,Plan,Run current
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Experiment["ExperimentDraft"] --> Expand["expand()"]
+    Filters["variant + replicate filters"] --> Expand
+    Expand --> Plans["ordered RunIdMap + plans"]
+    Plans --> Many["run_many()"]
+    Many --> Result["ExperimentExecutionResult"]
+    class Experiment,Expand,Filters,Plans,Many,Result proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Draft["experiment variants x replicates"] --> Expand["deterministic expansion"]
+    Expand --> Freeze["freeze each ordinary plan"]
+    Freeze --> Queue["bounded run queue"]
+    Queue --> Execute["existing run()"]
+    Execute --> Aggregate["completed | failed | skipped"]
+    class Draft contract
+    class Expand,Freeze,Queue,Execute implementation
+    class Aggregate output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Contract models
 
 ### Run-ID assignment
@@ -180,6 +227,9 @@ Runs already in progress finish and keep their actual result.
 
 ### Complete example
 
+<!-- contract-example-symbols: ["execution", "expand", "freeze"] -->
+<!-- contract-worked-example: start -->
+
 ```python
 from pathlib import Path
 
@@ -215,6 +265,8 @@ results = execution.run_many(
     max_concurrency=2,
 )
 ```
+
+<!-- contract-worked-example: end -->
 
 ## 6. Runtime ownership
 

@@ -211,6 +211,8 @@ private API helpers need that package.
 The example uses one existing fixture to prove that ownership changes while
 behavior remains stable.
 
+<!-- contract-example-symbols: ["HANDLER_REGISTRY"] -->
+
 <!-- contract-worked-example: start -->
 
 ```python

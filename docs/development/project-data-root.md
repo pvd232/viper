@@ -341,6 +341,10 @@ This target workflow initializes one temporary project, rediscovers its root
 from a child directory, resolves one ordinary input, and publishes the same
 artifact bytes through both local reference types.
 
+<!-- contract-example-symbols:
+["Settings", "ViperConfig", "InitProjectRequest", "InitProjectSuccess", "find_root", "resolve_root", "resolve_path", "LocalFileRef", "LocalStageResultSnapshotRef"]
+-->
+
 <!-- contract-worked-example: start -->
 
 ```python

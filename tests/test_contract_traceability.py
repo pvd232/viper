@@ -107,6 +107,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 return ExampleRecord(value)
             [END]
 
+            <!-- contract-example-symbols: ["ExampleRecord", "build_record"] -->
             <!-- contract-worked-example: start -->
             [PYTHON]
             declared = ExampleRecord("declared")
@@ -262,6 +263,44 @@ def test_contract_examples_reject_incomplete_structure(tmp_path: Path) -> None:
     with pytest.raises(
         ContractTraceabilityError,
         match="requires ordered current, proposed-change, and integrated",
+    ):
+        validate_contract_example(contract)
+
+
+def test_contract_examples_reject_undeclared_inventory_symbol(
+    tmp_path: Path,
+) -> None:
+    """Reject an inventory entry that has no contract declaration."""
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            '["ExampleRecord", "build_record"]',
+            '["ExampleRecord", "build_record", "MissingRecord"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="inventory names undeclared symbols: \\['MissingRecord'\\]",
+    ):
+        validate_contract_example(contract)
+
+
+def test_contract_examples_reject_unused_inventory_symbol(tmp_path: Path) -> None:
+    """Reject a declared inventory symbol omitted by the worked example."""
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            "built = build_record(declared.value)",
+            "built = declared",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="operations=\\['build_record'\\]",
     ):
         validate_contract_example(contract)
 

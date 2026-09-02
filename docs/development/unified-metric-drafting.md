@@ -130,6 +130,57 @@ Third, `BenchmarkSpec.metrics` makes every recorded benchmark metric carry a
 threshold. The executor requires `ge` or `le` before it can record a verified
 score.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Function["decorated metric"] --> Impl["MetricImplementationRef"]
+    Impl --> Spec["MetricSpec"]
+    Spec --> Registry["ExperimentSpec.metrics"]
+    Spec --> Id["copied metric_id"]
+    Id --> Stage["stage metric selection"]
+    Spec --> Gap["parameters and runtime binding disconnected"]
+    class Function,Impl,Spec,Registry,Id,Stage current
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Definition["MetricDefinition"] --> Draft["MetricDraft"]
+    Params["typed params"] --> Draft
+    Dependencies["artifact dependencies"] --> Draft
+    Comparator["recompute comparator"] --> Draft
+    Draft --> Objective["MetricObjectiveDraft"]
+    Draft --> Criterion["MetricCriterionDraft"]
+    class Definition,Draft,Params,Dependencies,Comparator,Objective,Criterion proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Decorator["@metric"] --> Measure["measure()"]
+    Measure --> Stage["stage objective and metrics"]
+    Stage --> Experiment["derived metric registry"]
+    Measure --> Benchmark["benchmark metric or criterion"]
+    Experiment --> Execute["measurement + verification"]
+    Benchmark --> Result["BenchmarkMetricResult"]
+    class Decorator contract
+    class Measure,Execute implementation
+    class Stage,Experiment,Benchmark,Result output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Contract models
 
 ### Metric definition and configuration
@@ -1460,6 +1511,11 @@ The superseded behavior has these dispositions:
 
 ## 9. Acceptance cases
 
+<!-- contract-example-symbols:
+["experiment", "replicate", "run_artifact", "stage", "variant", "at_least", "benchmark", "min"]
+-->
+<!-- contract-worked-example: start -->
+
 ### Complete success
 
 The acceptance program defines two live embedding diagnostics, one live training
@@ -1615,6 +1671,8 @@ Omitting `evaluation_loss` from `BenchmarkResult.metrics` fails
 
 Changing the holdout pointer while keeping the same benchmark ID fails the
 existing benchmark input-identity checks before execution.
+
+<!-- contract-worked-example: end -->
 
 ## 10. Implementation order
 

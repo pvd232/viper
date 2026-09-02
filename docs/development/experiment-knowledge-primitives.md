@@ -56,6 +56,56 @@ Free text supplies prose while leaving versioned terms, typed evidence links,
 and deterministic recomputation unresolved. A vector index supplies a ranking.
 Identity, provenance, and experimental effects require exact records.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Runs["verified experiments"] --> Text["journal prose"]
+    Runs --> Metrics["metrics + diagnostics"]
+    Text --> Vector["semantic vector"]
+    Metrics --> Gap["no shared primitive or modulation identity"]
+    Vector --> Gap
+    class Runs,Text,Metrics,Vector current
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Ontology["versioned primitives"] --> Assignment["PrimitiveAssignment"]
+    Runs["matched runs"] --> Modulation["Modulation"]
+    Assignment --> Modulation
+    Modulation --> Effect["EffectEstimate"]
+    Runs --> Diagnostic["DiagnosticSignature"]
+    Runs --> Journal["JournalAssertion"]
+    class Ontology,Assignment,Runs,Modulation,Effect,Diagnostic,Journal proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Evidence["verified VIPER evidence"] --> Knowledge["typed knowledge records"]
+    Knowledge --> Exact["ontology + graph filters"]
+    Knowledge --> Views["journal, diagnostic, effect vectors"]
+    Exact --> Rank["evidence-aware ranking"]
+    Views --> Rank
+    Rank --> Result["source-linked research memory"]
+    class Evidence contract
+    class Knowledge,Exact,Views,Rank implementation
+    class Result output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Stable identifiers and targets
 
 The ontology defines the allowed scientific terms. A knowledge target identifies
@@ -902,6 +952,47 @@ publish_vector
 
 ## 12. Acceptance cases
 
+<!-- contract-example-symbols:
+["PrimitiveSpec", "OntologySpec", "PrimitiveRef", "RunKnowledgeTarget", "DeclaredPrimitiveAssignment"]
+-->
+<!-- contract-worked-example: start -->
+
+```python
+from datetime import UTC, datetime
+
+
+created_at = datetime.now(UTC)
+primitive = PrimitiveSpec(
+    primitive_id="loss.focal",
+    dimension="loss-term functional family",
+    label="Focal loss",
+    definition="Cross-entropy weighted toward hard examples.",
+    parents=("loss.classification",),
+    examples=("gamma=2",),
+)
+ontology = OntologySpec(
+    ontology_id="viper.ml",
+    version="1",
+    primitives=(classification_loss, primitive),
+    created_at=created_at,
+)
+primitive_ref = PrimitiveRef(
+    ontology_id=ontology.ontology_id,
+    ontology_version=ontology.version,
+    primitive_id=primitive.primitive_id,
+)
+target = RunKnowledgeTarget(run=verified_candidate_run)
+assignment = DeclaredPrimitiveAssignment(
+    target=target,
+    primitive=primitive_ref,
+    assigned_by="experiment-author",
+    assigned_at=created_at,
+)
+
+assert assignment.primitive.primitive_id == "loss.focal"
+assert assignment.target.run == verified_candidate_run
+```
+
 ### Ontology and assignment history
 
 Publish two ontology versions, one inferred assignment, and one reviewed
@@ -963,6 +1054,8 @@ duplicate aspect fails.
 Python, typed API, CLI, and MCP calls return the same ordered references for
 one exact query and one vector query. Read-only MCP omits publication and
 refresh tools. Execute mode routes them through the same typed handlers.
+
+<!-- contract-worked-example: end -->
 
 ## 13. Propagation
 

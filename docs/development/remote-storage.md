@@ -131,6 +131,57 @@ Cloud publication leaves the declared working file in place. VIPER can use
 that file again if the upload fails. `.viper/store` receives zero payload
 copies.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Working["working artifact"] --> Local["LocalArtifactStore"]
+    Local --> Ref["LocalFileRef"]
+    Ref --> Verify["local verification"]
+    Cloud["cloud destination"] --> Gap["no direct publication path"]
+    class Working,Local,Ref,Verify current
+    class Cloud evidence
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Destination["StorageDestination"] --> Publisher["SnapshotPublisher"]
+    Source["PublicationSource"] --> Publisher
+    Publisher --> LocalRef["local reference"]
+    Publisher --> CloudRef["ViperCloudFileRef"]
+    LocalRef --> Resolved["ResolvedFileRef"]
+    CloudRef --> Resolved
+    class Destination,Publisher,Source,LocalRef,CloudRef,Resolved proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Stage["stage output"] --> Publish["publish_resolved_files"]
+    Config["StorageSettings"] --> Publish
+    Publish --> Snapshot["StageResultSnapshot"]
+    Snapshot --> Run["RunResult"]
+    Run --> Retrieve["verify and restore"]
+    Retrieve --> Files["restored files"]
+    class Stage,Config contract
+    class Publish,Retrieve implementation
+    class Snapshot,Run,Files output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Storage configuration
 
 ### 4.1 Public configuration
@@ -1032,6 +1083,34 @@ direct function, typed handler, and CLI then call one restore engine.
 
 ## 11. Public workflow
 
+<!-- contract-example-symbols:
+["LocalStorageDestination", "ViperCloudDestination", "StorageSettings", "bind_run_destination", "publish_resolved_files"]
+-->
+<!-- contract-worked-example: start -->
+
+```python
+from pathlib import Path
+
+
+root = Path.cwd()
+local = StorageSettings(destination=LocalStorageDestination())
+cloud = StorageSettings(
+    destination=ViperCloudDestination(
+        owner="machina",
+        project="weekend_models",
+    )
+)
+destination = bind_run_destination(root, run_id, cloud.destination)
+published = publish_resolved_files(
+    root,
+    destination,
+    {resolved_run_path: resolved_run_bytes},
+)
+
+assert local.destination.kind == "local"
+assert published[resolved_run_path].bytes == len(resolved_run_bytes)
+```
+
 ### Local immutable publication
 
 ```toml
@@ -1088,6 +1167,8 @@ viper restore <run-reference> \
     evaluate.preds \
   --output recovered/
 ```
+
+<!-- contract-worked-example: end -->
 
 ## 12. Propagation and legacy cleanup
 

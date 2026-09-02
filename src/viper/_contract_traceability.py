@@ -169,6 +169,16 @@ _RULE_EDGE = re.compile(
 
 
 _PYTHON_FENCE = re.compile(r"\`\`\`python\n(?P<body>.*?)\n\`\`\`", re.DOTALL)
+_CONTRACT_EXAMPLE_SYMBOLS = re.compile(
+    r"<!-- contract-example-symbols:\s*(?P<body>\[.*?\])\s*-->",
+    re.DOTALL,
+)
+_CONTRACT_WORKED_EXAMPLE = re.compile(
+    r"<!-- contract-worked-example: start -->"
+    r"(?P<body>.*?)"
+    r"<!-- contract-worked-example: end -->",
+    re.DOTALL,
+)
 _MERMAID_FENCE = re.compile(
     r"\`\`\`mermaid\n(?P<body>.*?)\n\`\`\`",
     re.DOTALL,
@@ -509,22 +519,40 @@ def validate_contract_example(contract: Path) -> None:
     for index, diagram in enumerate(diagrams, start=1):
         _assert_dag(diagram, contract, index)
 
-    models = _section(text, 4)
-    examples = tuple(
-        re.finditer(
-            r"<!-- contract-worked-example: start -->"
-            r"(?P<body>.*?)"
-            r"<!-- contract-worked-example: end -->",
-            models,
-            re.DOTALL,
+    _section(text, 4)
+    inventories = tuple(_CONTRACT_EXAMPLE_SYMBOLS.finditer(text))
+    if len(inventories) != 1:
+        raise ContractTraceabilityError(
+            f"{contract.name} requires one contract-example-symbols inventory"
         )
-    )
+    try:
+        loaded_symbols = json.loads(inventories[0].group("body"))
+    except json.JSONDecodeError as error:
+        raise ContractTraceabilityError(
+            f"{contract.name} has an invalid contract-example-symbols inventory"
+        ) from error
+    if (
+        not isinstance(loaded_symbols, list)
+        or not loaded_symbols
+        or any(
+            not isinstance(symbol, str) or not symbol.isidentifier()
+            for symbol in loaded_symbols
+        )
+        or len(loaded_symbols) != len(set(loaded_symbols))
+    ):
+        raise ContractTraceabilityError(
+            f"{contract.name} contract-example-symbols must be a non-empty "
+            "array of unique Python identifiers"
+        )
+    symbols = set(loaded_symbols)
+
+    examples = tuple(_CONTRACT_WORKED_EXAMPLE.finditer(text))
     if len(examples) != 1:
         raise ContractTraceabilityError(
             f"{contract.name} requires one marked worked example"
         )
 
-    declarations = models[: examples[0].start()]
+    declarations = text
     declaration_trees = tuple(
         ast.parse(match.group("body"), filename=str(contract))
         for match in _PYTHON_FENCE.finditer(declarations)
@@ -549,6 +577,27 @@ def validate_contract_example(contract: Path) -> None:
         for target in node.targets
         if isinstance(target, ast.Name)
     }
+    declared_aliases.update(
+        node.target.id
+        for tree in declaration_trees
+        for node in tree.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+    )
+    declared_imports = {
+        alias.asname or alias.name.split(".", maxsplit=1)[0]
+        for tree in declaration_trees
+        for node in tree.body
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    declared_imports.update(
+        alias.asname or alias.name
+        for tree in declaration_trees
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    )
 
     example_blocks = tuple(
         match.group("body")
@@ -566,12 +615,30 @@ def validate_contract_example(contract: Path) -> None:
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     }
     used_names = {
-        node.id for node in ast.walk(example_tree) if isinstance(node, ast.Name)
+        node.id
+        for node in ast.walk(example_tree)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
     }
 
-    missing_classes = sorted(declared_classes - calls)
-    missing_functions = sorted(declared_functions - calls)
-    missing_aliases = sorted(declared_aliases - used_names)
+    declared_symbols = (
+        declared_classes | declared_functions | declared_aliases | declared_imports
+    )
+    undeclared_symbols = sorted(symbols - declared_symbols)
+    if undeclared_symbols:
+        raise ContractTraceabilityError(
+            f"{contract.name} inventory names undeclared symbols: "
+            f"{undeclared_symbols}"
+        )
+
+    missing_classes = sorted((symbols & declared_classes) - calls)
+    missing_functions = sorted((symbols & declared_functions) - calls)
+    referenced_symbols = declared_aliases | declared_imports
+    missing_aliases = sorted(
+        (symbols & referenced_symbols)
+        - declared_classes
+        - declared_functions
+        - used_names
+    )
     if missing_classes or missing_functions or missing_aliases:
         raise ContractTraceabilityError(
             f"{contract.name} incomplete worked example: "

@@ -56,6 +56,55 @@ benchmark contract.
 
 The user opts in per stage. `reuse="never"` preserves ordinary execution.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Plan["frozen stage"] --> Execute["execute every time"]
+    Execute --> Snapshot["verified stage snapshot"]
+    Snapshot --> Repeat["identical later stage"]
+    Repeat --> Gap["no reuse decision or receipt"]
+    class Plan,Execute,Snapshot,Repeat current
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Stage["ParameterizedSpec"] --> Key["StageReuseKey"]
+    Inputs["verified input identities"] --> Key
+    Env["env + reproducibility"] --> Key
+    Key --> Lookup["verified snapshot lookup"]
+    Lookup --> Receipt["StageReuseReceipt"]
+    class Stage,Key,Inputs,Env,Lookup,Receipt proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Policy["reuse policy"] --> Key["canonical key"]
+    Key --> Lookup["catalog lookup"]
+    Lookup --> Decision["execute or reuse"]
+    Decision --> Execute["ordinary execution"]
+    Decision --> Reuse["copy verified snapshot"]
+    Execute --> Completion["ExecutedStageCompletion"]
+    Reuse --> Completion
+    class Policy contract
+    class Key,Lookup,Decision,Execute,Reuse implementation
+    class Completion output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Frozen policy
 
 The policy is part of Python authoring and the frozen project-owned stage spec:
@@ -381,6 +430,48 @@ The verifier accepts a reused stage only after all of these checks pass:
 
 ## 10. Acceptance cases
 
+<!-- contract-example-symbols:
+["stage", "ReuseFileIdentity", "ReuseInputIdentity", "StageReuseKey"]
+-->
+<!-- contract-worked-example: start -->
+
+```python
+from viper.authoring import stage
+
+
+training = stage(
+    train,
+    params=train_params,
+    inputs=train_inputs,
+    artifacts=train_artifacts,
+    objective=training_objective,
+    metrics=training_metrics,
+    reuse="verified",
+)
+dataset_file = ReuseFileIdentity(
+    relative_path="training.csv",
+    sha256=dataset_sha256,
+    bytes=dataset_bytes,
+)
+dataset_input = ReuseInputIdentity(
+    input_name="dataset",
+    data_role="training",
+    files=(dataset_file,),
+)
+reuse_key = StageReuseKey(
+    stage_id="train",
+    stage_sha256=stage_sha256,
+    inputs=(dataset_input,),
+    seed=7,
+    env_sha256=env_sha256,
+    reproducibility_sha256=reproducibility_sha256,
+    metric_sha256s=metric_sha256s,
+)
+
+assert training.spec.reuse == "verified"
+assert reuse_key.inputs[0].files[0].sha256 == dataset_sha256
+```
+
 ### Training reuse
 
 Two run plans select different run IDs and the same training behavior and input
@@ -428,6 +519,8 @@ The catalog contains an executed completion and a newer reused completion with
 the same key. Candidate selection skips the reused completion and selects the
 executed completion. An absent valid executed completion sends the target stage
 through ordinary execution.
+
+<!-- contract-worked-example: end -->
 
 ## 11. Propagation
 

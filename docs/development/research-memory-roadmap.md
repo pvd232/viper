@@ -51,6 +51,8 @@ diagnostic signatures, journal assertions, and retrieval judgments. They do
 not persist the complete decision context that connects one research question
 to one next experiment.
 
+### Current DAG
+
 ```mermaid
 flowchart TB
     Runs["Verified runs"] --> Findings["Effects and assertions"]
@@ -74,6 +76,41 @@ selection probability, available memory snapshot, prompt and tool contract,
 budget, or rejected alternatives. A collection of such assertions is useful
 scientific memory. It is not yet a learning dataset or an off-policy decision
 log.
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Objective["ResearchObjective"] --> Candidates["ExperimentCandidate set"]
+    Candidates --> Selection["ExperimentSelection"]
+    Memory["frozen memory snapshot"] --> Selection
+    Budget["ResourceBudget"] --> Selection
+    Selection --> Episode["ResearchEpisode"]
+    class Objective,Candidates,Selection,Memory,Budget,Episode proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Objective["objective + hypotheses"] --> Select["bounded candidate selection"]
+    Catalog["verified research memory"] --> Select
+    Select --> Execute["VIPER experiment execution"]
+    Execute --> Review["ResearchReview"]
+    Review --> Dataset["LearningDatasetManifest"]
+    Dataset --> Assess["frozen policy evaluation"]
+    Assess --> Promote["promotion or rollback"]
+    Promote --> Catalog
+    class Objective,Catalog contract
+    class Select,Execute,Review,Assess,Promote implementation
+    class Dataset output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
 
 ## 4. Architectural decision
 
@@ -929,6 +966,60 @@ The verifier rejects:
 
 ## 16. Acceptance traces
 
+<!-- contract-example-symbols:
+["ResearchConstraint", "ResearchObjective", "AnalysisPlan", "HypothesisSpec"]
+-->
+<!-- contract-worked-example: start -->
+
+```python
+from datetime import UTC, datetime
+
+
+registered_at = datetime.now(UTC)
+constraint = ResearchConstraint(
+    constraint_id="same-heldout-split",
+    kind="scope",
+    statement="Compare both variants on the same held-out split.",
+    enforcement="preflight",
+    verifier_rule="research.split.fixed",
+    evidence=(heldout_split_ref,),
+)
+objective = ResearchObjective(
+    objective_id="reduce-heldout-loss",
+    question="Does focal loss reduce held-out loss under fixed conditions?",
+    target_metrics=("evaluation_loss",),
+    admissible_evidence=(baseline_run_ref,),
+    constraints=(constraint,),
+    created_by="experiment-author",
+    created_at=registered_at,
+)
+analysis = AnalysisPlan(
+    estimand="paired mean change in held-out loss",
+    comparison="paired",
+    metric_id="evaluation_loss",
+    direction="min",
+    minimum_effect=0.01,
+    interval_method="fixed_normal",
+    confidence=0.95,
+    stopping_rule="fixed_sample",
+    maximum_looks=1,
+)
+hypothesis = HypothesisSpec(
+    hypothesis_id="focal-loss-v1",
+    objective=objective_ref,
+    null_claim="Focal loss does not reduce held-out loss by 0.01.",
+    alternative_claim="Focal loss reduces held-out loss by at least 0.01.",
+    intervention="Replace cross-entropy with focal loss.",
+    control="Keep cross-entropy.",
+    population="Matched seeds under the fixed dataset and model family.",
+    analysis=analysis,
+    registered_at=registered_at,
+)
+
+assert objective.constraints[0].constraint_id == "same-heldout-split"
+assert hypothesis.analysis.stopping_rule == "fixed_sample"
+```
+
 ### Successful retrieval-memory update
 
 ```text
@@ -974,6 +1065,8 @@ challenger improves objective score
 -> AgentEvaluationResult(status="failed")
 -> PolicyPromotionDecision(decision="promote") rejected
 ```
+
+<!-- contract-worked-example: end -->
 
 ## 17. Propagation
 

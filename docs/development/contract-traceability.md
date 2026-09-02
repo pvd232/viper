@@ -10,7 +10,7 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** implementation partial; cross-contract migration pending.
+**Contract status:** implemented.
 
 These requirements bind the contract to the master checklist:
 
@@ -18,7 +18,7 @@ These requirements bind the contract to the master checklist:
 | --- | --- |
 | CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_contract_traceability.py --> | Parse every contract requirement and named verifier rule into `ContractTraceabilityGraph`, with each collection serialized in canonical order. |
 | CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_contract_traceability.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
-| CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs plus one worked example that constructs every contract model and calls every declared operation. |
+| CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs plus one explicit example-symbol inventory and one worked example that exercises every inventoried symbol. |
 | CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph that baseline SystemGraph compilation lowers into $G_0$. |
 
 ## 2. Required claim
@@ -396,8 +396,17 @@ colon after the repository path and constructs `RepoSymbolRef`.
 
 ### Illustrative worked example
 
-This example constructs every Section 4 model for `PDR-03`. Master Phase 0 will create
-the source and test symbols, so both links begin in the `planned` state.
+The inventory explicitly names the contract symbols this workflow must
+exercise. The validator resolves each name to a Python declaration in this
+contract, then requires the example to construct classes, call functions, and
+reference aliases. Document position does not define coverage.
+
+Master Phase 0 will create the source and test symbols, so both links begin in
+the `planned` state.
+
+<!-- contract-example-symbols:
+["RequirementId", "VerifierRuleId", "RuleEdgeKind", "TraceState", "DeclarationRef", "RepoSymbolRef", "ContractRequirement", "VerifierRule", "RuleEdge", "ContractTraceabilityGraph"]
+-->
 
 <!-- contract-worked-example: start -->
 
@@ -585,7 +594,7 @@ machine's absolute checkout path.
 | `contract.rule.declared` <!-- verifier-rule: contract.rule.declared requirement=CRT-01 --> | Each requirement declares at least one unique verifier rule. |
 | `contract.rule.implemented` <!-- verifier-rule: contract.rule.implemented requirement=CRT-02 --> | Each verifier rule names one exact implementation target; every link marked `implemented` resolves to an existing file and symbol. |
 | `contract.rule.tested` <!-- verifier-rule: contract.rule.tested requirement=CRT-02 --> | Each verifier rule names at least one exact test target; every link marked `implemented` resolves to an existing test function. |
-| `contract.example.complete` <!-- verifier-rule: contract.example.complete requirement=CRT-03 --> | Each contract contains three rendered DAG sources and one marked, syntax-valid worked example that constructs every class and calls every operation declared in Section 4. |
+| `contract.example.complete` <!-- verifier-rule: contract.example.complete requirement=CRT-03 --> | Each contract declares one explicit example-symbol inventory and contains three rendered DAG sources plus one marked, syntax-valid worked example that exercises every inventoried class, function, and alias. |
 | `contract.diagram.palette` <!-- verifier-rule: contract.diagram.palette requirement=CRT-03 --> | The current, proposed-change, and integrated DAGs use the declared semantic role colors and neutral link style. |
 | `contract.model.matches_runtime` <!-- verifier-rule: contract.model.matches_runtime requirement=CRT-03 --> | Every Section 4 traceability class has the same name and direct fields as its Python implementation. |
 | `contract.model.documented` <!-- verifier-rule: contract.model.documented requirement=CRT-03 --> | Every direct field in each persisted traceability model has a non-empty generated-schema description that states its role. |
@@ -602,10 +611,10 @@ named test function. The traceability graph joins those three representations.
 | Surface | Required statement |
 | --- | --- |
 | `src/viper/_contract_traceability.py` | Add exact models, marker parsers, symbol resolution, cardinality checks, contract-example validation, and canonical serialization for developer tooling. |
-| `tests/test_documentation.py` | Compare the compiler output with the current requirement, phase, test-file, and baseline oracle; require each contract's three DAGs and complete Section 4 example. |
+| `tests/test_documentation.py` | Compare the compiler output with the current requirement, phase, test-file, and baseline oracle; require each contract's three DAGs, symbol inventory, and complete worked example. |
 | `docs/development/master-execution-checklist.md` | Add the foundational Master Phase 0 work before project-root and system-graph implementation. |
 | `docs/development/*.md` pending contracts | Add verifier-rule markers, three DAGs, and one complete worked example per contract. |
-| `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, complete Section 4 example, and requirement-rule-owner-test chain. |
+| `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, explicit example-symbol inventory, complete worked example, and requirement-rule-owner-test chain. |
 | `docs/development/system-impact-compiler.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
 | `docs/development/testing.md` | Document the focused traceability check and the meaning of each marker. |
 

@@ -316,7 +316,59 @@ publishes `ResolvedSingleFileArtifact`, and gives a consumer `FutureInputRef` or
 is the selection record. The response bytes occupy all three graph roles
 through these records.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Local["local path"] --> Input["consumer input"]
+    Http["HTTP body"] --> Artifact["published artifact"]
+    Artifact --> Input
+    Input --> Gap["root evidence varies by route"]
+    class Local,Http,Artifact,Input current
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Local["LocalSource"] --> LocalRoot["ResolvedExternalInputRef"]
+    Http["HttpRequestSpec"] --> HttpRoot["ResolvedHttpRetrieval"]
+    HttpRoot --> Published["ResolvedSingleFileArtifact"]
+    LocalRoot --> Selection["ExternalInputRef"]
+    Published --> Selection["FutureInputRef or StoredInputRef"]
+    class Local,LocalRoot,Http,HttpRoot,Published,Selection proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Draft["authored input"] --> Resolve["freeze or execute"]
+    Resolve --> Evidence["route-specific root evidence"]
+    Evidence --> Ref["typed input reference"]
+    Ref --> Materialize["verified stage input"]
+    Materialize --> Context["Context.inputs"]
+    class Draft contract
+    class Resolve,Materialize implementation
+    class Evidence,Ref,Context output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. `DownloadSpec` still means "perform a network request"
+
+<!-- contract-example-symbols:
+["authoring", "artifact", "HttpRequestSpec", "HttpRetrievalPolicy", "DATASET_PATH", "download"]
+-->
+<!-- contract-worked-example: start -->
 
 This contract preserves the job of `DownloadSpec`: freeze HTTP requests,
 choose an HTTP implementation and policy, then have VIPER perform and record each network
@@ -373,6 +425,9 @@ download = authoring.download(
         ),
     },
 )
+
+assert set(download.spec.inputs) == {"dataset"}
+assert set(download.spec.artifacts) == {"dataset"}
 ```
 
 The custom-HTTP version appears in the complete program in
@@ -413,6 +468,8 @@ execution changes, and legacy cleanup live in
 the stage. Removing `HttpSource` preserves that rule. A future requirement for
 per-request policies or HTTP implementations belongs in the `DownloadSpec` request
 schema, while the download executor remains the only network path.
+
+<!-- contract-worked-example: end -->
 
 ## 5. A downloaded body becomes an external root and a future input
 

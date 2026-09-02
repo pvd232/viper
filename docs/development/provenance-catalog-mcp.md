@@ -76,6 +76,55 @@ An MCP server built directly over filesystem searches would create a second,
 weaker model of VIPER. This contract adds the catalog first. MCP calls the
 catalog and typed API after both interfaces exist.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Records["immutable run records"] --> Lineage["lineage(run)"]
+    Lineage --> One["one-run graph"]
+    Records --> Search["filesystem scan"]
+    Search --> Gap["no cross-run query model"]
+    class Records,Lineage,One,Search current
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Records["immutable records"] --> Refresh["catalog refresh"]
+    Refresh --> Rows["typed catalog rows + edges"]
+    Query["typed query"] --> Catalog["Catalog"]
+    Rows --> Catalog
+    Catalog --> MCP["thin MCP adapter"]
+    class Records,Refresh,Rows,Query,Catalog,MCP proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Store["verified VIPER store"] --> Index["rebuildable catalog"]
+    Index --> Python["Python query API"]
+    Index --> CLI["CLI search"]
+    Index --> MCP["MCP tools and resources"]
+    Python --> Result["source-linked result"]
+    CLI --> Result
+    MCP --> Result
+    class Store contract
+    class Index,Python,CLI,MCP implementation
+    class Result output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Catalog models
 
 Catalog models use `BaseModel` and carry derived query results. Protocol models
@@ -583,6 +632,34 @@ to skip execution.
 
 ## 10. Acceptance cases
 
+<!-- contract-example-symbols:
+["catalog", "RunQuery", "MeasurementQuery", "ArtifactQuery", "BenchmarkQuery"]
+-->
+<!-- contract-worked-example: start -->
+
+```python
+from pathlib import Path
+
+
+index = catalog(Path.cwd())
+index.refresh(runs=(verified_run,))
+runs = index.runs(RunQuery(input_sha256=dataset_sha256))
+measurements = index.measurements(
+    MeasurementQuery(
+        metric_ids=("test_loss",),
+        input_sha256=dataset_sha256,
+        env_sha256=env_sha256,
+    )
+)
+artifacts = index.artifacts(ArtifactQuery(source_commit=source_commit))
+benchmarks = index.benchmarks(BenchmarkQuery(artifact_sha256=model_sha256))
+
+assert runs.items
+assert measurements.items
+assert artifacts.items
+assert benchmarks.items
+```
+
 ### Rebuild equality
 
 The test indexes three fixture runs, records every query result, deletes the
@@ -655,6 +732,8 @@ One `run_many` call executes once through a task-capable client and once through
 the ordinary typed response. Both paths expose the same VIPER operation
 identity, terminal status, cancellation behavior, and result. The task path
 adds MCP polling metadata only.
+
+<!-- contract-worked-example: end -->
 
 ## 11. Propagation
 

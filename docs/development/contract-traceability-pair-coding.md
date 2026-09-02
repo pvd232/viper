@@ -10,13 +10,13 @@ The identifier for this subsystem is `CRT`.
 
 ## 1. Status and boundary
 
-**Guide status:** compiler and focused proofs implemented; `P0-CRT-04` pending.
+**Guide status:** implemented.
 
-The compiler operations exist in `src/viper/_contract_traceability.py`, and
-their focused tests exist in `tests/test_contract_traceability.py`. The
-`P0-CRT-04` migration must still apply the shared contract structure to the
-remaining contracts. Each `python pair-edit` fence retains the approved code
-for its named pair cycle.
+The compiler operations exist in `src/viper/_contract_traceability.py`, their
+focused tests exist in `tests/test_contract_traceability.py`, and every
+implementation contract passes the shared DAG, symbol-inventory, and worked-
+example gate. Each `python pair-edit` fence retains the approved code for its
+named pair cycle.
 
 This guide changes only contract traceability during Master Phase 0:
 
@@ -431,6 +431,16 @@ import ast
 
 
 _PYTHON_FENCE = re.compile(r"\`\`\`python\n(?P<body>.*?)\n\`\`\`", re.DOTALL)
+_CONTRACT_EXAMPLE_SYMBOLS = re.compile(
+    r"<!-- contract-example-symbols:\s*(?P<body>\[.*?\])\s*-->",
+    re.DOTALL,
+)
+_CONTRACT_WORKED_EXAMPLE = re.compile(
+    r"<!-- contract-worked-example: start -->"
+    r"(?P<body>.*?)"
+    r"<!-- contract-worked-example: end -->",
+    re.DOTALL,
+)
 _MERMAID_FENCE = re.compile(
     r"\`\`\`mermaid\n(?P<body>.*?)\n\`\`\`",
     re.DOTALL,
@@ -523,22 +533,40 @@ def validate_contract_example(contract: Path) -> None:
     for index, diagram in enumerate(diagrams, start=1):
         _assert_dag(diagram, contract, index)
 
-    models = _section(text, 4)
-    examples = tuple(
-        re.finditer(
-            r"<!-- contract-worked-example: start -->"
-            r"(?P<body>.*?)"
-            r"<!-- contract-worked-example: end -->",
-            models,
-            re.DOTALL,
+    _section(text, 4)
+    inventories = tuple(_CONTRACT_EXAMPLE_SYMBOLS.finditer(text))
+    if len(inventories) != 1:
+        raise ContractTraceabilityError(
+            f"{contract.name} requires one contract-example-symbols inventory"
         )
-    )
+    try:
+        loaded_symbols = json.loads(inventories[0].group("body"))
+    except json.JSONDecodeError as error:
+        raise ContractTraceabilityError(
+            f"{contract.name} has an invalid contract-example-symbols inventory"
+        ) from error
+    if (
+        not isinstance(loaded_symbols, list)
+        or not loaded_symbols
+        or any(
+            not isinstance(symbol, str) or not symbol.isidentifier()
+            for symbol in loaded_symbols
+        )
+        or len(loaded_symbols) != len(set(loaded_symbols))
+    ):
+        raise ContractTraceabilityError(
+            f"{contract.name} contract-example-symbols must be a non-empty "
+            "array of unique Python identifiers"
+        )
+    symbols = set(loaded_symbols)
+
+    examples = tuple(_CONTRACT_WORKED_EXAMPLE.finditer(text))
     if len(examples) != 1:
         raise ContractTraceabilityError(
             f"{contract.name} requires one marked worked example"
         )
 
-    declarations = models[: examples[0].start()]
+    declarations = text
     declaration_trees = tuple(
         ast.parse(match.group("body"), filename=str(contract))
         for match in _PYTHON_FENCE.finditer(declarations)
@@ -563,6 +591,27 @@ def validate_contract_example(contract: Path) -> None:
         for target in node.targets
         if isinstance(target, ast.Name)
     }
+    declared_aliases.update(
+        node.target.id
+        for tree in declaration_trees
+        for node in tree.body
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+    )
+    declared_imports = {
+        alias.asname or alias.name.split(".", maxsplit=1)[0]
+        for tree in declaration_trees
+        for node in tree.body
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    declared_imports.update(
+        alias.asname or alias.name
+        for tree in declaration_trees
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    )
 
     example_blocks = tuple(
         match.group("body")
@@ -584,12 +633,28 @@ def validate_contract_example(contract: Path) -> None:
     used_names = {
         node.id
         for node in ast.walk(example_tree)
-        if isinstance(node, ast.Name)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
     }
 
-    missing_classes = sorted(declared_classes - calls)
-    missing_functions = sorted(declared_functions - calls)
-    missing_aliases = sorted(declared_aliases - used_names)
+    declared_symbols = (
+        declared_classes | declared_functions | declared_aliases | declared_imports
+    )
+    undeclared_symbols = sorted(symbols - declared_symbols)
+    if undeclared_symbols:
+        raise ContractTraceabilityError(
+            f"{contract.name} inventory names undeclared symbols: "
+            f"{undeclared_symbols}"
+        )
+
+    missing_classes = sorted((symbols & declared_classes) - calls)
+    missing_functions = sorted((symbols & declared_functions) - calls)
+    referenced_symbols = declared_aliases | declared_imports
+    missing_aliases = sorted(
+        (symbols & referenced_symbols)
+        - declared_classes
+        - declared_functions
+        - used_names
+    )
     if missing_classes or missing_functions or missing_aliases:
         raise ContractTraceabilityError(
             f"{contract.name} incomplete worked example: "
@@ -603,14 +668,14 @@ def validate_contract_example(contract: Path) -> None:
 id = "P0-CRT-04"
 requirements = ["CRT-03"]
 targets = ["tests/test_documentation.py:CONTRACTS_WITH_COMPLETE_EXAMPLES"]
-tests = ["tests/test_documentation.py:test_phase_zero_contracts_show_three_dags_and_instantiate_models"]
-gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k phase_zero_contracts_show_three_dags_and_instantiate_models -q"
+tests = ["tests/test_documentation.py:test_contract_examples_are_complete"]
+gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k contract_examples_are_complete -q"
 depends_on = ["P0-CRT-03"]
 ```
 
 **Context:** Only migrated contracts can enter the compiled traceability graph.
-This block adds each contract after its diagrams, models, and worked example
-satisfy the shared contract structure.
+This block adds each contract after its diagrams, explicit example-symbol
+inventory, and worked example satisfy the shared contract structure.
 
 Expand the validated contract set only after every contract has the required
 three diagrams and complete worked example.
@@ -630,10 +695,11 @@ Migrate these contracts one at a time, in checklist order:
 11. `research-memory-roadmap.md`
 
 For each contract, add its verifier-rule rows, current DAG, proposed-change
-DAG, integrated DAG, complete Section 4 declarations, and marked worked example
-before adding its path to the validated tuple. The contract-gap skill defines
-the required contents of those sections; this block controls only their
-repository-wide migration and acceptance gate.
+DAG, integrated DAG, explicit example-symbol inventory, and marked worked
+example before adding its path to the validated tuple. The inventory names the
+contract surface that the example must exercise; document position does not
+define coverage. The contract-gap skill defines the required contents; this
+block controls only their repository-wide migration and acceptance gate.
 
 `tests/test_documentation.py`
 
@@ -838,6 +904,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 return ExampleRecord(value)
             [END]
 
+            <!-- contract-example-symbols: ["ExampleRecord", "build_record"] -->
             <!-- contract-worked-example: start -->
             [PYTHON]
             declared = ExampleRecord("declared")
@@ -1000,15 +1067,15 @@ def test_rule_edges_reject_missing_symbols(tmp_path: Path) -> None:
 ```toml pair-block
 id = "P0-PROOF-03"
 requirements = ["CRT-03"]
-targets = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
-tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure"]
+targets = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure", "tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol", "tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol"]
+tests = ["tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure", "tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol", "tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol"]
 gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k contract_examples -q"
 depends_on = ["P0-CRT-03", "P0-PROOF-02"]
 ```
 
-**Context:** A contract can declare rules while omitting a required DAG or model
-use from its worked example. This test rejects the exact structural omission
-before the contract enters the compiled graph.
+**Context:** A contract can declare rules while omitting a required DAG or an
+inventoried symbol from its worked example. These tests reject the exact
+structural omission before the contract enters the compiled graph.
 
 Extend the imports, then add these tests.
 
@@ -1035,10 +1102,46 @@ def test_contract_examples_reject_incomplete_structure(tmp_path: Path) -> None:
         match="requires ordered current, proposed-change, and integrated",
     ):
         validate_contract_example(contract)
+
+
+def test_contract_examples_reject_undeclared_inventory_symbol(
+    tmp_path: Path,
+) -> None:
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            '["ExampleRecord", "build_record"]',
+            '["ExampleRecord", "build_record", "MissingRecord"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="inventory names undeclared symbols: \\['MissingRecord'\\]",
+    ):
+        validate_contract_example(contract)
+
+
+def test_contract_examples_reject_unused_inventory_symbol(tmp_path: Path) -> None:
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            "built = build_record(declared.value)",
+            "built = declared",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="operations=\\['build_record'\\]",
+    ):
+        validate_contract_example(contract)
 ```
 
-**Stop:** the targeted contract-example rejection passes. Complete graph
-compilation begins next.
+**Stop:** all three contract-example rejections pass. Complete graph compilation
+begins next.
 
 <!-- pair-block-definition: P0-PROOF-04 -->
 ```toml pair-block
@@ -1149,8 +1252,8 @@ to import. The block stays within its current behavior and test.
 
 Cycle `P0-CRT-04` is the only repeated migration. Add one contract to
 `CONTRACTS_WITH_COMPLETE_EXAMPLES` after that contract receives all three
-DAGs, its complete worked example, and verifier-rule markers. Run the focused
-gate after each contract.
+DAGs, its example-symbol inventory, its complete worked example, and
+verifier-rule markers. Run the focused gate after each contract.
 
 ## 6. Guide gate
 

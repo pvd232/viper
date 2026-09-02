@@ -141,6 +141,58 @@ and byte count. [`ResolvedHttpRetrieval`](../../src/viper/http.py),
 The missing connector is an equality rule joining one request, one retrieval
 receipt, and one declared single-file artifact.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Request["HttpRequestSpec"] --> Receipt["ResolvedHttpRetrieval.body"]
+    Receipt --> Copy["callable copies bytes"]
+    Copy --> Artifact["ResolvedSingleFileArtifact.file"]
+    Receipt --> Gap["identity checked separately"]
+    Artifact --> Gap
+    class Request,Receipt,Artifact current
+    class Copy evidence
+    class Gap gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    Request["named request"] --> File["one published SnapshotFileRef"]
+    File --> Receipt["ResolvedHttpRetrieval.body"]
+    File --> Artifact["ResolvedSingleFileArtifact.file"]
+    Receipt --> Rule["retrieval-artifact equality rule"]
+    Artifact --> Rule
+    class Request,File,Receipt,Artifact,Rule proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Spec["DownloadSpec"] --> Fetch["runner fetches body"]
+    Fetch --> Publish["publish_download_body"]
+    Publish --> File["SnapshotFileRef"]
+    File --> Receipt["ResolvedHttpRetrieval"]
+    File --> Artifact["ResolvedSingleFileArtifact"]
+    Receipt --> Verify["download verifier"]
+    Artifact --> Verify
+    class Spec contract
+    class Fetch,Publish implementation
+    class File,Receipt,Artifact,Verify output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Contract models
 
 ### 4.1 Frozen `DownloadSpec`
@@ -276,6 +328,11 @@ and timing evidence. See
 
 ### 4.4 Complete public authoring example
 
+<!-- contract-example-symbols:
+["authoring", "artifact", "HttpRequestSpec", "HttpRetrievalPolicy", "DATASET_PATH", "download"]
+-->
+<!-- contract-worked-example: start -->
+
 This program declares one request and its same-named dataset artifact. Omitting
 `http=` selects VIPER's built-in HTTPX implementation. The file served at the
 URL contains these exact 22 bytes:
@@ -348,6 +405,8 @@ body at that concrete path. Project code delegates publication to the runner.
 
 The complete custom-HTTP and model-run program lives in
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
+
+<!-- contract-worked-example: end -->
 
 ## 5. Execution
 

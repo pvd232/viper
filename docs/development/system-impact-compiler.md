@@ -1825,6 +1825,40 @@ exploratory path, publishes both graphs, creates their condensation DAG, and
 builds the resulting impact report. It then assigns every affected path a
 disposition and reconciles one planned addition with the candidate delta.
 
+<!-- contract-example-symbols:
+[
+  "SystemNodeId", "SystemComponentId", "PairBlockId", "SystemNodeKind",
+  "SystemNodeRole", "SystemEdgeKind", "ResolutionKind", "EdgeOrigin",
+  "FileAnalysisStatus", "ContextPackage", "ContextVariable", "ContextFile",
+  "ContextCommand", "SystemContextManifest", "SystemSource",
+  "CodeQLPackIdentity", "CodeQLToolchainIdentity", "SystemCompilerIdentity",
+  "RepositoryFile", "FileAnalysisReceipt", "DependencySiteOutcome",
+  "DiagnosticSeverity", "SystemDiagnostic", "DeltaOperationKind", "PairBlock",
+  "PythonParameterKind", "PythonParameterFact", "PythonSignatureFact",
+  "RepositoryFileNode", "PythonSymbolNode", "DocumentAnchorNode",
+  "ExternalSymbolNode", "SystemNode", "RepositoryFileAnchor",
+  "PythonSymbolAnchor", "DocumentAnchorRef", "ExternalSymbolAnchor",
+  "SystemNodeAnchor", "PlannedNodeAnchor", "SystemEdgeAnchor",
+  "NodeIdentityFact", "NodeRolesFact", "EdgeFact", "GraphFact",
+  "CodeQLSourceLocation", "CodeQLNodeRow", "CodeQLEdgeRow",
+  "CodeQLSignatureRow", "CodeQLDependencySiteRow", "CodeQLSourceFact",
+  "CodeQLDatabaseReceipt", "CodeQLQueryReceipt", "CodeQLAnalysisReceipt",
+  "CodeQLSourceFacts", "AddNodeOperation", "RemoveNodeOperation",
+  "UpdateNodeOperation", "AddEdgeOperation", "RemoveEdgeOperation",
+  "UpdateEdgeOperation", "DeltaOperation", "OperationPrecedence",
+  "ContractChange", "ContractDelta", "TargetConstraintOrigin",
+  "PresenceConstraint", "AbsenceConstraint", "PreservationConstraint",
+  "TargetConstraint", "TargetSpecification", "ConstraintOutcome",
+  "ConstraintConformanceReceipt", "TargetConformanceReport", "SourceEvidence",
+  "ResolutionEvidence", "EdgeEvidence", "SystemEdge", "ResolutionAttempt",
+  "ResolutionObservation", "UnresolvedDependency", "SystemGraph",
+  "SystemComponent", "SystemComponentEdge", "SystemCondensationDAG",
+  "ChangedNode", "SystemGraphDelta", "ImpactReport", "PropagationAction",
+  "PropagationDisposition", "PlannedAddition", "PropagationPlan",
+  "AffectedSymbolCoverage", "BlastCoverageReport"
+]
+-->
+
 <!-- contract-worked-example: start -->
 
 ```python

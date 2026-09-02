@@ -73,12 +73,8 @@ IMPLEMENTATION_CONTRACTS = (
     RESEARCH_MEMORY,
 )
 
-MASTER_PHASE_ZERO_CONTRACTS = (
-    ROOT / "docs/development/contract-traceability.md",
-    ROOT / "docs/development/project-data-root.md",
-    MODULE_OWNERSHIP,
-    SYSTEM_IMPACT_COMPILER,
-)
+FOUNDATION_CONTRACTS = IMPLEMENTATION_CONTRACTS[:4]
+CONTRACTS_WITH_COMPLETE_EXAMPLES = IMPLEMENTATION_CONTRACTS
 TRACEABILITY_MODELS = (
     DeclarationRef,
     RepoSymbolRef,
@@ -1619,126 +1615,14 @@ def _numbered_contract_section(text: str, number: int) -> str:
     return match.group("body")
 
 
-def test_phase_zero_contracts_show_three_dags_and_instantiate_models() -> None:
-    """Require each foundational contract to show and realize its full delta."""
-    failures: dict[str, list[str]] = {}
-
-    for contract in MASTER_PHASE_ZERO_CONTRACTS:
-        text = contract.read_text()
-        current_gap = _numbered_contract_section(text, 3)
-        contract_models = _numbered_contract_section(text, 4)
-        errors: list[str] = []
-
-        for heading in (
-            "### Current DAG",
-            "### Proposed-change DAG",
-            "### Integrated DAG",
-        ):
-            if heading not in current_gap:
-                errors.append(f"missing {heading}")
-
-        diagrams = tuple(_MERMAID_FENCE.finditer(current_gap))
-        if len(diagrams) != 3:
-            errors.append(f"expected 3 Mermaid DAGs; found {len(diagrams)}")
-        for index, diagram in enumerate(diagrams, start=1):
-            diagram_body = diagram.group("body")
-            if not diagram_body.lstrip().startswith("flowchart"):
-                errors.append(f"diagram {index} is not a Mermaid flowchart")
-                continue
-
-            adjacency: dict[str, set[str]] = {}
-            for line in diagram_body.splitlines():
-                edge = _MERMAID_EDGE.match(line)
-                if edge is None:
-                    continue
-                adjacency.setdefault(edge.group("source"), set()).add(
-                    edge.group("target")
-                )
-            if not adjacency:
-                errors.append(f"diagram {index} has no parsed directed edges")
-                continue
-
-            visiting: set[str] = set()
-            visited: set[str] = set()
-
-            def visit(node: str) -> bool:
-                if node in visiting:
-                    return False
-                if node in visited:
-                    return True
-                visiting.add(node)
-                for target in adjacency.get(node, set()):
-                    if not visit(target):
-                        return False
-                visiting.remove(node)
-                visited.add(node)
-                return True
-
-            if not all(visit(node) for node in adjacency):
-                errors.append(f"diagram {index} contains a directed cycle")
-
-        examples = tuple(_CONTRACT_WORKED_EXAMPLE.finditer(contract_models))
-        if len(examples) != 1:
-            errors.append(f"expected 1 marked worked example; found {len(examples)}")
-            failures[contract.name] = errors
-            continue
-
-        declarations_text = contract_models[: examples[0].start()]
-        declaration_trees = [
-            ast.parse(match.group("body"))
-            for match in _PYTHON_FENCE.finditer(declarations_text)
-        ]
-        declared_classes = {
-            node.name
-            for tree in declaration_trees
-            for node in tree.body
-            if isinstance(node, ast.ClassDef)
-        }
-        declared_functions = {
-            node.name
-            for tree in declaration_trees
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        declared_aliases = {
-            target.id
-            for tree in declaration_trees
-            for node in tree.body
-            if isinstance(node, ast.Assign)
-            for target in node.targets
-            if isinstance(target, ast.Name)
-        }
-
-        example_blocks = tuple(
-            match.group("body")
-            for match in _PYTHON_FENCE.finditer(examples[0].group("body"))
-        )
-        if not example_blocks:
-            errors.append("worked example has no Python block")
-            failures[contract.name] = errors
-            continue
-
-        example_tree = ast.parse("\n\n".join(example_blocks))
-        calls = {
-            node.func.id
-            for node in ast.walk(example_tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        }
-        used_names = {
-            node.id for node in ast.walk(example_tree) if isinstance(node, ast.Name)
-        }
-        missing_classes = sorted(declared_classes - calls)
-        missing_functions = sorted(declared_functions - calls)
-        missing_aliases = sorted(declared_aliases - used_names)
-        if missing_classes:
-            errors.append(f"models never constructed: {missing_classes}")
-        if missing_functions:
-            errors.append(f"operations never called: {missing_functions}")
-        if missing_aliases:
-            errors.append(f"aliases never realized: {missing_aliases}")
-
-        if errors:
-            failures[contract.name] = errors
+def test_contract_examples_are_complete() -> None:
+    """Require every implementation contract to show and realize its delta."""
+    failures: dict[str, str] = {}
+    for contract in CONTRACTS_WITH_COMPLETE_EXAMPLES:
+        try:
+            traceability.validate_contract_example(contract)
+        except traceability.ContractTraceabilityError as error:
+            failures[contract.name] = str(error)
 
     assert failures == {}
 
@@ -2125,6 +2009,8 @@ def test_contract_traceability_pair_guide_executes_as_one_workflow(
         "test_rule_edges_resolve_one_owner_and_tests",
         "test_rule_edges_reject_missing_symbols",
         "test_contract_examples_reject_incomplete_structure",
+        "test_contract_examples_reject_undeclared_inventory_symbol",
+        "test_contract_examples_reject_unused_inventory_symbol",
         "test_contract_traceability_graph_is_canonical",
         "test_contract_traceability_graph_rejects_duplicate_ids",
     )
@@ -2194,7 +2080,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
 
     requirement_ids = {
         match.group("requirement")
-        for contract in MASTER_PHASE_ZERO_CONTRACTS
+        for contract in FOUNDATION_CONTRACTS
         for match in _CONTRACT_REQUIREMENT.finditer(
             contract.read_text(encoding="utf-8")
         )
@@ -2559,7 +2445,7 @@ def _worked_example_runtime_failures(
 def test_worked_examples_resolve_live_imports_and_constructor_fields() -> None:
     """Reject stale runtime names and constructor fields in worked examples."""
     failures: list[str] = []
-    for contract in MASTER_PHASE_ZERO_CONTRACTS:
+    for contract in CONTRACTS_WITH_COMPLETE_EXAMPLES:
         example_match = _CONTRACT_WORKED_EXAMPLE.search(
             contract.read_text(encoding="utf-8")
         )

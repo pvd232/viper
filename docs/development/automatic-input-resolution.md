@@ -154,6 +154,55 @@ metric connector. It defines `MetricDraft`, typed metric parameter delivery,
 stage objectives, derived experiment metric registries, and benchmark metric
 results.
 
+### Current DAG
+
+```mermaid
+flowchart LR
+    Artifact["prior artifact"] --> Manual["manual protocol reference"]
+    Local["local file"] --> Manual
+    Future["same-run artifact"] --> Manual
+    Manual --> Spec["StageSpec.inputs"]
+    Spec --> Runtime["existing materializer"]
+    class Artifact,Local,Future,Manual,Spec,Runtime current
+    class Manual gap
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Proposed-change DAG
+
+```mermaid
+flowchart LR
+    File["input()"] --> Draft["StageInputDraft"]
+    StageArtifact["StageDraftArtifactRef"] --> Draft
+    RunArtifact["RunArtifactDraft"] --> Draft
+    Draft --> Freeze["freeze()"]
+    Freeze --> Ref["ExternalInputRef | FutureInputRef | StoredInputRef"]
+    class File,StageArtifact,RunArtifact,Draft,Freeze,Ref proposed
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+### Integrated DAG
+
+```mermaid
+flowchart LR
+    Author["Python authoring graph"] --> Validate["typed draft validation"]
+    Validate --> Freeze["freeze plan"]
+    Freeze --> Protocol["canonical protocol refs"]
+    Protocol --> Materialize["verified materialization"]
+    Materialize --> Context["stage Context"]
+    Context --> Artifacts["declared artifacts and metrics"]
+    class Author contract
+    class Validate,Freeze,Materialize implementation
+    class Protocol,Context,Artifacts output
+    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
 ## 4. Contract models
 
 ### Protocol-owned stage keys
@@ -1151,6 +1200,23 @@ derives one metric list from their stage selections. The complete rules belong t
 [`unified-metric-drafting.md`](unified-metric-drafting.md).
 
 ### Complete proposed authoring example
+
+<!-- contract-example-symbols:
+[
+  "artifact", "download", "expand", "experiment", "factor", "freeze",
+  "input", "plan", "replicate", "run_artifact", "stage", "variant",
+  "at_least", "at_most", "benchmark", "catalog", "MeasurementQuery",
+  "http", "HttpRequestSpec", "HttpResult", "HttpRetrievalError",
+  "HttpRetrievalPolicy", "ObservedHttpResponse", "FloatComparator",
+  "MetricDependency", "measure", "metric", "min", "GitFileRef",
+  "GitSource", "DataLoaderConfiguration", "capture_resume_state",
+  "load_resume_state", "save_resume_state", "LocalEnvSpec",
+  "NumPyRandomnessSpec", "ParallelismSpec", "ReproducibilitySpec",
+  "TorchDeterminismSpec", "TorchPrecisionSpec", "observe_python_env",
+  "build", "embed", "eval", "train"
+]
+-->
+<!-- contract-worked-example: start -->
 
 **Illustrative example:** this program shows the complete target API. The
 constructors and shortened decorator names remain proposed until this contract
@@ -2487,6 +2553,8 @@ source run is a completed prior run
 `ArtifactPointer` remains the persisted record that joins a prior completed
 run to one declared artifact. `RunArtifactDraft` selects that source during
 Python authoring; the compiler owns pointer construction and publication.
+
+<!-- contract-worked-example: end -->
 
 ## 5. Execution
 

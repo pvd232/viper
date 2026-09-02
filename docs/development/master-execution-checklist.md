@@ -273,7 +273,7 @@ scheduled phase and dependency order.
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Implementation partial; cross-contract migration pending | Requirement, verifier-rule, implementation-owner, and acceptance-test links |
+| [Contract Traceability](contract-traceability.md) | Implemented | Requirement, verifier-rule, implementation-owner, and acceptance-test links |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design; implementation pending | One defining module for API operations, verification operations, and verification types |
 | [System Impact Compiler](system-impact-compiler.md) | Approved design; implementation pending | Pinned CodeQL source analysis, normalized `SystemGraph`, automatic `ContractChange` compilation, conservative impact closure, SCC condensation, strict diagnostics, blast coverage, total propagation, generated PairBlocks, and independently observed conformance |
@@ -328,22 +328,22 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=e8b48bff93381b9d661137ece3ec33a118bb0bfe4c2460f417e4cbead2d2eca0 -->
+<!-- contract-baseline: contract-traceability.md sha256=72158f573e201a385ed14662ab64db23a916c1d08e9caa8f6737f3765fa4c1e0 -->
 
-<!-- contract-baseline: project-data-root.md sha256=d873368c2ea9b9c8ddd3bb9dbe8a8d6ff8b86aa17951a92ef65f36ecd30746f3 -->
-<!-- contract-baseline: module-ownership.md sha256=bda82e5234893cdbe05f618563dad4902ac253c61005964cc9a24e4c5be80db1 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=a4633fe87d789eed2ccf53e086dc3effb4700aaa44c4416a7b2e7b40affe05c9 -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=1e3b082c70675f1b8c93b900749eb52b69644760b1eeb5aec58af55a60a1436d -->
-<!-- contract-baseline: external-input-roots.md sha256=e392471c58db799b0766dc1607a9a0821d6df66fa194fc2c391c7a0d3335ccc8 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=2a783dbb3d348516f647efb837fccdb0917de008705c142144fbd6b8a9fd1b03 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=0bcd5fba467acee497220a99085663e085706caf4d3b93ea28b865d3879a5c78 -->
-<!-- contract-baseline: frozen-plan-git-identity.md sha256=a36055d171989130aa625df16866fcafdcaa5d7aa01a942041ae3a88c2323ed4 -->
-<!-- contract-baseline: remote-storage.md sha256=bb7ec5224ec46daf389293c4504236816ba05c58e3fefb63e721dcbad846556d -->
-<!-- contract-baseline: experiment-expansion.md sha256=4fcbd2e40e16651f697544f41923d331d04b99e631b6072e42fbcad96cafcc98 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=16d545bcdb3873db34a5aab04c4e1d4273c2f6b75c1cebd4a7e3a5574db81488 -->
-<!-- contract-baseline: stage-reuse.md sha256=30345396844be978a004167e27af5fc6b38e83dbc32a3b19a94e0ed030d89ed8 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=728758e2ffe67b5aba4d6a2b7d09a682090bbb48e429645045ca694b43796348 -->
-<!-- contract-baseline: research-memory-roadmap.md sha256=df705a3646fc1ed81bd36564477b06650ccd465a01d7ecfa74affa411d7e8eb4 -->
+<!-- contract-baseline: project-data-root.md sha256=7a45e84116ade463f23150baf95b052d01b0c75c7ed93a82124ea70f45d0b8d7 -->
+<!-- contract-baseline: module-ownership.md sha256=dc6ae1ee057dd594435bcc2444c5838c828b0475fb6a27f97711fcbf4bbf4d92 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=2e07cf13c901ae5dfc1d684bb4a7d42a46a141610187654ac7a35f4e2ed9a13c -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=70ea937d7f8a51b14f848bcfa2a3ad9ca3a31714daf08809a341bde0a4e6b7b7 -->
+<!-- contract-baseline: external-input-roots.md sha256=34fd4a5112f8d1558880636cd0752144a1f5cee062bb193fc8bdcd1ff6819d07 -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=7289fe8b145abf492faf766bea19830aacb12710fff3e58334314043fe841058 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=2ba326fb38f504435bc609794a7ccf8892b291a054e1a84b8d076522506f0458 -->
+<!-- contract-baseline: frozen-plan-git-identity.md sha256=4da2149e8297fc29ac6d7db4cfcf874457f724e5b7a02f2aa0af66ab32451a9b -->
+<!-- contract-baseline: remote-storage.md sha256=249b977ff7525b0d5e2365544042fcb0f328a98465edee36109babe503b0d11c -->
+<!-- contract-baseline: experiment-expansion.md sha256=1f2ee3371482e73118cd7e91c8ee9fd8097eeda4c1159f63140af7a361e3b53f -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=61b3f30e9f5230dd4148a9c759e1a4ade34c5b42cadcdc71adf4b589e29456cc -->
+<!-- contract-baseline: stage-reuse.md sha256=8f7bb57e8c7b839beda46aa2e2d24e3ed3f5d8cb9330856c272b53c82e0d5121 -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=6d0009516e08c3200b49f146b28d6c1dc1a0ccf61cbc1c52d894f030046e1780 -->
+<!-- contract-baseline: research-memory-roadmap.md sha256=56d008dd6a5ee86eb6a4de087a3e03c8a1a34be8eb2ffbfe21674f650f9f4e7e -->
 
 ## 4. Specification-system review
 
@@ -677,18 +677,17 @@ working-file edit must leave the immutable copy retrievable.
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.tested state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
 - [x] Validate marked worked examples and require current, proposed-change, and
-      integrated DAGs. Reject unconstructed Section 4 models and incomplete
-      graph structure.
+      integrated DAGs. Reject undeclared or unused example-inventory symbols
+      and incomplete graph structure.
       <!-- pair-block: P0-CRT-03 -->
       <!-- implements: CRT-03 -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=implemented owner=src/viper/_contract_traceability.py:validate_contract_example -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.diagram.palette state=implemented owner=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented owner=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.documented state=implemented owner=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
-- [ ] Apply the three-DAG and complete worked-example format to each remaining
-      pending contract. Extend the documentation test from
-      `MASTER_PHASE_ZERO_CONTRACTS` to `IMPLEMENTATION_CONTRACTS` before Master Phase 0
-      closes.
+- [x] Apply the three-DAG, explicit example-symbol inventory, and complete
+      worked-example format to every implementation contract. Validate
+      `IMPLEMENTATION_CONTRACTS` as one closed set before Master Phase 0 closes.
       <!-- pair-block: P0-CRT-04 -->
 - [x] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
       compare its requirement and phase coverage with the current documentation
