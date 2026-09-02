@@ -271,7 +271,11 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "Realized": "proposed",
         "Resolved": "proposed",
         "Target": "proposed",
+        "Tests": "proposed",
+        "Prior": "proposed",
         "Check": "proposed",
+        "Commit": "proposed",
+        "Acceptance": "proposed",
     },
     {
         "Requirement": "contract",
@@ -285,9 +289,12 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "Impact": "evidence",
         "Execute": "implementation",
         "Freeze": "implementation",
+        "Commit": "implementation",
         "Resolved": "output",
         "Tests": "implementation",
+        "Prior": "output",
         "Check": "output",
+        "Acceptance": "output",
     },
 )
 SYSTEM_IMPACT_DAG_EDGES = (
@@ -299,6 +306,7 @@ SYSTEM_IMPACT_DAG_EDGES = (
     },
     {
         ("Plan", "Freeze"),
+        ("Plan", "Check"),
         ("Identity", "Baseline"),
         ("Baseline", "Impact"),
         ("Freeze", "Resolved"),
@@ -309,6 +317,12 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Realized", "Target"),
         ("Impact", "Check"),
         ("Target", "Check"),
+        ("Tests", "Check"),
+        ("Prior", "Check"),
+        ("Freeze", "Commit"),
+        ("Check", "Commit"),
+        ("Commit", "Acceptance"),
+        ("Check", "Acceptance"),
     },
     {
         ("Requirement", "Target"),
@@ -335,6 +349,12 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Impact", "Check"),
         ("Block", "Tests"),
         ("Tests", "Check"),
+        ("Prior", "Check"),
+        ("Freeze", "Check"),
+        ("Freeze", "Commit"),
+        ("Check", "Commit"),
+        ("Commit", "Acceptance"),
+        ("Check", "Acceptance"),
     },
 )
 
@@ -1951,6 +1971,7 @@ def test_system_impact_consumes_the_closed_ctg_plan() -> None:
         "check_plan(selected CTG, G0, G1, test results) -> PlanCheck"
         in contract
     )
+    assert "accept(repository root, PlanCheck, revision) -> Acceptance" in contract
     assert "accepts the closed CTG without reparsing" in crt_guide
 
     definition = next(
@@ -1961,6 +1982,21 @@ def test_system_impact_consumes_the_closed_ctg_plan() -> None:
     manifest = tomllib.loads(definition.group("manifest"))
     assert manifest["depends_on"] == ["P0-SIG-03"]
     assert "src/viper/system_impact.py:check_plan" in manifest["targets"]
+    assert "src/viper/system_impact.py:accept" in manifest["targets"]
+
+
+def test_contract_target_declaration_has_one_meaning() -> None:
+    """Keep the target payload boundary identical in contract and pair guide."""
+    description = (
+        "            "
+        '"Authored PairBlock payload containing the desired declaration for "\n'
+        '            "an add or update, or the exact removal marker for a removal."'
+    )
+
+    assert description in CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
+    assert description in CONTRACT_TRACEABILITY_PAIR_CODING.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_system_impact_check_has_one_bounded_proof_obligation() -> None:
@@ -2397,6 +2433,7 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
         "TargetCheck",
         "TestResult",
         "PlanCheck",
+        "Acceptance",
     ):
         assert f"class {model}(ProtocolModel)" in specification
     for operation in ("imports", "calls", "constructs", "inherits", "reads", "writes"):
@@ -2408,7 +2445,7 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
         "### Guided work and strict closure",
         "The default guided boundary is one contract session",
         "Every changed declaration receives one result",
-        "test_plan_check_rejects_post_freeze_edit",
+        "test_acceptance_binds_commit_to_checked_source",
     ):
         assert boundary in specification
 
@@ -2819,6 +2856,7 @@ def test_system_impact_rule_owners_match_the_bounded_check() -> None:
         "src/viper/system_impact.py:CodeQLIdentity",
         "src/viper/system_impact.py:inspect_plan",
         "src/viper/system_impact.py:check_plan",
+        "src/viper/system_impact.py:accept",
         "tests/test_system_impact.py:test_committed_manifest_rename",
     }
     retired_owners = {

@@ -324,11 +324,11 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=6f1a2982083770e069c8a0ca0cfcb4025270ba35ea490666c435367eeb903999 -->
+<!-- contract-baseline: contract-traceability.md sha256=95ea7e9104a87134eb612172bc593b4e108f73ca9d8eb0ee5dc0085f11178fea -->
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
-<!-- contract-baseline: system-impact-compiler.md sha256=e1a7eeecdc926656f65a4fc36cb04362aab96fe577fcc4742d7ab444b2c432e5 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=d092033a70eb3dcca13d97e689656aeca6f70239f3d1e1127be178e972437a02 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
 <!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->
@@ -808,16 +808,17 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_plan_targets_resolve_and_report_dependents -->
 - [ ] Freeze the selected PairBlocks and candidate source once, analyze that
       snapshot with the same CodeQL identity, check every planned transition,
-      record each focused `TestResult`, and reject any unplanned declaration or
-      post-freeze edit.
+      record each focused `TestResult`, validate prior dependency acceptance,
+      reject any unplanned declaration, and bind the passing check to the
+      commit containing the checked source.
       <!-- pair-block: P0-SIG-04 -->
       <!-- implements: SIG-03 -->
       <!-- verifies: SIG-03 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.plan.realized state=planned owner=src/viper/system_impact.py:check_plan -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=planned owner=src/viper/system_impact.py:check_plan -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=planned owner=src/viper/system_impact.py:accept -->
       <!-- contract-verification: requirement=SIG-03 rule=system.plan.realized state=planned test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
-      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
-      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_rejects_post_freeze_edit -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_requires_tests_dependencies_and_digest -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source -->
 - [ ] Replay the committed `model_support` to `models` migration and one
       completed VIPER PairBlock against their exact Git diffs.
       <!-- pair-block: P0-SIG-05 -->

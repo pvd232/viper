@@ -986,8 +986,8 @@ class ContractTarget(ProtocolModel):
     )
     declaration: DeclarationRef = Field(
         description=(
-            "Authored pair-edit payload for an add or update, or the exact "
-            "removal marker for a removal."
+            "Authored PairBlock payload containing the desired declaration for "
+            "an add or update, or the exact removal marker for a removal."
         )
     )
 

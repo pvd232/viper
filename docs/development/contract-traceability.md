@@ -444,8 +444,8 @@ class ContractTarget(ProtocolModel):
     )
     declaration: DeclarationRef = Field(
         description=(
-            "Exact pair-edit code required for an add or update, or the exact "
-            "removal marker required for a removal."
+            "Authored PairBlock payload containing the desired declaration for "
+            "an add or update, or the exact removal marker for a removal."
         )
     )
 
@@ -537,10 +537,10 @@ class ContractTraceabilityGraph(ProtocolModel):
 
 `ContractTarget.declaration` locates the authored PairBlock payload. For an
 `add` or `update`, it covers the associated `python pair-edit` fence. For a
-`remove`, it covers the associated removal marker. It does not claim that the
-whole fence is one Python declaration. The System Impact Check later resolves
-the target's qualified symbol inside that payload and hashes only the exact
-declaration bytes.
+`remove`, it covers the associated removal marker. The reference covers the
+complete payload rather than one Python declaration. The System Impact Check
+later resolves the target's qualified symbol inside that payload and hashes
+only the exact declaration bytes.
 
 `RepoSymbolRef.symbol` uses the qualified name found in the named file. A
 module-level function uses its function name. A method uses
