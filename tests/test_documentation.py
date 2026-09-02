@@ -263,10 +263,13 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "Gap": "gap",
     },
     {
+        "Plan": "proposed",
+        "Freeze": "proposed",
         "Identity": "proposed",
         "Baseline": "proposed",
         "Impact": "proposed",
         "Realized": "proposed",
+        "Resolved": "proposed",
         "Target": "proposed",
         "Check": "proposed",
     },
@@ -281,6 +284,8 @@ SYSTEM_IMPACT_DAG_ROLES = (
         "G1": "evidence",
         "Impact": "evidence",
         "Execute": "implementation",
+        "Freeze": "implementation",
+        "Resolved": "output",
         "Tests": "implementation",
         "Check": "output",
     },
@@ -293,10 +298,14 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Source", "Gap"),
     },
     {
+        ("Plan", "Freeze"),
         ("Identity", "Baseline"),
         ("Baseline", "Impact"),
+        ("Freeze", "Resolved"),
+        ("Freeze", "Realized"),
         ("Identity", "Realized"),
-        ("Baseline", "Target"),
+        ("Baseline", "Resolved"),
+        ("Resolved", "Target"),
         ("Realized", "Target"),
         ("Impact", "Check"),
         ("Target", "Check"),
@@ -314,9 +323,13 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("CTG", "G0"),
         ("G0", "Impact"),
         ("Block", "Execute"),
-        ("Execute", "G1"),
+        ("Execute", "Freeze"),
+        ("CTG", "Freeze"),
+        ("Freeze", "G1"),
+        ("Freeze", "Resolved"),
         ("CodeQL", "G1"),
         ("CTG", "Check"),
+        ("Resolved", "Check"),
         ("G0", "Check"),
         ("G1", "Check"),
         ("Impact", "Check"),
@@ -1662,7 +1675,7 @@ def test_system_impact_check_is_the_single_active_specification() -> None:
     for required_boundary in (
         "validated ContractTraceabilityGraph",
         "CodeQL baseline source graph",
-        "CodeQL realized source graph",
+        "CodeQL candidate source graph",
         "reject unplanned source changes",
     ):
         assert required_boundary in text
@@ -1934,7 +1947,10 @@ def test_system_impact_consumes_the_closed_ctg_plan() -> None:
 
     assert "compile_contract_traceability() -> closed CTG plan" in contract
     assert "analyze_source(R0, K) -> G0 + receipt" in contract
-    assert "check_plan(CTG, G0, G1, test results) -> PlanCheck" in contract
+    assert (
+        "check_plan(selected CTG, G0, G1, test results) -> PlanCheck"
+        in contract
+    )
     assert "accepts the closed CTG without reparsing" in crt_guide
 
     definition = next(
@@ -2374,14 +2390,25 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
         "CodeQLReceipt",
         "SourceNode",
         "SourceEdge",
+        "SourceSnapshot",
         "SourceGraph",
         "Impact",
+        "ResolvedContractTarget",
         "TargetCheck",
+        "TestResult",
         "PlanCheck",
     ):
         assert f"class {model}(ProtocolModel)" in specification
     for operation in ("imports", "calls", "constructs", "inherits", "reads", "writes"):
         assert f'"{operation}"' in specification
+    for boundary in (
+        "start_col: int",
+        "end_col: int",
+        "def extract_declaration_bytes(",
+        "### Guided work and strict closure",
+        "test_plan_check_rejects_post_freeze_edit",
+    ):
+        assert boundary in specification
     for retired in ("SystemGraph", "ContractDelta", "PropagationPlan", "SCC"):
         assert f"class {retired}" not in specification
 
@@ -2763,17 +2790,18 @@ def test_wheel_smoke_gates_use_the_public_module_contract() -> None:
 
 
 def test_system_impact_status_matches_the_master_checklist() -> None:
-    """Keep the approved replacement state distinct from implementation."""
+    """Keep the draft replacement state distinct from implementation."""
     specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
 
     assert (
-        "**Contract status:** approved replacement design; implementation pending."
+        "**Contract status:** draft replacement design; acceptance-boundary update"
         in specification
     )
     assert (
         "| [System Impact Check](system-impact-compiler.md) "
-        "| Approved replacement design; implementation pending |" in checklist
+        "| Draft replacement design; acceptance-boundary update pending review |"
+        in checklist
     )
 
 

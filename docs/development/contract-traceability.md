@@ -10,7 +10,8 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** implemented through `CRT-05`; `CRT-06` approved.
+**Contract status:** implemented through `CRT-05`; `CRT-06` draft pending
+review of the complete target-to-PairBlock closure.
 
 These requirements bind the contract to the master checklist:
 
@@ -60,7 +61,7 @@ requirement
 requirement
 -> contract target
 -> PairBlock
--> exact edit and gate
+-> authored edit and gate
 ```
 
 Each link names an exact file and symbol. While a contract remains planned, the
@@ -534,10 +535,12 @@ class ContractTraceabilityGraph(ProtocolModel):
     )
 ```
 
-`ContractTarget.declaration` does not describe a source location in general.
-It identifies the exact authored bytes that state the desired source value. For
-an `add` or `update`, those bytes are the associated `python pair-edit` block.
-For a `remove`, those bytes are the associated removal marker.
+`ContractTarget.declaration` locates the authored PairBlock payload. For an
+`add` or `update`, it covers the associated `python pair-edit` fence. For a
+`remove`, it covers the associated removal marker. It does not claim that the
+whole fence is one Python declaration. The System Impact Check later resolves
+the target's qualified symbol inside that payload and hashes only the exact
+declaration bytes.
 
 `RepoSymbolRef.symbol` uses the qualified name found in the named file. A
 module-level function uses its function name. A method uses
@@ -590,10 +593,10 @@ colon after the repository path and constructs `RepoSymbolRef`.
 
 `CRT-06` derives `RuleEdge.block_id` from the `pair-block` marker in the same
 checklist checkbox. Each PairBlock target receives one marker immediately
-before the exact code or removal declaration that owns it:
+before the code or removal declaration that owns it:
 
 ```html
-<!-- contract-target: block=P0-MOD-01 action=add target=src/viper/verification/models.py:__all__ -->
+<!-- contract-target: requirements=MOD-01 action=add target=src/viper/verification/models.py:__all__ -->
 ```
 
 ```python contract-target
@@ -611,10 +614,12 @@ __all__ = [
 ]
 ```
 
-The containing PairBlock supplies `requirements`. The marker supplies
-`block_id`, `action`, and `target`. The following fenced block supplies
-`declaration`. A removal uses the same marker followed by
-`<!-- contract-remove -->`; its marker bytes become the declaration evidence.
+The marker supplies `requirements`, `action`, and `target`. The containing
+PairBlock supplies `block_id`; the compiler rejects a marker outside a block.
+The following file-separated fence supplies `declaration`. Several consecutive
+markers may name declarations in the same fence. A removal uses the same
+marker followed by `<!-- contract-remove -->`; those marker bytes become the
+declaration evidence.
 
 The implemented `contract-symbols` and `contract-example-symbols` markers remain
 active only until `P0-CRT-07` migrates every PairBlock target. `CRT-06` then
@@ -819,7 +824,7 @@ target = ContractTarget(
     ),
     declaration=declaration_ref(
         Path("docs/development/contract-traceability.md"),
-        "contract-target: block=P0-MOD-01",
+        "contract-target: requirements=MOD-01",
     ),
 )
 
@@ -929,7 +934,7 @@ three:
 3. parse checklist implementation and verification links
 4. validate complete contract-symbol inventories and worked examples
 5. validate planned locations and implemented repository symbols
-6. parse PairBlock manifests and their exact target declarations
+6. parse PairBlock manifests and their authored target declarations
 7. attach each rule edge and contract target to one PairBlock
 8. validate target coverage and the acyclic PairBlock dependency graph
 ```
@@ -953,7 +958,9 @@ It then applies these cardinality rules:
 11. Every PairBlock target has exactly one `ContractTarget` in that block.
 12. Every `RuleEdge.block_id` resolves to one PairBlock whose requirements
     contain the rule's requirement.
-13. Every implementation edge target appears in its PairBlock's `targets`.
+13. Each implementation edge resolves to a block containing its rule's
+    requirement and at least one `ContractTarget` for that requirement. The
+    implementation owner need not itself change.
 14. Every verification edge target appears in its PairBlock's `tests`.
 15. Every PairBlock dependency resolves to one known block, and the dependency
     relation is acyclic.
@@ -993,7 +1000,7 @@ machine's absolute checkout path.
 | `contract.declaration.anchored` <!-- verifier-rule: contract.declaration.anchored requirement=CRT-04 --> | Every requirement, rule, and edge retains the exact declaration path, line span, and SHA-256 digest used to reconstruct it. |
 | `contract.symbol.complete` <!-- verifier-rule: contract.symbol.complete requirement=CRT-05 --> | Until `CRT-06` migration closes, each contract declares one sorted, disjoint `contract-symbols` inventory and every `contract-example-symbols` entry belongs to it. |
 | `contract.target.complete` <!-- verifier-rule: contract.target.complete requirement=CRT-06 --> | Every PairBlock target has exactly one requirement-owned `ContractTarget` in that block, with an action and exact declaration. |
-| `contract.block.complete` <!-- verifier-rule: contract.block.complete requirement=CRT-06 --> | Every rule edge resolves to one PairBlock; implementation targets occur in `PairBlock.targets`; verification targets occur in `PairBlock.tests`; and every referenced requirement belongs to the block. |
+| `contract.block.complete` <!-- verifier-rule: contract.block.complete requirement=CRT-06 --> | Every rule edge resolves to one PairBlock whose requirements contain the rule's requirement; each implementation block contains at least one target for that requirement; and every verification target occurs in `PairBlock.tests`. |
 | `contract.block.acyclic` <!-- verifier-rule: contract.block.acyclic requirement=CRT-06 --> | Every dependency resolves to a known PairBlock and the complete dependency relation is acyclic. |
 
 These named rules are logical entities only after the parser reads their

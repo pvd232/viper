@@ -10,8 +10,8 @@ The identifier for this subsystem is `CRT`.
 
 ## 1. Status and boundary
 
-**Guide status:** implemented through `P0-CRT-05`; the approved `CRT-06`
-extension is ready for pair implementation.
+**Guide status:** implemented through `P0-CRT-05`; the draft `CRT-06`
+extension remains unimplemented and pending review.
 
 The compiler operations exist in `src/viper/_contract_traceability.py`, their
 focused tests exist in `tests/test_contract_traceability.py`, and every
@@ -986,8 +986,8 @@ class ContractTarget(ProtocolModel):
     )
     declaration: DeclarationRef = Field(
         description=(
-            "Exact pair-edit code required for an add or update, or the exact "
-            "removal marker required for a removal."
+            "Authored pair-edit payload for an add or update, or the exact "
+            "removal marker for a removal."
         )
     )
 
@@ -1135,9 +1135,19 @@ def _validate_plan(
             raise ContractTraceabilityError("RuleEdge names unknown PairBlock")
         if rule.requirement_id not in block.requirements:
             raise ContractTraceabilityError("RuleEdge requirement is absent from PairBlock")
-        collection = block.targets if edge.kind == "implementation" else block.tests
-        if edge.target not in collection:
-            raise ContractTraceabilityError("RuleEdge target is absent from PairBlock")
+        if edge.kind == "implementation":
+            if not any(
+                item.block_id == block.block_id
+                and rule.requirement_id in item.requirements
+                for item in targets
+            ):
+                raise ContractTraceabilityError(
+                    "implementation block lacks a target for the rule requirement"
+                )
+        elif edge.target not in block.tests:
+            raise ContractTraceabilityError(
+                "verification target is absent from PairBlock.tests"
+            )
 ```
 
 Stop after the models and closure validator import cleanly. The next block owns
@@ -1171,13 +1181,15 @@ _PAIR_BLOCK = re.compile(
     re.DOTALL,
 )
 _TARGET_MARKER = re.compile(
-    r"<!-- contract-target: action=(?P<action>add|update|remove) "
+    r"<!-- contract-target: requirements=(?P<requirements>[^ ]+) "
+    r"action=(?P<action>add|update|remove) "
     r"target=(?P<target>[^ ]+) -->"
 )
 _PAIR_EDIT_FENCE = re.compile(
     r"```python pair-edit\\n(?P<body>.*?)\\n```",
     re.DOTALL,
 )
+_REMOVE_MARKER = re.compile(r"<!-- contract-remove -->")
 _CHECKBOX = re.compile(
     r"^- \\[[ xX]\\] .*?(?=^- \\[[ xX]\\] |^### |^## |\\Z)",
     re.MULTILINE | re.DOTALL,
@@ -1225,16 +1237,27 @@ def _parse_pair_blocks(
             body = match.group("body")
             target_markers = tuple(_TARGET_MARKER.finditer(body))
             for target_marker in target_markers:
-                declaration = _PAIR_EDIT_FENCE.search(body, target_marker.end())
-                next_marker = _TARGET_MARKER.search(body, target_marker.end())
-                if declaration is None or (
-                    next_marker is not None
-                    and next_marker.start() < declaration.start()
-                ):
-                    raise ContractTraceabilityError(
-                        "ContractTarget lacks its following pair-edit declaration"
-                    )
+                action = target_marker.group("action")
+                if action == "remove":
+                    declaration = _REMOVE_MARKER.search(body, target_marker.end())
+                    if declaration is None:
+                        raise ContractTraceabilityError(
+                            "removed ContractTarget lacks contract-remove"
+                        )
+                else:
+                    declaration = _PAIR_EDIT_FENCE.search(body, target_marker.end())
+                    if declaration is None:
+                        raise ContractTraceabilityError(
+                            "ContractTarget lacks its following pair-edit declaration"
+                        )
                 target = _parse_repo_symbol(target_marker.group("target"))
+                target_requirements = tuple(
+                    target_marker.group("requirements").split(",")
+                )
+                if not set(target_requirements) <= set(requirements):
+                    raise ContractTraceabilityError(
+                        "ContractTarget requirement is absent from PairBlock"
+                    )
                 if target not in block_targets:
                     raise ContractTraceabilityError(
                         "ContractTarget is absent from PairBlock.targets"
@@ -1243,9 +1266,9 @@ def _parse_pair_blocks(
                 declaration_end = match.start("body") + declaration.end()
                 targets.append(
                     ContractTarget(
-                        requirements=requirements,
+                        requirements=target_requirements,
                         block_id=block.block_id,
-                        action=target_marker.group("action"),
+                        action=action,
                         target=target,
                         declaration=_declaration_ref(
                             root,

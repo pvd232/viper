@@ -233,12 +233,15 @@ baseline source + pinned CodeQL identity
 -> SourceGraph G0 and receipt
 -> reverse dependencies of the declared targets
 
-execute the existing PairBlocks and focused tests
--> realized source
+edit the selected PairBlocks and source while running focused tests
+-> candidate source
 
-realized source + same CodeQL identity
+freeze selected plan + candidate source once
+-> plan digest + immutable candidate snapshot
+
+candidate snapshot + same CodeQL identity
 -> SourceGraph G1 and receipt
--> check every target action and declaration
+-> extract and check every exact target declaration
 -> reject changed declarations absent from the plan
 ```
 
@@ -266,10 +269,10 @@ scheduled phase and dependency order.
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Implemented through `CRT-05`; `CRT-06` approved | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
+| [Contract Traceability](contract-traceability.md) | Implemented through `CRT-05`; `CRT-06` draft pending review | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Approved design; implementation pending | One defining module for API operations, verification operations, and verification types |
-| [System Impact Check](system-impact-compiler.md) | Approved replacement design; implementation pending | Pinned CodeQL observations of baseline and realized source, reverse-dependency reporting, target-transition checks, and rejection of unplanned source changes |
+| [System Impact Check](system-impact-compiler.md) | Draft replacement design; acceptance-boundary update pending review | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, reverse-dependency reporting, and rejection of unplanned source changes |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -321,11 +324,11 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=64ae23cc581f04ff0d4aa45c28fee6d45ba6f9a8b323ba87ffcef9ceaebc85ed -->
+<!-- contract-baseline: contract-traceability.md sha256=6f1a2982083770e069c8a0ca0cfcb4025270ba35ea490666c435367eeb903999 -->
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
-<!-- contract-baseline: system-impact-compiler.md sha256=a340ee6a877a1d0281fa32717f796b79a4cb38ee4ae4444f3dc9f5baf95c53c2 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=5426e1d1a34d519bb3626b132157365275dfdc6c94135ca9079192238f9d0ae7 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
 <!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->
@@ -371,7 +374,7 @@ with `59 passed`.
 | Value | Declaration | Frozen record | Runtime record | Verifier or consumer |
 | --- | --- | --- | --- | --- |
 | Project root | `viper init ROOT` or explicit `root=` | Local `viper.toml` marker; absolute path omitted from protocol identity | One resolved absolute root per operation | Root resolver, path-boundary checks, local store, and every local consumer |
-| System impact | Baseline revision, realized revision, pinned `CodeQLIdentity`, and closed `ContractTraceabilityGraph` | Two `SourceGraph` records and receipts, one `Impact`, and one `PlanCheck` | CodeQL source extraction, reverse reachability from declared targets, action and declaration comparison, and unexpected-change detection | Same-identity receipts, exact target transitions, no unplanned declaration changes, and passing PairBlock tests |
+| System impact | Baseline commit, selected PairBlocks, frozen candidate source, pinned `CodeQLIdentity`, and closed `ContractTraceabilityGraph` | Two `SourceGraph` records and receipts, one `Impact`, resolved target digests, and one `PlanCheck` | Exact AST declaration extraction, CodeQL source extraction, reverse reachability, action and declaration comparison, and unexpected-change detection | Same-identity receipts, frozen-plan digest, exact target transitions, no unplanned declaration changes, and passing PairBlock tests |
 | Local dataset | `ExternalInputDraft` | `ExternalInputRef` | `ResolvedExternalInputRef` plus stage snapshot | Stage worker and local-root verifier |
 | HTTP dataset | `HttpRequestSpec` plus file artifact draft | `DownloadSpec` | `ResolvedHttpRetrieval` and `ResolvedSingleFileArtifact` sharing one file | Download verifier and later input compiler |
 | Same-run artifact | `StageDraft.artifacts[name]` | `FutureInputRef` | `ResolvedFutureInputRef` | Materializer and input verifier |
@@ -557,7 +560,7 @@ Master Phase 0 establishes the project root first. The
 `ContractTraceabilityGraph` then resolves contract requirements to source and
 tests inside that root. Module ownership gives each public symbol one defining
 module. The System Impact Check compares the closed CTG plan with pinned CodeQL
-observations of the baseline and realized source. Master Phases 2
+observations of the baseline and frozen candidate source. Master Phases 2
 and 4 may occur on separate branches after Master Phase 1; both feed Master
 Phase 5. Master Phases 3 and 6 both feed Master Phase 7.
 
@@ -602,7 +605,7 @@ later local operation resolves that same root. Every contract requirement then
 has a named rule, exact implementation owner, and exact test.
 Public API and verification imports identify their defining modules. VIPER can
 analyze that source tree with one pinned CodeQL identity, report baseline
-dependents of the declared targets, and reject a realized source change that
+dependents of the declared targets, and reject a candidate source change that
 the CTG plan did not authorize.
 
 ### 7.1 Project root
@@ -773,30 +776,33 @@ the guide owns their file-separated code.
 Production source analysis lives in `src/viper/_system_impact/codeql.py`.
 The public records and checks live in `src/viper/system_impact.py`.
 
-- [ ] Add `CodeQLIdentity`, `CodeQLReceipt`, `SourceNode`, `SourceEdge`,
-      and `SourceGraph` with canonical serialization.
+- [ ] Add `CodeQLIdentity`, `SourceSnapshot`, `CodeQLReceipt`, `SourceNode`,
+      `SourceEdge`, and `SourceGraph` with canonical serialization.
       <!-- pair-block: P0-SIG-01 -->
       <!-- implements: SIG-01, SIG-05 -->
       <!-- verifies: SIG-01 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.source.canonical state=planned owner=src/viper/system_impact.py:SourceGraph -->
       <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=planned test=tests/test_system_impact.py:test_source_graph_is_canonical -->
       <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.identity state=planned owner=src/viper/system_impact.py:CodeQLIdentity -->
-- [ ] Analyze one exact Git revision with the pinned query pack and retain the
-      command, identity, revision, exit status, database digest, and decoded-row
-      digest.
+- [ ] Analyze one immutable source snapshot with the pinned query pack and
+      retain the command, identity, source digest, optional commit, exit status,
+      database digest, and decoded-row digest.
       <!-- pair-block: P0-SIG-02 -->
       <!-- verifies: SIG-05 -->
       <!-- contract-verification: requirement=SIG-05 rule=system.codeql.identity state=planned test=tests/test_system_impact.py:test_codeql_receipt_binds_revision_and_identity -->
-- [ ] Resolve every CTG target against the baseline graph and report its reverse
-      dependencies without generating or rewriting any PairBlock.
+- [ ] Resolve every selected CTG target against the baseline graph; extract the
+      exact authored declaration bytes, including decorators and UTF-8 byte
+      columns; and report reverse dependencies without rewriting any PairBlock.
       <!-- pair-block: P0-SIG-03 -->
       <!-- implements: SIG-02 -->
       <!-- verifies: SIG-02 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=planned owner=src/viper/system_impact.py:inspect_plan -->
+      <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=planned test=tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes -->
       <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_plan_targets_resolve_and_report_dependents -->
-- [ ] Analyze the realized revision with the same CodeQL identity. Check every
-      planned transition and reject every changed declaration absent from the
-      CTG target set.
+- [ ] Freeze the selected PairBlocks and candidate source once, analyze that
+      snapshot with the same CodeQL identity, check every planned transition,
+      record each focused `TestResult`, and reject any unplanned declaration or
+      post-freeze edit.
       <!-- pair-block: P0-SIG-04 -->
       <!-- implements: SIG-03 -->
       <!-- verifies: SIG-03 -->
@@ -804,6 +810,7 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=planned owner=src/viper/system_impact.py:check_plan -->
       <!-- contract-verification: requirement=SIG-03 rule=system.plan.realized state=planned test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
       <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_rejects_post_freeze_edit -->
 - [ ] Replay the committed `model_support` to `models` migration and one
       completed VIPER PairBlock against their exact Git diffs.
       <!-- pair-block: P0-SIG-05 -->
