@@ -169,13 +169,22 @@ its recorded digest before running those tests.
 
 The check reports baseline dependents for review. It accepts the implementation
 only when every declared target has the required after-state, every PairBlock
-test passes, and no changed source declaration is absent from the closed CTG
-plan. It does not generate a plan or claim complete runtime behavior from
-static analysis.
+test passes, and the closed CTG plan names every changed source declaration.
+The resulting evidence covers statically represented Python declarations.
+Execution tests remain responsible for runtime behavior.
 
 Planned links name exact future symbols. Implemented links must resolve in the
 candidate source tree. Phase closure requires every link to use the implemented
 state.
+
+## Deferred macOS subprocess hardening
+
+- [ ] Remove the local `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround
+  recorded in the [September 3 execution journal](../../workday-09-03/JOURNAL.md).
+  Reproduce the child-side `fork()` crash across the supported Python versions,
+  beginning with `preflight._git_bytes()`. Move subprocess-heavy tests to a
+  clean-process or spawn-compatible launch path. Add a focused macOS regression
+  that fails when a child crashes before `exec()`, then remove the workaround.
 
 The automatic-input contract marks one complete public workflow. Documentation
 tests parse that example and require every planned public constructor. They
