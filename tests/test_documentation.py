@@ -18,8 +18,10 @@ import viper._contract_traceability as traceability
 from viper._contract_traceability import (
     ContractRequirement,
     ContractSymbol,
+    ContractTarget,
     ContractTraceabilityGraph,
     DeclarationRef,
+    PairBlock,
     RepoSymbolRef,
     RuleEdge,
     VerifierRule,
@@ -81,6 +83,8 @@ TRACEABILITY_MODELS = (
     VerifierRule,
     RuleEdge,
     ContractSymbol,
+    ContractTarget,
+    PairBlock,
     ContractTraceabilityGraph,
 )
 
@@ -127,6 +131,10 @@ _CONTRACT_WORKED_EXAMPLE = re.compile(
     re.DOTALL,
 )
 _PYTHON_FENCE = re.compile(r"```python\n(?P<body>.*?)\n```", re.DOTALL)
+_TRACEABILITY_MODEL_FENCE = re.compile(
+    r"```python contract-target\n(?P<body>.*?)\n```",
+    re.DOTALL,
+)
 _CONTRACT_EXPORTS = re.compile(
     r"```python contract-exports\n(?P<body>.*?)\n```",
     re.DOTALL,
@@ -2024,14 +2032,20 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         if block_id.startswith("P0-PDR-"):
             assert body.count("**Context:**") == 1, block_id
         edits = tuple(_PAIR_EDIT.finditer(body))
+        contract_targets = "```python contract-target\n" in body
         edit_tree: ast.Module | None = None
-        if block_id.startswith("P0-SIG-") or block_id in {
-            "P0-PROOF-08",
-            "P0-PROOF-09",
-            "P0-PROOF-10",
-            "P0-PROOF-11",
-            "P0-PROOF-12",
-        }:
+        if (
+            contract_targets
+            or block_id.startswith("P0-SIG-")
+            or block_id
+            in {
+                "P0-PROOF-08",
+                "P0-PROOF-09",
+                "P0-PROOF-10",
+                "P0-PROOF-11",
+                "P0-PROOF-12",
+            }
+        ):
             assert not edits, block_id
             assert _PAIR_PLACEHOLDER.search(definition.group("body")) is None
         else:
@@ -2545,7 +2559,7 @@ def test_contract_traceability_model_block_matches_runtime() -> None:
     section = text.split("## 4. Contract models", maxsplit=1)[1].split(
         "## 5. Execution", maxsplit=1
     )[0]
-    block = _PYTHON_FENCE.search(section)
+    block = _TRACEABILITY_MODEL_FENCE.search(section)
     assert block is not None
 
     tree = ast.parse(block.group("body"))

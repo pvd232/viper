@@ -260,7 +260,14 @@ flowchart TD
 These development-tool records remain outside the experiment protocol and run
 identity.
 
-```python
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-06 action=add target=src/viper/_contract_traceability.py:PairBlockId -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-06 action=add target=src/viper/_contract_traceability.py:TargetAction -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-06 action=add target=src/viper/_contract_traceability.py:ContractTarget -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-06 action=add target=src/viper/_contract_traceability.py:PairBlock -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-06 action=update target=src/viper/_contract_traceability.py:RuleEdge -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-06 action=update target=src/viper/_contract_traceability.py:ContractTraceabilityGraph -->
+
+```python contract-target
 RequirementId = Annotated[
     str,
     Field(pattern=r"^[A-Z]{3}-[0-9]{2}$"),
@@ -271,6 +278,10 @@ VerifierRuleId = Annotated[
 ]
 RuleEdgeKind = Literal["implementation", "verification"]
 TraceState = Literal["planned", "implemented"]
+PairBlockId = Annotated[
+    str,
+    Field(pattern=r"^P[0-9]+-[A-Z]+-[0-9]{2}$"),
+]
 ContractSymbolKind = Literal["model", "alias", "function"]
 ContractSymbolName = Annotated[
     str,
@@ -350,7 +361,7 @@ class VerifierRule(ProtocolModel):
 
 
 class RuleEdge(ProtocolModel):
-    """Connect one verifier rule to an implementation or test."""
+    """Connect one verifier rule to its implementation block or test block."""
 
     kind: RuleEdgeKind = Field(
         description="Relationship from the rule to an implementation or test."
@@ -358,9 +369,8 @@ class RuleEdge(ProtocolModel):
     rule_id: VerifierRuleId = Field(
         description="Verifier rule at the source of this edge."
     )
-    phase: int = Field(
-        ge=0,
-        description="Checklist phase that schedules this relationship.",
+    block_id: PairBlockId = Field(
+        description="PairBlock that owns the target of this relationship."
     )
     declaration: DeclarationRef = Field(
         description="Exact checklist marker that declares this relationship."
@@ -390,39 +400,6 @@ class ContractSymbol(ProtocolModel):
     )
 
 
-class ContractTraceabilityGraph(ProtocolModel):
-    """Store the complete ordered traceability graph."""
-
-    schema_version: Literal[4] = Field(
-        default=4,
-        description="Format version of the serialized traceability graph.",
-    )
-    requirements: tuple[ContractRequirement, ...] = Field(
-        min_length=1,
-        description="Ordered contract requirements represented by the graph.",
-    )
-    rules: tuple[VerifierRule, ...] = Field(
-        min_length=1,
-        description="Ordered verifier rules represented by the graph.",
-    )
-    edges: tuple[RuleEdge, ...] = Field(
-        min_length=1,
-        description="Ordered implementation and verification relationships.",
-    )
-    symbols: tuple[ContractSymbol, ...] = Field(
-        min_length=1,
-        description="Ordered normative symbols inventoried by the contracts.",
-    )
-```
-
-The block above is the implemented `CRT-05` baseline. `CRT-06` replaces
-`ContractSymbol` and `symbols` with the following exact target model:
-
-```python target-model
-PairBlockId = Annotated[
-    str,
-    Field(pattern=r"^P[0-9]+-[A-Z]+-[0-9]{2}$"),
-]
 TargetAction = Literal["add", "update", "remove"]
 
 
@@ -457,16 +434,13 @@ class PairBlock(ProtocolModel):
         description="Stable identifier used by checklist and target records."
     )
     requirements: tuple[RequirementId, ...] = Field(
-        min_length=1,
-        description="Contract requirements implemented by this block."
+        min_length=1, description="Contract requirements implemented by this block."
     )
     targets: tuple[RepoSymbolRef, ...] = Field(
-        min_length=1,
-        description="Repository symbols this block changes."
+        min_length=1, description="Repository symbols this block changes."
     )
     tests: tuple[RepoSymbolRef, ...] = Field(
-        min_length=1,
-        description="Exact pytest functions that observe this block."
+        min_length=1, description="Exact pytest functions that observe this block."
     )
     gate: NonEmptyStr = Field(
         description="Focused command that must pass before the block closes."
@@ -479,55 +453,30 @@ class PairBlock(ProtocolModel):
     )
 
 
-class RuleEdge(ProtocolModel):
-    """Connect one verifier rule to its implementation block or test block."""
-
-    kind: RuleEdgeKind = Field(
-        description="Relationship from the rule to an implementation or test."
-    )
-    rule_id: VerifierRuleId = Field(
-        description="Verifier rule at the source of this edge."
-    )
-    block_id: PairBlockId = Field(
-        description="PairBlock that owns the target of this relationship."
-    )
-    declaration: DeclarationRef = Field(
-        description="Exact checklist marker that declares this relationship."
-    )
-    state: TraceState = Field(
-        description="Whether the referenced symbol is planned or implemented."
-    )
-    target: RepoSymbolRef = Field(
-        description="Repository symbol reached by this relationship."
-    )
-
-
 class ContractTraceabilityGraph(ProtocolModel):
     """Store the complete ordered contract and implementation plan."""
 
     schema_version: Literal[5] = Field(
-        default=5,
-        description="Format version of the serialized traceability graph."
+        default=5, description="Format version of the serialized traceability graph."
     )
     requirements: tuple[ContractRequirement, ...] = Field(
         min_length=1,
-        description="Ordered contract requirements represented by the graph."
+        description="Ordered contract requirements represented by the graph.",
     )
     rules: tuple[VerifierRule, ...] = Field(
         min_length=1,
-        description="Ordered verifier rules represented by the graph."
+        description="Ordered verifier rules represented by the graph.",
     )
     edges: tuple[RuleEdge, ...] = Field(
         min_length=1,
-        description="Ordered implementation and verification relationships."
+        description="Ordered implementation and verification relationships.",
     )
     targets: tuple[ContractTarget, ...] = Field(
-        min_length=1,
-        description="Ordered source changes required by the contracts."
+        min_length=1, description="Ordered source changes required by the contracts."
     )
     blocks: tuple[PairBlock, ...] = Field(
         min_length=1,
-        description="Ordered implementation blocks that apply the source changes."
+        description="Ordered implementation blocks that apply the source changes.",
     )
 ```
 
@@ -580,12 +529,16 @@ cleanup step then removes both fields.
 Marker and TOML values use `path:symbol` strings. The parser splits the first
 colon after the repository path and constructs `RepoSymbolRef`.
 
+The compiler accepts an explicit contract set. It ignores checklist edges whose
+requirement and rule both belong outside that set. An edge that resolves only
+one endpoint fails as a malformed cross-contract reference.
+
 `CRT-06` derives `RuleEdge.block_id` from the `pair-block` marker in the same
 checklist checkbox. Each PairBlock target receives one marker immediately
 before the code or removal declaration that owns it:
 
 ```html
-<!-- contract-target: requirements=MOD-01 block=P0-MOD-01 action=add target=src/viper/verification/models.py:__all__ -->
+<!-- contract-target-example: requirements=MOD-01 block=P0-MOD-01 action=add target=src/viper/verification/models.py:__all__ -->
 ```
 
 ```python contract-target
@@ -606,13 +559,16 @@ __all__ = [
 `ContractTarget.declaration` locates the contract-owned target payload. For an
 `add` or `update`, the payload is the following `python contract-target` fence.
 For a `remove`, the payload is the following `contract-remove` marker.
+Consecutive target markers may share one payload when that payload declares
+several named targets. No prose or unrelated declaration may separate those
+markers from their shared payload.
 
 The marker supplies `requirements`, `block_id`, `action`, and `target`. The
 contract therefore owns the required source transition. The corresponding
-PairBlock must name the same target and reproduce the desired declaration in
-its file-separated `python pair-edit` fence. The CTG compiler rejects a missing
-PairBlock target. The System Impact Check rejects realized source that differs
-from the contract-owned declaration.
+PairBlock must name the same target. The `python contract-target` fence is the
+single code specification for that transition. The CTG compiler rejects a
+missing PairBlock target. The System Impact Check rejects realized source that
+differs from the contract-owned declaration.
 
 The implemented `contract-symbols` and `contract-example-symbols` markers remain
 active only until `P0-CRT-07` migrates every PairBlock target. `CRT-06` then
@@ -946,14 +902,14 @@ It then applies these cardinality rules:
 10. Every `ContractTarget` belongs to at least one declared requirement, names
     one known PairBlock, and appears in that block's `targets`.
 11. Every PairBlock target has exactly one `ContractTarget` in that block.
-12. Every `RuleEdge.block_id` resolves to one PairBlock whose requirements
-    contain the rule's requirement.
-13. Each implementation edge resolves to a block containing its rule's
+12. Every planned `RuleEdge.block_id` resolves to one PairBlock whose
+    requirements contain the rule's requirement.
+13. Each planned implementation edge resolves to a block containing its rule's
     requirement and at least one `ContractTarget` for that requirement. The
     implementation owner need not itself change.
-14. Every verification edge target appears in its PairBlock's `tests`.
-15. Every PairBlock dependency resolves to one known block, and the dependency
-    relation is acyclic.
+14. Every planned verification edge target appears in its PairBlock's `tests`.
+15. Every PairBlock dependency resolves to an active PairBlock or a block named
+    by an implemented edge. The active dependency relation is acyclic.
 
 The compiler sorts requirements by ID, rules by rule ID, implementation links
 by `(requirement_id, rule_id)`, verification links by
@@ -970,9 +926,17 @@ history rather than duplicated historical edit recipes.
 ```toml pair-block
 id = "P0-CRT-06"
 requirements = ["CRT-06"]
-targets = ["src/viper/_contract_traceability.py:ContractTarget", "src/viper/_contract_traceability.py:PairBlock", "src/viper/_contract_traceability.py:RuleEdge", "src/viper/_contract_traceability.py:ContractTraceabilityGraph", "src/viper/_contract_traceability.py:_validate_plan"]
-tests = ["tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage", "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks", "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic"]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies' -q"
+targets = [
+    "src/viper/_contract_traceability.py:PairBlockId",
+    "src/viper/_contract_traceability.py:TargetAction",
+    "src/viper/_contract_traceability.py:ContractTarget",
+    "src/viper/_contract_traceability.py:PairBlock",
+    "src/viper/_contract_traceability.py:RuleEdge",
+    "src/viper/_contract_traceability.py:ContractTraceabilityGraph",
+    "src/viper/_contract_traceability.py:_validate_plan",
+]
+tests = ["tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical", "tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage", "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks", "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic"]
+gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'canonical or contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies' -q"
 depends_on = ["P0-CRT-05"]
 ```
 
@@ -982,7 +946,8 @@ declared once in Section 4. Add this closure validator beside them.
 
 `src/viper/_contract_traceability.py`
 
-```python pair-edit
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-06 action=add target=src/viper/_contract_traceability.py:_validate_plan -->
+```python contract-target
 def _validate_plan(
     requirements: tuple[ContractRequirement, ...],
     rules: tuple[VerifierRule, ...],
@@ -993,6 +958,9 @@ def _validate_plan(
     requirement_ids = {item.requirement_id for item in requirements}
     rule_by_id = {item.rule_id: item for item in rules}
     block_by_id = {item.block_id: item for item in blocks}
+    completed_blocks = {
+        edge.block_id for edge in edges if edge.state == "implemented"
+    }
 
     target_keys = [(item.block_id, item.target) for item in targets]
     if len(target_keys) != len(set(target_keys)):
@@ -1014,7 +982,7 @@ def _validate_plan(
             if (block.block_id, target) not in target_keys:
                 raise ContractTraceabilityError("PairBlock target lacks ContractTarget")
         for dependency in block.depends_on:
-            if dependency not in block_by_id:
+            if dependency not in block_by_id and dependency not in completed_blocks:
                 raise ContractTraceabilityError("PairBlock names unknown dependency")
 
     visiting: set[PairBlockId] = set()
@@ -1027,7 +995,8 @@ def _validate_plan(
             return
         visiting.add(block_id)
         for dependency in block_by_id[block_id].depends_on:
-            visit(dependency)
+            if dependency in block_by_id:
+                visit(dependency)
         visiting.remove(block_id)
         visited.add(block_id)
 
@@ -1036,6 +1005,8 @@ def _validate_plan(
 
     for edge in edges:
         rule = rule_by_id[edge.rule_id]
+        if edge.state == "implemented":
+            continue
         block = block_by_id.get(edge.block_id)
         if block is None:
             raise ContractTraceabilityError("RuleEdge names unknown PairBlock")
@@ -1062,7 +1033,18 @@ def _validate_plan(
 ```toml pair-block
 id = "P0-CRT-07"
 requirements = ["CRT-06"]
-targets = ["src/viper/_contract_traceability.py:_parse_pair_blocks", "src/viper/_contract_traceability.py:_parse_contract_targets", "src/viper/_contract_traceability.py:_parse_rule_edges", "src/viper/_contract_traceability.py:compile_contract_traceability"]
+targets = [
+    "src/viper/_contract_traceability.py:_PAIR_BLOCK",
+    "src/viper/_contract_traceability.py:_TARGET_MARKER",
+    "src/viper/_contract_traceability.py:_TARGET_FENCE",
+    "src/viper/_contract_traceability.py:_REMOVE_MARKER",
+    "src/viper/_contract_traceability.py:_CHECKBOX",
+    "src/viper/_contract_traceability.py:_PAIR_BLOCK_MARKER",
+    "src/viper/_contract_traceability.py:_parse_pair_blocks",
+    "src/viper/_contract_traceability.py:_parse_contract_targets",
+    "src/viper/_contract_traceability.py:_parse_rule_edges",
+    "src/viper/_contract_traceability.py:compile_contract_traceability",
+]
 tests = ["tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage"]
 gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py tests/test_documentation.py -k 'contract_target or pair_block' -q"
 depends_on = ["P0-CRT-06"]
@@ -1074,9 +1056,20 @@ input and migrates contracts one at a time.
 
 `src/viper/_contract_traceability.py`
 
-```python pair-edit
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_PAIR_BLOCK -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_TARGET_MARKER -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_TARGET_FENCE -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_REMOVE_MARKER -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_CHECKBOX -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_PAIR_BLOCK_MARKER -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_parse_pair_blocks -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=add target=src/viper/_contract_traceability.py:_parse_contract_targets -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=update target=src/viper/_contract_traceability.py:_parse_rule_edges -->
+<!-- contract-target: requirements=CRT-06 block=P0-CRT-07 action=update target=src/viper/_contract_traceability.py:compile_contract_traceability -->
+
+```python contract-target
 import tomllib
-from typing import Any
+from typing import Annotated, Any, Literal, Self, cast
 
 
 _PAIR_BLOCK = re.compile(
@@ -1154,21 +1147,22 @@ def _parse_contract_targets(
     for contract in contracts:
         text = contract.read_text(encoding="utf-8")
         markers = tuple(_TARGET_MARKER.finditer(text))
-        for index, marker in enumerate(markers):
-            end = markers[index + 1].start() if index + 1 < len(markers) else len(text)
-            body = text[marker.end():end]
+        for marker in markers:
             action = cast(TargetAction, marker.group("action"))
-            payload = (
-                _REMOVE_MARKER.search(body)
-                if action == "remove"
-                else _TARGET_FENCE.search(body)
-            )
+            payload_pattern = _REMOVE_MARKER if action == "remove" else _TARGET_FENCE
+            payload = payload_pattern.search(text, marker.end())
+
             if payload is None:
                 raise ContractTraceabilityError(
                     "ContractTarget lacks its contract-owned declaration"
                 )
-            start = marker.end() + payload.start()
-            stop = marker.end() + payload.end()
+
+            between = text[marker.end() : payload.start()]
+            if _TARGET_MARKER.sub("", between).strip():
+                raise ContractTraceabilityError(
+                    "ContractTarget is not immediately followed by its declaration"
+                )
+
             targets.append(
                 ContractTarget(
                     requirements=tuple(marker.group("requirements").split(",")),
@@ -1179,8 +1173,8 @@ def _parse_contract_targets(
                         root,
                         contract,
                         text,
-                        start,
-                        stop,
+                        payload.start(),
+                        payload.end(),
                     ),
                 )
             )
@@ -1233,6 +1227,8 @@ def _parse_rule_edges(
                     )
                 requirement_marker = requirement_by_id.get(requirement_id)
                 rule = rule_by_id.get(rule_id)
+                if requirement_marker is None and rule is None:
+                    continue
                 if requirement_marker is None or rule is None:
                     raise ContractTraceabilityError(
                         f"unknown requirement-rule edge: {requirement_id}:{rule_id}"
@@ -1349,21 +1345,358 @@ or checklist entry refers to a separate CRT pair-coding guide.
 ```toml pair-block
 id = "P0-PROOF-08"
 requirements = ["CRT-06"]
-targets = ["tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage", "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks", "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic"]
-tests = ["tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage", "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks", "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic"]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies' -q"
+targets = [
+    "tests/test_contract_traceability.py:_write_fixture",
+    "tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical",
+    "tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage",
+    "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks",
+    "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic",
+    "tests/test_contract_traceability.py:test_contract_traceability_graph_covers_migrated_contracts",
+]
+tests = ["tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage", "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks", "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic", "tests/test_contract_traceability.py:test_contract_traceability_graph_covers_migrated_contracts"]
+gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies or migrated_contracts' -q"
 depends_on = ["P0-CRT-07"]
 ```
 
-**Context:** These tests implement the success and rejection cases in Section
-9. Each test changes one join: target to block, rule edge to block, or block to
-predecessor.
+**Context:** The shared fixture and canonical test must adopt the new graph
+records before the three rejection tests can change one target, rule edge, or
+dependency and observe the exact failed join.
 
 `tests/test_contract_traceability.py`
 
-Add the three named tests using the shared connected repository fixture. Each
-test changes only the declaration named by its rejection case and asserts the
-exact `ContractTraceabilityError` boundary.
+<!-- contract-target: requirements=CRT-06 block=P0-PROOF-08 action=update target=tests/test_contract_traceability.py:_write_fixture -->
+<!-- contract-target: requirements=CRT-06 block=P0-PROOF-08 action=update target=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
+<!-- contract-target: requirements=CRT-06 block=P0-PROOF-08 action=add target=tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage -->
+<!-- contract-target: requirements=CRT-06 block=P0-PROOF-08 action=add target=tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks -->
+<!-- contract-target: requirements=CRT-06 block=P0-PROOF-08 action=add target=tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic -->
+<!-- contract-target: requirements=CRT-06 block=P0-PROOF-08 action=update target=tests/test_contract_traceability.py:test_contract_traceability_graph_covers_migrated_contracts -->
+
+```python contract-target
+def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """Write one connected contract, checklist, source, and test fixture."""
+    contract = tmp_path / "docs/development/example.md"
+    checklist = tmp_path / "docs/development/master-execution-checklist.md"
+    source = tmp_path / "src/owner.py"
+    test = tmp_path / "tests/test_owner.py"
+    for path in (contract, checklist, source, test):
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    source.write_text(
+        "def enforce() -> str:\n    return 'accepted'\n",
+        encoding="utf-8",
+    )
+    test.write_text(
+        "def test_enforce() -> None:\n    assert True\n",
+        encoding="utf-8",
+    )
+    checklist.write_text(
+        dedent(
+            """
+            ## 7. Master Phase 0
+
+            - [x] Compile the example contract.
+              <!-- pair-block: P0-CRT-01 -->
+              [IMPLEMENTATION]
+              [VERIFICATION]
+            """
+        )
+        .replace(
+            "[IMPLEMENTATION]",
+            "<!-- contract-"
+            "implementation: requirement=CRT-01 rule=contract.rule "
+            "state=implemented owner=src/owner.py:enforce -->",
+        )
+        .replace(
+            "[VERIFICATION]",
+            "<!-- contract-"
+            "verification: requirement=CRT-01 rule=contract.rule "
+            "state=implemented test=tests/test_owner.py:test_enforce -->",
+        ),
+        encoding="utf-8",
+    )
+    contract.write_text(
+        dedent(
+            """
+            # Example contract
+
+            ## 1. Status
+
+            | Requirement | Claim |
+            |---|---|
+            [REQUIREMENT_ROW]
+
+            ## 2. Required claim
+
+            The compiler joins the rule to its owner and test.
+
+            ## 3. Current gap
+
+            ### Current DAG
+
+            [MERMAID]
+            flowchart LR
+                A["Requirement"]
+                B["Missing join"]
+                A --> B
+            [END]
+
+            ### Proposed-change DAG
+
+            [MERMAID]
+            flowchart LR
+                C["RuleEdge"]
+                D["Resolved symbol"]
+                C --> D
+            [END]
+
+            ### Integrated DAG
+
+            [MERMAID]
+            flowchart LR
+                A["Requirement"]
+                C["RuleEdge"]
+                D["Resolved symbol"]
+                A --> C
+                C --> D
+            [END]
+
+            ## 4. Contract models
+
+            [PYTHON]
+            class ExampleRecord:
+                def __init__(self, value: str) -> None:
+                    self.value = value
+
+
+            def build_record(value: str) -> ExampleRecord:
+                return ExampleRecord(value)
+            [END]
+
+            <!-- contract-symbols:
+            {"models":["ExampleRecord"],"aliases":[],"functions":["build_record"]}
+            -->
+
+            <!-- contract-example-symbols: ["ExampleRecord", "build_record"] -->
+            <!-- contract-worked-example: start -->
+            [PYTHON]
+            declared = ExampleRecord("declared")
+            built = build_record(declared.value)
+            assert built.value == "declared"
+            [END]
+            <!-- contract-worked-example: end -->
+
+            ## 5. Execution
+
+            The compiler parses the rule.
+
+            ## 6. Persisted evidence
+
+            Canonical graph bytes retain the join.
+
+            ## 7. Verification
+
+            | Rule | Statement |
+            |---|---|
+            [RULE_ROW]
+
+            ## 8. Propagation
+
+            The source and test symbols enter the graph.
+
+            ## 9. Acceptance case
+
+            The accepted case compiles one implementation edge and one
+            verification edge. The rejected case removes or corrupts one exact
+            marker and requires ContractTraceabilityError in pytest.
+
+            ## 10. Implementation order
+
+            Parse declarations before edges.
+
+            <!-- pair-block-definition: P0-CRT-01 -->
+            [PAIR_BLOCK]
+            id = "P0-CRT-01"
+            requirements = ["CRT-01"]
+            targets = ["src/owner.py:enforce"]
+            tests = ["tests/test_owner.py:test_enforce"]
+            gate = "python -m pytest tests/test_owner.py -q"
+            depends_on = []
+            [END]
+
+            [TARGET_MARKER]
+            [TARGET]
+            def enforce() -> str:
+                return "accepted"
+            [END]
+            """
+        )
+        .replace(
+            "[PYTHON]",
+            chr(96) * 3 + "python",
+        )
+        .replace(
+            "[MERMAID]",
+            chr(96) * 3 + "mermaid",
+        )
+        .replace(
+            "[PAIR_BLOCK]",
+            chr(96) * 3 + "toml pair-block",
+        )
+        .replace(
+            "[TARGET]",
+            chr(96) * 3 + "python contract-target",
+        )
+        .replace(
+            "[TARGET_MARKER]",
+            "<!-- contract-"
+            "target: requirements=CRT-01 block=P0-CRT-01 "
+            "action=update target=src/owner.py:enforce -->",
+        )
+        .replace(
+            "[END]",
+            chr(96) * 3,
+        )
+        .replace(
+            "[REQUIREMENT_ROW]",
+            "| CRT-01 <!-- contract-requirement: CRT-01 phase=0 "
+            "test=tests/test_contract_traceability.py --> | Compile one exact rule. |",
+        )
+        .replace(
+            "[RULE_ROW]",
+            "| `contract.rule` <!-- verifier-rule: contract.rule "
+            "requirement=CRT-01 --> | One owner and one test exist. |",
+        ),
+        encoding="utf-8",
+    )
+    return contract, checklist
+
+
+def test_contract_traceability_graph_is_canonical(tmp_path: Path) -> None:
+    """Require stable graph bytes and source-evidenced declarations."""
+    contract, checklist = _write_fixture(tmp_path)
+    contracts = (contract,)
+
+    left = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        contracts,
+    )
+    right = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        contracts,
+    )
+
+    assert left == right
+    assert serialize_contract_traceability(left) == (
+        serialize_contract_traceability(right)
+    )
+    for rule in left.rules:
+        links = tuple(edge for edge in left.edges if edge.rule_id == rule.rule_id)
+        assert sum(edge.kind == "implementation" for edge in links) == 1
+        assert sum(edge.kind == "verification" for edge in links) >= 1
+    assert [block.block_id for block in left.blocks] == ["P0-CRT-01"]
+    assert [target.target.symbol for target in left.targets] == ["enforce"]
+
+    declaration = left.requirements[0].declaration
+    assert declaration.path == "docs/development/example.md"
+    assert declaration.start_line == declaration.end_line
+    original_sha256 = declaration.sha256
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            "test=tests/test_contract_traceability.py",
+            "test=tests/test_changed.py",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    changed = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        contracts,
+    )
+    assert changed.requirements[0].declaration.sha256 != original_sha256
+
+
+def test_contract_targets_require_exact_block_coverage(tmp_path: Path) -> None:
+    """Reject a PairBlock target without one matching ContractTarget."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            "<!-- contract-target: requirements=CRT-01 block=P0-CRT-01 "
+            "action=update target=src/owner.py:enforce -->\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="PairBlock target lacks ContractTarget",
+    ):
+        compile_contract_traceability(tmp_path, checklist, (contract,))
+
+
+def test_rule_edges_match_pair_blocks(tmp_path: Path) -> None:
+    """Reject a verification edge absent from its PairBlock tests."""
+    contract, checklist = _write_fixture(tmp_path)
+    checklist.write_text(
+        checklist.read_text(encoding="utf-8").replace(
+            "state=implemented test=tests/test_owner.py:test_enforce",
+            "state=planned test=tests/test_owner.py:test_enforce",
+        ),
+        encoding="utf-8",
+    )
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            'tests = ["tests/test_owner.py:test_enforce"]',
+            'tests = ["tests/test_owner.py:test_other"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="verification target is absent from PairBlock.tests",
+    ):
+        compile_contract_traceability(tmp_path, checklist, (contract,))
+
+
+def test_pair_block_dependencies_are_acyclic(tmp_path: Path) -> None:
+    """Reject a PairBlock dependency cycle."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            "depends_on = []",
+            'depends_on = ["P0-CRT-01"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="PairBlock dependency cycle",
+    ):
+        compile_contract_traceability(tmp_path, checklist, (contract,))
+
+
+def test_contract_traceability_graph_covers_migrated_contracts() -> None:
+    """Compile every contract migrated to contract-owned PairBlocks."""
+    contracts = (ROOT / "docs/development/contract-traceability.md",)
+    graph = compile_contract_traceability(
+        ROOT,
+        MASTER_CHECKLIST,
+        contracts,
+    )
+
+    assert {requirement.contract for requirement in graph.requirements} == {
+        contract.relative_to(ROOT).as_posix() for contract in contracts
+    }
+    assert all(
+        any(edge.rule_id == rule.rule_id for edge in graph.edges)
+        for rule in graph.rules
+    )
+```
 
 **Stop:** all three named tests and the focused gate pass.
 

@@ -6,9 +6,10 @@ import ast
 import hashlib
 import json
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal, Self, cast
+from typing import Annotated, Any, Literal, Self, cast
 
 from pydantic import Field, model_validator
 
@@ -24,6 +25,10 @@ VerifierRuleId = Annotated[
 ]
 RuleEdgeKind = Literal["implementation", "verification"]
 TraceState = Literal["planned", "implemented"]
+PairBlockId = Annotated[
+    str,
+    Field(pattern=r"^P[0-9]+-[A-Z]+-[0-9]{2}$"),
+]
 ContractSymbolKind = Literal["model", "alias", "function"]
 ContractSymbolName = Annotated[
     str,
@@ -105,7 +110,7 @@ class VerifierRule(ProtocolModel):
 
 
 class RuleEdge(ProtocolModel):
-    """Connect one verifier rule to an implementation or test."""
+    """Connect one verifier rule to its implementation block or test block."""
 
     kind: RuleEdgeKind = Field(
         description="Relationship from the rule to an implementation or test."
@@ -113,9 +118,8 @@ class RuleEdge(ProtocolModel):
     rule_id: VerifierRuleId = Field(
         description="Verifier rule at the source of this edge."
     )
-    phase: int = Field(
-        ge=0,
-        description="Checklist phase that schedules this relationship.",
+    block_id: PairBlockId = Field(
+        description="PairBlock that owns the target of this relationship."
     )
     declaration: DeclarationRef = Field(
         description="Exact checklist marker that declares this relationship."
@@ -145,28 +149,82 @@ class ContractSymbol(ProtocolModel):
     )
 
 
-class ContractTraceabilityGraph(ProtocolModel):
-    """Store the complete ordered traceability graph."""
+TargetAction = Literal["add", "update", "remove"]
 
-    schema_version: Literal[4] = Field(
-        default=4,
-        description="Format version of the serialized traceability graph.",
+
+class ContractTarget(ProtocolModel):
+    """Bind one required source change to one implementation block."""
+
+    requirements: tuple[RequirementId, ...] = Field(
+        min_length=1,
+        description="Contract requirements that need this source change.",
+    )
+    block_id: PairBlockId = Field(
+        description="PairBlock that applies this source change."
+    )
+    action: TargetAction = Field(
+        description="Whether the PairBlock adds, updates, or removes the target."
+    )
+    target: RepoSymbolRef = Field(
+        description="Repository symbol changed by the PairBlock."
+    )
+    declaration: DeclarationRef = Field(
+        description=(
+            "Exact contract-owned payload containing the desired declaration "
+            "for an add or update, or the removal marker for a removal."
+        )
+    )
+
+
+class PairBlock(ProtocolModel):
+    """Store one bounded, dependency-ordered implementation step."""
+
+    block_id: PairBlockId = Field(
+        description="Stable identifier used by checklist and target records."
+    )
+    requirements: tuple[RequirementId, ...] = Field(
+        min_length=1, description="Contract requirements implemented by this block."
+    )
+    targets: tuple[RepoSymbolRef, ...] = Field(
+        min_length=1, description="Repository symbols this block changes."
+    )
+    tests: tuple[RepoSymbolRef, ...] = Field(
+        min_length=1, description="Exact pytest functions that observe this block."
+    )
+    gate: NonEmptyStr = Field(
+        description="Focused command that must pass before the block closes."
+    )
+    depends_on: tuple[PairBlockId, ...] = Field(
+        description="Blocks whose completed results this block consumes."
+    )
+    declaration: DeclarationRef = Field(
+        description="Exact pair-block manifest used to reconstruct this record."
+    )
+
+
+class ContractTraceabilityGraph(ProtocolModel):
+    """Store the complete ordered contract and implementation plan."""
+
+    schema_version: Literal[5] = Field(
+        default=5, description="Format version of the serialized traceability graph."
     )
     requirements: tuple[ContractRequirement, ...] = Field(
         min_length=1,
         description="Ordered contract requirements represented by the graph.",
     )
     rules: tuple[VerifierRule, ...] = Field(
-        min_length=1,
-        description="Ordered verifier rules represented by the graph.",
+        min_length=1, description="Ordered verifier rules represented by the graph."
     )
     edges: tuple[RuleEdge, ...] = Field(
         min_length=1,
         description="Ordered implementation and verification relationships.",
     )
-    symbols: tuple[ContractSymbol, ...] = Field(
+    targets: tuple[ContractTarget, ...] = Field(
+        min_length=1, description="Ordered source changes required by the contracts."
+    )
+    blocks: tuple[PairBlock, ...] = Field(
         min_length=1,
-        description="Ordered normative symbols inventoried by the contracts.",
+        description="Ordered implementation blocks that apply the source changes.",
     )
 
 
@@ -192,6 +250,30 @@ _RULE_EDGE = re.compile(
     r"state=(?P<state>planned|implemented) "
     r"(?P<label>owner|test)=(?P<target>[^ ]+) -->"
 )
+_PAIR_BLOCK = re.compile(
+    r"<!-- pair-"
+    r"block-definition: (?P<id>P[0-9]+-[A-Z]+-[0-9]{2}) -->\n"
+    r"```toml pair-block\n(?P<manifest>.*?)\n```(?P<body>.*?)"
+    r"(?=<!-- pair-"
+    r"block-definition: |\Z)",
+    re.DOTALL,
+)
+_TARGET_MARKER = re.compile(
+    r"<!-- contract-target: requirements=(?P<requirements>[^ ]+) "
+    r"block=(?P<block>P[0-9]+-[A-Z]+-[0-9]{2}) "
+    r"action=(?P<action>add|update|remove) "
+    r"target=(?P<target>[^ ]+) -->"
+)
+_TARGET_FENCE = re.compile(
+    r"```python contract-target\n(?P<body>.*?)\n```",
+    re.DOTALL,
+)
+_REMOVE_MARKER = re.compile(r"<!-- contract-remove -->")
+_CHECKBOX = re.compile(
+    r"^- \[[ xX]\] .*?(?=^- \[[ xX]\] |^### |^## |\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_PAIR_BLOCK_MARKER = re.compile(r"<!-- pair-block: (?P<id>P[0-9]+-[A-Z]+-[0-9]{2}) -->")
 
 
 _PYTHON_FENCE = re.compile(r"\`\`\`python\n(?P<body>.*?)\n\`\`\`", re.DOTALL)
@@ -228,6 +310,179 @@ class _RequirementMarker:
     requirement: ContractRequirement
     phase: int
     test_path: str
+
+
+def _parse_pair_blocks(
+    root: Path,
+    contracts: tuple[Path, ...],
+) -> tuple[PairBlock, ...]:
+    """Compile the implementation blocks declared by the contracts."""
+    blocks: list[PairBlock] = []
+    for contract in contracts:
+        text = contract.read_text(encoding="utf-8")
+        for match in _PAIR_BLOCK.finditer(text):
+            manifest: dict[str, Any] = tomllib.loads(match.group("manifest"))
+            block_id = match.group("id")
+            if manifest.get("id") != block_id:
+                raise ContractTraceabilityError("PairBlock marker and manifest differ")
+            requirements = tuple(manifest["requirements"])
+            block_targets = tuple(
+                _parse_repo_symbol(value) for value in manifest["targets"]
+            )
+            block = PairBlock(
+                block_id=block_id,
+                requirements=requirements,
+                targets=block_targets,
+                tests=tuple(_parse_repo_symbol(value) for value in manifest["tests"]),
+                gate=manifest["gate"],
+                depends_on=tuple(manifest["depends_on"]),
+                declaration=_declaration_ref(
+                    root,
+                    contract,
+                    text,
+                    match.start("manifest"),
+                    match.end("manifest"),
+                ),
+            )
+            blocks.append(block)
+    if _duplicates([block.block_id for block in blocks]):
+        raise ContractTraceabilityError("PairBlock ID belongs to several contracts")
+    return tuple(sorted(blocks, key=lambda item: item.block_id))
+
+
+def _parse_contract_targets(
+    root: Path,
+    contracts: tuple[Path, ...],
+) -> tuple[ContractTarget, ...]:
+    """Compile each contract-owned source transition."""
+    targets: list[ContractTarget] = []
+    for contract in contracts:
+        text = contract.read_text(encoding="utf-8")
+        markers = tuple(_TARGET_MARKER.finditer(text))
+        for marker in markers:
+            action = cast(TargetAction, marker.group("action"))
+            payload_pattern = _REMOVE_MARKER if action == "remove" else _TARGET_FENCE
+            payload = payload_pattern.search(text, marker.end())
+
+            if payload is None:
+                raise ContractTraceabilityError(
+                    "ContractTarget lacks its contract-owned declaration"
+                )
+
+            between = text[marker.end() : payload.start()]
+            if _TARGET_MARKER.sub("", between).strip():
+                raise ContractTraceabilityError(
+                    "ContractTarget is not immediately followed by its declaration"
+                )
+
+            targets.append(
+                ContractTarget(
+                    requirements=tuple(marker.group("requirements").split(",")),
+                    block_id=marker.group("block"),
+                    action=action,
+                    target=_parse_repo_symbol(marker.group("target")),
+                    declaration=_declaration_ref(
+                        root,
+                        contract,
+                        text,
+                        payload.start(),
+                        payload.end(),
+                    ),
+                )
+            )
+    return tuple(
+        sorted(
+            targets,
+            key=lambda item: (
+                item.block_id,
+                item.target.path,
+                item.target.symbol,
+            ),
+        )
+    )
+
+
+def _validate_plan(
+    requirements: tuple[ContractRequirement, ...],
+    rules: tuple[VerifierRule, ...],
+    edges: tuple[RuleEdge, ...],
+    targets: tuple[ContractTarget, ...],
+    blocks: tuple[PairBlock, ...],
+) -> None:
+    requirement_ids = {item.requirement_id for item in requirements}
+    rule_by_id = {item.rule_id: item for item in rules}
+    block_by_id = {item.block_id: item for item in blocks}
+    completed_blocks = {edge.block_id for edge in edges if edge.state == "implemented"}
+
+    target_keys = [(item.block_id, item.target) for item in targets]
+    if len(target_keys) != len(set(target_keys)):
+        raise ContractTraceabilityError("PairBlock target has several ContractTargets")
+
+    for target in targets:
+        if not set(target.requirements) <= requirement_ids:
+            raise ContractTraceabilityError("ContractTarget names unknown requirement")
+        block = block_by_id.get(target.block_id)
+        if block is None:
+            raise ContractTraceabilityError("ContractTarget names unknown PairBlock")
+        if not set(target.requirements) <= set(block.requirements):
+            raise ContractTraceabilityError(
+                "ContractTarget requirement is absent from PairBlock"
+            )
+        if target.target not in block.targets:
+            raise ContractTraceabilityError(
+                "ContractTarget is absent from PairBlock.targets"
+            )
+
+    for block in blocks:
+        for target in block.targets:
+            if (block.block_id, target) not in target_keys:
+                raise ContractTraceabilityError("PairBlock target lacks ContractTarget")
+        for dependency in block.depends_on:
+            if dependency not in block_by_id and dependency not in completed_blocks:
+                raise ContractTraceabilityError("PairBlock names unknown dependency")
+
+    visiting: set[PairBlockId] = set()
+    visited: set[PairBlockId] = set()
+
+    def visit(block_id: PairBlockId) -> None:
+        if block_id in visiting:
+            raise ContractTraceabilityError("PairBlock dependency cycle")
+        if block_id in visited:
+            return
+        visiting.add(block_id)
+        for dependency in block_by_id[block_id].depends_on:
+            if dependency in block_by_id:
+                visit(dependency)
+        visiting.remove(block_id)
+        visited.add(block_id)
+
+    for block_id in block_by_id:
+        visit(block_id)
+
+    for edge in edges:
+        rule = rule_by_id[edge.rule_id]
+        if edge.state == "implemented":
+            continue
+        block = block_by_id.get(edge.block_id)
+        if block is None:
+            raise ContractTraceabilityError("RuleEdge names unknown PairBlock")
+        if rule.requirement_id not in block.requirements:
+            raise ContractTraceabilityError(
+                "RuleEdge requirement is absent from PairBlock"
+            )
+        if edge.kind == "implementation":
+            if not any(
+                item.block_id == block.block_id
+                and rule.requirement_id in item.requirements
+                for item in targets
+            ):
+                raise ContractTraceabilityError(
+                    "implementation block lacks a target for the rule requirement"
+                )
+        elif edge.target not in block.tests:
+            raise ContractTraceabilityError(
+                "verification target is absent from PairBlock.tests"
+            )
 
 
 def _declaration_ref(
@@ -386,6 +641,7 @@ def _parse_rule_edges(
     requirements: tuple[_RequirementMarker, ...],
     rules: tuple[VerifierRule, ...],
 ) -> tuple[RuleEdge, ...]:
+    """Compile rule edges and the PairBlock owning each edge target."""
     text = checklist.read_text(encoding="utf-8")
     phases = tuple(_PHASE_HEADING.finditer(text))
     requirement_by_id = {item.requirement.requirement_id: item for item in requirements}
@@ -394,73 +650,77 @@ def _parse_rule_edges(
     for index, phase_match in enumerate(phases):
         phase = int(phase_match.group("phase"))
         end = phases[index + 1].start() if index + 1 < len(phases) else len(text)
-        section = text[phase_match.end() : end]
-        for match in _RULE_EDGE.finditer(section):
-            requirement_id = match.group("requirement")
-            rule_id = match.group("rule")
-            kind = cast(RuleEdgeKind, match.group("kind"))
-            expected_label = "owner" if kind == "implementation" else "test"
-            if match.group("label") != expected_label:
+        section_start = phase_match.end()
+        section = text[section_start:end]
+        for checkbox in _CHECKBOX.finditer(section):
+            block_markers = tuple(_PAIR_BLOCK_MARKER.finditer(checkbox.group(0)))
+            edge_markers = tuple(_RULE_EDGE.finditer(checkbox.group(0)))
+            if edge_markers and len(block_markers) != 1:
                 raise ContractTraceabilityError(
-                    f"{kind} edge requires {expected_label}= target"
+                    "rule-bearing checklist task requires one PairBlock"
                 )
-            requirement_marker = requirement_by_id.get(requirement_id)
-            rule = rule_by_id.get(rule_id)
-            if requirement_marker is None or rule is None:
-                raise ContractTraceabilityError(
-                    f"unknown requirement-rule edge: {requirement_id}:{rule_id}"
+            for match in edge_markers:
+                requirement_id = match.group("requirement")
+                rule_id = match.group("rule")
+                kind = cast(RuleEdgeKind, match.group("kind"))
+                expected_label = "owner" if kind == "implementation" else "test"
+                if match.group("label") != expected_label:
+                    raise ContractTraceabilityError(
+                        f"{kind} edge requires {expected_label}= target"
+                    )
+                requirement_marker = requirement_by_id.get(requirement_id)
+                rule = rule_by_id.get(rule_id)
+                if requirement_marker is None and rule is None:
+                    continue
+                if requirement_marker is None or rule is None:
+                    raise ContractTraceabilityError(
+                        f"unknown requirement-rule edge: {requirement_id}:{rule_id}"
+                    )
+                if rule.requirement_id != requirement_id:
+                    raise ContractTraceabilityError(
+                        f"{rule_id} does not belong to {requirement_id}"
+                    )
+                if requirement_marker.phase != phase:
+                    raise ContractTraceabilityError(
+                        f"{requirement_id} belongs to phase "
+                        f"{requirement_marker.phase}, not {phase}"
+                    )
+                target = _parse_repo_symbol(match.group("target"))
+                state = cast(TraceState, match.group("state"))
+                if state == "implemented":
+                    _require_python_symbol(root=root, target=target)
+                marker_start = section_start + checkbox.start() + match.start()
+                marker_end = section_start + checkbox.start() + match.end()
+                edges.append(
+                    RuleEdge(
+                        kind=kind,
+                        rule_id=rule_id,
+                        block_id=block_markers[0].group("id"),
+                        declaration=_declaration_ref(
+                            root,
+                            checklist,
+                            text,
+                            marker_start,
+                            marker_end,
+                        ),
+                        state=state,
+                        target=target,
+                    )
                 )
-            if rule.requirement_id != requirement_id:
-                raise ContractTraceabilityError(
-                    f"{rule_id} does not belong to {requirement_id}"
-                )
-            if requirement_marker.phase != phase:
-                raise ContractTraceabilityError(
-                    f"{requirement_id} belongs to phase "
-                    f"{requirement_marker.phase}, not {phase}"
-                )
-            target = _parse_repo_symbol(match.group("target"))
-            state = cast(TraceState, match.group("state"))
-            if state == "implemented":
-                _require_python_symbol(root=root, target=target)
-            declaration_start = phase_match.end() + match.start()
-            declaration_end = phase_match.end() + match.end()
-            edges.append(
-                RuleEdge(
-                    kind=kind,
-                    rule_id=rule_id,
-                    phase=phase,
-                    declaration=_declaration_ref(
-                        root,
-                        checklist,
-                        text,
-                        declaration_start,
-                        declaration_end,
-                    ),
-                    state=state,
-                    target=target,
-                )
-            )
     keys = [(edge.kind, edge.rule_id, edge.target) for edge in edges]
     if len(keys) != len(set(keys)):
         raise ContractTraceabilityError("duplicate rule edge")
     for rule_id in rule_by_id:
-        implementation_count = sum(
-            edge.kind == "implementation" for edge in edges if edge.rule_id == rule_id
-        )
-        verification_count = sum(
-            edge.kind == "verification" for edge in edges if edge.rule_id == rule_id
-        )
-        if implementation_count != 1:
+        links = tuple(edge for edge in edges if edge.rule_id == rule_id)
+        if sum(edge.kind == "implementation" for edge in links) != 1:
             raise ContractTraceabilityError(
                 f"{rule_id} requires exactly one implementation edge"
             )
-        if verification_count < 1:
+        if sum(edge.kind == "verification" for edge in links) < 1:
             raise ContractTraceabilityError(
                 f"{rule_id} requires at least one verification edge"
             )
     order = {"implementation": 0, "verification": 1}
-
     return tuple(
         sorted(
             edges,
@@ -812,6 +1072,7 @@ def compile_contract_traceability(
     checklist: Path,
     contracts: tuple[Path, ...],
 ) -> ContractTraceabilityGraph:
+    """Compile and validate the complete contract implementation plan."""
     markers = tuple(
         marker
         for contract in contracts
@@ -835,24 +1096,16 @@ def compile_contract_traceability(
     )
     if _duplicates([item.rule_id for item in rules]):
         raise ContractTraceabilityError("verifier-rule ID belongs to several contracts")
+    blocks = _parse_pair_blocks(root, contracts)
+    targets = _parse_contract_targets(root, contracts)
     edges = _parse_rule_edges(root, checklist, markers, rules)
-    symbols = tuple(
-        symbol
-        for contract in contracts
-        for symbol in _parse_contract_symbols(root, contract)
-    )
-    for contract in contracts:
-        validate_contract_example(contract)
+    _validate_plan(requirements, rules, edges, targets, blocks)
     graph = ContractTraceabilityGraph(
         requirements=tuple(sorted(requirements, key=lambda item: item.requirement_id)),
         rules=tuple(sorted(rules, key=lambda item: item.rule_id)),
         edges=edges,
-        symbols=tuple(
-            sorted(
-                symbols,
-                key=lambda item: (item.contract, item.kind, item.name),
-            )
-        ),
+        targets=targets,
+        blocks=blocks,
     )
     serialize_contract_traceability(graph)
     return graph

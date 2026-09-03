@@ -324,7 +324,7 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=ca7393c35260f84bccf42203171c4f9fa91952f18ce3dbde9b0d91de3d6682ea -->
+<!-- contract-baseline: contract-traceability.md sha256=1efcb82c879ec79e366408e75d0d398331f8053ed5f89b1d96f7ba7cacd52a85 -->
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
@@ -809,7 +809,6 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- pair-block: P0-SIG-03 -->
       <!-- implements: SIG-02 -->
       <!-- verifies: SIG-02 -->
-      <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=planned owner=src/viper/_system_impact/source.py:classify_target_change -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=planned owner=src/viper/system_impact.py:inspect_plan -->
       <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=planned test=tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes -->
       <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates -->
