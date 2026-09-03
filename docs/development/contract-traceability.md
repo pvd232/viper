@@ -543,6 +543,12 @@ Consecutive target markers may share one payload when that payload declares
 several named targets. No prose or unrelated declaration may separate those
 markers from their shared payload.
 
+For every new or revised human-readable PairBlock guide, place
+`**File: \`repository/relative/path.py\`**` immediately above each
+file-separated marker group and payload. Repeat the label when a later payload
+returns to the same file. The marker remains the machine-readable owner; the
+label lets a reviewer locate every edit without parsing marker syntax.
+
 The marker supplies `requirements`, `block_id`, `action`, and `target`. The
 contract therefore owns the required source transition. The corresponding
 PairBlock must name the same target. The `python contract-target` fence is the

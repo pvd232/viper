@@ -517,8 +517,8 @@ binds their default local fetchers to `request.root`, `request.left_root`, or
 id = "P0-PDR-04"
 requirements = ["PDR-04"]
 targets = ["src/viper/cli.py:add_root", "src/viper/cli.py:build_parser", "src/viper/api.py:_stage_parser", "src/viper/api.py:run", "src/viper/api.py:retry"]
-tests = ["tests/test_generated_project_acceptance.py:test_generated_project_executes_five_stage_benchmark"]
-gate = "conda run -n mantra python -m pytest tests/test_generated_project_acceptance.py -k generated_project_executes_five_stage_benchmark -q"
+tests = ["tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads"]
+gate = "conda run -n mantra python -m pytest tests/test_generated_project_acceptance.py -k generated_project_uses_runner_owned_downloads -q"
 depends_on = ["P0-PDR-03"]
 ```
 
@@ -934,8 +934,8 @@ suite and checklist rather than repeated here.
 id = "P0-PROOF-05"
 requirements = ["PDR-01", "PDR-04"]
 targets = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
-tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root", "tests/test_generated_project_acceptance.py:test_generated_project_executes_five_stage_benchmark"]
-gate = "conda run -n mantra python -m pytest tests/test_project_init.py tests/test_generated_project_acceptance.py -k 'establishes_discoverable_root or generated_project_executes_five_stage_benchmark' -q"
+tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root", "tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads"]
+gate = "conda run -n mantra python -m pytest tests/test_project_init.py tests/test_generated_project_acceptance.py -k 'establishes_discoverable_root or generated_project_uses_runner_owned_downloads' -q"
 depends_on = ["P0-PDR-01", "P0-PDR-02", "P0-PDR-04"]
 ```
 

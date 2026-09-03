@@ -282,7 +282,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
-| [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
+| [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks ready | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
@@ -942,7 +942,7 @@ defines the exact six blocks. It consumes the closed CTG produced by
       <!-- verifies: PDR-04 -->
       <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=implemented test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
       <!-- contract-verification: requirement=PDR-01 rule=project.root.layout state=implemented test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
-      <!-- contract-verification: requirement=PDR-04 rule=project.root.vocabulary state=implemented test=tests/test_generated_project_acceptance.py:test_generated_project_executes_five_stage_benchmark -->
+      <!-- contract-verification: requirement=PDR-04 rule=project.root.vocabulary state=implemented test=tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads -->
 - [x] In `tests/test_storage.py`, publish beneath the selected root, mutate the
       working artifact, retrieve the original immutable bytes, and reject an
       escaping store. In `tests/test_validation_architecture.py`, require each
@@ -1254,13 +1254,6 @@ python -m pytest \
 
 ## 10. Master Phase 3 — captured local external roots
 
-<!-- contract-implementation: requirement=EIR-01 rule=input.local.model state=planned owner=src/viper/inputs.py:ExternalInputRef -->
-<!-- contract-verification: requirement=EIR-01 rule=input.local.model state=planned test=tests/test_protocol.py:test_external_inputs_are_local_only -->
-<!-- contract-implementation: requirement=EIR-02 rule=input.local.capture state=planned owner=src/viper/execution/_materialization.py:capture_external_input -->
-<!-- contract-verification: requirement=EIR-02 rule=input.local.capture state=planned test=tests/test_run_execution.py:test_local_input_is_captured_by_attempt -->
-<!-- contract-implementation: requirement=EIR-03 rule=input.local.identity state=planned owner=src/viper/_verification/attempt.py:verify_external_input -->
-<!-- contract-verification: requirement=EIR-03 rule=input.local.identity state=planned test=tests/test_verification_acceptance.py:test_external_input_identity_survives_execution -->
-
 **Depends on:** Master Phase 2.
 
 **Contract:** [External input roots](external-input-roots.md)
@@ -1271,7 +1264,11 @@ through stage consumption. A change fails the stage.
 ### 10.1 Model cleanup
 
 - [ ] Delete `HttpSource` and `ExternalInputSource` from `src/viper/inputs.py`.
+      <!-- pair-block: P3-EIR-01 -->
+      <!-- pair-block-contract: P3-EIR-01 contract=external-input-roots.md -->
       <!-- implements: EIR-01 -->
+      <!-- contract-implementation: requirement=EIR-01 rule=input.local.model state=planned owner=src/viper/inputs.py:ExternalInputRef -->
+      <!-- contract-verification: requirement=EIR-01 rule=input.local.model state=planned test=tests/test_protocol.py:test_external_inputs_are_local_only -->
 - [ ] Set both local `source` fields to `LocalSource`.
 - [ ] Delete `ExternalInputRef.path`.
 - [ ] Change `ResolvedExternalInputRef.file` to `SnapshotFileRef`.
@@ -1282,12 +1279,20 @@ through stage consumption. A change fails the stage.
 
 - [ ] Reject a local source that is a symlink, resolves outside the repository,
       or has a file type other than regular before reading it.
+      <!-- pair-block: P3-EIR-02 -->
+      <!-- pair-block-contract: P3-EIR-02 contract=external-input-roots.md -->
       <!-- implements: EIR-02 -->
-- [ ] Add `captured_input_path()` to `src/viper/paths.py`. Derive the path from
+      <!-- contract-implementation: requirement=EIR-02 rule=input.local.capture state=planned owner=src/viper/execution/_materialization.py:capture_external_input -->
+      <!-- contract-verification: requirement=EIR-02 rule=input.local.capture state=planned test=tests/test_run_execution.py:test_local_input_is_captured_by_attempt -->
+- [ ] Add `captured_input_path()` to `src/viper/workspace.py`. Derive the path from
       run ID, attempt ID, stage ID, input name, and the source suffix.
 - [ ] Use the helper in `execution/_materialization.py`,
       `_workers/stages.py`, and `_verification/attempt.py`.
+      <!-- pair-block: P3-EIR-03 -->
+      <!-- pair-block-contract: P3-EIR-03 contract=external-input-roots.md -->
       <!-- implements: EIR-03 -->
+      <!-- contract-implementation: requirement=EIR-03 rule=input.local.identity state=planned owner=src/viper/_verification/attempt.py:_verify_external_inputs -->
+      <!-- contract-verification: requirement=EIR-03 rule=input.local.identity state=planned test=tests/test_verification_acceptance.py:test_external_input_identity_survives_execution -->
 - [ ] Read the local source once.
 - [ ] Write a temporary sibling file, flush it, and atomically replace the
       canonical attempt-owned path.

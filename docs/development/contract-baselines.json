@@ -11,7 +11,7 @@
         "CRT-06",
         "CRT-07"
       ],
-      "sha256": "7a773b9abd911fe7c42b97edcde1d9df94e0892446993180338e3691d3da915f"
+      "sha256": "d8e508e34f70911e4c1d8a669bf6249dd8896e295d4e66102787b2fc3f1d5643"
     },
     {
       "path": "docs/development/project-data-root.md",
@@ -48,7 +48,7 @@
         "CPL-01",
         "CPL-02"
       ],
-      "sha256": "e50e7bfec6c26928b23e2fedd2b06b0becaa2bbd62bfa8fed65c8e2bd9988d06"
+      "sha256": "11de07dfe1d27f23ff9500747f4d34900332c0d129ab5ff2aec2ac7e6770615e"
     },
     {
       "path": "docs/development/download-retrieval-artifacts.md",
@@ -71,7 +71,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709"
+      "sha256": "27d9aadd413e7d5d273e006a62d4244310b1d7f6bb16b9e6d9c6ca47213e3a03"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",

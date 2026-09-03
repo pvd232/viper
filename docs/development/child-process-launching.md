@@ -279,11 +279,15 @@ gate = "python -m pytest tests/test_process_startup.py tests/test_preflight.py t
 depends_on = ["P2-CPL-01"]
 ```
 
-## 7. ContractTargets
+## 7. Accepted `ContractTarget` declarations
 
-The following declarations are the exact accepted implementation. One fence
-may contain several declarations; each `ContractTarget` resolves one named AST
-declaration inside that fence.
+Each `contract-target` marker identifies one repository declaration as
+`path:symbol`. The Python fence beneath the marker contains the accepted
+implementation of that declaration. A fence may contain several declarations
+from the same file; the parser selects and hashes each named declaration
+separately.
+
+**File: `tests/test_documentation.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=add target=tests/test_documentation.py:CHILD_PROCESS_LAUNCHING -->
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_documentation.py:IMPLEMENTATION_CONTRACTS -->
@@ -309,6 +313,8 @@ IMPLEMENTATION_CONTRACTS = (
     RESEARCH_MEMORY,
 )
 ```
+
+**File: `src/viper/_subprocess.py`**
 
 <!-- contract-target: requirements=CPL-01 block=P2-CPL-01 action=add target=src/viper/_subprocess.py:annotations -->
 <!-- contract-target: requirements=CPL-01 block=P2-CPL-01 action=add target=src/viper/_subprocess.py:json -->
@@ -537,6 +543,8 @@ def _exec_bridge(payload: str) -> None:
     os.execve(arguments[0], arguments, os.environ)
 ```
 
+**File: `tests/test_process_startup.py`**
+
 <!-- contract-target: requirements=CPL-01 block=P2-CPL-01 action=add target=tests/test_process_startup.py:ast -->
 <!-- contract-target: requirements=CPL-01 block=P2-CPL-01 action=add target=tests/test_process_startup.py:os -->
 <!-- contract-target: requirements=CPL-01 block=P2-CPL-01 action=add target=tests/test_process_startup.py:subprocess -->
@@ -663,20 +671,28 @@ def test_preflight_git_read_executes_without_fork(
     assert _git_bytes(tmp_path, "HEAD", "value.txt") == b"committed\n"
 ```
 
+**File: `src/viper/preflight.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/preflight.py:subprocess -->
 ```python contract-target
 from . import _subprocess as subprocess
 ```
+
+**File: `src/viper/project.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/project.py:subprocess -->
 ```python contract-target
 from . import _subprocess as subprocess
 ```
 
+**File: `src/viper/runtime.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/runtime.py:subprocess -->
 ```python contract-target
 from . import _subprocess as subprocess
 ```
+
+**File: `src/viper/runtime.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/runtime.py:_observe_execution -->
 ```python contract-target
@@ -722,57 +738,119 @@ def _observe_execution(host: HostContext, compute: ComputeSpec) -> ExecutionCont
     )
 ```
 
+**File: `src/viper/authoring.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/authoring.py:subprocess -->
 ```python contract-target
 from . import _subprocess as subprocess
 ```
+
+**File: `src/viper/_system_impact/codeql.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/_system_impact/codeql.py:subprocess -->
 ```python contract-target
 from .. import _subprocess as subprocess
 ```
 
+**File: `src/viper/_system_impact/check.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/_system_impact/check.py:subprocess -->
 ```python contract-target
 from .. import _subprocess as subprocess
 ```
+
+**File: `src/viper/_verification/storage.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/_verification/storage.py:subprocess -->
 ```python contract-target
 from .. import _subprocess as subprocess
 ```
 
+**File: `src/viper/execution/_source.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_source.py:subprocess -->
 ```python contract-target
 from .. import _subprocess as subprocess
 ```
+
+**File: `src/viper/execution/_stage.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_stage.py:subprocess -->
 ```python contract-target
 from .. import _subprocess as subprocess
 ```
 
+**File: `src/viper/execution/_metric.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_metric.py:subprocess -->
 ```python contract-target
 from .. import _subprocess as subprocess
 ```
+
+**File: `src/viper/execution/_process.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_process.py:subprocess -->
 ```python contract-target
 from .. import _subprocess as subprocess
 ```
 
+**File: `tests/git_repository.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/git_repository.py:subprocess -->
+```python contract-target
+from viper import _subprocess as subprocess
+```
+
+**File: `tests/test_authoring.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_authoring.py:subprocess -->
+```python contract-target
+from viper import _subprocess as subprocess
+```
+
+**File: `tests/test_cli.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_cli.py:subprocess -->
+```python contract-target
+from viper import _subprocess as subprocess
+```
+
+**File: `tests/test_execution_signals.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_execution_signals.py:subprocess -->
+```python contract-target
+from viper import _subprocess as subprocess
+```
+
+**File: `tests/test_generated_project_acceptance.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_generated_project_acceptance.py:subprocess -->
+```python contract-target
+from viper import _subprocess as subprocess
+```
+
+**File: `tests/test_project_init.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_project_init.py:subprocess -->
+```python contract-target
+from viper import _subprocess as subprocess
+```
+
+**File: `tests/test_system_impact.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_system_impact.py:subprocess -->
+```python contract-target
+from viper import _subprocess as subprocess
+```
+
+**File: `tests/test_verification.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_verification.py:subprocess -->
 ```python contract-target
 from viper import _subprocess as subprocess
 ```
+
+**File: `tests/test_project_init.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_project_init.py:test_init_generates_importable_five_stage_project -->
 ```python contract-target
@@ -802,10 +880,14 @@ def test_init_generates_importable_five_stage_project(
     assert "1 passed" in completed.stdout
 ```
 
+**File: `tests/test_process_startup.py`**
+
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=add target=tests/test_process_startup.py:runtime -->
 ```python contract-target
 import viper.runtime as runtime
 ```
+
+**File: `tests/test_process_startup.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=add target=tests/test_process_startup.py:test_runtime_observation_does_not_invoke_platform_processor -->
 ```python contract-target
@@ -824,6 +906,8 @@ def test_runtime_observation_does_not_invoke_platform_processor(
 
     assert observed.cpu.model == observed.cpu.architecture
 ```
+
+**File: `tests/test_process_startup.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=add target=tests/test_process_startup.py:test_repository_launch_sites_use_spawn_safe_subprocess -->
 ```python contract-target
