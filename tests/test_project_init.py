@@ -78,6 +78,7 @@ def test_init_rejects_invalid_package_before_writing(
     assert result.code == "invalid_request"
     assert not target.exists()
 
+
 def test_init_establishes_discoverable_root(tmp_path: Path) -> None:
     """Guarantee that project root discovery and resolution == project init path ."""
     target = tmp_path / "outside" / "starter"

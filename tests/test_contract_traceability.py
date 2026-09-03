@@ -201,11 +201,11 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
         )
         .replace(
             "[WORKED_START]",
-            "<!-- contract-" "worked-example: start -->",
+            "<!-- contract-worked-example: start -->",
         )
         .replace(
             "[WORKED_END]",
-            "<!-- contract-" "worked-example: end -->",
+            "<!-- contract-worked-example: end -->",
         )
         .replace(
             "[END]",
@@ -350,8 +350,7 @@ def test_contract_examples_reject_retired_symbol_inventories(
     contract.write_text(
         contract.read_text(encoding="utf-8").replace(
             "<!-- contract-worked-example: start -->",
-            "<!-- contract-symbols: {} -->\n"
-            "<!-- contract-worked-example: start -->",
+            "<!-- contract-symbols: {} -->\n<!-- contract-worked-example: start -->",
         ),
         encoding="utf-8",
     )
