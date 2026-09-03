@@ -17,7 +17,6 @@ import pytest
 import viper._contract_traceability as traceability
 from viper._contract_traceability import (
     ContractRequirement,
-    ContractSymbol,
     ContractTarget,
     ContractTraceabilityGraph,
     DeclarationRef,
@@ -81,7 +80,6 @@ TRACEABILITY_MODELS = (
     ContractRequirement,
     VerifierRule,
     RuleEdge,
-    ContractSymbol,
     ContractTarget,
     PairBlock,
     ContractTraceabilityGraph,

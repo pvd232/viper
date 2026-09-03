@@ -436,14 +436,6 @@ The verifier accepts a reused stage only after all of these checks pass:
     source attempt and matches the target `MetricSpec` digest.
 
 ## 10. Acceptance cases
-
-<!-- contract-symbols:
-{"models":["ParameterizedSpec","ParameterizedSpecDraft","ReuseFileIdentity","ReuseInputIdentity","StageReuseKey"],"aliases":["StageReuseMode"],"functions":["stage"]}
--->
-
-<!-- contract-example-symbols:
-["stage", "ReuseFileIdentity", "ReuseInputIdentity", "StageReuseKey"]
--->
 <!-- contract-worked-example: start -->
 
 ```python

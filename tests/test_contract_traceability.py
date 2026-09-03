@@ -8,7 +8,6 @@ import pytest
 
 from viper._contract_traceability import (
     ContractTraceabilityError,
-    _parse_contract_symbols,
     _parse_requirement_markers,
     _parse_rule_edges,
     _parse_verifier_rules,
@@ -125,18 +124,13 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 return ExampleRecord(value)
             [END]
 
-            <!-- contract-symbols:
-            {"models":["ExampleRecord"],"aliases":[],"functions":["build_record"]}
-            -->
-
-            <!-- contract-example-symbols: ["ExampleRecord", "build_record"] -->
-            <!-- contract-worked-example: start -->
+            [WORKED_START]
             [PYTHON]
             declared = ExampleRecord("declared")
             built = build_record(declared.value)
             assert built.value == "declared"
             [END]
-            <!-- contract-worked-example: end -->
+            [WORKED_END]
 
             ## 5. Execution
 
@@ -204,6 +198,14 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
             "<!-- contract-"
             "target: requirements=CRT-01 block=P0-CRT-01 "
             "action=update target=src/owner.py:enforce -->",
+        )
+        .replace(
+            "[WORKED_START]",
+            "<!-- contract-" "worked-example: start -->",
+        )
+        .replace(
+            "[WORKED_END]",
+            "<!-- contract-" "worked-example: end -->",
         )
         .replace(
             "[END]",
@@ -340,93 +342,23 @@ def test_contract_examples_reject_incomplete_structure(tmp_path: Path) -> None:
         validate_contract_example(contract)
 
 
-def test_contract_examples_reject_undeclared_inventory_symbol(
+def test_contract_examples_reject_retired_symbol_inventories(
     tmp_path: Path,
 ) -> None:
-    """Reject an inventory entry that has no contract declaration."""
-    contract, _ = _write_fixture(tmp_path)
-    contract.write_text(
-        contract.read_text(encoding="utf-8")
-        .replace(
-            '["ExampleRecord", "build_record"]',
-            '["ExampleRecord", "build_record", "MissingRecord"]',
-        )
-        .replace(
-            '"models":["ExampleRecord"]',
-            '"models":["ExampleRecord","MissingRecord"]',
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(
-        ContractTraceabilityError,
-        match="inventory names undeclared symbols: \\['MissingRecord'\\]",
-    ):
-        validate_contract_example(contract)
-
-
-def test_contract_symbols_compile_complete_inventory(tmp_path: Path) -> None:
-    """Compile every Section 4 declaration and every example symbol."""
-    contract, _ = _write_fixture(tmp_path)
-
-    symbols = _parse_contract_symbols(tmp_path, contract)
-
-    assert [(symbol.kind, symbol.name) for symbol in symbols] == [
-        ("model", "ExampleRecord"),
-        ("function", "build_record"),
-    ]
-
-
-def test_contract_symbols_reject_missing_section_model(tmp_path: Path) -> None:
-    """Reject a Section 4 model omitted from the formal inventory."""
+    """Reject the obsolete inventory that ContractTarget replaced."""
     contract, _ = _write_fixture(tmp_path)
     contract.write_text(
         contract.read_text(encoding="utf-8").replace(
-            '"models":["ExampleRecord"]',
-            '"models":[]',
+            "<!-- contract-worked-example: start -->",
+            "<!-- contract-symbols: {} -->\n"
+            "<!-- contract-worked-example: start -->",
         ),
         encoding="utf-8",
     )
 
     with pytest.raises(
         ContractTraceabilityError,
-        match="omits Section 4 models: \\['ExampleRecord'\\]",
-    ):
-        _parse_contract_symbols(tmp_path, contract)
-
-
-def test_contract_examples_require_registered_symbols(tmp_path: Path) -> None:
-    """Reject an example symbol absent from the contract inventory."""
-    contract, _ = _write_fixture(tmp_path)
-    contract.write_text(
-        contract.read_text(encoding="utf-8").replace(
-            ',"functions":["build_record"]',
-            ',"functions":[]',
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(
-        ContractTraceabilityError,
-        match="example symbols absent from contract-symbols: \\['build_record'\\]",
-    ):
-        validate_contract_example(contract)
-
-
-def test_contract_examples_reject_unused_inventory_symbol(tmp_path: Path) -> None:
-    """Reject a declared inventory symbol omitted by the worked example."""
-    contract, _ = _write_fixture(tmp_path)
-    contract.write_text(
-        contract.read_text(encoding="utf-8").replace(
-            "built = build_record(declared.value)",
-            "built = declared",
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(
-        ContractTraceabilityError,
-        match="operations=\\['build_record'\\]",
+        match="contains a retired symbol inventory",
     ):
         validate_contract_example(contract)
 

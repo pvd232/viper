@@ -188,12 +188,6 @@ move.
 The example uses one existing fixture to prove that ownership changes while
 behavior remains stable.
 
-<!-- contract-symbols:
-{"models":[],"aliases":["HANDLER_REGISTRY"],"functions":[]}
--->
-
-<!-- contract-example-symbols: ["HANDLER_REGISTRY"] -->
-
 <!-- contract-worked-example: start -->
 
 ```python

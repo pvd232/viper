@@ -1200,26 +1200,6 @@ derives one metric list from their stage selections. The complete rules belong t
 [`unified-metric-drafting.md`](unified-metric-drafting.md).
 
 ### Complete proposed authoring example
-
-<!-- contract-symbols:
-{"models":["BaseSpec","BaseSpecDraft","BuildSpec","BuildSpecDraft","BuiltinHttpImplementationSpec","BundleArtifactDraft","CustomHttpDraft","DataLoaderConfiguration","DownloadSpec","DownloadSpecDraft","EmbedSpec","EmbedSpecDraft","EnvSecretRef","Eval","EvalSpec","EvalSpecDraft","ExecutedStageCompletion","ExternalInputDraft","FloatComparator","FrozenPlanFiles","GCEEnvSpec","GitFileRef","GitSource","HttpCallable","HttpContext","HttpDefinition","HttpImplementationRef","HttpRequestSpec","HttpResult","HttpRetrievalError","HttpRetrievalPolicy","InternalSpec","InternalSpecDraft","LocalEnvSpec","MeasurementQuery","MetricDependency","NumPyRandomnessSpec","ObservedHttpResponse","ParallelismSpec","ParameterModelRef","ParameterizedSpec","ParameterizedSpecDraft","ProcessStartupReceipt","ProjectHttpImplementationSpec","PythonEnvSpec","ReproducibilitySpec","ResolvedArtifactPointerRef","ResolvedBaseSpec","ResolvedDownloadSpec","ResolvedEvalSpec","ResolvedExecutedSpec","ResolvedGCEEnv","ResolvedHttpImplementation","ResolvedInternalSpec","ResolvedLocalEnv","ResolvedParameterizedSpec","ResolvedStoredInputRef","ReusedStageCompletion","RunArtifactDraft","RunPlanDraft","SingleFileArtifactDraft","StageDraft","StageDraftArtifactRef","StoredInputRef","TorchDeterminismSpec","TorchPrecisionSpec","Train","TrainParams","TrainSpec","TrainSpecDraft"],"aliases":["ArtifactDraft","DataRole","EnvSpec","EvalId","HttpDraft","HttpImplementationSpec","HttpParamsT","ParameterModelOwner","ParameterizedStageSpec","PythonSourceRelPath","ResolvedEnv","RunArtifactPath","Spec","StageCompletion","StageInputDraft","StageSpecDraft","model","tokenizer"],"functions":["artifact","at_least","at_most","benchmark","build","capture_resume_state","catalog","download","embed","eval","expand","experiment","factor","fit","freeze","http","input","load_resume_state","measure","metric","min","observe_python_env","plan","replicate","request","run_artifact","save_resume_state","stage","train","validate_run_artifact_path","variant"]}
--->
-
-<!-- contract-example-symbols:
-[
-  "artifact", "download", "expand", "experiment", "factor", "freeze",
-  "input", "plan", "replicate", "run_artifact", "stage", "variant",
-  "at_least", "at_most", "benchmark", "catalog", "MeasurementQuery",
-  "http", "HttpRequestSpec", "HttpResult", "HttpRetrievalError",
-  "HttpRetrievalPolicy", "ObservedHttpResponse", "FloatComparator",
-  "MetricDependency", "measure", "metric", "min", "GitFileRef",
-  "GitSource", "DataLoaderConfiguration", "capture_resume_state",
-  "load_resume_state", "save_resume_state", "LocalEnvSpec",
-  "NumPyRandomnessSpec", "ParallelismSpec", "ReproducibilitySpec",
-  "TorchDeterminismSpec", "TorchPrecisionSpec", "observe_python_env",
-  "build", "embed", "eval", "train"
-]
--->
 <!-- contract-worked-example: start -->
 
 **Illustrative example:** this program shows the complete target API. The

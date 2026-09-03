@@ -973,14 +973,6 @@ The verifier rejects:
   capability support.
 
 ## 16. Acceptance traces
-
-<!-- contract-symbols:
-{"models":["AnalysisPlan","HypothesisSpec","ResearchConstraint","ResearchObjective"],"aliases":[],"functions":[]}
--->
-
-<!-- contract-example-symbols:
-["ResearchConstraint", "ResearchObjective", "AnalysisPlan", "HypothesisSpec"]
--->
 <!-- contract-worked-example: start -->
 
 ```python

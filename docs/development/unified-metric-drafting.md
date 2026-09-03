@@ -1519,14 +1519,6 @@ The superseded behavior has these dispositions:
 | Benchmark fixtures that require one threshold per metric | Replace with one criterion-free result case and one threshold case. |
 
 ## 9. Acceptance cases
-
-<!-- contract-symbols:
-{"models":["BaseSpec","BenchmarkDraft","BenchmarkMetricResult","BenchmarkResult","BenchmarkSpec","BuildSpec","BuildVariantStageParams","EmbedSpec","EmbedVariantStageParams","EvalSpec","EvalVariantStageParams","ExperimentDraft","ExperimentSpec","FactorDraft","InternalSpec","MetricContext","MetricCriterion","MetricCriterionDraft","MetricCriterionResult","MetricDefinition","MetricDraft","MetricExecutionReceipt","MetricHandle","MetricObjectiveDraft","MetricObjectiveSpec","MetricSpec","ParameterModelRef","ParameterizedSpec","ReplicateDraft","RunPlanDraft","RunningAccuracy","StatefulMetric","TrainSpec","TrainVariantStageParams","VariantDraft","VariantSpec"],"aliases":["DecoratedMetric","DecoratedMetricT","MetricMode","MetricParamsT","ObjectiveDirection","ParameterModelOwner","PythonSourceRelPath","VariantStageParams","baseline_plan","baseline_replicate_02_plan","baseline_training","gradient_norm_metric","high_rate_plan","high_rate_training","study","training"],"functions":["at_least","at_most","benchmark","bind_live_metric","evaluation_loss","experiment","factor","gradient_norm","max","measure","metric","metric_definition","min","replicate","run_artifact","stage","training_loss","variant"]}
--->
-
-<!-- contract-example-symbols:
-["experiment", "replicate", "run_artifact", "stage", "variant", "at_least", "benchmark", "min"]
--->
 <!-- contract-worked-example: start -->
 
 ### Complete success

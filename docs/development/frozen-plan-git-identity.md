@@ -310,12 +310,6 @@ verified run plan.
 | Legacy cleanup | Replace every lookup that uses `RunSpec.source.commit` for a generated experiment, variant, benchmark, stage, or run document. Retain that commit for project definitions. |
 
 ## 9. Acceptance cases
-
-<!-- contract-symbols:
-{"models":["FrozenPlanFiles","GitFileRef","ResolvedRunSpecRef"],"aliases":[],"functions":["freeze"]}
--->
-
-<!-- contract-example-symbols: ["freeze", "GitFileRef", "ResolvedRunSpecRef"] -->
 <!-- contract-worked-example: start -->
 
 ### Success

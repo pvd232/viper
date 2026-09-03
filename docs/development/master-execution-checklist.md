@@ -324,22 +324,22 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=92dc20471cb2f1381443b2c79cdc7a9f061b0845f03e55f3b20f7de348ebbc9e -->
+<!-- contract-baseline: contract-traceability.md sha256=899fbc86234bfd128ecd6bb7e663e5b4327ea2f2a319badd35b577c3856f968b -->
 
-<!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
-<!-- contract-baseline: module-ownership.md sha256=15712c4d1932e2d0ea73219924b6b6d7e62827b46eece8c8fbc6fa85a37b95de -->
-<!-- contract-baseline: system-impact-compiler.md sha256=f7e43771fb1e525e2d3c6ceeea28e82ac094352b26227c2b91e8d8b3bef80cf9 -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
-<!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=a4d17639ce266136212c9650c35786164caa824c3dc3805e0c9f615d5be5c7d4 -->
-<!-- contract-baseline: frozen-plan-git-identity.md sha256=cbff443e9ccf4191b509eafcb3a235d979a45494482b1fa30fe11e97a90c7fd3 -->
-<!-- contract-baseline: remote-storage.md sha256=da39fe2d55bf6dc0107e4630146e793dd62aaca437d784f5dfd00f2fef6b8173 -->
-<!-- contract-baseline: experiment-expansion.md sha256=59a8d5978632c3298c2a7163194c4862c80f70a7a001252d6f21dd884e20e96d -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=06dd7fd41b7211911b3b1c2d8d473e796236832f8c3e5256e5fd517081e1e436 -->
-<!-- contract-baseline: stage-reuse.md sha256=ee1f16ea213c1e45b95ac08429dc436486e6c1491a9d754a3e72bea259402b1c -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=bb0a0ee2593f901dbca4311e71e7d681e015f4aa2cea7f77c11fa7e8a6a34f1b -->
-<!-- contract-baseline: research-memory-roadmap.md sha256=afba4d2a3caf4a823cdb59bc055badc84abacf3b9d31844e8923ca198a60b6f9 -->
+<!-- contract-baseline: project-data-root.md sha256=03049cafba7be2bcc521ba4d219b8b57b130ce18ecf5fbe36ce435ffc67a6dc3 -->
+<!-- contract-baseline: module-ownership.md sha256=3894a5d392103d25c3b5490d1b54a2eff3232359458605428fb9525720f259e5 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=37a0065e7bb3a67838b9c8553785184487a44ff580ef7dce4c099d529e58ac24 -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=00808701b78fd2cb335a6ac5b8236b4f29ffb325c6fff910ea6999f31778cffe -->
+<!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
+<!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=fde97fbf294f74170bac1e64bc2557ec0e97ef5db6d219c4eb30eef76a3f9184 -->
+<!-- contract-baseline: frozen-plan-git-identity.md sha256=53b4af9b238a2083e24f0c77a7601da81045eed1ff2ccfc3f1639fd57bdca56e -->
+<!-- contract-baseline: remote-storage.md sha256=1d18ce4d5db48d7b6331e9c9beadfbc240908b9286ad71826496165fbcc88c49 -->
+<!-- contract-baseline: experiment-expansion.md sha256=27f3bf85e1a701108b7a08dfd46b3b5ef35bc2a42b2ecd57d0336e58d7c96349 -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=b06dd2eed63fb3652dc7e1d571430d5781abff81ed6dd952ed12713451d899ca -->
+<!-- contract-baseline: stage-reuse.md sha256=0abce93ad35f61ef636f09af3eda23bea21d30bd02df885e208509826f54570d -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=d70166a38a7855dd9ba31e19145fc281f1e34247fd807c294d699e45ab743aa5 -->
+<!-- contract-baseline: research-memory-roadmap.md sha256=a764fd25b02e98c2ba277edc5a1ab39d7518528c2e3929ba67db147ec0d93bd9 -->
 
 ## 4. Specification-system review
 
@@ -682,22 +682,19 @@ working-file edit must leave the immutable copy retrievable.
       <!-- implements: CRT-02 -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.tested state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-- [x] Inventory every Section 4 contract symbol, require worked-example symbols
-      to be a subset, and validate marked examples plus current,
-      proposed-change, and integrated DAGs.
+- [x] Validate marked worked examples plus current, proposed-change, and
+      integrated DAGs.
       <!-- pair-block: P0-CRT-03 -->
-      <!-- implements: CRT-03, CRT-05 -->
+      <!-- implements: CRT-03 -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=implemented owner=src/viper/_contract_traceability.py:validate_contract_example -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.diagram.palette state=implemented owner=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented owner=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.model.documented state=implemented owner=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
-      <!-- contract-implementation: requirement=CRT-05 rule=contract.symbol.complete state=implemented owner=src/viper/_contract_traceability.py:_parse_contract_symbols -->
-- [x] Apply the three-DAG, explicit example-symbol inventory, and complete
-      worked-example format to every implementation contract. Validate
+- [x] Apply the three-DAG and complete worked-example format to every
+      implementation contract. Validate
       `IMPLEMENTATION_CONTRACTS` as one closed set before Master Phase 0 closes.
       <!-- pair-block: P0-CRT-04 -->
-- [x] Serialize one ordered, source-evidenced `ContractTraceabilityGraph`,
-      including its contract-symbol records, and
+- [x] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
       compare its requirement and phase coverage with the current documentation
       oracle. Require every requirement, rule, and edge to retain its
       exact `DeclarationRef` path, line span, and digest.
@@ -714,10 +711,13 @@ working-file edit must leave the immutable copy retrievable.
       <!-- contract-implementation: requirement=CRT-06 rule=contract.target.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-06 rule=contract.block.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-06 rule=contract.block.acyclic state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-- [ ] Migrate every existing PairBlock target to one `ContractTarget`, then
-      remove `ContractSymbol`, `contract-symbols`, `contract-example-symbols`,
-      and `contract-exports` after target parity passes.
+- [x] Make `ContractTarget` the sole code-change inventory for executable
+      PairBlocks and reject the retired symbol, example, and export inventories.
       <!-- pair-block: P0-CRT-07 -->
+      <!-- implements: CRT-05 -->
+      <!-- verifies: CRT-05 -->
+      <!-- contract-implementation: requirement=CRT-05 rule=contract.target.authoritative state=implemented owner=src/viper/_contract_traceability.py:validate_contract_example -->
+      <!-- contract-verification: requirement=CRT-05 rule=contract.target.authoritative state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_retired_symbol_inventories -->
 
 <details>
 <summary>Hints</summary>
@@ -867,20 +867,14 @@ defines the exact five blocks. It consumes the closed CTG produced by
       <!-- verifies: CRT-02 -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
-- [x] In `tests/test_contract_traceability.py`, reject a missing DAG, an
-      undeclared inventory symbol, and an inventoried symbol absent from the
-      worked example.
+- [x] In `tests/test_contract_traceability.py`, reject a missing DAG and an
+      invalid worked example.
       <!-- pair-block: P0-PROOF-03 -->
-      <!-- verifies: CRT-03, CRT-05 -->
+      <!-- verifies: CRT-03 -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_undeclared_inventory_symbol -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_unused_inventory_symbol -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
-      <!-- contract-verification: requirement=CRT-05 rule=contract.symbol.complete state=implemented test=tests/test_contract_traceability.py:test_contract_symbols_compile_complete_inventory -->
-      <!-- contract-verification: requirement=CRT-05 rule=contract.symbol.complete state=implemented test=tests/test_contract_traceability.py:test_contract_symbols_reject_missing_section_model -->
-      <!-- contract-verification: requirement=CRT-05 rule=contract.symbol.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_require_registered_symbols -->
 - [x] In `tests/test_contract_traceability.py`, compile twice, require identical graph
       bytes, and require every rule to reach its owner and tests.
       <!-- pair-block: P0-PROOF-04 -->

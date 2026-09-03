@@ -10,8 +10,9 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** the closure compiler is implemented through `P0-CRT-06`;
-the repository-wide `P0-CRT-07` migration remains pending.
+**Contract status:** implemented through `P0-CRT-07` for the contracts whose
+PairBlocks are executable. Later contracts enter the CTG when their PairBlocks
+gain exact `ContractTarget` declarations.
 
 These requirements bind the contract to the master checklist:
 
@@ -19,9 +20,9 @@ These requirements bind the contract to the master checklist:
 | --- | --- |
 | CRT-01 <!-- contract-requirement: CRT-01 phase=0 test=tests/test_contract_traceability.py --> | Parse every contract requirement and named verifier rule into `ContractTraceabilityGraph`, with each collection serialized in canonical order. |
 | CRT-02 <!-- contract-requirement: CRT-02 phase=0 test=tests/test_contract_traceability.py --> | Require every verifier rule to name one implementation owner and at least one exact acceptance test. |
-| CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs plus one explicit example-symbol inventory and one worked example that exercises every inventoried symbol. |
+| CRT-03 <!-- contract-requirement: CRT-03 phase=0 test=tests/test_contract_traceability.py --> | Require every contract-gap specification to include current, proposed-change, and integrated DAGs plus one marked, syntax-valid worked example. |
 | CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph for downstream plan checks. |
-| CRT-05 <!-- contract-requirement: CRT-05 phase=0 test=tests/test_contract_traceability.py --> | Inventory every normative Section 4 Python symbol, require every worked-example symbol to belong to that inventory, and publish the inventory in `ContractTraceabilityGraph`. |
+| CRT-05 <!-- contract-requirement: CRT-05 phase=0 test=tests/test_contract_traceability.py --> | Use `ContractTarget` as the sole code-change inventory and reject the retired symbol, export, and example inventories. |
 | CRT-06 <!-- contract-requirement: CRT-06 phase=0 test=tests/test_contract_traceability.py --> | Compile every `ContractTarget` and `PairBlock` into `ContractTraceabilityGraph`; bind each rule edge to one block; require complete requirement, target, rule, test, and dependency closure; then remove the superseded symbol, export, and example inventories. |
 
 ## 2. Required claim
@@ -282,13 +283,6 @@ PairBlockId = Annotated[
     str,
     Field(pattern=r"^P[0-9]+-[A-Z]+-[0-9]{2}$"),
 ]
-ContractSymbolKind = Literal["model", "alias", "function"]
-ContractSymbolName = Annotated[
-    str,
-    Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$"),
-]
-
-
 class DeclarationRef(ProtocolModel):
     """Locate and identify one authored traceability declaration."""
 
@@ -380,23 +374,6 @@ class RuleEdge(ProtocolModel):
     )
     target: RepoSymbolRef = Field(
         description="Repository symbol reached by this relationship."
-    )
-
-
-class ContractSymbol(ProtocolModel):
-    """Identify one normative Python symbol named by one contract."""
-
-    kind: ContractSymbolKind = Field(
-        description="Symbol category declared by the contract inventory."
-    )
-    name: ContractSymbolName = Field(
-        description="Python identifier used for the symbol in the contract."
-    )
-    contract: RepoRelPath = Field(
-        description="Repository-relative contract that inventories the symbol."
-    )
-    declaration: DeclarationRef = Field(
-        description="Exact contract-symbols marker that inventories the symbol."
     )
 
 
@@ -570,41 +547,15 @@ single code specification for that transition. The CTG compiler rejects a
 missing PairBlock target. The System Impact Check rejects realized source that
 differs from the contract-owned declaration.
 
-The implemented `contract-symbols` and `contract-example-symbols` markers remain
-active only until `P0-CRT-07` migrates every PairBlock target. `CRT-06` then
-removes both marker families, `ContractSymbol`, and the MOD-specific
-`contract-exports` fences.
-
-Each contract also declares one exact symbol inventory:
-
-```text
-contract-symbols:
-{"models":["RuleEdge"],"aliases":["RuleEdgeKind"],"functions":[]}
-```
-
-The three arrays are sorted and disjoint. They include every top-level model,
-alias, and function in Section 4. They may also include symbols imported for
-the worked example. Every `contract-example-symbols` entry must appear in this
-larger inventory. The compiler rejects an omitted Section 4 declaration, an
-unresolved inventory name, or an example-only name.
+`ContractTarget` replaces the former symbol, export, and worked-example
+inventories. It records code that a PairBlock will add, update, or remove. A
+worked example remains explanatory evidence; it no longer doubles as a code
+change inventory.
 
 ### Illustrative worked example
 
-The inventory explicitly names the contract symbols this workflow must
-exercise. The validator resolves each name to a Python declaration in this
-contract, then requires the example to construct classes, call functions, and
-reference aliases. Document position does not define coverage.
-
 Master Phase 0 will create the source and test symbols, so both links begin in
 the `planned` state.
-
-<!-- contract-symbols:
-{"models":["ContractRequirement","ContractSymbol","ContractTraceabilityGraph","DeclarationRef","RepoSymbolRef","RuleEdge","VerifierRule"],"aliases":["ContractSymbolKind","ContractSymbolName","RequirementId","RuleEdgeKind","TraceState","VerifierRuleId"],"functions":[]}
--->
-
-<!-- contract-example-symbols:
-["ContractSymbolKind", "ContractSymbolName", "RequirementId", "VerifierRuleId", "RuleEdgeKind", "TraceState", "DeclarationRef", "RepoSymbolRef", "ContractRequirement", "VerifierRule", "RuleEdge", "ContractSymbol", "ContractTraceabilityGraph"]
--->
 
 <!-- contract-worked-example: start -->
 
@@ -615,11 +566,10 @@ from pathlib import Path
 
 from viper._contract_traceability import (
     ContractRequirement,
-    ContractSymbol,
-    ContractSymbolKind,
-    ContractSymbolName,
+    ContractTarget,
     ContractTraceabilityGraph,
     DeclarationRef,
+    PairBlock,
     RequirementId,
     RepoSymbolRef,
     RuleEdge,
@@ -714,20 +664,40 @@ verification = RuleEdge(
     target=test_location,
 )
 
-symbol_kind: ContractSymbolKind = "model"
-symbol_name: ContractSymbolName = "RuleEdge"
-symbol = ContractSymbol(
-    kind=symbol_kind,
-    name=symbol_name,
-    contract=requirement.contract,
-    declaration=declaration_ref(CONTRACT, "contract-symbols:"),
+target = ContractTarget(
+    requirements=(REQUIREMENT_ID,),
+    block_id="P0-PDR-06",
+    action="update",
+    target=implementation_location,
+    declaration=declaration_ref(CONTRACT, "contract-requirement: PDR-03"),
+)
+
+implementation_block = PairBlock(
+    block_id="P0-PDR-06",
+    requirements=(REQUIREMENT_ID,),
+    targets=(implementation_location,),
+    tests=(test_location,),
+    gate="python -m pytest tests/test_validation_architecture.py -q",
+    depends_on=(),
+    declaration=declaration_ref(CONTRACT, "contract-requirement: PDR-03"),
+)
+
+verification_block = PairBlock(
+    block_id="P0-PROOF-07",
+    requirements=(REQUIREMENT_ID,),
+    targets=(test_location,),
+    tests=(test_location,),
+    gate="python -m pytest tests/test_validation_architecture.py -q",
+    depends_on=("P0-PDR-06",),
+    declaration=declaration_ref(CONTRACT, "contract-requirement: PDR-03"),
 )
 
 traceability = ContractTraceabilityGraph(
     requirements=(requirement,),
     rules=(rule,),
     edges=(implementation, verification),
-    symbols=(symbol,),
+    targets=(target,),
+    blocks=(implementation_block, verification_block),
 )
 
 canonical_bytes = json.dumps(
@@ -878,7 +848,7 @@ three:
 1. enumerate implementation contracts
 2. parse requirement and verifier-rule declarations
 3. parse checklist implementation and verification links
-4. validate complete contract-symbol inventories and worked examples
+4. validate contract structure and worked-example syntax
 5. validate planned locations and implemented repository symbols
 6. parse PairBlock manifests and their authored target declarations
 7. attach each rule edge and contract target to one PairBlock
@@ -895,8 +865,7 @@ It then applies these cardinality rules:
 6. Each implementation and test link uses the phase containing its checklist
    marker.
 7. Each contract contains the required DAGs and one complete worked example.
-8. Every Section 4 declaration is inventoried, and every worked-example symbol
-   belongs to that inventory.
+8. Retired symbol, export, and example inventories are rejected.
 9. Phase closure requires every implementation and verification link to
    use `state="implemented"`.
 10. Every `ContractTarget` belongs to at least one declared requirement, names
@@ -1032,7 +1001,7 @@ def _validate_plan(
 <!-- pair-block-definition: P0-CRT-07 -->
 ```toml pair-block
 id = "P0-CRT-07"
-requirements = ["CRT-06"]
+requirements = ["CRT-05", "CRT-06"]
 targets = [
     "src/viper/_contract_traceability.py:_PAIR_BLOCK",
     "src/viper/_contract_traceability.py:_TARGET_MARKER",
@@ -1045,7 +1014,10 @@ targets = [
     "src/viper/_contract_traceability.py:_parse_rule_edges",
     "src/viper/_contract_traceability.py:compile_contract_traceability",
 ]
-tests = ["tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage"]
+tests = [
+    "tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage",
+    "tests/test_contract_traceability.py:test_contract_examples_reject_retired_symbol_inventories",
+]
 gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py tests/test_documentation.py -k 'contract_target or pair_block' -q"
 depends_on = ["P0-CRT-06"]
 ```
@@ -1471,19 +1443,13 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
             def build_record(value: str) -> ExampleRecord:
                 return ExampleRecord(value)
             [END]
-
-            <!-- contract-symbols:
-            {"models":["ExampleRecord"],"aliases":[],"functions":["build_record"]}
-            -->
-
-            <!-- contract-example-symbols: ["ExampleRecord", "build_record"] -->
-            <!-- contract-worked-example: start -->
+            [WORKED_START]
             [PYTHON]
             declared = ExampleRecord("declared")
             built = build_record(declared.value)
             assert built.value == "declared"
             [END]
-            <!-- contract-worked-example: end -->
+            [WORKED_END]
 
             ## 5. Execution
 
@@ -1551,6 +1517,14 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
             "<!-- contract-"
             "target: requirements=CRT-01 block=P0-CRT-01 "
             "action=update target=src/owner.py:enforce -->",
+        )
+        .replace(
+            "[WORKED_START]",
+            "<!-- contract-" "worked-example: start -->",
+        )
+        .replace(
+            "[WORKED_END]",
+            "<!-- contract-" "worked-example: end -->",
         )
         .replace(
             "[END]",
@@ -1722,14 +1696,14 @@ machine's absolute checkout path.
 | `contract.rule.declared` <!-- verifier-rule: contract.rule.declared requirement=CRT-01 --> | Each requirement declares at least one unique verifier rule. |
 | `contract.rule.implemented` <!-- verifier-rule: contract.rule.implemented requirement=CRT-02 --> | Each verifier rule names one exact implementation target; every link marked `implemented` resolves to an existing file and symbol. |
 | `contract.rule.tested` <!-- verifier-rule: contract.rule.tested requirement=CRT-02 --> | Each verifier rule names at least one exact test target; every link marked `implemented` resolves to an existing test function. |
-| `contract.example.complete` <!-- verifier-rule: contract.example.complete requirement=CRT-03 --> | Each contract declares one explicit example-symbol inventory and contains three rendered DAG sources plus one marked, syntax-valid worked example that exercises every inventoried class, function, and alias. |
+| `contract.example.complete` <!-- verifier-rule: contract.example.complete requirement=CRT-03 --> | Each contract contains three rendered DAG sources plus one marked, syntax-valid worked example. |
 | `contract.diagram.palette` <!-- verifier-rule: contract.diagram.palette requirement=CRT-03 --> | The current, proposed-change, and integrated DAGs use the declared semantic role colors and neutral link style. |
 | `contract.model.matches_runtime` <!-- verifier-rule: contract.model.matches_runtime requirement=CRT-03 --> | Every Section 4 traceability class has the same name and direct fields as its Python implementation. |
 | `contract.model.documented` <!-- verifier-rule: contract.model.documented requirement=CRT-03 --> | Every direct field in each persisted traceability model has a non-empty generated-schema description that states its role. |
 | `contract.graph.canonical` <!-- verifier-rule: contract.graph.canonical requirement=CRT-04 --> | Repeated compilation produces identical ordered JSON bytes. |
 | `contract.graph.complete` <!-- verifier-rule: contract.graph.complete requirement=CRT-04 --> | Every requirement and rule reaches its owner and tests. |
 | `contract.declaration.anchored` <!-- verifier-rule: contract.declaration.anchored requirement=CRT-04 --> | Every requirement, rule, and edge retains the exact declaration path, line span, and SHA-256 digest used to reconstruct it. |
-| `contract.symbol.complete` <!-- verifier-rule: contract.symbol.complete requirement=CRT-05 --> | Until `CRT-06` migration closes, each contract declares one sorted, disjoint `contract-symbols` inventory and every `contract-example-symbols` entry belongs to it. |
+| `contract.target.authoritative` <!-- verifier-rule: contract.target.authoritative requirement=CRT-05 --> | `ContractTarget` is the sole code-change inventory; contracts reject the retired symbol, export, and example inventories. |
 | `contract.target.complete` <!-- verifier-rule: contract.target.complete requirement=CRT-06 --> | Every PairBlock target has exactly one requirement-owned `ContractTarget` in that block, with an action and exact declaration. |
 | `contract.block.complete` <!-- verifier-rule: contract.block.complete requirement=CRT-06 --> | Every rule edge resolves to one PairBlock whose requirements contain the rule's requirement; each implementation block contains at least one target for that requirement; and every verification target occurs in `PairBlock.tests`. |
 | `contract.block.acyclic` <!-- verifier-rule: contract.block.acyclic requirement=CRT-06 --> | Every dependency resolves to a known PairBlock and the complete dependency relation is acyclic. |
@@ -1742,11 +1716,11 @@ named test function. The traceability graph joins those three representations.
 
 | Surface | Required statement |
 | --- | --- |
-| `src/viper/_contract_traceability.py` | Add exact models, marker parsers, symbol resolution, cardinality checks, contract-symbol and example validation, and canonical serialization for developer tooling. |
-| `tests/test_contract_traceability.py` and `tests/test_documentation.py` | Compile every baselined contract into one graph, compare the result with the requirement, phase, test-file, and baseline oracle, and require each contract's three DAGs, symbol inventory, and complete worked example. |
+| `src/viper/_contract_traceability.py` | Add exact models, marker parsers, symbol resolution, cardinality checks, contract structure validation, and canonical serialization for developer tooling. |
+| `tests/test_contract_traceability.py` and `tests/test_documentation.py` | Compile every migrated contract into one graph, compare the result with the requirement, phase, test-file, and baseline oracle, and require each contract's three DAGs and marked worked example. |
 | `docs/development/master-execution-checklist.md` | Add the foundational Master Phase 0 work before project-root and system-graph implementation. |
-| `docs/development/*.md` implementation contracts | Retain verifier-rule markers, three DAGs, one formal symbol inventory, and one complete worked example per contract. |
-| `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, explicit example-symbol inventory, complete worked example, and requirement-rule-owner-test chain. |
+| `docs/development/*.md` implementation contracts | Retain verifier-rule markers, three DAGs, and one complete worked example per contract. Add `ContractTarget` records when a PairBlock becomes executable. |
+| `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, complete worked example, and requirement-rule-owner-test chain. |
 | `docs/development/system-impact-compiler.md` | Consume `ContractTraceabilityGraph` directly as its contract-coverage input. |
 | `docs/development/testing.md` | Document the focused traceability check and the meaning of each marker. |
 
@@ -1760,7 +1734,7 @@ named test function. The traceability graph joins those three representations.
 | Requirement marker `test=` field | Retain only while the old documentation checker remains active; remove after exact verification-edge parity. |
 | System-graph contract's independent contract-marker parser | Replace with `ContractTraceabilityGraph` ingestion. |
 | Prose-only verifier rules | Replace sentence-derived identity with stable rule markers. |
-| `contract-symbols`, `contract-example-symbols`, and `contract-exports` | Remove after every PairBlock target has one compiled `ContractTarget`; `ContractTarget` becomes the source-change inventory. |
+| Symbol, example, and export inventories | Removed; `ContractTarget` is the source-change inventory. |
 
 ## 9. Acceptance case
 
@@ -1799,11 +1773,9 @@ and a PairBlock dependency cycle.
 7. Expose the canonical graph to the system-impact compiler.
 8. Add `ContractTarget`, `PairBlock`, and `RuleEdge.block_id`; compile the
    complete requirement-to-PairBlock closure as `CRT-06`.
-9. Classify and repair every existing PairBlock target before enabling strict
-   target closure.
-10. Remove `ContractSymbol`, `contract-symbols`,
-    `contract-example-symbols`, and `contract-exports` after target parity.
-11. Remove duplicate parsing only after parity passes.
+9. Classify and repair each contract's PairBlock targets before that contract
+   enters strict target closure.
+10. Remove duplicate parsing only after parity passes.
 
 **Commit boundary:** `Trace contract requirements to code and tests`
 

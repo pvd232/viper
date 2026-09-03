@@ -410,14 +410,6 @@ class Acceptance(ProtocolModel):
 Baseline and expected digests are optional because additions have no baseline
 declaration and removals have no expected or realized declaration.
 
-<!-- contract-symbols:
-{"models":["Acceptance","CodeQLIdentity","CodeQLReceipt","Impact","PlanCheck","ResolvedContractTarget","SourceEdge","SourceGraph","SourceNode","SourceSnapshot","TargetCheck"],"aliases":["ChangeKind","CheckState","CommitId","EdgeKind","NodeId"],"functions":[]}
--->
-
-<!-- contract-example-symbols:
-["CommitId", "NodeId", "EdgeKind", "ChangeKind", "CheckState", "CodeQLIdentity", "SourceSnapshot", "CodeQLReceipt", "SourceNode", "SourceEdge", "SourceGraph", "Impact", "ResolvedContractTarget", "TargetCheck", "PlanCheck", "Acceptance"]
--->
-
 ### Illustrative worked example
 
 The example checks the completed manifest migration that renamed

@@ -150,10 +150,8 @@ targets. Symbol resolution begins when an edge advances to `implemented`.
 
 Each contract-gap specification also carries three Mermaid flowcharts in its
 Current gap section: the inspected current DAG, the proposed-change DAG, and
-the integrated DAG. An explicit symbol inventory names the declarations that
-one marked worked example must exercise. The documentation test rejects an
-undeclared inventory symbol or a workflow that fails to construct an
-inventoried class, call an inventoried function, or read an inventoried alias.
+the integrated DAG. One marked worked example must contain syntax-valid Python.
+Executable PairBlocks use `ContractTarget` as their sole code-change inventory.
 Mermaid rendering remains a separate visual check;
 the repository renderer must produce readable light and dark previews before
 review.

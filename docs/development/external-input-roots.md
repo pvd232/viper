@@ -364,14 +364,6 @@ flowchart LR
 ```
 
 ## 4. `DownloadSpec` still means "perform a network request"
-
-<!-- contract-symbols:
-{"models":["HttpRequestSpec","HttpRetrievalPolicy"],"aliases":["DATASET_PATH","authoring","download"],"functions":["artifact"]}
--->
-
-<!-- contract-example-symbols:
-["authoring", "artifact", "HttpRequestSpec", "HttpRetrievalPolicy", "DATASET_PATH", "download"]
--->
 <!-- contract-worked-example: start -->
 
 This contract preserves the job of `DownloadSpec`: freeze HTTP requests,

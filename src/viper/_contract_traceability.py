@@ -29,11 +29,6 @@ PairBlockId = Annotated[
     str,
     Field(pattern=r"^P[0-9]+-[A-Z]+-[0-9]{2}$"),
 ]
-ContractSymbolKind = Literal["model", "alias", "function"]
-ContractSymbolName = Annotated[
-    str,
-    Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$"),
-]
 
 
 class DeclarationRef(ProtocolModel):
@@ -129,23 +124,6 @@ class RuleEdge(ProtocolModel):
     )
     target: RepoSymbolRef = Field(
         description="Repository symbol reached by this relationship."
-    )
-
-
-class ContractSymbol(ProtocolModel):
-    """Identify one normative Python symbol named by one contract."""
-
-    kind: ContractSymbolKind = Field(
-        description="Symbol category declared by the contract inventory."
-    )
-    name: ContractSymbolName = Field(
-        description="Python identifier used for the symbol in the contract."
-    )
-    contract: RepoRelPath = Field(
-        description="Repository-relative contract that inventories the symbol."
-    )
-    declaration: DeclarationRef = Field(
-        description="Exact contract-symbols marker that inventories the symbol."
     )
 
 
@@ -277,14 +255,6 @@ _PAIR_BLOCK_MARKER = re.compile(r"<!-- pair-block: (?P<id>P[0-9]+-[A-Z]+-[0-9]{2
 
 
 _PYTHON_FENCE = re.compile(r"\`\`\`python\n(?P<body>.*?)\n\`\`\`", re.DOTALL)
-_CONTRACT_EXAMPLE_SYMBOLS = re.compile(
-    r"<!-- contract-example-symbols:\s*(?P<body>\[.*?\])\s*-->",
-    re.DOTALL,
-)
-_CONTRACT_SYMBOLS = re.compile(
-    r"<!-- contract-symbols:\s*(?P<body>\{.*?\})\s*-->",
-    re.DOTALL,
-)
 _CONTRACT_WORKED_EXAMPLE = re.compile(
     r"<!-- contract-worked-example: start -->"
     r"(?P<body>.*?)"
@@ -747,123 +717,6 @@ def _section(text: str, number: int) -> str:
     return match.group("body")
 
 
-def _python_declarations(text: str, filename: str) -> dict[str, set[str]]:
-    declarations = {"models": set(), "aliases": set(), "functions": set()}
-    declarations["imports"] = set()
-    for match in _PYTHON_FENCE.finditer(text):
-        tree = ast.parse(match.group("body"), filename=filename)
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                declarations["models"].add(node.name)
-            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                declarations["functions"].add(node.name)
-            elif isinstance(node, ast.Assign):
-                declarations["aliases"].update(
-                    target.id for target in node.targets if isinstance(target, ast.Name)
-                )
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                declarations["aliases"].add(node.target.id)
-            elif isinstance(node, ast.Import):
-                declarations["imports"].update(
-                    alias.asname or alias.name.split(".", maxsplit=1)[0]
-                    for alias in node.names
-                )
-            elif isinstance(node, ast.ImportFrom):
-                declarations["imports"].update(
-                    alias.asname or alias.name for alias in node.names
-                )
-    return declarations
-
-
-def _load_symbol_inventory(contract: Path) -> dict[str, tuple[str, ...]]:
-    text = contract.read_text(encoding="utf-8")
-    markers = tuple(_CONTRACT_SYMBOLS.finditer(text))
-    if len(markers) != 1:
-        raise ContractTraceabilityError(
-            f"{contract.name} requires one contract-symbols inventory"
-        )
-    try:
-        loaded = json.loads(markers[0].group("body"))
-    except json.JSONDecodeError as error:
-        raise ContractTraceabilityError(
-            f"{contract.name} has an invalid contract-symbols inventory"
-        ) from error
-    keys = ("models", "aliases", "functions")
-    if not isinstance(loaded, dict) or set(loaded) != set(keys):
-        raise ContractTraceabilityError(
-            f"{contract.name} contract-symbols requires models, aliases, and functions"
-        )
-    inventory: dict[str, tuple[str, ...]] = {}
-    for key in keys:
-        values = loaded[key]
-        if (
-            not isinstance(values, list)
-            or any(
-                not isinstance(value, str) or not value.isidentifier()
-                for value in values
-            )
-            or values != sorted(set(values))
-        ):
-            raise ContractTraceabilityError(
-                f"{contract.name} contract-symbols {key} must be sorted "
-                "unique Python identifiers"
-            )
-        inventory[key] = tuple(values)
-    all_names = [name for values in inventory.values() for name in values]
-    if not all_names or len(all_names) != len(set(all_names)):
-        raise ContractTraceabilityError(
-            f"{contract.name} contract-symbols must inventory each symbol once"
-        )
-    return inventory
-
-
-def _parse_contract_symbols(root: Path, contract: Path) -> tuple[ContractSymbol, ...]:
-    text = contract.read_text(encoding="utf-8")
-    inventory = _load_symbol_inventory(contract)
-    marker = next(_CONTRACT_SYMBOLS.finditer(text))
-    marker_ref = _declaration_ref(
-        root,
-        contract,
-        text,
-        marker.start(),
-        marker.end(),
-    )
-
-    available = _python_declarations(text, str(contract))
-    available_names = set().union(*available.values())
-    inventoried_names = set().union(*(set(values) for values in inventory.values()))
-    missing = sorted(inventoried_names - available_names)
-    if missing:
-        raise ContractTraceabilityError(
-            f"{contract.name} contract-symbols names undeclared symbols: {missing}"
-        )
-
-    models = _section(text, 4)
-    example = _CONTRACT_WORKED_EXAMPLE.search(models)
-    if example is not None:
-        models = models[: example.start()] + models[example.end() :]
-    required = _python_declarations(models, f"{contract}:section-4")
-    for key in ("models", "aliases", "functions"):
-        omitted = sorted(required[key] - set(inventory[key]))
-        if omitted:
-            raise ContractTraceabilityError(
-                f"{contract.name} contract-symbols omits Section 4 {key}: {omitted}"
-            )
-
-    kinds = {"models": "model", "aliases": "alias", "functions": "function"}
-    contract_path = contract.relative_to(root).as_posix()
-    return tuple(
-        ContractSymbol(
-            kind=cast(ContractSymbolKind, kinds[key]),
-            name=name,
-            contract=contract_path,
-            declaration=marker_ref,
-        )
-        for key in ("models", "aliases", "functions")
-        for name in inventory[key]
-    )
-
-
 def _assert_dag(diagram: str, contract: Path, index: int) -> None:
     if not diagram.lstrip().startswith("flowchart"):
         raise ContractTraceabilityError(
@@ -901,6 +754,15 @@ def _assert_dag(diagram: str, contract: Path, index: int) -> None:
 
 def validate_contract_example(contract: Path) -> None:
     text = contract.read_text(encoding="utf-8")
+    retired_markers = (
+        "<!-- contract-symbols:",
+        "<!-- contract-example-symbols:",
+        "```python contract-exports",
+    )
+    if any(marker in text for marker in retired_markers):
+        raise ContractTraceabilityError(
+            f"{contract.name} contains a retired symbol inventory"
+        )
     current_gap = _section(text, 3)
     positions = tuple(
         current_gap.find(heading)
@@ -926,91 +788,11 @@ def validate_contract_example(contract: Path) -> None:
     for index, diagram in enumerate(diagrams, start=1):
         _assert_dag(diagram, contract, index)
 
-    _section(text, 4)
-    inventories = tuple(_CONTRACT_EXAMPLE_SYMBOLS.finditer(text))
-    if len(inventories) != 1:
-        raise ContractTraceabilityError(
-            f"{contract.name} requires one contract-example-symbols inventory"
-        )
-    try:
-        loaded_symbols = json.loads(inventories[0].group("body"))
-    except json.JSONDecodeError as error:
-        raise ContractTraceabilityError(
-            f"{contract.name} has an invalid contract-example-symbols inventory"
-        ) from error
-    if (
-        not isinstance(loaded_symbols, list)
-        or not loaded_symbols
-        or any(
-            not isinstance(symbol, str) or not symbol.isidentifier()
-            for symbol in loaded_symbols
-        )
-        or len(loaded_symbols) != len(set(loaded_symbols))
-    ):
-        raise ContractTraceabilityError(
-            f"{contract.name} contract-example-symbols must be a non-empty "
-            "array of unique Python identifiers"
-        )
-    symbols = set(loaded_symbols)
-    contract_symbols = set().union(*_load_symbol_inventory(contract).values())
-    uncovered_symbols = sorted(symbols - contract_symbols)
-    if uncovered_symbols:
-        raise ContractTraceabilityError(
-            f"{contract.name} example symbols absent from contract-symbols: "
-            f"{uncovered_symbols}"
-        )
-
     examples = tuple(_CONTRACT_WORKED_EXAMPLE.finditer(text))
     if len(examples) != 1:
         raise ContractTraceabilityError(
             f"{contract.name} requires one marked worked example"
         )
-
-    declarations = text
-    declaration_trees = tuple(
-        ast.parse(match.group("body"), filename=str(contract))
-        for match in _PYTHON_FENCE.finditer(declarations)
-    )
-    declared_classes = {
-        node.name
-        for tree in declaration_trees
-        for node in tree.body
-        if isinstance(node, ast.ClassDef)
-    }
-    declared_functions = {
-        node.name
-        for tree in declaration_trees
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    declared_aliases = {
-        target.id
-        for tree in declaration_trees
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-    }
-    declared_aliases.update(
-        node.target.id
-        for tree in declaration_trees
-        for node in tree.body
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
-    )
-    declared_imports = {
-        alias.asname or alias.name.split(".", maxsplit=1)[0]
-        for tree in declaration_trees
-        for node in tree.body
-        if isinstance(node, ast.Import)
-        for alias in node.names
-    }
-    declared_imports.update(
-        alias.asname or alias.name
-        for tree in declaration_trees
-        for node in tree.body
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
-    )
 
     example_blocks = tuple(
         match.group("body")
@@ -1018,45 +800,10 @@ def validate_contract_example(contract: Path) -> None:
     )
     if not example_blocks:
         raise ContractTraceabilityError(f"{contract.name} worked example has no Python")
-    example_tree = ast.parse(
+    ast.parse(
         "\n\n".join(example_blocks),
         filename=f"{contract}:worked-example",
     )
-    calls = {
-        node.func.id
-        for node in ast.walk(example_tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    used_names = {
-        node.id
-        for node in ast.walk(example_tree)
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
-    }
-
-    declared_symbols = (
-        declared_classes | declared_functions | declared_aliases | declared_imports
-    )
-    undeclared_symbols = sorted(symbols - declared_symbols)
-    if undeclared_symbols:
-        raise ContractTraceabilityError(
-            f"{contract.name} inventory names undeclared symbols: {undeclared_symbols}"
-        )
-
-    missing_classes = sorted((symbols & declared_classes) - calls)
-    missing_functions = sorted((symbols & declared_functions) - calls)
-    referenced_symbols = declared_aliases | declared_imports
-    missing_aliases = sorted(
-        (symbols & referenced_symbols)
-        - declared_classes
-        - declared_functions
-        - used_names
-    )
-    if missing_classes or missing_functions or missing_aliases:
-        raise ContractTraceabilityError(
-            f"{contract.name} incomplete worked example: "
-            f"models={missing_classes}, operations={missing_functions}, "
-            f"aliases={missing_aliases}"
-        )
 
 
 def serialize_contract_traceability(graph: ContractTraceabilityGraph) -> bytes:
