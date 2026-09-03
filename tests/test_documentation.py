@@ -42,6 +42,7 @@ MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist
 CONTRACT_TRACEABILITY = ROOT / "docs/development/contract-traceability.md"
 MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
 SYSTEM_IMPACT_COMPILER = ROOT / "docs/development/system-impact-compiler.md"
+CHILD_PROCESS_LAUNCHING = ROOT / "docs/development/child-process-launching.md"
 RESEARCH_MEMORY = ROOT / "docs/development/research-memory-roadmap.md"
 RESEARCH_MEMORY_PAIR_CODING = ROOT / "docs/development/research-memory-pair-coding.md"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release.yml"
@@ -59,6 +60,7 @@ IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/project-data-root.md",
     MODULE_OWNERSHIP,
     SYSTEM_IMPACT_COMPILER,
+    CHILD_PROCESS_LAUNCHING,
     ROOT / "docs/development/download-retrieval-artifacts.md",
     ROOT / "docs/development/external-input-roots.md",
     ROOT / "docs/development/unified-metric-drafting.md",

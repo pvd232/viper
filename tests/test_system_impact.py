@@ -7,13 +7,13 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from viper import _subprocess as subprocess
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,

@@ -6,7 +6,6 @@ import hashlib
 import os
 import re
 import string
-import subprocess
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -15,6 +14,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
 
+from . import _subprocess as subprocess
 from ._parameter.validation import (
     ParameterValidationError,
     validate_stage_parameters,

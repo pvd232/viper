@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import subprocess
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import cast
 import yaml
 from huggingface_hub import HfApi, RepoFile, hf_hub_download
 
+from .. import _subprocess as subprocess
 from .._schema import ArtifactName, DataRole, RepoRelPath
 from ..artifact_loaders import (
     ArtifactLoaderError,

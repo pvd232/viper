@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import subprocess
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -24,6 +23,7 @@ from tests.fixtures import (
     stage_implementation_ref,
     verification_policy,
 )
+from viper import _subprocess as subprocess
 from viper import parameters
 from viper._schema import (
     PARAMETERS,

@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import signal
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -15,6 +14,7 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
+from .. import _subprocess as subprocess
 from .._parameter.validation import (
     ParameterValidationError,
     validate_stage_parameters,

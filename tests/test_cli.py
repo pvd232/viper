@@ -1,7 +1,6 @@
 """Tests for the installed VIPER command surface."""
 
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -10,6 +9,7 @@ from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 
+from viper import _subprocess as subprocess
 from viper.cli import main
 from viper.journal import DurableJournal
 

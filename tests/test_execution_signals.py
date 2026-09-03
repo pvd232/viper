@@ -7,7 +7,6 @@ import json
 import os
 import shutil
 import signal
-import subprocess
 import sys
 import threading
 import time
@@ -26,6 +25,7 @@ from tests.fixtures import (
     reproducibility,
     resume_state,
 )
+from viper import _subprocess as subprocess
 from viper import parameters
 from viper._schema import (
     PARAMETERS,

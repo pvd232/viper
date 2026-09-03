@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,6 +13,7 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .. import _subprocess as subprocess
 from .._schema import ArtifactName
 from ..experiments import ExperimentSpec
 from ..ids import InputName, StageId

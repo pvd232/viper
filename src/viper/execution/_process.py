@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .. import _subprocess as subprocess
 
 
 class WorkerError(RuntimeError):

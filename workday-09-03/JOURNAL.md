@@ -17,8 +17,10 @@ commits were accepted.
 - Kept Conda outside the repository contract. A contributor may use Conda
   locally, but VIPER's documented commands now depend only on an activated
   Python environment.
-- Set `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` for subprocess-heavy test runs
-  on this macOS host to avoid the observed PyTorch fork crash.
+- Early Phase 1 and Phase 2 test runs used
+  `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` after macOS reported a child-side
+  pre-exec crash. The child-process hardening work below removed that
+  workaround from the final acceptance boundary.
 
 ### Master Phase 1 — local publication
 
@@ -50,6 +52,45 @@ commits were accepted.
 - Preserved the inherited Phase 1 execution-test identity and placed every
   Phase 2 implementation and verification edge inside its owning checklist
   PairBlock.
+
+### macOS child-process hardening
+
+- Promoted the deferred crash TODO into the
+  [Child-process launching](../docs/development/child-process-launching.md)
+  contract with requirements `CPL-01` and `CPL-02`, PairBlocks `P2-CPL-01`
+  and `P2-CPL-02`, exact `ContractTarget` declarations, and checklist edges.
+- Traced five Python crash reports to `_posixsubprocess.fork_exec()`. Four
+  reports came from direct subprocess launches. The fifth came from the
+  hidden `subprocess.check_output(["uname", "-p"])` call inside
+  `platform.processor()` after an earlier test had initialized a server
+  thread.
+- Added `viper._subprocess.Popen` and `viper._subprocess.run`. On macOS, the
+  facade starts an absolute Python bridge through `posix_spawn`; the bridge
+  applies the working directory and session settings before `execve()`
+  replaces it with the requested target.
+- Routed every direct subprocess import beneath `src/viper` and `tests`
+  through the facade, except the regression module that replaces `_fork_exec`
+  with a rejecting stub.
+- Removed `platform.processor()` from macOS runtime observation.
+  `CPUContext.model` records the already observed architecture on macOS and
+  retains the prior processor probe on other platforms.
+- Registered the contract in the documentation contract set and repaired the
+  generated-project file-count assertion that prevented its process result
+  from being checked.
+- Installed and locked the CodeQL query-pack dependencies required by the
+  System Impact gate.
+
+The final `ContractTraceabilityGraph` contains 2 requirements, 2 verifier
+rules, 4 traceability edges, 60 exact targets, and 2 PairBlocks. CodeQL observed
+4,796 baseline declarations and 4,835 candidate declarations with 8,280
+candidate dependency edges under one `CodeQLIdentity`. The final precommit
+`PlanCheck` passed all 60 targets, reported no unexpected declaration changes
+or unsatisfied dependencies, and returned zero from both PairBlock gates. The
+checked plan digest is
+`c66eb8d9e6018da01c9f312dbfccfb42be8995949c077b335aef835f00aebdc9`.
+The exact combined gate passed 98 tests with 1 skip and 2 subtests and created
+no new macOS crash report. The documentation and Contract Traceability gate
+passed 82 tests.
 
 ## Acceptance evidence
 

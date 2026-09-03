@@ -177,14 +177,22 @@ Planned links name exact future symbols. Implemented links must resolve in the
 candidate source tree. Phase closure requires every link to use the implemented
 state.
 
-## Deferred macOS subprocess hardening
+## macOS child-process launching
 
-- [ ] Remove the local `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES` workaround
-  recorded in the [September 3 execution journal](../../workday-09-03/JOURNAL.md).
-  Reproduce the child-side `fork()` crash across the supported Python versions,
-  beginning with `preflight._git_bytes()`. Move subprocess-heavy tests to a
-  clean-process or spawn-compatible launch path. Add a focused macOS regression
-  that fails when a child crashes before `exec()`, then remove the workaround.
+Production code imports the private `viper._subprocess` facade. On macOS, the
+facade starts a Python bridge through `posix_spawn`; the bridge applies the
+requested process settings and replaces itself with the target executable.
+The [child-process contract](child-process-launching.md) defines the supported
+arguments and exact acceptance checks.
+
+`tests/test_process_startup.py` disables `_fork_exec` while running a real
+command, verifies its output, and checks the previously crashing preflight Git
+read. It replaces `platform.processor()` with a rejecting stub while observing
+the local runtime, because that standard-library helper starts an unguarded
+subprocess on macOS. It also scans `src/viper` and `tests` and rejects direct
+standard-library subprocess imports outside the facade and that regression
+module. Run it without `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` after changing a
+repository-owned process boundary.
 
 The automatic-input contract marks one complete public workflow. Documentation
 tests parse that example and require every planned public constructor. They

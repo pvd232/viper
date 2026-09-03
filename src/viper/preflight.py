@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import os
-import subprocess
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from . import _subprocess as subprocess
 from ._parameter.validation import (
     ParameterValidationError,
     validate_stage_parameters,

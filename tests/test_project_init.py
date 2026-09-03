@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from os import environ
 from pathlib import Path
 
+from viper import _subprocess as subprocess
 from viper.api import (
     InitProjectRequest,
     ViperFailure,
@@ -35,7 +35,7 @@ def test_init_generates_importable_five_stage_project(
     )
 
     assert result.project_root == target
-    assert len(result.files) == 22
+    assert len(result.files) == 21
     assert target / "viper.toml" in result.files
     assert target / "inputs" / ".gitkeep" in result.files
     assert completed.returncode == 0, completed.stdout + completed.stderr

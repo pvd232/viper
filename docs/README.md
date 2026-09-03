@@ -27,6 +27,7 @@ Start with the task you need to complete.
 | [Contract Traceability](development/contract-traceability.md) | Link each contract requirement to its verifier rule, implementation owner, and acceptance test |
 | [Project data root contract](development/project-data-root.md) | Bind initialization, protocol paths, local storage, and later commands to one selected project root |
 | [System Impact Check](development/system-impact-compiler.md) | Compare one closed CTG plan with pinned CodeQL observations before and after implementation |
+| [Child-process launching](development/child-process-launching.md) | Start repository-owned child processes without calling `fork()` from an initialized macOS process |
 | [Research Memory and Agent Learning](development/research-memory-roadmap.md) | Record auditable research episodes, curate leakage-safe learning data, evaluate policy changes, and connect literature through the full MCP layout |
 | [Research Memory Pair-Coding Guide](development/research-memory-pair-coding.md) | Implement Master Phases 18–20 through bounded, tested PairBlocks |
 | [Download retrieval contract](development/download-retrieval-artifacts.md) | Make each verified HTTP body the same-named stage artifact |

@@ -1,7 +1,8 @@
 """Provide Git repository operations shared by execution acceptance tests."""
 
-import subprocess
 from pathlib import Path
+
+from viper import _subprocess as subprocess
 
 REPOSITORY = "https://github.com/example/viper-local-project"
 

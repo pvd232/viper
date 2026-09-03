@@ -6,11 +6,11 @@ import ast
 import hashlib
 import json
 import shutil
-import subprocess
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, cast
 
+from .. import _subprocess as subprocess
 from ..system_impact import (
     CodeQLIdentity,
     CodeQLReceipt,

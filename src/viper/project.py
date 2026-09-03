@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 import tempfile
 import tomllib
 from pathlib import Path
@@ -12,6 +11,7 @@ from typing import Literal
 
 from pydantic import Field, ValidationError
 
+from . import _subprocess as subprocess
 from ._schema import ProtocolModel, RepoRelPath
 
 PACKAGE_PATTERN = re.compile(r"[a-z][a-z0-9_]*\Z")

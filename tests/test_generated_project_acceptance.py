@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -18,6 +17,7 @@ from tests.fixtures import (
 )
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_run_execution import http_source as execution_http_source
+from viper import _subprocess as subprocess
 from viper import parameters
 from viper._schema import (
     PARAMETERS,

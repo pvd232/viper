@@ -1,11 +1,19 @@
 """Tests for process-start controls and initialized generator evidence."""
 
+import ast
 import hashlib
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
+import viper.runtime as runtime
+from viper import _subprocess
 from viper._verification.attempt import _verify_startup_backend
+from viper.preflight import _git_bytes
 from viper.resume import DataLoaderConfiguration
 from viper.runtime import (
     CPUBackendContext,
@@ -22,6 +30,150 @@ from viper.runtime import (
     process_environment,
 )
 from viper.verification.models import VerificationError
+
+
+def _run_git(root: Path, *arguments: str) -> None:
+    """Create the committed Git fixture through the spawn-safe facade."""
+    _subprocess.run(
+        ("git", "-C", str(root), *arguments),
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_run_uses_spawn_bridge_without_fork(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Execute the target with cwd, environment, and input while fork is disabled."""
+    monkeypatch.setattr(_subprocess, "_use_spawn_bridge", lambda: True)
+
+    def reject_fork(*args: object, **kwargs: object) -> None:
+        raise AssertionError("spawn-safe execution called fork")
+
+    monkeypatch.setattr(subprocess, "_fork_exec", reject_fork)
+    environment = {**os.environ, "VIPER_SPAWN_VALUE": "observed"}
+    completed = _subprocess.run(
+        (
+            sys.executable,
+            "-c",
+            "import os,sys; print(os.getcwd()); "
+            "print(os.environ['VIPER_SPAWN_VALUE']); print(sys.stdin.read())",
+        ),
+        cwd=tmp_path,
+        env=environment,
+        input="payload",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.splitlines() == [
+        str(tmp_path),
+        "observed",
+        "payload",
+    ]
+
+
+def test_popen_preserves_new_process_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Apply ``start_new_session`` inside the bridge before target execution."""
+    monkeypatch.setattr(_subprocess, "_use_spawn_bridge", lambda: True)
+    process = _subprocess.Popen(
+        (
+            sys.executable,
+            "-c",
+            "import os; print(os.getsid(0) == os.getpid())",
+        ),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+
+    stdout, stderr = process.communicate(timeout=10)
+
+    assert process.returncode == 0, stderr.decode(errors="replace")
+    assert stdout == b"True\n"
+
+
+def test_run_rejects_nonzero_target_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Require successful target execution when ``check`` is enabled."""
+    monkeypatch.setattr(_subprocess, "_use_spawn_bridge", lambda: True)
+
+    with pytest.raises(subprocess.CalledProcessError) as failure:
+        _subprocess.run(
+            (sys.executable, "-c", "raise SystemExit(7)"),
+            capture_output=True,
+            check=True,
+        )
+
+    assert failure.value.returncode == 7
+
+
+def test_preflight_git_read_executes_without_fork(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read committed bytes through the migrated preflight process boundary."""
+    _run_git(tmp_path, "init", "--quiet")
+    _run_git(tmp_path, "config", "user.name", "VIPER test")
+    _run_git(tmp_path, "config", "user.email", "test@example.com")
+    (tmp_path / "value.txt").write_text("committed\n", encoding="utf-8")
+    _run_git(tmp_path, "add", "value.txt")
+    _run_git(tmp_path, "commit", "--quiet", "-m", "fixture")
+    monkeypatch.setattr(_subprocess, "_use_spawn_bridge", lambda: True)
+
+    def reject_fork(*args: object, **kwargs: object) -> None:
+        raise AssertionError("preflight Git read called fork")
+
+    monkeypatch.setattr(subprocess, "_fork_exec", reject_fork)
+
+    assert _git_bytes(tmp_path, "HEAD", "value.txt") == b"committed\n"
+
+
+def test_runtime_observation_does_not_invoke_platform_processor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Avoid the hidden subprocess used by ``platform.processor()``."""
+
+    def reject_processor_probe() -> str:
+        raise AssertionError("runtime observation launched the processor probe")
+
+    monkeypatch.setattr(runtime.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(runtime.platform, "processor", reject_processor_probe)
+
+    observed = runtime.observe_local_execution(CPUComputeSpec())
+
+    assert observed.cpu.model == observed.cpu.architecture
+
+
+def test_repository_launch_sites_use_spawn_safe_subprocess() -> None:
+    """Keep repository-owned subprocess calls behind the spawn-safe facade."""
+    repository_root = Path(__file__).parents[1]
+    search_roots = (repository_root / "src/viper", repository_root / "tests")
+    direct_imports: list[str] = []
+    for search_root in search_roots:
+        for path in sorted(search_root.rglob("*.py")):
+            relative_path = path.relative_to(repository_root).as_posix()
+            if relative_path in {
+                "src/viper/_subprocess.py",
+                "tests/test_process_startup.py",
+            }:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import) and any(
+                    alias.name == "subprocess" for alias in node.names
+                ):
+                    direct_imports.append(relative_path)
+                if isinstance(node, ast.ImportFrom) and node.module == "subprocess":
+                    direct_imports.append(relative_path)
+
+    assert direct_imports == []
 
 
 def _controls() -> ReproducibilitySpec:

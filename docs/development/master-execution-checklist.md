@@ -280,6 +280,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
+| [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -302,6 +303,7 @@ The contracts share models. One contract owns each shared decision:
 | Public API and verification symbols are implemented in the modules callers import | Public module ownership |
 | Requirements, targets, rule edges, tests, gates, and dependency order form one closed implementation plan | Contract Traceability |
 | Pinned CodeQL observations report policy-selected direct baseline dependents and prove whether realized source changes match that closed plan | System Impact Check |
+| Repository-owned child processes use the spawn-safe facade on macOS | Child-process launching |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
 | HTTP root is `ResolvedHttpRetrieval` | External input roots |
 | Custom HTTP execution uses `@http(id=...)` from `viper.http` and `DownloadSpec.http` | Automatic input resolution |
@@ -336,6 +338,7 @@ a new digest.
 <!-- contract-baseline: project-data-root.md sha256=fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb -->
 <!-- contract-baseline: module-ownership.md sha256=135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea -->
 <!-- contract-baseline: system-impact-compiler.md sha256=89ee53748fc5b0a154feaedc6173f5604db71e4302ea0b9e5e3c306350a118de -->
+<!-- contract-baseline: child-process-launching.md sha256=e50e7bfec6c26928b23e2fedd2b06b0becaa2bbd62bfa8fed65c8e2bd9988d06 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=c4ee06aaefa8fc60f812ab213a5b2a12c720c082a2f88f4ad9c3312bd0692112 -->
 <!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
@@ -1214,6 +1217,40 @@ python -m pytest \
 ```
 
 **Commit boundary:** `Make download stages runner owned`
+
+### 9.4 Spawn-safe child processes
+
+- [x] Add `viper._subprocess.Popen` and `viper._subprocess.run`. On macOS,
+      resolve the target executable and launch the Python bridge through
+      `posix_spawn`; apply `cwd` and `start_new_session` inside the bridge
+      before `execve()` replaces it with the target.
+      <!-- pair-block: P2-CPL-01 -->
+      <!-- pair-block-contract: P2-CPL-01 contract=child-process-launching.md -->
+      <!-- implements: CPL-01 -->
+      <!-- contract-implementation: requirement=CPL-01 rule=process.launch.spawn_safe state=implemented owner=src/viper/_subprocess.py:Popen -->
+      <!-- contract-verification: requirement=CPL-01 rule=process.launch.spawn_safe state=implemented test=tests/test_process_startup.py:test_run_uses_spawn_bridge_without_fork -->
+- [x] Preserve captured streams, standard input, timeout, `check=True`, and
+      process-session behavior. Require the regression command to execute and
+      return its expected output while `_fork_exec` is disabled.
+- [x] Route every repository-owned subprocess call through `viper._subprocess`
+      and reject later direct standard-library subprocess imports beneath
+      `src/viper` and `tests`, except the regression test's `_fork_exec` probe.
+      <!-- pair-block: P2-CPL-02 -->
+      <!-- pair-block-contract: P2-CPL-02 contract=child-process-launching.md -->
+      <!-- implements: CPL-02 -->
+      <!-- contract-implementation: requirement=CPL-02 rule=process.launch.closed_boundary state=implemented owner=src/viper/_subprocess.py:run -->
+      <!-- contract-verification: requirement=CPL-02 rule=process.launch.closed_boundary state=implemented test=tests/test_process_startup.py:test_repository_launch_sites_use_spawn_safe_subprocess -->
+- [x] Avoid the hidden subprocess inside `platform.processor()` during runtime
+      observation, and reject any regression that invokes that probe.
+- [x] Run both frozen PairBlock gates, including
+      `python -m pytest tests/test_process_startup.py -q`, without
+      `OBJC_DISABLE_INITIALIZE_FORK_SAFETY`; confirm that the previously
+      crashing paths create no new macOS crash report.
+      <!-- verifies: CPL-01, CPL-02 -->
+
+**Contract:** [Child-process launching](child-process-launching.md)
+
+**Commit boundary:** `Make macOS child processes spawn safe`
 
 ## 10. Master Phase 3 — captured local external roots
 

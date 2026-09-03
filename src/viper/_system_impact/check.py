@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
-import subprocess
 import tempfile
 from pathlib import Path
 
+from .. import _subprocess as subprocess
 from .._contract_traceability import (
     ContractTarget,
     ContractTraceabilityGraph,

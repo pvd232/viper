@@ -1,13 +1,13 @@
 """Tests for canonical protocol-file authoring and run-plan freezing."""
 
 import hashlib
-import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import yaml
 
+from viper import _subprocess as subprocess
 from viper import parameters
 from viper._schema import (
     PARAMETERS,

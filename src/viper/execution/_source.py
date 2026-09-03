@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import subprocess
 from pathlib import Path
 
+from .. import _subprocess as subprocess
 from .._schema import RepoRelPath
 from .._verification.storage import (
     fetch_git_file_bytes,

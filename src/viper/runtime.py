@@ -10,7 +10,6 @@ import pickle
 import platform
 import random
 import re
-import subprocess
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -21,6 +20,7 @@ import numpy as np
 import torch
 from pydantic import Field, model_validator
 
+from . import _subprocess as subprocess
 from ._schema import (
     SHA256,
     NonEmptyStr,
@@ -720,7 +720,11 @@ def select_cuda_device(model: str) -> int:
 def _observe_execution(host: HostContext, compute: ComputeSpec) -> ExecutionContext:
     """Capture CPU, backend, and numerical runtime facts for one observed host."""
     architecture = platform.machine() or "unreported"
-    processor = platform.processor() or architecture
+    processor = (
+        architecture
+        if platform.system() == "Darwin"
+        else platform.processor() or architecture
+    )
     return ExecutionContext(
         host=host,
         cpu=CPUContext(
