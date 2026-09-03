@@ -8,7 +8,7 @@ from pathlib import Path
 from ..journal import DurableJournal
 from ..runs import AttemptFailure, RunAttempt, RunSpec
 from ..serialization import parse_yaml_bytes
-from ..storage import LocalArtifactStore
+from ..storage import StorageDestination
 from ._publication import publish_attempt_files, write_attempt_document
 
 
@@ -17,7 +17,7 @@ def reconcile_abandoned_attempts(
     workspace_root: Path,
     run: RunSpec,
     run_root: str,
-    store: LocalArtifactStore,
+    destination: StorageDestination,
     known_attempts: tuple[RunAttempt, ...],
 ) -> tuple[RunAttempt, ...]:
     """Close every durable workspace omitted from the current run head."""
@@ -55,8 +55,8 @@ def reconcile_abandoned_attempts(
         else:
             lost_at = entries[-1].recorded_at
         journal_reference, measurements, metric_receipts, logs = publish_attempt_files(
-            store,
             root,
+            destination,
             run_root,
             attempt_id,
             journal,
@@ -83,6 +83,6 @@ def reconcile_abandoned_attempts(
                 occurred_at=lost_at,
             ),
         )
-        write_attempt_document(root, run_root, recovered_attempt, store)
+        write_attempt_document(root, run_root, recovered_attempt, destination)
         recovered[attempt_id] = recovered_attempt
     return tuple(recovered[key] for key in sorted(recovered))

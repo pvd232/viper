@@ -25,6 +25,7 @@ These requirements bind the contract to the master checklist:
 | CRT-04 <!-- contract-requirement: CRT-04 phase=0 test=tests/test_contract_traceability.py --> | Publish a canonical, source-evidenced traceability graph for downstream plan checks. |
 | CRT-05 <!-- contract-requirement: CRT-05 phase=0 test=tests/test_contract_traceability.py --> | Use `ContractTarget` as the sole Python-declaration change inventory and reject the retired symbol, export, and example inventories. |
 | CRT-06 <!-- contract-requirement: CRT-06 phase=0 test=tests/test_contract_traceability.py --> | Compile every `ContractTarget` and `PairBlock` into `ContractTraceabilityGraph`; bind each rule edge to one block; require complete requirement, target, supporting-asset, rule, test, and dependency closure; then remove the superseded symbol, export, and example inventories. |
+| CRT-07 <!-- contract-requirement: CRT-07 phase=1 test=tests/test_contract_traceability.py --> | Compile a closed requirement slice from a multi-phase contract and derive contract status from both PairBlock completion and requirement-edge state. |
 
 ## 2. Required claim
 
@@ -1731,6 +1732,7 @@ machine's absolute checkout path.
 | `contract.target.complete` <!-- verifier-rule: contract.target.complete requirement=CRT-06 --> | Every PairBlock target has exactly one requirement-owned `ContractTarget` in that block, with an action and exact declaration. |
 | `contract.block.complete` <!-- verifier-rule: contract.block.complete requirement=CRT-06 --> | Every rule edge resolves to one PairBlock whose requirements contain the rule's requirement; each implementation block contains at least one target for that requirement; and every verification target occurs in `PairBlock.tests`. |
 | `contract.block.acyclic` <!-- verifier-rule: contract.block.acyclic requirement=CRT-06 --> | Every dependency resolves to a known PairBlock and the complete dependency relation is acyclic. |
+| `contract.graph.selected` <!-- verifier-rule: contract.graph.selected requirement=CRT-07 --> | `compile_contract_traceability(requirement_ids=...)` returns only complete selected requirements, rules, blocks, targets, and edges; it rejects an absent requirement or a selection that splits one PairBlock. |
 
 These named rules are logical entities only after the parser reads their
 markers. Their implementation is ordinary source code. Their proof is the
@@ -1800,6 +1802,537 @@ and a PairBlock dependency cycle.
 9. Classify and repair each contract's PairBlock targets before that contract
    enters strict target closure.
 10. Remove duplicate parsing only after parity passes.
+
+<!-- pair-block-definition: P1-CRT-01 -->
+```toml pair-block
+id = "P1-CRT-01"
+requirements = ["CRT-07"]
+targets = ["src/viper/_contract_traceability.py:_implemented_pair_blocks", "src/viper/_contract_traceability.py:_validate_plan", "src/viper/_contract_traceability.py:compile_contract_traceability", "tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice", "tests/test_contract_traceability.py:test_contract_traceability_includes_dependency_evidence_for_selected_slice", "tests/test_contract_traceability.py:test_contract_traceability_rejects_requirement_slice_that_splits_block", "tests/test_documentation.py:_CONTENT_PAIR_BLOCK_MARKER", "tests/test_documentation.py:_RULE_EDGE_STATE", "tests/test_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status", "tests/test_documentation.py:test_target_contracts_use_env_identifiers"]
+tests = ["tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice", "tests/test_contract_traceability.py:test_contract_traceability_includes_dependency_evidence_for_selected_slice", "tests/test_contract_traceability.py:test_contract_traceability_rejects_requirement_slice_that_splits_block", "tests/test_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status", "tests/test_documentation.py:test_target_contracts_use_env_identifiers"]
+gate = "python -m pytest tests/test_contract_traceability.py tests/test_documentation.py -k 'selected_requirement_slice or dependency_evidence or splits_block or pair_blocks_map_to_contract_sections_and_derived_status or target_contracts_use_env_identifiers' -q"
+depends_on = ["P0-CRT-07"]
+```
+
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=update target=tests/test_documentation.py:test_target_contracts_use_env_identifiers -->
+
+```python contract-target
+def test_target_contracts_use_env_identifiers() -> None:
+    """Keep normative contract prose on `env` names before the rename executes."""
+    contract_text = "\n".join(
+        _TRACEABILITY_MODEL_FENCE.sub("", path.read_text())
+        for path in IMPLEMENTATION_CONTRACTS
+    )
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
+
+    assert TARGET_ENV_IDENTIFIERS - target_identifiers == set()
+    assert target_identifiers & RETIRED_TARGET_ENV_IDENTIFIERS == set()
+    assert 'kind: Literal["env"] = "env"' in contract_text
+    assert 'kind: Literal["environment"] = "environment"' not in contract_text
+    assert all(name in checklist for name in TARGET_ENV_IDENTIFIERS)
+    assert all(name in checklist for name in RETIRED_TARGET_ENV_IDENTIFIERS)
+```
+
+`compile_contract_traceability()` accepts `requirement_ids` because one contract
+may own work scheduled in several master phases. The selected graph retains
+complete closure inside the requested slice. A PairBlock that owns both a
+selected and an omitted requirement makes the slice invalid. The graph also
+retains each selected block's direct dependency block and its targets. System
+Impact can therefore prove that an omitted completed dependency already exists
+in the baseline without rerunning that block.
+
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=update target=src/viper/_contract_traceability.py:_validate_plan -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=src/viper/_contract_traceability.py:_implemented_pair_blocks -->
+
+```python contract-target
+def _implemented_pair_blocks(checklist: Path) -> frozenset[PairBlockId]:
+    """Return blocks with at least one implemented checklist rule edge."""
+    text = checklist.read_text(encoding="utf-8")
+    completed: set[PairBlockId] = set()
+    for checkbox in _CHECKBOX.finditer(text):
+        blocks = tuple(_PAIR_BLOCK_MARKER.finditer(checkbox.group(0)))
+        edges = tuple(_RULE_EDGE.finditer(checkbox.group(0)))
+        if (
+            len(blocks) == 1
+            and edges
+            and all(edge.group("state") == "implemented" for edge in edges)
+        ):
+            completed.add(cast(PairBlockId, blocks[0].group("id")))
+    return frozenset(completed)
+
+def _validate_plan(
+    root: Path,
+    requirements: tuple[ContractRequirement, ...],
+    rules: tuple[VerifierRule, ...],
+    edges: tuple[RuleEdge, ...],
+    targets: tuple[ContractTarget, ...],
+    blocks: tuple[PairBlock, ...],
+    completed_block_ids: frozenset[PairBlockId] = frozenset(),
+) -> None:
+    requirement_ids = {item.requirement_id for item in requirements}
+    rule_by_id = {item.rule_id: item for item in rules}
+    block_by_id = {item.block_id: item for item in blocks}
+    completed_blocks = completed_block_ids | {
+        edge.block_id for edge in edges if edge.state == "implemented"
+    }
+
+    target_keys = [(item.block_id, item.target) for item in targets]
+    if len(target_keys) != len(set(target_keys)):
+        raise ContractTraceabilityError("PairBlock target has several ContractTargets")
+    asset_paths = [asset for block in blocks for asset in block.assets]
+    if _duplicates(asset_paths):
+        raise ContractTraceabilityError("PairBlock asset has several owners")
+
+    for target in targets:
+        if not set(target.requirements) <= requirement_ids:
+            raise ContractTraceabilityError("ContractTarget names unknown requirement")
+        block = block_by_id.get(target.block_id)
+        if block is None:
+            raise ContractTraceabilityError("ContractTarget names unknown PairBlock")
+        if not set(target.requirements) <= set(block.requirements):
+            raise ContractTraceabilityError(
+                "ContractTarget requirement is absent from PairBlock"
+            )
+        if target.target not in block.targets:
+            raise ContractTraceabilityError(
+                "ContractTarget is absent from PairBlock.targets"
+            )
+
+    for block in blocks:
+        if any(Path(asset).suffix in {".py", ".pyi"} for asset in block.assets):
+            raise ContractTraceabilityError(
+                "PairBlock assets must not name Python source"
+            )
+        if block.block_id in completed_blocks:
+            for asset in block.assets:
+                if not (root / asset).is_file():
+                    raise ContractTraceabilityError(
+                        f"implemented PairBlock asset is missing: {asset}"
+                    )
+        for target in block.targets:
+            if (block.block_id, target) not in target_keys:
+                raise ContractTraceabilityError("PairBlock target lacks ContractTarget")
+        for dependency in block.depends_on:
+            if dependency not in block_by_id and dependency not in completed_blocks:
+                raise ContractTraceabilityError("PairBlock names unknown dependency")
+
+    visiting: set[PairBlockId] = set()
+    visited: set[PairBlockId] = set()
+
+    def visit(block_id: PairBlockId) -> None:
+        if block_id in visiting:
+            raise ContractTraceabilityError("PairBlock dependency cycle")
+        if block_id in visited:
+            return
+        visiting.add(block_id)
+        for dependency in block_by_id[block_id].depends_on:
+            if dependency in block_by_id:
+                visit(dependency)
+        visiting.remove(block_id)
+        visited.add(block_id)
+
+    for block_id in block_by_id:
+        visit(block_id)
+
+    for edge in edges:
+        rule = rule_by_id[edge.rule_id]
+        if edge.state == "implemented":
+            continue
+        block = block_by_id.get(edge.block_id)
+        if block is None:
+            raise ContractTraceabilityError("RuleEdge names unknown PairBlock")
+        if rule.requirement_id not in block.requirements:
+            raise ContractTraceabilityError(
+                "RuleEdge requirement is absent from PairBlock"
+            )
+        if edge.kind == "implementation":
+            if not any(
+                item.block_id == block.block_id
+                and rule.requirement_id in item.requirements
+                for item in targets
+            ):
+                raise ContractTraceabilityError(
+                    "implementation block lacks a target for the rule requirement"
+                )
+        elif edge.target not in block.tests:
+            raise ContractTraceabilityError(
+                "verification target is absent from PairBlock.tests"
+            )
+```
+
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=update target=src/viper/_contract_traceability.py:compile_contract_traceability -->
+
+```python contract-target
+def compile_contract_traceability(
+    root: Path,
+    checklist: Path,
+    contracts: tuple[Path, ...],
+    *,
+    requirement_ids: tuple[str, ...] | None = None,
+) -> ContractTraceabilityGraph:
+    """Compile and validate a complete contract or selected requirement slice."""
+    all_markers = tuple(
+        marker
+        for contract in contracts
+        for marker in _parse_requirement_markers(root, contract)
+    )
+    if _duplicates([marker.requirement.requirement_id for marker in all_markers]):
+        raise ContractTraceabilityError("requirement ID belongs to several contracts")
+    all_blocks = _parse_pair_blocks(root, contracts)
+    if requirement_ids is not None:
+        if not requirement_ids or len(requirement_ids) != len(set(requirement_ids)):
+            raise ContractTraceabilityError(
+                "requirement_ids must contain unique selected requirements"
+            )
+        declared_ids = {marker.requirement.requirement_id for marker in all_markers}
+        missing = sorted(set(requirement_ids) - declared_ids)
+        if missing:
+            raise ContractTraceabilityError(
+                f"selected requirements are absent: {missing}"
+            )
+        selected_ids = set(requirement_ids)
+        partial_blocks = tuple(
+            block
+            for block in all_blocks
+            if set(block.requirements) & selected_ids
+            and not set(block.requirements) <= selected_ids
+        )
+        if partial_blocks:
+            raise ContractTraceabilityError(
+                "selected requirements split a PairBlock: "
+                f"{[block.block_id for block in partial_blocks]}"
+            )
+        primary_blocks = tuple(
+            block for block in all_blocks if set(block.requirements) & selected_ids
+        )
+        direct_dependencies = {
+            dependency for block in primary_blocks for dependency in block.depends_on
+        }
+        supporting_blocks = tuple(
+            block for block in all_blocks if block.block_id in direct_dependencies
+        )
+        included_block_ids = {
+            block.block_id for block in (*primary_blocks, *supporting_blocks)
+        }
+        selected_ids.update(
+            requirement
+            for block in supporting_blocks
+            for requirement in block.requirements
+        )
+    else:
+        selected_ids = {marker.requirement.requirement_id for marker in all_markers}
+        included_block_ids = {block.block_id for block in all_blocks}
+    markers = tuple(
+        marker
+        for marker in all_markers
+        if marker.requirement.requirement_id in selected_ids
+    )
+    requirements = tuple(marker.requirement for marker in markers)
+    if _duplicates([item.requirement_id for item in requirements]):
+        raise ContractTraceabilityError("requirement ID belongs to several contracts")
+    all_rules = tuple(
+        rule
+        for contract in contracts
+        for rule in _parse_verifier_rules(
+            root,
+            contract,
+            tuple(
+                marker
+                for marker in all_markers
+                if marker.requirement.contract == contract.relative_to(root).as_posix()
+            ),
+        )
+    )
+    rules = tuple(rule for rule in all_rules if rule.requirement_id in selected_ids)
+    if _duplicates([item.rule_id for item in rules]):
+        raise ContractTraceabilityError("verifier-rule ID belongs to several contracts")
+    blocks = tuple(
+        block for block in all_blocks if block.block_id in included_block_ids
+    )
+    selected_blocks = {block.block_id for block in blocks}
+    targets = tuple(
+        target
+        for target in _parse_contract_targets(root, contracts)
+        if target.block_id in selected_blocks
+    )
+    edges = _parse_rule_edges(root, checklist, markers, rules)
+    _validate_plan(
+        root,
+        requirements,
+        rules,
+        edges,
+        targets,
+        blocks,
+        completed_block_ids=_implemented_pair_blocks(checklist),
+    )
+    graph = ContractTraceabilityGraph(
+        requirements=tuple(sorted(requirements, key=lambda item: item.requirement_id)),
+        rules=tuple(sorted(rules, key=lambda item: item.rule_id)),
+        edges=edges,
+        targets=targets,
+        blocks=blocks,
+    )
+    serialize_contract_traceability(graph)
+    return graph
+```
+
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_contract_traceability.py:test_contract_traceability_includes_dependency_evidence_for_selected_slice -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_contract_traceability.py:test_contract_traceability_rejects_requirement_slice_that_splits_block -->
+
+```python contract-target
+def test_contract_traceability_compiles_selected_requirement_slice(
+    tmp_path: Path,
+) -> None:
+    """Compile one closed requirement without requiring a later contract phase."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8")
+        .replace(
+            "| CRT-01 <!-- contract-requirement:",
+            "| CRT-02 <!-- contract-requirement: CRT-02 phase=1 "
+            "test=tests/test_owner.py --> | Later requirement. |\n"
+            "| CRT-01 <!-- contract-requirement:",
+        )
+        .replace(
+            "| `contract.rule` <!-- verifier-rule:",
+            "| `contract.later` <!-- verifier-rule: contract.later "
+            "requirement=CRT-02 --> | Later rule. |\n"
+            "| `contract.rule` <!-- verifier-rule:",
+        ),
+        encoding="utf-8",
+    )
+
+    graph = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        (contract,),
+        requirement_ids=("CRT-01",),
+    )
+
+    assert [item.requirement_id for item in graph.requirements] == ["CRT-01"]
+    assert [item.rule_id for item in graph.rules] == ["contract.rule"]
+    assert [item.block_id for item in graph.blocks] == ["P0-CRT-01"]
+
+def test_contract_traceability_includes_dependency_evidence_for_selected_slice(
+    tmp_path: Path,
+) -> None:
+    """Retain one omitted dependency block so its baseline target can be checked."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8")
+        .replace(
+            "| CRT-01 <!-- contract-requirement:",
+            "| CRT-02 <!-- contract-requirement: CRT-02 phase=1 "
+            "test=tests/test_owner.py --> | Later requirement. |\n"
+            "| CRT-01 <!-- contract-requirement:",
+        )
+        .replace(
+            "| `contract.rule` <!-- verifier-rule:",
+            "| `contract.later` <!-- verifier-rule: contract.later "
+            "requirement=CRT-02 --> | Later rule. |\n"
+            "| `contract.rule` <!-- verifier-rule:",
+        )
+        + dedent(
+            """
+
+            <!-- pair-block-definition: P1-CRT-01 -->
+            ```toml pair-block
+            id = "P1-CRT-01"
+            requirements = ["CRT-02"]
+            targets = ["src/owner.py:later"]
+            tests = ["tests/test_owner.py:test_enforce"]
+            gate = "python -m pytest tests/test_owner.py -q"
+            depends_on = ["P0-CRT-01"]
+            ```
+
+            [TARGET]
+            ```python contract-target
+            def later() -> str:
+                return "later"
+            ```
+            """
+        ).replace(
+            "[TARGET]",
+            "<!-- contract-target: requirements=CRT-02 block=P1-CRT-01 "
+            "action=add target=src/owner.py:later -->",
+        ),
+        encoding="utf-8",
+    )
+    checklist.write_text(
+        checklist.read_text(encoding="utf-8")
+        + dedent(
+            """
+
+            ## 8. Master Phase 1
+
+            - [ ] Compile the selected requirement.
+              <!-- pair-block: P1-CRT-01 -->
+              [IMPLEMENTATION]
+              [VERIFICATION]
+            """
+        )
+        .replace(
+            "[IMPLEMENTATION]",
+            "<!-- contract-implementation: requirement=CRT-02 "
+            "rule=contract.later state=planned owner=src/owner.py:later -->",
+        )
+        .replace(
+            "[VERIFICATION]",
+            "<!-- contract-verification: requirement=CRT-02 "
+            "rule=contract.later state=planned "
+            "test=tests/test_owner.py:test_enforce -->",
+        ),
+        encoding="utf-8",
+    )
+
+    graph = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        (contract,),
+        requirement_ids=("CRT-02",),
+    )
+
+    assert [item.requirement_id for item in graph.requirements] == [
+        "CRT-01",
+        "CRT-02",
+    ]
+    assert [item.block_id for item in graph.blocks] == [
+        "P0-CRT-01",
+        "P1-CRT-01",
+    ]
+
+def test_contract_traceability_rejects_requirement_slice_that_splits_block(
+    tmp_path: Path,
+) -> None:
+    """Reject selection that omits a requirement owned by the same PairBlock."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8")
+        .replace(
+            "| CRT-01 <!-- contract-requirement:",
+            "| CRT-02 <!-- contract-requirement: CRT-02 phase=1 "
+            "test=tests/test_owner.py --> | Coupled requirement. |\n"
+            "| CRT-01 <!-- contract-requirement:",
+        )
+        .replace(
+            "| `contract.rule` <!-- verifier-rule:",
+            "| `contract.later` <!-- verifier-rule: contract.later "
+            "requirement=CRT-02 --> | Coupled rule. |\n"
+            "| `contract.rule` <!-- verifier-rule:",
+        )
+        .replace(
+            'requirements = ["CRT-01"]',
+            'requirements = ["CRT-01", "CRT-02"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="selected requirements split a PairBlock",
+    ):
+        compile_contract_traceability(
+            tmp_path,
+            checklist,
+            (contract,),
+            requirement_ids=("CRT-01",),
+        )
+```
+
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=update target=tests/test_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_documentation.py:_RULE_EDGE_STATE -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_documentation.py:_CONTENT_PAIR_BLOCK_MARKER -->
+
+```python contract-target
+_CONTENT_PAIR_BLOCK_MARKER = re.compile(
+    r"<!-- pair-block: (?P<id>P[0-9]+-[A-Z]+-\d{2}) -->"
+)
+
+_RULE_EDGE_STATE = re.compile(
+    r"<!-- contract-(?:implementation|verification): "
+    r"requirement=(?P<requirement>[A-Z]{3}-\d{2}) "
+    r"rule=[a-z][a-z0-9_.]+ state=(?P<state>planned|implemented) "
+)
+
+def test_pair_blocks_map_to_contract_sections_and_derived_status() -> None:
+    """Map each content-changing block to one contract, section, and state."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    contract_names = {contract.name for contract in IMPLEMENTATION_CONTRACTS}
+    headings = tuple(_SUBSECTION_HEADING.finditer(checklist))
+    mappings: dict[str, tuple[str, str, bool]] = {}
+
+    for checkbox in _CHECKBOX_BLOCK.finditer(checklist):
+        markers = tuple(_CONTENT_PAIR_BLOCK_MARKER.finditer(checkbox.group(0)))
+        if not markers:
+            continue
+        assert len(markers) == 1, checkbox.group(0).splitlines()[0]
+        marker = markers[0]
+        contract_markers = tuple(_PAIR_BLOCK_CONTRACT.finditer(checkbox.group(0)))
+        assert len(contract_markers) == 1, checkbox.group(0).splitlines()[0]
+        contract_marker = contract_markers[0]
+        block_id = marker.group("id")
+        assert contract_marker.group("id") == block_id
+        contract = contract_marker.group("contract")
+        assert block_id not in mappings
+        assert contract in contract_names
+        section = next(
+            heading.group("section")
+            for heading in reversed(headings)
+            if heading.start() < checkbox.start()
+        )
+        mappings[block_id] = (
+            contract,
+            section,
+            checkbox.group(0).startswith("- [x]"),
+        )
+
+    assert mappings
+    statuses = {
+        match.group("path"): match.group("status").casefold()
+        for match in re.finditer(
+            r"^\| \[[^]]+\]\((?P<path>[a-z0-9-]+\.md)\) "
+            r"\| (?P<status>[^|]+?) \|",
+            checklist,
+            re.MULTILINE,
+        )
+    }
+    for contract in {mapping[0] for mapping in mappings.values()}:
+        completed = [
+            complete
+            for mapped_contract, _, complete in mappings.values()
+            if mapped_contract == contract
+        ]
+        contract_path = ROOT / "docs" / "development" / contract
+        requirement_ids = {
+            match.group("requirement")
+            for match in _CONTRACT_REQUIREMENT.finditer(
+                contract_path.read_text(encoding="utf-8")
+            )
+        }
+        requirement_states = {
+            requirement: [
+                match.group("state") == "implemented"
+                for match in _RULE_EDGE_STATE.finditer(checklist)
+                if match.group("requirement") == requirement
+            ]
+            for requirement in requirement_ids
+        }
+        requirements_complete = all(
+            states and all(states) for states in requirement_states.values()
+        )
+        implementation_started = any(
+            any(states) for states in requirement_states.values()
+        )
+        expected = (
+            "complete"
+            if all(completed) and requirements_complete
+            else "in progress"
+            if any(completed) or implementation_started
+            else "planned"
+        )
+        assert statuses[contract].split(";", 1)[0] == expected
+```
 
 **Commit boundary:** `Trace contract requirements to code and tests`
 

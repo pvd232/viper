@@ -12,7 +12,7 @@ from ..references import ResolvedFileRef, ResolvedStageInvocationRef
 from ..runs import AttemptJournalRef, ResolvedAttemptRef, RunAttempt
 from ..serialization import serialize_document
 from ..stages import StageInvocationReceipt
-from ..storage import LocalArtifactStore
+from ..storage import StorageDestination, publish_resolved_files
 from .errors import RunError
 
 
@@ -57,8 +57,8 @@ def replace_synchronized(path: Path, raw: bytes) -> None:
 
 
 def publish_attempt_files(
-    store: LocalArtifactStore,
     root: Path,
+    destination: StorageDestination,
     run_root: str,
     attempt_id: int,
     journal: DurableJournal,
@@ -77,12 +77,8 @@ def publish_attempt_files(
         files[path.relative_to(root).as_posix()] = path.read_bytes()
     journal_path = f"{run_root}/attempts/{attempt_id}/journal.jsonl"
     files[journal_path] = journal.path.read_bytes()
-    references = store.resolved_files(files)
-    journal_file = next(
-        reference
-        for reference in references
-        if reference.stored_at.path == journal_path
-    )
+    references = publish_resolved_files(root, destination, files)
+    journal_file = references[journal_path]
     return (
         AttemptJournalRef(
             sha256=journal_file.sha256,
@@ -91,19 +87,15 @@ def publish_attempt_files(
         ),
         tuple(
             reference
-            for reference in references
-            if "/measurements/" in str(reference.stored_at.path)
+            for path, reference in references.items()
+            if "/measurements/" in path
         ),
         tuple(
             reference
-            for reference in references
-            if "/metric_verification/" in str(reference.stored_at.path)
+            for path, reference in references.items()
+            if "/metric_verification/" in path
         ),
-        tuple(
-            reference
-            for reference in references
-            if "/logs/" in str(reference.stored_at.path)
-        ),
+        tuple(reference for path, reference in references.items() if "/logs/" in path),
     )
 
 
@@ -111,13 +103,18 @@ def write_attempt_document(
     root: Path,
     run_root: str,
     attempt: RunAttempt,
-    store: LocalArtifactStore,
+    destination: StorageDestination,
 ) -> ResolvedAttemptRef:
     """Publish one canonical attempt document and return its immutable reference."""
     path = root / run_root / "attempts" / str(attempt.attempt_id) / "resolved.yaml"
     raw = serialize_document(attempt)
     write_synchronized(path, raw)
-    reference = store.resolved_files({path.relative_to(root).as_posix(): raw})[0]
+    relative_path = path.relative_to(root).as_posix()
+    reference = publish_resolved_files(
+        root,
+        destination,
+        {relative_path: raw},
+    )[relative_path]
     return ResolvedAttemptRef(
         sha256=reference.sha256,
         bytes=reference.bytes,
@@ -126,13 +123,14 @@ def write_attempt_document(
 
 
 def publish_invocation_receipt(
-    store: LocalArtifactStore,
+    root: Path,
+    destination: StorageDestination,
     path: str,
     receipt: StageInvocationReceipt,
 ) -> ResolvedStageInvocationRef:
     """Publish one stage invocation receipt at its canonical attempt path."""
     raw = serialize_document(receipt)
-    reference = store.resolved_files({path: raw})[0]
+    reference = publish_resolved_files(root, destination, {path: raw})[path]
     return ResolvedStageInvocationRef(
         sha256=reference.sha256,
         bytes=reference.bytes,

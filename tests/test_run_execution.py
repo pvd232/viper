@@ -245,6 +245,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         ),
     )
     source_files = {
+        "viper.toml": b"[project]\nschema_version = 1\n",
         "environment.yml": b"name: viper-test\n",
         "project/loaders/bytes_file.py": (
             b"def load(path):\n    return path.read_bytes()\n"
@@ -555,6 +556,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     result = execute_retry(root, frozen.files[-1])
 
     assert result.resolved_run.status == "succeeded"
+    destination_path = (
+        root / ".viper" / "workspaces" / RUN_ID / "storage-destination.json"
+    )
+    assert destination_path.read_bytes() == b'{"kind":"local"}\n'
     assert result.resolved_run_path.is_file()
     attempts = tuple(
         read_attempt_reference(reference, run_plan, fetcher=fetcher)
@@ -743,6 +748,7 @@ def test_train_stage_captures_local_external_input(
         stage_params=(TrainVariantStageParams(stage_id="train", params=train_params),),
     )
     source_files = {
+        "viper.toml": b"[project]\nschema_version = 1\n",
         "environment.yml": b"name: viper-test\n",
         "project/loaders/bytes_file.py": (
             b"def load(path):\n    return path.read_bytes()\n"

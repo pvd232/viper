@@ -428,6 +428,167 @@ def test_contract_traceability_graph_rejects_duplicate_ids(
         )
 
 
+def test_contract_traceability_compiles_selected_requirement_slice(
+    tmp_path: Path,
+) -> None:
+    """Compile one closed requirement without requiring a later contract phase."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8")
+        .replace(
+            "| CRT-01 <!-- contract-requirement:",
+            "| CRT-02 <!-- contract-requirement: CRT-02 phase=1 "
+            "test=tests/test_owner.py --> | Later requirement. |\n"
+            "| CRT-01 <!-- contract-requirement:",
+        )
+        .replace(
+            "| `contract.rule` <!-- verifier-rule:",
+            "| `contract.later` <!-- verifier-rule: contract.later "
+            "requirement=CRT-02 --> | Later rule. |\n"
+            "| `contract.rule` <!-- verifier-rule:",
+        ),
+        encoding="utf-8",
+    )
+
+    graph = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        (contract,),
+        requirement_ids=("CRT-01",),
+    )
+
+    assert [item.requirement_id for item in graph.requirements] == ["CRT-01"]
+    assert [item.rule_id for item in graph.rules] == ["contract.rule"]
+    assert [item.block_id for item in graph.blocks] == ["P0-CRT-01"]
+
+
+def test_contract_traceability_rejects_requirement_slice_that_splits_block(
+    tmp_path: Path,
+) -> None:
+    """Reject selection that omits a requirement owned by the same PairBlock."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8")
+        .replace(
+            "| CRT-01 <!-- contract-requirement:",
+            "| CRT-02 <!-- contract-requirement: CRT-02 phase=1 "
+            "test=tests/test_owner.py --> | Coupled requirement. |\n"
+            "| CRT-01 <!-- contract-requirement:",
+        )
+        .replace(
+            "| `contract.rule` <!-- verifier-rule:",
+            "| `contract.later` <!-- verifier-rule: contract.later "
+            "requirement=CRT-02 --> | Coupled rule. |\n"
+            "| `contract.rule` <!-- verifier-rule:",
+        )
+        .replace(
+            'requirements = ["CRT-01"]',
+            'requirements = ["CRT-01", "CRT-02"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="selected requirements split a PairBlock",
+    ):
+        compile_contract_traceability(
+            tmp_path,
+            checklist,
+            (contract,),
+            requirement_ids=("CRT-01",),
+        )
+
+
+def test_contract_traceability_includes_dependency_evidence_for_selected_slice(
+    tmp_path: Path,
+) -> None:
+    """Retain one omitted dependency block so its baseline target can be checked."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8")
+        .replace(
+            "| CRT-01 <!-- contract-requirement:",
+            "| CRT-02 <!-- contract-requirement: CRT-02 phase=1 "
+            "test=tests/test_owner.py --> | Later requirement. |\n"
+            "| CRT-01 <!-- contract-requirement:",
+        )
+        .replace(
+            "| `contract.rule` <!-- verifier-rule:",
+            "| `contract.later` <!-- verifier-rule: contract.later "
+            "requirement=CRT-02 --> | Later rule. |\n"
+            "| `contract.rule` <!-- verifier-rule:",
+        )
+        + dedent(
+            """
+
+            <!-- pair-block-definition: P1-CRT-01 -->
+            ```toml pair-block
+            id = "P1-CRT-01"
+            requirements = ["CRT-02"]
+            targets = ["src/owner.py:later"]
+            tests = ["tests/test_owner.py:test_enforce"]
+            gate = "python -m pytest tests/test_owner.py -q"
+            depends_on = ["P0-CRT-01"]
+            ```
+
+            [TARGET]
+            ```python contract-target
+            def later() -> str:
+                return "later"
+            ```
+            """
+        ).replace(
+            "[TARGET]",
+            "<!-- contract-target: requirements=CRT-02 block=P1-CRT-01 "
+            "action=add target=src/owner.py:later -->",
+        ),
+        encoding="utf-8",
+    )
+    checklist.write_text(
+        checklist.read_text(encoding="utf-8")
+        + dedent(
+            """
+
+            ## 8. Master Phase 1
+
+            - [ ] Compile the selected requirement.
+              <!-- pair-block: P1-CRT-01 -->
+              [IMPLEMENTATION]
+              [VERIFICATION]
+            """
+        )
+        .replace(
+            "[IMPLEMENTATION]",
+            "<!-- contract-implementation: requirement=CRT-02 "
+            "rule=contract.later state=planned owner=src/owner.py:later -->",
+        )
+        .replace(
+            "[VERIFICATION]",
+            "<!-- contract-verification: requirement=CRT-02 "
+            "rule=contract.later state=planned "
+            "test=tests/test_owner.py:test_enforce -->",
+        ),
+        encoding="utf-8",
+    )
+
+    graph = compile_contract_traceability(
+        tmp_path,
+        checklist,
+        (contract,),
+        requirement_ids=("CRT-02",),
+    )
+
+    assert [item.requirement_id for item in graph.requirements] == [
+        "CRT-01",
+        "CRT-02",
+    ]
+    assert [item.block_id for item in graph.blocks] == [
+        "P0-CRT-01",
+        "P1-CRT-01",
+    ]
+
+
 def test_contract_targets_require_exact_block_coverage(tmp_path: Path) -> None:
     """Reject a PairBlock target without one matching ContractTarget."""
     contract, checklist = _write_fixture(tmp_path)

@@ -390,11 +390,14 @@ def _validate_plan(
     edges: tuple[RuleEdge, ...],
     targets: tuple[ContractTarget, ...],
     blocks: tuple[PairBlock, ...],
+    completed_block_ids: frozenset[PairBlockId] = frozenset(),
 ) -> None:
     requirement_ids = {item.requirement_id for item in requirements}
     rule_by_id = {item.rule_id: item for item in rules}
     block_by_id = {item.block_id: item for item in blocks}
-    completed_blocks = {edge.block_id for edge in edges if edge.state == "implemented"}
+    completed_blocks = completed_block_ids | {
+        edge.block_id for edge in edges if edge.state == "implemented"
+    }
 
     target_keys = [(item.block_id, item.target) for item in targets]
     if len(target_keys) != len(set(target_keys)):
@@ -729,6 +732,22 @@ def _parse_rule_edges(
     )
 
 
+def _implemented_pair_blocks(checklist: Path) -> frozenset[PairBlockId]:
+    """Return blocks with at least one implemented checklist rule edge."""
+    text = checklist.read_text(encoding="utf-8")
+    completed: set[PairBlockId] = set()
+    for checkbox in _CHECKBOX.finditer(text):
+        blocks = tuple(_PAIR_BLOCK_MARKER.finditer(checkbox.group(0)))
+        edges = tuple(_RULE_EDGE.finditer(checkbox.group(0)))
+        if (
+            len(blocks) == 1
+            and edges
+            and all(edge.group("state") == "implemented" for edge in edges)
+        ):
+            completed.add(cast(PairBlockId, blocks[0].group("id")))
+    return frozenset(completed)
+
+
 def _section(text: str, number: int) -> str:
     match = re.search(
         rf"^## {number}\. [^\n]+\n(?P<body>.*?)(?=^## \d+\. |\Z)",
@@ -851,17 +870,70 @@ def compile_contract_traceability(
     root: Path,
     checklist: Path,
     contracts: tuple[Path, ...],
+    *,
+    requirement_ids: tuple[str, ...] | None = None,
 ) -> ContractTraceabilityGraph:
-    """Compile and validate the complete contract implementation plan."""
-    markers = tuple(
+    """Compile and validate a complete contract or selected requirement slice."""
+    all_markers = tuple(
         marker
         for contract in contracts
         for marker in _parse_requirement_markers(root, contract)
     )
+    if _duplicates([marker.requirement.requirement_id for marker in all_markers]):
+        raise ContractTraceabilityError("requirement ID belongs to several contracts")
+    all_blocks = _parse_pair_blocks(root, contracts)
+    if requirement_ids is not None:
+        if not requirement_ids or len(requirement_ids) != len(set(requirement_ids)):
+            raise ContractTraceabilityError(
+                "requirement_ids must contain unique selected requirements"
+            )
+        declared_ids = {marker.requirement.requirement_id for marker in all_markers}
+        missing = sorted(set(requirement_ids) - declared_ids)
+        if missing:
+            raise ContractTraceabilityError(
+                f"selected requirements are absent: {missing}"
+            )
+        selected_ids = set(requirement_ids)
+        partial_blocks = tuple(
+            block
+            for block in all_blocks
+            if set(block.requirements) & selected_ids
+            and not set(block.requirements) <= selected_ids
+        )
+        if partial_blocks:
+            raise ContractTraceabilityError(
+                "selected requirements split a PairBlock: "
+                f"{[block.block_id for block in partial_blocks]}"
+            )
+        primary_blocks = tuple(
+            block for block in all_blocks if set(block.requirements) & selected_ids
+        )
+        direct_dependencies = {
+            dependency for block in primary_blocks for dependency in block.depends_on
+        }
+        supporting_blocks = tuple(
+            block for block in all_blocks if block.block_id in direct_dependencies
+        )
+        included_block_ids = {
+            block.block_id for block in (*primary_blocks, *supporting_blocks)
+        }
+        selected_ids.update(
+            requirement
+            for block in supporting_blocks
+            for requirement in block.requirements
+        )
+    else:
+        selected_ids = {marker.requirement.requirement_id for marker in all_markers}
+        included_block_ids = {block.block_id for block in all_blocks}
+    markers = tuple(
+        marker
+        for marker in all_markers
+        if marker.requirement.requirement_id in selected_ids
+    )
     requirements = tuple(marker.requirement for marker in markers)
     if _duplicates([item.requirement_id for item in requirements]):
         raise ContractTraceabilityError("requirement ID belongs to several contracts")
-    rules = tuple(
+    all_rules = tuple(
         rule
         for contract in contracts
         for rule in _parse_verifier_rules(
@@ -869,17 +941,33 @@ def compile_contract_traceability(
             contract,
             tuple(
                 marker
-                for marker in markers
+                for marker in all_markers
                 if marker.requirement.contract == contract.relative_to(root).as_posix()
             ),
         )
     )
+    rules = tuple(rule for rule in all_rules if rule.requirement_id in selected_ids)
     if _duplicates([item.rule_id for item in rules]):
         raise ContractTraceabilityError("verifier-rule ID belongs to several contracts")
-    blocks = _parse_pair_blocks(root, contracts)
-    targets = _parse_contract_targets(root, contracts)
+    blocks = tuple(
+        block for block in all_blocks if block.block_id in included_block_ids
+    )
+    selected_blocks = {block.block_id for block in blocks}
+    targets = tuple(
+        target
+        for target in _parse_contract_targets(root, contracts)
+        if target.block_id in selected_blocks
+    )
     edges = _parse_rule_edges(root, checklist, markers, rules)
-    _validate_plan(root, requirements, rules, edges, targets, blocks)
+    _validate_plan(
+        root,
+        requirements,
+        rules,
+        edges,
+        targets,
+        blocks,
+        completed_block_ids=_implemented_pair_blocks(checklist),
+    )
     graph = ContractTraceabilityGraph(
         requirements=tuple(sorted(requirements, key=lambda item: item.requirement_id)),
         rules=tuple(sorted(rules, key=lambda item: item.rule_id)),

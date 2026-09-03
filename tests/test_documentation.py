@@ -163,9 +163,17 @@ _MASTER_PHASE_ZERO_CHECKBOX = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 _PAIR_BLOCK_MARKER = re.compile(r"<!-- pair-block: (?P<id>P0-[A-Z]+-\d{2}) -->")
+_CONTENT_PAIR_BLOCK_MARKER = re.compile(
+    r"<!-- pair-block: (?P<id>P[0-9]+-[A-Z]+-\d{2}) -->"
+)
 _PAIR_BLOCK_CONTRACT = re.compile(
     r"<!-- pair-block-contract: (?P<id>P[0-9]+-[A-Z]+-\d{2}) "
     r"contract=(?P<contract>[a-z0-9-]+\.md) -->"
+)
+_RULE_EDGE_STATE = re.compile(
+    r"<!-- contract-(?:implementation|verification): "
+    r"requirement=(?P<requirement>[A-Z]{3}-\d{2}) "
+    r"rule=[a-z][a-z0-9_.]+ state=(?P<state>planned|implemented) "
 )
 _PAIR_BLOCK_DEFINITION = re.compile(
     r"<!-- pair-block-definition: (?P<id>P0-[A-Z]+-\d{2}) -->\n"
@@ -1362,11 +1370,7 @@ def test_pair_blocks_map_to_contract_sections_and_derived_status() -> None:
     mappings: dict[str, tuple[str, str, bool]] = {}
 
     for checkbox in _CHECKBOX_BLOCK.finditer(checklist):
-        markers = tuple(
-            match
-            for pattern in (_PAIR_BLOCK_MARKER, _RESEARCH_PAIR_BLOCK_MARKER)
-            for match in pattern.finditer(checkbox.group(0))
-        )
+        markers = tuple(_CONTENT_PAIR_BLOCK_MARKER.finditer(checkbox.group(0)))
         if not markers:
             continue
         assert len(markers) == 1, checkbox.group(0).splitlines()[0]
@@ -1406,11 +1410,32 @@ def test_pair_blocks_map_to_contract_sections_and_derived_status() -> None:
             for mapped_contract, _, complete in mappings.values()
             if mapped_contract == contract
         ]
+        contract_path = ROOT / "docs" / "development" / contract
+        requirement_ids = {
+            match.group("requirement")
+            for match in _CONTRACT_REQUIREMENT.finditer(
+                contract_path.read_text(encoding="utf-8")
+            )
+        }
+        requirement_states = {
+            requirement: [
+                match.group("state") == "implemented"
+                for match in _RULE_EDGE_STATE.finditer(checklist)
+                if match.group("requirement") == requirement
+            ]
+            for requirement in requirement_ids
+        }
+        requirements_complete = all(
+            states and all(states) for states in requirement_states.values()
+        )
+        implementation_started = any(
+            any(states) for states in requirement_states.values()
+        )
         expected = (
             "complete"
-            if all(completed)
+            if all(completed) and requirements_complete
             else "in progress"
-            if any(completed)
+            if any(completed) or implementation_started
             else "planned"
         )
         assert statuses[contract].split(";", 1)[0] == expected
@@ -1472,8 +1497,11 @@ def test_complete_authoring_example_covers_the_public_workflow() -> None:
 
 
 def test_target_contracts_use_env_identifiers() -> None:
-    """Keep target contracts and their implementation plan on `env` names."""
-    contract_text = "\n".join(path.read_text() for path in IMPLEMENTATION_CONTRACTS)
+    """Keep normative contract prose on `env` names before the rename executes."""
+    contract_text = "\n".join(
+        _TRACEABILITY_MODEL_FENCE.sub("", path.read_text())
+        for path in IMPLEMENTATION_CONTRACTS
+    )
     checklist = MASTER_EXECUTION_CHECKLIST.read_text()
     target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
 

@@ -359,18 +359,10 @@ invalid row the next time it rebuilds the catalog.
 
 ### Snapshot publication
 
-The storage publisher adds one operation:
+Stage reuse extends the storage publisher with one operation:
 
 ```python
-class SnapshotPublisher(Protocol):
-    def publish(
-        self,
-        *,
-        resolved_stage_path: RepoRelPath,
-        resolved_stage: bytes,
-        files: Mapping[RepoRelPath, Path],
-    ) -> StageResultSnapshot: ...
-
+class ReuseSnapshotPublisher(SnapshotPublisher, Protocol):
     def publish_reuse(
         self,
         *,

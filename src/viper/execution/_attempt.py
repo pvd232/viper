@@ -35,7 +35,13 @@ from ..stages import (
     DownloadSpec,
     InternalSpec,
 )
-from ..storage import LocalArtifactStore, snapshot_file
+from ..storage import (
+    LocalArtifactStore,
+    bind_run_destination,
+    create_snapshot_publisher,
+    load_storage_settings,
+    snapshot_file,
+)
 from ..verification import verify_run_result
 from ..verification.models import VerificationError, VerificationPolicy
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
@@ -82,6 +88,12 @@ def execute_attempt(
         raise RunError("RunSpec bytes are absent from the current Git commit")
 
     store = LocalArtifactStore(root)
+    destination = bind_run_destination(
+        root,
+        run.run_id,
+        load_storage_settings(root).destination,
+    )
+    snapshot_publisher = create_snapshot_publisher(root, destination)
     fetcher = RunFetcher(root, store, str(run.source.repository))
     policy = VerificationPolicy(
         trusted_source_repositories=frozenset({str(run.source.repository)})
@@ -134,7 +146,7 @@ def execute_attempt(
         workspace_root,
         run,
         run_root,
-        store,
+        destination,
         known_attempts,
     )
     attempt_id = max(
@@ -262,7 +274,8 @@ def execute_attempt(
                     )
                     invocation_refs.append(
                         publish_invocation_receipt(
-                            store,
+                            root,
+                            destination,
                             invocation_path,
                             exc.invocation,
                         )
@@ -288,7 +301,8 @@ def execute_attempt(
                 f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
             )
             invocation_ref = publish_invocation_receipt(
-                store,
+                root,
+                destination,
                 invocation_path,
                 process.invocation,
             )
@@ -313,13 +327,11 @@ def execute_attempt(
                 f"/stages/{stage_reference.stage_id}/resolved.yaml"
             )
             resolved_raw = serialize_document(resolved)
-            snapshot_files: dict[str, bytes] = {resolved_path: resolved_raw}
+            snapshot_paths: dict[str, Path] = {}
             if resolved_retrievals is not None:
                 for retrieval in resolved_retrievals.values():
                     retrieval_path = retrieval.body.stored_at.path
-                    snapshot_files[retrieval_path] = (
-                        root / retrieval_path
-                    ).read_bytes()
+                    snapshot_paths[retrieval_path] = root / retrieval_path
             for artifact in process.artifacts.values():
                 artifact_references: tuple[SnapshotFileRef, ...]
                 if artifact.kind == "file":
@@ -329,16 +341,18 @@ def execute_attempt(
                         member.file for member in artifact.members
                     )
                 for reference in artifact_references:
-                    snapshot_files[reference.path] = (
-                        root / reference.path
-                    ).read_bytes()
+                    snapshot_paths[reference.path] = root / reference.path
             journal.append(
                 "publishing_stage",
                 "stage snapshot publication started",
                 recorded_at=datetime.now(UTC),
                 details={"stage_id": stage_reference.stage_id},
             )
-            snapshot = store.snapshot(snapshot_files)
+            snapshot = snapshot_publisher.publish(
+                resolved_stage_path=resolved_path,
+                resolved_stage=resolved_raw,
+                files=snapshot_paths,
+            )
             resolved_stage_ref = ResolvedStageRef(
                 stage_id=stage_reference.stage_id,
                 snapshot=snapshot,
@@ -391,8 +405,8 @@ def execute_attempt(
             metric_verification_references,
             log_references,
         ) = publish_attempt_files(
-            store,
             root,
+            destination,
             run_root,
             attempt_id,
             journal,
@@ -420,7 +434,12 @@ def execute_attempt(
             commit=plan_commit,
             path=relative_run_path,
         )
-        attempt_reference = write_attempt_document(root, run_root, attempt, store)
+        attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            attempt,
+            destination,
+        )
         if purpose == "benchmark_confirmation":
             return ConfirmationRunResult(
                 attempt=attempt,
@@ -431,7 +450,7 @@ def execute_attempt(
                 journal_path=journal.path,
             )
         attempt_references = tuple(
-            write_attempt_document(root, run_root, value, store)
+            write_attempt_document(root, run_root, value, destination)
             for value in previous_attempts
         ) + (attempt_reference,)
         resolved_run = ResolvedRun(
@@ -497,8 +516,8 @@ def execute_attempt(
             metric_verification_references,
             log_references,
         ) = publish_attempt_files(
-            store,
             root,
+            destination,
             run_root,
             attempt_id,
             journal,
@@ -535,7 +554,7 @@ def execute_attempt(
             root,
             run_root,
             failed_attempt,
-            store,
+            destination,
         )
         if purpose == "benchmark_confirmation":
             failed_attempt_path = (
@@ -546,7 +565,7 @@ def execute_attempt(
                 f"written to {failed_attempt_path}"
             ) from exc
         attempt_references = tuple(
-            write_attempt_document(root, run_root, value, store)
+            write_attempt_document(root, run_root, value, destination)
             for value in previous_attempts
         ) + (failed_attempt_reference,)
         failed_run = ResolvedRun(

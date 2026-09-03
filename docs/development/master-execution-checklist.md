@@ -285,7 +285,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
-| [Direct Viper Cloud publication](remote-storage.md) | Audited; owner approval pending | Destination-neutral publication, cloud references, retrieval, and restore |
+| [Direct Viper Cloud publication](remote-storage.md) | In progress | Destination-neutral publication, cloud references, retrieval, and restore |
 | [Experiment expansion](experiment-expansion.md) | Audited; owner approval pending | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Audited; owner approval pending | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
@@ -331,7 +331,7 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=dbc9c6714b4d2f062262c754189e189429cd548875035d3457c7ed19223db78c -->
+<!-- contract-baseline: contract-traceability.md sha256=257fafc1e36192765b1d8733353a7a65c4834aab2b645376b144094d4280f72e -->
 
 <!-- contract-baseline: project-data-root.md sha256=fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb -->
 <!-- contract-baseline: module-ownership.md sha256=135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea -->
@@ -341,10 +341,10 @@ a new digest.
 <!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
 <!-- contract-baseline: automatic-input-resolution.md sha256=fde97fbf294f74170bac1e64bc2557ec0e97ef5db6d219c4eb30eef76a3f9184 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=53b4af9b238a2083e24f0c77a7601da81045eed1ff2ccfc3f1639fd57bdca56e -->
-<!-- contract-baseline: remote-storage.md sha256=1d18ce4d5db48d7b6331e9c9beadfbc240908b9286ad71826496165fbcc88c49 -->
+<!-- contract-baseline: remote-storage.md sha256=a7a23950508c2e7a3e29e4511c36b7e2bcca9096338d42a634016c9cc98be1ef -->
 <!-- contract-baseline: experiment-expansion.md sha256=27f3bf85e1a701108b7a08dfd46b3b5ef35bc2a42b2ecd57d0336e58d7c96349 -->
 <!-- contract-baseline: provenance-catalog-mcp.md sha256=b06dd2eed63fb3652dc7e1d571430d5781abff81ed6dd952ed12713451d899ca -->
-<!-- contract-baseline: stage-reuse.md sha256=0abce93ad35f61ef636f09af3eda23bea21d30bd02df885e208509826f54570d -->
+<!-- contract-baseline: stage-reuse.md sha256=15f05d57a895a5be73e5e3259738966169b666599314b527c55f12c3a87e5163 -->
 <!-- contract-baseline: experiment-knowledge-primitives.md sha256=d70166a38a7855dd9ba31e19145fc281f1e34247fd807c294d699e45ab743aa5 -->
 <!-- contract-baseline: research-memory-roadmap.md sha256=f22cccf9d2a598f0598849843930c8861f47ff4beded4556fbe2560121c7e6e3 -->
 
@@ -983,33 +983,47 @@ PairBlock's focused tests remain the behavioral gate.
 
 ## 8. Master Phase 1 — destination-neutral local publication
 
-<!-- contract-implementation: requirement=RSP-01 rule=storage.publisher.local state=planned owner=src/viper/storage.py:SnapshotPublisher -->
-<!-- contract-verification: requirement=RSP-01 rule=storage.publisher.local state=planned test=tests/test_storage.py:test_local_publishers_share_destination_neutral_interface -->
-<!-- contract-implementation: requirement=RSP-02 rule=storage.destination.bound state=planned owner=src/viper/execution/_attempt.py:execute_attempt -->
-<!-- contract-verification: requirement=RSP-02 rule=storage.destination.bound state=planned test=tests/test_run_execution.py:test_attempt_binds_one_storage_destination -->
-
 **Depends on:** Module-privacy work already implemented.
 
-**Contract:** [Direct Viper Cloud publication](remote-storage.md)
+**Contracts:** [Contract traceability](contract-traceability.md) and
+[Direct Viper Cloud publication](remote-storage.md)
 
 **Outcome:** Current local runs produce the same bytes and references through a
 new publisher boundary. Cloud implementation begins in Master Phase 9.
 
 ### 8.1 Local publication interface
 
-- [ ] Add `LocalStorageDestination`, `ViperCloudDestination`,
+- [x] Allow `compile_contract_traceability()` to compile a closed requirement
+      slice from a multi-phase contract. Derive contract status from both
+      PairBlock completion and requirement-edge state.
+      <!-- pair-block: P1-CRT-01 -->
+      <!-- pair-block-contract: P1-CRT-01 contract=contract-traceability.md -->
+      <!-- implements: CRT-07 -->
+      <!-- verifies: CRT-07 -->
+      <!-- contract-implementation: requirement=CRT-07 rule=contract.graph.selected state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-verification: requirement=CRT-07 rule=contract.graph.selected state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice -->
+- [x] Add `LocalStorageDestination`, `ViperCloudDestination`,
       `StorageDestination`, and `StorageSettings` as closed configuration
       models. Runtime selection remains local in this phase.
-- [ ] Add `PublicationSource = bytes | Path`.
-- [ ] Add `SnapshotPublisher.publish()` with `resolved_stage_path`,
+      <!-- pair-block: P1-RSP-01 -->
+      <!-- pair-block-contract: P1-RSP-01 contract=remote-storage.md -->
+- [x] Add `PublicationSource = bytes | Path`.
+- [x] Add `SnapshotPublisher.publish()` with `resolved_stage_path`,
       `resolved_stage`, and `files`. <!-- implements: RSP-01 -->
-- [ ] Implement `LocalSnapshotPublisher` by reading validated paths and calling
+      <!-- pair-block: P1-RSP-02 -->
+      <!-- pair-block-contract: P1-RSP-02 contract=remote-storage.md -->
+      <!-- contract-implementation: requirement=RSP-01 rule=storage.publisher.local state=implemented owner=src/viper/storage.py:SnapshotPublisher -->
+      <!-- contract-verification: requirement=RSP-01 rule=storage.publisher.local state=implemented test=tests/test_storage.py:test_local_publishers_share_destination_neutral_interface -->
+- [x] Implement `LocalSnapshotPublisher` by reading validated paths and calling
       `LocalArtifactStore.snapshot()`.
-- [ ] Add `publish_resolved_files()` and return
+- [x] Add `publish_resolved_files()` and return
       `dict[RepoRelPath, ResolvedFileRef]`.
-- [ ] Add `bind_run_destination(root, run_id, destination)` and persist the
+- [x] Add `bind_run_destination(root, run_id, destination)` and persist the
       first selected destination atomically before any immutable publication.
-- [ ] Add one local publisher factory or constructor used by the attempt
+      <!-- pair-block: P1-RSP-03 -->
+      <!-- pair-block-contract: P1-RSP-03 contract=remote-storage.md -->
+- [x] Add `create_snapshot_publisher()` for the local implementation used by
+      the attempt
       executor.
 
 <details>
@@ -1025,13 +1039,17 @@ before its first write.
 
 ### 8.2 Replace direct local calls
 
-- [ ] Change `execution/_attempt.py` to obtain a publisher once per attempt.
+- [x] Change `execution/_attempt.py` to obtain a publisher once per attempt.
       <!-- implements: RSP-02 -->
-- [ ] Replace the direct stage `store.snapshot()` call with
+      <!-- pair-block: P1-RSP-04 -->
+      <!-- pair-block-contract: P1-RSP-04 contract=remote-storage.md -->
+      <!-- contract-implementation: requirement=RSP-02 rule=storage.destination.bound state=implemented owner=src/viper/execution/_attempt.py:execute_attempt -->
+      <!-- contract-verification: requirement=RSP-02 rule=storage.destination.bound state=implemented test=tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifies_terminal_result -->
+- [x] Replace the direct stage `store.snapshot()` call with
       `snapshot_publisher.publish()`.
-- [ ] Replace direct standalone `store.resolved_files()` calls in
+- [x] Replace direct standalone `store.resolved_files()` calls in
       `execution/_publication.py` with `publish_resolved_files()`.
-- [ ] Keep `LocalArtifactStore.fetch()` and local snapshot retrieval working.
+- [x] Keep `LocalArtifactStore.fetch()` and local snapshot retrieval working.
 
 <details>
 <summary>Hints</summary>
@@ -1050,10 +1068,11 @@ publisher.
 
 ### 8.3 Focused proof
 
-- [ ] Extend `tests/test_storage.py` for destination parsing, union round trips,
+- [x] Extend `tests/test_storage.py` for destination parsing, union round trips,
       mapping-return publication, and local snapshot compatibility.
-- [ ] Update protocol fixtures in `tests/test_protocol.py`.
-- [ ] Run: <!-- verifies: RSP-01, RSP-02 -->
+- [x] Preserve the unchanged storage-reference fixtures in
+      `tests/test_protocol.py`.
+- [x] Run: <!-- verifies: RSP-01, RSP-02 -->
 
 ```bash
 python -m pytest \

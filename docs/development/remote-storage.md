@@ -14,7 +14,7 @@ the immutable copy.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** in progress.
 
 These requirements bind the contract to the master checklist:
 
@@ -566,15 +566,6 @@ class SnapshotPublisher(Protocol):
         resolved_stage: bytes,
         files: Mapping[RepoRelPath, Path],
     ) -> StageResultSnapshot: ...
-
-    def publish_reuse(
-        self,
-        *,
-        resolved_stage_path: RepoRelPath,
-        resolved_stage: bytes,
-        source_snapshot: StageResultSnapshot,
-        files: tuple[ReusedStageFile, ...],
-    ) -> StageResultSnapshot: ...
 ```
 
 Files outside stage snapshots use a separate function:
@@ -598,11 +589,8 @@ The local publisher calls `LocalArtifactStore`. The cloud publisher uploads
 each source and seals one revision. It returns `ViperCloudFileRef` for a
 separate file or `ViperCloudStageResultSnapshotRef` for a stage snapshot.
 
-`publish_reuse()` supports the opt-in contract in
-[`stage-reuse.md`](stage-reuse.md). The local publisher links or copies
-verified source-snapshot bytes into a new target revision. The cloud publisher
-seals a new target manifest over existing payload objects. Both paths publish
-the target `resolved.yaml` and return a new target snapshot identity.
+The later [`stage-reuse.md`](stage-reuse.md) contract extends this protocol with
+`publish_reuse()` when Master Phase 14 implements stage reuse.
 
 The stage executor uses this exact call:
 
@@ -1397,6 +1385,1984 @@ a failed seal preserves the working files required for retry
 
 the first immutable publication fixes the run's destination before stage work
 ```
+
+## 16. Contract-owned PairBlocks
+
+<!-- pair-block-definition: P1-RSP-01 -->
+```toml pair-block
+id = "P1-RSP-01"
+requirements = ["RSP-01"]
+targets = [
+    "src/viper/storage.py:json",
+    "src/viper/storage.py:tomllib",
+    "src/viper/storage.py:Annotated",
+    "src/viper/storage.py:Literal",
+    "src/viper/storage.py:Protocol",
+    "src/viper/storage.py:Field",
+    "src/viper/storage.py:TypeAdapter",
+    "src/viper/storage.py:ValidationError",
+    "src/viper/storage.py:ProtocolModel",
+    "src/viper/storage.py:RepoRelPath",
+    "src/viper/storage.py:HumanId",
+    "src/viper/storage.py:RunId",
+    "src/viper/storage.py:StorageConfigurationError",
+    "src/viper/storage.py:LocalStorageDestination",
+    "src/viper/storage.py:ViperCloudDestination",
+    "src/viper/storage.py:StorageDestination",
+    "src/viper/storage.py:StorageSettings",
+    "src/viper/storage.py:_parse_storage_destination",
+    "src/viper/storage.py:load_storage_settings",
+    "tests/test_storage.py:test_storage_settings_parse_local_and_cloud_destinations",
+]
+tests = ["tests/test_storage.py:test_storage_settings_parse_local_and_cloud_destinations"]
+gate = "python -m pytest tests/test_storage.py -k storage_settings -q"
+depends_on = ["P1-CRT-01"]
+```
+
+<!-- pair-block-definition: P1-RSP-02 -->
+```toml pair-block
+id = "P1-RSP-02"
+requirements = ["RSP-01"]
+targets = [
+    "src/viper/storage.py:LocalFileRef",
+    "src/viper/storage.py:LocalStageResultSnapshotRef",
+    "src/viper/storage.py:ResolvedFileRef",
+    "src/viper/storage.py:SnapshotFileRef",
+    "src/viper/storage.py:StageResultSnapshot",
+    "src/viper/storage.py:StorageModel",
+    "src/viper/storage.py:PublicationSource",
+    "src/viper/storage.py:SnapshotPublisher",
+    "src/viper/storage.py:LocalSnapshotPublisher",
+    "src/viper/storage.py:_read_publication_source",
+    "src/viper/storage.py:create_snapshot_publisher",
+    "src/viper/storage.py:publish_resolved_files",
+    "tests/test_storage.py:LocalFileRef",
+    "tests/test_storage.py:LocalStageResultSnapshotRef",
+    "tests/test_storage.py:LocalArtifactStore",
+    "tests/test_storage.py:LocalSnapshotPublisher",
+    "tests/test_storage.py:LocalStorageDestination",
+    "tests/test_storage.py:LocalStoreError",
+    "tests/test_storage.py:StorageConfigurationError",
+    "tests/test_storage.py:StorageSettings",
+    "tests/test_storage.py:ViperCloudDestination",
+    "tests/test_storage.py:bind_run_destination",
+    "tests/test_storage.py:create_snapshot_publisher",
+    "tests/test_storage.py:load_storage_settings",
+    "tests/test_storage.py:publish_resolved_files",
+    "tests/test_storage.py:test_local_publishers_share_destination_neutral_interface",
+]
+tests = ["tests/test_storage.py:test_local_publishers_share_destination_neutral_interface"]
+gate = "python -m pytest tests/test_storage.py -k local_publishers -q"
+depends_on = ["P1-RSP-01"]
+```
+
+<!-- pair-block-definition: P1-RSP-03 -->
+```toml pair-block
+id = "P1-RSP-03"
+requirements = ["RSP-02"]
+targets = [
+    "src/viper/storage.py:bind_run_destination",
+    "tests/test_storage.py:RUN_ID",
+    "tests/test_storage.py:test_bind_run_destination_is_idempotent_and_rejects_change",
+]
+tests = ["tests/test_storage.py:test_bind_run_destination_is_idempotent_and_rejects_change"]
+gate = "python -m pytest tests/test_storage.py -k bind_run_destination -q"
+depends_on = ["P1-RSP-01"]
+```
+
+<!-- pair-block-definition: P1-RSP-04 -->
+```toml pair-block
+id = "P1-RSP-04"
+requirements = ["RSP-02"]
+targets = [
+    "src/viper/execution/_publication.py:LocalArtifactStore",
+    "src/viper/execution/_publication.py:StorageDestination",
+    "src/viper/execution/_publication.py:publish_resolved_files",
+    "src/viper/execution/_publication.py:publish_attempt_files",
+    "src/viper/execution/_publication.py:write_attempt_document",
+    "src/viper/execution/_publication.py:publish_invocation_receipt",
+    "src/viper/execution/_recovery.py:LocalArtifactStore",
+    "src/viper/execution/_recovery.py:StorageDestination",
+    "src/viper/execution/_recovery.py:reconcile_abandoned_attempts",
+    "src/viper/execution/_attempt.py:LocalArtifactStore",
+    "src/viper/execution/_attempt.py:bind_run_destination",
+    "src/viper/execution/_attempt.py:create_snapshot_publisher",
+    "src/viper/execution/_attempt.py:load_storage_settings",
+    "src/viper/execution/_attempt.py:snapshot_file",
+    "src/viper/execution/_attempt.py:execute_attempt",
+    "tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifies_terminal_result",
+    "tests/test_run_execution.py:test_train_stage_captures_local_external_input",
+]
+tests = ["tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifies_terminal_result", "tests/test_run_execution.py:test_train_stage_captures_local_external_input"]
+gate = "python -m pytest tests/test_run_execution.py -q"
+depends_on = ["P1-RSP-02", "P1-RSP-03"]
+```
+
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:json -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:tomllib -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:Annotated -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:Literal -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:Protocol -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:Field -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:TypeAdapter -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:ValidationError -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:ProtocolModel -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=update target=src/viper/storage.py:RepoRelPath -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:HumanId -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:RunId -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=src/viper/storage.py:LocalFileRef -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=src/viper/storage.py:LocalStageResultSnapshotRef -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=src/viper/storage.py:ResolvedFileRef -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=src/viper/storage.py:SnapshotFileRef -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=src/viper/storage.py:StageResultSnapshot -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=src/viper/storage.py:StorageModel -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:StorageConfigurationError -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:LocalStorageDestination -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:ViperCloudDestination -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:StorageDestination -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:StorageSettings -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=src/viper/storage.py:PublicationSource -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=src/viper/storage.py:SnapshotPublisher -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=src/viper/storage.py:LocalSnapshotPublisher -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:_parse_storage_destination -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:load_storage_settings -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=src/viper/storage.py:_read_publication_source -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=src/viper/storage.py:create_snapshot_publisher -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=src/viper/storage.py:publish_resolved_files -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-03 action=add target=src/viper/storage.py:bind_run_destination -->
+
+```python contract-target
+from typing import Annotated, Literal, Protocol
+
+from pydantic import Field, TypeAdapter, ValidationError
+
+from .ids import HumanId, RunId
+
+class LocalStorageDestination(ProtocolModel):
+    """Select repository-local immutable publication."""
+
+    kind: Literal["local"] = Field(
+        default="local",
+        description="Discriminator selecting ROOT/.viper/store publication.",
+    )
+
+from ._schema import ProtocolModel, RepoRelPath
+
+class StorageConfigurationError(RuntimeError):
+    """Report invalid storage configuration or a changed run destination."""
+
+StorageDestination = Annotated[
+    LocalStorageDestination | ViperCloudDestination,
+    Field(discriminator="kind"),
+]
+
+class StorageSettings(ProtocolModel):
+    """Store the immutable-publication settings parsed from viper.toml."""
+
+    destination: StorageDestination = Field(
+        default_factory=LocalStorageDestination,
+        description="Destination used for every immutable publication in one run.",
+    )
+
+class ViperCloudDestination(ProtocolModel):
+    """Select one Viper Cloud project for immutable publication."""
+
+    kind: Literal["viper_cloud"] = Field(
+        default="viper_cloud",
+        description="Discriminator selecting Viper Cloud publication.",
+    )
+    owner: HumanId = Field(description="Viper Cloud account owning the project.")
+    project: HumanId = Field(description="Viper Cloud project receiving the files.")
+
+def _parse_storage_destination(value: object) -> StorageDestination:
+    """Parse one public storage destination string into its protocol model."""
+    if value == "local":
+        return LocalStorageDestination()
+    if not isinstance(value, str) or not value.startswith("viper://"):
+        raise StorageConfigurationError("storage destination is invalid")
+    address = value.removeprefix("viper://")
+    if any(token in address for token in ("?", "#")):
+        raise StorageConfigurationError("storage destination is invalid")
+    parts = address.split("/")
+    if len(parts) != 2 or not all(parts):
+        raise StorageConfigurationError("storage destination is invalid")
+    try:
+        return ViperCloudDestination(owner=parts[0], project=parts[1])
+    except ValidationError as error:
+        raise StorageConfigurationError("storage destination is invalid") from error
+
+import json
+
+def load_storage_settings(root: Path) -> StorageSettings:
+    """Load the storage table from the selected project's viper.toml file."""
+    try:
+        marker = resolve_path(root, "viper.toml", operation="read")
+        document = tomllib.loads(marker.read_text(encoding="utf-8"))
+        storage = document.get("storage", {})
+        if not isinstance(storage, dict):
+            raise StorageConfigurationError("storage table is invalid")
+        payload = dict(storage)
+        payload["destination"] = _parse_storage_destination(
+            payload.get("destination", "local")
+        )
+        return StorageSettings.model_validate(payload)
+    except (OSError, PathError, tomllib.TOMLDecodeError, ValidationError) as error:
+        raise StorageConfigurationError("storage settings are invalid") from error
+
+import tomllib
+
+from .references import (
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    SnapshotFileRef,
+    StageResultSnapshot,
+    StorageModel,
+)
+
+class LocalSnapshotPublisher:
+    """Publish stage snapshots through one repository-local artifact store."""
+
+    def __init__(self, root: Path):
+        """Bind publication to the selected project root."""
+        self.root = root.resolve(strict=True)
+        self.store = LocalArtifactStore(self.root)
+
+    def publish(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        files: Mapping[RepoRelPath, Path],
+    ) -> LocalStageResultSnapshotRef:
+        """Read validated member paths and publish one local stage snapshot."""
+        payload: dict[RepoRelPath, bytes] = {resolved_stage_path: resolved_stage}
+        for path, source in files.items():
+            payload[path] = _read_publication_source(self.root, source)
+        return self.store.snapshot(payload)
+
+PublicationSource = bytes | Path
+
+class SnapshotPublisher(Protocol):
+    """Publish one completed stage snapshot to a selected destination."""
+
+    def publish(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        files: Mapping[RepoRelPath, Path],
+    ) -> StageResultSnapshot:
+        """Publish one resolved stage document and its existing member files."""
+        ...
+
+def _read_publication_source(root: Path, source: PublicationSource) -> bytes:
+    """Return bytes from one in-memory or root-confined publication source."""
+    if isinstance(source, bytes):
+        return source
+    project_root = root.resolve(strict=True)
+    candidate = source if source.is_absolute() else project_root / source
+    try:
+        relative = candidate.relative_to(project_root).as_posix()
+        validated = resolve_path(project_root, relative, operation="read")
+    except (OSError, ValueError, PathError) as error:
+        raise StorageConfigurationError(
+            "storage publication source is invalid"
+        ) from error
+    return validated.read_bytes()
+
+def create_snapshot_publisher(
+    root: Path,
+    destination: StorageDestination,
+) -> SnapshotPublisher:
+    """Create the stage publisher for one implemented storage destination."""
+    if isinstance(destination, LocalStorageDestination):
+        return LocalSnapshotPublisher(root)
+    raise StorageConfigurationError("viper_cloud publication is not implemented")
+
+def publish_resolved_files(
+    root: Path,
+    destination: StorageDestination,
+    files: Mapping[RepoRelPath, PublicationSource],
+) -> dict[RepoRelPath, ResolvedFileRef]:
+    """Publish standalone files and return references keyed by requested path."""
+    if not isinstance(destination, LocalStorageDestination):
+        raise StorageConfigurationError("viper_cloud publication is not implemented")
+    payload = {
+        path: _read_publication_source(root, source) for path, source in files.items()
+    }
+    references = LocalArtifactStore(root).resolved_files(payload)
+    return {
+        reference.stored_at.path: reference
+        for reference in references
+        if isinstance(reference.stored_at, LocalFileRef)
+    }
+
+def bind_run_destination(
+    root: Path,
+    run_id: RunId,
+    destination: StorageDestination,
+) -> StorageDestination:
+    """Create or validate the immutable publication destination for one run."""
+    relative = f".viper/workspaces/{run_id}/storage-destination.json"
+    try:
+        target = resolve_path(root, relative, operation="write")
+    except PathError as error:
+        raise StorageConfigurationError(
+            "storage destination path is invalid"
+        ) from error
+    target.parent.mkdir(parents=True, exist_ok=True)
+    raw = (
+        json.dumps(
+            destination.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        + b"\n"
+    )
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=target.parent,
+        prefix=f".{target.name}.",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as temporary_file:
+            temporary_file.write(raw)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            pass
+    finally:
+        temporary.unlink(missing_ok=True)
+
+    try:
+        stored = TypeAdapter(StorageDestination).validate_json(target.read_bytes())
+    except (OSError, ValidationError) as error:
+        raise StorageConfigurationError("stored run destination is invalid") from error
+    if stored != destination:
+        raise StorageConfigurationError("storage_destination_changed")
+    return stored
+```
+
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=tests/test_storage.py:LocalFileRef -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:LocalStageResultSnapshotRef -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=tests/test_storage.py:LocalArtifactStore -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:LocalSnapshotPublisher -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:LocalStorageDestination -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=update target=tests/test_storage.py:LocalStoreError -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:StorageConfigurationError -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:StorageSettings -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:ViperCloudDestination -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:bind_run_destination -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:create_snapshot_publisher -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:load_storage_settings -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:publish_resolved_files -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-03 action=add target=tests/test_storage.py:RUN_ID -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=tests/test_storage.py:test_storage_settings_parse_local_and_cloud_destinations -->
+<!-- contract-target: requirements=RSP-01 block=P1-RSP-02 action=add target=tests/test_storage.py:test_local_publishers_share_destination_neutral_interface -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-03 action=add target=tests/test_storage.py:test_bind_run_destination_is_idempotent_and_rejects_change -->
+
+```python contract-target
+def test_storage_settings_parse_local_and_cloud_destinations(tmp_path: Path) -> None:
+    """Parse the two destination forms and preserve their closed model shape."""
+    marker = tmp_path / "viper.toml"
+    marker.write_text("[project]\nschema_version = 1\n", encoding="utf-8")
+
+    local = load_storage_settings(tmp_path)
+    assert local == StorageSettings(destination=LocalStorageDestination())
+    assert StorageSettings.model_validate_json(local.model_dump_json()) == local
+
+    marker.write_text(
+        "[project]\nschema_version = 1\n"
+        '[storage]\ndestination = "viper://machina/weekend_models"\n',
+        encoding="utf-8",
+    )
+    cloud = load_storage_settings(tmp_path)
+    assert cloud.destination == ViperCloudDestination(
+        owner="machina",
+        project="weekend_models",
+    )
+    assert StorageSettings.model_validate_json(cloud.model_dump_json()) == cloud
+
+    marker.write_text(
+        "[project]\nschema_version = 1\n"
+        '[storage]\ndestination = "https://example.com/project"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(StorageConfigurationError, match="destination is invalid"):
+        load_storage_settings(tmp_path)
+
+from viper.storage import (
+    LocalArtifactStore,
+    LocalSnapshotPublisher,
+    LocalStorageDestination,
+    LocalStoreError,
+    StorageConfigurationError,
+    StorageSettings,
+    ViperCloudDestination,
+    bind_run_destination,
+    create_snapshot_publisher,
+    load_storage_settings,
+    publish_resolved_files,
+)
+
+from viper.references import LocalFileRef, LocalStageResultSnapshotRef
+
+def test_local_publishers_share_destination_neutral_interface(
+    tmp_path: Path,
+) -> None:
+    """Publish stage and standalone bytes through the local destination boundary."""
+    marker = tmp_path / "viper.toml"
+    marker.write_text("[project]\nschema_version = 1\n", encoding="utf-8")
+    artifact = tmp_path / "artifacts" / "model.bin"
+    artifact.parent.mkdir()
+    artifact.write_bytes(b"parameters")
+    destination = LocalStorageDestination()
+
+    publisher = create_snapshot_publisher(tmp_path, destination)
+    assert isinstance(publisher, LocalSnapshotPublisher)
+    snapshot = publisher.publish(
+        resolved_stage_path="runs/example/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\n",
+        files={"artifacts/model.bin": artifact},
+    )
+    assert isinstance(snapshot, LocalStageResultSnapshotRef)
+    store = LocalArtifactStore(tmp_path)
+    assert set(store.list_snapshot_files(snapshot)) == {
+        "artifacts/model.bin",
+        "runs/example/stages/train/resolved.yaml",
+    }
+
+    references = publish_resolved_files(
+        tmp_path,
+        destination,
+        {
+            "runs/example/journal.jsonl": b'{"state":"terminal"}\n',
+            "artifacts/model.bin": artifact,
+        },
+    )
+    assert set(references) == {
+        "artifacts/model.bin",
+        "runs/example/journal.jsonl",
+    }
+    assert store.fetch(references["artifacts/model.bin"].stored_at) == b"parameters"
+
+RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+def test_bind_run_destination_is_idempotent_and_rejects_change(
+    tmp_path: Path,
+) -> None:
+    """Persist the first run destination and reject a later different value."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    local = LocalStorageDestination()
+
+    assert bind_run_destination(tmp_path, RUN_ID, local) == local
+    assert bind_run_destination(tmp_path, RUN_ID, local) == local
+    destination_path = (
+        tmp_path / ".viper" / "workspaces" / RUN_ID / "storage-destination.json"
+    )
+    assert destination_path.read_bytes() == b'{"kind":"local"}\n'
+
+    with pytest.raises(StorageConfigurationError, match="storage_destination_changed"):
+        bind_run_destination(
+            tmp_path,
+            RUN_ID,
+            ViperCloudDestination(owner="machina", project="weekend_models"),
+        )
+```
+
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=remove target=src/viper/execution/_publication.py:LocalArtifactStore -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=add target=src/viper/execution/_publication.py:StorageDestination -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=add target=src/viper/execution/_publication.py:publish_resolved_files -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=src/viper/execution/_publication.py:publish_attempt_files -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=src/viper/execution/_publication.py:write_attempt_document -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=src/viper/execution/_publication.py:publish_invocation_receipt -->
+
+```python contract-target
+from ..storage import StorageDestination, publish_resolved_files
+
+def publish_attempt_files(
+    root: Path,
+    destination: StorageDestination,
+    run_root: str,
+    attempt_id: int,
+    journal: DurableJournal,
+    log_files: Mapping[str, bytes],
+    measurement_paths: list[Path],
+    metric_verification_paths: list[Path],
+) -> tuple[
+    AttemptJournalRef,
+    tuple[ResolvedFileRef, ...],
+    tuple[ResolvedFileRef, ...],
+    tuple[ResolvedFileRef, ...],
+]:
+    """Publish one terminal journal and every available attempt-owned file."""
+    files = dict(log_files)
+    for path in (*measurement_paths, *metric_verification_paths):
+        files[path.relative_to(root).as_posix()] = path.read_bytes()
+    journal_path = f"{run_root}/attempts/{attempt_id}/journal.jsonl"
+    files[journal_path] = journal.path.read_bytes()
+    references = publish_resolved_files(root, destination, files)
+    journal_file = references[journal_path]
+    return (
+        AttemptJournalRef(
+            sha256=journal_file.sha256,
+            bytes=journal_file.bytes,
+            stored_at=journal_file.stored_at,
+        ),
+        tuple(
+            reference
+            for path, reference in references.items()
+            if "/measurements/" in path
+        ),
+        tuple(
+            reference
+            for path, reference in references.items()
+            if "/metric_verification/" in path
+        ),
+        tuple(reference for path, reference in references.items() if "/logs/" in path),
+    )
+
+def publish_invocation_receipt(
+    root: Path,
+    destination: StorageDestination,
+    path: str,
+    receipt: StageInvocationReceipt,
+) -> ResolvedStageInvocationRef:
+    """Publish one stage invocation receipt at its canonical attempt path."""
+    raw = serialize_document(receipt)
+    reference = publish_resolved_files(root, destination, {path: raw})[path]
+    return ResolvedStageInvocationRef(
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+        stored_at=reference.stored_at,
+    )
+
+def write_attempt_document(
+    root: Path,
+    run_root: str,
+    attempt: RunAttempt,
+    destination: StorageDestination,
+) -> ResolvedAttemptRef:
+    """Publish one canonical attempt document and return its immutable reference."""
+    path = root / run_root / "attempts" / str(attempt.attempt_id) / "resolved.yaml"
+    raw = serialize_document(attempt)
+    write_synchronized(path, raw)
+    relative_path = path.relative_to(root).as_posix()
+    reference = publish_resolved_files(
+        root,
+        destination,
+        {relative_path: raw},
+    )[relative_path]
+    return ResolvedAttemptRef(
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+        stored_at=reference.stored_at,
+    )
+```
+
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=remove target=src/viper/execution/_recovery.py:LocalArtifactStore -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=add target=src/viper/execution/_recovery.py:StorageDestination -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=src/viper/execution/_recovery.py:reconcile_abandoned_attempts -->
+
+```python contract-target
+from ..storage import StorageDestination
+
+def reconcile_abandoned_attempts(
+    root: Path,
+    workspace_root: Path,
+    run: RunSpec,
+    run_root: str,
+    destination: StorageDestination,
+    known_attempts: tuple[RunAttempt, ...],
+) -> tuple[RunAttempt, ...]:
+    """Close every durable workspace omitted from the current run head."""
+    recovered = {attempt.attempt_id: attempt for attempt in known_attempts}
+    local_run_root = workspace_root.resolve() / str(run.run_id)
+    if not local_run_root.is_dir():
+        return known_attempts
+    for workspace_path in sorted(local_run_root.glob("attempt-*")):
+        suffix = workspace_path.name.removeprefix("attempt-")
+        if not suffix.isdecimal():
+            continue
+        attempt_id = int(suffix)
+        if attempt_id in recovered:
+            continue
+        attempt_document = (
+            root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+        )
+        if attempt_document.is_file():
+            recovered[attempt_id] = RunAttempt.model_validate(
+                parse_yaml_bytes(attempt_document.read_bytes())
+            )
+            continue
+        journal = DurableJournal(workspace_path / "control" / "journal.jsonl")
+        entries = journal.read()
+        if not entries:
+            continue
+        if entries[-1].state != "terminal":
+            lost_at = datetime.now(UTC)
+            journal.append(
+                "terminal",
+                "attempt failed after coordinator loss",
+                recorded_at=lost_at,
+                details={"exception": "coordinator_lost"},
+            )
+        else:
+            lost_at = entries[-1].recorded_at
+        journal_reference, measurements, metric_receipts, logs = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            {},
+            [],
+            [],
+        )
+        recovered_attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose="run",
+            status="failed",
+            started_at=entries[0].recorded_at,
+            completed_at=datetime.now(UTC),
+            resolved_stages=(),
+            invocations=(),
+            journal=journal_reference,
+            measurement_files=measurements,
+            metric_verification_files=metric_receipts,
+            log_files=logs,
+            failure=AttemptFailure(
+                code="coordinator_lost",
+                stage_id=None,
+                message="coordinator exited before terminal attempt publication",
+                occurred_at=lost_at,
+            ),
+        )
+        write_attempt_document(root, run_root, recovered_attempt, destination)
+        recovered[attempt_id] = recovered_attempt
+    return tuple(recovered[key] for key in sorted(recovered))
+```
+
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=src/viper/execution/_attempt.py:LocalArtifactStore -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=add target=src/viper/execution/_attempt.py:bind_run_destination -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=add target=src/viper/execution/_attempt.py:create_snapshot_publisher -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=add target=src/viper/execution/_attempt.py:load_storage_settings -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=src/viper/execution/_attempt.py:snapshot_file -->
+
+```python contract-target
+from ..storage import (
+    LocalArtifactStore,
+    bind_run_destination,
+    create_snapshot_publisher,
+    load_storage_settings,
+    snapshot_file,
+)
+```
+
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=src/viper/execution/_attempt.py:execute_attempt -->
+
+```python contract-target
+def execute_attempt(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+    retry: bool = False,
+    purpose: AttemptPurpose = "run",
+) -> RunResult | ConfirmationRunResult:
+    """Execute one ordinary or benchmark-confirmation attempt."""
+    root = repository_root.resolve()
+    run_path = run_spec_path.resolve()
+    run_raw = run_path.read_bytes()
+    run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
+    origin = run_git(root, "remote", "get-url", "origin").decode().strip()
+    if origin != str(run.source.repository):
+        raise RunError("Git origin differs from RunSpec.source.repository")
+    plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
+    relative_run_path = run_path.relative_to(root).as_posix()
+    if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
+        raise RunError("RunSpec bytes are absent from the current Git commit")
+
+    store = LocalArtifactStore(root)
+    destination = bind_run_destination(
+        root,
+        run.run_id,
+        load_storage_settings(root).destination,
+    )
+    snapshot_publisher = create_snapshot_publisher(root, destination)
+    fetcher = RunFetcher(root, store, str(run.source.repository))
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({str(run.source.repository)})
+    )
+    experiment = ExperimentSpec.model_validate(
+        parse_yaml_bytes(
+            fetcher(
+                GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=f"experiments/{run.experiment_id}/spec.yaml",
+                )
+            )
+        )
+    )
+    run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+
+    workspace_root = root / ".viper" / "workspaces"
+    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
+    run_lock.acquire()
+    terminal_path = run_path.parent / "resolved.yaml"
+    previous_run: ResolvedRun | None = None
+    if terminal_path.is_file():
+        previous_run = ResolvedRun.model_validate(
+            parse_yaml_bytes(terminal_path.read_bytes())
+        )
+        if purpose == "run" and not retry:
+            run_lock.release()
+            raise RunError("run already has terminal attempt history; use retry")
+        if purpose == "run" and previous_run.status == "succeeded":
+            run_lock.release()
+            raise RunError("a successful run cannot be retried")
+    elif purpose == "benchmark_confirmation":
+        run_lock.release()
+        raise RunError("benchmark confirmation requires a terminal candidate run")
+    if purpose == "benchmark_confirmation" and previous_run is not None:
+        if previous_run.status != "succeeded":
+            run_lock.release()
+            raise RunError("benchmark confirmation requires a successful candidate run")
+    known_attempts = (
+        ()
+        if previous_run is None
+        else tuple(
+            read_attempt_reference(reference, run, fetcher=fetcher)
+            for reference in previous_run.attempts
+        )
+    )
+    previous_attempts = reconcile_abandoned_attempts(
+        root,
+        workspace_root,
+        run,
+        run_root,
+        destination,
+        known_attempts,
+    )
+    attempt_id = max(
+        next_attempt_id(workspace_root, run.run_id),
+        max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
+    )
+    workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
+    journal = DurableJournal(workspace.control / "journal.jsonl")
+    attempt_started = datetime.now(UTC)
+    resolved_stage_refs: list[ResolvedStageRef] = []
+    invocation_refs: list[ResolvedStageInvocationRef] = []
+    completed: dict[StageId, ResolvedStageRef] = {}
+    loaded_stages: dict[StageId, BaseSpec] = {}
+    measurement_paths: list[Path] = []
+    metric_verification_paths: list[Path] = []
+    log_files: dict[str, bytes] = {}
+    active_stage_id: StageId | None = None
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def cancel_attempt(signum: int, frame: object) -> None:
+        """Convert an interrupt request into a durable cancellation outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("cancelled")
+
+    def preempt_attempt(signum: int, frame: object) -> None:
+        """Convert host termination into a durable preemption outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("preempted")
+
+    signal.signal(signal.SIGINT, cancel_attempt)
+    signal.signal(signal.SIGTERM, preempt_attempt)
+    try:
+        journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
+        preflight = preflight_plan(root, run_path)
+        preflight_path = workspace.control / "preflight.json"
+        write_synchronized(
+            preflight_path,
+            f"{preflight.model_dump_json()}\n".encode(),
+        )
+        journal.append(
+            "preflighting",
+            "preflight completed and frozen plan located in Git",
+            recorded_at=datetime.now(UTC),
+            details={
+                "plan_commit": plan_commit,
+                "report": preflight_path.relative_to(workspace.root).as_posix(),
+            },
+        )
+        if not preflight.ready:
+            failed_codes = ", ".join(
+                check.code for check in preflight.checks if check.status == "failure"
+            )
+            raise RunError(f"plan preflight failed: {failed_codes}")
+        for stage_reference in run.stages:
+            active_stage_id = stage_reference.stage_id
+            stage = load_stage_spec(root / stage_reference.spec)
+            loaded_stages[stage_reference.stage_id] = stage
+            effective_environment = stage.environment or run.environment
+            source_location = GitFileRef(
+                repository=run.source.repository,
+                commit=run.source.commit,
+                path=stage.implementation.path,
+            )
+            source = resolve_git_file(fetcher, source_location)
+            if (root / stage.implementation.path).read_bytes() != fetcher(
+                source_location
+            ):
+                raise RunError("stage source differs from the frozen source")
+
+            resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
+            resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
+            input_paths: dict[str, Path] = {}
+            if isinstance(stage, DownloadSpec):
+                resolved_retrievals, input_paths = retrieve_download_inputs(
+                    root,
+                    workspace,
+                    run,
+                    stage_reference.stage_id,
+                    stage,
+                    store,
+                )
+            elif isinstance(stage, InternalSpec):
+                resolved_inputs, input_paths = resolve_inputs(
+                    root,
+                    workspace,
+                    stage_reference.stage_id,
+                    stage,
+                    completed,
+                    loaded_stages,
+                    fetcher,
+                    policy,
+                    store,
+                )
+
+            journal.append(
+                "running_stage",
+                "stage process started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+            try:
+                process = execute_stage_process(
+                    root,
+                    run,
+                    stage_reference,
+                    stage,
+                    attempt_id=attempt_id,
+                    input_paths=input_paths,
+                    retrievals=resolved_retrievals,
+                    timeout_seconds=timeout_seconds,
+                )
+            except (StageExecutionError, StageProcessInterrupted) as exc:
+                run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
+                log_files[f"{run_log_root}/{stage_reference.stage_id}.stdout.log"] = (
+                    exc.stdout
+                )
+                log_files[f"{run_log_root}/{stage_reference.stage_id}.stderr.log"] = (
+                    exc.stderr
+                )
+                if exc.invocation is not None:
+                    invocation_path = (
+                        f"{run_root}/attempts/{attempt_id}/invocations/"
+                        f"{stage_reference.stage_id}.yaml"
+                    )
+                    invocation_refs.append(
+                        publish_invocation_receipt(
+                            root,
+                            destination,
+                            invocation_path,
+                            exc.invocation,
+                        )
+                    )
+                raise
+            metric_specs = {metric.metric_id: metric for metric in experiment.metrics}
+            for metric_id in stage.metric_ids:
+                if metric_specs[metric_id].mode != "live":
+                    continue
+                live_path = (
+                    root
+                    / (
+                        f"experiments/{run.experiment_id}/runs/"
+                        f"{run.variant_id}/{run.run_id}"
+                    )
+                    / f"attempts/{attempt_id}/measurements"
+                    / f"{stage_reference.stage_id}.{metric_id}.jsonl"
+                )
+                if live_path.is_file() and live_path not in measurement_paths:
+                    measurement_paths.append(live_path)
+            invocation_path = (
+                f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
+            )
+            invocation_ref = publish_invocation_receipt(
+                root,
+                destination,
+                invocation_path,
+                process.invocation,
+            )
+            invocation_refs.append(invocation_ref)
+            stage_completed = datetime.now(UTC)
+            resolved = resolve_stage(
+                stage,
+                source=source,
+                environment=resolve_environment(
+                    fetcher,
+                    effective_environment,
+                    process,
+                ),
+                process=process,
+                invocation=invocation_ref,
+                inputs=resolved_inputs,
+                retrievals=resolved_retrievals,
+                completed_at=stage_completed,
+            )
+            resolved_path = (
+                f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                f"/stages/{stage_reference.stage_id}/resolved.yaml"
+            )
+            resolved_raw = serialize_document(resolved)
+            snapshot_paths: dict[str, Path] = {}
+            if resolved_retrievals is not None:
+                for retrieval in resolved_retrievals.values():
+                    retrieval_path = retrieval.body.stored_at.path
+                    snapshot_paths[retrieval_path] = root / retrieval_path
+            for artifact in process.artifacts.values():
+                artifact_references: tuple[SnapshotFileRef, ...]
+                if artifact.kind == "file":
+                    artifact_references = (artifact.file,)
+                else:
+                    artifact_references = tuple(
+                        member.file for member in artifact.members
+                    )
+                for reference in artifact_references:
+                    snapshot_paths[reference.path] = root / reference.path
+            journal.append(
+                "publishing_stage",
+                "stage snapshot publication started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+            snapshot = snapshot_publisher.publish(
+                resolved_stage_path=resolved_path,
+                resolved_stage=resolved_raw,
+                files=snapshot_paths,
+            )
+            resolved_stage_ref = ResolvedStageRef(
+                stage_id=stage_reference.stage_id,
+                snapshot=snapshot,
+                resolved_spec=snapshot_file(resolved_path, resolved_raw),
+            )
+            resolved_stage_refs.append(resolved_stage_ref)
+            completed[stage_reference.stage_id] = resolved_stage_ref
+            run_after_stage_metrics(
+                root,
+                run,
+                stage_reference.stage_id,
+                stage,
+                experiment,
+                input_paths,
+                measurement_paths,
+                metric_verification_paths,
+                store,
+                timeout_seconds,
+                attempt_id,
+            )
+            log_files[
+                f"{run_root}/attempts/{attempt_id}/logs/"
+                f"{stage_reference.stage_id}.stdout.log"
+            ] = process.stdout
+            log_files[
+                f"{run_root}/attempts/{attempt_id}/logs/"
+                f"{stage_reference.stage_id}.stderr.log"
+            ] = process.stderr
+            active_stage_id = None
+
+        journal.append(
+            "closing_attempt",
+            "all planned stages completed",
+            recorded_at=datetime.now(UTC),
+        )
+        journal.append(
+            "publishing_attempt_files",
+            "attempt evidence publication started",
+            recorded_at=datetime.now(UTC),
+            details={},
+        )
+        journal.append(
+            "terminal",
+            "attempt succeeded",
+            recorded_at=datetime.now(UTC),
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+        )
+        attempt_completed = datetime.now(UTC)
+        attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status="succeeded",
+            started_at=attempt_started,
+            completed_at=attempt_completed,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=None,
+        )
+        run_reference = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+        attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            attempt,
+            destination,
+        )
+        if purpose == "benchmark_confirmation":
+            return ConfirmationRunResult(
+                attempt=attempt,
+                attempt_reference=attempt_reference,
+                attempt_path=(
+                    root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+                ),
+                journal_path=journal.path,
+            )
+        attempt_references = tuple(
+            write_attempt_document(root, run_root, value, destination)
+            for value in previous_attempts
+        ) + (attempt_reference,)
+        resolved_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=run_reference,
+            ),
+            status="succeeded",
+            attempts=attempt_references,
+            successful_attempt_id=attempt_id,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(resolved_run)
+        verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+        replace_synchronized(terminal_path, terminal_raw)
+        write_synchronized(workspace.terminal, terminal_raw)
+        return RunResult(
+            resolved_run=resolved_run,
+            resolved_run_path=terminal_path,
+            journal_path=journal.path,
+        )
+    except (Exception, KeyboardInterrupt) as exc:
+        failed_at = datetime.now(UTC)
+        status: Literal["failed", "cancelled", "preempted"]
+        if isinstance(exc, StageProcessInterrupted):
+            status = exc.outcome
+        elif isinstance(exc, KeyboardInterrupt):
+            status = "cancelled"
+        else:
+            status = "failed"
+        latest = journal.latest()
+        if latest is not None and latest.state != "terminal":
+            journal.append(
+                "terminal",
+                f"attempt {status}",
+                recorded_at=failed_at,
+                details={
+                    "stage_id": active_stage_id,
+                    "exception": type(exc).__name__,
+                },
+            )
+        code = (
+            "cancelled"
+            if status == "cancelled"
+            else "preempted"
+            if status == "preempted"
+            else "preflight_failed"
+            if isinstance(exc, RunError)
+            and str(exc).startswith("plan preflight failed")
+            else "verification_failed"
+            if isinstance(exc, VerificationError)
+            else "execution_failed"
+            if isinstance(
+                exc,
+                (StageExecutionError, MetricExecutionError, HttpRetrievalError),
+            )
+            else "internal_error"
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+        )
+        completed_at = datetime.now(UTC)
+        failed_attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status=status,
+            started_at=attempt_started,
+            completed_at=completed_at,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=AttemptFailure(
+                code=code,
+                stage_id=active_stage_id,
+                message=str(exc) or type(exc).__name__,
+                occurred_at=failed_at,
+            ),
+        )
+        run_reference = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+        failed_attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            failed_attempt,
+            destination,
+        )
+        if purpose == "benchmark_confirmation":
+            failed_attempt_path = (
+                root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+            )
+            raise RunError(
+                f"benchmark confirmation attempt {attempt_id} failed; evidence "
+                f"written to {failed_attempt_path}"
+            ) from exc
+        attempt_references = tuple(
+            write_attempt_document(root, run_root, value, destination)
+            for value in previous_attempts
+        ) + (failed_attempt_reference,)
+        failed_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=run_reference,
+            ),
+            status="cancelled" if status == "cancelled" else "failed",
+            attempts=attempt_references,
+            successful_attempt_id=None,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(failed_run)
+        replace_synchronized(terminal_path, terminal_raw)
+        replace_synchronized(workspace.terminal, terminal_raw)
+        raise RunError(
+            f"attempt {attempt_id} failed; evidence written to {terminal_path}"
+        ) from exc
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
+        run_lock.release()
+```
+
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifies_terminal_result -->
+<!-- contract-target: requirements=RSP-02 block=P1-RSP-04 action=update target=tests/test_run_execution.py:test_train_stage_captures_local_external_input -->
+
+```python contract-target
+def test_train_stage_captures_local_external_input(
+    tmp_path: Path,
+) -> None:
+    """Execute source-frozen stages through immutable local publication."""
+    root = tmp_path / "project"
+    root.mkdir()
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
+
+    train_params = parameters.Train.model_validate(
+        {"epochs": 1, "batch_size": 1, "learning_rate": 0.1}
+    )
+    metric_source = (
+        b"from viper.metrics import metric\n\n"
+        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
+        b'mode="recompute")\n'
+        b"def compute(context):\n"
+        b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
+    )
+    live_metric_source = (
+        b"from viper.metrics import StatefulMetric, metric\n\n"
+        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b"class EpochMean(StatefulMetric):\n"
+        b"    def __init__(self):\n"
+        b"        self.values = []\n"
+        b"    def update(self, value):\n"
+        b"        self.values.append(float(value))\n"
+        b"    def compute(self):\n"
+        b"        return sum(self.values) / len(self.values)\n"
+    )
+    parameter_bytes = MetricSpec(
+        metric_id="parameter_bytes",
+        kind="diagnostic",
+        implementation=MetricImplementationRef(
+            path="project/metrics/parameter_bytes.py",
+            symbol="compute",
+            sha256=hashlib.sha256(metric_source).hexdigest(),
+            bytes=len(metric_source),
+        ),
+        params=parameters.Metric(),
+        mode="recompute",
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name=PARAMETERS,
+                required_data_role="training",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+    epoch_mean = MetricSpec(
+        metric_id="epoch_mean",
+        kind="training",
+        implementation=MetricImplementationRef(
+            path="project/metrics/epoch_mean.py",
+            symbol="EpochMean",
+            sha256=hashlib.sha256(live_metric_source).hexdigest(),
+            bytes=len(live_metric_source),
+        ),
+        params=parameters.Metric(),
+        mode="live",
+    )
+    experiment = ExperimentSpec(
+        experiment_id="example",
+        factors=(),
+        variant_ids=("baseline",),
+        replicates=(ReplicateSpec(replicate_id="r1", seed=7),),
+        metrics=(parameter_bytes, epoch_mean),
+    )
+    variant = VariantSpec(
+        experiment_id="example",
+        variant_id="baseline",
+        levels={},
+        stage_params=(TrainVariantStageParams(stage_id="train", params=train_params),),
+    )
+    source_files = {
+        "viper.toml": b"[project]\nschema_version = 1\n",
+        "environment.yml": b"name: viper-test\n",
+        "project/loaders/bytes_file.py": (
+            b"def load(path):\n    return path.read_bytes()\n"
+        ),
+        "project/loaders/resume_state.py": (
+            "def load(path):\n"
+            f"    return {resume_state().model_dump(mode='python')!r}\n"
+        ).encode(),
+        "project/metrics/parameter_bytes.py": metric_source,
+        "project/metrics/epoch_mean.py": live_metric_source,
+        "project/parameters/train.py": (
+            b"from pydantic import Field\n"
+            b"from viper import parameters\n\n"
+            b"class TinyTrainParameters(parameters.Train):\n"
+            b"    epochs: int = Field(gt=0)\n"
+            b"    batch_size: int = Field(gt=0)\n"
+            b"    learning_rate: float = Field(gt=0)\n"
+        ),
+        "jobs/train.py": (
+            b"from project.parameters.train import TinyTrainParameters\n"
+            b"from viper.stages import train\n\n"
+            b"@train(params=TinyTrainParameters)\n"
+            b"def train(context):\n"
+            b"    assert context.params.epochs == 1\n"
+            b"    assert context.params.batch_size == 1\n"
+            b"    assert context.params.learning_rate == 0.1\n"
+            b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
+            b"    context.artifacts['parameters'].parent.mkdir(\n"
+            b"        parents=True, exist_ok=True\n"
+            b"    )\n"
+            b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
+            b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            b"    live_metric = context.metrics['epoch_mean']\n"
+            b"    live_metric.update(1.0)\n"
+            b"    live_metric.update(3.0)\n"
+            b"    live_metric.record(epoch=0, step=1)\n"
+        ),
+        "inputs/raw/prior.bin": b"prior",
+        "experiments/example/spec.yaml": serialize_document(experiment),
+        "experiments/example/variants/baseline.spec.yaml": serialize_document(variant),
+    }
+    for relative_path, raw in source_files.items():
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "source")
+    source_commit = run_git(root, "rev-parse", "HEAD")
+
+    source = GitSource.model_validate(
+        {"repository": REPOSITORY, "commit": source_commit}
+    )
+    lockfile = GitFileRef.model_validate(
+        {
+            "repository": REPOSITORY,
+            "commit": source_commit,
+            "path": "environment.yml",
+        }
+    )
+    if os.environ.get("VIPER_LIVE_GCE") == "1":
+        environment = GCEEnvironmentSpec(
+            provisioning=observe_gce_provisioning(),
+            machine_type="g2-standard-12",
+            compute=CUDAComputeSpec(model="NVIDIA L4", count=1),
+            lockfile=lockfile,
+            python_environment=python_environment(),
+        )
+    else:
+        environment = LocalEnvironmentSpec(
+            lockfile=lockfile,
+            python_environment=python_environment(),
+        )
+
+    train = TrainSpec(
+        implementation=StageImplementationRef(
+            path="jobs/train.py",
+            symbol="train",
+            sha256=hashlib.sha256(source_files["jobs/train.py"]).hexdigest(),
+            bytes=len(source_files["jobs/train.py"]),
+        ),
+        parameter_model=ParameterModelRef(
+            path="project/parameters/train.py",
+            symbol="TinyTrainParameters",
+            sha256=hashlib.sha256(
+                source_files["project/parameters/train.py"]
+            ).hexdigest(),
+            bytes=len(source_files["project/parameters/train.py"]),
+        ),
+        metric_ids=("parameter_bytes", "epoch_mean"),
+        inputs={
+            "prior": ExternalInputRef(
+                source=LocalSource(path="inputs/raw/prior.bin"),
+                path="inputs/datasets/tiny/prior.bin",
+                data_role="training",
+            )
+        },
+        params=train_params,
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
+                loader=ArtifactLoaderRef(
+                    path="project/loaders/bytes_file.py",
+                    symbol="load",
+                    sha256=hashlib.sha256(
+                        source_files["project/loaders/bytes_file.py"]
+                    ).hexdigest(),
+                    bytes=len(source_files["project/loaders/bytes_file.py"]),
+                ),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                path=f"{RUN_ROOT}/artifacts/models/tiny/resume_state.bin",
+                loader=ArtifactLoaderRef(
+                    path="project/loaders/resume_state.py",
+                    symbol="load",
+                    sha256=hashlib.sha256(
+                        source_files["project/loaders/resume_state.py"]
+                    ).hexdigest(),
+                    bytes=len(source_files["project/loaders/resume_state.py"]),
+                ),
+                data_role="training",
+            ),
+        },
+    )
+    draft_root = tmp_path / "drafts"
+    draft_root.mkdir()
+    train_draft = draft_root / "train.yaml"
+    train_draft.write_bytes(serialize_document(train))
+    frozen = freeze_run_plan(
+        root,
+        RunPlanDraft(
+            run_id=RUN_ID,
+            experiment_id="example",
+            variant_id="baseline",
+            replicate_id="r1",
+            seed=7,
+            source=source,
+            environment=environment,
+            reproducibility=reproducibility(),
+            stages=(StageDraft(stage_id="train", spec_source=train_draft),),
+            estimator=StageArtifactRef(
+                stage_id="train",
+                artifact_name=PARAMETERS,
+            ),
+        ),
+    )
+    run_git(root, "add", "experiments/example/runs")
+    run_git(root, "commit", "--quiet", "-m", "plan")
+
+    result = execute_run(root, frozen.files[-1])
+
+    assert result.resolved_run.status == "succeeded"
+    assert (root / "inputs/datasets/tiny/prior.bin").read_bytes() == b"prior"
+
+    store = LocalArtifactStore(root)
+    verified = verify_run_result(
+        result.resolved_run,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=RunFetcher(root, store, REPOSITORY),
+    )
+
+    resolved_train = verified.resolved_stages["train"]
+    assert isinstance(resolved_train, ResolvedTrainSpec)
+    resolved_input = resolved_train.inputs["prior"]
+
+    assert isinstance(resolved_input, ResolvedExternalInputRef)
+    assert store.fetch(resolved_input.file.stored_at) == b"prior"
+
+def test_two_stage_local_run_writes_and_verifies_terminal_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    http_source: tuple[str, int],
+) -> None:
+    """Execute source-frozen stages through immutable local publication."""
+    root = tmp_path / "project"
+    root.mkdir()
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
+
+    train_params = parameters.Train.model_validate(
+        {"epochs": 1, "batch_size": 1, "learning_rate": 0.1}
+    )
+    metric_source = (
+        b"from viper.metrics import metric\n\n"
+        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
+        b'mode="recompute")\n'
+        b"def compute(context):\n"
+        b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
+    )
+    live_metric_source = (
+        b"from viper.metrics import StatefulMetric, metric\n\n"
+        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b"class EpochMean(StatefulMetric):\n"
+        b"    def __init__(self):\n"
+        b"        self.values = []\n"
+        b"    def update(self, value):\n"
+        b"        self.values.append(float(value))\n"
+        b"    def compute(self):\n"
+        b"        return sum(self.values) / len(self.values)\n"
+    )
+    parameter_bytes = MetricSpec(
+        metric_id="parameter_bytes",
+        kind="diagnostic",
+        implementation=MetricImplementationRef(
+            path="project/metrics/parameter_bytes.py",
+            symbol="compute",
+            sha256=hashlib.sha256(metric_source).hexdigest(),
+            bytes=len(metric_source),
+        ),
+        params=parameters.Metric(),
+        mode="recompute",
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name=PARAMETERS,
+                required_data_role="training",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+    epoch_mean = MetricSpec(
+        metric_id="epoch_mean",
+        kind="training",
+        implementation=MetricImplementationRef(
+            path="project/metrics/epoch_mean.py",
+            symbol="EpochMean",
+            sha256=hashlib.sha256(live_metric_source).hexdigest(),
+            bytes=len(live_metric_source),
+        ),
+        params=parameters.Metric(),
+        mode="live",
+    )
+    experiment = ExperimentSpec(
+        experiment_id="example",
+        factors=(),
+        variant_ids=("baseline",),
+        replicates=(ReplicateSpec(replicate_id="r1", seed=7),),
+        metrics=(parameter_bytes, epoch_mean),
+    )
+    variant = VariantSpec(
+        experiment_id="example",
+        variant_id="baseline",
+        levels={},
+        stage_params=(
+            DownloadVariantStageParams(
+                stage_id="download",
+                params=parameters.Download(),
+            ),
+            TrainVariantStageParams(stage_id="train", params=train_params),
+        ),
+    )
+    source_files = {
+        "viper.toml": b"[project]\nschema_version = 1\n",
+        "environment.yml": b"name: viper-test\n",
+        "project/loaders/bytes_file.py": (
+            b"def load(path):\n    return path.read_bytes()\n"
+        ),
+        "project/loaders/resume_state.py": (
+            "def load(path):\n"
+            f"    return {resume_state().model_dump(mode='python')!r}\n"
+        ).encode(),
+        "project/metrics/parameter_bytes.py": metric_source,
+        "project/metrics/epoch_mean.py": live_metric_source,
+        "project/parameters/train.py": (
+            b"from pydantic import Field\n"
+            b"from viper import parameters\n\n"
+            b"class TinyTrainParameters(parameters.Train):\n"
+            b"    epochs: int = Field(gt=0)\n"
+            b"    batch_size: int = Field(gt=0)\n"
+            b"    learning_rate: float = Field(gt=0)\n"
+        ),
+        "project/parameters/download.py": (
+            b"from viper import parameters\n\n"
+            b"class TinyDownloadParameters(parameters.Download):\n"
+            b'    """Validate the download parameters used by this project."""\n'
+        ),
+        "jobs/download.py": (
+            b"from project.parameters.download import TinyDownloadParameters\n"
+            b"from viper.stages import download\n\n"
+            b"@download(params=TinyDownloadParameters)\n"
+            b"def download(context):\n"
+            b"    path = context.artifacts['prior']\n"
+            b"    path.parent.mkdir(parents=True, exist_ok=True)\n"
+            b"    body = context.retrievals['source'].body\n"
+            b"    path.write_bytes(body.read_bytes())\n"
+        ),
+        "jobs/train.py": (
+            b"from project.parameters.train import TinyTrainParameters\n"
+            b"from viper.stages import train\n\n"
+            b"@train(params=TinyTrainParameters)\n"
+            b"def train(context):\n"
+            b"    assert context.params.epochs == 1\n"
+            b"    assert context.params.batch_size == 1\n"
+            b"    assert context.params.learning_rate == 0.1\n"
+            b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
+            b"    context.artifacts['parameters'].parent.mkdir(\n"
+            b"        parents=True, exist_ok=True\n"
+            b"    )\n"
+            b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
+            b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            b"    live_metric = context.metrics['epoch_mean']\n"
+            b"    live_metric.update(1.0)\n"
+            b"    live_metric.update(3.0)\n"
+            b"    live_metric.record(epoch=0, step=1)\n"
+        ),
+        "experiments/example/spec.yaml": serialize_document(experiment),
+        "experiments/example/variants/baseline.spec.yaml": serialize_document(variant),
+    }
+    for relative_path, raw in source_files.items():
+        path = root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "source")
+    source_commit = run_git(root, "rev-parse", "HEAD")
+
+    source = GitSource.model_validate(
+        {"repository": REPOSITORY, "commit": source_commit}
+    )
+    lockfile = GitFileRef.model_validate(
+        {
+            "repository": REPOSITORY,
+            "commit": source_commit,
+            "path": "environment.yml",
+        }
+    )
+    if os.environ.get("VIPER_LIVE_GCE") == "1":
+        environment = GCEEnvironmentSpec(
+            provisioning=observe_gce_provisioning(),
+            machine_type="g2-standard-12",
+            compute=CUDAComputeSpec(model="NVIDIA L4", count=1),
+            lockfile=lockfile,
+            python_environment=python_environment(),
+        )
+    else:
+        environment = LocalEnvironmentSpec(
+            lockfile=lockfile,
+            python_environment=python_environment(),
+        )
+    host, port = http_source
+    download = DownloadSpec(
+        implementation=StageImplementationRef(
+            path="jobs/download.py",
+            symbol="download",
+            sha256=hashlib.sha256(source_files["jobs/download.py"]).hexdigest(),
+            bytes=len(source_files["jobs/download.py"]),
+        ),
+        parameter_model=ParameterModelRef(
+            path="project/parameters/download.py",
+            symbol="TinyDownloadParameters",
+            sha256=hashlib.sha256(
+                source_files["project/parameters/download.py"]
+            ).hexdigest(),
+            bytes=len(source_files["project/parameters/download.py"]),
+        ),
+        inputs={
+            "source": http_request(
+                url=f"http://{host}:{port}/redirect",
+                body=b"prior",
+            )
+        },
+        transport=builtin_http_transport(),
+        policy=http_policy(
+            hosts=frozenset({host}),
+            ports=frozenset({port}),
+        ),
+        artifacts={
+            "prior": SingleFileArtifactSpec(
+                path=f"{RUN_ROOT}/artifacts/datasets/tiny/prior.bin",
+                loader=ArtifactLoaderRef(
+                    path="project/loaders/bytes_file.py",
+                    symbol="load",
+                    sha256=hashlib.sha256(
+                        source_files["project/loaders/bytes_file.py"]
+                    ).hexdigest(),
+                    bytes=len(source_files["project/loaders/bytes_file.py"]),
+                ),
+                data_role="training",
+            )
+        },
+        params=parameters.Download(),
+    )
+    train = TrainSpec(
+        implementation=StageImplementationRef(
+            path="jobs/train.py",
+            symbol="train",
+            sha256=hashlib.sha256(source_files["jobs/train.py"]).hexdigest(),
+            bytes=len(source_files["jobs/train.py"]),
+        ),
+        parameter_model=ParameterModelRef(
+            path="project/parameters/train.py",
+            symbol="TinyTrainParameters",
+            sha256=hashlib.sha256(
+                source_files["project/parameters/train.py"]
+            ).hexdigest(),
+            bytes=len(source_files["project/parameters/train.py"]),
+        ),
+        metric_ids=("parameter_bytes", "epoch_mean"),
+        inputs={
+            "prior": FutureInputRef(
+                producer_stage_id="download",
+                producer_artifact="prior",
+            )
+        },
+        params=train_params,
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
+                loader=ArtifactLoaderRef(
+                    path="project/loaders/bytes_file.py",
+                    symbol="load",
+                    sha256=hashlib.sha256(
+                        source_files["project/loaders/bytes_file.py"]
+                    ).hexdigest(),
+                    bytes=len(source_files["project/loaders/bytes_file.py"]),
+                ),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                path=f"{RUN_ROOT}/artifacts/models/tiny/resume_state.bin",
+                loader=ArtifactLoaderRef(
+                    path="project/loaders/resume_state.py",
+                    symbol="load",
+                    sha256=hashlib.sha256(
+                        source_files["project/loaders/resume_state.py"]
+                    ).hexdigest(),
+                    bytes=len(source_files["project/loaders/resume_state.py"]),
+                ),
+                data_role="training",
+            ),
+        },
+    )
+    draft_root = tmp_path / "drafts"
+    draft_root.mkdir()
+    download_draft = draft_root / "download.yaml"
+    train_draft = draft_root / "train.yaml"
+    download_draft.write_bytes(serialize_document(download))
+    train_draft.write_bytes(serialize_document(train))
+    frozen = freeze_run_plan(
+        root,
+        RunPlanDraft(
+            run_id=RUN_ID,
+            experiment_id="example",
+            variant_id="baseline",
+            replicate_id="r1",
+            seed=7,
+            source=source,
+            environment=environment,
+            reproducibility=reproducibility(),
+            stages=(
+                StageDraft(stage_id="download", spec_source=download_draft),
+                StageDraft(stage_id="train", spec_source=train_draft),
+            ),
+            estimator=StageArtifactRef(
+                stage_id="train",
+                artifact_name=PARAMETERS,
+            ),
+        ),
+    )
+    run_git(root, "add", "experiments/example/runs")
+    run_git(root, "commit", "--quiet", "-m", "plan")
+
+    requests = []
+
+    def fake_run_request(request):
+        requests.append(request)
+        return RunSuccess(
+            run_id=RUN_ID,
+            attempt_id=1,
+            resolved_attempt=root / RUN_ROOT / "attempts/1/resolved.yaml",
+            resolved_run=root / RUN_ROOT / "resolved.yaml",
+            journal=root / ".viper" / "attempt.jsonl",
+        )
+
+    monkeypatch.setattr("viper.api.run_request", fake_run_request)
+    train_callable = load_stage_callable(
+        root / train.implementation.path,
+        train.implementation,
+        import_root=root,
+    )
+    run_stage(
+        train_callable,
+        argv=(
+            "--run",
+            str(frozen.files[-1]),
+            "--stage",
+            "train",
+            "--root",
+            str(root),
+        ),
+    )
+    assert len(requests) == 1
+    assert requests[0].run_spec == frozen.files[-1].resolve()
+
+    orphan = AttemptWorkspace.create(
+        root / ".viper" / "workspaces",
+        RUN_ID,
+        1,
+    )
+    orphan_journal = DurableJournal(orphan.control / "journal.jsonl")
+    orphan_started = datetime.now(UTC)
+    orphan_journal.append(
+        "allocated",
+        "attempt allocated",
+        recorded_at=orphan_started,
+    )
+    orphan_journal.append(
+        "preflighting",
+        "coordinator exited during preflight",
+        recorded_at=datetime.now(UTC),
+    )
+
+    def fail_first_train(*args, **kwargs):
+        """Return real child evidence, then simulate one transient train failure ."""
+        process = execute_stage_process(*args, **kwargs)
+        stage_reference = args[2]
+
+        if stage_reference.stage_id == "train":
+            raise StageExecutionError(
+                "transient train failure",
+                invocation=process.invocation.model_copy(update={"outcome": "failed"}),
+                stdout=process.stdout,
+                stderr=b"transient train failure\n",
+            )
+
+        return process
+
+    monkeypatch.setattr(
+        "viper.execution._attempt.execute_stage_process",
+        fail_first_train,
+    )
+
+    with pytest.raises(RunError, match="attempt 2 failed"):
+        execute_run(root, frozen.files[-1])
+
+    failed_run = ResolvedRun.model_validate(
+        parse_yaml_bytes((root / RUN_ROOT / "resolved.yaml").read_bytes())
+    )
+    run_plan = RunSpec.model_validate(parse_yaml_bytes(frozen.files[-1].read_bytes()))
+    store = LocalArtifactStore(root)
+    fetcher = RunFetcher(root, store, REPOSITORY)
+    failed_attempts = tuple(
+        read_attempt_reference(reference, run_plan, fetcher=fetcher)
+        for reference in failed_run.attempts
+    )
+    assert failed_run.status == "failed"
+    assert failed_attempts[0].failure is not None
+    assert failed_attempts[0].failure.code == "coordinator_lost"
+    failed_attempt = failed_attempts[1]
+    assert failed_attempt.failure is not None
+    assert failed_attempt.failure.code == "execution_failed"
+    assert len(failed_attempt.resolved_stages) == 1
+    assert len(failed_attempt.invocations) == 2
+    assert (root / RUN_ROOT / "attempts/1/resolved.yaml").is_file()
+    assert (root / RUN_ROOT / "attempts/2/resolved.yaml").is_file()
+
+    monkeypatch.setattr(
+        "viper.execution._attempt.execute_stage_process",
+        execute_stage_process,
+    )
+    result = execute_retry(root, frozen.files[-1])
+
+    assert result.resolved_run.status == "succeeded"
+    destination_path = (
+        root / ".viper" / "workspaces" / RUN_ID / "storage-destination.json"
+    )
+    assert destination_path.read_bytes() == b'{"kind":"local"}\n'
+    assert result.resolved_run_path.is_file()
+    attempts = tuple(
+        read_attempt_reference(reference, run_plan, fetcher=fetcher)
+        for reference in result.resolved_run.attempts
+    )
+    assert [attempt.attempt_id for attempt in attempts] == [1, 2, 3]
+    assert (root / RUN_ROOT / "attempts/3/resolved.yaml").is_file()
+    successful_attempt = attempts[2]
+    assert len(successful_attempt.resolved_stages) == 2
+    assert len(successful_attempt.measurement_files) == 2
+    assert len(successful_attempt.metric_verification_files) == 1
+    assert result.journal_path.is_file()
+    assert (result.journal_path.parent / "preflight.json").is_file()
+    metric_runtime = root / ".viper" / "runtime"
+    production_result = MetricWorkerResult.model_validate_json(
+        next(
+            metric_runtime.glob("*.parameter_bytes.measurement.result.json")
+        ).read_text(encoding="utf-8")
+    )
+    assert production_result.receipt is not None
+    assert production_result.receipt.purpose == "measurement"
+    assert tuple(
+        entry.state for entry in DurableJournal(result.journal_path).read()
+    ) == (
+        "allocated",
+        "preflighting",
+        "running_stage",
+        "publishing_stage",
+        "running_stage",
+        "publishing_stage",
+        "closing_attempt",
+        "publishing_attempt_files",
+        "terminal",
+    )
+
+    live_reference = next(
+        reference
+        for reference in successful_attempt.measurement_files
+        if str(reference.stored_at.path).endswith("train.epoch_mean.jsonl")
+    )
+    live_measurement = Measurement.model_validate_json(
+        fetcher(live_reference.stored_at)
+    )
+    assert live_measurement.value == 2.0
+    assert live_measurement.epoch == 0
+    assert live_measurement.step == 1
+    comparison = compare_runs_application(
+        CompareRunsRequest(
+            left_path=result.resolved_run_path,
+            right_path=result.resolved_run_path,
+            left_root=root,
+            right_root=root,
+            trusted_source_repositories=frozenset({REPOSITORY}),
+        ),
+        left_fetcher=fetcher,
+        right_fetcher=fetcher,
+    )
+    assert comparison.identical is True
+    assert comparison.changes == ()
+
+    candidate_run_raw = result.resolved_run_path.read_bytes()
+    confirmation = execute_benchmark_confirmation(root, frozen.files[-1])
+    assert confirmation.attempt.attempt_id == 4
+    assert confirmation.attempt.purpose == "benchmark_confirmation"
+    assert confirmation.attempt.status == "succeeded"
+    assert confirmation.attempt_path.is_file()
+    assert result.resolved_run_path.read_bytes() == candidate_run_raw
+    candidate_snapshots = {
+        stage.snapshot.commit for stage in successful_attempt.resolved_stages
+    }
+    confirmation_snapshots = {
+        stage.snapshot.commit for stage in confirmation.attempt.resolved_stages
+    }
+    assert candidate_snapshots.isdisjoint(confirmation_snapshots)
+
+    first_snapshot = attempts[1].resolved_stages[0].snapshot
+    assert first_snapshot.kind == "local"
+    stored_artifact = (
+        root
+        / first_snapshot.store
+        / first_snapshot.commit
+        / f"{RUN_ROOT}/artifacts/datasets/tiny/prior.bin"
+    )
+    stored_artifact.write_bytes(b"tampered")
+    with pytest.raises(VerificationError, match="byte-count mismatch"):
+        verify_run_result(
+            result.resolved_run,
+            policy=VerificationPolicy(
+                trusted_source_repositories=frozenset({REPOSITORY})
+            ),
+            fetcher=RunFetcher(root, store, REPOSITORY),
+        )
+    stored_artifact.write_bytes(b"prior")
+    stored_retrieval = (
+        root
+        / first_snapshot.store
+        / first_snapshot.commit
+        / f"{RUN_ROOT}/stages/download/retrievals/source/body"
+    )
+    stored_retrieval.write_bytes(b"PRIOR")
+    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
+        verify_run_result(
+            result.resolved_run,
+            policy=VerificationPolicy(
+                trusted_source_repositories=frozenset({REPOSITORY})
+            ),
+            fetcher=RunFetcher(root, store, REPOSITORY),
+        )
+```
+
+The first three blocks define and verify the destination boundary. The fourth
+block routes the existing local executor through that boundary. Master Phases
+4, 9, 10, and 11 retain the remaining requirements in this contract.
 
 ## Implementation sources
 
