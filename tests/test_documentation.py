@@ -104,6 +104,10 @@ _CONTRACT_BASELINE = re.compile(
     r"sha256=(?P<sha256>[0-9a-f]{64}) -->"
 )
 _PHASE_HEADING = re.compile(r"^## \d+\. Master Phase (?P<phase>\d+)\b.*$", re.MULTILINE)
+_SUBSECTION_HEADING = re.compile(
+    r"^### (?P<section>\d+\.\d+)\s+.+$",
+    re.MULTILINE,
+)
 _PHASE_CAPABILITY = re.compile(
     r"<!-- phase-(?P<role>produces|consumes): "
     r"(?P<symbols>[A-Za-z0-9_., ]+) -->"
@@ -159,6 +163,10 @@ _MASTER_PHASE_ZERO_CHECKBOX = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 _PAIR_BLOCK_MARKER = re.compile(r"<!-- pair-block: (?P<id>P0-[A-Z]+-\d{2}) -->")
+_PAIR_BLOCK_CONTRACT = re.compile(
+    r"<!-- pair-block-contract: (?P<id>P[0-9]+-[A-Z]+-\d{2}) "
+    r"contract=(?P<contract>[a-z0-9-]+\.md) -->"
+)
 _PAIR_BLOCK_DEFINITION = re.compile(
     r"<!-- pair-block-definition: (?P<id>P0-[A-Z]+-\d{2}) -->\n"
     r"```toml pair-block\n(?P<manifest>.*?)\n```\n"
@@ -1344,6 +1352,68 @@ def test_contract_statuses_match_the_master_checklist() -> None:
         assert status is not None, contract
         documented = status.group("status").removesuffix(".").casefold()
         assert documented == rows[contract.name].casefold()
+
+
+def test_pair_blocks_map_to_contract_sections_and_derived_status() -> None:
+    """Map each content-changing block to one contract, section, and state."""
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+    contract_names = {contract.name for contract in IMPLEMENTATION_CONTRACTS}
+    headings = tuple(_SUBSECTION_HEADING.finditer(checklist))
+    mappings: dict[str, tuple[str, str, bool]] = {}
+
+    for checkbox in _CHECKBOX_BLOCK.finditer(checklist):
+        markers = tuple(
+            match
+            for pattern in (_PAIR_BLOCK_MARKER, _RESEARCH_PAIR_BLOCK_MARKER)
+            for match in pattern.finditer(checkbox.group(0))
+        )
+        if not markers:
+            continue
+        assert len(markers) == 1, checkbox.group(0).splitlines()[0]
+        marker = markers[0]
+        contract_markers = tuple(_PAIR_BLOCK_CONTRACT.finditer(checkbox.group(0)))
+        assert len(contract_markers) == 1, checkbox.group(0).splitlines()[0]
+        contract_marker = contract_markers[0]
+        block_id = marker.group("id")
+        assert contract_marker.group("id") == block_id
+        contract = contract_marker.group("contract")
+        assert block_id not in mappings
+        assert contract in contract_names
+        section = next(
+            heading.group("section")
+            for heading in reversed(headings)
+            if heading.start() < checkbox.start()
+        )
+        mappings[block_id] = (
+            contract,
+            section,
+            checkbox.group(0).startswith("- [x]"),
+        )
+
+    assert mappings
+    statuses = {
+        match.group("path"): match.group("status").casefold()
+        for match in re.finditer(
+            r"^\| \[[^]]+\]\((?P<path>[a-z0-9-]+\.md)\) "
+            r"\| (?P<status>[^|]+?) \|",
+            checklist,
+            re.MULTILINE,
+        )
+    }
+    for contract in {mapping[0] for mapping in mappings.values()}:
+        completed = [
+            complete
+            for mapped_contract, _, complete in mappings.values()
+            if mapped_contract == contract
+        ]
+        expected = (
+            "complete"
+            if all(completed)
+            else "in progress"
+            if any(completed)
+            else "planned"
+        )
+        assert statuses[contract].split(";", 1)[0] == expected
 
 
 def test_protocol_uses_renderer_safe_math_fences() -> None:

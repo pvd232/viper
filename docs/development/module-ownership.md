@@ -12,7 +12,7 @@ its operation bodies. `viper.verification` owns verification operations, while
 
 ## 1. Status
 
-**Contract status:** implemented.
+**Contract status:** complete.
 
 | ID | Implementation obligation |
 | --- | --- |

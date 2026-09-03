@@ -7,7 +7,7 @@ of treating the current working directory as an unrelated default.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** complete.
 
 These requirements bind the contract to the master checklist:
 

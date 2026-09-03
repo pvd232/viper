@@ -1,6 +1,6 @@
 # VIPER Master Execution Checklist
 
-Start with the first open block in Master Phase 0. Master Phase 0 establishes
+Start with the first open block in Master Phase 1. Master Phase 0 established
 the traceability, repository-root, ownership, and impact evidence required by
 every later phase.
 
@@ -267,13 +267,19 @@ their capability names when the checklist moves them. PairBlock IDs keep their
 existing `P0-*` and `P1-*` prefixes because those IDs already identify their
 scheduled phase and dependency order.
 
+For contracts with executable PairBlocks, `Planned`, `In progress`, and
+`Complete` are derived states. Each `pair-block-contract` marker names the
+PairBlock and its governing contract; the containing heading supplies the
+checklist section. A block is complete only after its gate passes. A contract
+is complete only when every mapped PairBlock and requirement is complete.
+
 | Contract | Status | Owns |
 | --- | --- | --- |
-| [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Implemented through `P0-CRT-07` for executable PairBlocks | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
-| [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
-| [Public module ownership](module-ownership.md) | Implemented | One defining module for API operations, verification operations, and verification types |
-| [System Impact Check](system-impact-compiler.md) | Implemented through `P0-SIG-05` | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
+| [Module privacy](module-privacy.md) | Complete | Public modules, shared internal names, and private-module checks |
+| [Contract Traceability](contract-traceability.md) | Complete | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
+| [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
+| [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
+| [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -284,7 +290,7 @@ scheduled phase and dependency order.
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Audited; owner approval pending | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
 | [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Audited; owner approval pending | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
-| [Research Memory and Agent Learning](research-memory-roadmap.md) | Audited; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
+| [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
 The contracts share models. One contract owns each shared decision:
 
@@ -325,11 +331,11 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=99ea5bed80ac5b692b0d459376c6a955a37704326666ee5beb28b3c26fd44a6b -->
+<!-- contract-baseline: contract-traceability.md sha256=dbc9c6714b4d2f062262c754189e189429cd548875035d3457c7ed19223db78c -->
 
-<!-- contract-baseline: project-data-root.md sha256=03049cafba7be2bcc521ba4d219b8b57b130ce18ecf5fbe36ce435ffc67a6dc3 -->
-<!-- contract-baseline: module-ownership.md sha256=3894a5d392103d25c3b5490d1b54a2eff3232359458605428fb9525720f259e5 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=69ac7bc3215e50995c6799d09a73ea1342f0b7b7dfdaea67886ad9983ef1b89e -->
+<!-- contract-baseline: project-data-root.md sha256=fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb -->
+<!-- contract-baseline: module-ownership.md sha256=135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea -->
+<!-- contract-baseline: system-impact-compiler.md sha256=89ee53748fc5b0a154feaedc6173f5604db71e4302ea0b9e5e3c306350a118de -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=00808701b78fd2cb335a6ac5b8236b4f29ffb325c6fff910ea6999f31778cffe -->
 <!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
@@ -340,7 +346,7 @@ a new digest.
 <!-- contract-baseline: provenance-catalog-mcp.md sha256=b06dd2eed63fb3652dc7e1d571430d5781abff81ed6dd952ed12713451d899ca -->
 <!-- contract-baseline: stage-reuse.md sha256=0abce93ad35f61ef636f09af3eda23bea21d30bd02df885e208509826f54570d -->
 <!-- contract-baseline: experiment-knowledge-primitives.md sha256=d70166a38a7855dd9ba31e19145fc281f1e34247fd807c294d699e45ab743aa5 -->
-<!-- contract-baseline: research-memory-roadmap.md sha256=a764fd25b02e98c2ba277edc5a1ab39d7518528c2e3929ba67db147ec0d93bd9 -->
+<!-- contract-baseline: research-memory-roadmap.md sha256=f22cccf9d2a598f0598849843930c8861f47ff4beded4556fbe2560121c7e6e3 -->
 
 ## 4. Specification-system review
 
@@ -368,7 +374,7 @@ The baseline hashes in Section 3.2 identify the exact contract revisions under
 review.
 
 **Current result:** `python -m pytest tests/test_documentation.py -q` completed
-with `59 passed`.
+with `62 passed`.
 
 ### 4.2 Value-lifecycle decisions
 
@@ -591,8 +597,12 @@ One contract session is the default guided boundary:
 6. Update the plan for an intentional discovery only after user approval;
    remove accidental changes or move them to a separately approved plan.
 7. Freeze the reconciled plan and candidate source, run one strict System
-   Impact check, and mark the contract complete only after it passes.
-8. Commit and push the exact accepted state.
+   Impact check, and accept only the blocks whose gates pass.
+8. Update each accepted block's checklist checkbox, preserve its governing
+   contract in the adjacent `pair-block-contract` marker, refresh the contract
+   status in Section 3.1, and update the contract digest in Section 3.2.
+9. Run the checklist mapping and documentation checks, then commit and push the
+   exact accepted implementation and checklist state together.
 
 The user writes the code during guided PairBlocks. Codex inspects each bounded
 edit, explains the next change, and performs the final reconciliation. A user
@@ -626,31 +636,37 @@ candidate declarations absent from the CTG plan.
 - [x] Add `Settings`, `RootError`, `find_root()`, and `resolve_root()` in
       `src/viper/project.py`.
       <!-- pair-block: P0-PDR-01 -->
+      <!-- pair-block-contract: P0-PDR-01 contract=project-data-root.md -->
       <!-- implements: PDR-01 -->
       <!-- contract-implementation: requirement=PDR-01 rule=project.root.marker state=implemented owner=src/viper/project.py:resolve_root -->
 - [x] Add `viper.toml`, `inputs/`, `benchmarks/`, and `experiments/` to the
       staged project scaffold in `src/viper/project.py`.
       <!-- pair-block: P0-PDR-02 -->
+      <!-- pair-block-contract: P0-PDR-02 contract=project-data-root.md -->
       <!-- contract-implementation: requirement=PDR-01 rule=project.root.layout state=implemented owner=src/viper/project.py:init -->
 - [x] Route public default roots through `resolve_root()` and pass the
       resolved value into internal operations exactly once.
       <!-- pair-block: P0-PDR-03 -->
+      <!-- pair-block-contract: P0-PDR-03 contract=project-data-root.md -->
       <!-- contract-implementation: requirement=PDR-02 rule=project.root.git state=implemented owner=src/viper/project.py:resolve_root -->
       <!-- contract-implementation: requirement=PDR-02 rule=project.root.stability state=implemented owner=src/viper/project.py:resolve_root -->
 - [x] Replace CLI `--repository-root` with `--root` and keep `viper init ROOT`
       as the root-selection operation. <!-- implements: PDR-04 -->
       <!-- pair-block: P0-PDR-04 -->
+      <!-- pair-block-contract: P0-PDR-04 contract=project-data-root.md -->
       <!-- contract-implementation: requirement=PDR-04 rule=project.root.vocabulary state=implemented owner=src/viper/cli.py:add_root -->
 - [x] Add `resolve_path()` and reject every descendant symlink, logical
       traversal, and final resolved escape before any local read, write,
       capture, publication, or restore. <!-- implements: PDR-03 -->
       <!-- pair-block: P0-PDR-06 -->
+      <!-- pair-block-contract: P0-PDR-06 contract=project-data-root.md -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.logical_boundary state=implemented owner=src/viper/project.py:resolve_path -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.symlink_free state=implemented owner=src/viper/project.py:resolve_path -->
       <!-- contract-implementation: requirement=PDR-03 rule=project.path.resolved_boundary state=implemented owner=src/viper/project.py:resolve_path -->
 - [x] Bind `LocalArtifactStore` to `ROOT/.viper/store`; keep working artifacts
       at their protocol paths and preserve separate immutable copies.
       <!-- pair-block: P0-PDR-05 -->
+      <!-- pair-block-contract: P0-PDR-05 contract=project-data-root.md -->
       <!-- implements: PDR-02 -->
       <!-- contract-implementation: requirement=PDR-02 rule=project.store.boundary state=implemented owner=src/viper/storage.py:LocalArtifactStore.__init__ -->
 
@@ -674,18 +690,21 @@ working-file edit must leave the immutable copy retrievable.
       `src/viper/_contract_traceability.py`; compile current requirement rows
       and verifier-rule markers into canonical declarations.
       <!-- pair-block: P0-CRT-01 -->
+      <!-- pair-block-contract: P0-CRT-01 contract=contract-traceability.md -->
       <!-- implements: CRT-01 -->
       <!-- contract-implementation: requirement=CRT-01 rule=contract.requirement.unique state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-01 rule=contract.rule.declared state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
 - [x] Resolve every rule to one exact source owner and at least one exact test
       function; reject missing files, symbols, and phase mismatches.
       <!-- pair-block: P0-CRT-02 -->
+      <!-- pair-block-contract: P0-CRT-02 contract=contract-traceability.md -->
       <!-- implements: CRT-02 -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.implemented state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-02 rule=contract.rule.tested state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
 - [x] Validate marked worked examples plus current, proposed-change, and
       integrated DAGs.
       <!-- pair-block: P0-CRT-03 -->
+      <!-- pair-block-contract: P0-CRT-03 contract=contract-traceability.md -->
       <!-- implements: CRT-03 -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=implemented owner=src/viper/_contract_traceability.py:validate_contract_example -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.diagram.palette state=implemented owner=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
@@ -695,11 +714,13 @@ working-file edit must leave the immutable copy retrievable.
       implementation contract. Validate
       `IMPLEMENTATION_CONTRACTS` as one closed set before Master Phase 0 closes.
       <!-- pair-block: P0-CRT-04 -->
+      <!-- pair-block-contract: P0-CRT-04 contract=contract-traceability.md -->
 - [x] Serialize one ordered, source-evidenced `ContractTraceabilityGraph` and
       compare its requirement and phase coverage with the current documentation
       oracle. Require every requirement, rule, and edge to retain its
       exact `DeclarationRef` path, line span, and digest.
       <!-- pair-block: P0-CRT-05 -->
+      <!-- pair-block-contract: P0-CRT-05 contract=contract-traceability.md -->
       <!-- implements: CRT-04 -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.canonical state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
@@ -708,6 +729,7 @@ working-file edit must leave the immutable copy retrievable.
       graph, derive `RuleEdge.block_id` from each checklist task, and enforce
       complete target, rule, test, and acyclic dependency closure.
       <!-- pair-block: P0-CRT-06 -->
+      <!-- pair-block-contract: P0-CRT-06 contract=contract-traceability.md -->
       <!-- implements: CRT-06 -->
       <!-- contract-implementation: requirement=CRT-06 rule=contract.target.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-06 rule=contract.block.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
@@ -715,6 +737,7 @@ working-file edit must leave the immutable copy retrievable.
 - [x] Make `ContractTarget` the sole code-change inventory for executable
       PairBlocks and reject the retired symbol, example, and export inventories.
       <!-- pair-block: P0-CRT-07 -->
+      <!-- pair-block-contract: P0-CRT-07 contract=contract-traceability.md -->
       <!-- implements: CRT-05 -->
       <!-- verifies: CRT-05 -->
       <!-- contract-implementation: requirement=CRT-05 rule=contract.target.authoritative state=implemented owner=src/viper/_contract_traceability.py:validate_contract_example -->
@@ -748,6 +771,7 @@ are not duplicated.
       exact model export list in `src/viper/verification/models.py`. Keep
       `verification.py` active until `P0-MOD-02` performs the atomic cutover.
       <!-- pair-block: P0-MOD-01 -->
+      <!-- pair-block-contract: P0-MOD-01 contract=module-ownership.md -->
       <!-- contract-implementation: requirement=MOD-01 rule=module.verification.owner state=implemented owner=src/viper/verification/models.py:VerificationPolicy -->
       <!-- contract-implementation: requirement=MOD-01 rule=module.verification.model_exports state=implemented owner=src/viper/verification/models.py:__all__ -->
 - [x] Replace `src/viper/verification.py` with the public
@@ -755,12 +779,14 @@ are not duplicated.
       verification operation there and update each importer to use the defining
       operation or model module.
       <!-- pair-block: P0-MOD-02 -->
+      <!-- pair-block-contract: P0-MOD-02 contract=module-ownership.md -->
       <!-- contract-implementation: requirement=MOD-01 rule=module.verification.operation_exports state=implemented owner=src/viper/verification/__init__.py:__all__ -->
 - [x] Move every helper and operation body from `src/viper/_api/handlers.py`
       into `src/viper/api.py`. Point `HANDLER_REGISTRY` at those local
       functions, then delete the pass-through wrappers and private handler
       module. <!-- implements: MOD-01 -->
       <!-- pair-block: P0-MOD-03 -->
+      <!-- pair-block-contract: P0-MOD-03 contract=module-ownership.md -->
       <!-- contract-implementation: requirement=MOD-01 rule=module.api.owner state=implemented owner=src/viper/api.py:HANDLER_REGISTRY -->
 
 <details>
@@ -791,6 +817,7 @@ The public records and checks live in `src/viper/system_impact.py`.
 - [x] Add `CodeQLIdentity`, `SourceSnapshot`, `CodeQLReceipt`, `SourceNode`,
       `SourceEdge`, and `SourceGraph` with canonical serialization.
       <!-- pair-block: P0-SIG-01 -->
+      <!-- pair-block-contract: P0-SIG-01 contract=system-impact-compiler.md -->
       <!-- implements: SIG-01, SIG-05 -->
       <!-- verifies: SIG-01 -->
       <!-- contract-implementation: requirement=SIG-01 rule=system.source.canonical state=implemented owner=src/viper/system_impact.py:SourceGraph -->
@@ -800,6 +827,7 @@ The public records and checks live in `src/viper/system_impact.py`.
       retain the command, identity, source digest, optional commit, exit status,
       database digest, and decoded-row digest.
       <!-- pair-block: P0-SIG-02 -->
+      <!-- pair-block-contract: P0-SIG-02 contract=system-impact-compiler.md -->
       <!-- verifies: SIG-05 -->
       <!-- contract-verification: requirement=SIG-05 rule=system.codeql.identity state=implemented test=tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse -->
 - [x] Resolve every selected CTG target against the baseline graph; extract the
@@ -807,6 +835,7 @@ The public records and checks live in `src/viper/system_impact.py`.
       columns; classify its `ChangeKind`; and report only the direct dependents
       selected by impact-policy version 1 while preserving every PairBlock.
       <!-- pair-block: P0-SIG-03 -->
+      <!-- pair-block-contract: P0-SIG-03 contract=system-impact-compiler.md -->
       <!-- implements: SIG-02 -->
       <!-- verifies: SIG-02 -->
       <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=implemented owner=src/viper/system_impact.py:inspect_plan -->
@@ -822,6 +851,7 @@ The public records and checks live in `src/viper/system_impact.py`.
       reject any unplanned declaration, and bind the passing check to the
       commit containing the checked source and selected plan.
       <!-- pair-block: P0-SIG-04 -->
+      <!-- pair-block-contract: P0-SIG-04 contract=system-impact-compiler.md -->
       <!-- implements: SIG-03 -->
       <!-- verifies: SIG-03 -->
       <!-- contract-implementation: requirement=SIG-03 rule=system.plan.realized state=implemented owner=src/viper/system_impact.py:check_plan -->
@@ -832,6 +862,7 @@ The public records and checks live in `src/viper/system_impact.py`.
 - [x] Replay the committed `model_support` to `models` migration and one
       completed VIPER PairBlock against their exact Git diffs.
       <!-- pair-block: P0-SIG-05 -->
+      <!-- pair-block-contract: P0-SIG-05 contract=system-impact-compiler.md -->
       <!-- implements: SIG-04 -->
       <!-- verifies: SIG-04 -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.fixture.replayed state=implemented owner=tests/test_system_impact.py:test_committed_manifest_rename -->
@@ -847,6 +878,7 @@ defines the exact five blocks. It consumes the closed CTG produced by
       verification type to belong to `viper.verification.models`; reject both
       retired source files; and preserve existing API and verification results.
       <!-- pair-block: P0-MOD-04 -->
+      <!-- pair-block-contract: P0-MOD-04 contract=module-ownership.md -->
       <!-- verifies: MOD-01 -->
       <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_public_api.py:test_api_operations_are_locally_defined -->
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
@@ -860,18 +892,21 @@ defines the exact five blocks. It consumes the closed CTG produced by
 - [x] In `tests/test_contract_traceability.py`, reject duplicate requirements and
       orphan rules; require canonical declarations.
       <!-- pair-block: P0-PROOF-01 -->
+      <!-- pair-block-contract: P0-PROOF-01 contract=contract-traceability.md -->
       <!-- verifies: CRT-01 -->
       <!-- contract-verification: requirement=CRT-01 rule=contract.requirement.unique state=implemented test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
       <!-- contract-verification: requirement=CRT-01 rule=contract.rule.declared state=implemented test=tests/test_contract_traceability.py:test_requirement_rows_reject_duplicate_and_orphan_ids -->
 - [x] In `tests/test_contract_traceability.py`, reject a missing implementation symbol
       and a missing test function.
       <!-- pair-block: P0-PROOF-02 -->
+      <!-- pair-block-contract: P0-PROOF-02 contract=contract-traceability.md -->
       <!-- verifies: CRT-02 -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.implemented state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
       <!-- contract-verification: requirement=CRT-02 rule=contract.rule.tested state=implemented test=tests/test_contract_traceability.py:test_rule_edges_reject_missing_symbols -->
 - [x] In `tests/test_contract_traceability.py`, reject a missing DAG and an
       invalid worked example.
       <!-- pair-block: P0-PROOF-03 -->
+      <!-- pair-block-contract: P0-PROOF-03 contract=contract-traceability.md -->
       <!-- verifies: CRT-03 -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
@@ -880,6 +915,7 @@ defines the exact five blocks. It consumes the closed CTG produced by
 - [x] In `tests/test_contract_traceability.py`, compile twice, require identical graph
       bytes, and require every rule to reach its owner and tests.
       <!-- pair-block: P0-PROOF-04 -->
+      <!-- pair-block-contract: P0-PROOF-04 contract=contract-traceability.md -->
       <!-- verifies: CRT-04 -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
@@ -888,6 +924,7 @@ defines the exact five blocks. It consumes the closed CTG produced by
       requirement absent from its block, a missing implementation target, a
       missing verification test, and a dependency cycle.
       <!-- pair-block: P0-PROOF-08 -->
+      <!-- pair-block-contract: P0-PROOF-08 contract=contract-traceability.md -->
       <!-- verifies: CRT-06 -->
       <!-- contract-verification: requirement=CRT-06 rule=contract.target.complete state=implemented test=tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage -->
       <!-- contract-verification: requirement=CRT-06 rule=contract.block.complete state=implemented test=tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks -->
@@ -897,6 +934,7 @@ defines the exact five blocks. It consumes the closed CTG produced by
       discover the root from a child directory, and assert the complete tree.
       Run the existing generated-project acceptance test against the public
       `--root` interface. <!-- pair-block: P0-PROOF-05 -->
+      <!-- pair-block-contract: P0-PROOF-05 contract=project-data-root.md -->
       <!-- verifies: PDR-01 -->
       <!-- verifies: PDR-04 -->
       <!-- contract-verification: requirement=PDR-01 rule=project.root.marker state=implemented test=tests/test_project_init.py:test_init_establishes_discoverable_root -->
@@ -907,12 +945,14 @@ defines the exact five blocks. It consumes the closed CTG produced by
       escaping store. In `tests/test_validation_architecture.py`, require each
       operation to resolve every selected root once. <!-- verifies: PDR-02 -->
       <!-- pair-block: P0-PROOF-06 -->
+      <!-- pair-block-contract: P0-PROOF-06 contract=project-data-root.md -->
       <!-- contract-verification: requirement=PDR-02 rule=project.root.git state=implemented test=tests/test_storage.py:test_store_uses_selected_project_root -->
       <!-- contract-verification: requirement=PDR-02 rule=project.store.boundary state=implemented test=tests/test_storage.py:test_store_uses_selected_project_root -->
       <!-- contract-verification: requirement=PDR-02 rule=project.root.stability state=implemented test=tests/test_validation_architecture.py:test_operations_resolve_project_root_once -->
 - [x] In `tests/test_validation_architecture.py`, reject descendant symlinks,
       logical traversal, and resolved path escapes.
       <!-- pair-block: P0-PROOF-07 -->
+      <!-- pair-block-contract: P0-PROOF-07 contract=project-data-root.md -->
       <!-- verifies: PDR-03 -->
       <!-- contract-verification: requirement=PDR-03 rule=project.path.logical_boundary state=implemented test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
       <!-- contract-verification: requirement=PDR-03 rule=project.path.symlink_free state=implemented test=tests/test_validation_architecture.py:test_project_paths_reject_symlinks -->
@@ -2667,11 +2707,13 @@ reviewed conclusion, and immutable `ResearchEpisode`.
       and `ResourceBudget` to `src/viper/research.py` with the validators from
       the contract.
       <!-- pair-block: P18-RML-01 -->
+      <!-- pair-block-contract: P18-RML-01 contract=research-memory-roadmap.md -->
 - [ ] Add `ExperimentCandidate`, `SelectionPolicyIdentity`, `CandidateScore`,
       and `ExperimentSelection`. Require complete candidate and score sets,
       selected-candidate membership, eligibility, declared budget coverage,
       and the random seed and selection probability for stochastic policies.
       <!-- pair-block: P18-RML-02 -->
+      <!-- pair-block-contract: P18-RML-02 contract=research-memory-roadmap.md -->
 - [ ] Add `AgentModelIdentity`, `AgentPolicyIdentity`,
       `AgentModelInvocationReceipt`, `AgentToolInvocationReceipt`,
       `ResearchObservation`, `ResearchReview`, and `ResearchEpisode`. Bind
@@ -2679,12 +2721,14 @@ reviewed conclusion, and immutable `ResearchEpisode`.
       Compiler records and generated PairBlocks. Bind executed candidates to
       verified `ResolvedRunRef` values. <!-- implements: RML-01 -->
       <!-- pair-block: P18-RML-03 -->
+      <!-- pair-block-contract: P18-RML-03 contract=research-memory-roadmap.md -->
 - [ ] Add `ResearchRecordKind`, `ResearchRecord`,
       `ResearchRecordEnvelope`, `ResearchManifest`, and canonical publication
       under `.viper/research/head.json`. Extend `Catalog.refresh()` with
       research-manifest discovery, exact rows, closed research edges, and
       immutable source references.
       <!-- pair-block: P18-RML-04 -->
+      <!-- pair-block-contract: P18-RML-04 contract=research-memory-roadmap.md -->
 
 ### 25.2 Selection and scientific validity
 
@@ -2696,6 +2740,7 @@ reviewed conclusion, and immutable `ResearchEpisode`.
       multiplicity rule and preserve exploratory labels.
       <!-- implements: RML-02 -->
       <!-- pair-block: P18-RML-05 -->
+      <!-- pair-block-contract: P18-RML-05 contract=research-memory-roadmap.md -->
 
 ### 25.3 Focused proof
 
@@ -2709,6 +2754,7 @@ reviewed conclusion, and immutable `ResearchEpisode`.
       optional stopping, and unrecomputed multiplicity claim.
       <!-- verifies: RML-02 -->
       <!-- pair-block: P18-RML-06 -->
+      <!-- pair-block-contract: P18-RML-06 contract=research-memory-roadmap.md -->
 
 ```bash
 python -m pytest \
@@ -2752,6 +2798,7 @@ promoted with explicit approval, and rolled back.
       <!-- implements: RML-03 -->
       <!-- verifies: RML-03 -->
       <!-- pair-block: P19-RML-01 -->
+      <!-- pair-block-contract: P19-RML-01 contract=research-memory-roadmap.md -->
 
 ### 26.2 Update, evaluation, promotion, and rollback
 
@@ -2763,6 +2810,7 @@ promoted with explicit approval, and rolled back.
       Require primary improvement or noninferiority, backward retention,
       leakage, cost, and safety gates by task and context slice.
       <!-- pair-block: P19-RML-02 -->
+      <!-- pair-block-contract: P19-RML-02 contract=research-memory-roadmap.md -->
 - [ ] Require an explicit `decision="promote"` review and a loadable,
       smoke-tested rollback policy
       before promotion. In `tests/test_verification_acceptance.py`, accept one
@@ -2771,6 +2819,7 @@ promoted with explicit approval, and rolled back.
       <!-- implements: RML-04 -->
       <!-- verifies: RML-04 -->
       <!-- pair-block: P19-RML-03 -->
+      <!-- pair-block-contract: P19-RML-03 contract=research-memory-roadmap.md -->
 
 ### 26.3 Focused gate
 
@@ -2814,6 +2863,7 @@ catalog also carries anchored, versioned primary-source literature claims.
       promotion records.
       <!-- implements: RML-05, PCM-06 -->
       <!-- pair-block: P20-RML-01 -->
+      <!-- pair-block-contract: P20-RML-01 contract=research-memory-roadmap.md -->
 - [ ] Add the `io.modelcontextprotocol/tasks` extension for `catalog_refresh`,
       `run_many`, `run_learning_update`, and `evaluate_agent_policy`. Map each
       task ID to one durable VIPER operation identity; route `tasks/get`,
@@ -2821,6 +2871,7 @@ catalog also carries anchored, versioned primary-source literature claims.
       ordinary status path for clients that omit the extension.
       <!-- implements: PCM-07 -->
       <!-- pair-block: P20-RML-02 -->
+      <!-- pair-block-contract: P20-RML-02 contract=research-memory-roadmap.md -->
 
 ### 27.2 Literature evidence
 
@@ -2834,6 +2885,7 @@ catalog also carries anchored, versioned primary-source literature claims.
       Export a verified research episode and literature bundle as a derived
       RO-Crate while the authoritative VIPER records remain unchanged.
       <!-- pair-block: P20-RML-03 -->
+      <!-- pair-block-contract: P20-RML-03 contract=research-memory-roadmap.md -->
 
 ### 27.3 Focused proof
 
@@ -2851,6 +2903,7 @@ catalog also carries anchored, versioned primary-source literature claims.
       version chain, missing anchor, and unreviewed claim used as an accepted
       scientific conclusion. <!-- verifies: RML-06 -->
       <!-- pair-block: P20-RML-04 -->
+      <!-- pair-block-contract: P20-RML-04 contract=research-memory-roadmap.md -->
 
 ```bash
 python -m pytest \

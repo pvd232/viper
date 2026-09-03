@@ -8,7 +8,7 @@ silently retrain or promote the agent that proposed it.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** planned; owner approval pending.
 
 These requirements bind this contract to the master checklist:
 

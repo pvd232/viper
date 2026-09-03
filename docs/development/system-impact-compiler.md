@@ -22,7 +22,7 @@ gate remains the behavioral acceptance boundary.
 
 ## 1. Status
 
-**Contract status:** implemented through `P0-SIG-05`.
+**Contract status:** complete.
 
 | ID | Implementation obligation |
 | --- | --- |

@@ -10,7 +10,7 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** implemented through `P0-CRT-07` for executable PairBlocks.
+**Contract status:** complete.
 
 Later contracts enter the CTG when their PairBlocks gain exact
 `ContractTarget` declarations.
