@@ -269,10 +269,10 @@ scheduled phase and dependency order.
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Closure compiler implemented through `P0-CRT-06`; repository migration pending | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
+| [Contract Traceability](contract-traceability.md) | Implemented through `P0-CRT-07` for executable PairBlocks | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Implemented | One defining module for API operations, verification operations, and verification types |
-| [System Impact Check](system-impact-compiler.md) | Approved replacement design; implementation pending | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
+| [System Impact Check](system-impact-compiler.md) | Implementation started through `P0-SIG-01`; remaining blocks pending | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -324,11 +324,11 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=899fbc86234bfd128ecd6bb7e663e5b4327ea2f2a319badd35b577c3856f968b -->
+<!-- contract-baseline: contract-traceability.md sha256=706a8a386ca123e179d0efa3c8e0278808167f3f8633b0704325f5b131205d55 -->
 
 <!-- contract-baseline: project-data-root.md sha256=03049cafba7be2bcc521ba4d219b8b57b130ce18ecf5fbe36ce435ffc67a6dc3 -->
 <!-- contract-baseline: module-ownership.md sha256=3894a5d392103d25c3b5490d1b54a2eff3232359458605428fb9525720f259e5 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=37a0065e7bb3a67838b9c8553785184487a44ff580ef7dce4c099d529e58ac24 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=7772a88a72d0224b183d8476a9a18327da0d1788f46c8e5bb72d08aaaee0a544 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=00808701b78fd2cb335a6ac5b8236b4f29ffb325c6fff910ea6999f31778cffe -->
 <!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
@@ -787,14 +787,14 @@ checklist owns their order and completion state.
 Production source analysis lives in `src/viper/_system_impact/codeql.py`.
 The public records and checks live in `src/viper/system_impact.py`.
 
-- [ ] Add `CodeQLIdentity`, `SourceSnapshot`, `CodeQLReceipt`, `SourceNode`,
+- [x] Add `CodeQLIdentity`, `SourceSnapshot`, `CodeQLReceipt`, `SourceNode`,
       `SourceEdge`, and `SourceGraph` with canonical serialization.
       <!-- pair-block: P0-SIG-01 -->
       <!-- implements: SIG-01, SIG-05 -->
       <!-- verifies: SIG-01 -->
-      <!-- contract-implementation: requirement=SIG-01 rule=system.source.canonical state=planned owner=src/viper/system_impact.py:SourceGraph -->
-      <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=planned test=tests/test_system_impact.py:test_source_graph_is_canonical -->
-      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.identity state=planned owner=src/viper/system_impact.py:CodeQLIdentity -->
+      <!-- contract-implementation: requirement=SIG-01 rule=system.source.canonical state=implemented owner=src/viper/system_impact.py:SourceGraph -->
+      <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=implemented test=tests/test_system_impact.py:test_source_graph_is_canonical -->
+      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.identity state=implemented owner=src/viper/system_impact.py:CodeQLIdentity -->
 - [ ] Analyze one immutable source snapshot with the pinned query pack and
       retain the command, identity, source digest, optional commit, exit status,
       database digest, and decoded-row digest.

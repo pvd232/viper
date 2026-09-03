@@ -10,9 +10,10 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** implemented through `P0-CRT-07` for the contracts whose
-PairBlocks are executable. Later contracts enter the CTG when their PairBlocks
-gain exact `ContractTarget` declarations.
+**Contract status:** implemented through `P0-CRT-07` for executable PairBlocks.
+
+Later contracts enter the CTG when their PairBlocks gain exact
+`ContractTarget` declarations.
 
 These requirements bind the contract to the master checklist:
 

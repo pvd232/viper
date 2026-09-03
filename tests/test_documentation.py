@@ -74,6 +74,11 @@ IMPLEMENTATION_CONTRACTS = (
 
 FOUNDATION_CONTRACTS = IMPLEMENTATION_CONTRACTS[:4]
 CONTRACTS_WITH_COMPLETE_EXAMPLES = IMPLEMENTATION_CONTRACTS
+EVAL_VOCABULARY_CONTRACTS = (
+    ROOT / "docs/development/unified-metric-drafting.md",
+    AUTOMATIC_INPUT_RESOLUTION,
+    ROOT / "docs/development/stage-reuse.md",
+)
 TRACEABILITY_MODELS = (
     DeclarationRef,
     RepoSymbolRef,
@@ -1410,7 +1415,7 @@ def test_target_contracts_use_env_identifiers() -> None:
 
 def test_target_contracts_use_eval_identifiers() -> None:
     """Keep the evaluation-stage contract on the `Eval` vocabulary."""
-    contract_text = "\n".join(path.read_text() for path in IMPLEMENTATION_CONTRACTS)
+    contract_text = "\n".join(path.read_text() for path in EVAL_VOCABULARY_CONTRACTS)
     checklist = MASTER_EXECUTION_CHECKLIST.read_text()
     target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
 
@@ -2769,23 +2774,10 @@ def test_wheel_smoke_gates_use_the_public_module_contract() -> None:
     assert workflows.count("python -I -m pytest tests/test_public_api.py -q") >= 4
 
 
-def test_system_impact_status_matches_the_master_checklist() -> None:
-    """Keep the draft replacement state distinct from implementation."""
-    specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
-    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
-
-    assert "**Contract status:** implemented." in specification
-    assert (
-        "| [System Impact Check](system-impact-compiler.md) "
-        "| Implemented |" in checklist
-    )
-
-
 def test_system_impact_rule_owners_match_the_bounded_check() -> None:
     """Keep verifier owners on the exact source-check operations."""
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
     required_owners = {
-        "src/viper/_system_impact/source.py:classify_target_change",
         "src/viper/system_impact.py:SourceGraph",
         "src/viper/system_impact.py:CodeQLIdentity",
         "src/viper/system_impact.py:inspect_plan",

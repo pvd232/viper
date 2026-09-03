@@ -22,7 +22,7 @@ gate remains the behavioral acceptance boundary.
 
 ## 1. Status
 
-**Contract status:** approved replacement design; implementation pending.
+**Contract status:** implementation started through `P0-SIG-01`; remaining blocks pending.
 
 | ID | Implementation obligation |
 | --- | --- |
