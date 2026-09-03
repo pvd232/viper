@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import importlib
 import json
 import os
 import shutil
@@ -26,6 +25,7 @@ from viper._contract_traceability import (
     VerifierRule,
     compile_contract_plan,
 )
+from viper._subprocess import run as run_subprocess
 from viper._system_impact.check import SystemImpactCheckError, _unexpected_changes
 from viper._system_impact.codeql import (
     CodeQLAnalysisError,
@@ -53,8 +53,6 @@ from viper.system_impact import (
     check_plan,
     inspect_plan,
 )
-
-run_subprocess = importlib.import_module("viper._subprocess").run
 
 _BLOCK_ID = "P0-SIG-03"
 _REQUIREMENT_ID = "SIG-02"
