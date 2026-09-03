@@ -337,7 +337,7 @@ a new digest.
 
 <!-- contract-baseline: project-data-root.md sha256=fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb -->
 <!-- contract-baseline: module-ownership.md sha256=135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea -->
-<!-- contract-baseline: system-impact-compiler.md sha256=89ee53748fc5b0a154feaedc6173f5604db71e4302ea0b9e5e3c306350a118de -->
+<!-- contract-baseline: system-impact-compiler.md sha256=ed89a7152284ba548b0bb4e99c9f5d9ff6338ef56e937b5159225e4e6d652509 -->
 <!-- contract-baseline: child-process-launching.md sha256=e50e7bfec6c26928b23e2fedd2b06b0becaa2bbd62bfa8fed65c8e2bd9988d06 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=c4ee06aaefa8fc60f812ab213a5b2a12c720c082a2f88f4ad9c3312bd0692112 -->
 <!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
@@ -591,20 +591,27 @@ One contract session is the default guided boundary:
 
 1. Synchronize the repository and record the baseline commit.
 2. Compile the contract's starting PairBlocks and select its remaining work.
-3. Implement one bounded PairBlock edit at a time and run focused tests where
+3. Before reading `Impact.affected`, record the selected targets and any other
+   declarations already chosen for propagation review in the
+   [CodeQL impact observations](codeql-impact-observations.md) ledger.
+4. Run `inspect_plan()` against the baseline and review every reported direct
+   dependent.
+5. Implement one bounded PairBlock edit at a time and run focused tests where
    they provide useful feedback.
-4. Preserve intermediate review cycles as checkpoint commits while the
+6. Preserve intermediate review cycles as checkpoint commits while the
    PairBlocks remain planned.
-5. At the end of pair coding, compare the complete Git diff with every selected
+7. At the end of pair coding, compare the complete Git diff with every selected
    `ContractTarget`.
-6. Update the plan for an intentional discovery only after user approval;
+8. Update the plan for an intentional discovery only after user approval;
    remove accidental changes or move them to a separately approved plan.
-7. Freeze the reconciled plan and candidate source, run one strict System
+9. Freeze the reconciled plan and candidate source, run one strict System
    Impact check, and accept only the blocks whose gates pass.
-8. Update each accepted block's checklist checkbox, preserve its governing
+10. Record the report's novel dependents, resulting actions, review-only cases,
+    and dependencies discovered outside the report in the observation ledger.
+11. Update each accepted block's checklist checkbox, preserve its governing
    contract in the adjacent `pair-block-contract` marker, refresh the contract
    status in Section 3.1, and update the contract digest in Section 3.2.
-9. Run the checklist mapping and documentation checks, then commit and push the
+12. Run the checklist mapping and documentation checks, then commit and push the
    exact accepted implementation and checklist state together.
 
 The user writes the code during guided PairBlocks. Codex inspects each bounded

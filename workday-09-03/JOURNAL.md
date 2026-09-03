@@ -97,6 +97,21 @@ System Impact accepted implementation commit
 commit to passing `PlanCheck`
 `432355b3c7006a148f6dd63eb0f16e89ef2fe1d4c597b0144e38c6b387b7eff8`.
 
+### CodeQL impact value
+
+The child-process run produced the first entry in the
+[CodeQL impact observation ledger](../docs/development/codeql-impact-observations.md).
+`inspect_plan()` reported `observe_local_execution` and
+`observe_gce_execution` as direct dependents of `_observe_execution`, through
+one `calls` and one `reads` edge for each wrapper. Review required no additional
+source or test change. CodeQL-only defect discoveries remained at zero.
+
+The run predated the pre-CodeQL consideration-set protocol, leaving the novelty
+of those two dependents unknown. The report also omitted the decisive external
+call chain through `platform.processor()` because the current dependency query
+retains only targets with repository-relative paths. The result supports
+CodeQL's audit role. Its incremental repair value remains unproven.
+
 ## Acceptance evidence
 
 - System Impact checked 424 exact declaration targets with no failed targets,

@@ -1020,6 +1020,12 @@ their unique `source` node identifiers. The operation stops after this direct
 step. If review adds one reported dependent as another `ContractTarget`, that
 target receives its own classification and direct-impact report.
 
+The [CodeQL impact observations](codeql-impact-observations.md) ledger records
+whether this report supplies a direct dependent absent from the pre-report
+plan, whether that dependent changes source or tests, and which relevant
+dependencies later prove absent from the report. The ledger evaluates the
+report's practical value while preserving this contract's acceptance claim.
+
 This work is linear in the bytes of each selected fence and source file. Cache
 the parsed declaration index by file digest, so several targets in one file
 pay the parse cost once. In practice, CodeQL analysis and pytest dominate this
