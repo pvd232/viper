@@ -13,7 +13,6 @@ from typing import cast
 
 import pytest
 
-from viper import _subprocess as subprocess
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
@@ -26,6 +25,7 @@ from viper._contract_traceability import (
     VerifierRule,
     compile_contract_plan,
 )
+from viper._subprocess import run as run_subprocess
 from viper._system_impact.check import SystemImpactCheckError, _unexpected_changes
 from viper._system_impact.codeql import (
     CodeQLAnalysisError,
@@ -1052,7 +1052,7 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
     query_pack = tmp_path / "query-pack"
     shutil.copytree(checked_in_pack, query_pack)
 
-    installed = subprocess.run(
+    installed = run_subprocess(
         (str(executable), "pack", "install", str(query_pack)),
         check=False,
         capture_output=True,
@@ -1060,7 +1060,7 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
 
-    version = subprocess.run(
+    version = run_subprocess(
         (str(executable), "version", "--format=json"),
         check=True,
         capture_output=True,
@@ -1327,7 +1327,7 @@ def test_plan_check_rejects_wrong_target_and_receipt_identity(
 
 def _git(root: Path, *arguments: str) -> str:
     """Run one successful Git command in an isolated acceptance repository."""
-    return subprocess.run(
+    return run_subprocess(
         ("git", *arguments),
         cwd=root,
         check=True,
