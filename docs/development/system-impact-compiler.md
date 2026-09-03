@@ -716,8 +716,8 @@ digests of any prior acceptance records used to satisfy omitted dependencies.
 This replacement removes `ContractChange`, `ContractDelta`,
 `TargetSpecification`, generated PairBlocks, total propagation dispositions,
 SCC condensation, coverage.py blast certification, observed dynamic-resolution
-manifests, and the research program from Master Phase 0. Git history retains
-the former design for later research.
+manifests, and the research program from Master Phase 0. Appendix A retains the
+cross-contract scheduling extension and the evidence required to reconsider it.
 
 ## 9. Acceptance case
 
@@ -808,6 +808,194 @@ depends_on = ["P0-SIG-04"]
 The implementation closes after all five focused gates pass, the complete test
 module passes, and the review-cycle commit is synchronized with its upstream.
 
+## Appendix A. Future work: cross-contract scheduling
+
+This appendix records a possible scheduler for later evaluation. Master Phase
+0 excludes this scheduler. A later promotion must assign its requirement,
+verifier rule, PairBlock, and acceptance claim.
+
+The operating model would remain:
+
+```text
+approve contracts
+-> connect their dependency evidence
+-> review their order in the master checklist
+-> execute one contract or independent branch
+-> run its final System Impact check
+-> accept its commit
+-> use that accepted revision as the next dependent contract's baseline
+```
+
+### Project source dependencies onto contracts
+
+The future operation would consume one `SourceGraph` for a shared repository
+revision and one `ContractTraceabilityGraph` compiled from the approved
+contract paths. `compile_contract_traceability()` already accepts
+`contracts: tuple[Path, ...]`, so the graph can retain requirements, targets,
+and PairBlocks from several contracts while preserving their source records.
+
+Each `ContractTarget.requirements` value identifies `ContractRequirement`
+records. `ContractRequirement.contract` identifies the contract that owns the
+target. Each `PairBlock.block_id` identifies the block that performs the edit.
+These joins assign source declarations and explicit block dependencies to
+their owning contracts. A separate edge establishes that one contract supplies
+a value consumed by another contract.
+
+The combined contract graph needs three edge sources:
+
+1. `PairBlock.depends_on` supplies authored execution prerequisites.
+2. `SourceEdge` records supply CodeQL-observed dependencies between declarations
+   present in the shared revision.
+3. A future authored relationship must identify a planned symbol from one
+   contract that another contract consumes. CodeQL observes the symbol after
+   its declaration exists.
+
+The current `ContractTraceabilityGraph` contains the first source and the
+ownership joins needed by the second. The gap contract that promotes this
+scheduler must define the planned-symbol relationship and its validation rule.
+
+For each `SourceEdge`, let contract B own a target that resolves to
+`SourceEdge.source`, and let contract A own a target that resolves to
+`SourceEdge.target`. The source edge says that B's declaration depends on A's
+declaration. The projected schedule therefore adds the edge A to B, meaning
+that A should execute before B. A cross-contract
+`PairBlock.depends_on` relationship adds the same prerequisite-first edge from
+the dependency block's contract to the consuming block's contract.
+
+```mermaid
+flowchart TB
+    Source["SourceGraph<br/>shared revision"]
+    CTG["ContractTraceabilityGraph<br/>approved contracts"]
+    Targets["ResolvedContractTarget records<br/>contract ownership"]
+    Blocks["PairBlock.depends_on<br/>explicit prerequisites"]
+    Planned["Proposed planned-symbol edges<br/>authored prerequisites"]
+    Projection["Proposed contract edges<br/>prerequisite to consumer"]
+    SCC["Strongly connected components"]
+    Schedule["Condensation DAG<br/>candidate checklist order"]
+    Tranche["Coordinated contract tranche"]
+    Checklist["Master checklist<br/>reviewed order"]
+
+    Source -->|"SourceEdge rows"| Projection
+    CTG -->|"requirements and contracts"| Targets
+    Targets -->|"source-to-contract map"| Projection
+    CTG -->|"blocks"| Blocks
+    Blocks -->|"declared order"| Projection
+    Planned -->|"future declarations"| Projection
+    Projection -->|"directed contract graph"| SCC
+    SCC -->|"acyclic components"| Schedule
+    SCC -->|"multi-contract component"| Tranche
+    Schedule -->|"ordering evidence"| Checklist
+    Tranche -->|"coordination decision"| Checklist
+
+    class Source,CTG,Targets,Blocks current
+    class Checklist checklist
+    class Planned,Projection,SCC,Schedule,Tranche proposed
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef checklist fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+When a direct dependent lacks an approved contract owner, the projection emits
+an uncovered-scheduling diagnostic. A `ContractTarget` and owning requirement
+convert that diagnostic into a contract edge.
+
+### Condense cycles and propose order
+
+Strongly connected components partition the projected contract graph. A
+single-contract component can retain ordinary checklist ordering. A component
+containing several contracts means that each contract consumes a declaration
+changed by another contract in the same component. The checklist should treat
+that component as one coordinated tranche: establish the shared interface,
+close the contracts together, or revise a contract boundary to remove the
+cycle.
+
+Replacing each component with one node produces a condensation DAG. A
+topological ordering of that DAG places every prerequisite component before
+its consumers. The generated order would serve as review evidence for the
+master checklist. The master checklist would remain the scheduling authority
+until a separate contract defines and verifies automatic checklist updates.
+
+`CRT-06` requires the explicit `PairBlock.depends_on` graph to remain acyclic.
+A cycle discovered through source or planned-symbol edges therefore stays
+outside that field. A multi-contract SCC identifies a
+coordination problem. The future scheduler must either freeze a shared
+interface and compile one acyclic block order for the tranche, accept the
+contracts through one combined plan, or revise the contract boundaries to
+remove the cycle.
+
+### Execute independent contracts from accepted revisions
+
+Two contracts may perform implementation work in parallel when the projected
+graph contains zero paths between them and their `ContractTarget.target` sets
+are disjoint. Those conditions support parallel work. Runtime discovery or a
+new planned-symbol edge may still expose a dependency during integration.
+
+Final acceptance remains sequential. Suppose contracts B and C start from
+accepted repository revision $R_i$, whose analyzed graph is $G_i$. Integrate B
+into $R_{i+1}$, analyze $G_{i+1}$, run `check_plan()` over B's selected plan,
+$G_i$, and $G_{i+1}$, then run `accept()` on $R_{i+1}$. Apply C's candidate
+changes to $R_{i+1}$ and analyze $G_{i+2}$. C's final `check_plan()` uses
+$G_{i+1}$ as the baseline graph and $G_{i+2}$ as the candidate graph before
+`accept()` binds the result to $R_{i+2}$. This recheck tests C against the
+source state that downstream contracts will actually consume.
+
+### Promotion evidence
+
+Implementation should begin only after completed System Impact runs establish
+all of these conditions:
+
+1. `SourceNode.node_id` resolves the same declaration across the shared
+   baseline used by every included contract.
+2. The one-hop `Impact` reports expose useful cross-contract dependencies on
+   several completed contracts while irrelevant-edge volume remains within a
+   reviewed tolerance.
+3. The projected edges reproduce explicit `PairBlock.depends_on` order and
+   identify at least one previously implicit dependency or cycle worth acting
+   on.
+4. A reviewed fixture defines the expected contract edges, strongly connected
+   components, condensation DAG, and checklist order.
+5. A new gap contract assigns the projection, diagnostics, scheduling output,
+   and checklist integration to exact implementation symbols and tests.
+
+Evaluation should proceed in four increments:
+
+1. Complete `CRT-06` and validate the authored `PairBlock.depends_on` order.
+2. Complete the CodeQL adapter and compare source-derived contract edges with
+   that authored order.
+3. Specify the planned-symbol relationship when added declarations create
+   dependencies absent from the baseline `SourceGraph`.
+4. Compute SCCs and a condensation DAG after the combined edge set proves
+   useful on completed contracts.
+
+These observations determine whether contract-level SCC scheduling earns its
+implementation and maintenance cost. Until then, reviewers may use the
+one-hop `Impact` records when updating the master checklist manually.
+
+### Boundary with autonomous repair selection
+
+`ContractTarget` records freeze exact declarations selected for an approved
+PairBlock. The current System Impact check therefore answers whether the
+implementation faithfully executed that selected plan.
+
+A future autonomous change compiler needs a different input when several
+implementations can satisfy the same outcome. A proposed
+`TargetSpecification` would describe the admissible outcomes. A repair selector
+could choose one satisfying implementation and compile that choice into exact
+`ContractTarget` and `PairBlock` records before System Impact runs. Contract
+scheduling would operate on those selected targets because their source
+identities and dependencies are concrete.
+
+This separation retains two different guarantees:
+
+- `TargetSpecification` would constrain which implementation choices are
+  acceptable.
+- `ContractTarget` and `PlanCheck` verify the exact choice that entered
+  execution.
+
+`TargetSpecification`, repair generation, and repair selection remain future
+contract work.
+
 ## Sources
 
 - GitHub, [About CodeQL](https://codeql.github.com/docs/codeql-overview/about-codeql/),
@@ -833,3 +1021,7 @@ module passes, and the review-cycle commit is synchronized with its upstream.
   provides the dependency-based regression-selection framing. VIPER uses the
   typed direct-impact set as review evidence. Safe test selection under that
   paper's proof conditions remains outside this contract.
+- Robert Tarjan,
+  [Depth-First Search and Linear Graph Algorithms](https://doi.org/10.1137/0201010),
+  gives the linear-time strongly connected component algorithm used by the
+  proposed condensation step.

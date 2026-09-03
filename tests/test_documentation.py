@@ -2340,6 +2340,66 @@ def test_system_impact_uses_change_sensitive_one_hop_advice() -> None:
     } <= set(manifest["tests"])
 
 
+def test_system_impact_defers_cross_contract_scc_scheduling() -> None:
+    """Keep contract projection and SCC scheduling outside Master Phase 0."""
+    specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
+    appendix = specification.split(
+        "## Appendix A. Future work: cross-contract scheduling",
+        maxsplit=1,
+    )[1].split("## Sources", maxsplit=1)[0]
+
+    for boundary in (
+        "contracts: tuple[Path, ...]",
+        "ContractTarget.requirements",
+        "ContractRequirement.contract",
+        "PairBlock.depends_on",
+        "SourceEdge.source",
+        "SourceEdge.target",
+        "planned-symbol relationship",
+        "Strongly connected components",
+        "condensation DAG",
+        "master checklist manually",
+        "`check_plan()` uses\n$G_{i+1}$ as the baseline graph",
+        "`TargetSpecification` would describe the admissible outcomes",
+    ):
+        assert boundary in appendix
+    for active_marker in (
+        "contract-requirement:",
+        "pair-block-definition:",
+        "verifier-rule:",
+    ):
+        assert active_marker not in appendix
+
+    diagram = next(_MERMAID_FENCE.finditer(appendix)).group("body")
+    actual_edges = {
+        (edge.group("source"), edge.group("target"))
+        for line in diagram.splitlines()
+        if (edge := _MERMAID_EDGE.match(line)) is not None
+    }
+    assert actual_edges == {
+        ("Source", "Projection"),
+        ("CTG", "Targets"),
+        ("Targets", "Projection"),
+        ("CTG", "Blocks"),
+        ("Blocks", "Projection"),
+        ("Planned", "Projection"),
+        ("Projection", "SCC"),
+        ("SCC", "Schedule"),
+        ("SCC", "Tranche"),
+        ("Schedule", "Checklist"),
+        ("Tranche", "Checklist"),
+    }
+    assert {
+        match.group("role"): match.group("style")
+        for match in _MERMAID_CLASS_DEF.finditer(diagram)
+    } == {
+        "current": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
+        "checklist": "fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px",
+        "proposed": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
+    }
+    assert TRACEABILITY_LINK_STYLE in diagram
+
+
 def test_system_impact_codeql_backend_is_end_to_end() -> None:
     """Keep one pinned CodeQL identity at both observation boundaries."""
     specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
