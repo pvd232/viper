@@ -269,7 +269,7 @@ scheduled phase and dependency order.
 | Contract | Status | Owns |
 | --- | --- | --- |
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
-| [Contract Traceability](contract-traceability.md) | Implemented through `CRT-05`; `CRT-06` draft pending review | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
+| [Contract Traceability](contract-traceability.md) | Closure compiler implemented through `P0-CRT-06`; repository migration pending | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Implemented | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Approved replacement design; implementation pending | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
@@ -324,7 +324,7 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=4447c20665987bef501e3a986eed261b8169af96608f4f3969018c93d531c8d7 -->
+<!-- contract-baseline: contract-traceability.md sha256=92dc20471cb2f1381443b2c79cdc7a9f061b0845f03e55f3b20f7de348ebbc9e -->
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=15712c4d1932e2d0ea73219924b6b6d7e62827b46eece8c8fbc6fa85a37b95de -->
@@ -706,14 +706,14 @@ working-file edit must leave the immutable copy retrievable.
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.canonical state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.graph.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
       <!-- contract-implementation: requirement=CRT-04 rule=contract.declaration.anchored state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-- [ ] Compile `ContractTarget` and `PairBlock` records into the traceability
+- [x] Compile `ContractTarget` and `PairBlock` records into the traceability
       graph, derive `RuleEdge.block_id` from each checklist task, and enforce
       complete target, rule, test, and acyclic dependency closure.
       <!-- pair-block: P0-CRT-06 -->
       <!-- implements: CRT-06 -->
-      <!-- contract-implementation: requirement=CRT-06 rule=contract.target.complete state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-      <!-- contract-implementation: requirement=CRT-06 rule=contract.block.complete state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
-      <!-- contract-implementation: requirement=CRT-06 rule=contract.block.acyclic state=planned owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-06 rule=contract.target.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-06 rule=contract.block.complete state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
+      <!-- contract-implementation: requirement=CRT-06 rule=contract.block.acyclic state=implemented owner=src/viper/_contract_traceability.py:compile_contract_traceability -->
 - [ ] Migrate every existing PairBlock target to one `ContractTarget`, then
       remove `ContractSymbol`, `contract-symbols`, `contract-example-symbols`,
       and `contract-exports` after target parity passes.

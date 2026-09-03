@@ -10,8 +10,8 @@ impact graph consumes these links after this contract is implemented.
 
 ## 1. Status
 
-**Contract status:** implemented through `CRT-05`; `CRT-06` draft pending
-review of the complete target-to-PairBlock closure.
+**Contract status:** the closure compiler is implemented through `P0-CRT-06`;
+the repository-wide `P0-CRT-07` migration remains pending.
 
 These requirements bind the contract to the master checklist:
 
