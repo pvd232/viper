@@ -882,14 +882,14 @@ defines the exact five blocks. It consumes the closed CTG produced by
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.canonical state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.graph.complete state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_rejects_duplicate_ids -->
       <!-- contract-verification: requirement=CRT-04 rule=contract.declaration.anchored state=implemented test=tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical -->
-- [ ] In `tests/test_contract_traceability.py`, reject an unknown PairBlock, a
+- [x] In `tests/test_contract_traceability.py`, reject an unknown PairBlock, a
       requirement absent from its block, a missing implementation target, a
       missing verification test, and a dependency cycle.
       <!-- pair-block: P0-PROOF-08 -->
       <!-- verifies: CRT-06 -->
-      <!-- contract-verification: requirement=CRT-06 rule=contract.target.complete state=planned test=tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage -->
-      <!-- contract-verification: requirement=CRT-06 rule=contract.block.complete state=planned test=tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks -->
-      <!-- contract-verification: requirement=CRT-06 rule=contract.block.acyclic state=planned test=tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic -->
+      <!-- contract-verification: requirement=CRT-06 rule=contract.target.complete state=implemented test=tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage -->
+      <!-- contract-verification: requirement=CRT-06 rule=contract.block.complete state=implemented test=tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks -->
+      <!-- contract-verification: requirement=CRT-06 rule=contract.block.acyclic state=implemented test=tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic -->
 
 - [x] In `tests/test_project_init.py`, initialize outside the current directory,
       discover the root from a child directory, and assert the complete tree.
