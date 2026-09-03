@@ -7,16 +7,21 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..artifacts import ArtifactPointer
+from ..artifacts import (
+    ArtifactPointer,
+    ResolvedArtifact,
+    ResolvedSingleFileArtifact,
+    SingleFileArtifactSpec,
+)
 from ..http import (
     HttpRequestSpec,
+    HttpResult,
     HttpRetrievalError,
     HttpRetrievalPolicy,
-    HttpTransportResult,
+    ResolvedHttpImplementation,
     ResolvedHttpRetrieval,
-    ResolvedHttpTransport,
-    invoke_transport,
-    resolve_transport,
+    invoke_http,
+    resolve_http,
 )
 from ..ids import InputName, StageId
 from ..inputs import (
@@ -25,9 +30,7 @@ from ..inputs import (
     ResolvedInputRef,
     ResolvedStoredInputRef,
 )
-from ..paths import retrieval_body_path
 from ..references import ResolvedArtifactPointerRef, ResolvedStageRef
-from ..runs import RunSpec
 from ..serialization import parse_yaml_bytes
 from ..stages import (
     BaseSpec,
@@ -38,6 +41,7 @@ from ..storage import LocalArtifactStore
 from ..verification import verify_promoted_artifact
 from ..verification.models import VerificationPolicy, VerifiedArtifact
 from ..workspace import AttemptWorkspace
+from ._downloads import publish_download_body
 from ._source import RunFetcher
 from .errors import RunError
 
@@ -74,19 +78,19 @@ def _materialize_verified_artifact(
         )
 
 
-def _http_transport_helper(
+def _http_helper(
     root: Path,
-    transport: ResolvedHttpTransport,
+    implementation: ResolvedHttpImplementation,
     request: HttpRequestSpec,
     retrieval_workspace: Path,
     policy: HttpRetrievalPolicy,
     destination: Path,
     input_name: str,
-) -> HttpTransportResult:
+) -> HttpResult:
     try:
-        result = invoke_transport(
+        result = invoke_http(
             root,
-            transport,
+            implementation,
             request,
             policy,
             retrieval_workspace,
@@ -141,9 +145,9 @@ def resolve_inputs(
                     f"stages/{stage_id}/external/{name}"
                 )
                 retrieval_workspace.mkdir(parents=True, exist_ok=True)
-                result = _http_transport_helper(
+                result = _http_helper(
                     root=root,
-                    transport=resolve_transport(root, input_ref.source.transport),
+                    implementation=resolve_http(root, input_ref.source.http),
                     request=input_ref.source.request,
                     retrieval_workspace=retrieval_workspace,
                     destination=retrieval_workspace / "body",
@@ -184,18 +188,21 @@ def resolve_inputs(
 def retrieve_download_inputs(
     root: Path,
     workspace: AttemptWorkspace,
-    run: RunSpec,
     stage_id: StageId,
     stage: DownloadSpec,
-    store: LocalArtifactStore,
-) -> tuple[dict[InputName, ResolvedHttpRetrieval], dict[str, Path]]:
-    """Retrieve, verify, publish, and materialize every frozen HTTP input."""
+) -> tuple[
+    dict[InputName, ResolvedHttpRetrieval],
+    dict[str, ResolvedArtifact],
+    dict[str, Path],
+]:
+    """Retrieve each HTTP input and publish it as its same-named artifact."""
     try:
-        transport = resolve_transport(root, stage.transport)
+        implementation = resolve_http(root, stage.http)
     except (HttpRetrievalError, OSError) as exc:
-        raise RunError("selected HTTP transport failed identity checks") from exc
+        raise RunError("selected HTTP implementation failed identity checks") from exc
 
     retrievals: dict[InputName, ResolvedHttpRetrieval] = {}
+    artifacts: dict[str, ResolvedArtifact] = {}
     paths: dict[str, Path] = {}
     for input_name, request in stage.inputs.items():
         retrieval_workspace = workspace.resolve(
@@ -204,9 +211,9 @@ def retrieve_download_inputs(
         retrieval_workspace.mkdir(parents=True, exist_ok=True)
         destination = retrieval_workspace / "body"
         started_at = datetime.now(UTC)
-        result = _http_transport_helper(
+        result = _http_helper(
             root=root,
-            transport=transport,
+            implementation=implementation,
             request=request,
             retrieval_workspace=retrieval_workspace,
             policy=stage.policy,
@@ -214,18 +221,25 @@ def retrieve_download_inputs(
             input_name=input_name,
         )
         completed_at = datetime.now(UTC)
-        raw = result.body.read_bytes()
-        canonical_path = retrieval_body_path(run, stage_id, input_name)
-        body = store.resolved_files({canonical_path: raw})[0]
-        _write_materialized_file(root, canonical_path, raw)
+        declaration = stage.artifacts[input_name]
+        if not isinstance(declaration, SingleFileArtifactSpec):
+            raise RunError("download artifact must be a single file")
+        body = publish_download_body(
+            repository_root=root,
+            source=result.body,
+            destination=declaration.path,
+            expected_sha256=request.expected_body_sha256,
+            expected_bytes=request.expected_body_bytes,
+        )
         retrievals[input_name] = ResolvedHttpRetrieval(
             input_name=input_name,
             request=request,
-            transport=transport,
+            http=implementation,
             response=result.response,
             body=body,
             started_at=started_at,
             completed_at=completed_at,
         )
-        paths[input_name] = root / canonical_path
-    return retrievals, paths
+        artifacts[input_name] = ResolvedSingleFileArtifact(file=body)
+        paths[input_name] = root / body.path
+    return retrievals, artifacts, paths

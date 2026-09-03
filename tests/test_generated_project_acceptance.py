@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from tests.fixtures import (
-    builtin_http_transport,
+    builtin_http,
     http_policy,
     http_request,
     python_environment,
@@ -46,7 +46,6 @@ from viper.benchmark import (
 )
 from viper.experiments import (
     BuildVariantStageParams,
-    DownloadVariantStageParams,
     EmbedVariantStageParams,
     EvaluateVariantStageParams,
     ExperimentSpec,
@@ -242,20 +241,23 @@ def _child_environment(root: Path) -> dict[str, str]:
     return environment
 
 
-def test_generated_project_executes_five_stage_benchmark(
+def test_generated_project_uses_runner_owned_downloads(
     tmp_path: Path,
     http_source: tuple[str, int],
 ) -> None:
     """Run generated code through acquisition, training, and confirmation."""
     root = tmp_path / "generated"
     init(root, "sample_project")
+    assert not (root / "src/sample_project/stages/download.py").exists()
+    assert "DownloadParameters" not in (
+        root / "src/sample_project/parameters.py"
+    ).read_text(encoding="utf-8")
     run_git(root, "init", "--quiet")
     run_git(root, "config", "user.email", "viper@example.com")
     run_git(root, "config", "user.name", "VIPER Test")
     run_git(root, "remote", "add", "origin", REPOSITORY)
     host, port = http_source
 
-    download_params = parameters.Download.model_validate({"media_type": "text/plain"})
     train_params = parameters.Train.model_validate({"epochs": 1})
     write_experiment_spec(
         root,
@@ -274,10 +276,6 @@ def test_generated_project_executes_five_stage_benchmark(
             variant_id="baseline",
             levels={},
             stage_params=(
-                DownloadVariantStageParams(
-                    stage_id="download",
-                    params=download_params,
-                ),
                 TrainVariantStageParams(stage_id="train", params=train_params),
             ),
         ),
@@ -287,8 +285,6 @@ def test_generated_project_executes_five_stage_benchmark(
     acquisition_source_commit = run_git(root, "rev-parse", "HEAD")
     acquisition_root = f"experiments/acquisition/runs/baseline/{ACQUISITION_RUN_ID}"
     acquisition_download = DownloadSpec(
-        implementation=_stage_implementation(root, "download"),
-        parameter_model=_parameter_model(root, "DownloadParameters"),
         inputs={
             name: http_request(
                 url=f"http://{host}:{port}/prior",
@@ -297,9 +293,8 @@ def test_generated_project_executes_five_stage_benchmark(
             )
             for name in ("seed_training", "evaluation_dataset", "test_split")
         },
-        transport=builtin_http_transport(),
+        http=builtin_http(),
         policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
-        params=download_params,
         artifacts={
             "seed_training": _artifact(
                 root,
@@ -351,7 +346,7 @@ def test_generated_project_executes_five_stage_benchmark(
         stages={"download": acquisition_download, "train": acquisition_train},
     )
     child_environment = _child_environment(root)
-    subprocess.run(
+    acquisition_process = subprocess.run(
         (
             sys.executable,
             "-m",
@@ -364,9 +359,10 @@ def test_generated_project_executes_five_stage_benchmark(
         ),
         cwd=root,
         env=child_environment,
-        check=True,
+        check=False,
         capture_output=True,
     )
+    assert acquisition_process.returncode == 0, acquisition_process.stderr.decode()
     acquisition_result_path = root / acquisition_root / "resolved.yaml"
     acquisition_result = ResolvedRun.model_validate(
         parse_yaml_bytes(acquisition_result_path.read_bytes())
@@ -449,10 +445,6 @@ def test_generated_project_executes_five_stage_benchmark(
             variant_id="baseline",
             levels={},
             stage_params=(
-                DownloadVariantStageParams(
-                    stage_id="download",
-                    params=download_params,
-                ),
                 BuildVariantStageParams(stage_id="build", params=build_params),
                 EmbedVariantStageParams(stage_id="embed", params=embed_params),
                 TrainVariantStageParams(stage_id="train", params=train_params),
@@ -484,8 +476,6 @@ def test_generated_project_executes_five_stage_benchmark(
     candidate_source_commit = run_git(root, "rev-parse", "HEAD")
     candidate_root = f"experiments/starter/runs/baseline/{CANDIDATE_RUN_ID}"
     candidate_download = DownloadSpec(
-        implementation=_stage_implementation(root, "download"),
-        parameter_model=_parameter_model(root, "DownloadParameters"),
         inputs={
             "dataset": http_request(
                 url=f"http://{host}:{port}/prior",
@@ -493,9 +483,8 @@ def test_generated_project_executes_five_stage_benchmark(
                 version="training-v1",
             )
         },
-        transport=builtin_http_transport(),
+        http=builtin_http(),
         policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
-        params=download_params,
         artifacts={
             "dataset": _artifact(
                 root,

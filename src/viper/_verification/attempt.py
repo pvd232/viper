@@ -19,23 +19,20 @@ from .._parameter.validation import (
 from .._schema import RepoRelPath, repo_file_paths_overlap
 from ..experiments import ExperimentSpec
 from ..http import (
-    HttpRetrievalContextBinding,
     HttpRetrievalError,
-    ProjectHttpTransportSpec,
+    ProjectHttpImplementationSpec,
     validate_request_policy,
 )
 from ..ids import InputName, StageId
 from ..inputs import FutureInputRef
 from ..journal import parse_journal_bytes
 from ..metrics import Measurement
-from ..paths import retrieval_body_path
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedStageInvocationRef,
-    SnapshotFileRef,
     StageResultSnapshotRef,
 )
 from ..runs import RunAttempt, RunSpec
@@ -56,13 +53,13 @@ from ..runtime import (
 from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
     BaseSpec,
-    DownloadSpec,
     EvaluateSpec,
     InternalSpec,
     ParameterizedSpec,
     ParameterizedStageSpec,
     ResolvedBaseSpec,
     ResolvedDownloadSpec,
+    ResolvedParameterizedSpec,
     ResolvedSpec,
     StageContextBinding,
     StageInvocationReceipt,
@@ -103,8 +100,6 @@ def _logical_input_paths(
     stage_specs: Mapping[StageId, BaseSpec],
 ) -> dict[InputName, RepoRelPath]:
     """Reconstruct the repository-relative input paths delivered to one stage."""
-    if isinstance(stage, DownloadSpec):
-        return {name: retrieval_body_path(run, stage_id, name) for name in stage.inputs}
     if not isinstance(stage, InternalSpec):
         return {}
     paths: dict[InputName, RepoRelPath] = {}
@@ -126,7 +121,7 @@ def _verify_stage_invocation(
     stage_id: StageId,
     stage: ParameterizedStageSpec,
     stage_specs: Mapping[StageId, BaseSpec],
-    resolved_stage: ResolvedBaseSpec,
+    resolved_stage: ResolvedParameterizedSpec,
     fetcher: StorageFetcher | None,
 ) -> StageInvocationReceipt:
     """Verify one invocation receipt against its plan, context, and startup facts."""
@@ -143,19 +138,6 @@ def _verify_stage_invocation(
         raise VerificationError(
             f"stage {stage_id!r} invocation receipt is invalid"
         ) from exc
-    retrieval_bindings: dict[InputName, HttpRetrievalContextBinding] = {}
-    if isinstance(resolved_stage, ResolvedDownloadSpec):
-        retrieval_bindings = {
-            name: HttpRetrievalContextBinding(
-                response=retrieval.response,
-                body=SnapshotFileRef(
-                    path=retrieval.body.stored_at.path,
-                    sha256=retrieval.body.sha256,
-                    bytes=retrieval.body.bytes,
-                ),
-            )
-            for name, retrieval in resolved_stage.retrievals.items()
-        }
     expected_binding = StageContextBinding(
         run_id=run.run_id,
         attempt_id=attempt.attempt_id,
@@ -163,7 +145,6 @@ def _verify_stage_invocation(
         parameter_model=stage.parameter_model,
         parameter_digest=document_digest(stage.params),
         inputs=_logical_input_paths(run, stage_id, stage, stage_specs),
-        retrievals=retrieval_bindings,
         artifacts={name: value.path for name, value in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
@@ -388,7 +369,6 @@ def _verify_unresolved_stage_invocation(
         parameter_model=stage.parameter_model,
         parameter_digest=document_digest(stage.params),
         inputs=_logical_input_paths(run, stage_id, stage, stage_specs),
-        retrievals=receipt.context.retrievals,
         artifacts={name: value.path for name, value in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
@@ -432,7 +412,7 @@ def _verify_download_retrievals(
     *,
     fetcher: StorageFetcher | None,
 ) -> None:
-    """Verify each HTTP request, response, body, transport, and delivery path."""
+    """Verify each HTTP request, response, implementation, and artifact body."""
     retrieve = fetch_storage_bytes if fetcher is None else fetcher
     for input_name, retrieval in resolved.retrievals.items():
         try:
@@ -449,21 +429,21 @@ def _verify_download_retrievals(
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} has an unaccepted status"
             )
-        expected_path = retrieval_body_path(run, stage_id, input_name)
-        if retrieval.body.stored_at.path != expected_path:
+        expected_path = resolved.spec.artifacts[input_name].path
+        if retrieval.body.path != expected_path:
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} body uses another path"
             )
-        body_raw = read_resolved_file(retrieval.body, fetcher=fetcher)
-        read_snapshot_file(
+        body_raw = read_snapshot_file(
             snapshot,
-            SnapshotFileRef(
-                path=expected_path,
-                sha256=retrieval.body.sha256,
-                bytes=retrieval.body.bytes,
-            ),
+            retrieval.body,
             fetcher=fetcher,
         )
+        artifact = resolved.artifacts[input_name]
+        if artifact.kind != "file" or artifact.file != retrieval.body:
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} differs from its artifact"
+            )
         if (
             hashlib.sha256(body_raw).hexdigest()
             != retrieval.request.expected_body_sha256
@@ -482,9 +462,9 @@ def _verify_download_retrievals(
                 f"HTTP retrieval {input_name!r} timing falls outside its stage"
             )
 
-        transport = retrieval.transport
-        if isinstance(transport.spec, ProjectHttpTransportSpec):
-            implementation = transport.spec.implementation
+        http = retrieval.http
+        if isinstance(http.spec, ProjectHttpImplementationSpec):
+            implementation = http.spec.implementation
             implementation_raw = retrieve(
                 GitFileRef(
                     repository=run.source.repository,
@@ -498,9 +478,9 @@ def _verify_download_retrievals(
                 != implementation.sha256
             ):
                 raise VerificationError(
-                    f"HTTP retrieval {input_name!r} transport source differs"
+                    f"HTTP retrieval {input_name!r} implementation source differs"
                 )
-            parameter_reference = transport.spec.parameter_model
+            parameter_reference = http.spec.parameter_model
             parameter_raw = retrieve(
                 GitFileRef(
                     repository=run.source.repository,
@@ -512,9 +492,9 @@ def _verify_download_retrievals(
                 verify_parameter_model_bytes(parameter_reference, parameter_raw)
             except ParameterValidationError as exc:
                 raise VerificationError(
-                    f"HTTP retrieval {input_name!r} transport parameter model differs"
+                    f"HTTP retrieval {input_name!r} HTTP parameter model differs"
                 ) from exc
-            for executable in transport.external_executables:
+            for executable in http.external_executables:
                 try:
                     executable_raw = executable.path.read_bytes()
                 except OSError as exc:
@@ -552,13 +532,23 @@ def verify_attempt_stages(
 
     if set(stage_specs) != set(expected_stage_ids):
         raise VerificationError("loaded stage specs do not match the run stage plan")
-    if len(attempt.invocations) < len(attempt.resolved_stages):
+    resolved_parameterized_ids = tuple(
+        stage_id
+        for stage_id in resolved_stage_ids
+        if isinstance(stage_specs[stage_id], ParameterizedSpec)
+    )
+    planned_parameterized_ids = tuple(
+        stage_id
+        for stage_id in expected_stage_ids
+        if isinstance(stage_specs[stage_id], ParameterizedSpec)
+    )
+    if len(attempt.invocations) < len(resolved_parameterized_ids):
         raise VerificationError(
-            "attempt must retain an invocation receipt for every resolved stage"
+            "attempt must retain an invocation receipt for every project stage"
         )
-    if len(attempt.invocations) > len(expected_stage_ids):
+    if len(attempt.invocations) > len(planned_parameterized_ids):
         raise VerificationError("attempt contains more invocations than planned stages")
-    if len(attempt.invocations) > len(attempt.resolved_stages) + 1:
+    if len(attempt.invocations) > len(resolved_parameterized_ids) + 1:
         raise VerificationError(
             "attempt contains invocations after its unresolved active stage"
         )
@@ -566,7 +556,7 @@ def verify_attempt_stages(
         expected_path = stage_invocation_path(
             run,
             attempt.attempt_id,
-            expected_stage_ids[index],
+            planned_parameterized_ids[index],
         )
         if invocation.stored_at.path != expected_path:
             raise VerificationError(
@@ -616,34 +606,38 @@ def verify_attempt_stages(
                 f"stage {stage_reference.stage_id!r} does not embed its stage spec"
             )
 
-        invocation_reference = attempt.invocations[stage_index]
-        if resolved_spec.invocation != invocation_reference:
-            raise VerificationError(
-                f"stage {stage_reference.stage_id!r} invocation reference differs "
-                "from its attempt"
+        if isinstance(stage_spec, ParameterizedSpec):
+            if not isinstance(resolved_spec, ResolvedParameterizedSpec):
+                raise VerificationError("project stage omitted invocation evidence")
+            invocation_index = resolved_parameterized_ids.index(
+                stage_reference.stage_id
             )
-        if not isinstance(stage_spec, ParameterizedSpec):
-            raise VerificationError("resolved stage is not parameterized")
-        _verify_stage_invocation(
-            invocation_reference,
-            attempt=attempt,
-            run=run,
-            stage_id=stage_reference.stage_id,
-            stage=cast(ParameterizedStageSpec, stage_spec),
-            stage_specs=stage_specs,
-            resolved_stage=resolved_spec,
-            fetcher=fetcher,
-        )
+            invocation_reference = attempt.invocations[invocation_index]
+            if resolved_spec.invocation != invocation_reference:
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} invocation reference differs "
+                    "from its attempt"
+                )
+            _verify_stage_invocation(
+                invocation_reference,
+                attempt=attempt,
+                run=run,
+                stage_id=stage_reference.stage_id,
+                stage=cast(ParameterizedStageSpec, stage_spec),
+                stage_specs=stage_specs,
+                resolved_stage=resolved_spec,
+                fetcher=fetcher,
+            )
 
-        source_location = resolved_spec.source.stored_at
-        if (
-            source_location.repository != run.source.repository
-            or source_location.commit != run.source.commit
-        ):
-            raise VerificationError(
-                f"stage {stage_reference.stage_id!r} source does not match the "
-                "run source snapshot"
-            )
+            source_location = resolved_spec.source.stored_at
+            if (
+                source_location.repository != run.source.repository
+                or source_location.commit != run.source.commit
+            ):
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} source does not match the "
+                    "run source snapshot"
+                )
 
         if not (
             attempt.started_at < resolved_spec.completed_at <= attempt.completed_at
@@ -673,7 +667,8 @@ def verify_attempt_stages(
                     "preceding stage"
                 )
 
-        read_resolved_file(resolved_spec.source, fetcher=fetcher)
+        if isinstance(resolved_spec, ResolvedParameterizedSpec):
+            read_resolved_file(resolved_spec.source, fetcher=fetcher)
         read_resolved_file(resolved_spec.environment.lockfile, fetcher=fetcher)
 
         requested_environment = stage_spec.environment or run.environment
@@ -685,16 +680,17 @@ def verify_attempt_stages(
             resolved_spec.execution_context,
         )
 
-        expected_command = (
-            "python",
-            "-m",
-            "viper._workers.stages",
-        )
-        if resolved_spec.command != expected_command:
-            raise VerificationError(
-                f"stage {stage_reference.stage_id!r} command does not match "
-                "the run plan"
+        if isinstance(resolved_spec, ResolvedParameterizedSpec):
+            expected_command = (
+                "python",
+                "-m",
+                "viper._workers.stages",
             )
+            if resolved_spec.command != expected_command:
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} command does not match "
+                    "the run plan"
+                )
 
         for artifact_name, artifact in resolved_spec.artifacts.items():
             declaration = stage_spec.artifacts[artifact_name]
@@ -715,7 +711,7 @@ def verify_attempt_stages(
 
         verified_stages[stage_reference.stage_id] = resolved_spec
 
-    if len(attempt.invocations) == len(attempt.resolved_stages) + 1:
+    if len(attempt.invocations) == len(resolved_parameterized_ids) + 1:
         stage_id = expected_stage_ids[len(attempt.resolved_stages)]
         stage_spec = stage_specs[stage_id]
         if not isinstance(stage_spec, ParameterizedSpec):

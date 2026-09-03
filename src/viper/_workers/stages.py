@@ -8,15 +8,12 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
 
 from .._parameter.validation import instantiate_parameters
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
-from ..http import HttpRetrievalHandle
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
 from ..metrics import MeasurementSink, MetricHandle, bind_live_metric
-from ..paths import retrieval_body_path
 from ..runs import RunSpec
 from ..runtime import (
     apply_reproducibility,
@@ -26,9 +23,8 @@ from ..runtime import (
 )
 from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from ..stages import (
+    BaseSpec,
     Context,
-    DownloadContext,
-    DownloadSpec,
     InternalSpec,
     ParameterizedSpec,
     StageContextBinding,
@@ -63,7 +59,7 @@ def _planned_stage_context(
     stage_id: str,
 ) -> tuple[ParameterizedSpec, dict[str, str]]:
     """Load the selected stage and derive its plan-owned logical input paths."""
-    loaded: dict[str, ParameterizedSpec] = {}
+    loaded: dict[str, BaseSpec] = {}
     selected: ParameterizedSpec | None = None
     expected_inputs: dict[str, str] = {}
     for reference in run.stages:
@@ -74,16 +70,11 @@ def _planned_stage_context(
         ):
             raise ValueError("startup.plan: stage spec identity differs")
         candidate = load_stage_spec(path)
-        if not isinstance(candidate, ParameterizedSpec):
-            raise ValueError("startup.plan: stage is not parameterized")
         if reference.stage_id == stage_id:
+            if not isinstance(candidate, ParameterizedSpec):
+                raise ValueError("startup.plan: selected stage is not parameterized")
             selected = candidate
-            if isinstance(candidate, DownloadSpec):
-                expected_inputs = {
-                    name: retrieval_body_path(run, stage_id, name)
-                    for name in candidate.inputs
-                }
-            elif isinstance(candidate, InternalSpec):
+            if isinstance(candidate, InternalSpec):
                 for name, input_reference in candidate.inputs.items():
                     if isinstance(input_reference, StoredInputRef):
                         expected_inputs[name] = str(input_reference.path)
@@ -166,9 +157,9 @@ def main(argv: list[str] | None = None) -> int:
     initialization = None
     execution_context = None
     python_environment = None
+    if not isinstance(stage, ParameterizedSpec):
+        raise ValueError("stage worker requires a parameterized stage")
     try:
-        if not isinstance(stage, ParameterizedSpec):
-            raise ValueError("stage worker requires a parameterized stage")
         planned_stage, expected_inputs = _planned_stage_context(
             root,
             run,
@@ -238,47 +229,16 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("startup.callable: parameter model source differs")
 
-        common_context = {
-            "run_id": binding.run_id,
-            "attempt_id": binding.attempt_id,
-            "stage_id": binding.stage_id,
-            "params": params,
-            "inputs": MappingProxyType(_workspace_paths(root, binding.inputs)),
-            "artifacts": MappingProxyType(_workspace_paths(root, binding.artifacts)),
-            "metrics": MappingProxyType(
-                _live_metric_handles(root, run, stage, binding)
-            ),
-            "numpy_generators": MappingProxyType(initialization.numpy_generators),
-        }
-        if isinstance(stage, DownloadSpec):
-            if set(binding.retrievals) != set(stage.inputs):
-                raise ValueError("startup.context: HTTP retrieval handles differ")
-            retrievals = {
-                name: HttpRetrievalHandle(
-                    response=value.response,
-                    body=_workspace_paths(root, {name: value.body.path})[name],
-                )
-                for name, value in binding.retrievals.items()
-            }
-            if any(
-                value.body.relative_to(root).as_posix() != binding.inputs[name]
-                for name, value in retrievals.items()
-            ):
-                raise ValueError("startup.context: HTTP retrieval body path differs")
-            for name, value in binding.retrievals.items():
-                raw = retrievals[name].body.read_bytes()
-                if len(raw) != value.body.bytes:
-                    raise ValueError("startup.context: HTTP body byte count differs")
-                if hashlib.sha256(raw).hexdigest() != value.body.sha256:
-                    raise ValueError("startup.context: HTTP body SHA-256 differs")
-            context: Context[Any] = DownloadContext(
-                **common_context,
-                retrievals=MappingProxyType(retrievals),
-            )
-        else:
-            if binding.retrievals:
-                raise ValueError("startup.context: internal stage received retrievals")
-            context = Context(**common_context)
+        context = Context(
+            run_id=binding.run_id,
+            attempt_id=binding.attempt_id,
+            stage_id=binding.stage_id,
+            params=params,
+            inputs=MappingProxyType(_workspace_paths(root, binding.inputs)),
+            artifacts=MappingProxyType(_workspace_paths(root, binding.artifacts)),
+            metrics=MappingProxyType(_live_metric_handles(root, run, stage, binding)),
+            numpy_generators=MappingProxyType(initialization.numpy_generators),
+        )
         with autocast_context(run.reproducibility):
             function(context)
     except Exception as exc:

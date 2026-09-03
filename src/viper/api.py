@@ -680,6 +680,8 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
         if reference is None:
             raise ValueError("selected stage is absent from the run plan")
         stage = load_stage_spec(project_root / reference.spec)
+        if not isinstance(stage, ParameterizedSpec):
+            raise ValueError("runner-owned download stages require execute_attempt")
         result = execute_stage_process(
             project_root,
             run,

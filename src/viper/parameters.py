@@ -18,10 +18,6 @@ class ParameterSet(BaseModel):
     schema_version: Literal[1] = 1
 
 
-class Download(ParameterSet):
-    """Parameters consumed by one project-defined download procedure."""
-
-
 class Build(ParameterSet):
     """Parameters consumed by one project-defined prior builder."""
 
@@ -52,8 +48,8 @@ class Metric(ParameterSet):
     """Parameters consumed by one project-defined metric."""
 
 
-class HttpTransport(ParameterSet):
-    """Parameters consumed by one project-defined HTTP transport."""
+class Http(ParameterSet):
+    """Parameters consumed by one project-defined HTTP implementation."""
 
 
 class ParameterModelRef(ProtocolModel):
@@ -67,10 +63,9 @@ class ParameterModelRef(ProtocolModel):
 
 __all__ = [
     "Build",
-    "Download",
     "Embed",
     "Evaluate",
-    "HttpTransport",
+    "Http",
     "Metric",
     "ParameterModelRef",
     "Train",

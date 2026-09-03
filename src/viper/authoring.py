@@ -30,7 +30,7 @@ from .experiments import (
     ExperimentSpec,
     VariantSpec,
 )
-from .http import ProjectHttpTransportSpec, resolve_transport, validate_request_policy
+from .http import ProjectHttpImplementationSpec, resolve_http, validate_request_policy
 from .ids import ExperimentId, ReplicateId, RunId, StageId, VariantId
 from .references import GitSource
 from .runs import (
@@ -290,31 +290,31 @@ def freeze_run_plan(
                     "stage implementation differs from the frozen source commit"
                 )
             validate_stage_definition(root, spec)
-            if isinstance(spec, DownloadSpec):
-                for request in spec.inputs.values():
-                    validate_request_policy(request, spec.policy)
-                resolve_transport(root, spec.transport)
-                if isinstance(spec.transport, ProjectHttpTransportSpec):
-                    for reference in (
-                        spec.transport.implementation,
-                        spec.transport.parameter_model,
-                    ):
-                        local_raw = (root / reference.path).read_bytes()
-                        committed_raw = subprocess.run(
-                            (
-                                "git",
-                                "-C",
-                                str(root),
-                                "show",
-                                f"{draft.source.commit}:{reference.path}",
-                            ),
-                            check=True,
-                            capture_output=True,
-                        ).stdout
-                        if local_raw != committed_raw:
-                            raise ValueError(
-                                "HTTP transport source differs from the frozen commit"
-                            )
+        if isinstance(spec, DownloadSpec):
+            for request in spec.inputs.values():
+                validate_request_policy(request, spec.policy)
+            resolve_http(root, spec.http)
+            if isinstance(spec.http, ProjectHttpImplementationSpec):
+                for reference in (
+                    spec.http.implementation,
+                    spec.http.parameter_model,
+                ):
+                    local_raw = (root / reference.path).read_bytes()
+                    committed_raw = subprocess.run(
+                        (
+                            "git",
+                            "-C",
+                            str(root),
+                            "show",
+                            f"{draft.source.commit}:{reference.path}",
+                        ),
+                        check=True,
+                        capture_output=True,
+                    ).stdout
+                    if local_raw != committed_raw:
+                        raise ValueError(
+                            "HTTP implementation source differs from the frozen commit"
+                        )
         for artifact in spec.artifacts.values():
             loader = artifact.loader
             try:

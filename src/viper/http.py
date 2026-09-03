@@ -1,4 +1,4 @@
-"""Execute frozen HTTP retrievals through verified transport implementations."""
+"""Execute frozen HTTP retrievals through verified HTTP implementations."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from ._schema import (
 )
 from .ids import HumanId, InputName
 from .parameters import ParameterModelRef
-from .references import ResolvedFileRef, SnapshotFileRef
+from .references import SnapshotFileRef
 
 HttpHeaderName = Annotated[
     str,
@@ -149,8 +149,8 @@ def http_origin(url: HttpUrl) -> HttpOrigin:
     return HttpOrigin(scheme=scheme, host=host.lower().rstrip("."), port=port)
 
 
-class HttpTransportImplementationRef(ProtocolModel):
-    """Identify one project-owned HTTP transport callable by exact file bytes."""
+class HttpImplementationRef(ProtocolModel):
+    """Identify one project-owned HTTP callable by exact file bytes."""
 
     path: PythonRepoRelPath
     symbol: PythonSymbol
@@ -159,7 +159,7 @@ class HttpTransportImplementationRef(ProtocolModel):
 
 
 class ExternalExecutableSpec(ProtocolModel):
-    """Freeze the exact executable selected by one project transport."""
+    """Freeze the exact executable selected by one project HTTP implementation."""
 
     executable_id: HumanId
     command: NonEmptyStr
@@ -167,25 +167,25 @@ class ExternalExecutableSpec(ProtocolModel):
     bytes: int = Field(gt=0)
 
 
-class BuiltinHttpTransportSpec(ProtocolModel):
-    """Select the built-in HTTPX transport."""
+class BuiltinHttpImplementationSpec(ProtocolModel):
+    """Select the built-in HTTPX implementation."""
 
     kind: Literal["builtin"] = "builtin"
-    transport_id: Literal["httpx"] = "httpx"
+    id: Literal["httpx"] = "httpx"
 
 
-class ProjectHttpTransportSpec(ProtocolModel):
-    """Select one frozen project-owned HTTP transport implementation."""
+class ProjectHttpImplementationSpec(ProtocolModel):
+    """Select one frozen project-owned HTTP implementation."""
 
     kind: Literal["project"] = "project"
-    transport_id: HumanId
-    implementation: HttpTransportImplementationRef
+    id: HumanId
+    implementation: HttpImplementationRef
     parameter_model: ParameterModelRef
-    params: parameters.HttpTransport
+    params: parameters.Http
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
     @model_validator(mode="after")
-    def validate_unique_executables(self) -> ProjectHttpTransportSpec:
+    def validate_unique_executables(self) -> ProjectHttpImplementationSpec:
         """Require one external executable requirement per identifier."""
         identifiers = tuple(value.executable_id for value in self.executables)
         if len(set(identifiers)) != len(identifiers):
@@ -193,8 +193,8 @@ class ProjectHttpTransportSpec(ProtocolModel):
         return self
 
 
-HttpTransportSpec = Annotated[
-    BuiltinHttpTransportSpec | ProjectHttpTransportSpec,
+HttpImplementationSpec = Annotated[
+    BuiltinHttpImplementationSpec | ProjectHttpImplementationSpec,
     Field(discriminator="kind"),
 ]
 
@@ -230,36 +230,36 @@ class ResolvedExternalExecutable(ProtocolModel):
     path: Path
 
 
-class ResolvedHttpTransport(ProtocolModel):
-    """Record the transport and executable identities used for retrieval."""
+class ResolvedHttpImplementation(ProtocolModel):
+    """Record the HTTP and executable identities used for retrieval."""
 
-    spec: HttpTransportSpec
+    spec: HttpImplementationSpec
     external_executables: tuple[ResolvedExternalExecutable, ...] = ()
 
     @model_validator(mode="after")
-    def validate_executable_resolution(self) -> ResolvedHttpTransport:
+    def validate_executable_resolution(self) -> ResolvedHttpImplementation:
         """Resolve every project executable exactly once and none for HTTPX."""
-        if isinstance(self.spec, BuiltinHttpTransportSpec):
+        if isinstance(self.spec, BuiltinHttpImplementationSpec):
             if self.external_executables:
-                raise ValueError("built-in HTTP transport cannot resolve executables")
+                raise ValueError("built-in HTTP implementation cannot use executables")
             return self
         expected = tuple(value.executable_id for value in self.spec.executables)
         received = tuple(
             value.spec.executable_id for value in self.external_executables
         )
         if received != expected:
-            raise ValueError("resolved HTTP executables differ from transport spec")
+            raise ValueError("resolved HTTP executables differ from the specification")
         return self
 
 
 class ResolvedHttpRetrieval(ProtocolModel):
-    """Bind one logical request to its transport, response, and stored body."""
+    """Bind one request to its HTTP implementation, response, and snapshot body."""
 
     input_name: InputName
     request: HttpRequestSpec
-    transport: ResolvedHttpTransport
+    http: ResolvedHttpImplementation
     response: ObservedHttpResponse
-    body: ResolvedFileRef
+    body: SnapshotFileRef
     started_at: AwareDatetime
     completed_at: AwareDatetime
 
@@ -275,15 +275,8 @@ class ResolvedHttpRetrieval(ProtocolModel):
         return self
 
 
-class HttpRetrievalContextBinding(ProtocolModel):
-    """Bind one download context handle to response and body-file identity."""
-
-    response: ObservedHttpResponse
-    body: SnapshotFileRef
-
-
-TransportParamsT = TypeVar("TransportParamsT", bound=parameters.HttpTransport)
-DecoratedTransport = TypeVar("DecoratedTransport", bound=Callable[..., object])
+HttpParamsT = TypeVar("HttpParamsT", bound=parameters.Http)
+DecoratedHttp = TypeVar("DecoratedHttp", bound=Callable[..., object])
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _PERSISTED_RESPONSE_HEADERS = frozenset(
@@ -300,12 +293,12 @@ _PERSISTED_RESPONSE_HEADERS = frozenset(
 
 
 class HttpRetrievalError(RuntimeError):
-    """Report one rejected request, transport, response, or completed body."""
+    """Report one rejected request, HTTP implementation, response, or body."""
 
 
 @dataclass(frozen=True)
 class RuntimeHttpCredential:
-    """Carry one resolved secret only for the active transport invocation."""
+    """Carry one resolved secret only for the active HTTP invocation."""
 
     header: HttpHeaderName
     prefix: str
@@ -313,20 +306,20 @@ class RuntimeHttpCredential:
 
 
 @dataclass(frozen=True)
-class HttpTransportContext(Generic[TransportParamsT]):
-    """Supply one transport with its frozen request and bounded destination."""
+class HttpContext(Generic[HttpParamsT]):
+    """Supply one HTTP implementation with its request and destination."""
 
     request: HttpRequestSpec
     credential: RuntimeHttpCredential | None
     workspace: Path
     destination: Path
     policy: HttpRetrievalPolicy
-    params: TransportParamsT
+    params: HttpParamsT
     executables: Mapping[HumanId, Path]
 
 
 @dataclass(frozen=True)
-class HttpTransportResult:
+class HttpResult:
     """Return one completed response body and its terminal HTTP response."""
 
     body: Path
@@ -334,84 +327,73 @@ class HttpTransportResult:
 
 
 @dataclass(frozen=True)
-class HttpRetrievalHandle:
-    """Expose one verified response body to the download-stage callable."""
+class HttpDefinition(Generic[HttpParamsT]):
+    """Store authoring metadata attached to one project HTTP callable."""
 
-    response: ObservedHttpResponse
-    body: Path
-
-
-@dataclass(frozen=True)
-class HttpTransportDefinition(Generic[TransportParamsT]):
-    """Store authoring metadata attached to one project transport callable."""
-
-    transport_id: HumanId
-    parameter_model: type[TransportParamsT]
+    id: HumanId
+    parameter_model: type[HttpParamsT]
 
 
-class HttpTransportCallable(Protocol[TransportParamsT]):
-    """Describe the callable interface shared by project HTTP transports."""
+class HttpCallable(Protocol[HttpParamsT]):
+    """Describe the callable interface shared by project HTTP implementations."""
 
     def __call__(
         self,
-        context: HttpTransportContext[TransportParamsT],
-    ) -> HttpTransportResult:
+        context: HttpContext[HttpParamsT],
+    ) -> HttpResult:
         """Transfer one request into the assigned destination."""
         ...
 
 
-def http_transport(
+def http(
     *,
-    transport_id: HumanId,
-    parameter_model: type[TransportParamsT],
-) -> Callable[[DecoratedTransport], DecoratedTransport]:
-    """Declare one project-owned HTTP transport callable."""
-    if not issubclass(parameter_model, parameters.HttpTransport):
-        raise TypeError(
-            "HTTP transport parameter model must subclass "
-            "viper.parameters.HttpTransport"
-        )
-    definition = HttpTransportDefinition(
-        transport_id=transport_id,
+    id: HumanId,
+    parameter_model: type[HttpParamsT],
+) -> Callable[[DecoratedHttp], DecoratedHttp]:
+    """Declare one project-owned HTTP callable."""
+    if not issubclass(parameter_model, parameters.Http):
+        raise TypeError("HTTP parameter model must subclass viper.parameters.Http")
+    definition = HttpDefinition(
+        id=id,
         parameter_model=parameter_model,
     )
 
-    def decorate(function: DecoratedTransport) -> DecoratedTransport:
-        """Validate the transport signature and attach its authoring metadata."""
+    def decorate(function: DecoratedHttp) -> DecoratedHttp:
+        """Validate the callable signature and attach its authoring metadata."""
         parameters = tuple(inspect.signature(function).parameters.values())
         if len(parameters) != 1:
-            raise TypeError("an HTTP transport must accept one HttpTransportContext")
-        setattr(function, "__viper_http_transport__", definition)
+            raise TypeError("an HTTP callable must accept one HttpContext")
+        setattr(function, "__viper_http__", definition)
         return function
 
     return decorate
 
 
 def _verify_implementation_bytes(
-    reference: HttpTransportImplementationRef,
+    reference: HttpImplementationRef,
     raw: bytes,
 ) -> None:
-    """Compare one project transport file with its frozen identity."""
+    """Compare one project HTTP file with its frozen identity."""
     if len(raw) != reference.bytes:
-        raise HttpRetrievalError("HTTP transport byte count differs")
+        raise HttpRetrievalError("HTTP implementation byte count differs")
     if hashlib.sha256(raw).hexdigest() != reference.sha256:
-        raise HttpRetrievalError("HTTP transport SHA-256 differs")
+        raise HttpRetrievalError("HTTP implementation SHA-256 differs")
 
 
-def _load_project_transport(
+def _load_project_http(
     repository_root: Path,
-    spec: ProjectHttpTransportSpec,
-) -> HttpTransportCallable[Any]:
+    spec: ProjectHttpImplementationSpec,
+) -> HttpCallable[Any]:
     """Load the exact decorated top-level callable selected by one stage."""
     root = repository_root.resolve()
     path = (root / spec.implementation.path).resolve()
     if not path.is_relative_to(root) or not path.is_file():
-        raise HttpRetrievalError("HTTP transport implementation is unavailable")
+        raise HttpRetrievalError("HTTP implementation is unavailable")
     _verify_implementation_bytes(spec.implementation, path.read_bytes())
-    module_name = f"_viper_http_transport_{path.stem}_{abs(hash(path))}"
+    module_name = f"_viper_http_{path.stem}_{abs(hash(path))}"
     module_spec = importlib.util.spec_from_file_location(module_name, path)
     if module_spec is None or module_spec.loader is None:
-        raise HttpRetrievalError("HTTP transport module could not be loaded")
+        raise HttpRetrievalError("HTTP module could not be loaded")
     module = importlib.util.module_from_spec(module_spec)
     sys.modules[module_name] = module
     inserted_path = str(root)
@@ -432,27 +414,27 @@ def _load_project_transport(
         module_spec.loader.exec_module(module)
         value = getattr(module, spec.implementation.symbol, None)
         if value is None or not callable(value):
-            raise HttpRetrievalError("HTTP transport symbol is not callable")
+            raise HttpRetrievalError("HTTP symbol is not callable")
         if getattr(value, "__module__", None) != module_name:
-            raise HttpRetrievalError("HTTP transport symbol must be top-level")
-        definition = getattr(value, "__viper_http_transport__", None)
-        if not isinstance(definition, HttpTransportDefinition):
-            raise HttpRetrievalError("HTTP transport lacks a VIPER decorator")
-        if definition.transport_id != spec.transport_id:
-            raise HttpRetrievalError("HTTP transport decorator ID differs")
+            raise HttpRetrievalError("HTTP symbol must be top-level")
+        definition = getattr(value, "__viper_http__", None)
+        if not isinstance(definition, HttpDefinition):
+            raise HttpRetrievalError("HTTP callable lacks a VIPER decorator")
+        if definition.id != spec.id:
+            raise HttpRetrievalError("HTTP decorator ID differs")
         if definition.parameter_model.__name__ != spec.parameter_model.symbol:
-            raise HttpRetrievalError("HTTP transport parameter class differs")
+            raise HttpRetrievalError("HTTP parameter class differs")
         parameter_source = inspect.getsourcefile(definition.parameter_model)
         if (
             parameter_source is None
             or Path(parameter_source).resolve()
             != (root / spec.parameter_model.path).resolve()
         ):
-            raise HttpRetrievalError("HTTP transport parameter source differs")
+            raise HttpRetrievalError("HTTP parameter source differs")
     except Exception as exc:
         if isinstance(exc, HttpRetrievalError):
             raise
-        raise HttpRetrievalError("HTTP transport module raised during import") from exc
+        raise HttpRetrievalError("HTTP module raised during import") from exc
     finally:
         sys.modules.pop(module_name, None)
         sys.path.remove(inserted_path)
@@ -463,7 +445,7 @@ def _load_project_transport(
             ):
                 sys.modules.pop(name, None)
         sys.modules.update(saved_modules)
-    return cast(HttpTransportCallable[Any], value)
+    return cast(HttpCallable[Any], value)
 
 
 def validate_request_policy(
@@ -515,32 +497,32 @@ def _resolve_executable(spec: ExternalExecutableSpec) -> ResolvedExternalExecuta
     return ResolvedExternalExecutable(spec=spec, path=path)
 
 
-def resolve_transport(
+def resolve_http(
     repository_root: Path,
-    spec: HttpTransportSpec,
-) -> ResolvedHttpTransport:
-    """Validate source and executable identities before one transport runs."""
-    from ._parameter.validation import (  # Avoid a transport-validation cycle.
+    spec: HttpImplementationSpec,
+) -> ResolvedHttpImplementation:
+    """Validate source and executable identities before one HTTP call."""
+    from ._parameter.validation import (  # Avoid an HTTP-validation cycle.
         instantiate_parameters,
         verify_parameter_model_bytes,
     )
 
-    if isinstance(spec, BuiltinHttpTransportSpec):
-        return ResolvedHttpTransport(spec=spec)
+    if isinstance(spec, BuiltinHttpImplementationSpec):
+        return ResolvedHttpImplementation(spec=spec)
     root = repository_root.resolve()
     implementation_path = root / spec.implementation.path
     _verify_implementation_bytes(spec.implementation, implementation_path.read_bytes())
     parameter_path = root / spec.parameter_model.path
     verify_parameter_model_bytes(spec.parameter_model, parameter_path.read_bytes())
-    _load_project_transport(root, spec)
+    _load_project_http(root, spec)
     instantiate_parameters(
         parameter_path,
         spec.parameter_model,
         spec.params,
-        parameters.HttpTransport,
+        parameters.Http,
     )
     executables = tuple(_resolve_executable(value) for value in spec.executables)
-    return ResolvedHttpTransport(spec=spec, external_executables=executables)
+    return ResolvedHttpImplementation(spec=spec, external_executables=executables)
 
 
 def _credential_headers(
@@ -566,9 +548,9 @@ def _persisted_headers(response: httpx.Response) -> dict[str, str]:
     }
 
 
-def _httpx_transport(
-    context: HttpTransportContext[parameters.HttpTransport],
-) -> HttpTransportResult:
+def _httpx_request(
+    context: HttpContext[parameters.Http],
+) -> HttpResult:
     """Retrieve one exact response body through a bounded HTTPX client."""
     started = time.monotonic()
     current_url = context.request.url
@@ -642,7 +624,7 @@ def _httpx_transport(
                         os.fsync(body.fileno())
                     os.replace(temporary_path, destination)
                     temporary_path = None
-                    return HttpTransportResult(
+                    return HttpResult(
                         body=destination,
                         response=ObservedHttpResponse(
                             response_url=_HTTP_URL_ADAPTER.validate_python(
@@ -655,24 +637,24 @@ def _httpx_transport(
     except httpx.TimeoutException as exc:
         raise HttpRetrievalError("HTTP retrieval exceeded its timeout") from exc
     except httpx.HTTPError as exc:
-        raise HttpRetrievalError("HTTP transport failed") from exc
+        raise HttpRetrievalError("HTTP request failed") from exc
     finally:
         if temporary_path is not None and temporary_path.exists():
             temporary_path.unlink()
 
 
-def invoke_transport(
+def invoke_http(
     repository_root: Path,
-    transport: ResolvedHttpTransport,
+    implementation: ResolvedHttpImplementation,
     request: HttpRequestSpec,
     policy: HttpRetrievalPolicy,
     workspace: Path,
     destination: Path,
     *,
     environment: Mapping[str, str] | None = None,
-) -> HttpTransportResult:
-    """Invoke the selected transport and enforce its returned body contract."""
-    from ._parameter.validation import (  # Avoid a transport-validation cycle.
+) -> HttpResult:
+    """Invoke the selected HTTP implementation and verify its result."""
+    from ._parameter.validation import (  # Avoid an HTTP-validation cycle.
         instantiate_parameters,
     )
 
@@ -688,22 +670,22 @@ def invoke_transport(
         raise HttpRetrievalError("HTTP destination escapes its retrieval workspace")
     if destination.is_symlink():
         raise HttpRetrievalError("HTTP destination must not be a symlink")
-    if isinstance(transport.spec, BuiltinHttpTransportSpec):
-        params = parameters.HttpTransport()
-        function: HttpTransportCallable[Any] = _httpx_transport
+    if isinstance(implementation.spec, BuiltinHttpImplementationSpec):
+        params = parameters.Http()
+        function: HttpCallable[Any] = _httpx_request
     else:
-        project = transport.spec
+        project = implementation.spec
         params = cast(
-            parameters.HttpTransport,
+            parameters.Http,
             instantiate_parameters(
                 root / project.parameter_model.path,
                 project.parameter_model,
                 project.params,
-                parameters.HttpTransport,
+                parameters.Http,
             ),
         )
-        function = _load_project_transport(root, project)
-    context = HttpTransportContext(
+        function = _load_project_http(root, project)
+    context = HttpContext(
         request=request,
         credential=credential,
         workspace=resolved_workspace,
@@ -712,7 +694,7 @@ def invoke_transport(
         params=params,
         executables={
             value.spec.executable_id: value.path
-            for value in transport.external_executables
+            for value in implementation.external_executables
         },
     )
     started = time.monotonic()
@@ -721,9 +703,9 @@ def invoke_transport(
         raise HttpRetrievalError("HTTP retrieval exceeded its timeout")
     expected_destination = destination.resolve()
     if result.body.resolve() != expected_destination:
-        raise HttpRetrievalError("HTTP transport returned another body path")
+        raise HttpRetrievalError("HTTP implementation returned another body path")
     if result.body.is_symlink() or not result.body.is_file():
-        raise HttpRetrievalError("HTTP transport returned no regular body file")
+        raise HttpRetrievalError("HTTP implementation returned no regular body file")
     if result.response.status not in policy.accepted_statuses:
         raise HttpRetrievalError("HTTP terminal status is unaccepted")
     terminal_request = request.model_copy(update={"url": result.response.response_url})

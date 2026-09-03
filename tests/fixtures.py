@@ -6,7 +6,7 @@ from viper import parameters
 from viper._schema import DataRole
 from viper.artifacts import ArtifactLoaderRef
 from viper.http import (
-    BuiltinHttpTransportSpec,
+    BuiltinHttpImplementationSpec,
     HttpRequestSpec,
     HttpRetrievalPolicy,
 )
@@ -144,9 +144,9 @@ def http_policy(
     )
 
 
-def builtin_http_transport() -> BuiltinHttpTransportSpec:
-    """Select the HTTPX transport for one synthetic download stage."""
-    return BuiltinHttpTransportSpec()
+def builtin_http() -> BuiltinHttpImplementationSpec:
+    """Select the HTTPX implementation for one synthetic download stage."""
+    return BuiltinHttpImplementationSpec()
 
 
 def reproducibility() -> ReproducibilitySpec:

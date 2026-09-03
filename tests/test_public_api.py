@@ -95,9 +95,8 @@ def test_stage_interface_uses_parsimonious_names() -> None:
     """Let the stage module supply the category once at each use site."""
     assert stages.Context.__module__ == "viper.stages"
     assert tuple(
-        operation.__name__
-        for operation in (stages.download, stages.build, stages.embed, stages.train)
-    ) == ("download", "build", "embed", "train")
+        operation.__name__ for operation in (stages.build, stages.embed, stages.train)
+    ) == ("build", "embed", "train")
     assert stages.eval.__name__ == "eval"
 
 
@@ -197,10 +196,9 @@ def test_parameter_categories_form_the_public_extension_namespace() -> None:
     parameters = importlib.import_module("viper.parameters")
     assert tuple(parameters.__all__) == (
         "Build",
-        "Download",
         "Embed",
         "Evaluate",
-        "HttpTransport",
+        "Http",
         "Metric",
         "ParameterModelRef",
         "Train",

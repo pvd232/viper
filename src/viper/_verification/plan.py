@@ -24,7 +24,6 @@ from ..serialization import parse_yaml_bytes
 from ..stages import (
     BaseSpec,
     BuildSpec,
-    DownloadSpec,
     EmbedSpec,
     EvaluateSpec,
     InternalSpec,
@@ -342,7 +341,7 @@ def verify_run_plan_relationships(
         for stage_id, stage in stages.items()
         if isinstance(
             stage,
-            (DownloadSpec, BuildSpec, EmbedSpec, TrainSpec, EvaluateSpec),
+            (BuildSpec, EmbedSpec, TrainSpec, EvaluateSpec),
         )
     }
     variant_params = {stage.stage_id: stage for stage in variant.stage_params}
@@ -558,32 +557,34 @@ def verify_stage_plan(
                 f"stage {stage.stage_id!r} file is not a valid stage spec"
             ) from exc
 
-        implementation = spec.implementation
-        implementation_location = GitFileRef(
-            repository=run.source.repository,
-            commit=run.source.commit,
-            path=implementation.path,
-        )
-        try:
-            implementation_raw = retrieve(implementation_location)
-            verify_stage_implementation_bytes(implementation, implementation_raw)
-            implementation_tree = ast.parse(
-                implementation_raw,
-                filename=implementation.path,
+        if isinstance(spec, ParameterizedSpec):
+            implementation = spec.implementation
+            implementation_location = GitFileRef(
+                repository=run.source.repository,
+                commit=run.source.commit,
+                path=implementation.path,
             )
-        except (KeyError, OSError, SyntaxError, StageDefinitionError) as exc:
-            raise VerificationError(
-                f"implementation of stage {stage.stage_id!r} failed source verification"
-            ) from exc
-        if not any(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == implementation.symbol
-            for node in implementation_tree.body
-        ):
-            raise VerificationError(
-                f"implementation of stage {stage.stage_id!r} must define "
-                f"top-level callable {implementation.symbol!r}"
-            )
+            try:
+                implementation_raw = retrieve(implementation_location)
+                verify_stage_implementation_bytes(implementation, implementation_raw)
+                implementation_tree = ast.parse(
+                    implementation_raw,
+                    filename=implementation.path,
+                )
+            except (KeyError, OSError, SyntaxError, StageDefinitionError) as exc:
+                raise VerificationError(
+                    f"implementation of stage {stage.stage_id!r} "
+                    "failed source verification"
+                ) from exc
+            if not any(
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == implementation.symbol
+                for node in implementation_tree.body
+            ):
+                raise VerificationError(
+                    f"implementation of stage {stage.stage_id!r} must define "
+                    f"top-level callable {implementation.symbol!r}"
+                )
 
         artifact_root = f"{run_root(run)}/artifacts/"
         for artifact_name, artifact in spec.artifacts.items():

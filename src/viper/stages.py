@@ -33,13 +33,17 @@ from ._schema import (
     RepoRelPath,
     repo_file_paths_overlap,
 )
-from .artifacts import ArtifactSpec, ResolvedArtifact
+from .artifacts import (
+    ArtifactSpec,
+    ResolvedArtifact,
+    ResolvedSingleFileArtifact,
+    SingleFileArtifactSpec,
+)
 from .http import (
+    BuiltinHttpImplementationSpec,
+    HttpImplementationSpec,
     HttpRequestSpec,
-    HttpRetrievalContextBinding,
-    HttpRetrievalHandle,
     HttpRetrievalPolicy,
-    HttpTransportSpec,
     ResolvedHttpRetrieval,
 )
 from .ids import HumanId, InputName, MetricId, RunId, StageId
@@ -77,13 +81,6 @@ class Context(Generic[ParamsT]):
     numpy_generators: Mapping[HumanId, np.random.Generator]
 
 
-@dataclass(frozen=True)
-class DownloadContext(Context[parameters.Download]):
-    """Extend the stage context with verified HTTP retrieval handles."""
-
-    retrievals: Mapping[InputName, HttpRetrievalHandle]
-
-
 class StageImplementationRef(ProtocolModel):
     """Identify one project-owned top-level stage callable by exact file bytes."""
 
@@ -103,9 +100,6 @@ class StageContextBinding(ProtocolModel):
     parameter_model: ParameterModelRef
     parameter_digest: SHA256
     inputs: dict[InputName, RepoRelPath]
-    retrievals: dict[InputName, HttpRetrievalContextBinding] = Field(
-        default_factory=dict
-    )
     artifacts: dict[ArtifactName, RepoRelPath]
     metric_ids: tuple[MetricId, ...]
     numpy_generator_names: tuple[HumanId, ...]
@@ -134,8 +128,6 @@ class BaseSpec(ProtocolModel):
 
     kind: str
     schema_version: Literal[1] = 1
-
-    implementation: StageImplementationRef
 
     environment: EnvironmentSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
@@ -185,11 +177,6 @@ class BaseSpec(ProtocolModel):
                     "and entity ID"
                 )
 
-            if repo_file_paths_overlap(artifact.path, self.implementation.path):
-                raise ValueError(
-                    f"artifact {name!r} path collides with the stage implementation"
-                )
-
             for previous_path, previous_name in artifact_roots.items():
                 if repo_file_paths_overlap(artifact.path, previous_path):
                     raise ValueError(
@@ -205,17 +192,39 @@ class BaseSpec(ProtocolModel):
 class ParameterizedSpec(BaseSpec):
     """Request an operation governed by one project-defined parameter model."""
 
+    implementation: StageImplementationRef
     parameter_model: ParameterModelRef
 
+    @model_validator(mode="after")
+    def validate_implementation_path(self) -> ParameterizedSpec:
+        """Keep the project callable outside every declared artifact root."""
+        for name, artifact in self.artifacts.items():
+            if repo_file_paths_overlap(artifact.path, self.implementation.path):
+                raise ValueError(
+                    f"artifact {name!r} path collides with the stage implementation"
+                )
+        return self
 
-class DownloadSpec(ParameterizedSpec):
-    """Request verified HTTP retrievals followed by one project operation."""
+
+class DownloadSpec(BaseSpec):
+    """Request runner-owned HTTP retrievals into same-named file artifacts."""
 
     kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    transport: HttpTransportSpec
+    http: HttpImplementationSpec = Field(default_factory=BuiltinHttpImplementationSpec)
     policy: HttpRetrievalPolicy
-    params: parameters.Download
+
+    @model_validator(mode="after")
+    def validate_download_artifacts(self) -> DownloadSpec:
+        """Require one same-named single-file artifact for each HTTP request."""
+        if set(self.inputs) != set(self.artifacts):
+            raise ValueError("download input and artifact names must match")
+        if any(
+            not isinstance(artifact, SingleFileArtifactSpec)
+            for artifact in self.artifacts.values()
+        ):
+            raise ValueError("download artifacts must be single files")
+        return self
 
 
 class InternalSpec(ParameterizedSpec):
@@ -420,11 +429,11 @@ class EvaluateSpec(InternalSpec):
         return self
 
 
-ParameterizedStageSpec = DownloadSpec | BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
+ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
 
 
 Spec = Annotated[
-    ParameterizedStageSpec,
+    DownloadSpec | ParameterizedStageSpec,
     Field(discriminator="kind"),
 ]
 
@@ -436,29 +445,14 @@ class ResolvedBaseSpec(ProtocolModel):
     kind: str
 
     spec: BaseSpec
-    source: ResolvedGitFileRef
-
     environment: ResolvedEnvironment
     execution_context: ExecutionContext
-    startup: ProcessStartupReceipt
-    invocation: ResolvedStageInvocationRef
-
-    command: tuple[str, ...] = Field(min_length=1)
-
     artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
     completed_at: AwareDatetime
 
     @model_validator(mode="after")
     def validate_common_invariants(self) -> ResolvedBaseSpec:
         """Match realized source, artifacts, environment, and context to the request."""
-        if not self.command[0]:
-            raise ValueError("command executable must be nonempty")
-
-        if self.source.stored_at.path != self.spec.implementation.path:
-            raise ValueError(
-                "resolved source entrypoint must match the stage implementation path"
-            )
-
         if set(self.artifacts) != set(self.spec.artifacts):
             raise ValueError(
                 "resolved artifact names must match declared artifact names"
@@ -582,9 +576,11 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
 
     @model_validator(mode="after")
     def validate_download_retrievals(self) -> ResolvedDownloadSpec:
-        """Match every retrieval to its input, request, transport, and timing."""
+        """Match each retrieval to its request, HTTP implementation, and timing."""
         if set(self.retrievals) != set(self.spec.inputs):
             raise ValueError("resolved retrieval names must match download inputs")
+        if set(self.artifacts) != set(self.retrievals):
+            raise ValueError("resolved download artifacts must match retrievals")
         for input_name, retrieval in self.retrievals.items():
             if retrieval.input_name != input_name:
                 raise ValueError("resolved retrieval input name differs from its key")
@@ -592,14 +588,38 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
                 raise ValueError(
                     "resolved retrieval request differs from download input"
                 )
-            if retrieval.transport.spec != self.spec.transport:
-                raise ValueError("resolved retrieval transport differs from stage spec")
+            if retrieval.http.spec != self.spec.http:
+                raise ValueError("resolved HTTP implementation differs from stage spec")
+            artifact = self.artifacts[input_name]
+            if not isinstance(artifact, ResolvedSingleFileArtifact):
+                raise ValueError("resolved download artifacts must be single files")
+            if retrieval.body != artifact.file:
+                raise ValueError("retrieval body must equal its resolved artifact file")
             if retrieval.completed_at > self.completed_at:
                 raise ValueError("download retrieval cannot follow stage completion")
         return self
 
 
-class ResolvedInternalSpec(ResolvedBaseSpec):
+class ResolvedParameterizedSpec(ResolvedBaseSpec):
+    """Record evidence produced by one project-owned stage process."""
+
+    spec: ParameterizedSpec  # pyright: ignore[reportIncompatibleVariableOverride]
+    source: ResolvedGitFileRef
+    startup: ProcessStartupReceipt
+    invocation: ResolvedStageInvocationRef
+    command: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_project_invocation(self) -> ResolvedParameterizedSpec:
+        """Match the resolved source to the selected project callable."""
+        if self.source.stored_at.path != self.spec.implementation.path:
+            raise ValueError(
+                "resolved source entrypoint must match the stage implementation path"
+            )
+        return self
+
+
+class ResolvedInternalSpec(ResolvedParameterizedSpec):
     """Record an operation that consumes previously produced artifacts."""
 
     spec: InternalSpec  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -707,13 +727,6 @@ def _stage_decorator(
         return function
 
     return decorate
-
-
-def download(
-    *, params: type[parameters.Download]
-) -> Callable[[DecoratedStage], DecoratedStage]:
-    """Declare one download-stage callable."""
-    return _stage_decorator("download", params)
 
 
 def build(

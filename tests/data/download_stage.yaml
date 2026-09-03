@@ -1,10 +1,5 @@
 kind: download
 schema_version: 1
-implementation:
-  path: src/sample_project/stages/download.py
-  symbol: download
-  sha256: 910fe8004296d069a5f8af0863a7201adbc737713114cf37fc6051c0ec5552c2
-  bytes: 510
 environment: null
 metric_ids: []
 artifacts:
@@ -26,11 +21,6 @@ artifacts:
       sha256: bd95723e8f125165e4fa975e965b2038ca02e88897976baa6183d1bc5495bacc
       bytes: 178
     data_role: evaluation
-parameter_model:
-  path: src/sample_project/parameters.py
-  symbol: DownloadParameters
-  sha256: c62911026f6fb5bbf11aec9ed98d4e2b4f9661d25d088e858c6c8e1684b25fdc
-  bytes: 838
 inputs:
   dataset:
     kind: http
@@ -50,9 +40,9 @@ inputs:
     expected_body_sha256: c6590e360c923a8db90afe047ffbfe234b94f4490ec5f63ded68ed498655c0d0
     expected_body_bytes: 24
     credentials: null
-transport:
+http:
   kind: builtin
-  transport_id: httpx
+  id: httpx
 policy:
   allowed_schemes:
   - https
@@ -65,6 +55,3 @@ policy:
   max_redirects: 2
   max_body_bytes: 1024
   timeout_seconds: 30.0
-params:
-  schema_version: 1
-  media_type: text/plain

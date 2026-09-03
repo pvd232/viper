@@ -28,10 +28,6 @@ from ..artifacts import (
     ResolvedSingleFileArtifact,
     SingleFileArtifactSpec,
 )
-from ..http import (
-    HttpRetrievalContextBinding,
-    ResolvedHttpRetrieval,
-)
 from ..references import SnapshotFileRef
 from ..runs import (
     RunSpec,
@@ -46,7 +42,6 @@ from ..runtime import (
 )
 from ..serialization import document_digest
 from ..stages import (
-    BaseSpec,
     ParameterizedSpec,
     ParameterizedStageSpec,
     StageContextBinding,
@@ -211,11 +206,10 @@ def execute_stage_process(
     repository_root: Path,
     run: RunSpec,
     stage_reference: RunStageRef,
-    stage_spec: BaseSpec,
+    stage_spec: ParameterizedSpec,
     *,
     attempt_id: int = 1,
     input_paths: dict[str, Path] | None = None,
-    retrievals: dict[str, ResolvedHttpRetrieval] | None = None,
     timeout_seconds: float | None = None,
 ) -> StageProcessResult:
     """Invoke one frozen callable and hash every declared output file."""
@@ -240,8 +234,6 @@ def execute_stage_process(
     ):
         raise StageExecutionError("stage implementation SHA-256 differs")
 
-    if not isinstance(stage_spec, ParameterizedSpec):
-        raise StageExecutionError("stage invocation requires a parameterized spec")
     parameterized_stage = cast(ParameterizedStageSpec, stage_spec)
     try:
         validate_stage_parameters(
@@ -270,17 +262,6 @@ def execute_stage_process(
         parameter_model=parameterized_stage.parameter_model,
         parameter_digest=document_digest(parameterized_stage.params),
         inputs=logical_inputs,
-        retrievals={
-            name: HttpRetrievalContextBinding(
-                response=retrieval.response,
-                body=SnapshotFileRef(
-                    path=logical_inputs[name],
-                    sha256=retrieval.body.sha256,
-                    bytes=retrieval.body.bytes,
-                ),
-            )
-            for name, retrieval in ({} if retrievals is None else retrievals).items()
-        },
         artifacts={
             name: artifact.path for name, artifact in stage_spec.artifacts.items()
         },

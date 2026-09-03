@@ -957,16 +957,15 @@ class ParameterSet(BaseModel):
     schema_version: Literal[1] = 1
 
 
-class Download(ParameterSet): ...
 class Build(ParameterSet): ...
 class Embed(ParameterSet): ...
 class Train(ParameterSet): ...
 class Evaluate(ParameterSet): ...
 class Metric(ParameterSet): ...
-class HttpTransport(ParameterSet): ...
+class Http(ParameterSet): ...
 ```
 
-`ParameterSet` and its seven public categories belong to
+`ParameterSet` and its six public categories belong to
 `viper.parameters`. Project code specializes the category that matches the
 consumer of its values.
 
@@ -979,7 +978,7 @@ The records below use these shared types:
 | `PythonRepoRelPath` | A `RepoRelPath` ending in `.py`. |
 | `PythonSymbol` | A top-level Python identifier selected from one module. |
 | `NormalizedDistributionName` | A Python distribution name normalized under the PyPA name-normalization rule. |
-| `HttpHeaderName` | A lowercase HTTP field name accepted by the controlled retriever and selected transport. |
+| `HttpHeaderName` | A lowercase HTTP field name accepted by the controlled retriever and selected HTTP implementation. |
 | `SHA256` | A 64-character lowercase hexadecimal digest. |
 | `GitCommit` | A 40- or 64-character lowercase hexadecimal commit ID. |
 | `NonEmptyStr` | A string containing at least one character. |
@@ -1109,11 +1108,6 @@ class ParameterModelRef(ProtocolModel):
     bytes: int = Field(gt=0)
 
 
-class HttpRetrievalContextBinding(ProtocolModel):
-    response: ObservedHttpResponse
-    body: SnapshotFileRef
-
-
 class StageContextBinding(ProtocolModel):
     schema_version: Literal[1] = 1
     run_id: RunId
@@ -1122,9 +1116,6 @@ class StageContextBinding(ProtocolModel):
     parameter_model: ParameterModelRef
     parameter_digest: SHA256
     inputs: dict[InputName, RepoRelPath]
-    retrievals: dict[InputName, HttpRetrievalContextBinding] = Field(
-        default_factory=dict
-    )
     artifacts: dict[ArtifactName, RepoRelPath]
     metric_ids: tuple[MetricId, ...]
     numpy_generator_names: tuple[HumanId, ...]
@@ -1166,7 +1157,6 @@ ArtifactSpec = Annotated[
 class BaseSpec(ProtocolModel):
     kind: str
     schema_version: Literal[1] = 1
-    implementation: StageImplementationRef
     environment: EnvironmentSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
     artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
@@ -1189,7 +1179,7 @@ stage, `models` for an embed or train stage, and `evaluations` for an evaluate
 stage. A single-file artifact includes a filename after `<entity_id>`. A bundle
 root may equal the identity directory or a directory beneath it.
 
-`BaseSpec.implementation`, `MetricSpec.implementation`, and
+`ParameterizedSpec.implementation`, `MetricSpec.implementation`, and
 `ArtifactSpec.loader` identify one top-level symbol in one exact Python file.
 Each reference stores the repository-relative path, symbol, SHA-256 digest, and
 byte count. `RunSpec.source` fixes the repository revision containing each
@@ -1234,12 +1224,8 @@ class ResolvedBaseSpec(ProtocolModel):
     schema_version: Literal[1] = 1
     kind: str
     spec: BaseSpec
-    source: ResolvedGitFileRef
     environment: ResolvedEnvironment
     execution_context: ExecutionContext
-    startup: ProcessStartupReceipt
-    invocation: ResolvedStageInvocationRef
-    command: tuple[str, ...] = Field(min_length=1)
     artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
     completed_at: AwareDatetime
 ```
@@ -2094,36 +2080,36 @@ lockfile reference. A resolved GCE environment also records the immutable
 provisioning-source identity. `ExecutionContext` records the runtime library
 implementations and versions used by the stage.
 
-### Source and invocation
+### Parameterized-stage source and invocation
 
-`ResolvedBaseSpec.source` identifies the file containing the callable selected
-by `BaseSpec.implementation` at `RunSpec.source`:
+`ResolvedParameterizedSpec.source` identifies the file containing the callable
+selected by `ParameterizedSpec.implementation` at `RunSpec.source`:
 
 ```text
-ResolvedBaseSpec.source.stored_at.repository
+ResolvedParameterizedSpec.source.stored_at.repository
 == RunSpec.source.repository
 
-ResolvedBaseSpec.source.stored_at.commit
+ResolvedParameterizedSpec.source.stored_at.commit
 == RunSpec.source.commit
 
-ResolvedBaseSpec.source.stored_at.path
-== ResolvedBaseSpec.spec.implementation.path
+ResolvedParameterizedSpec.source.stored_at.path
+== ResolvedParameterizedSpec.spec.implementation.path
 
-ResolvedBaseSpec.source.sha256
-== ResolvedBaseSpec.spec.implementation.sha256
+ResolvedParameterizedSpec.source.sha256
+== ResolvedParameterizedSpec.spec.implementation.sha256
 
-ResolvedBaseSpec.source.bytes
-== ResolvedBaseSpec.spec.implementation.bytes
+ResolvedParameterizedSpec.source.bytes
+== ResolvedParameterizedSpec.spec.implementation.bytes
 ```
 
 The process-startup layer records the actual child-process command in
-`ResolvedBaseSpec.command`. The stage worker imports the selected symbol and
+`ResolvedParameterizedSpec.command`. The stage worker imports the selected symbol and
 passes it the typed context reconstructed from the coordinator-supplied
 `StageContextBinding`. After the child terminates, the coordinator places that
 same binding in `StageInvocationReceipt.context`.
 
 ```text
-BaseSpec.implementation
+ParameterizedSpec.implementation
 -> exact callable
 
 StageContextBinding
@@ -2238,12 +2224,6 @@ files.
 ### Variant declaration
 
 ```python
-class DownloadVariantStageParams(ProtocolModel):
-    kind: Literal["download"] = "download"
-    stage_id: StageId
-    params: viper.parameters.Download
-
-
 class BuildVariantStageParams(ProtocolModel):
     kind: Literal["build"] = "build"
     stage_id: StageId
@@ -2269,8 +2249,7 @@ class EvaluateVariantStageParams(ProtocolModel):
 
 
 VariantStageParams = Annotated[
-    DownloadVariantStageParams
-    | BuildVariantStageParams
+    BuildVariantStageParams
     | EmbedVariantStageParams
     | TrainVariantStageParams
     | EvaluateVariantStageParams,
@@ -2480,7 +2459,7 @@ class HttpRetrievalPolicy(ProtocolModel):
     timeout_seconds: float = Field(gt=0, allow_inf_nan=False)
 
 
-class HttpTransportImplementationRef(ProtocolModel):
+class HttpImplementationRef(ProtocolModel):
     path: PythonRepoRelPath
     symbol: PythonSymbol
     sha256: SHA256
@@ -2494,22 +2473,22 @@ class ExternalExecutableSpec(ProtocolModel):
     bytes: int = Field(gt=0)
 
 
-class BuiltinHttpTransportSpec(ProtocolModel):
+class BuiltinHttpImplementationSpec(ProtocolModel):
     kind: Literal["builtin"] = "builtin"
-    transport_id: Literal["httpx"] = "httpx"
+    id: Literal["httpx"] = "httpx"
 
 
-class ProjectHttpTransportSpec(ProtocolModel):
+class ProjectHttpImplementationSpec(ProtocolModel):
     kind: Literal["project"] = "project"
-    transport_id: HumanId
-    implementation: HttpTransportImplementationRef
+    id: HumanId
+    implementation: HttpImplementationRef
     parameter_model: ParameterModelRef
-    params: viper.parameters.HttpTransport
+    params: viper.parameters.Http
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
 
-HttpTransportSpec = Annotated[
-    BuiltinHttpTransportSpec | ProjectHttpTransportSpec,
+HttpImplementationSpec = Annotated[
+    BuiltinHttpImplementationSpec | ProjectHttpImplementationSpec,
     Field(discriminator="kind"),
 ]
 
@@ -2539,8 +2518,8 @@ stores the resulting effective port.
 experimental run plan. Dynamic discovery and scraping publish observed content
 before a later experimental run selects it.
 
-`BuiltinHttpTransportSpec` selects the HTTPX implementation shipped with
-VIPER. `ProjectHttpTransportSpec` selects one decorated callable from the
+`BuiltinHttpImplementationSpec` selects the HTTPX implementation shipped with
+VIPER. `ProjectHttpImplementationSpec` selects one decorated callable from the
 project source and binds its project-defined parameter class, parameter values,
 and external executable requirements.
 
@@ -2563,15 +2542,17 @@ class Context(Generic[ParamsT]):
 
 
 class ParameterizedSpec(BaseSpec):
+    implementation: StageImplementationRef
     parameter_model: ParameterModelRef
 
 
-class DownloadSpec(ParameterizedSpec):
+class DownloadSpec(BaseSpec):
     kind: Literal["download"] = "download"
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    transport: HttpTransportSpec
+    http: HttpImplementationSpec = Field(
+        default_factory=BuiltinHttpImplementationSpec
+    )
     policy: HttpRetrievalPolicy
-    params: viper.parameters.Download
 
 
 class ObservedHttpResponse(ProtocolModel):
@@ -2580,9 +2561,9 @@ class ObservedHttpResponse(ProtocolModel):
     response_headers: dict[HttpHeaderName, str]
 
 
-TransportParamsT = TypeVar(
-    "TransportParamsT",
-    bound=viper.parameters.HttpTransport,
+HttpParamsT = TypeVar(
+    "HttpParamsT",
+    bound=viper.parameters.Http,
 )
 
 
@@ -2594,31 +2575,20 @@ class RuntimeHttpCredential:
 
 
 @dataclass(frozen=True)
-class HttpTransportContext(Generic[TransportParamsT]):
+class HttpContext(Generic[HttpParamsT]):
     request: HttpRequestSpec
     credential: RuntimeHttpCredential | None
     workspace: Path
     destination: Path
     policy: HttpRetrievalPolicy
-    params: TransportParamsT
+    params: HttpParamsT
     executables: Mapping[HumanId, Path]
 
 
 @dataclass(frozen=True)
-class HttpTransportResult:
+class HttpResult:
     body: Path
     response: ObservedHttpResponse
-
-
-@dataclass(frozen=True)
-class HttpRetrievalHandle:
-    response: ObservedHttpResponse
-    body: Path
-
-
-@dataclass(frozen=True)
-class DownloadContext(Context[viper.parameters.Download]):
-    retrievals: Mapping[InputName, HttpRetrievalHandle]
 
 
 class InternalSpec(ParameterizedSpec):
@@ -2648,16 +2618,16 @@ class EvaluateSpec(InternalSpec):
     params: viper.parameters.Evaluate
 
 
-ParameterizedStageSpec = DownloadSpec | BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
+ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
 
 
 Spec = Annotated[
-    ParameterizedStageSpec,
+    DownloadSpec | ParameterizedStageSpec,
     Field(discriminator="kind"),
 ]
 ```
 
-`StageImplementationRef` identifies the callable. The runner validates
+`StageImplementationRef` identifies a project stage callable. The runner validates
 `ParameterizedSpec.params` through `ParameterModelRef`, constructs one
 `Context`, and passes it as the callable's sole argument:
 
@@ -2675,25 +2645,26 @@ exact callable(Context)
 The runtime context contains absolute attempt-workspace paths and the named
 NumPy generator objects initialized by the child. Its persisted
 `StageContextBinding` contains the canonical repository-relative paths, the
-metric IDs bound to runner-owned handles, and the sorted generator names. For
-a download stage, it also binds each terminal HTTP response to the path,
-SHA-256, and byte count delivered through `DownloadContext`.
+metric IDs bound to runner-owned handles, and the sorted generator names.
+Download stages run inside the attempt process and therefore do not create a
+`StageContextBinding` or `StageInvocationReceipt`.
 
-`http_transport()` from `viper.http` decorates one project transport callable. Freezing
+`http()` from `viper.http` decorates one project HTTP callable. Freezing
 resolves its repository-relative path, symbol, SHA-256, byte count, parameter
-class, and parameter values into `ProjectHttpTransportSpec`. During execution,
-the runner constructs one `HttpTransportContext`, invokes the selected
-transport, hashes the returned body, and constructs `ResolvedHttpRetrieval`.
+class, and parameter values into `ProjectHttpImplementationSpec`. During
+execution, the runner constructs one `HttpContext`, invokes the selected HTTP
+implementation, hashes the returned body, and constructs
+`ResolvedHttpRetrieval`.
 
-The runner assigns each `HttpTransportContext` a dedicated retrieval workspace
-and an exact destination within it. A selected transport may use the workspace
+The runner assigns each `HttpContext` a dedicated retrieval workspace and an
+exact destination within it. A selected implementation may use the workspace
 for temporary transfer files and returns only after the completed body exists
 at the destination.
 
-`DownloadContext.retrievals` exposes the verified bodies already retrieved for
-each frozen input. The experimental plan fixes one expected body identity for
-each request. Dynamic acquisition publishes observed content before a later
-experimental run selects it.
+The runner publishes each verified response directly as the same-named
+single-file download artifact. The experimental plan fixes one expected body
+identity for each request. Dynamic acquisition publishes observed content
+before a later experimental run selects it.
 
 Each core parameter class preserves a versioned JSON mapping. Every stage
 selects a project-owned Pydantic subclass through `parameter_model`.
@@ -2718,7 +2689,7 @@ Within one stage spec:
 2. Artifact names are unique.
 3. Stored-input paths are pairwise non-overlapping.
 4. Artifact roots are pairwise non-overlapping.
-5. Input paths, artifact roots, and `BaseSpec.implementation.path` are pairwise
+5. Input paths, artifact roots, and `ParameterizedSpec.implementation.path` are pairwise
    non-overlapping.
 6. `parameters` and `resume_state` occur only as training-stage
    artifacts.
@@ -2753,17 +2724,17 @@ class ResolvedExternalExecutable(ProtocolModel):
     path: Path
 
 
-class ResolvedHttpTransport(ProtocolModel):
-    spec: HttpTransportSpec
+class ResolvedHttpImplementation(ProtocolModel):
+    spec: HttpImplementationSpec
     external_executables: tuple[ResolvedExternalExecutable, ...] = ()
 
 
 class ResolvedHttpRetrieval(ProtocolModel):
     input_name: InputName
     request: HttpRequestSpec
-    transport: ResolvedHttpTransport
+    http: ResolvedHttpImplementation
     response: ObservedHttpResponse
-    body: ResolvedFileRef
+    body: SnapshotFileRef
     started_at: AwareDatetime
     completed_at: AwareDatetime
 
@@ -2774,7 +2745,15 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
     retrievals: dict[InputName, ResolvedHttpRetrieval]
 
 
-class ResolvedInternalSpec(ResolvedBaseSpec):
+class ResolvedParameterizedSpec(ResolvedBaseSpec):
+    spec: ParameterizedSpec
+    source: ResolvedGitFileRef
+    startup: ProcessStartupReceipt
+    invocation: ResolvedStageInvocationRef
+    command: tuple[str, ...] = Field(min_length=1)
+
+
+class ResolvedInternalSpec(ResolvedParameterizedSpec):
     spec: InternalSpec
     inputs: dict[InputName, ResolvedInputRef]
 
@@ -2818,22 +2797,22 @@ keys(ResolvedDownloadSpec.retrievals)
 ResolvedHttpRetrieval.request
 == ResolvedDownloadSpec.spec.inputs[ResolvedHttpRetrieval.input_name]
 
-ResolvedHttpRetrieval.transport.spec
-== ResolvedDownloadSpec.spec.transport
+ResolvedHttpRetrieval.http.spec
+== ResolvedDownloadSpec.spec.http
 ```
 
 Each retrieval interval lies within the containing attempt and precedes stage
-completion. `ResolvedHttpRetrieval.body` identifies the completed file.
-`DownloadContext.retrievals` supplies one verified body per input to the stage
-callable. A promoted download artifact can then serve as a stored input
-selected by a later run.
+completion. `ResolvedHttpRetrieval.body` and the same-named
+`ResolvedSingleFileArtifact.file` contain the same `SnapshotFileRef`. A
+download artifact can then serve as a same-run or stored input selected by a
+later stage.
 
-Redirects and segmented range requests remain internal to one transport
+Redirects and segmented range requests remain internal to one HTTP
 invocation. Dynamic pagination and scraping belong to discovery work that
 publishes immutable files before an experimental plan selects them.
 
-VIPER 0.1 trusts the project source identified by `RunSpec.source` to use the
-delivered handles for network input. A future confinement contract will
+VIPER 0.1 trusts project-owned stage source identified by `RunSpec.source` not
+to bypass the runner-owned download path. A future confinement contract will
 restrict direct outbound network access by project code.
 
 For every resolved stage:
@@ -3436,24 +3415,22 @@ For each `ResolvedStageRef`, the verifier:
 3. Parses the file through the `ResolvedSpec` union.
 4. Requires its embedded stage spec to equal the stage spec selected by the
    corresponding `RunStageRef`.
-5. Verifies `ResolvedBaseSpec.source` against `RunSpec.source` and
-   `BaseSpec.implementation`.
-6. Resolves the selected stage environment and checks `ResolvedEnvironment`,
-   `ExecutionContext`, and `ProcessStartupReceipt` under Section 15.
-7. Retrieves `ResolvedBaseSpec.invocation`, verifies its file identity, and
-   parses `StageInvocationReceipt`.
-8. Reconstructs `StageContextBinding`; checks its parameter digest, input and
-   artifact paths, download retrieval handles, metric IDs, named NumPy
-   generator keys, canonical context digest, callable identity, and successful
-   outcome against the receipt.
-9. Checks the recorded child-process command.
-10. Checks the resolved input names and kinds against the planned inputs.
-11. Checks that `completed_at` lies within the containing attempt and is at or
+5. Resolves the selected stage environment and checks `ResolvedEnvironment`
+   and `ExecutionContext` under Section 15.
+6. For a parameterized stage, verifies `ResolvedParameterizedSpec.source`
+   against `RunSpec.source` and `ParameterizedSpec.implementation`; verifies
+   its `ProcessStartupReceipt`, `ResolvedStageInvocationRef`, and command; and
+   reconstructs `StageContextBinding` from the invocation receipt.
+7. Checks the parameter digest, input and artifact paths, metric IDs, named
+   NumPy generator keys, canonical context digest, callable identity, and
+   successful outcome for each parameterized stage.
+8. Checks the resolved input names and kinds against the planned inputs.
+9. Checks that `completed_at` lies within the containing attempt and is at or
     after the prior completed stage.
-12. For a download stage, verifies each input-keyed retrieval, frozen request,
-    transport identity, transport parameters, executable identity, terminal
-    response, expected body identity, resolved body identity, completion
-    interval, and delivered handle.
+10. For a download stage, verifies each input-keyed retrieval, frozen request,
+    HTTP implementation, implementation parameters, executable identity,
+    terminal response, expected body identity, resolved body identity, and
+    completion interval.
 
 These checks establish that the recorded runtime state satisfies:
 
@@ -3622,8 +3599,8 @@ The protocol publishes immutable snapshots in dependency order:
 |---|---|---|
 | A | Git | Source, experiment records, benchmark specs, loaders, lockfile, and existing promotion pointers. |
 | B | Git | One `RunSpec` and every stage-spec file identified by it. |
-| $I_{i,j}$ | Artifact repository | The invocation receipt for stage $j$ of attempt $i$. |
-| $C_{i,j}$ | Artifact repository | The resolved spec, every retrieved body, and every artifact file for stage $j$ of attempt $i$. |
+| $I_{i,j}$ | Artifact repository | The invocation receipt for parameterized stage $j$ of attempt $i$. Download stages do not create this snapshot. |
+| $C_{i,j}$ | Artifact repository | The resolved spec and every artifact file for stage $j$ of attempt $i$; each download body is its same-named artifact file. |
 | $D_i$ | Artifact repository | Attempt document, journal, invocation references, metric-verification receipts, measurements, and logs for attempt $i$. |
 | E | Artifact repository | The terminal `ResolvedRun`. |
 | F | Artifact repository | The optional `BenchmarkResult`. |
@@ -3656,22 +3633,23 @@ For attempt $i$:
    environment.
 7. Launch the controlled child and record `ProcessStartupReceipt` and
    `ExecutionContext`.
-8. For a download stage, validate and invoke the selected HTTP transport for
-   every frozen request, persist each body, and construct `DownloadContext`.
-9. Validate the stage parameter model, bind the configured named NumPy
-   generators, construct the applicable typed context, and invoke the exact
+8. For a download stage, invoke the selected `HttpImplementationSpec` for every
+   frozen request and atomically publish each verified body as its same-named
+   single-file artifact.
+9. For a parameterized stage, validate the stage parameter model, bind the
+   configured named NumPy generators, construct `Context`, and invoke the exact
    callable selected by `StageImplementationRef`.
-10. Record and publish `StageInvocationReceipt` as snapshot $I_{i,j}$.
-11. Construct `ResolvedStageInvocationRef` from the published receipt.
-12. Resolve every declared artifact and construct the resolved stage spec.
-13. Publish the resolved stage spec, every retrieved body, and every artifact
-    file together as snapshot $C_{i,j}$.
-14. Retrieve and verify the complete snapshot, including its invocation
-    reference.
-15. Construct `ResolvedStageRef` from the returned snapshot commit and resolved
+10. For a parameterized stage, record and publish `StageInvocationReceipt` as
+    snapshot $I_{i,j}$, then construct `ResolvedStageInvocationRef`.
+11. Resolve every declared artifact and construct the resolved stage spec.
+12. Publish the resolved stage spec and every artifact file together as
+    snapshot $C_{i,j}$.
+13. Retrieve and verify the complete snapshot, including the invocation
+    reference for a parameterized stage.
+14. Construct `ResolvedStageRef` from the returned snapshot commit and resolved
     stage-spec file identity.
-16. Append the verified stage result and invocation reference to the current
-    attempt.
+15. Append the verified stage result and any invocation reference to the
+    current attempt.
 
 After the attempt reaches a terminal status:
 
@@ -3689,14 +3667,13 @@ After the attempt reaches a terminal status:
 stage execution
         │
         ▼
-snapshot I_i,j
+snapshot I_i,j (parameterized stages only)
 └── invocation receipt
         │
         ▼
 snapshot C_i,j
 ├── resolved stage spec
-├── invocation reference → snapshot I_i,j
-├── every retrieved body for a download stage
+├── invocation reference → snapshot I_i,j (parameterized stages only)
 └── every file in every named artifact
         │
         ▼
@@ -3836,8 +3813,8 @@ immutable local copies. Editing a working artifact makes the working tree
 differ from its published snapshot. Verification and restore use the immutable
 snapshot reference.
 
-Each `BaseSpec.implementation.path`, project
-`HttpTransportImplementationRef.path`, `MetricSpec.implementation.path`, and
+Each `ParameterizedSpec.implementation.path`, project
+`HttpImplementationRef.path`, `MetricSpec.implementation.path`, and
 `ArtifactSpec.loader.path` records its selected Python file as a
 `PythonRepoRelPath` value. For example, each of these paths is valid:
 
@@ -3850,11 +3827,11 @@ loaders/model_bundle.py
 ```
 
 `RunSpec.source` fixes the exact bytes of every entrypoint, imported production
-module, project transport, metric, and artifact loader.
+module, project HTTP implementation, metric, and artifact loader.
 
 When a project uses `tools/`, that directory contains repository-maintenance,
 migration, generation, and inspection utilities. A tool has one documented
-purpose. `BaseSpec.implementation` selects production stage source.
+purpose. `ParameterizedSpec.implementation` selects production stage source.
 
 When a project uses `tests/`, that directory contains deterministic checks for
 its entrypoints, metrics, and loaders. Test files may be present in the source

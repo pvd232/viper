@@ -1,6 +1,6 @@
 # VIPER Master Execution Checklist
 
-Start with the first open block in Master Phase 1. Master Phase 0 established
+Start with the first open block in Master Phase 3. Master Phase 0 established
 the traceability, repository-root, ownership, and impact evidence required by
 every later phase.
 
@@ -280,7 +280,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
-| [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
+| [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
@@ -336,7 +336,7 @@ a new digest.
 <!-- contract-baseline: project-data-root.md sha256=fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb -->
 <!-- contract-baseline: module-ownership.md sha256=135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea -->
 <!-- contract-baseline: system-impact-compiler.md sha256=89ee53748fc5b0a154feaedc6173f5604db71e4302ea0b9e5e3c306350a118de -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=00808701b78fd2cb335a6ac5b8236b4f29ffb325c6fff910ea6999f31778cffe -->
+<!-- contract-baseline: download-retrieval-artifacts.md sha256=c4ee06aaefa8fc60f812ab213a5b2a12c720c082a2f88f4ad9c3312bd0692112 -->
 <!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
 <!-- contract-baseline: automatic-input-resolution.md sha256=fde97fbf294f74170bac1e64bc2557ec0e97ef5db6d219c4eb30eef76a3f9184 -->
@@ -1085,17 +1085,6 @@ python -m pytest \
 
 ## 9. Master Phase 2 — runner-owned download stages
 
-<!-- contract-implementation: requirement=DRA-01 rule=download.model.complete state=planned owner=src/viper/protocol.py:DownloadSpec -->
-<!-- contract-verification: requirement=DRA-01 rule=download.model.complete state=planned test=tests/test_protocol.py:test_download_models_use_runner_owned_hierarchy -->
-<!-- contract-implementation: requirement=DRA-02 rule=download.runner.custody state=planned owner=src/viper/execution/_attempt.py:execute_attempt -->
-<!-- contract-verification: requirement=DRA-02 rule=download.runner.custody state=planned test=tests/test_run_execution.py:test_download_runs_inside_attempt_process -->
-<!-- contract-implementation: requirement=DRA-03 rule=download.artifact.identity state=planned owner=src/viper/execution/_downloads.py:publish_download_body -->
-<!-- contract-verification: requirement=DRA-03 rule=download.artifact.identity state=planned test=tests/test_execution_acceptance.py:test_download_body_becomes_declared_artifact -->
-<!-- contract-implementation: requirement=DRA-04 rule=download.verification.identity state=planned owner=src/viper/_verification/attempt.py:verify_download -->
-<!-- contract-verification: requirement=DRA-04 rule=download.verification.identity state=planned test=tests/test_verification_acceptance.py:test_download_verification_binds_receipt_to_artifact -->
-<!-- contract-implementation: requirement=DRA-05 rule=download.legacy.removed state=planned owner=src/viper/project.py:init -->
-<!-- contract-verification: requirement=DRA-05 rule=download.legacy.removed state=planned test=tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads -->
-
 **Depends on:** Master Phase 1.
 
 **Contracts:** [Download retrieval artifacts](download-retrieval-artifacts.md),
@@ -1106,35 +1095,40 @@ single-file artifact. Both records identify one snapshot file.
 
 ### 9.1 Frozen and resolved models
 
-- [ ] Keep `src/viper/http.py` as the defining public HTTP module. Define the
+- [x] Keep `src/viper/http.py` as the defining public HTTP module. Define the
       `http` decorator and every supported HTTP type there. List only local
       definitions in `viper.http.__all__`.
-- [ ] In `src/viper/http.py`, rename `HttpTransportImplementationRef`,
+- [x] In `src/viper/http.py`, rename `HttpTransportImplementationRef`,
       `BuiltinHttpTransportSpec`, `ProjectHttpTransportSpec`,
       `HttpTransportSpec`, and `ResolvedHttpTransport` to
       `HttpImplementationRef`, `BuiltinHttpImplementationSpec`,
       `ProjectHttpImplementationSpec`, `HttpImplementationSpec`, and
       `ResolvedHttpImplementation`.
-- [ ] Rename `transport_id` to `id`, `DownloadSpec.transport` to
+- [x] Rename `transport_id` to `id`, `DownloadSpec.transport` to
       `DownloadSpec.http`, and `ResolvedHttpRetrieval.transport` to
       `ResolvedHttpRetrieval.http`. Regenerate every YAML fixture with the new
       serialized field names.
-- [ ] Rename `parameters.HttpTransport` to `parameters.Http` and update its
+- [x] Rename `parameters.HttpTransport` to `parameters.Http` and update its
       validators, parameter-model references, fixtures, and public alias.
-- [ ] Move `implementation` and `parameter_model` from `BaseSpec` to
+- [x] Move `implementation` and `parameter_model` from `BaseSpec` to
       `ParameterizedSpec` in `src/viper/stages.py`.
-- [ ] Make `DownloadSpec` inherit `BaseSpec` directly and complete the
+- [x] Make `DownloadSpec` inherit `BaseSpec` directly and complete the
       runner-owned frozen and resolved model hierarchy in Section 8.1.
+      <!-- pair-block: P2-DRA-01 -->
+      <!-- pair-block-contract: P2-DRA-01 contract=download-retrieval-artifacts.md -->
       <!-- implements: DRA-01 -->
-- [ ] Require equal `DownloadSpec.inputs` and `DownloadSpec.artifacts` keys.
-- [ ] Require every download artifact to be `SingleFileArtifactSpec`.
-- [ ] Move project invocation fields from `ResolvedBaseSpec` to
+      <!-- contract-implementation: requirement=DRA-01 rule=download.model.complete state=implemented owner=src/viper/stages.py:DownloadSpec -->
+      <!-- contract-verification: requirement=DRA-01 rule=download.model.complete state=implemented test=tests/test_protocol.py:test_download_models_use_runner_owned_hierarchy -->
+- [x] Require equal `DownloadSpec.inputs` and `DownloadSpec.artifacts` keys.
+- [x] Require every download artifact to be `SingleFileArtifactSpec`.
+- [x] Move project invocation fields from `ResolvedBaseSpec` to
       `ResolvedParameterizedSpec`.
-- [ ] Keep `ResolvedDownloadSpec` runner-owned.
-- [ ] Change `ResolvedHttpRetrieval.body` to `SnapshotFileRef`.
-- [ ] Require `retrievals[name].body == artifacts[name].file`.
-- [ ] Delete `parameters.Download`, `DownloadContext`, `DownloadVariantStageParams`,
-      `@download_stage`, and their exports.
+- [x] Keep `ResolvedDownloadSpec` runner-owned.
+- [x] Change `ResolvedHttpRetrieval.body` to `SnapshotFileRef`.
+- [x] Require `retrievals[name].body == artifacts[name].file`.
+- [x] Delete `parameters.Download`, `DownloadContext`,
+      `DownloadVariantStageParams`, the `download()` stage decorator, and their
+      exports.
 
 <details>
 <summary>Hints</summary>
@@ -1152,48 +1146,62 @@ receipt and artifact.
 
 ### 9.2 Execution
 
-- [ ] Rename `HttpTransportContext`, `HttpTransportResult`,
+- [x] Rename `HttpTransportContext`, `HttpTransportResult`,
       `HttpTransportCallable`, and their definition and type-variable peers to
       `HttpContext`, `HttpResult`, `HttpCallable`, and the matching `Http*`
       names.
-- [ ] Rename `resolve_transport()`, `invoke_transport()`, and `_httpx_transport`
+- [x] Rename `resolve_transport()`, `invoke_transport()`, and `_httpx_transport`
       to `resolve_http()`, `invoke_http()`, and `_httpx_request`; update preflight,
       execution, recovery, and verification callers.
-- [ ] Change `execution/_materialization.py:retrieve_download_inputs()` to
+- [x] Change `execution/_materialization.py:retrieve_download_inputs()` to
       write each verified body directly at its frozen artifact path.
-- [ ] Add `publish_download_body()`. Stream the HTTP result file into a temporary
+- [x] Add `publish_download_body()`. Stream the HTTP result file into a temporary
       artifact sibling, hash the bytes written, compare the frozen digest and
       byte count, then atomically replace the artifact path.
+      <!-- pair-block: P2-DRA-02 -->
+      <!-- pair-block-contract: P2-DRA-02 contract=download-retrieval-artifacts.md -->
       <!-- implements: DRA-03 -->
-- [ ] Remove the separate retrieval-body path from `src/viper/paths.py`.
-- [ ] Remove download worker invocation from `execution/_attempt.py`.
+      <!-- contract-implementation: requirement=DRA-03 rule=download.artifact.identity state=implemented owner=src/viper/execution/_downloads.py:publish_download_body -->
+      <!-- contract-verification: requirement=DRA-03 rule=download.artifact.identity state=implemented test=tests/test_execution_acceptance.py:test_download_body_becomes_declared_artifact -->
+      <!-- contract-implementation: requirement=DRA-02 rule=download.runner.custody state=implemented owner=src/viper/execution/_attempt.py:execute_attempt -->
+      <!-- contract-verification: requirement=DRA-02 rule=download.runner.custody state=implemented test=tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifies_terminal_result -->
+- [x] Remove the separate retrieval-body path from `src/viper/paths.py`.
+- [x] Remove download worker invocation from `execution/_attempt.py`.
       <!-- implements: DRA-02 -->
-- [ ] Construct `ResolvedDownloadSpec` in the runner after retrieval.
-- [ ] Publish the resolved stage document and each unique body path once.
-- [ ] Remove download handling from `_workers/stages.py`.
-- [ ] Add the HTTP receipt-artifact verifier in `_verification/attempt.py`.
+- [x] Construct `ResolvedDownloadSpec` in the runner after retrieval.
+- [x] Publish the resolved stage document and each unique body path once.
+- [x] Remove download handling from `_workers/stages.py`.
+- [x] Add the HTTP receipt-artifact verifier in `_verification/attempt.py`.
+      <!-- pair-block: P2-DRA-03 -->
+      <!-- pair-block-contract: P2-DRA-03 contract=download-retrieval-artifacts.md -->
       <!-- implements: DRA-04 -->
+      <!-- contract-implementation: requirement=DRA-04 rule=download.verification.identity state=implemented owner=src/viper/_verification/attempt.py:_verify_download_retrievals -->
+      <!-- contract-verification: requirement=DRA-04 rule=download.verification.identity state=implemented test=tests/test_verification_acceptance.py:test_download_verification_binds_receipt_to_artifact -->
 
 ### 9.3 Focused proof
 
-- [ ] Define `http`, `HttpRequestSpec`, `HttpRetrievalPolicy`,
+- [x] Define `http`, `HttpRequestSpec`, `HttpRetrievalPolicy`,
       `ObservedHttpResponse`, `HttpRetrievalError`, `HttpContext`, and
       `HttpResult` in `src/viper/http.py`. List only those local definitions in
       that module's `__all__`. Keep `src/viper/__init__.py` free of forwarding
       exports. Update `tests/test_public_api.py`, protocol fixtures, and schema
       assertions.
-- [ ] Add a repository search assertion that permits `transport` only in the
+- [x] Add a repository search assertion that permits `transport` only in the
       migration tables of the development contracts until those tables retire.
-- [ ] Update `tests/test_http_retrieval.py` for the shared file.
-- [ ] Update `tests/test_run_execution.py` for a runner-owned download.
-- [ ] Update `tests/test_execution_acceptance.py` for one snapshot copy.
-- [ ] Add a same-byte-count body mutation between HTTP validation and
+- [x] Update `tests/test_http_retrieval.py` for the shared file.
+- [x] Update `tests/test_run_execution.py` for a runner-owned download.
+- [x] Update `tests/test_execution_acceptance.py` for one snapshot copy.
+- [x] Add a same-byte-count body mutation between HTTP validation and
       artifact publication. Require `download.runner_custody` to reject it.
-- [ ] Remove callable-copy fixtures from `tests/fixtures.py` and generated
-      project tests. Replace the generated download callable in
-      `src/viper/project.py` with `viper.authoring.download()` authoring.
+- [x] Remove callable-copy fixtures from `tests/fixtures.py` and generated
+      project tests. Omit project-owned download code from the generated
+      scaffold; Master Phase 6 adds `viper.authoring.download()`.
+      <!-- pair-block: P2-DRA-04 -->
+      <!-- pair-block-contract: P2-DRA-04 contract=download-retrieval-artifacts.md -->
       <!-- implements: DRA-05 -->
-- [ ] Run: <!-- verifies: DRA-01, DRA-02, DRA-03, DRA-04, DRA-05 -->
+      <!-- contract-implementation: requirement=DRA-05 rule=download.legacy.removed state=implemented owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=DRA-05 rule=download.legacy.removed state=implemented test=tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads -->
+- [x] Run: <!-- verifies: DRA-01, DRA-02, DRA-03, DRA-04, DRA-05 -->
 
 ```bash
 python -m pytest \

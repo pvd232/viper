@@ -41,7 +41,9 @@ from viper.runtime import (
 )
 from viper.serialization import load_stage_spec
 from viper.stages import (
+    DownloadSpec,
     EvaluateSpec,
+    ParameterizedSpec,
     TrainSpec,
 )
 
@@ -956,6 +958,21 @@ class YAMLLoadingTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "mapping keys must be scalar"):
                 load_stage_spec(path)
+
+
+def test_download_models_use_runner_owned_hierarchy() -> None:
+    """Keep download requests outside the project-callable stage hierarchy."""
+    stage = load_stage_spec(
+        Path(__file__).parents[1] / "tests" / "data" / "download_stage.yaml"
+    )
+
+    assert isinstance(stage, DownloadSpec)
+    assert not isinstance(stage, ParameterizedSpec)
+    assert "implementation" not in type(stage).model_fields
+    assert "parameter_model" not in type(stage).model_fields
+    assert "params" not in type(stage).model_fields
+    assert set(stage.inputs) == set(stage.artifacts)
+    assert stage.http.kind == "builtin"
 
 
 class ExternalInputRootTests(unittest.TestCase):

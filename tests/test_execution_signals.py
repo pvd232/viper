@@ -19,7 +19,7 @@ import pytest
 import torch
 
 from tests.fixtures import (
-    builtin_http_transport,
+    builtin_http,
     http_policy,
     http_request,
     python_environment,
@@ -42,7 +42,6 @@ from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
 from viper.execution import run as execute_run
 from viper.execution._source import RunFetcher
 from viper.experiments import (
-    DownloadVariantStageParams,
     ExperimentSpec,
     ReplicateSpec,
     TrainVariantStageParams,
@@ -71,6 +70,7 @@ from viper.runtime import (
 from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
 from viper.stages import (
     DownloadSpec,
+    ResolvedTrainSpec,
     StageImplementationRef,
     StageInvocationReceipt,
     TrainSpec,
@@ -158,6 +158,7 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes
         )
     )
     source_files = {
+        "viper.toml": b"[project]\nschema_version = 1\n",
         "environment.yml": b"name: viper-signal-test\n",
         "project/loaders/bytes_file.py": (
             b"def load(path):\n    return path.read_bytes()\n"
@@ -166,24 +167,10 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes
             "def load(path):\n"
             f"    return {resume_state().model_dump(mode='python')!r}\n"
         ).encode(),
-        "project/parameters/download.py": (
-            b"from viper import parameters\n\n"
-            b"class SignalDownloadParameters(parameters.Download):\n"
-            b'    """Validate this fixture\'s download parameters."""\n'
-        ),
         "project/parameters/train.py": (
             b"from viper import parameters\n\n"
             b"class SignalTrainParameters(parameters.Train):\n"
             b'    """Validate this fixture\'s training parameters."""\n'
-        ),
-        "jobs/download.py": (
-            b"from project.parameters.download import SignalDownloadParameters\n"
-            b"from viper.stages import download\n\n"
-            b"@download(params=SignalDownloadParameters)\n"
-            b"def download(context):\n"
-            b"    target = context.artifacts['prior']\n"
-            b"    target.parent.mkdir(parents=True, exist_ok=True)\n"
-            b"    target.write_bytes(context.retrievals['source'].body.read_bytes())\n"
         ),
         "jobs/train.py": (
             b"import os\n"
@@ -228,10 +215,6 @@ def _freeze_signal_plan(
         variant_id="baseline",
         levels={},
         stage_params=(
-            DownloadVariantStageParams(
-                stage_id="download",
-                params=parameters.Download(),
-            ),
             TrainVariantStageParams(stage_id="train", params=parameters.Train()),
         ),
     )
@@ -276,27 +259,13 @@ def _freeze_signal_plan(
         bytes=len(source_files["project/loaders/resume_state.py"]),
     )
     download = DownloadSpec(
-        implementation=StageImplementationRef(
-            path="jobs/download.py",
-            symbol="download",
-            sha256=hashlib.sha256(source_files["jobs/download.py"]).hexdigest(),
-            bytes=len(source_files["jobs/download.py"]),
-        ),
-        parameter_model=ParameterModelRef(
-            path="project/parameters/download.py",
-            symbol="SignalDownloadParameters",
-            sha256=hashlib.sha256(
-                source_files["project/parameters/download.py"]
-            ).hexdigest(),
-            bytes=len(source_files["project/parameters/download.py"]),
-        ),
         inputs={
-            "source": http_request(
+            "prior": http_request(
                 url=f"http://{host}:{port}/prior",
                 body=b"prior",
             )
         },
-        transport=builtin_http_transport(),
+        http=builtin_http(),
         policy=http_policy(
             hosts=frozenset({host}),
             ports=frozenset({port}),
@@ -308,7 +277,6 @@ def _freeze_signal_plan(
                 data_role="training",
             )
         },
-        params=parameters.Download(),
     )
     train = TrainSpec(
         implementation=StageImplementationRef(
@@ -429,6 +397,7 @@ def test_live_l4_stage_records_requested_backend(
     )
 
     train_result = verified.resolved_stages["train"]
+    assert isinstance(train_result, ResolvedTrainSpec)
     backend = train_result.execution_context.backend
 
     assert result.resolved_run.status == "succeeded"
@@ -546,7 +515,7 @@ def test_signal_closes_attempt_with_active_stage_evidence(
     assert attempt.failure is not None
     assert attempt.failure.code == expected_code
     assert tuple(stage.stage_id for stage in attempt.resolved_stages) == ("download",)
-    assert len(attempt.invocations) == 2
+    assert len(attempt.invocations) == 1
     interrupted_receipt = StageInvocationReceipt.model_validate(
         parse_yaml_bytes(store.fetch(attempt.invocations[-1].stored_at))
     )

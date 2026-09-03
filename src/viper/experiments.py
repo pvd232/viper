@@ -69,14 +69,6 @@ class ExperimentSpec(ProtocolModel):
         return self
 
 
-class DownloadVariantStageParams(ProtocolModel):
-    """Bind one download stage to its selected variant parameters."""
-
-    kind: Literal["download"] = "download"
-    stage_id: StageId
-    params: parameters.Download
-
-
 class BuildVariantStageParams(ProtocolModel):
     """Bind one build stage to its selected variant parameters."""
 
@@ -110,8 +102,7 @@ class EvaluateVariantStageParams(ProtocolModel):
 
 
 VariantStageParams = Annotated[
-    DownloadVariantStageParams
-    | BuildVariantStageParams
+    BuildVariantStageParams
     | EmbedVariantStageParams
     | TrainVariantStageParams
     | EvaluateVariantStageParams,

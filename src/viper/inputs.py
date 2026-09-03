@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from viper.http import HttpRequestSpec, HttpRetrievalPolicy, HttpTransportSpec
+from viper.http import HttpImplementationSpec, HttpRequestSpec, HttpRetrievalPolicy
 
 from ._schema import (
     ArtifactName,
@@ -39,7 +39,7 @@ class HttpSource(ProtocolModel):
     kind: Literal["http"] = "http"
     request: HttpRequestSpec
     policy: HttpRetrievalPolicy
-    transport: HttpTransportSpec
+    http: HttpImplementationSpec
 
 
 ExternalInputSource = Annotated[LocalSource | HttpSource, Field(discriminator="kind")]

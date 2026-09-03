@@ -23,8 +23,8 @@ from ._verification.plan import (
 from ._verification.storage import fetch_storage_bytes
 from .http import (
     HttpRetrievalError,
-    ProjectHttpTransportSpec,
-    resolve_transport,
+    ProjectHttpImplementationSpec,
+    resolve_http,
     validate_request_policy,
 )
 from .ids import StageId
@@ -61,7 +61,7 @@ PreflightCheckCode = Literal[
     "environment.python",
     "http.credentials",
     "http.request",
-    "http.transport.identity",
+    "http.implementation",
     "input.future",
     "metric.implementation",
     "parameter_model.identity",
@@ -229,43 +229,44 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
         checks.append(_check("stage.document", reference.stage_id, True, ""))
         loaded[reference.stage_id] = stage
 
-        implementation_path = root / stage.implementation.path
-        try:
-            implementation_raw = implementation_path.read_bytes()
-            verify_stage_implementation_bytes(
-                stage.implementation,
-                implementation_raw,
-            )
-            implementation_exists = (
-                implementation_path.is_file()
-                and implementation_raw
-                == _git_bytes(root, run.source.commit, stage.implementation.path)
-            )
-        except (OSError, subprocess.CalledProcessError, StageDefinitionError):
-            implementation_exists = False
-        checks.append(
-            _check(
-                "stage.implementation",
-                reference.stage_id,
-                implementation_exists,
-                "stage implementation differs from the frozen source commit",
-            )
-        )
-        callable_valid = False
-        if implementation_exists:
+        if isinstance(stage, ParameterizedSpec):
+            implementation_path = root / stage.implementation.path
             try:
-                validate_stage_definition(root, stage)
-                callable_valid = True
-            except (OSError, StageDefinitionError):
-                pass
-        checks.append(
-            _check(
-                "stage.callable",
-                reference.stage_id,
-                callable_valid,
-                "stage callable decorator differs from the frozen stage contract",
+                implementation_raw = implementation_path.read_bytes()
+                verify_stage_implementation_bytes(
+                    stage.implementation,
+                    implementation_raw,
+                )
+                implementation_exists = (
+                    implementation_path.is_file()
+                    and implementation_raw
+                    == _git_bytes(root, run.source.commit, stage.implementation.path)
+                )
+            except (OSError, subprocess.CalledProcessError, StageDefinitionError):
+                implementation_exists = False
+            checks.append(
+                _check(
+                    "stage.implementation",
+                    reference.stage_id,
+                    implementation_exists,
+                    "stage implementation differs from the frozen source commit",
+                )
             )
-        )
+            callable_valid = False
+            if implementation_exists:
+                try:
+                    validate_stage_definition(root, stage)
+                    callable_valid = True
+                except (OSError, StageDefinitionError):
+                    pass
+            checks.append(
+                _check(
+                    "stage.callable",
+                    reference.stage_id,
+                    callable_valid,
+                    "stage callable decorator differs from the frozen stage contract",
+                )
+            )
         effective_environment = stage.environment or run.environment
         checks.append(
             _check(
@@ -416,35 +417,35 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
                     "one or more required HTTP credentials are unavailable",
                 )
             )
-            transport_valid = True
+            implementation_valid = True
             try:
-                resolve_transport(root, stage.transport)
-                if isinstance(stage.transport, ProjectHttpTransportSpec):
-                    transport_valid = (
-                        root / stage.transport.implementation.path
+                resolve_http(root, stage.http)
+                if isinstance(stage.http, ProjectHttpImplementationSpec):
+                    implementation_valid = (
+                        root / stage.http.implementation.path
                     ).read_bytes() == _git_bytes(
                         root,
                         run.source.commit,
-                        stage.transport.implementation.path,
+                        stage.http.implementation.path,
                     ) and (
-                        root / stage.transport.parameter_model.path
+                        root / stage.http.parameter_model.path
                     ).read_bytes() == _git_bytes(
                         root,
                         run.source.commit,
-                        stage.transport.parameter_model.path,
+                        stage.http.parameter_model.path,
                     )
             except (
                 HttpRetrievalError,
                 OSError,
                 subprocess.CalledProcessError,
             ):
-                transport_valid = False
+                implementation_valid = False
             checks.append(
                 _check(
-                    "http.transport.identity",
+                    "http.implementation",
                     reference.stage_id,
-                    transport_valid,
-                    "selected HTTP transport failed source or executable checks",
+                    implementation_valid,
+                    "selected HTTP implementation failed source or executable checks",
                 )
             )
 

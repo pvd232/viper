@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from tests.fixtures import (
-    builtin_http_transport,
+    builtin_http,
     http_policy,
     http_request,
     python_environment,
@@ -44,7 +44,6 @@ from viper.execution._source import RunFetcher
 from viper.execution._stage import StageExecutionError, execute_stage_process
 from viper.execution.errors import RunError
 from viper.experiments import (
-    DownloadVariantStageParams,
     ExperimentSpec,
     ReplicateSpec,
     TrainVariantStageParams,
@@ -236,13 +235,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         experiment_id="example",
         variant_id="baseline",
         levels={},
-        stage_params=(
-            DownloadVariantStageParams(
-                stage_id="download",
-                params=parameters.Download(),
-            ),
-            TrainVariantStageParams(stage_id="train", params=train_params),
-        ),
+        stage_params=(TrainVariantStageParams(stage_id="train", params=train_params),),
     )
     source_files = {
         "viper.toml": b"[project]\nschema_version = 1\n",
@@ -263,21 +256,6 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             b"    epochs: int = Field(gt=0)\n"
             b"    batch_size: int = Field(gt=0)\n"
             b"    learning_rate: float = Field(gt=0)\n"
-        ),
-        "project/parameters/download.py": (
-            b"from viper import parameters\n\n"
-            b"class TinyDownloadParameters(parameters.Download):\n"
-            b'    """Validate the download parameters used by this project."""\n'
-        ),
-        "jobs/download.py": (
-            b"from project.parameters.download import TinyDownloadParameters\n"
-            b"from viper.stages import download\n\n"
-            b"@download(params=TinyDownloadParameters)\n"
-            b"def download(context):\n"
-            b"    path = context.artifacts['prior']\n"
-            b"    path.parent.mkdir(parents=True, exist_ok=True)\n"
-            b"    body = context.retrievals['source'].body\n"
-            b"    path.write_bytes(body.read_bytes())\n"
         ),
         "jobs/train.py": (
             b"from project.parameters.train import TinyTrainParameters\n"
@@ -334,27 +312,13 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         )
     host, port = http_source
     download = DownloadSpec(
-        implementation=StageImplementationRef(
-            path="jobs/download.py",
-            symbol="download",
-            sha256=hashlib.sha256(source_files["jobs/download.py"]).hexdigest(),
-            bytes=len(source_files["jobs/download.py"]),
-        ),
-        parameter_model=ParameterModelRef(
-            path="project/parameters/download.py",
-            symbol="TinyDownloadParameters",
-            sha256=hashlib.sha256(
-                source_files["project/parameters/download.py"]
-            ).hexdigest(),
-            bytes=len(source_files["project/parameters/download.py"]),
-        ),
         inputs={
-            "source": http_request(
+            "prior": http_request(
                 url=f"http://{host}:{port}/redirect",
                 body=b"prior",
             )
         },
-        transport=builtin_http_transport(),
+        http=builtin_http(),
         policy=http_policy(
             hosts=frozenset({host}),
             ports=frozenset({port}),
@@ -373,7 +337,6 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
                 data_role="training",
             )
         },
-        params=parameters.Download(),
     )
     train = TrainSpec(
         implementation=StageImplementationRef(
@@ -545,7 +508,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert failed_attempt.failure is not None
     assert failed_attempt.failure.code == "execution_failed"
     assert len(failed_attempt.resolved_stages) == 1
-    assert len(failed_attempt.invocations) == 2
+    assert len(failed_attempt.invocations) == 1
     assert (root / RUN_ROOT / "attempts/1/resolved.yaml").is_file()
     assert (root / RUN_ROOT / "attempts/2/resolved.yaml").is_file()
 
@@ -653,21 +616,6 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             fetcher=RunFetcher(root, store, REPOSITORY),
         )
     stored_artifact.write_bytes(b"prior")
-    stored_retrieval = (
-        root
-        / first_snapshot.store
-        / first_snapshot.commit
-        / f"{RUN_ROOT}/stages/download/retrievals/source/body"
-    )
-    stored_retrieval.write_bytes(b"PRIOR")
-    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
-        verify_run_result(
-            result.resolved_run,
-            policy=VerificationPolicy(
-                trusted_source_repositories=frozenset({REPOSITORY})
-            ),
-            fetcher=RunFetcher(root, store, REPOSITORY),
-        )
 
 
 def test_train_stage_captures_local_external_input(

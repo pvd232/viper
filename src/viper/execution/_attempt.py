@@ -34,6 +34,7 @@ from ..stages import (
     BaseSpec,
     DownloadSpec,
     InternalSpec,
+    ParameterizedSpec,
 )
 from ..storage import (
     LocalArtifactStore,
@@ -55,7 +56,12 @@ from ._publication import (
     write_synchronized,
 )
 from ._recovery import reconcile_abandoned_attempts
-from ._resolution import resolve_environment, resolve_stage
+from ._resolution import (
+    resolve_download_stage,
+    resolve_environment,
+    resolve_runner_environment,
+    resolve_stage,
+)
 from ._source import RunFetcher, resolve_git_file, run_git
 from ._stage import (
     StageExecutionError,
@@ -206,122 +212,141 @@ def execute_attempt(
             stage = load_stage_spec(root / stage_reference.spec)
             loaded_stages[stage_reference.stage_id] = stage
             effective_environment = stage.environment or run.environment
-            source_location = GitFileRef(
-                repository=run.source.repository,
-                commit=run.source.commit,
-                path=stage.implementation.path,
-            )
-            source = resolve_git_file(fetcher, source_location)
-            if (root / stage.implementation.path).read_bytes() != fetcher(
-                source_location
-            ):
-                raise RunError("stage source differs from the frozen source")
-
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             input_paths: dict[str, Path] = {}
-            if isinstance(stage, DownloadSpec):
-                resolved_retrievals, input_paths = retrieve_download_inputs(
-                    root,
-                    workspace,
-                    run,
-                    stage_reference.stage_id,
-                    stage,
-                    store,
-                )
-            elif isinstance(stage, InternalSpec):
-                resolved_inputs, input_paths = resolve_inputs(
-                    root,
-                    workspace,
-                    stage_reference.stage_id,
-                    stage,
-                    completed,
-                    loaded_stages,
-                    fetcher,
-                    policy,
-                    store,
-                )
-
+            process = None
             journal.append(
                 "running_stage",
-                "stage process started",
+                "stage execution started",
                 recorded_at=datetime.now(UTC),
                 details={"stage_id": stage_reference.stage_id},
             )
-            try:
-                process = execute_stage_process(
-                    root,
-                    run,
-                    stage_reference,
-                    stage,
-                    attempt_id=attempt_id,
-                    input_paths=input_paths,
-                    retrievals=resolved_retrievals,
-                    timeout_seconds=timeout_seconds,
-                )
-            except (StageExecutionError, StageProcessInterrupted) as exc:
-                run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
-                log_files[f"{run_log_root}/{stage_reference.stage_id}.stdout.log"] = (
-                    exc.stdout
-                )
-                log_files[f"{run_log_root}/{stage_reference.stage_id}.stderr.log"] = (
-                    exc.stderr
-                )
-                if exc.invocation is not None:
-                    invocation_path = (
-                        f"{run_root}/attempts/{attempt_id}/invocations/"
-                        f"{stage_reference.stage_id}.yaml"
-                    )
-                    invocation_refs.append(
-                        publish_invocation_receipt(
-                            root,
-                            destination,
-                            invocation_path,
-                            exc.invocation,
-                        )
-                    )
-                raise
-            metric_specs = {metric.metric_id: metric for metric in experiment.metrics}
-            for metric_id in stage.metric_ids:
-                if metric_specs[metric_id].mode != "live":
-                    continue
-                live_path = (
-                    root
-                    / (
-                        f"experiments/{run.experiment_id}/runs/"
-                        f"{run.variant_id}/{run.run_id}"
-                    )
-                    / f"attempts/{attempt_id}/measurements"
-                    / f"{stage_reference.stage_id}.{metric_id}.jsonl"
-                )
-                if live_path.is_file() and live_path not in measurement_paths:
-                    measurement_paths.append(live_path)
-            invocation_path = (
-                f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
-                f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
-            )
-            invocation_ref = publish_invocation_receipt(
-                root,
-                destination,
-                invocation_path,
-                process.invocation,
-            )
-            invocation_refs.append(invocation_ref)
-            stage_completed = datetime.now(UTC)
-            resolved = resolve_stage(
-                stage,
-                source=source,
-                environment=resolve_environment(
+
+            if isinstance(stage, DownloadSpec):
+                runner_environment, execution_context = resolve_runner_environment(
                     fetcher,
                     effective_environment,
-                    process,
-                ),
-                process=process,
-                invocation=invocation_ref,
-                inputs=resolved_inputs,
-                retrievals=resolved_retrievals,
-                completed_at=stage_completed,
-            )
+                )
+                (
+                    resolved_retrievals,
+                    resolved_artifacts,
+                    input_paths,
+                ) = retrieve_download_inputs(
+                    root,
+                    workspace,
+                    stage_reference.stage_id,
+                    stage,
+                )
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_download_stage(
+                    stage,
+                    environment=runner_environment,
+                    execution_context=execution_context,
+                    artifacts=resolved_artifacts,
+                    retrievals=resolved_retrievals,
+                    completed_at=stage_completed,
+                )
+            else:
+                if not isinstance(stage, ParameterizedSpec):
+                    raise RunError("project stage lacks its parameterized contract")
+                source_location = GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=stage.implementation.path,
+                )
+                source = resolve_git_file(fetcher, source_location)
+                if (root / stage.implementation.path).read_bytes() != fetcher(
+                    source_location
+                ):
+                    raise RunError("stage source differs from the frozen source")
+                if isinstance(stage, InternalSpec):
+                    resolved_inputs, input_paths = resolve_inputs(
+                        root,
+                        workspace,
+                        stage_reference.stage_id,
+                        stage,
+                        completed,
+                        loaded_stages,
+                        fetcher,
+                        policy,
+                        store,
+                    )
+                try:
+                    process = execute_stage_process(
+                        root,
+                        run,
+                        stage_reference,
+                        stage,
+                        attempt_id=attempt_id,
+                        input_paths=input_paths,
+                        timeout_seconds=timeout_seconds,
+                    )
+                except (StageExecutionError, StageProcessInterrupted) as exc:
+                    run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stdout.log"
+                    ] = exc.stdout
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stderr.log"
+                    ] = exc.stderr
+                    if exc.invocation is not None:
+                        invocation_path = (
+                            f"{run_root}/attempts/{attempt_id}/invocations/"
+                            f"{stage_reference.stage_id}.yaml"
+                        )
+                        invocation_refs.append(
+                            publish_invocation_receipt(
+                                root,
+                                destination,
+                                invocation_path,
+                                exc.invocation,
+                            )
+                        )
+                    raise
+                invocation_path = (
+                    f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                    f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
+                )
+                invocation_ref = publish_invocation_receipt(
+                    root,
+                    destination,
+                    invocation_path,
+                    process.invocation,
+                )
+                invocation_refs.append(invocation_ref)
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_stage(
+                    stage,
+                    source=source,
+                    environment=resolve_environment(
+                        fetcher,
+                        effective_environment,
+                        process,
+                    ),
+                    process=process,
+                    invocation=invocation_ref,
+                    inputs=resolved_inputs,
+                    completed_at=stage_completed,
+                )
+                resolved_artifacts = process.artifacts
+                metric_specs = {
+                    metric.metric_id: metric for metric in experiment.metrics
+                }
+                for metric_id in stage.metric_ids:
+                    if metric_specs[metric_id].mode != "live":
+                        continue
+                    live_path = (
+                        root
+                        / (
+                            f"experiments/{run.experiment_id}/runs/"
+                            f"{run.variant_id}/{run.run_id}"
+                        )
+                        / f"attempts/{attempt_id}/measurements"
+                        / f"{stage_reference.stage_id}.{metric_id}.jsonl"
+                    )
+                    if live_path.is_file() and live_path not in measurement_paths:
+                        measurement_paths.append(live_path)
             resolved_path = (
                 f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
                 f"/stages/{stage_reference.stage_id}/resolved.yaml"
@@ -330,9 +355,9 @@ def execute_attempt(
             snapshot_paths: dict[str, Path] = {}
             if resolved_retrievals is not None:
                 for retrieval in resolved_retrievals.values():
-                    retrieval_path = retrieval.body.stored_at.path
+                    retrieval_path = retrieval.body.path
                     snapshot_paths[retrieval_path] = root / retrieval_path
-            for artifact in process.artifacts.values():
+            for artifact in resolved_artifacts.values():
                 artifact_references: tuple[SnapshotFileRef, ...]
                 if artifact.kind == "file":
                     artifact_references = (artifact.file,)
@@ -373,14 +398,15 @@ def execute_attempt(
                 timeout_seconds,
                 attempt_id,
             )
-            log_files[
-                f"{run_root}/attempts/{attempt_id}/logs/"
-                f"{stage_reference.stage_id}.stdout.log"
-            ] = process.stdout
-            log_files[
-                f"{run_root}/attempts/{attempt_id}/logs/"
-                f"{stage_reference.stage_id}.stderr.log"
-            ] = process.stderr
+            if process is not None:
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stdout.log"
+                ] = process.stdout
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stderr.log"
+                ] = process.stderr
             active_stage_id = None
 
         journal.append(

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from tests.fixtures import (
     artifact_loader_ref,
-    builtin_http_transport,
+    builtin_http,
     http_policy,
     http_request,
     parameter_model_ref,
@@ -168,10 +168,8 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
 def test_future_input_uses_canonical_producer_path(tmp_path: Path) -> None:
     """Resolve one consumer input to the materialized producer artifact."""
     producer = DownloadSpec(
-        implementation=stage_implementation_ref("project/download.py"),
-        parameter_model=parameter_model_ref("download"),
-        inputs={"remote": http_request(url="https://example.com/data")},
-        transport=builtin_http_transport(),
+        inputs={"dataset": http_request(url="https://example.com/data")},
+        http=builtin_http(),
         policy=http_policy(),
         artifacts={
             "dataset": _artifact(
@@ -179,7 +177,6 @@ def test_future_input_uses_canonical_producer_path(tmp_path: Path) -> None:
                 "artifacts/datasets/main/data.bin"
             )
         },
-        params=parameters.Download(),
     )
     path = tmp_path / producer.artifacts["dataset"].path
     path.parent.mkdir(parents=True)

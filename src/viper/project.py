@@ -122,7 +122,6 @@ def validate_package_name(package: str) -> None:
 def _project_files(package: str) -> dict[str, str]:
     """Return the complete starter-project file mapping."""
     stage_definitions = {
-        "download": ("DownloadParameters", "download", "dataset"),
         "build": ("BuildParameters", "build", "prior"),
         "embed": ("EmbedParameters", "embed", "embedding"),
         "train": ("TrainParameters", "train", "parameters"),
@@ -137,9 +136,7 @@ This project contains one decorated callable for each VIPER stage kind.
 
 Run the focused project tests:
 
-```bash
-python -m pytest -q
-```
+    python -m pytest -q
 
 After replacing the stage templates, commit the project and write an experiment
 draft under `experiments/`. The draft selects the stages and files for one run.
@@ -174,12 +171,6 @@ pythonpath = ["src"]
 
 from pydantic import Field
 from viper import parameters
-
-
-class DownloadParameters(parameters.Download):
-    """Select the expected media type for the retrieved dataset."""
-
-    media_type: str = "text/plain"
 
 
 class BuildParameters(parameters.Build):
@@ -320,7 +311,6 @@ if __name__ == "__main__":
             f'''"""Verify generated stages expose their VIPER definitions."""
 
 from {package}.stages.build import build
-from {package}.stages.download import download
 from {package}.stages.embed import embed
 from {package}.stages.evaluate import evaluate
 from {package}.stages.train import train
@@ -330,10 +320,9 @@ from viper.stages import stage_definition
 
 def test_stage_kinds() -> None:
     """Match each callable with the stage kind fixed by its decorator."""
-    stages = (download, build, embed, train, evaluate)
+    stages = (build, embed, train, evaluate)
 
     assert tuple(stage_definition(stage).kind for stage in stages) == (
-        "download",
         "build",
         "embed",
         "train",
@@ -343,9 +332,7 @@ def test_stage_kinds() -> None:
         ),
     }
     for stage, (parameter_class, decorator, artifact) in stage_definitions.items():
-        if stage == "download":
-            input_read = ""
-        elif stage == "evaluate":
+        if stage == "evaluate":
             input_read = "    payload = context.inputs['parameters'].read_bytes()\n"
         else:
             input_read = (
@@ -357,15 +344,8 @@ def test_stage_kinds() -> None:
             extra_artifact = (
                 "    context.artifacts['resume_state'].write_bytes(b'resume')\n"
             )
-        if stage == "download":
-            stage_body = """    for name, retrieval in context.retrievals.items():
-        destination = context.artifacts[name]
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(retrieval.body.read_bytes())
-"""
-        else:
-            destination_line = f'    destination = context.artifacts["{artifact}"]\n'
-            stage_body = f"""{input_read}{destination_line}\
+        destination_line = f'    destination = context.artifacts["{artifact}"]\n'
+        stage_body = f"""{input_read}{destination_line}\
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(payload)
 {extra_artifact}"""
