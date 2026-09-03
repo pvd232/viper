@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-import viper._subprocess as subprocess
+
+from viper import _subprocess as subprocess
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
