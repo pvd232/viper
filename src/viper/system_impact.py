@@ -2,15 +2,34 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
+from ._contract_traceability import (
+    ContractTarget,
+    ContractTraceabilityGraph,
+    PairBlockId,
+    RepoSymbolRef,
+)
 from ._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 NodeId = NonEmptyStr
 EdgeKind = Literal["imports", "calls", "constructs", "inherits", "reads", "writes"]
+SourceNodeKind = Literal["function", "method", "class", "assignment", "import"]
+ChangeKind = Literal[
+    "added",
+    "removed",
+    "callable_interface_changed",
+    "type_interface_changed",
+    "implementation_changed",
+    "unclassified",
+]
+CheckState = Literal["passed", "failed"]
 
 
 class CodeQLIdentity(ProtocolModel):
@@ -18,7 +37,9 @@ class CodeQLIdentity(ProtocolModel):
 
     version: NonEmptyStr = Field(description="Required CodeQL CLI version.")
     platform: NonEmptyStr = Field(description="CodeQL bundle platform identifier.")
-    bundle_sha256: SHA256 = Field(description="Digest of the installed CodeQL bundle.")
+    executable_sha256: SHA256 = Field(
+        description="Digest of the exact CodeQL launcher executable."
+    )
     pack: NonEmptyStr = Field(description="Name and version of the VIPER query pack.")
     pack_sha256: SHA256 = Field(description="Digest of the exact query-pack bytes.")
 
@@ -43,17 +64,22 @@ class CodeQLReceipt(ProtocolModel):
     snapshot: SourceSnapshot = Field(
         description="Immutable source snapshot analyzed by CodeQL."
     )
-    command: tuple[NonEmptyStr, ...] = Field(
+    identity: CodeQLIdentity = Field(
+        description="Exact CodeQL and query-pack identity used by every command."
+    )
+    commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
         min_length=1,
-        description="Exact analyzer argument vector.",
+        description="Ordered argument vectors executed for this analysis.",
     )
     exit_code: int = Field(description="Terminal process exit code.")
     database_sha256: SHA256 = Field(
-        description="Digest identifying the CodeQL database."
+        description="Digest of the CodeQL database's relative paths and file bytes."
     )
     result_sha256: SHA256 = Field(description="Digest of the decoded canonical rows.")
     stderr_sha256: SHA256 = Field(
-        description="Digest of captured standard error bytes."
+        description=(
+            "Digest of the ordered query labels and captured standard error bytes."
+        )
     )
 
 
@@ -63,7 +89,7 @@ class SourceNode(ProtocolModel):
     node_id: NodeId = Field(description="Stable path-and-symbol node identifier.")
     path: RepoRelPath = Field(description="Repository-relative Python source path.")
     symbol: NonEmptyStr = Field(description="Qualified Python symbol name.")
-    kind: NonEmptyStr = Field(description="Observed Python declaration kind.")
+    kind: SourceNodeKind = Field(description="Observed Python declaration kind.")
     start_line: int = Field(
         ge=1,
         description="First source line of the declaration.",
@@ -135,15 +161,287 @@ class SourceGraph(ProtocolModel):
         """Order edges by their stable identifiers before serialization."""
         return tuple(sorted(edges, key=lambda edge: edge.edge_id))
 
+    @model_validator(mode="after")
+    def validate_graph(self) -> SourceGraph:
+        """Reject duplicate identities, dangling edges, and receipt drift."""
+        node_ids = tuple(node.node_id for node in self.nodes)
+        edge_ids = tuple(edge.edge_id for edge in self.edges)
+        if len(node_ids) != len(set(node_ids)):
+            raise ValueError("SourceGraph contains duplicate node IDs")
+        if len(edge_ids) != len(set(edge_ids)):
+            raise ValueError("SourceGraph contains duplicate edge IDs")
+        known = set(node_ids)
+        if any(
+            edge.source not in known or edge.target not in known for edge in self.edges
+        ):
+            raise ValueError("SourceGraph contains an edge with an unknown endpoint")
+        if self.receipt.snapshot != self.snapshot:
+            raise ValueError("CodeQLReceipt snapshot differs from SourceGraph snapshot")
+        if self.receipt.identity != self.identity:
+            raise ValueError("CodeQLReceipt identity differs from SourceGraph identity")
+        result_payload = json.dumps(
+            {
+                "nodes": [node.model_dump(mode="json") for node in self.nodes],
+                "edges": [edge.model_dump(mode="json") for edge in self.edges],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        if hashlib.sha256(result_payload).hexdigest() != self.receipt.result_sha256:
+            raise ValueError(
+                "CodeQLReceipt result digest differs from SourceGraph rows"
+            )
+        return self
+
+
+class Impact(ProtocolModel):
+    """Report direct baseline dependents selected by policy version 1."""
+
+    policy_version: Literal[1] = Field(
+        default=1,
+        description="Change-kind-to-edge-kind policy version used for this report.",
+    )
+    baseline: SourceSnapshot = Field(
+        description="Baseline source snapshot whose direct edges were inspected."
+    )
+    targets: tuple[NodeId, ...] = Field(
+        description="Existing baseline nodes resolved from the selected targets."
+    )
+    affected: tuple[NodeId, ...] = Field(
+        description="Unique direct dependents selected by the impact policy."
+    )
+    edges: tuple[SHA256, ...] = Field(
+        description="SourceEdge identifiers that support the affected-node report."
+    )
+
+
+class ResolvedContractTarget(ProtocolModel):
+    """Bind one authored target to baseline and expected declaration bytes."""
+
+    target: ContractTarget = Field(description="Selected CTG target being resolved.")
+    baseline_node: NodeId | None = Field(
+        description="Resolved baseline node identifier, or absent for an addition."
+    )
+    baseline_sha256: SHA256 | None = Field(
+        description="Baseline declaration digest, or absent for an addition."
+    )
+    expected_sha256: SHA256 | None = Field(
+        description="Authored declaration digest, or absent for a removal."
+    )
+    change_kind: ChangeKind = Field(
+        description="Planned transition used to select direct dependency edges."
+    )
+
+
+class TargetCheck(ProtocolModel):
+    """Record whether one realized declaration matches its authored target."""
+
+    resolved: ResolvedContractTarget = Field(
+        description="Authored target resolved against the baseline source graph."
+    )
+    after_sha256: SHA256 | None = Field(
+        description=(
+            "Realized declaration digest, or absent when no declaration remains."
+        )
+    )
+    state: CheckState = Field(
+        description="Whether the realized declaration has the required target state."
+    )
+    message: NonEmptyStr = Field(description="Specific reason for the target result.")
+
+
+class GateCheck(ProtocolModel):
+    """Record one selected PairBlock gate invocation."""
+
+    block_id: PairBlockId = Field(
+        description="Selected PairBlock whose frozen gate was executed."
+    )
+    command: tuple[NonEmptyStr, ...] = Field(
+        min_length=1,
+        description="Exact argument vector executed without a command shell.",
+    )
+    exit_code: int = Field(description="Terminal process exit code.")
+    stdout_sha256: SHA256 = Field(
+        description="Digest of the gate's captured standard output bytes."
+    )
+    stderr_sha256: SHA256 = Field(
+        description="Digest of the gate's captured standard error bytes."
+    )
+
+
+class PlanCheck(ProtocolModel):
+    """Record the complete result of checking selected PairBlocks."""
+
+    schema_version: Literal[1] = Field(
+        default=1,
+        description="Plan-check record format version.",
+    )
+    baseline: SourceSnapshot = Field(
+        description="Source state inspected before the selected PairBlocks ran."
+    )
+    realized: SourceSnapshot = Field(
+        description=(
+            "Candidate source state inspected after the selected PairBlocks ran."
+        )
+    )
+    blocks: tuple[PairBlockId, ...] = Field(
+        min_length=1,
+        description="Selected PairBlocks covered by this check.",
+    )
+    contracts: tuple[RepoRelPath, ...] = Field(
+        min_length=1,
+        description="Contract files needed to reconstruct the selected plan.",
+    )
+    baseline_dependencies: tuple[PairBlockId, ...] = Field(
+        default=(),
+        description=(
+            "Omitted dependencies whose target state already exists in the baseline."
+        ),
+    )
+    unsatisfied_dependencies: tuple[PairBlockId, ...] = Field(
+        default=(),
+        description=(
+            "Omitted dependencies whose target state is absent from the baseline."
+        ),
+    )
+    plan_sha256: SHA256 = Field(
+        description=(
+            "Digest of the selected PairBlock and ContractTarget records plus "
+            "the selected asset paths and bytes."
+        )
+    )
+    impact: Impact = Field(
+        description="Direct advisory dependency report for the selected targets."
+    )
+    targets: tuple[TargetCheck, ...] = Field(
+        description="One realized result for every selected ContractTarget."
+    )
+    unexpected: tuple[RepoSymbolRef, ...] = Field(
+        description="Changed declarations that no selected ContractTarget owns."
+    )
+    gates: tuple[GateCheck, ...] = Field(
+        description="One gate result for every selected PairBlock."
+    )
+    receipts_valid: bool = Field(
+        description=(
+            "Whether both graphs have successful receipts with one analyzer identity."
+        )
+    )
+    plan_valid: bool = Field(
+        description=(
+            "Whether the post-gate contract files retain the checked plan digest."
+        )
+    )
+    source_valid: bool = Field(
+        description="Whether both source roots retain their checked source digests."
+    )
+    passed: bool = Field(
+        description=(
+            "Whether every target, dependency, gate, source, plan, and receipt check "
+            "passed."
+        )
+    )
+
+
+class Acceptance(ProtocolModel):
+    """Bind a passing plan check to its exact committed source and plan."""
+
+    check: SHA256 = Field(
+        description="Digest of the exact passing PlanCheck accepted for reuse."
+    )
+    revision: CommitId = Field(
+        description="Commit whose Python source and selected plan match the PlanCheck."
+    )
+
+
+class PlanInspection(ProtocolModel):
+    """Return resolved selected targets and their direct advisory impact."""
+
+    targets: tuple[ResolvedContractTarget, ...] = Field(
+        description="Selected targets resolved against their baseline declarations."
+    )
+    impact: Impact = Field(
+        description="Direct advisory impact derived from the resolved targets."
+    )
+
+
+def inspect_plan(
+    *,
+    plan_root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+) -> PlanInspection:
+    """Resolve selected targets and report their policy-selected direct impact."""
+    from ._system_impact.plan import inspect_plan as _inspect_plan
+
+    return _inspect_plan(
+        plan_root=plan_root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=block_ids,
+        baseline=baseline,
+    )
+
+
+def check_plan(
+    *,
+    root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+    realized: SourceGraph,
+    gate_timeout_seconds: float = 900.0,
+) -> PlanCheck:
+    """Check selected PairBlocks against independently observed source graphs."""
+    from ._system_impact.check import check_plan as _check_plan
+
+    return _check_plan(
+        root=root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=block_ids,
+        baseline=baseline,
+        realized=realized,
+        gate_timeout_seconds=gate_timeout_seconds,
+    )
+
+
+def accept(
+    *,
+    root: Path,
+    check: PlanCheck,
+    revision: CommitId,
+) -> Acceptance:
+    """Bind a passing plan check to identical committed source and plan bytes."""
+    from ._system_impact.check import accept as _accept
+
+    return _accept(root=root, check=check, revision=revision)
+
 
 __all__ = [
+    "Acceptance",
     "CodeQLIdentity",
     "CodeQLReceipt",
+    "ChangeKind",
+    "CheckState",
     "CommitId",
     "EdgeKind",
+    "GateCheck",
+    "Impact",
     "NodeId",
+    "PlanCheck",
+    "PlanInspection",
+    "ResolvedContractTarget",
     "SourceEdge",
     "SourceGraph",
     "SourceNode",
+    "SourceNodeKind",
     "SourceSnapshot",
+    "TargetCheck",
+    "accept",
+    "check_plan",
+    "inspect_plan",
 ]

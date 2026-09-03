@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "fixture_id": "agents-manifest-key-migration",
+  "origin_repository": "https://github.com/pvd232/agents.git",
+  "baseline_revision": "6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b",
+  "realized_revision": "18083057eeb92c755ead031122afd48e8a77d653",
+  "test_source_suffix": ".source",
+  "source_files": [
+    {
+      "path": "scripts/run-skill-evaluations.py",
+      "baseline_sha256": "5841e3edd84bd523f06cfde965c5b0968f591181dbdd11dd4571de2bf6a793b9",
+      "realized_sha256": "c629421588553641f60075ba0639184976276a7e57be0020dac9ed0f0ea6b1da"
+    },
+    {
+      "path": "scripts/validate-skill-contract.py",
+      "baseline_sha256": "956cbe6dac899509443a9c41a6e14de46207c151650b85beb64e4d1ed22053ef",
+      "realized_sha256": "5c2e10557c0fb85b0166d6504517ba33e1a2fd8cb08b6ef4f4fd0c58d2e8ccbf"
+    },
+    {
+      "path": "scripts/validate-skill-evaluation-run.py",
+      "baseline_sha256": "1c42d3b215d3636c39f2edae495f2d9a0f1ed50657762dafb67eac72f1d43230",
+      "realized_sha256": "330f265d66c4dfd83749674968eeb19f6b3e9987ada0d4d6d4cfc7961bc6fde8"
+    },
+    {
+      "path": "tests/test_run_skill_evaluations.py",
+      "baseline_sha256": "dd03f169ec2adc2a12c28fe3ab75fa955a985aeba36aa87200a608c1a7b11eaf",
+      "realized_sha256": "5eab9c848cae597077b6cbb5f60ad53d8b710688f54b9ab1f5fcc2dfb436c21d"
+    },
+    {
+      "path": "tests/test_skill_contract.py",
+      "baseline_sha256": "55ff90969e4c18e658476ecdb605781f00f0d162d292a3488d953d353e3985f1",
+      "realized_sha256": "2de2ec433acdd94e60d23088227a4d5c47b5a723efbdc7961e49e557738b1c17"
+    }
+  ],
+  "expected_changed_declarations": [
+    {
+      "path": "scripts/run-skill-evaluations.py",
+      "symbol": "main",
+      "action": "update",
+      "baseline_sha256": "672afadc47a2f77b3496089d9201b513d6148c8312cabbd59e75a7e1ba2198aa",
+      "realized_sha256": "5c231bbcdd1af83febc41181639444379269aad275748eea06ca09dde8795e6e"
+    },
+    {
+      "path": "scripts/validate-skill-contract.py",
+      "symbol": "compile_manifest",
+      "action": "update",
+      "baseline_sha256": "6d6a7fc57ec0da60ad7fc9a3606614fac78532511ace9b3c46dff9d89e24f894",
+      "realized_sha256": "08f47fbe49e99b5161b76af7574fa568c81bc2514f509290bcd9c1a816eabc82"
+    },
+    {
+      "path": "scripts/validate-skill-evaluation-run.py",
+      "symbol": "validate_run",
+      "action": "update",
+      "baseline_sha256": "01e6f9b6b0da7a1b83a78b40810bca613709569b9541a26f9f1553627ceb1154",
+      "realized_sha256": "b9f8dd6c22db24ed1e7355fa1dd17d1aa45d7851663b7b6cbba40fb6b0ea4868"
+    },
+    {
+      "path": "tests/test_run_skill_evaluations.py",
+      "symbol": "SkillEvaluationRunnerTests",
+      "action": "update",
+      "baseline_sha256": "2b3191a04fcee2d63556d59e9492afc4ef4df9480beabcd800ea0a1a525966dc",
+      "realized_sha256": "e7225cf4905aa52c1d3d6f5f4917b8ec33d3fc983fafed4f95c3751664ee5b0f"
+    },
+    {
+      "path": "tests/test_run_skill_evaluations.py",
+      "symbol": "SkillEvaluationRunnerTests.setUp",
+      "action": "update",
+      "baseline_sha256": "a2ed67fb48ca514f01ba83a3c7cf47e4391944be3a8ae164d50d11ef523426f5",
+      "realized_sha256": "d438c7f1075e9f7c5f8ca4454fa957abf8835244f5f6913f1e7e9987eec837e2"
+    },
+    {
+      "path": "tests/test_skill_contract.py",
+      "symbol": "SkillContractTests",
+      "action": "update",
+      "baseline_sha256": "08982af5ab89f8a9f166392ded59fc195ccf9d9fdbf84b9fa4bf587d2c89a7c1",
+      "realized_sha256": "eccae4905077259c65fe6c6e7b39008ddda184c7674f3675d778284f1178f2af"
+    },
+    {
+      "path": "tests/test_skill_contract.py",
+      "symbol": "SkillContractTests.test_retired_model_support_field_is_rejected",
+      "action": "add",
+      "baseline_sha256": null,
+      "realized_sha256": "31e57fcad867608da9e6d5861ac4a49760f536f71f1b8989189d5e3eed06e365"
+    }
+  ]
+}

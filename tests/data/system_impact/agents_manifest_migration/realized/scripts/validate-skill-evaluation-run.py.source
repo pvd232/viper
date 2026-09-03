@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""Validate persisted Agent Skill run evidence and release closure."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MANIFEST_VALIDATOR = ROOT / "scripts" / "validate-skill-contract.py"
+DISABLED_SUBJECT_FEATURES = (
+    "apps",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "computer_use",
+    "goals",
+    "image_generation",
+    "in_app_browser",
+    "in_app_chat",
+    "in_app_dictation",
+    "in_app_local_automation",
+    "in_app_updates",
+    "memories",
+    "multi_agent",
+    "plugin_sharing",
+    "plugins",
+    "recommended_plugins",
+    "remote_plugin",
+    "tool_suggest",
+    "view_image",
+    "workspace_dependencies",
+)
+
+
+class RunValidationError(ValueError):
+    """Report one invalid or incomplete persisted evaluation run."""
+
+
+def require(condition: bool, message: str) -> None:
+    """Raise a run-validation error when one invariant fails."""
+
+    if not condition:
+        raise RunValidationError(message)
+
+
+def load_validator() -> ModuleType:
+    """Load the manifest compiler that owns evaluation-plan semantics."""
+
+    specification = importlib.util.spec_from_file_location(
+        "skill_manifest_validator",
+        MANIFEST_VALIDATOR,
+    )
+    if specification is None or specification.loader is None:
+        raise RunValidationError(f"cannot load {MANIFEST_VALIDATOR}")
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    return module
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    """Load one JSON object."""
+
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RunValidationError(f"{path}: {exc}") from exc
+    require(isinstance(value, dict), f"{path}: expected an object")
+    return value
+
+
+def sha256(path: Path) -> str:
+    """Return the byte identity of one persisted input."""
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_run(run_path: Path, root: Path, require_success: bool) -> None:
+    """Validate one run against its current manifest and retained artifacts."""
+
+    run_file = run_path / "run.json" if run_path.is_dir() else run_path
+    run_dir = run_file.parent
+    run = load_json(run_file)
+    schema_version = run.get("schema_version")
+    require(schema_version in {1, 2}, "schema_version must equal 1 or 2")
+    tier = run.get("tier")
+    require(tier in {"routine", "sample", "release"}, "tier is invalid")
+    model_role = run.get("model_role")
+    require(
+        model_role in {"acceptance", "candidate", "stress", "calibration"},
+        "model_role is invalid",
+    )
+    require(
+        run.get("blocking") is (model_role == "acceptance"),
+        "blocking flag is inconsistent with model_role",
+    )
+    require(
+        run.get("catalog_isolation")
+        == {
+            "user_home": "ephemeral",
+            "codex_home": "ephemeral_auth_link",
+            "project_skill_root": ".agents/skills",
+        },
+        "catalog isolation policy is missing or inconsistent",
+    )
+    if schema_version == 1:
+        require(
+            "feature_context" not in run,
+            "schema version 1 cannot contain feature_context",
+        )
+    else:
+        feature_context = run.get("feature_context")
+        require(isinstance(feature_context, dict), "feature_context is missing")
+        mode = feature_context.get("mode")
+        disabled_features = feature_context.get("disabled_features")
+        require(mode in {"reduced", "full"}, "feature context mode is invalid")
+        require(
+            disabled_features
+            == ([] if mode == "full" else list(DISABLED_SUBJECT_FEATURES)),
+            "disabled feature set is inconsistent with feature context mode",
+        )
+
+    manifest_value = run.get("manifest")
+    require(isinstance(manifest_value, str), "manifest must be a path")
+    manifest = root / manifest_value
+    require(manifest.is_file(), f"manifest does not exist: {manifest}")
+    require(
+        run.get("manifest_sha256") == sha256(manifest),
+        "manifest digest does not match the persisted run",
+    )
+    manifest_data = load_json(manifest)
+    require(run.get("skill") == manifest_data.get("skill"), "skill record changed")
+    skill_path = root / manifest_data["skill"]["path"]
+    require(
+        skill_path.is_file() and manifest_data["skill"]["sha256"] == sha256(skill_path),
+        "skill digest does not match the current source",
+    )
+    subject_identity = {
+        "model": run.get("model"),
+        "reasoning": run.get("reasoning"),
+        "role": model_role,
+    }
+    require(
+        subject_identity in manifest_data.get("models", []),
+        "subject model policy does not match the manifest",
+    )
+
+    validator = load_validator()
+    plan = validator.compile_manifest(manifest, root)
+    plan_by_id = {item["evaluation_id"]: item for item in plan}
+    raw_results = run.get("results")
+    require(isinstance(raw_results, list) and raw_results, "results are missing")
+    result_by_id: dict[str, dict[str, Any]] = {}
+    for result in raw_results:
+        require(isinstance(result, dict), "result must be an object")
+        evaluation_id = result.get("evaluation_id")
+        require(evaluation_id in plan_by_id, f"unknown evaluation {evaluation_id}")
+        require(
+            evaluation_id not in result_by_id, f"duplicate evaluation {evaluation_id}"
+        )
+        result_by_id[evaluation_id] = result
+        status = result.get("status")
+        require(status in {"passed", "ungraded", "failed"}, "result status invalid")
+        require(result.get("passed") is (status == "passed"), "passed flag is false")
+        if (
+            status in {"passed", "ungraded"}
+            and plan_by_id[evaluation_id]["surface"] == "execution"
+        ):
+            require(
+                result.get("activation_observed") is True,
+                f"{evaluation_id}: execution did not load matching skill bytes",
+            )
+        result_dir = run_dir / evaluation_id
+        for name in (
+            "trace.jsonl",
+            "stderr.txt",
+            "final.txt",
+            "changes.patch",
+            "result.json",
+        ):
+            require((result_dir / name).is_file(), f"{evaluation_id}: missing {name}")
+
+    statuses = {result["status"] for result in raw_results}
+    subject_results = [result.get("subject_passed") for result in raw_results]
+    require(
+        all(isinstance(value, bool) for value in subject_results),
+        "subject_passed must be Boolean",
+    )
+    expected_subject_failure_rate = sum(not value for value in subject_results) / len(
+        subject_results
+    )
+    require(
+        run.get("subject_failure_rate") == expected_subject_failure_rate,
+        "subject_failure_rate is inconsistent with subject results",
+    )
+    expected_status = (
+        "failed"
+        if "failed" in statuses
+        else "partial"
+        if "ungraded" in statuses
+        else "passed"
+    )
+    require(run.get("status") == expected_status, "aggregate status is inconsistent")
+    require(
+        run.get("passed") is (expected_status == "passed"),
+        "aggregate passed flag is inconsistent",
+    )
+    terminal_reason = run.get("terminal_reason")
+    require(
+        terminal_reason in {"completed", "failed_fast"},
+        "terminal_reason is invalid",
+    )
+
+    if tier == "routine":
+        require(run.get("grader_model") is None, "routine tier cannot name a grader")
+        require(
+            run.get("grader_reasoning") is None,
+            "routine tier cannot name grader reasoning",
+        )
+        for evaluation_id, result in result_by_id.items():
+            if (
+                plan_by_id[evaluation_id]["method"] == "rubric"
+                and result["status"] != "failed"
+            ):
+                require(
+                    result["status"] == "ungraded",
+                    f"{evaluation_id}: routine rubric must remain ungraded",
+                )
+                require(
+                    not (run_dir / evaluation_id / "rubric-trace.jsonl").exists(),
+                    f"{evaluation_id}: routine tier launched a rubric grader",
+                )
+    else:
+        require(
+            isinstance(run.get("grader_model"), str),
+            f"{tier} tier requires a grader model",
+        )
+        require(
+            isinstance(run.get("grader_reasoning"), str),
+            f"{tier} tier requires grader reasoning",
+        )
+        for evaluation_id, result in result_by_id.items():
+            if plan_by_id[evaluation_id]["method"] == "rubric":
+                require(
+                    result["status"] != "ungraded",
+                    f"{evaluation_id}: rubric was not graded",
+                )
+                require(
+                    (run_dir / evaluation_id / "rubric-trace.jsonl").is_file(),
+                    f"{evaluation_id}: grader trace is missing",
+                )
+
+    if tier == "sample":
+        require(
+            set(result_by_id) < set(plan_by_id),
+            "sample tier must select a strict subset",
+        )
+    if tier == "release":
+        require(model_role == "acceptance", "release tier requires acceptance model")
+        if expected_status == "passed":
+            require(terminal_reason == "completed", "passed release did not complete")
+            require(
+                set(result_by_id) == set(plan_by_id),
+                "release tier must cover every case",
+            )
+        else:
+            expected_prefix = list(plan_by_id)[: len(raw_results)]
+            actual_prefix = [result["evaluation_id"] for result in raw_results]
+            require(
+                terminal_reason == "failed_fast",
+                "failed release must stop at its first blocking failure",
+            )
+            require(
+                actual_prefix == expected_prefix,
+                "failed release is not an ordered prefix",
+            )
+            require(
+                raw_results[-1]["status"] == "failed",
+                "failed release did not stop on failure",
+            )
+    if require_success:
+        require(expected_status == "passed", "run did not close with passed status")
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse run paths and the optional success requirement."""
+
+    parser = argparse.ArgumentParser(
+        description="Validate persisted Agent Skill evaluation evidence."
+    )
+    parser.add_argument("runs", nargs="+", type=Path)
+    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--require-success", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Validate every selected run and report one compact result."""
+
+    args = parse_args()
+    try:
+        for run in args.runs:
+            validate_run(run.resolve(), args.root.resolve(), args.require_success)
+    except (RunValidationError, ValueError) as exc:
+        print(f"skill-evaluation-run: {exc}", file=sys.stderr)
+        return 1
+    print(f"skill-evaluation-run: {len(args.runs)} run(s) valid")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

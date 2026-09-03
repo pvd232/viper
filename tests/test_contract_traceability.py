@@ -382,11 +382,13 @@ def test_contract_traceability_graph_is_canonical(tmp_path: Path) -> None:
     assert serialize_contract_traceability(left) == (
         serialize_contract_traceability(right)
     )
+    assert left.schema_version == 6
     for rule in left.rules:
         links = tuple(edge for edge in left.edges if edge.rule_id == rule.rule_id)
         assert sum(edge.kind == "implementation" for edge in links) == 1
         assert sum(edge.kind == "verification" for edge in links) >= 1
     assert [block.block_id for block in left.blocks] == ["P0-CRT-01"]
+    assert left.blocks[0].assets == ()
     assert [target.target.symbol for target in left.targets] == ["enforce"]
 
     declaration = left.requirements[0].declaration
@@ -484,6 +486,98 @@ def test_pair_block_dependencies_are_acyclic(tmp_path: Path) -> None:
     with pytest.raises(
         ContractTraceabilityError,
         match="PairBlock dependency cycle",
+    ):
+        compile_contract_traceability(tmp_path, checklist, (contract,))
+
+
+def test_pair_block_assets_compile_when_implemented_files_exist(
+    tmp_path: Path,
+) -> None:
+    """Compile one optional non-Python asset owned by an implemented block."""
+    contract, checklist = _write_fixture(tmp_path)
+    asset = tmp_path / "tools/codeql/example/Declarations.ql"
+    asset.parent.mkdir(parents=True)
+    asset.write_text("select 1\n", encoding="utf-8")
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            'targets = ["src/owner.py:enforce"]',
+            'targets = ["src/owner.py:enforce"]\n'
+            'assets = ["tools/codeql/example/Declarations.ql"]',
+        ),
+        encoding="utf-8",
+    )
+
+    graph = compile_contract_traceability(tmp_path, checklist, (contract,))
+
+    assert graph.blocks[0].assets == ("tools/codeql/example/Declarations.ql",)
+
+
+def test_pair_block_assets_reject_duplicates(tmp_path: Path) -> None:
+    """Reject one asset path repeated inside the same PairBlock."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            'targets = ["src/owner.py:enforce"]',
+            'targets = ["src/owner.py:enforce"]\n'
+            'assets = ["tools/query.ql", "tools/query.ql"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="PairBlock asset has several owners",
+    ):
+        compile_contract_traceability(tmp_path, checklist, (contract,))
+
+
+def test_pair_block_assets_reject_python_source(tmp_path: Path) -> None:
+    """Keep Python declaration changes in ContractTarget records."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            'targets = ["src/owner.py:enforce"]',
+            'targets = ["src/owner.py:enforce"]\nassets = ["src/owner.py"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="PairBlock assets must not name Python source",
+    ):
+        compile_contract_traceability(tmp_path, checklist, (contract,))
+
+
+def test_pair_block_assets_require_files_only_after_implementation(
+    tmp_path: Path,
+) -> None:
+    """Permit a planned asset and reject it once its block is implemented."""
+    contract, checklist = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            'targets = ["src/owner.py:enforce"]',
+            'targets = ["src/owner.py:enforce"]\n'
+            'assets = ["tools/codeql/example/Declarations.ql"]',
+        ),
+        encoding="utf-8",
+    )
+    implemented_checklist = checklist.read_text(encoding="utf-8")
+    checklist.write_text(
+        implemented_checklist.replace("state=implemented", "state=planned"),
+        encoding="utf-8",
+    )
+
+    graph = compile_contract_traceability(tmp_path, checklist, (contract,))
+    assert graph.blocks[0].assets == ("tools/codeql/example/Declarations.ql",)
+
+    checklist.write_text(implemented_checklist, encoding="utf-8")
+    with pytest.raises(
+        ContractTraceabilityError,
+        match=(
+            "implemented PairBlock asset is missing: "
+            "tools/codeql/example/Declarations.ql"
+        ),
     ):
         compile_contract_traceability(tmp_path, checklist, (contract,))
 

@@ -131,14 +131,14 @@ TargetAction = Literal["add", "update", "remove"]
 
 
 class ContractTarget(ProtocolModel):
-    """Bind one required source change to one implementation block."""
+    """Bind one required Python declaration change to one implementation block."""
 
     requirements: tuple[RequirementId, ...] = Field(
         min_length=1,
-        description="Contract requirements that need this source change.",
+        description="Contract requirements that need this Python declaration change.",
     )
     block_id: PairBlockId = Field(
-        description="PairBlock that applies this source change."
+        description="PairBlock that applies this Python declaration change."
     )
     action: TargetAction = Field(
         description="Whether the PairBlock adds, updates, or removes the target."
@@ -166,6 +166,13 @@ class PairBlock(ProtocolModel):
     targets: tuple[RepoSymbolRef, ...] = Field(
         min_length=1, description="Repository symbols this block changes."
     )
+    assets: tuple[RepoRelPath, ...] = Field(
+        default=(),
+        description=(
+            "Non-Python implementation files owned by this block and bound by "
+            "the consuming protocol's content digest."
+        ),
+    )
     tests: tuple[RepoSymbolRef, ...] = Field(
         min_length=1, description="Exact pytest functions that observe this block."
     )
@@ -183,8 +190,8 @@ class PairBlock(ProtocolModel):
 class ContractTraceabilityGraph(ProtocolModel):
     """Store the complete ordered contract and implementation plan."""
 
-    schema_version: Literal[5] = Field(
-        default=5, description="Format version of the serialized traceability graph."
+    schema_version: Literal[6] = Field(
+        default=6, description="Format version of the serialized traceability graph."
     )
     requirements: tuple[ContractRequirement, ...] = Field(
         min_length=1,
@@ -198,11 +205,14 @@ class ContractTraceabilityGraph(ProtocolModel):
         description="Ordered implementation and verification relationships.",
     )
     targets: tuple[ContractTarget, ...] = Field(
-        min_length=1, description="Ordered source changes required by the contracts."
+        min_length=1,
+        description="Ordered Python declaration changes required by the contracts.",
     )
     blocks: tuple[PairBlock, ...] = Field(
         min_length=1,
-        description="Ordered implementation blocks that apply the source changes.",
+        description=(
+            "Ordered implementation blocks that apply declaration and asset changes."
+        ),
     )
 
 
@@ -256,10 +266,10 @@ _PAIR_BLOCK_MARKER = re.compile(r"<!-- pair-block: (?P<id>P[0-9]+-[A-Z]+-[0-9]{2
 
 _PYTHON_FENCE = re.compile(r"\`\`\`python\n(?P<body>.*?)\n\`\`\`", re.DOTALL)
 _CONTRACT_WORKED_EXAMPLE = re.compile(
-    r"<!-- contract-worked-example: start -->"
+    r"^<!-- contract-worked-example: start -->$"
     r"(?P<body>.*?)"
-    r"<!-- contract-worked-example: end -->",
-    re.DOTALL,
+    r"^<!-- contract-worked-example: end -->$",
+    re.DOTALL | re.MULTILINE,
 )
 _MERMAID_FENCE = re.compile(
     r"\`\`\`mermaid\n(?P<body>.*?)\n\`\`\`",
@@ -303,6 +313,7 @@ def _parse_pair_blocks(
                 block_id=block_id,
                 requirements=requirements,
                 targets=block_targets,
+                assets=tuple(manifest.get("assets", ())),
                 tests=tuple(_parse_repo_symbol(value) for value in manifest["tests"]),
                 gate=manifest["gate"],
                 depends_on=tuple(manifest["depends_on"]),
@@ -373,6 +384,7 @@ def _parse_contract_targets(
 
 
 def _validate_plan(
+    root: Path,
     requirements: tuple[ContractRequirement, ...],
     rules: tuple[VerifierRule, ...],
     edges: tuple[RuleEdge, ...],
@@ -387,6 +399,9 @@ def _validate_plan(
     target_keys = [(item.block_id, item.target) for item in targets]
     if len(target_keys) != len(set(target_keys)):
         raise ContractTraceabilityError("PairBlock target has several ContractTargets")
+    asset_paths = [asset for block in blocks for asset in block.assets]
+    if _duplicates(asset_paths):
+        raise ContractTraceabilityError("PairBlock asset has several owners")
 
     for target in targets:
         if not set(target.requirements) <= requirement_ids:
@@ -404,6 +419,16 @@ def _validate_plan(
             )
 
     for block in blocks:
+        if any(Path(asset).suffix in {".py", ".pyi"} for asset in block.assets):
+            raise ContractTraceabilityError(
+                "PairBlock assets must not name Python source"
+            )
+        if block.block_id in completed_blocks:
+            for asset in block.assets:
+                if not (root / asset).is_file():
+                    raise ContractTraceabilityError(
+                        f"implemented PairBlock asset is missing: {asset}"
+                    )
         for target in block.targets:
             if (block.block_id, target) not in target_keys:
                 raise ContractTraceabilityError("PairBlock target lacks ContractTarget")
@@ -814,6 +839,14 @@ def serialize_contract_traceability(graph: ContractTraceabilityGraph) -> bytes:
     ).encode("utf-8")
 
 
+def compile_contract_plan(
+    root: Path,
+    contracts: tuple[Path, ...],
+) -> tuple[tuple[PairBlock, ...], tuple[ContractTarget, ...]]:
+    """Compile the PairBlocks and ContractTargets declared by exact contracts."""
+    return _parse_pair_blocks(root, contracts), _parse_contract_targets(root, contracts)
+
+
 def compile_contract_traceability(
     root: Path,
     checklist: Path,
@@ -846,7 +879,7 @@ def compile_contract_traceability(
     blocks = _parse_pair_blocks(root, contracts)
     targets = _parse_contract_targets(root, contracts)
     edges = _parse_rule_edges(root, checklist, markers, rules)
-    _validate_plan(requirements, rules, edges, targets, blocks)
+    _validate_plan(root, requirements, rules, edges, targets, blocks)
     graph = ContractTraceabilityGraph(
         requirements=tuple(sorted(requirements, key=lambda item: item.requirement_id)),
         rules=tuple(sorted(rules, key=lambda item: item.rule_id)),

@@ -1,0 +1,777 @@
+#!/usr/bin/env python3
+"""Run Agent Skill evaluations in isolated Codex workspaces."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+VALIDATOR = ROOT / "scripts" / "validate-skill-contract.py"
+RUBRIC_PASS_SCORE = 3
+PATH_TOKEN = re.compile(r"(?:^|[\s'\"])(?P<path>(?:/|\.)[^\s'\";|()]+)")
+SUBJECT_PREAMBLE = (
+    "First decide whether a supplied skill applies. If one applies, read it from "
+    "its exact catalog path; never guess or substitute a different path. If no "
+    "skill applies, do not open a skill file."
+)
+DISABLED_SUBJECT_FEATURES = (
+    "apps",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "computer_use",
+    "goals",
+    "image_generation",
+    "in_app_browser",
+    "in_app_chat",
+    "in_app_dictation",
+    "in_app_local_automation",
+    "in_app_updates",
+    "memories",
+    "multi_agent",
+    "plugin_sharing",
+    "plugins",
+    "recommended_plugins",
+    "remote_plugin",
+    "tool_suggest",
+    "view_image",
+    "workspace_dependencies",
+)
+
+
+class EvaluationError(RuntimeError):
+    """Report one invalid runner input or failed harness operation."""
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse one reusable skill-evaluation run."""
+
+    parser = argparse.ArgumentParser(
+        description="Run resolved Agent Skill cases through Codex and grade them."
+    )
+    parser.add_argument("manifest", type=Path)
+    parser.add_argument("--model", required=True)
+    parser.add_argument(
+        "--model-role",
+        choices=("acceptance", "candidate", "stress", "calibration"),
+        required=True,
+        help="State whether this model blocks acceptance or supplies comparison evidence.",
+    )
+    parser.add_argument("--grader-model")
+    parser.add_argument("--reasoning", default="low")
+    parser.add_argument("--grader-reasoning", default="low")
+    parser.add_argument(
+        "--tier",
+        choices=("routine", "sample", "release"),
+        default="routine",
+        help=(
+            "Run a grader-free routine sweep, a selected fully graded sample, "
+            "or the complete release gate."
+        ),
+    )
+    parser.add_argument("--evaluation", action="append", default=[])
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=ROOT,
+        help="Project root used to resolve skill, fixture, and workspace sources.",
+    )
+    parser.add_argument("--results", type=Path)
+    parser.add_argument("--codex", default="codex")
+    parser.add_argument(
+        "--auth-codex-home",
+        type=Path,
+        default=Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")),
+        help="Existing Codex home whose auth.json authorizes isolated runs.",
+    )
+    parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--keep-workspaces", action="store_true")
+    parser.add_argument(
+        "--full-feature-context",
+        action="store_true",
+        help="Retain Codex features that routine skill evaluation does not need.",
+    )
+    return parser.parse_args()
+
+
+def feature_args(full_feature_context: bool) -> list[str]:
+    """Return exact Codex feature overrides for one evaluation process."""
+
+    if full_feature_context:
+        return []
+    return [
+        item for feature in DISABLED_SUBJECT_FEATURES for item in ("--disable", feature)
+    ]
+
+
+def run_process(
+    argv: list[str],
+    *,
+    cwd: Path,
+    timeout: int,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run one command with stable text capture and no shell expansion."""
+
+    try:
+        return subprocess.run(
+            argv,
+            cwd=cwd,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+            check=False,
+            env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise EvaluationError(f"cannot run {argv[0]}: {exc}") from exc
+
+
+def load_plan(
+    manifest: Path,
+    root: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Validate one manifest and return its skill record and resolved cases."""
+
+    completed = run_process(
+        [
+            sys.executable,
+            str(VALIDATOR),
+            "--root",
+            str(root),
+            "--show-plan",
+            str(manifest),
+        ],
+        cwd=root,
+        timeout=60,
+    )
+    if completed.returncode != 0:
+        raise EvaluationError(completed.stderr.strip() or "manifest validation failed")
+    try:
+        compiled = json.loads(completed.stdout)
+        manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+        return manifest_data, compiled["plans"][0]["evaluations"]
+    except (OSError, KeyError, IndexError, json.JSONDecodeError) as exc:
+        raise EvaluationError(f"cannot load compiled evaluation plan: {exc}") from exc
+
+
+def digest_path(path: Path) -> str:
+    """Return the SHA-256 identity of one file."""
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def create_isolated_codex_home(parent: Path, source: Path) -> Path:
+    """Create one empty Codex home linked to the caller's authentication."""
+
+    source_auth = source / "auth.json"
+    if not source_auth.is_file():
+        raise EvaluationError(
+            f"Codex authentication file does not exist: {source_auth}"
+        )
+    codex_home = parent / "codex-home"
+    codex_home.mkdir()
+    (codex_home / "auth.json").symlink_to(source_auth)
+    return codex_home
+
+
+def isolated_codex_env(home: Path, codex_home: Path) -> dict[str, str]:
+    """Build a child environment with isolated user and Codex catalogs."""
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["CODEX_HOME"] = str(codex_home)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return env
+
+
+def create_workspace(
+    evaluation: dict[str, Any],
+    skill: dict[str, Any],
+    parent: Path,
+    root: Path,
+) -> Path:
+    """Create one committed repository containing the case and pinned skill."""
+
+    workspace_spec = evaluation.get("workspace")
+    if workspace_spec is None:
+        raise EvaluationError(
+            f"{evaluation['evaluation_id']}: case has no runnable workspace"
+        )
+    workspace = parent / "workspace"
+    workspace.mkdir(parents=True)
+    for file_ref in workspace_spec["files"]:
+        source = root / file_ref["source"]
+        target = workspace / file_ref["target"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+    source_skill = (root / skill["path"]).parent
+    target_skill = workspace / ".agents" / "skills" / skill["name"]
+    shutil.copytree(
+        source_skill,
+        target_skill,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+    )
+
+    for argv in (
+        ["git", "init", "--quiet"],
+        ["git", "config", "user.name", "Agent Skill Eval"],
+        ["git", "config", "user.email", "skill-eval@example.invalid"],
+        ["git", "add", "."],
+        ["git", "commit", "--quiet", "-m", "evaluation baseline"],
+    ):
+        completed = run_process(argv, cwd=workspace, timeout=60)
+        if completed.returncode != 0:
+            raise EvaluationError(completed.stderr.strip() or "workspace setup failed")
+
+    # Syntax checks may create bytecode even when the subject process was asked
+    # not to. Bytecode is runtime debris, not an authored workspace change.
+    (workspace / ".git" / "info" / "exclude").write_text(
+        "__pycache__/\n*.py[cod]\n",
+        encoding="utf-8",
+    )
+    return workspace
+
+
+def parse_trace(raw: str) -> dict[str, Any]:
+    """Extract commands, messages, and usage from Codex JSONL events."""
+
+    events: list[dict[str, Any]] = []
+    commands: list[dict[str, Any]] = []
+    messages: list[str] = []
+    usage: dict[str, Any] = {}
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        events.append(event)
+        item = event.get("item")
+        if isinstance(item, dict) and item.get("type") == "command_execution":
+            commands.append(
+                {
+                    "command": str(item.get("command", "")),
+                    "exit_code": item.get("exit_code"),
+                    "status": item.get("status"),
+                }
+            )
+        if isinstance(item, dict) and item.get("type") == "agent_message":
+            messages.append(str(item.get("text", "")))
+        if event.get("type") == "turn.completed" and isinstance(
+            event.get("usage"), dict
+        ):
+            usage = event["usage"]
+    return {
+        "events": events,
+        "commands": commands,
+        "final_message": messages[-1] if messages else "",
+        "usage": usage,
+    }
+
+
+def changed_paths(workspace: Path) -> list[str]:
+    """Return every tracked or untracked path changed from the committed case."""
+
+    tracked = run_process(
+        ["git", "diff", "--name-only", "HEAD"], cwd=workspace, timeout=60
+    )
+    untracked = run_process(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=workspace,
+        timeout=60,
+    )
+    if tracked.returncode != 0 or untracked.returncode != 0:
+        raise EvaluationError("cannot inspect evaluation workspace changes")
+    return sorted(
+        {
+            path
+            for path in (tracked.stdout + "\n" + untracked.stdout).splitlines()
+            if path
+        }
+    )
+
+
+def grade_checks(
+    checks: list[dict[str, Any]],
+    *,
+    workspace: Path,
+    trace: dict[str, Any],
+    paths: list[str],
+    timeout: int,
+) -> list[dict[str, Any]]:
+    """Apply every generic deterministic check to one captured run."""
+
+    results: list[dict[str, Any]] = []
+    for check in checks:
+        kind = check["kind"]
+        if kind == "command":
+            completed = run_process(check["argv"], cwd=workspace, timeout=timeout)
+            passed = completed.returncode == check["expected_exit"]
+            passed = passed and all(
+                text in completed.stdout for text in check["stdout_contains"]
+            )
+            passed = passed and all(
+                text in completed.stderr for text in check["stderr_contains"]
+            )
+            results.append(
+                {
+                    "kind": kind,
+                    "passed": passed,
+                    "argv": check["argv"],
+                    "exit_code": completed.returncode,
+                    "stdout": completed.stdout,
+                    "stderr": completed.stderr,
+                }
+            )
+        elif kind == "changed_paths":
+            actual = set(paths)
+            allowed = set(check["allowed"])
+            required = set(check["required"])
+            results.append(
+                {
+                    "kind": kind,
+                    "passed": required <= actual <= allowed,
+                    "actual": paths,
+                    "allowed": check["allowed"],
+                    "required": check["required"],
+                }
+            )
+        elif kind == "trace_command":
+            successful = "\n".join(
+                command["command"]
+                for command in trace["commands"]
+                if command["exit_code"] == 0
+            )
+            results.append(
+                {
+                    "kind": kind,
+                    "passed": all(text in successful for text in check["contains"]),
+                    "contains": check["contains"],
+                    "successful_commands": successful,
+                }
+            )
+    return results
+
+
+def observed_skill_reads(
+    trace: dict[str, Any],
+    *,
+    workspace: Path,
+    skill_name: str,
+    expected_digest: str,
+) -> list[dict[str, Any]]:
+    """Find successful reads of skill instructions and verify their bytes."""
+
+    suffix = f"/skills/{skill_name}/SKILL.md"
+    observations: list[dict[str, Any]] = []
+    for command in trace["commands"]:
+        if command["exit_code"] != 0:
+            continue
+        for match in PATH_TOKEN.finditer(command["command"]):
+            candidate_text = match.group("path")
+            if not candidate_text.endswith(suffix):
+                continue
+            candidate = Path(candidate_text)
+            if not candidate.is_absolute():
+                candidate = workspace / candidate
+            if not candidate.is_file():
+                continue
+            actual_digest = digest_path(candidate)
+            observations.append(
+                {
+                    "path": str(candidate),
+                    "sha256": actual_digest,
+                    "matches_manifest": actual_digest == expected_digest,
+                }
+            )
+    return observations
+
+
+def grade_rubric(
+    evaluation: dict[str, Any],
+    evidence: dict[str, Any],
+    *,
+    workspace: Path,
+    result_dir: Path,
+    codex: str,
+    model: str,
+    reasoning: str,
+    timeout: int,
+    env: dict[str, str],
+    full_feature_context: bool,
+) -> dict[str, Any]:
+    """Ask a fresh read-only Codex run to score one qualitative rubric."""
+
+    schema_path = result_dir / "rubric-schema.json"
+    output_path = result_dir / "rubric-result.json"
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["score", "reason", "evidence"],
+        "properties": {
+            "score": {"type": "integer", "minimum": 0, "maximum": 4},
+            "reason": {"type": "string"},
+            "evidence": {"type": "array", "items": {"type": "string"}},
+        },
+    }
+    schema_path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+    prompt = (
+        "Grade this captured Agent Skill run against the rubric. Use only the "
+        "supplied evidence. Score 4 for complete satisfaction, 3 for adequate "
+        "satisfaction with minor defects, 2 for a material defect, 1 for a "
+        "mostly failed result, and 0 for no usable result.\n\n"
+        f"Rubric:\n{evaluation['rubric']}\n\n"
+        f"Evidence:\n{json.dumps(evidence, indent=2)[:60000]}"
+    )
+    completed = run_process(
+        [
+            codex,
+            "exec",
+            "--json",
+            "--ephemeral",
+            "--ignore-user-config",
+            "--ignore-rules",
+            *feature_args(full_feature_context),
+            "--sandbox",
+            "read-only",
+            "--model",
+            model,
+            "-c",
+            f'model_reasoning_effort="{reasoning}"',
+            "--output-schema",
+            str(schema_path),
+            "--output-last-message",
+            str(output_path),
+            "-C",
+            str(workspace),
+            prompt,
+        ],
+        cwd=workspace,
+        timeout=timeout,
+        env=env,
+    )
+    (result_dir / "rubric-trace.jsonl").write_text(completed.stdout, encoding="utf-8")
+    (result_dir / "rubric-stderr.txt").write_text(completed.stderr, encoding="utf-8")
+    if completed.returncode != 0 or not output_path.is_file():
+        return {
+            "passed": False,
+            "score": None,
+            "reason": "rubric grader did not produce a valid result",
+            "evidence": [],
+        }
+    try:
+        grade = json.loads(output_path.read_text(encoding="utf-8"))
+        score = grade["score"]
+        if not isinstance(score, int) or not 0 <= score <= 4:
+            raise ValueError("score must be an integer from 0 through 4")
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+        return {
+            "passed": False,
+            "score": None,
+            "reason": f"invalid rubric result: {exc}",
+            "evidence": [],
+        }
+    return {"passed": score >= RUBRIC_PASS_SCORE, **grade}
+
+
+def run_evaluation(
+    evaluation: dict[str, Any],
+    skill: dict[str, Any],
+    *,
+    run_dir: Path,
+    root: Path,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    """Execute and grade one resolved evaluation case."""
+
+    result_dir = run_dir / evaluation["evaluation_id"]
+    result_dir.mkdir(parents=True)
+    temporary = tempfile.TemporaryDirectory(prefix="agent-skill-eval-")
+    try:
+        workspace = create_workspace(
+            evaluation,
+            skill,
+            Path(temporary.name),
+            root,
+        )
+        isolated_home = Path(temporary.name) / "home"
+        isolated_home.mkdir()
+        isolated_codex_home = create_isolated_codex_home(
+            Path(temporary.name),
+            args.auth_codex_home.resolve(),
+        )
+        child_env = isolated_codex_env(isolated_home, isolated_codex_home)
+        subject = run_process(
+            [
+                args.codex,
+                "exec",
+                "--json",
+                "--ephemeral",
+                "--ignore-user-config",
+                "--ignore-rules",
+                *feature_args(args.full_feature_context),
+                "--sandbox",
+                "workspace-write",
+                "--model",
+                args.model,
+                "-c",
+                f'model_reasoning_effort="{args.reasoning}"',
+                "-C",
+                str(workspace),
+                f"{SUBJECT_PREAMBLE}\n\n{evaluation['prompt']}",
+            ],
+            cwd=workspace,
+            timeout=args.timeout,
+            env=child_env,
+        )
+        trace = parse_trace(subject.stdout)
+        paths = changed_paths(workspace)
+        diff = run_process(
+            ["git", "diff", "--binary", "HEAD"], cwd=workspace, timeout=60
+        ).stdout
+        (result_dir / "trace.jsonl").write_text(subject.stdout, encoding="utf-8")
+        (result_dir / "stderr.txt").write_text(subject.stderr, encoding="utf-8")
+        (result_dir / "final.txt").write_text(trace["final_message"], encoding="utf-8")
+        (result_dir / "changes.patch").write_text(diff, encoding="utf-8")
+
+        check_results = grade_checks(
+            evaluation["checks"],
+            workspace=workspace,
+            trace=trace,
+            paths=paths,
+            timeout=args.timeout,
+        )
+        checks_passed = all(check["passed"] for check in check_results)
+        skill_reads = observed_skill_reads(
+            trace,
+            workspace=workspace,
+            skill_name=skill["name"],
+            expected_digest=skill["sha256"],
+        )
+        activation = any(read["matches_manifest"] for read in skill_reads)
+        rubric_result: dict[str, Any] | None = None
+        if evaluation["surface"] == "activation":
+            subject_passed = (
+                subject.returncode == 0 and activation is evaluation["expected"]
+            )
+            passed = subject_passed
+            status = "passed" if passed else "failed"
+        else:
+            subject_passed = subject.returncode == 0 and activation and checks_passed
+        if (
+            evaluation["surface"] == "execution"
+            and evaluation["method"] == "deterministic"
+        ):
+            passed = subject_passed and checks_passed is evaluation["expected"]
+            status = "passed" if passed else "failed"
+        elif evaluation["surface"] == "execution" and args.tier == "routine":
+            passed = False
+            status = "ungraded" if subject_passed else "failed"
+            rubric_result = {
+                "passed": False,
+                "score": None,
+                "reason": "Rubric grading was deferred for this run.",
+                "evidence": [],
+            }
+        elif evaluation["surface"] == "execution":
+            evidence = {
+                "prompt": evaluation["prompt"],
+                "final_message": trace["final_message"],
+                "commands": trace["commands"],
+                "changed_paths": paths,
+                "diff": diff,
+                "deterministic_checks": check_results,
+            }
+            rubric_result = grade_rubric(
+                evaluation,
+                evidence,
+                workspace=workspace,
+                result_dir=result_dir,
+                codex=args.codex,
+                model=args.grader_model or args.model,
+                reasoning=args.grader_reasoning,
+                timeout=args.timeout,
+                env=child_env,
+                full_feature_context=args.full_feature_context,
+            )
+            passed = subject_passed and rubric_result["passed"]
+            status = "passed" if passed else "failed"
+        result = {
+            "evaluation_id": evaluation["evaluation_id"],
+            "status": status,
+            "passed": passed,
+            "subject_passed": subject_passed,
+            "subject_exit_code": subject.returncode,
+            "activation_observed": activation,
+            "skill_reads": skill_reads,
+            "changed_paths": paths,
+            "checks": check_results,
+            "rubric": rubric_result,
+            "usage": trace["usage"],
+        }
+        (result_dir / "result.json").write_text(
+            json.dumps(result, indent=2), encoding="utf-8"
+        )
+        if args.keep_workspaces:
+            retained = result_dir / "workspace"
+            shutil.copytree(workspace, retained, ignore=shutil.ignore_patterns(".git"))
+        return result
+    finally:
+        temporary.cleanup()
+
+
+def main() -> int:
+    """Run selected cases, persist their evidence, and return aggregate status."""
+
+    args = parse_args()
+    root = args.root.resolve()
+    manifest = args.manifest.resolve()
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    results_root = args.results.resolve() if args.results else root / "eval-results"
+    run_dir = results_root / timestamp
+    run_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        manifest_data, evaluations = load_plan(manifest, root)
+        skill = manifest_data["skill"]
+        declared_models = manifest_data.get("model_support", [])
+        subject_identity = {
+            "model": args.model,
+            "reasoning": args.reasoning,
+            "role": args.model_role,
+        }
+        if subject_identity not in declared_models:
+            raise EvaluationError(
+                "subject model, reasoning, and role are not declared by the skill"
+            )
+        selected = set(args.evaluation)
+        if args.tier == "release" and selected:
+            raise EvaluationError("release tier must run the complete manifest")
+        if args.tier == "release" and args.model_role != "acceptance":
+            raise EvaluationError("release tier requires --model-role acceptance")
+        if args.tier == "sample" and not selected:
+            raise EvaluationError("sample tier requires at least one --evaluation")
+        if args.tier in {"sample", "release"}:
+            grader_alias = args.grader_model or args.model
+            grader_identity = (grader_alias, args.grader_reasoning)
+            declared_graders = {
+                (item["model"], item["reasoning"])
+                for item in declared_models
+                if item["role"] in {"acceptance", "calibration"}
+            }
+            if grader_identity not in declared_graders:
+                raise EvaluationError(
+                    "grader model and reasoning are not declared as acceptance or calibration"
+                )
+        if selected:
+            available = {item["evaluation_id"] for item in evaluations}
+            missing = selected - available
+            if missing:
+                raise EvaluationError(f"unknown evaluations: {sorted(missing)}")
+            evaluations = [
+                item for item in evaluations if item["evaluation_id"] in selected
+            ]
+        codex_version = run_process([args.codex, "--version"], cwd=root, timeout=30)
+        if codex_version.returncode != 0:
+            raise EvaluationError(codex_version.stderr.strip() or "Codex unavailable")
+        results: list[dict[str, Any]] = []
+        terminal_reason = "completed"
+        for evaluation in evaluations:
+            result = run_evaluation(
+                evaluation,
+                skill,
+                run_dir=run_dir,
+                root=root,
+                args=args,
+            )
+            results.append(result)
+            if (
+                args.tier == "release"
+                and args.model_role == "acceptance"
+                and result["status"] == "failed"
+            ):
+                terminal_reason = "failed_fast"
+                break
+        run_status = (
+            "failed"
+            if any(result["status"] == "failed" for result in results)
+            else "partial"
+            if any(result["status"] == "ungraded" for result in results)
+            else "passed"
+        )
+        subject_failure_rate = sum(not result["subject_passed"] for result in results) / len(
+            results
+        )
+        summary = {
+            "schema_version": 2,
+            "manifest": manifest.relative_to(root).as_posix(),
+            "manifest_sha256": digest_path(manifest),
+            "skill": skill,
+            "catalog_isolation": {
+                "user_home": "ephemeral",
+                "codex_home": "ephemeral_auth_link",
+                "project_skill_root": ".agents/skills",
+            },
+            "feature_context": {
+                "mode": ("full" if args.full_feature_context else "reduced"),
+                "disabled_features": (
+                    [] if args.full_feature_context else list(DISABLED_SUBJECT_FEATURES)
+                ),
+            },
+            "model": args.model,
+            "tier": args.tier,
+            "model_role": args.model_role,
+            "blocking": args.model_role == "acceptance",
+            "grader_model": (
+                args.grader_model or args.model
+                if args.tier in {"sample", "release"}
+                else None
+            ),
+            "reasoning": args.reasoning,
+            "grader_reasoning": (
+                args.grader_reasoning if args.tier in {"sample", "release"} else None
+            ),
+            "codex_version": codex_version.stdout.strip(),
+            "started_at": timestamp,
+            "terminal_reason": terminal_reason,
+            "status": run_status,
+            "passed": run_status == "passed",
+            "subject_failure_rate": subject_failure_rate,
+            "results": results,
+        }
+        (run_dir / "run.json").write_text(
+            json.dumps(summary, indent=2), encoding="utf-8"
+        )
+        print(f"skill-evaluations: {run_status}")
+        print(f"results: {run_dir}")
+        return 1 if run_status == "failed" and summary["blocking"] else 0
+    except EvaluationError as exc:
+        print(f"skill-evaluations: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print(
+            f"skill-evaluations: interrupted; partial results: {run_dir}",
+            file=sys.stderr,
+        )
+        return 130
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

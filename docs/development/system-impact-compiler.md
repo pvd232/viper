@@ -22,7 +22,7 @@ gate remains the behavioral acceptance boundary.
 
 ## 1. Status
 
-**Contract status:** implementation started through `P0-SIG-01`; remaining blocks pending.
+**Contract status:** implemented through `P0-SIG-05`.
 
 | ID | Implementation obligation |
 | --- | --- |
@@ -77,24 +77,26 @@ For the `ContractTarget` records owned by `PlanCheck.blocks`,
    `block_id` appears in `PlanCheck.blocks`;
 5. VIPER runs every frozen selected `PairBlock.gate` once and every command
    exits with code `0`;
-6. every omitted PairBlock dependency is supported by a referenced
-   `Acceptance` whose commit is an ancestor of $R_0$;
+6. every omitted PairBlock dependency already has all of its declared target
+   states in $G_0$;
 7. `plan_sha256` equals the digest recomputed from the frozen selected blocks,
-   targets, dependencies, tests, and gates; and
+   targets, dependencies, tests, gates, and supporting-asset bytes; and
 8. both graphs have valid receipts for the same $K$.
 
 The check applies only to the selected PairBlocks. A selected block may omit a
-dependency only when `PlanCheck.acceptances` references an `Acceptance` whose
-`PlanCheck.blocks` contains that dependency and whose `revision` is an ancestor
-of $R_0$. A checked checklist box supplies documented status; the referenced
-`Acceptance` supplies the required Git evidence.
+dependency when every `ContractTarget` owned by that dependency already matches
+the baseline graph. `PlanCheck.baseline_dependencies` records those satisfied
+dependencies. `PlanCheck.unsatisfied_dependencies` records the rest and makes
+the check fail. The source graph, not checklist status, decides whether an
+omitted dependency is satisfied.
 
 `PlanCheck` evaluates the frozen candidate before commit. After commit,
 `accept()` recomputes the source digest and selected-plan digest from the
 committed tree. Both values must equal `PlanCheck.realized.source_sha256` and
-`PlanCheck.plan_sha256`. Equality produces an `Acceptance`; either mismatch
-rejects the commit. This final operation binds the passing check to the exact
-source and PairBlocks consumed by later dependency checks.
+`PlanCheck.plan_sha256`. The plan digest also binds each selected
+`PairBlock.assets` path and its exact bytes. Equality produces an `Acceptance`;
+either mismatch rejects the commit. The accepted commit becomes the baseline
+for the next block or contract.
 
 The impact report identifies direct source declarations that may need
 attention. `classify_target_change()` compares each baseline declaration with
@@ -110,21 +112,21 @@ does change a dependent, that declaration must already be a `ContractTarget`.
 
 ### Current DAG
 
-The CTG can validate requirements, rules, owners, and tests. CodeQL is not yet
-connected to that plan, so the repository cannot compare declared targets with
-realized source changes.
+The input boundary before this contract contains a closed CTG plan and source
+files, but no operation joins declared targets to independently observed source
+facts.
 
 ```mermaid
 flowchart LR
     Contract["Contract requirements and rules"]
     Edges["RuleEdge owners and tests"]
-    Blocks["PairBlocks outside CTG"]
+    Blocks["PairBlocks in CTG"]
     Source["Repository source"]
     Gap["Unsupported comparison<br/>plan versus realized source"]
 
     Contract -->|"requirement_id"| Edges
-    Blocks -->|"manual execution"| Source
-    Edges -->|"no target-plan join"| Gap
+    Blocks -->|"ordered execution"| Source
+    Edges -->|"no source-graph join"| Gap
     Source -->|"no source observation"| Gap
 
     class Contract current
@@ -145,17 +147,17 @@ conformance, and one post-commit acceptance record.
 flowchart TB
     Plan["Selected ContractTargets and PairBlocks"]
     Freeze["Freeze plan and candidate source"]
-    Identity["Proposed CodeQLIdentity"]
-    Baseline["Proposed SourceGraph G0"]
-    Impact["Proposed Impact"]
-    Realized["Proposed SourceGraph G1"]
-    Resolved["Proposed ResolvedContractTarget"]
-    Target["Proposed TargetCheck"]
+    Identity["CodeQLIdentity"]
+    Baseline["SourceGraph G0"]
+    Impact["Impact"]
+    Realized["SourceGraph G1"]
+    Resolved["ResolvedContractTarget"]
+    Target["TargetCheck"]
     Gates["Run frozen PairBlock gates"]
-    Prior["Prior Acceptance records"]
-    Check["Proposed PlanCheck"]
+    Dependencies["Baseline-satisfied dependencies"]
+    Check["PlanCheck"]
     Commit["Commit checked source"]
-    Acceptance["Proposed Acceptance"]
+    Acceptance["Acceptance"]
 
     Plan -->|"selected plan"| Freeze
     Plan -->|"recompute plan digest"| Check
@@ -172,13 +174,14 @@ flowchart TB
     Target -->|"ordered checks"| Check
     Plan -->|"gate commands"| Gates
     Gates -->|"exit code 0"| Check
-    Prior -->|"dependency evidence"| Check
+    Baseline -->|"dependency target states"| Dependencies
+    Dependencies -->|"omitted dependency evidence"| Check
     Freeze -->|"checked source and plan bytes"| Commit
     Check -->|"passed check"| Commit
     Commit -->|"revision, source, and plan bytes"| Acceptance
     Check -->|"check digest"| Acceptance
 
-    class Plan,Freeze,Identity,Baseline,Impact,Realized,Resolved,Target,Gates,Prior,Check,Commit,Acceptance proposed
+    class Plan,Freeze,Identity,Baseline,Impact,Realized,Resolved,Target,Gates,Dependencies,Check,Commit,Acceptance proposed
     classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
@@ -205,7 +208,7 @@ flowchart TB
     Resolved["ResolvedContractTarget<br/>digest and ChangeKind"]
     Check["PlanCheck"]
     Gates["Run frozen PairBlock gates"]
-    Prior["Prior Acceptance records"]
+    Dependencies["Baseline-satisfied dependencies"]
     Commit["Commit checked source"]
     Acceptance["Acceptance"]
 
@@ -234,7 +237,8 @@ flowchart TB
     Impact -->|"review evidence"| Check
     Block -->|"gate command"| Gates
     Gates -->|"exit code 0"| Check
-    Prior -->|"dependency evidence"| Check
+    G0 -->|"dependency target states"| Dependencies
+    Dependencies -->|"omitted dependency evidence"| Check
     Freeze -->|"plan digest"| Check
     Freeze -->|"checked source and plan bytes"| Commit
     Check -->|"passed check"| Commit
@@ -245,7 +249,7 @@ flowchart TB
     class Block checklist
     class CodeQL,G0,G1,Impact evidence
     class Execute,Freeze,Gates,Commit implementation
-    class Resolved,Prior,Check,Acceptance output
+    class Resolved,Dependencies,Check,Acceptance output
     classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
     classDef checklist fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
     classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
@@ -262,22 +266,54 @@ purple for proposed or generated records, and red for an unsupported gap.
 
 These records belong to developer tooling, not the experiment protocol.
 
-```python
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:CodeQLIdentity -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceSnapshot -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:CodeQLReceipt -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceNode -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceEdge -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceGraph -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=update target=src/viper/system_impact.py:CodeQLReceipt -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/system_impact.py:SourceNodeKind -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/system_impact.py:SourceNode -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/system_impact.py:SourceGraph -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:ChangeKind -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:Impact -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:ResolvedContractTarget -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:PlanInspection -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:inspect_plan -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:CheckState -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:TargetCheck -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:GateCheck -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:PlanCheck -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:Acceptance -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:check_plan -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:accept -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=update target=src/viper/system_impact.py:__all__ -->
+
+```python contract-target
+"""Define public source-analysis records for System Impact checks."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
-from viper._contract_traceability import (
+from ._contract_traceability import (
     ContractTarget,
-    DeclarationRef,
+    ContractTraceabilityGraph,
+    PairBlockId,
     RepoSymbolRef,
 )
-from viper._schema import NonEmptyStr, ProtocolModel, RepoRelPath, SHA256
-
+from ._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 NodeId = NonEmptyStr
 EdgeKind = Literal["imports", "calls", "constructs", "inherits", "reads", "writes"]
+SourceNodeKind = Literal["function", "method", "class", "assignment", "import"]
 ChangeKind = Literal[
     "added",
     "removed",
@@ -286,7 +322,7 @@ ChangeKind = Literal[
     "implementation_changed",
     "unclassified",
 ]
-CheckState = Literal["passed", "failed", "unresolved"]
+CheckState = Literal["passed", "failed"]
 
 
 class CodeQLIdentity(ProtocolModel):
@@ -294,7 +330,9 @@ class CodeQLIdentity(ProtocolModel):
 
     version: NonEmptyStr = Field(description="Required CodeQL CLI version.")
     platform: NonEmptyStr = Field(description="CodeQL bundle platform identifier.")
-    bundle_sha256: SHA256 = Field(description="Digest of the installed CodeQL bundle.")
+    executable_sha256: SHA256 = Field(
+        description="Digest of the exact CodeQL launcher executable."
+    )
     pack: NonEmptyStr = Field(description="Name and version of the VIPER query pack.")
     pack_sha256: SHA256 = Field(description="Digest of the exact query-pack bytes.")
 
@@ -302,20 +340,40 @@ class CodeQLIdentity(ProtocolModel):
 class SourceSnapshot(ProtocolModel):
     """Identify one immutable repository source tree."""
 
-    base_revision: CommitId = Field(description="Committed baseline from which this source was derived.")
-    source_sha256: SHA256 = Field(description="Digest of the complete analyzed source-file set and bytes.")
-    revision: CommitId | None = Field(description="Exact commit when the snapshot is committed; otherwise absent.")
+    base_revision: CommitId = Field(
+        description="Committed baseline from which this source was derived."
+    )
+    source_sha256: SHA256 = Field(
+        description="Digest of the complete analyzed source-file set and bytes."
+    )
+    revision: CommitId | None = Field(
+        description="Exact commit when the snapshot is committed; otherwise absent."
+    )
 
 
 class CodeQLReceipt(ProtocolModel):
     """Record one completed source-analysis invocation."""
 
-    snapshot: SourceSnapshot = Field(description="Immutable source snapshot analyzed by CodeQL.")
-    command: tuple[NonEmptyStr, ...] = Field(min_length=1, description="Exact analyzer argument vector.")
+    snapshot: SourceSnapshot = Field(
+        description="Immutable source snapshot analyzed by CodeQL."
+    )
+    identity: CodeQLIdentity = Field(
+        description="Exact CodeQL and query-pack identity used by every command."
+    )
+    commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
+        min_length=1,
+        description="Ordered argument vectors executed for this analysis.",
+    )
     exit_code: int = Field(description="Terminal process exit code.")
-    database_sha256: SHA256 = Field(description="Digest identifying the CodeQL database.")
+    database_sha256: SHA256 = Field(
+        description="Digest of the CodeQL database's relative paths and file bytes."
+    )
     result_sha256: SHA256 = Field(description="Digest of the decoded canonical rows.")
-    stderr_sha256: SHA256 = Field(description="Digest of captured standard error bytes.")
+    stderr_sha256: SHA256 = Field(
+        description=(
+            "Digest of the ordered query labels and captured standard error bytes."
+        )
+    )
 
 
 class SourceNode(ProtocolModel):
@@ -324,11 +382,23 @@ class SourceNode(ProtocolModel):
     node_id: NodeId = Field(description="Stable path-and-symbol node identifier.")
     path: RepoRelPath = Field(description="Repository-relative Python source path.")
     symbol: NonEmptyStr = Field(description="Qualified Python symbol name.")
-    kind: NonEmptyStr = Field(description="Observed Python declaration kind.")
-    start_line: int = Field(ge=1, description="First source line of the declaration.")
-    start_col: int = Field(ge=0, description="UTF-8 byte offset on the first line.")
-    end_line: int = Field(ge=1, description="Final source line of the declaration.")
-    end_col: int = Field(ge=0, description="UTF-8 byte offset after the declaration.")
+    kind: SourceNodeKind = Field(description="Observed Python declaration kind.")
+    start_line: int = Field(
+        ge=1,
+        description="First source line of the declaration.",
+    )
+    start_col: int = Field(
+        ge=0,
+        description="UTF-8 byte offset on the first line.",
+    )
+    end_line: int = Field(
+        ge=1,
+        description="Final source line of the declaration.",
+    )
+    end_col: int = Field(
+        ge=0,
+        description="UTF-8 byte offset after the declaration.",
+    )
     sha256: SHA256 = Field(description="Digest of the exact declaration bytes.")
 
 
@@ -340,71 +410,334 @@ class SourceEdge(ProtocolModel):
     target: NodeId = Field(description="Declaration consumed by the source.")
     kind: EdgeKind = Field(description="Observed dependency operation.")
     query: NonEmptyStr = Field(description="CodeQL query that emitted the edge.")
-    path: NonEmptyStr = Field(description="Repository-relative path containing the use.")
-    line: int = Field(ge=1, description="One-based source line containing the use.")
+    path: NonEmptyStr = Field(
+        description="Repository-relative path containing the use."
+    )
+    line: int = Field(
+        ge=1,
+        description="One-based source line containing the use.",
+    )
 
 
 class SourceGraph(ProtocolModel):
     """Store one canonical CodeQL observation of a source snapshot."""
 
-    schema_version: Literal[1] = Field(default=1, description="Source-graph format version.")
-    snapshot: SourceSnapshot = Field(description="Immutable source snapshot represented by the graph.")
-    identity: CodeQLIdentity = Field(description="Analyzer identity used for this graph.")
-    nodes: tuple[SourceNode, ...] = Field(description="Nodes sorted by stable identifier.")
-    edges: tuple[SourceEdge, ...] = Field(description="Edges sorted by stable identifier.")
-    receipt: CodeQLReceipt = Field(description="Evidence for the completed analysis run.")
+    schema_version: Literal[1] = Field(
+        default=1,
+        description="Source-graph format version.",
+    )
+    snapshot: SourceSnapshot = Field(
+        description="Immutable source snapshot represented by the graph."
+    )
+    identity: CodeQLIdentity = Field(
+        description="Analyzer identity used for this graph."
+    )
+    nodes: tuple[SourceNode, ...] = Field(
+        description="Nodes sorted by stable identifier."
+    )
+    edges: tuple[SourceEdge, ...] = Field(
+        description="Edges sorted by stable identifier."
+    )
+    receipt: CodeQLReceipt = Field(
+        description="Evidence for the completed analysis run."
+    )
+
+    @field_validator("nodes")
+    @classmethod
+    def order_nodes(cls, nodes: tuple[SourceNode, ...]) -> tuple[SourceNode, ...]:
+        """Order nodes by their stable identifiers before serialization."""
+        return tuple(sorted(nodes, key=lambda node: node.node_id))
+
+    @field_validator("edges")
+    @classmethod
+    def order_edges(cls, edges: tuple[SourceEdge, ...]) -> tuple[SourceEdge, ...]:
+        """Order edges by their stable identifiers before serialization."""
+        return tuple(sorted(edges, key=lambda edge: edge.edge_id))
+
+    @model_validator(mode="after")
+    def validate_graph(self) -> SourceGraph:
+        """Reject duplicate identities, dangling edges, and receipt drift."""
+        node_ids = tuple(node.node_id for node in self.nodes)
+        edge_ids = tuple(edge.edge_id for edge in self.edges)
+        if len(node_ids) != len(set(node_ids)):
+            raise ValueError("SourceGraph contains duplicate node IDs")
+        if len(edge_ids) != len(set(edge_ids)):
+            raise ValueError("SourceGraph contains duplicate edge IDs")
+        known = set(node_ids)
+        if any(
+            edge.source not in known or edge.target not in known for edge in self.edges
+        ):
+            raise ValueError("SourceGraph contains an edge with an unknown endpoint")
+        if self.receipt.snapshot != self.snapshot:
+            raise ValueError("CodeQLReceipt snapshot differs from SourceGraph snapshot")
+        if self.receipt.identity != self.identity:
+            raise ValueError("CodeQLReceipt identity differs from SourceGraph identity")
+        result_payload = json.dumps(
+            {
+                "nodes": [node.model_dump(mode="json") for node in self.nodes],
+                "edges": [edge.model_dump(mode="json") for edge in self.edges],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        if hashlib.sha256(result_payload).hexdigest() != self.receipt.result_sha256:
+            raise ValueError(
+                "CodeQLReceipt result digest differs from SourceGraph rows"
+            )
+        return self
 
 
 class Impact(ProtocolModel):
-    """Report direct baseline dependents selected by the impact policy."""
+    """Report direct baseline dependents selected by policy version 1."""
 
-    policy_version: Literal[1] = Field(default=1, description="ChangeKind-to-EdgeKind policy version.")
-    baseline: SourceSnapshot = Field(description="Baseline source snapshot used for direct-edge selection.")
-    targets: tuple[NodeId, ...] = Field(description="Resolved existing CTG target nodes.")
-    affected: tuple[NodeId, ...] = Field(description="Unique direct dependents selected by the impact policy.")
-    edges: tuple[SHA256, ...] = Field(description="Direct SourceEdge records supporting affected.")
-    unresolved: tuple[RepoSymbolRef, ...] = Field(description="Targets absent from the baseline graph.")
+    policy_version: Literal[1] = Field(
+        default=1,
+        description="Change-kind-to-edge-kind policy version used for this report.",
+    )
+    baseline: SourceSnapshot = Field(
+        description="Baseline source snapshot whose direct edges were inspected."
+    )
+    targets: tuple[NodeId, ...] = Field(
+        description="Existing baseline nodes resolved from the selected targets."
+    )
+    affected: tuple[NodeId, ...] = Field(
+        description="Unique direct dependents selected by the impact policy."
+    )
+    edges: tuple[SHA256, ...] = Field(
+        description="SourceEdge identifiers that support the affected-node report."
+    )
 
 
 class ResolvedContractTarget(ProtocolModel):
-    """Resolve one authored target and classify its planned change."""
+    """Bind one authored target to baseline and expected declaration bytes."""
 
     target: ContractTarget = Field(description="Selected CTG target being resolved.")
-    baseline_node: NodeId | None = Field(description="Baseline node, absent for an addition.")
-    baseline_sha256: SHA256 | None = Field(description="Baseline declaration digest, absent for an addition.")
-    expected_sha256: SHA256 | None = Field(description="Authored declaration digest, absent for a removal.")
-    change_kind: ChangeKind = Field(description="Planned declaration transition used to select direct dependency edges.")
+    baseline_node: NodeId | None = Field(
+        description="Resolved baseline node identifier, or absent for an addition."
+    )
+    baseline_sha256: SHA256 | None = Field(
+        description="Baseline declaration digest, or absent for an addition."
+    )
+    expected_sha256: SHA256 | None = Field(
+        description="Authored declaration digest, or absent for a removal."
+    )
+    change_kind: ChangeKind = Field(
+        description="Planned transition used to select direct dependency edges."
+    )
 
 
 class TargetCheck(ProtocolModel):
-    """Check one declared source change against both source graphs."""
+    """Record whether one realized declaration matches its authored target."""
 
-    resolved: ResolvedContractTarget = Field(description="Frozen target and expected declaration digest.")
-    after_sha256: SHA256 | None = Field(description="Realized digest, absent for a removal.")
-    state: CheckState = Field(description="Result of checking this target transition.")
-    message: NonEmptyStr = Field(description="Concrete reason for the check state.")
+    resolved: ResolvedContractTarget = Field(
+        description="Authored target resolved against the baseline source graph."
+    )
+    after_sha256: SHA256 | None = Field(
+        description=(
+            "Realized declaration digest, or absent when no declaration remains."
+        )
+    )
+    state: CheckState = Field(
+        description="Whether the realized declaration has the required target state."
+    )
+    message: NonEmptyStr = Field(description="Specific reason for the target result.")
+
+
+class GateCheck(ProtocolModel):
+    """Record one selected PairBlock gate invocation."""
+
+    block_id: PairBlockId = Field(
+        description="Selected PairBlock whose frozen gate was executed."
+    )
+    command: tuple[NonEmptyStr, ...] = Field(
+        min_length=1,
+        description="Exact argument vector executed without a command shell.",
+    )
+    exit_code: int = Field(description="Terminal process exit code.")
+    stdout_sha256: SHA256 = Field(
+        description="Digest of the gate's captured standard output bytes."
+    )
+    stderr_sha256: SHA256 = Field(
+        description="Digest of the gate's captured standard error bytes."
+    )
 
 
 class PlanCheck(ProtocolModel):
-    """Return the complete result of checking one CTG plan."""
+    """Record the complete result of checking selected PairBlocks."""
 
-    schema_version: Literal[1] = Field(default=1, description="Plan-check format version.")
-    baseline: SourceSnapshot = Field(description="Source snapshot inspected before implementation.")
-    realized: SourceSnapshot = Field(description="Frozen candidate source snapshot inspected after implementation.")
-    blocks: tuple[NonEmptyStr, ...] = Field(min_length=1, description="Selected PairBlocks checked in this run.")
-    acceptances: tuple[SHA256, ...] = Field(default=(), description="Prior Acceptance digests used to satisfy omitted dependencies.")
-    plan_sha256: SHA256 = Field(description="Digest of the frozen selected blocks, targets, dependencies, tests, and gates.")
-    impact: Impact = Field(description="Typed direct-impact report for the baseline targets.")
-    targets: tuple[TargetCheck, ...] = Field(description="One result per selected ContractTarget.")
-    unexpected: tuple[RepoSymbolRef, ...] = Field(description="Changed declarations absent from the selected plan.")
-    passed: bool = Field(description="True only when targets, gates, dependencies, plan identity, and source receipts pass.")
+    schema_version: Literal[1] = Field(
+        default=1,
+        description="Plan-check record format version.",
+    )
+    baseline: SourceSnapshot = Field(
+        description="Source state inspected before the selected PairBlocks ran."
+    )
+    realized: SourceSnapshot = Field(
+        description=(
+            "Candidate source state inspected after the selected PairBlocks ran."
+        )
+    )
+    blocks: tuple[PairBlockId, ...] = Field(
+        min_length=1,
+        description="Selected PairBlocks covered by this check.",
+    )
+    contracts: tuple[RepoRelPath, ...] = Field(
+        min_length=1,
+        description="Contract files needed to reconstruct the selected plan.",
+    )
+    baseline_dependencies: tuple[PairBlockId, ...] = Field(
+        default=(),
+        description=(
+            "Omitted dependencies whose target state already exists in the baseline."
+        ),
+    )
+    unsatisfied_dependencies: tuple[PairBlockId, ...] = Field(
+        default=(),
+        description=(
+            "Omitted dependencies whose target state is absent from the baseline."
+        ),
+    )
+    plan_sha256: SHA256 = Field(
+        description=(
+            "Digest of the selected PairBlock and ContractTarget records plus "
+            "the selected asset paths and bytes."
+        )
+    )
+    impact: Impact = Field(
+        description="Direct advisory dependency report for the selected targets."
+    )
+    targets: tuple[TargetCheck, ...] = Field(
+        description="One realized result for every selected ContractTarget."
+    )
+    unexpected: tuple[RepoSymbolRef, ...] = Field(
+        description="Changed declarations that no selected ContractTarget owns."
+    )
+    gates: tuple[GateCheck, ...] = Field(
+        description="One gate result for every selected PairBlock."
+    )
+    receipts_valid: bool = Field(
+        description=(
+            "Whether both graphs have successful receipts with one analyzer identity."
+        )
+    )
+    plan_valid: bool = Field(
+        description=(
+            "Whether the post-gate contract files retain the checked plan digest."
+        )
+    )
+    source_valid: bool = Field(
+        description="Whether both source roots retain their checked source digests."
+    )
+    passed: bool = Field(
+        description=(
+            "Whether every target, dependency, gate, source, plan, and receipt check "
+            "passed."
+        )
+    )
 
 
 class Acceptance(ProtocolModel):
-    """Bind a passing plan check to the commit containing its checked source."""
+    """Bind a passing plan check to its exact committed source and plan."""
 
-    check: SHA256 = Field(description="Digest of the accepted PlanCheck bytes.")
-    revision: CommitId = Field(description="Commit whose source and selected-plan digests equal the checked values.")
+    check: SHA256 = Field(
+        description="Digest of the exact passing PlanCheck accepted for reuse."
+    )
+    revision: CommitId = Field(
+        description="Commit whose Python source and selected plan match the PlanCheck."
+    )
+
+
+class PlanInspection(ProtocolModel):
+    """Return resolved selected targets and their direct advisory impact."""
+
+    targets: tuple[ResolvedContractTarget, ...] = Field(
+        description="Selected targets resolved against their baseline declarations."
+    )
+    impact: Impact = Field(
+        description="Direct advisory impact derived from the resolved targets."
+    )
+
+
+def inspect_plan(
+    *,
+    plan_root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+) -> PlanInspection:
+    """Resolve selected targets and report their policy-selected direct impact."""
+    from ._system_impact.plan import inspect_plan as _inspect_plan
+
+    return _inspect_plan(
+        plan_root=plan_root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=block_ids,
+        baseline=baseline,
+    )
+
+
+def check_plan(
+    *,
+    root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+    realized: SourceGraph,
+    gate_timeout_seconds: float = 900.0,
+) -> PlanCheck:
+    """Check selected PairBlocks against independently observed source graphs."""
+    from ._system_impact.check import check_plan as _check_plan
+
+    return _check_plan(
+        root=root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=block_ids,
+        baseline=baseline,
+        realized=realized,
+        gate_timeout_seconds=gate_timeout_seconds,
+    )
+
+
+def accept(
+    *,
+    root: Path,
+    check: PlanCheck,
+    revision: CommitId,
+) -> Acceptance:
+    """Bind a passing plan check to identical committed source and plan bytes."""
+    from ._system_impact.check import accept as _accept
+
+    return _accept(root=root, check=check, revision=revision)
+
+
+__all__ = [
+    "Acceptance",
+    "CodeQLIdentity",
+    "CodeQLReceipt",
+    "ChangeKind",
+    "CheckState",
+    "CommitId",
+    "EdgeKind",
+    "GateCheck",
+    "Impact",
+    "NodeId",
+    "PlanCheck",
+    "PlanInspection",
+    "ResolvedContractTarget",
+    "SourceEdge",
+    "SourceGraph",
+    "SourceNode",
+    "SourceNodeKind",
+    "SourceSnapshot",
+    "TargetCheck",
+    "accept",
+    "check_plan",
+    "inspect_plan",
+]
 ```
 
 Baseline and expected digests are optional because additions have no baseline
@@ -420,40 +753,119 @@ The example checks the completed manifest migration that renamed
 ```python
 baseline_id: CommitId = "6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b"
 realized_id: CommitId = "18083057eeb92c755ead031122afd48e8a77d653"
-node_id: NodeId = "scripts/validate-skill-contract.py:compile_manifest"
-edge_kind: EdgeKind = "calls"
-change_kind: ChangeKind = "implementation_changed"
-check_state: CheckState = "passed"
-target_declaration = DeclarationRef(
-    path="docs/development/skill-evaluation-pair-coding.md",
-    start_line=100,
-    end_line=120,
-    sha256="8" * 64,
+identity = CodeQLIdentity(
+    version="2.26.4",
+    platform="osx64",
+    executable_sha256="1" * 64,
+    pack="viper/python-impact@1.0.0",
+    pack_sha256="2" * 64,
 )
-
-identity = CodeQLIdentity(version="2.26.4", platform="osx64", bundle_sha256="1" * 64, pack="viper/python-impact@1.0.0", pack_sha256="2" * 64)
-baseline_snapshot = SourceSnapshot(base_revision=baseline_id, source_sha256="a" * 64, revision=baseline_id)
-realized_snapshot = SourceSnapshot(base_revision=baseline_id, source_sha256="c" * 64, revision=realized_id)
-baseline_receipt = CodeQLReceipt(snapshot=baseline_snapshot, command=("codeql", "database", "analyze", baseline_id), exit_code=0, database_sha256="3" * 64, result_sha256="4" * 64, stderr_sha256="5" * 64)
-realized_receipt = CodeQLReceipt(snapshot=realized_snapshot, command=("codeql", "database", "analyze", realized_id), exit_code=0, database_sha256="6" * 64, result_sha256="7" * 64, stderr_sha256="5" * 64)
-
-old_node = SourceNode(node_id=node_id, path="scripts/validate-skill-contract.py", symbol="compile_manifest", kind="function", start_line=283, start_col=0, end_line=561, end_col=1, sha256="6d6a7fc57ec0da60ad7fc9a3606614fac78532511ace9b3c46dff9d89e24f894")
-new_node = SourceNode(node_id=node_id, path="scripts/validate-skill-contract.py", symbol="compile_manifest", kind="function", start_line=283, start_col=0, end_line=561, end_col=1, sha256="08f47fbe49e99b5161b76af7574fa568c81bc2514f509290bcd9c1a816eabc82")
-consumer = SourceNode(node_id="scripts/validate-skill-contract.py:validate_manifest", path="scripts/validate-skill-contract.py", symbol="validate_manifest", kind="function", start_line=564, start_col=0, end_line=567, end_col=1, sha256="61858254334fb762d313a24cdcea32e9a29c9c25505c48880c36dcf1bc00ffd2")
-dependency = SourceEdge(edge_id="b" * 64, source=consumer.node_id, target=old_node.node_id, kind=edge_kind, query="viper/python-impact/calls", path=consumer.path, line=567)
-
-baseline = SourceGraph(snapshot=baseline_snapshot, identity=identity, nodes=(consumer, old_node), edges=(dependency,), receipt=baseline_receipt)
-realized = SourceGraph(snapshot=realized_snapshot, identity=identity, nodes=(new_node,), edges=(), receipt=realized_receipt)
-impact = Impact(policy_version=1, baseline=baseline.snapshot, targets=(old_node.node_id,), affected=(consumer.node_id,), edges=(dependency.edge_id,), unresolved=())
-planned = ContractTarget(requirements=("SKE-01",), block_id="P0-SKE-01", action="update", target=RepoSymbolRef(path=new_node.path, symbol=new_node.symbol), declaration=target_declaration)
-resolved = ResolvedContractTarget(target=planned, baseline_node=old_node.node_id, baseline_sha256=old_node.sha256, expected_sha256=new_node.sha256, change_kind=change_kind)
-target = TargetCheck(resolved=resolved, after_sha256=new_node.sha256, state=check_state, message="The realized field declaration matches the planned replacement.")
-result = PlanCheck(baseline=baseline.snapshot, realized=realized.snapshot, blocks=(planned.block_id,), acceptances=(), plan_sha256="9" * 64, impact=impact, targets=(target,), unexpected=(), passed=True)
+baseline_snapshot = SourceSnapshot(
+    base_revision=baseline_id,
+    source_sha256="a" * 64,
+    revision=baseline_id,
+)
+realized_snapshot = SourceSnapshot(
+    base_revision=baseline_id,
+    source_sha256="b" * 64,
+    revision=realized_id,
+)
+empty_result_sha256 = hashlib.sha256(b'{"edges":[],"nodes":[]}').hexdigest()
+baseline_receipt = CodeQLReceipt(
+    snapshot=baseline_snapshot,
+    identity=identity,
+    commands=(("codeql", "query", "run"),),
+    exit_code=0,
+    database_sha256="3" * 64,
+    result_sha256=empty_result_sha256,
+    stderr_sha256="4" * 64,
+)
+realized_receipt = CodeQLReceipt(
+    snapshot=realized_snapshot,
+    identity=identity,
+    commands=(("codeql", "query", "run"),),
+    exit_code=0,
+    database_sha256="5" * 64,
+    result_sha256=empty_result_sha256,
+    stderr_sha256="4" * 64,
+)
+baseline = SourceGraph(
+    snapshot=baseline_snapshot,
+    identity=identity,
+    nodes=(),
+    edges=(),
+    receipt=baseline_receipt,
+)
+realized = SourceGraph(
+    snapshot=realized_snapshot,
+    identity=identity,
+    nodes=(),
+    edges=(),
+    receipt=realized_receipt,
+)
+declaration = DeclarationRef(
+    path="docs/development/example.md",
+    start_line=1,
+    end_line=3,
+    sha256="6" * 64,
+)
+planned = ContractTarget(
+    requirements=("SKE-01",),
+    block_id="P0-SKE-01",
+    action="remove",
+    target=RepoSymbolRef(
+        path="scripts/validate-skill-contract.py",
+        symbol="compile_manifest",
+    ),
+    declaration=declaration,
+)
+resolved = ResolvedContractTarget(
+    target=planned,
+    baseline_node="scripts/validate-skill-contract.py:compile_manifest",
+    baseline_sha256="7" * 64,
+    expected_sha256=None,
+    change_kind="removed",
+)
+target = TargetCheck(
+    resolved=resolved,
+    after_sha256=None,
+    state="passed",
+    message="target declaration is absent",
+)
+gate = GateCheck(
+    block_id="P0-SKE-01",
+    command=("python", "-m", "pytest"),
+    exit_code=0,
+    stdout_sha256="8" * 64,
+    stderr_sha256="9" * 64,
+)
+result = PlanCheck(
+    baseline=baseline.snapshot,
+    realized=realized.snapshot,
+    blocks=(planned.block_id,),
+    contracts=("docs/development/example.md",),
+    baseline_dependencies=(),
+    unsatisfied_dependencies=(),
+    plan_sha256="c" * 64,
+    impact=Impact(
+        baseline=baseline.snapshot,
+        targets=(resolved.baseline_node,),
+        affected=(),
+        edges=(),
+    ),
+    targets=(target,),
+    unexpected=(),
+    gates=(gate,),
+    receipts_valid=True,
+    plan_valid=True,
+    source_valid=True,
+    passed=True,
+)
 acceptance = Acceptance(check="f" * 64, revision=realized_id)
 
 assert baseline.identity == realized.identity
 assert result.targets[0].state == "passed"
-assert result.unexpected == ()
+assert result.unsatisfied_dependencies == ()
 assert result.passed
 assert acceptance.revision == result.realized.revision
 ```
@@ -479,11 +891,37 @@ rows, hashes each declaration span, classifies each planned change, selects
 its direct dependency edges, and performs equality checks.
 CodeQL never authors requirements, targets, or PairBlocks.
 
-`check_plan()` recomputes `plan_sha256`, resolves every referenced prior
-`Acceptance`, checks its Git ancestry, and runs every frozen selected
+`analyze_source()` receives an exact `snapshot_root`, `SourceSnapshot`,
+`CodeQLIdentity`, CodeQL executable path, query-pack path, cache root, and
+artifact root. It verifies the source manifest, query-pack tree, CLI version,
+and launcher digest before analysis. An exact source-and-identity cache key may
+reuse a database only when its recorded content digest still matches the cached
+database. A missing or altered cache manifest or database forces a full
+rebuild. The receipt records every executed argument vector, the analyzed
+database digest, and the canonical result digest.
+
+`CodeQLIdentity` does not hash every file in the installed CodeQL distribution.
+Phase 0 binds the reported CLI version, launcher bytes, and query-pack bytes,
+and trusts the verified distribution installed behind that identity.
+
+Query-pack version `1.0.0` emits `calls`, `constructs`, `inherits`, `imports`,
+and `reads`. `writes` remains in the closed `EdgeKind` schema and impact-policy
+fallback for another conforming source-fact provider, but this first CodeQL
+pack does not emit it. Therefore, the Phase 0 advisory report makes no write-edge
+coverage claim. The checked-in QL pack and its lock file are
+`P0-SIG-02` supporting assets bound by `plan_sha256`.
+
+CodeQL identifies repository declarations and dependency evidence. Python's
+AST selects the exact original byte span for each CodeQL declaration row and
+each declaration inside a Markdown `contract-target` fence. This local AST pass
+does not resolve repository dependencies or replace CodeQL identity.
+
+`check_plan()` recomputes `plan_sha256`, verifies omitted dependencies against
+their declared baseline target states, and runs every frozen selected
 `PairBlock.gate`. A gate passes when its process exits with code `0`.
 `accept()` requires `PlanCheck.passed`, rebuilds the canonical source manifest
-and selected plan from `revision`, and compares both digests with
+and selected plan, including supporting-asset bytes, from `revision`. It
+compares both digests with
 `PlanCheck.realized.source_sha256` and `PlanCheck.plan_sha256` before returning
 `Acceptance`.
 
@@ -587,11 +1025,16 @@ the parsed declaration index by file digest, so several targets in one file
 pay the parse cost once. In practice, CodeQL analysis and pytest dominate this
 small local AST pass.
 
-`SourceSnapshot.source_sha256` hashes a canonical manifest of every Python file
-under the configured source and test roots, including untracked files named by
-`add` targets. Each row contains the repository-relative path and raw-file
-digest. The freeze copies exactly that manifest into an immutable temporary
-directory. CodeQL and declaration extraction read that immutable copy.
+`SourceSnapshot.source_sha256` hashes a canonical manifest of every `.py` file
+beneath `snapshot_root`, except files beneath the explicit cache and environment
+directories in `IGNORED_PARTS`. Each row contains the repository-relative path
+and raw-file digest. `analyze_source()` rejects a root whose current manifest
+differs from the snapshot. The caller may provide an immutable copy or a stable
+working tree; the digest check establishes the same input boundary.
+
+Phase 0 does not represent `.pyi` declarations. A plan that changes a stub file
+cannot pass System Impact until a source-fact provider emits nodes for that
+file type.
 
 ### Guided work and strict closure
 
@@ -660,9 +1103,9 @@ guided: start check -> flexible pair coding -> final check -> commit -> accept
 autonomous: freeze plan -> constrained execution -> final check -> commit -> accept
 ```
 
-## 6. Persisted evidence
+## 6. Serializable evidence
 
-One check writes:
+The implemented records serialize into this logical bundle:
 
 ```text
 .viper/system/<check-id>/
@@ -676,10 +1119,12 @@ One check writes:
 └── acceptance.json
 ```
 
-Each file uses sorted, compact JSON and repository-relative paths.
-`plan_sha256` is the digest of `plan.json`. `acceptance.json` is written only
-after `accept()` verifies the resulting commit. A later `PlanCheck` stores the
-digests of any prior acceptance records used to satisfy omitted dependencies.
+Each model uses sorted, compact JSON and repository-relative paths.
+`plan_sha256` binds the selected `PairBlock` and `ContractTarget` records plus
+the exact bytes of every selected `PairBlock.assets` path. `accept()` returns
+`Acceptance` only after it reconstructs those values from the committed tree.
+Writing this logical bundle to `.viper/system` belongs to a later storage API;
+the Phase 0 checker returns the complete records to its caller.
 
 ## 7. Verification
 
@@ -688,7 +1133,7 @@ digests of any prior acceptance records used to satisfy omitted dependencies.
 | `system.source.canonical` <!-- verifier-rule: system.source.canonical requirement=SIG-01 --> | Repeated analysis of one immutable source snapshot with one identity produces byte-identical `SourceGraph` JSON; each declaration span includes exact UTF-8 byte columns and hashes the original bytes. |
 | `system.plan.resolved` <!-- verifier-rule: system.plan.resolved requirement=SIG-02 --> | Every CTG target has a baseline state compatible with its action and one `ChangeKind`; `Impact` contains exactly the direct incoming baseline edges permitted by impact-policy version 1 and their source nodes. |
 | `system.plan.realized` <!-- verifier-rule: system.plan.realized requirement=SIG-03 --> | Every selected target has the required after-state and exact declaration digest. |
-| `system.plan.closed` <!-- verifier-rule: system.plan.closed requirement=SIG-03 --> | `check_plan()` recomputes `plan_sha256`, requires every selected PairBlock gate to exit with code `0`, and accepts an omitted dependency only through an ancestral `Acceptance`; `accept()` then requires the committed source and selected-plan digests to equal the checked values. |
+| `system.plan.closed` <!-- verifier-rule: system.plan.closed requirement=SIG-03 --> | `check_plan()` recomputes `plan_sha256`, requires every selected PairBlock gate to exit with code `0`, and accepts an omitted dependency only when all of its target states exist in the baseline; `accept()` then requires the committed source, selected-plan, and supporting-asset bytes to equal the checked values. |
 | `system.fixture.replayed` <!-- verifier-rule: system.fixture.replayed requirement=SIG-04 --> | Both committed fixtures reproduce their reviewed changed-path sets and target results. |
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 
@@ -720,11 +1165,11 @@ Two committed fixtures define the initial boundary:
 | Fixture | Baseline | Realized | Expected changed Python declarations |
 | --- | --- | --- | --- |
 | `.agents` manifest-key migration | `6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b` | `18083057eeb92c755ead031122afd48e8a77d653` | `run-skill-evaluations.py:main`; `validate-skill-contract.py:compile_manifest`; `validate-skill-evaluation-run.py:validate_run`; the changed runner-test class and setup; the changed skill-contract test class and new rejection test |
-| VIPER `P0-PROOF-05` | `1e33d9a7bd12327702397c0e7aaf96e490dec46e` | `5c78ff5d33bdfa9c7b92b7bb9ff5c0fefdc7eef8` | `test_documentation.py:test_contract_requirements_map_to_plan_tasks_and_tests`; `test_project_init.py:test_init_project_establishes_discoverable_root` |
+| VIPER `P0-PROOF-05` | `1e33d9a7bd12327702397c0e7aaf96e490dec46e` | `5c78ff5d33bdfa9c7b92b7bb9ff5c0fefdc7eef8` | `test_documentation.py:_CHECKBOX_BLOCK`; `test_documentation.py:test_contract_requirements_map_to_plan_tasks_and_tests`; imports of `find_project_root`, `resolve_project_root`, and `initialize_project`; `test_project_init.py:test_init_project_establishes_discoverable_root` |
 
 The fixture plan must name every declaration in its expected set. Every target
 transition must match, every selected PairBlock gate must exit with code `0`,
-every dependency must be selected or supported by ancestral acceptance, and
+every dependency must be selected or already match its baseline target state, and
 the Git diff must expose no additional changed Python declaration.
 `PlanCheck.passed` is then true.
 `accept()` binds that result to the fixture's realized commit.
@@ -761,9 +1206,10 @@ depends_on = ["P0-CRT-07"]
 ```toml pair-block
 id = "P0-SIG-02"
 requirements = ["SIG-01", "SIG-05"]
-targets = ["src/viper/_system_impact/codeql.py:analyze_source"]
-tests = ["tests/test_system_impact.py:test_codeql_receipt_binds_revision_and_identity"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k codeql_receipt -q"
+targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNodeKind", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceGraph"]
+assets = ["tools/codeql/viper-python-impact/qlpack.yml", "tools/codeql/viper-python-impact/codeql-pack.lock.yml", "tools/codeql/viper-python-impact/source-facts.qls", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
+tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
+gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack' -q"
 depends_on = ["P0-SIG-01"]
 ```
 
@@ -771,7 +1217,7 @@ depends_on = ["P0-SIG-01"]
 ```toml pair-block
 id = "P0-SIG-03"
 requirements = ["SIG-01", "SIG-02"]
-targets = ["src/viper/_system_impact/source.py:extract_declaration_bytes", "src/viper/_system_impact/source.py:classify_target_change", "src/viper/system_impact.py:ChangeKind", "src/viper/system_impact.py:Impact", "src/viper/system_impact.py:ResolvedContractTarget", "src/viper/system_impact.py:inspect_plan"]
+targets = ["src/viper/_system_impact/source.py:SourceDeclarationError", "src/viper/_system_impact/source.py:extract_declaration_bytes", "src/viper/_system_impact/source.py:classify_target_change", "src/viper/_system_impact/plan.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/plan.py:PlanInspectionError", "src/viper/_system_impact/plan.py:inspect_plan", "src/viper/system_impact.py:ChangeKind", "src/viper/system_impact.py:Impact", "src/viper/system_impact.py:ResolvedContractTarget", "src/viper/system_impact.py:PlanInspection", "src/viper/system_impact.py:inspect_plan"]
 tests = ["tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes", "tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates", "tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents", "tests/test_system_impact.py:test_removed_target_reports_all_represented_direct_dependents", "tests/test_system_impact.py:test_unclassified_change_uses_conservative_one_hop_edges"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'declaration_extraction or change_classifier or policy_selected_one_hop or removed_target or unclassified_change' -q"
 depends_on = ["P0-SIG-02"]
@@ -781,8 +1227,8 @@ depends_on = ["P0-SIG-02"]
 ```toml pair-block
 id = "P0-SIG-04"
 requirements = ["SIG-03"]
-targets = ["src/viper/system_impact.py:TargetCheck", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:Acceptance", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept"]
-tests = ["tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change", "tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies", "tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan"]
+targets = ["src/viper/_contract_traceability.py:compile_contract_plan", "src/viper/_system_impact/check.py:SystemImpactCheckError", "src/viper/_system_impact/check.py:check_plan", "src/viper/_system_impact/check.py:accept", "src/viper/system_impact.py:CheckState", "src/viper/system_impact.py:TargetCheck", "src/viper/system_impact.py:GateCheck", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:Acceptance", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:__all__"]
+tests = ["tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change", "tests/test_system_impact.py:test_plan_check_rejects_wrong_target_and_receipt_identity", "tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies", "tests/test_system_impact.py:test_plan_check_rejects_asset_changed_by_gate", "tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'plan_check or acceptance' -q"
 depends_on = ["P0-SIG-03"]
 ```
@@ -792,6 +1238,7 @@ depends_on = ["P0-SIG-03"]
 id = "P0-SIG-05"
 requirements = ["SIG-04"]
 targets = ["tests/test_system_impact.py:test_committed_manifest_rename", "tests/test_system_impact.py:test_completed_viper_pair_block"]
+assets = ["tests/data/system_impact/agents_manifest_migration/metadata.json", "tests/data/system_impact/agents_manifest_migration/baseline/scripts/run-skill-evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/scripts/validate-skill-contract.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/scripts/validate-skill-evaluation-run.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/tests/test_run_skill_evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/tests/test_skill_contract.py.source", "tests/data/system_impact/agents_manifest_migration/realized/scripts/run-skill-evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/realized/scripts/validate-skill-contract.py.source", "tests/data/system_impact/agents_manifest_migration/realized/scripts/validate-skill-evaluation-run.py.source", "tests/data/system_impact/agents_manifest_migration/realized/tests/test_run_skill_evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/realized/tests/test_skill_contract.py.source", "tests/data/system_impact/viper_p0_proof_05/metadata.json", "tests/data/system_impact/viper_p0_proof_05/baseline/tests/test_documentation.py.source", "tests/data/system_impact/viper_p0_proof_05/baseline/tests/test_project_init.py.source", "tests/data/system_impact/viper_p0_proof_05/realized/tests/test_documentation.py.source", "tests/data/system_impact/viper_p0_proof_05/realized/tests/test_project_init.py.source"]
 tests = ["tests/test_system_impact.py:test_committed_manifest_rename", "tests/test_system_impact.py:test_completed_viper_pair_block"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'committed_manifest_rename or completed_viper_pair_block' -q"
 depends_on = ["P0-SIG-04"]
@@ -799,6 +1246,644 @@ depends_on = ["P0-SIG-04"]
 
 The implementation closes after all five focused gates pass, the complete test
 module passes, and the review-cycle commit is synchronized with its upstream.
+
+## 11. Contract-owned internal declarations
+
+These declarations are the exact implementation values owned by the internal
+PairBlocks. The public records and wrappers remain in Section 4.
+
+### CodeQL adapter
+
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:IGNORED_PARTS -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:CodeQLAnalysisError -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:source_digest -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:analyze_source -->
+
+```python contract-target
+IGNORED_PARTS = frozenset(
+    {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "node_modules"}
+)
+
+class CodeQLAnalysisError(RuntimeError):
+    """Report a failed or internally inconsistent CodeQL analysis."""
+
+def source_digest(root: Path) -> str:
+    rows = [
+        {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        for path in _python_files(root)
+    ]
+    return hashlib.sha256(
+        json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+def analyze_source(
+    snapshot_root: Path,
+    *,
+    snapshot: SourceSnapshot,
+    identity: CodeQLIdentity,
+    codeql_executable: Path,
+    query_pack: Path,
+    cache_root: Path,
+    artifact_root: Path,
+) -> SourceGraph:
+    """Analyze one exact Python source tree with a pinned CodeQL query pack."""
+    root = snapshot_root.resolve()
+    if source_digest(root) != snapshot.source_sha256:
+        raise CodeQLAnalysisError(
+            "SourceSnapshot.source_sha256 does not match source bytes"
+        )
+    if _tree_digest(query_pack.resolve()) != identity.pack_sha256:
+        raise CodeQLAnalysisError(
+            "CodeQLIdentity.pack_sha256 does not match query-pack bytes"
+        )
+
+    version_stdout, version_stderr = _run(
+        (str(codeql_executable), "version", "--format=json"), cwd=root
+    )
+    version_payload = json.loads(version_stdout)
+    if version_payload.get("version") != identity.version:
+        raise CodeQLAnalysisError(
+            "CodeQL executable version does not match CodeQLIdentity"
+        )
+    if hashlib.sha256(codeql_executable.read_bytes()).hexdigest() != (
+        identity.executable_sha256
+    ):
+        raise CodeQLAnalysisError(
+            "CodeQL executable digest does not match CodeQLIdentity"
+        )
+
+    key = _hash_parts(
+        (
+            snapshot.source_sha256.encode(),
+            identity.version.encode(),
+            identity.executable_sha256.encode(),
+            identity.pack_sha256.encode(),
+        )
+    )
+    database = cache_root.resolve() / key / "database"
+    manifest = database.parent / "viper-database.json"
+    commands: list[tuple[str, ...]] = [
+        (str(codeql_executable), "version", "--format=json")
+    ]
+    stderr_parts: list[bytes] = [b"version", version_stderr]
+    if not _database_is_reusable(
+        database,
+        manifest,
+        key=key,
+        source_sha256=snapshot.source_sha256,
+    ):
+        if database.parent.exists():
+            shutil.rmtree(database.parent)
+        database.parent.mkdir(parents=True)
+        command = (
+            str(codeql_executable),
+            "database",
+            "create",
+            str(database),
+            "--language=python",
+            f"--source-root={root}",
+            "--overwrite",
+        )
+        _, stderr = _run(command, cwd=root)
+        commands.append(command)
+        stderr_parts.extend((b"database-create", stderr))
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    decoded: dict[str, list[list[Any]]] = {}
+    for query_name in _QUERY_FILES:
+        query = query_pack / query_name
+        bqrs = artifact_root / f"{query.stem}.bqrs"
+        decoded_path = artifact_root / f"{query.stem}.json"
+        run_command = (
+            str(codeql_executable),
+            "query",
+            "run",
+            str(query),
+            f"--database={database}",
+            f"--output={bqrs}",
+        )
+        _, stderr = _run(run_command, cwd=root)
+        commands.append(run_command)
+        stderr_parts.extend((query_name.encode(), stderr))
+        decode_command = (
+            str(codeql_executable),
+            "bqrs",
+            "decode",
+            str(bqrs),
+            "--format=json",
+            f"--output={decoded_path}",
+        )
+        _, stderr = _run(decode_command, cwd=root)
+        commands.append(decode_command)
+        stderr_parts.extend((f"decode:{query_name}".encode(), stderr))
+        rows = _table_rows(json.loads(decoded_path.read_text(encoding="utf-8")))
+        rows.sort(
+            key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":"))
+        )
+        decoded[query.stem] = rows
+
+    nodes = _load_nodes(root, decoded["Declarations"])
+    edges = _load_edges(decoded["Dependencies"], nodes)
+    result_payload = json.dumps(
+        {
+            "nodes": [node.model_dump(mode="json") for node in nodes],
+            "edges": [edge.model_dump(mode="json") for edge in edges],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    database_sha256 = _tree_digest(database)
+    manifest.write_text(
+        json.dumps(
+            {
+                "key": key,
+                "source_sha256": snapshot.source_sha256,
+                "database_sha256": database_sha256,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    receipt = CodeQLReceipt(
+        snapshot=snapshot,
+        identity=identity,
+        commands=tuple(commands),
+        exit_code=0,
+        database_sha256=database_sha256,
+        result_sha256=hashlib.sha256(result_payload).hexdigest(),
+        stderr_sha256=_hash_parts(stderr_parts),
+    )
+    return SourceGraph(
+        snapshot=snapshot,
+        identity=identity,
+        nodes=nodes,
+        edges=edges,
+        receipt=receipt,
+    )
+```
+
+### Declaration resolution and impact
+
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/source.py:SourceDeclarationError -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-03 action=add target=src/viper/_system_impact/source.py:extract_declaration_bytes -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/source.py:classify_target_change -->
+
+```python contract-target
+class SourceDeclarationError(ValueError):
+    """Report an absent, ambiguous, malformed, or impossible declaration change."""
+
+def extract_declaration_bytes(
+    source: bytes,
+    qualified_symbol: str,
+) -> bytes:
+    """Return one declaration exactly as encoded in UTF-8 source.
+
+    Module declarations and class members may be functions, classes,
+    assignments, annotated assignments, or import statements. The operation
+    raises ``SourceDeclarationError`` when the source or symbol cannot identify
+    one exact declaration.
+    """
+    try:
+        text = source.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SourceDeclarationError("Python source is not valid UTF-8") from error
+
+    try:
+        tree = ast.parse(text, type_comments=True)
+    except SyntaxError as error:
+        raise SourceDeclarationError("Python source cannot be parsed") from error
+
+    node = _resolve_declaration(tree, qualified_symbol)
+    if (
+        getattr(node, "lineno", None) is None
+        or getattr(node, "col_offset", None) is None
+        or node.end_lineno is None
+        or node.end_col_offset is None
+    ):
+        raise SourceDeclarationError(
+            f"Python declaration lacks a complete source span: {qualified_symbol}"
+        )
+
+    lines, offsets = _line_offsets(source)
+    try:
+        start_line, start_column = _declaration_start(node, lines)
+        start = offsets[start_line - 1] + start_column
+        end = offsets[node.end_lineno - 1] + node.end_col_offset
+    except (IndexError, ValueError) as error:
+        raise SourceDeclarationError(
+            f"Python declaration has an invalid source span: {qualified_symbol}"
+        ) from error
+
+    if start < 0 or end < start or end > len(source):
+        raise SourceDeclarationError(
+            f"Python declaration has an invalid source span: {qualified_symbol}"
+        )
+    return source[start:end]
+
+def classify_target_change(
+    *,
+    action: TargetAction,
+    baseline: bytes | None,
+    expected: bytes | None,
+) -> ChangeKind:
+    """Classify one valid planned declaration transition.
+
+    The operation raises ``SourceDeclarationError`` when the declared action
+    contradicts declaration presence or an update repeats the baseline bytes.
+    """
+    if action == "add":
+        if baseline is not None or expected is None:
+            raise SourceDeclarationError(
+                "add requires an absent baseline and a present expected declaration"
+            )
+        _parse_single_declaration(expected, "expected")
+        return "added"
+
+    if action == "remove":
+        if baseline is None or expected is not None:
+            raise SourceDeclarationError(
+                "remove requires a present baseline and no expected declaration"
+            )
+        _parse_single_declaration(baseline, "baseline")
+        return "removed"
+
+    if action != "update":
+        raise SourceDeclarationError(f"unsupported target action: {action!r}")
+    if baseline is None or expected is None:
+        raise SourceDeclarationError(
+            "update requires baseline and expected declarations"
+        )
+    if baseline == expected:
+        raise SourceDeclarationError(
+            "update requires different baseline and expected declaration bytes"
+        )
+
+    before = _parse_single_declaration(baseline, "baseline")
+    after = _parse_single_declaration(expected, "expected")
+    if type(before) is not type(after):
+        return "unclassified"
+
+    if isinstance(before, (ast.FunctionDef, ast.AsyncFunctionDef)) and isinstance(
+        after, (ast.FunctionDef, ast.AsyncFunctionDef)
+    ):
+        if _callable_interface(before) != _callable_interface(after):
+            return "callable_interface_changed"
+        return "implementation_changed"
+
+    if isinstance(before, ast.ClassDef) and isinstance(after, ast.ClassDef):
+        if _class_interface(before) != _class_interface(after):
+            return "type_interface_changed"
+        return "implementation_changed"
+
+    if isinstance(before, (ast.Assign, ast.AnnAssign)) and isinstance(
+        after, (ast.Assign, ast.AnnAssign)
+    ):
+        if _assignment_interface(before) != _assignment_interface(after):
+            return "type_interface_changed"
+        return "implementation_changed"
+
+    if not isinstance(before, _SupportedDeclaration) or not isinstance(
+        after, _SupportedDeclaration
+    ):
+        return "unclassified"
+    return "unclassified"
+```
+
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/plan.py:IMPACT_EDGE_KINDS_V1 -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/plan.py:PlanInspectionError -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/plan.py:inspect_plan -->
+
+```python contract-target
+IMPACT_EDGE_KINDS_V1: dict[str, frozenset[EdgeKind]] = {
+    "added": frozenset(),
+    "removed": frozenset(
+        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+    ),
+    "callable_interface_changed": frozenset({"calls", "constructs"}),
+    "type_interface_changed": frozenset({"constructs", "inherits", "reads", "writes"}),
+    "implementation_changed": frozenset({"calls", "reads"}),
+    "unclassified": frozenset(
+        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+    ),
+}
+
+class PlanInspectionError(ValueError):
+    """Report an absent, duplicate, stale, or impossible selected target."""
+
+def inspect_plan(
+    *,
+    plan_root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+) -> PlanInspection:
+    """Resolve selected targets and return policy-selected incoming edges."""
+    if not block_ids or len(block_ids) != len(set(block_ids)):
+        raise PlanInspectionError("block_ids must contain unique selected PairBlocks")
+    known_blocks = {block.block_id for block in traceability.blocks}
+    missing = sorted(set(block_ids) - known_blocks)
+    if missing:
+        raise PlanInspectionError(f"selected PairBlocks are absent: {missing}")
+
+    selected = set(block_ids)
+    targets = tuple(
+        sorted(
+            (target for target in traceability.targets if target.block_id in selected),
+            key=lambda item: (item.block_id, item.target.path, item.target.symbol),
+        )
+    )
+    nodes = _node_index(baseline)
+    resolved: list[ResolvedContractTarget] = []
+    impacted_edges = {}
+    target_ids: set[str] = set()
+    for target in targets:
+        key = (target.target.path, target.target.symbol)
+        baseline_node = nodes.get(key)
+        before = None
+        if baseline_node is not None:
+            source = (baseline_root / baseline_node.path).read_bytes()
+            before = extract_declaration_bytes(source, baseline_node.symbol)
+            if hashlib.sha256(before).hexdigest() != baseline_node.sha256:
+                raise PlanInspectionError(f"baseline digest is stale for {key!r}")
+        expected = _payload(plan_root, target)
+        change_kind = classify_target_change(
+            action=target.action,
+            baseline=before,
+            expected=expected,
+        )
+        item = ResolvedContractTarget(
+            target=target,
+            baseline_node=None if baseline_node is None else baseline_node.node_id,
+            baseline_sha256=None if baseline_node is None else baseline_node.sha256,
+            expected_sha256=None
+            if expected is None
+            else hashlib.sha256(expected).hexdigest(),
+            change_kind=change_kind,
+        )
+        resolved.append(item)
+        if baseline_node is None:
+            continue
+        target_ids.add(baseline_node.node_id)
+        permitted = IMPACT_EDGE_KINDS_V1[change_kind]
+        for edge in baseline.edges:
+            if edge.target == baseline_node.node_id and edge.kind in permitted:
+                impacted_edges[edge.edge_id] = edge
+
+    edges = tuple(sorted(impacted_edges.values(), key=lambda edge: edge.edge_id))
+    return PlanInspection(
+        targets=tuple(resolved),
+        impact=Impact(
+            baseline=baseline.snapshot,
+            targets=tuple(sorted(target_ids)),
+            affected=tuple(sorted({edge.source for edge in edges})),
+            edges=tuple(edge.edge_id for edge in edges),
+        ),
+    )
+```
+
+### Plan reconstruction
+
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/_contract_traceability.py:compile_contract_plan -->
+
+```python contract-target
+def compile_contract_plan(
+    root: Path,
+    contracts: tuple[Path, ...],
+) -> tuple[tuple[PairBlock, ...], tuple[ContractTarget, ...]]:
+    """Compile the PairBlocks and ContractTargets declared by exact contracts."""
+    return _parse_pair_blocks(root, contracts), _parse_contract_targets(root, contracts)
+```
+
+### Plan checking and acceptance
+
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/_system_impact/check.py:SystemImpactCheckError -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/_system_impact/check.py:check_plan -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/_system_impact/check.py:accept -->
+
+```python contract-target
+class SystemImpactCheckError(ValueError):
+    """Report malformed check inputs or a failed acceptance binding."""
+
+def check_plan(
+    *,
+    root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+    realized: SourceGraph,
+    gate_timeout_seconds: float = 900.0,
+) -> PlanCheck:
+    """Check selected PairBlocks against independently observed source graphs."""
+    root = root.resolve()
+    baseline_root = baseline_root.resolve()
+    if gate_timeout_seconds <= 0:
+        raise SystemImpactCheckError("gate timeout must be greater than zero")
+
+    blocks, targets = _selected_records(traceability, block_ids)
+    baseline_nodes = _node_index(baseline)
+    realized_nodes = _node_index(realized)
+    inspection = inspect_plan(
+        plan_root=root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=tuple(block.block_id for block in blocks),
+        baseline=baseline,
+    )
+    target_checks = _target_checks(
+        resolved_targets=inspection.targets,
+        realized_nodes=realized_nodes,
+    )
+    unexpected = _unexpected_changes(
+        baseline_nodes=baseline_nodes,
+        realized_nodes=realized_nodes,
+        targets=targets,
+    )
+    baseline_dependencies, unsatisfied_dependencies = _dependency_results(
+        root=root,
+        traceability=traceability,
+        blocks=blocks,
+        selected={block.block_id for block in blocks},
+        baseline_nodes=baseline_nodes,
+    )
+    plan_sha256 = _plan_sha256(
+        blocks,
+        targets,
+        _asset_manifest_sha256(root=root, blocks=blocks),
+    )
+    contracts = tuple(sorted({item.declaration.path for item in (*blocks, *targets)}))
+    gates = tuple(
+        _run_gate(
+            root=root,
+            block=block,
+            timeout_seconds=gate_timeout_seconds,
+        )
+        for block in blocks
+    )
+    receipt_valid = _receipt_pair_is_valid(baseline, realized)
+    try:
+        plan_valid = (
+            _current_plan_sha256(
+                root=root,
+                contracts=contracts,
+                block_ids=tuple(block.block_id for block in blocks),
+            )
+            == plan_sha256
+        )
+    except SystemImpactCheckError:
+        plan_valid = False
+    source_valid = (
+        source_digest(baseline_root) == baseline.snapshot.source_sha256
+        and source_digest(root) == realized.snapshot.source_sha256
+    )
+    passed = (
+        receipt_valid
+        and plan_valid
+        and source_valid
+        and all(target.state == "passed" for target in target_checks)
+        and not unexpected
+        and not unsatisfied_dependencies
+        and all(gate.exit_code == 0 for gate in gates)
+    )
+    return PlanCheck(
+        baseline=baseline.snapshot,
+        realized=realized.snapshot,
+        blocks=tuple(block.block_id for block in blocks),
+        contracts=contracts,
+        baseline_dependencies=baseline_dependencies,
+        unsatisfied_dependencies=unsatisfied_dependencies,
+        plan_sha256=plan_sha256,
+        impact=inspection.impact,
+        targets=target_checks,
+        unexpected=unexpected,
+        gates=gates,
+        receipts_valid=receipt_valid,
+        plan_valid=plan_valid,
+        source_valid=source_valid,
+        passed=passed,
+    )
+
+def accept(
+    *,
+    root: Path,
+    check: PlanCheck,
+    revision: CommitId,
+) -> Acceptance:
+    """Bind one passing check to identical committed source and plan bytes."""
+    root = root.resolve()
+    check_is_passing = (
+        check.passed
+        and check.receipts_valid
+        and check.plan_valid
+        and check.source_valid
+        and all(target.state == "passed" for target in check.targets)
+        and not check.unexpected
+        and not check.unsatisfied_dependencies
+        and all(gate.exit_code == 0 for gate in check.gates)
+        and tuple(sorted(gate.block_id for gate in check.gates)) == check.blocks
+    )
+    if not check_is_passing:
+        raise SystemImpactCheckError("cannot accept a failed PlanCheck")
+    if check.realized.revision is not None and check.realized.revision != revision:
+        raise SystemImpactCheckError(
+            "accepted commit differs from the committed realized snapshot"
+        )
+    resolved_revision = (
+        _git(
+            root,
+            ("rev-parse", "--verify", f"{revision}^{{commit}}"),
+        )
+        .decode("ascii")
+        .strip()
+    )
+    if resolved_revision != revision:
+        raise SystemImpactCheckError("accept requires one exact full commit ID")
+    ancestry = subprocess.run(  # noqa: S603
+        (
+            "git",
+            "merge-base",
+            "--is-ancestor",
+            check.baseline.revision or check.baseline.base_revision,
+            revision,
+        ),
+        cwd=root,
+        check=False,
+        capture_output=True,
+        shell=False,
+    )
+    if ancestry.returncode != 0:
+        raise SystemImpactCheckError(
+            "accepted commit does not descend from the checked baseline"
+        )
+
+    source_sha256 = _snapshot_source_sha256(root, revision)
+    if source_sha256 != check.realized.source_sha256:
+        raise SystemImpactCheckError(
+            "accepted commit source differs from the checked candidate"
+        )
+    plan_sha256, committed_targets = _committed_plan(
+        root=root,
+        revision=revision,
+        contracts=check.contracts,
+        block_ids=check.blocks,
+    )
+    if plan_sha256 != check.plan_sha256:
+        raise SystemImpactCheckError(
+            "accepted commit plan differs from the checked PairBlocks"
+        )
+    checked_targets = tuple(
+        sorted(
+            (
+                target.resolved.target.block_id,
+                target.resolved.target.target.path,
+                target.resolved.target.target.symbol,
+            )
+            for target in check.targets
+        )
+    )
+    expected_targets = tuple(
+        sorted(
+            (target.block_id, target.target.path, target.target.symbol)
+            for target in committed_targets
+        )
+    )
+    if checked_targets != expected_targets:
+        raise SystemImpactCheckError(
+            "accepted PlanCheck does not cover every committed ContractTarget"
+        )
+
+    check_sha256 = _sha256(_canonical_json(check.model_dump(mode="json")))
+    return Acceptance(check=check_sha256, revision=revision)
+```
+
+### Historical replay tests
+
+<!-- contract-target: requirements=SIG-04 block=P0-SIG-05 action=add target=tests/test_system_impact.py:test_committed_manifest_rename -->
+<!-- contract-target: requirements=SIG-04 block=P0-SIG-05 action=add target=tests/test_system_impact.py:test_completed_viper_pair_block -->
+
+```python contract-target
+def test_committed_manifest_rename(tmp_path: Path) -> None:
+    """Replay the global skills manifest-field migration fixture."""
+    _assert_historical_fixture(
+        "agents_manifest_migration",
+        "6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b",
+        "18083057eeb92c755ead031122afd48e8a77d653",
+        tmp_path,
+    )
+
+def test_completed_viper_pair_block(tmp_path: Path) -> None:
+    """Replay the accepted VIPER P0-PROOF-05 fixture."""
+    _assert_historical_fixture(
+        "viper_p0_proof_05",
+        "1e33d9a7bd12327702397c0e7aaf96e490dec46e",
+        "5c78ff5d33bdfa9c7b92b7bb9ff5c0fefdc7eef8",
+        tmp_path,
+    )
+```
+
 
 ## Appendix A. Future work: cross-contract scheduling
 
@@ -1083,8 +2168,8 @@ contract work.
   function and class spans to the first decorator before slicing source bytes.
 - Git,
   [`merge-base --is-ancestor`](https://git-scm.com/docs/git-merge-base#Documentation/git-merge-base.txt---is-ancestor),
-  provides the ancestry check used when a selected block consumes an earlier
-  accepted block without rerunning it.
+  provides the ancestry check used by `accept()` to require the candidate
+  commit to descend from the checked baseline.
 - Ramakrishna Bairi et al.,
   [CodePlan: Repository-level Coding using LLMs and Planning](https://arxiv.org/abs/2309.12499),
   provides the change-classification and dependency-relation selection pattern.

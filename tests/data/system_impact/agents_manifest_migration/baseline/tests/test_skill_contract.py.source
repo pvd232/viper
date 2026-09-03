@@ -1,0 +1,187 @@
+"""Test exact skill-evaluation joins and source-documentation checks."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+from types import ModuleType
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SKILL_VALIDATOR = ROOT / "scripts" / "validate-skill-contract.py"
+SCHEMA_CHECKER = (
+    ROOT / "skills" / "code-documentation" / "scripts" / "check-schema-descriptions.py"
+)
+PILOT_MANIFESTS = tuple(sorted(ROOT.glob("evals/*/skill-contract.json")))
+
+
+def load_script(name: str, path: Path) -> ModuleType:
+    """Load one repository script as an importable test target."""
+
+    specification = importlib.util.spec_from_file_location(name, path)
+    if specification is None or specification.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    return module
+
+
+skill_validator = load_script("skill_contract_validator", SKILL_VALIDATOR)
+schema_checker = load_script("schema_description_checker", SCHEMA_CHECKER)
+
+
+class SkillContractTests(unittest.TestCase):
+    """Prove that evaluation manifests resolve every concrete case exactly once."""
+
+    def test_pilot_manifests_resolve_every_case(self) -> None:
+        """Accept every checked-in pilot manifest and its complete case fixture."""
+
+        for manifest in PILOT_MANIFESTS:
+            with self.subTest(manifest=manifest):
+                skill_validator.validate_manifest(manifest, ROOT)
+
+    def test_compiled_plan_joins_prompt_and_expected_result(self) -> None:
+        """Resolve one evaluation into its concrete prompt and Boolean oracle."""
+
+        manifest = ROOT / "evals" / "code-documentation" / "skill-contract.json"
+        plan = skill_validator.compile_manifest(manifest, ROOT)
+        explicit = plan[0]
+        self.assertEqual(explicit["evaluation_id"], "CD-Activation-Explicit")
+        self.assertEqual(explicit["requirement_ids"], ["CD-Routing"])
+        self.assertEqual(explicit["surface"], "activation")
+        self.assertEqual(explicit["kind"], "explicit")
+        self.assertEqual(
+            explicit["prompt"],
+            "Use code-documentation to document this Python package and "
+            "enforce schema-field descriptions.",
+        )
+        self.assertEqual(explicit["method"], "deterministic")
+        self.assertIs(explicit["expected"], True)
+        self.assertEqual(explicit["workspace"]["workspace_id"], "schema-module")
+
+    def test_runnable_execution_resolves_workspace_and_checks(self) -> None:
+        """Compile one execution case into concrete files and generic checks."""
+
+        manifest = ROOT / "evals" / "code-documentation" / "skill-contract.json"
+        plan = skill_validator.compile_manifest(manifest, ROOT)
+        outcome = plan[4]
+        self.assertEqual(
+            outcome["workspace"]["files"],
+            [
+                {
+                    "source": "evals/code-documentation/rejected-schema.py",
+                    "target": "models.py",
+                }
+            ],
+        )
+        self.assertEqual(
+            [check["kind"] for check in outcome["checks"]],
+            ["command", "changed_paths"],
+        )
+
+    def test_missing_fixture_case_is_rejected(self) -> None:
+        """Reject an evaluation whose foreign key names no concrete case."""
+
+        root, manifest = self.copy_code_documentation_fixture()
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["evaluations"][0]["fixture_case_id"] = "CD-Missing"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            skill_validator.ManifestError,
+            "fixture has no case_id CD-Missing",
+        ):
+            skill_validator.validate_manifest(manifest, root)
+
+    def test_duplicate_fixture_case_assignment_is_rejected(self) -> None:
+        """Reject two evaluations that claim the same concrete case."""
+
+        root, manifest = self.copy_code_documentation_fixture()
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["evaluations"][1]["fixture_case_id"] = data["evaluations"][0][
+            "fixture_case_id"
+        ]
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            skill_validator.ManifestError,
+            "fixture case CD-Activation-Explicit is already assigned",
+        ):
+            skill_validator.validate_manifest(manifest, root)
+
+    def test_orphan_fixture_case_is_rejected(self) -> None:
+        """Reject a concrete case that no evaluation references."""
+
+        root, manifest = self.copy_code_documentation_fixture()
+        cases_path = root / "evals" / "code-documentation" / "cases.json"
+        cases = json.loads(cases_path.read_text(encoding="utf-8"))
+        cases["cases"].append(
+            {
+                "case_id": "CD-Unassigned",
+                "surface": "execution",
+                "kind": "outcome",
+                "workspace_id": "schema-module",
+                "prompt": "This case must be assigned before it can remain.",
+            }
+        )
+        cases_path.write_text(json.dumps(cases), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            skill_validator.ManifestError,
+            "unassigned cases.*CD-Unassigned",
+        ):
+            skill_validator.validate_manifest(manifest, root)
+
+    def copy_code_documentation_fixture(self) -> tuple[Path, Path]:
+        """Copy one complete manifest boundary into a temporary repository root."""
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        source_skill = ROOT / "skills" / "code-documentation" / "SKILL.md"
+        source_eval = ROOT / "evals" / "code-documentation"
+        target_skill = root / "skills" / "code-documentation" / "SKILL.md"
+        target_eval = root / "evals" / "code-documentation"
+        target_skill.parent.mkdir(parents=True)
+        target_eval.mkdir(parents=True)
+        shutil.copy2(source_skill, target_skill)
+        shutil.copy2(source_eval / "skill-contract.json", target_eval)
+        shutil.copy2(source_eval / "cases.json", target_eval)
+        shutil.copy2(source_eval / "rejected-schema.py", target_eval)
+        shutil.copy2(source_eval / "commented-schema.py", target_eval)
+        return root, target_eval / "skill-contract.json"
+
+
+class SchemaDescriptionTests(unittest.TestCase):
+    """Prove the accepted and rejected source fixtures exercise opposite results."""
+
+    def test_accepted_schema_has_descriptions(self) -> None:
+        """Accept a public model whose direct fields explain their semantic roles."""
+
+        accepted = ROOT / "evals" / "code-documentation" / "accepted-schema.py"
+        self.assertEqual(
+            schema_checker.missing_descriptions(
+                accepted,
+                schema_checker.DEFAULT_MODEL_BASES,
+            ),
+            [],
+        )
+
+    def test_rejected_schema_names_missing_field(self) -> None:
+        """Reject a public model and identify its undocumented direct field."""
+
+        rejected = ROOT / "evals" / "code-documentation" / "rejected-schema.py"
+        missing = schema_checker.missing_descriptions(
+            rejected,
+            schema_checker.DEFAULT_MODEL_BASES,
+        )
+        self.assertEqual(len(missing), 1)
+        self.assertTrue(missing[0].endswith("UndocumentedRecord.result"))
+
+
+if __name__ == "__main__":
+    unittest.main()

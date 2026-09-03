@@ -1,0 +1,518 @@
+"""Test reusable Agent Skill execution with a deterministic Codex double."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNNER = ROOT / "scripts" / "run-skill-evaluations.py"
+RUN_VALIDATOR = ROOT / "scripts" / "validate-skill-evaluation-run.py"
+FAKE_CODEX = r"""#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+if args == ["--version"]:
+    print("codex-cli test-double")
+    raise SystemExit(0)
+
+output_schema = "--output-schema" in args
+workspace = Path(args[args.index("-C") + 1])
+prompt = args[-1]
+
+disabled_features = {
+    args[index + 1]
+    for index, value in enumerate(args[:-1])
+    if value == "--disable"
+}
+expected_disabled_features = {
+    "apps", "browser_use", "browser_use_external",
+    "browser_use_full_cdp_access", "computer_use", "goals",
+    "image_generation", "in_app_browser", "in_app_chat",
+    "in_app_dictation", "in_app_local_automation", "in_app_updates",
+    "memories", "multi_agent", "plugin_sharing", "plugins",
+    "recommended_plugins", "remote_plugin", "tool_suggest", "view_image",
+    "workspace_dependencies",
+}
+if os.environ.get("FAKE_CODEX_REQUIRE_REDUCED_FEATURES") and (
+    disabled_features != expected_disabled_features
+):
+    print("subject feature context is not reduced", file=sys.stderr)
+    raise SystemExit(9)
+if os.environ.get("FAKE_CODEX_REQUIRE_FULL_FEATURES") and disabled_features:
+    print("subject feature context is not full", file=sys.stderr)
+    raise SystemExit(9)
+
+if os.environ.get("FAKE_CODEX_REQUIRE_PREAMBLE") and (
+    "If no skill applies, do not open a skill file" not in prompt
+):
+    print("subject prompt is missing the catalog instruction", file=sys.stderr)
+    raise SystemExit(9)
+
+home = Path(os.environ["HOME"])
+if home.name != "home" or not home.parent.name.startswith("agent-skill-eval-"):
+    print("subject HOME is not isolated", file=sys.stderr)
+    raise SystemExit(9)
+codex_home = Path(os.environ.get("CODEX_HOME", ""))
+if codex_home.name != "codex-home" or not (codex_home / "auth.json").is_symlink():
+    print("CODEX_HOME is not isolated with linked authentication", file=sys.stderr)
+    raise SystemExit(9)
+if not (
+    workspace / ".agents" / "skills" / "code-documentation" / "SKILL.md"
+).is_file():
+    print("project skill is not installed under .agents/skills", file=sys.stderr)
+    raise SystemExit(9)
+
+if output_schema:
+    output_path = Path(args[args.index("--output-last-message") + 1])
+    grade = {
+        "score": 4,
+        "reason": "The captured evidence satisfies the rubric.",
+        "evidence": ["models.py is the only changed path."],
+    }
+    output_path.write_text(json.dumps(grade), encoding="utf-8")
+    print(json.dumps({
+        "type": "item.completed",
+        "item": {"type": "agent_message", "text": json.dumps(grade)},
+    }))
+    print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 10}}))
+    raise SystemExit(0)
+
+negative = "Explain this function" in prompt
+forced_skip = os.environ.get("FAKE_CODEX_SKIP_SKILL_FOR", "")
+skip_skill = negative or (forced_skip and forced_skip in prompt)
+if not skip_skill:
+    print(json.dumps({
+        "type": "item.completed",
+        "item": {
+            "type": "command_execution",
+            "command": "/bin/zsh -lc 'sed -n \"1,240p\" .agents/skills/code-documentation/SKILL.md'",
+            "exit_code": 0,
+            "status": "completed",
+        },
+    }))
+
+execution = any(
+    text in prompt
+    for text in ("Document models.py", "Repair models.py", "Revise models.py", "Document only models.py")
+)
+if execution:
+    models = workspace / "models.py"
+    if "Remove the comment" in prompt:
+        models.write_text(
+            "\"\"\"Provide one documented snapshot-verification schema.\"\"\"\n\n"
+            "from pydantic import BaseModel, Field\n\n\n"
+            "class SnapshotJoin(BaseModel):\n"
+            "    \"\"\"Store the evidence used to accept one snapshot file.\"\"\"\n\n"
+            "    source_sha256: str = Field(description=\"Digest of source bytes.\")\n"
+            "    snapshot_sha256: str = Field(description=\"Digest in the snapshot.\")\n\n"
+            "    # The verifier compares both digests before setting verified.\n"
+            "    verified: bool = Field(description=\"Whether both digests match.\")\n",
+            encoding="utf-8",
+        )
+    else:
+        models.write_text(
+            "\"\"\"Provide one documented schema used by the evaluation.\"\"\"\n\n"
+            "from pydantic import BaseModel, Field\n\n\n"
+            "class UndocumentedRecord(BaseModel):\n"
+            "    \"\"\"Store one evaluated result.\"\"\"\n\n"
+            "    result: str = Field(\n"
+            "        description=\"Value produced by the evaluated operation.\"\n"
+            "    )\n",
+            encoding="utf-8",
+        )
+    if os.environ.get("FAKE_CODEX_BAD_SCOPE"):
+        (workspace / "unrelated.txt").write_text("outside scope", encoding="utf-8")
+    if os.environ.get("FAKE_CODEX_BYTECODE"):
+        cache = workspace / "__pycache__"
+        cache.mkdir()
+        (cache / "models.cpython-314.pyc").write_bytes(b"bytecode")
+    print(json.dumps({
+        "type": "item.completed",
+        "item": {"type": "file_change", "changes": [{"path": "models.py"}]},
+    }))
+
+if "check-schema-descriptions.py" in prompt:
+    print(json.dumps({
+        "type": "item.completed",
+        "item": {
+            "type": "command_execution",
+            "command": ".agents/skills/code-documentation/scripts/check-schema-descriptions.py models.py",
+            "exit_code": 0,
+            "status": "completed",
+        },
+    }))
+
+print(json.dumps({
+    "type": "item.completed",
+    "item": {"type": "agent_message", "text": "Finished the requested case."},
+}))
+print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 20}}))
+"""
+
+
+class SkillEvaluationRunnerTests(unittest.TestCase):
+    """Prove the generic runner captures, checks, grades, and persists runs."""
+
+    def setUp(self) -> None:
+        """Create one executable Codex double and isolated result directory."""
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.codex = self.root / "codex"
+        self.codex.write_text(textwrap.dedent(FAKE_CODEX), encoding="utf-8")
+        self.codex.chmod(0o755)
+        self.project = self.root / "project"
+        self.auth_codex_home = self.root / "auth-codex-home"
+        self.auth_codex_home.mkdir()
+        (self.auth_codex_home / "auth.json").write_text(
+            "{}",
+            encoding="utf-8",
+        )
+        shutil.copytree(
+            ROOT / "skills" / "code-documentation",
+            self.project / "skills" / "code-documentation",
+        )
+        shutil.copytree(
+            ROOT / "evals" / "code-documentation",
+            self.project / "evals" / "code-documentation",
+        )
+        self.manifest = (
+            self.project / "evals" / "code-documentation" / "skill-contract.json"
+        )
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["model_support"] = [
+            {
+                "model": "test-model",
+                "reasoning": "low",
+                "role": "acceptance",
+            },
+            {
+                "model": "test-stress",
+                "reasoning": "low",
+                "role": "stress",
+            },
+        ]
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        self.results = self.root / "results"
+
+    def run_harness(
+        self,
+        *extra: str,
+        environment: dict[str, str] | None = None,
+        model: str = "test-model",
+        model_role: str = "acceptance",
+    ) -> subprocess.CompletedProcess[str]:
+        """Run the checked-in manifest through the Codex test double."""
+
+        env = os.environ.copy()
+        if environment:
+            env.update(environment)
+        return subprocess.run(
+            [
+                str(RUNNER),
+                str(self.manifest),
+                "--model",
+                model,
+                "--model-role",
+                model_role,
+                "--codex",
+                str(self.codex),
+                "--results",
+                str(self.results),
+                "--auth-codex-home",
+                str(self.auth_codex_home),
+                "--root",
+                str(self.project),
+                "--tier",
+                "release",
+                *extra,
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            check=False,
+        )
+
+    def test_complete_manifest_passes_and_persists_evidence(self) -> None:
+        """Run all eight cases and retain one auditable result per case."""
+
+        completed = self.run_harness("--keep-workspaces")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        run_dir = next(self.results.iterdir())
+        summary = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        self.assertTrue(summary["passed"])
+        self.assertEqual(
+            summary["catalog_isolation"],
+            {
+                "user_home": "ephemeral",
+                "codex_home": "ephemeral_auth_link",
+                "project_skill_root": ".agents/skills",
+            },
+        )
+        self.assertEqual(summary["feature_context"]["mode"], "reduced")
+        self.assertIn("plugins", summary["feature_context"]["disabled_features"])
+        self.assertEqual(summary["terminal_reason"], "completed")
+        self.assertEqual(len(summary["results"]), 8)
+        outcome_dir = run_dir / "CD-Execution-Outcome"
+        self.assertTrue((outcome_dir / "trace.jsonl").is_file())
+        self.assertTrue((outcome_dir / "changes.patch").is_file())
+        retained_skill = (
+            run_dir
+            / "CD-Execution-Outcome"
+            / "workspace"
+            / ".agents"
+            / "skills"
+            / "code-documentation"
+            / "SKILL.md"
+        )
+        self.assertTrue(retained_skill.is_file())
+
+        self.assertFalse(
+            any(
+                path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"}
+                for path in retained_skill.parent.rglob("*")
+            )
+        )
+        self.assertFalse(
+            (
+                run_dir
+                / "CD-Execution-Outcome"
+                / "workspace"
+                / ".codex"
+                / "skills"
+                / "code-documentation"
+                / "SKILL.md"
+            ).exists()
+        )
+        process = next(
+            item
+            for item in summary["results"]
+            if item["evaluation_id"] == "CD-Execution-Process"
+        )
+        self.assertEqual(process["rubric"]["score"], 4)
+        validated = subprocess.run(
+            [
+                str(RUN_VALIDATOR),
+                str(run_dir),
+                "--root",
+                str(self.project),
+                "--require-success",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+
+    def test_subject_prompt_uses_exact_catalog_paths(self) -> None:
+        """Tell every subject to use the path supplied by the skill catalog."""
+
+        completed = self.run_harness(
+            "--tier",
+            "routine",
+            "--evaluation",
+            "CD-Activation-Explicit",
+            environment={"FAKE_CODEX_REQUIRE_PREAMBLE": "1"},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_runtime_bytecode_does_not_count_as_an_authored_change(self) -> None:
+        """Ignore Python cache files while retaining the source edit."""
+
+        completed = self.run_harness(
+            "--tier",
+            "routine",
+            "--evaluation",
+            "CD-Execution-Efficiency",
+            environment={"FAKE_CODEX_BYTECODE": "1"},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        run_dir = next(self.results.iterdir())
+        summary = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["results"][0]["changed_paths"], ["models.py"])
+
+    def test_reduced_feature_context_is_the_default(self) -> None:
+        """Disable every unrelated Codex feature and persist that policy."""
+
+        completed = self.run_harness(
+            "--tier",
+            "routine",
+            "--evaluation",
+            "CD-Activation-Explicit",
+            environment={"FAKE_CODEX_REQUIRE_REDUCED_FEATURES": "1"},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_full_feature_context_is_an_explicit_calibration_mode(self) -> None:
+        """Retain the complete Codex feature set only when requested."""
+
+        completed = self.run_harness(
+            "--tier",
+            "routine",
+            "--evaluation",
+            "CD-Activation-Explicit",
+            "--full-feature-context",
+            environment={"FAKE_CODEX_REQUIRE_FULL_FEATURES": "1"},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        run_dir = next(self.results.iterdir())
+        summary = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            summary["feature_context"],
+            {"mode": "full", "disabled_features": []},
+        )
+
+    def test_changed_path_violation_fails_the_case(self) -> None:
+        """Reject a rubric case whose edit escapes its declared path boundary."""
+
+        completed = self.run_harness(
+            "--evaluation",
+            "CD-Execution-Efficiency",
+            "--tier",
+            "sample",
+            "--grader-model",
+            "test-model",
+            environment={"FAKE_CODEX_BAD_SCOPE": "1"},
+        )
+        self.assertEqual(completed.returncode, 1)
+        run_dir = next(self.results.iterdir())
+        result = json.loads(
+            (run_dir / "CD-Execution-Efficiency" / "result.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["changed_paths"], ["models.py", "unrelated.txt"])
+
+    def test_deferred_rubric_runs_subject_without_grader(self) -> None:
+        """Retain one rubric subject as ungraded without launching a grader."""
+
+        completed = self.run_harness(
+            "--evaluation",
+            "CD-Execution-Process",
+            "--tier",
+            "routine",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        run_dir = next(self.results.iterdir())
+        summary = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["status"], "partial")
+        self.assertFalse(summary["passed"])
+        result_dir = run_dir / "CD-Execution-Process"
+        result = json.loads((result_dir / "result.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["status"], "ungraded")
+        self.assertFalse((result_dir / "rubric-trace.jsonl").exists())
+        validated = subprocess.run(
+            [str(RUN_VALIDATOR), str(run_dir), "--root", str(self.project)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+
+    def test_release_validator_rejects_incomplete_case_set(self) -> None:
+        """Prevent a selected sample from being relabeled as a release gate."""
+
+        completed = self.run_harness(
+            "--evaluation",
+            "CD-Execution-Process",
+            "--tier",
+            "sample",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        run_dir = next(self.results.iterdir())
+        run_path = run_dir / "run.json"
+        run = json.loads(run_path.read_text(encoding="utf-8"))
+        run["tier"] = "release"
+        run_path.write_text(json.dumps(run), encoding="utf-8")
+        validated = subprocess.run(
+            [str(RUN_VALIDATOR), str(run_dir), "--root", str(self.project)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(validated.returncode, 1)
+        self.assertIn("release tier must cover every case", validated.stderr)
+
+    def test_stress_failure_is_retained_without_blocking(self) -> None:
+        """Return success while preserving one failed non-blocking stress run."""
+
+        completed = self.run_harness(
+            "--evaluation",
+            "CD-Execution-Efficiency",
+            "--tier",
+            "sample",
+            "--grader-model",
+            "test-model",
+            environment={"FAKE_CODEX_BAD_SCOPE": "1"},
+            model="test-stress",
+            model_role="stress",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        run_dir = next(self.results.iterdir())
+        summary = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["status"], "failed")
+        self.assertFalse(summary["blocking"])
+        self.assertEqual(summary["subject_failure_rate"], 1.0)
+
+    def test_unlisted_model_policy_is_rejected(self) -> None:
+        """Reject a model role that the skill manifest never declared."""
+
+        completed = self.run_harness(
+            "--evaluation",
+            "CD-Activation-Explicit",
+            "--tier",
+            "sample",
+            model="undeclared-model",
+            model_role="stress",
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("not declared by the skill", completed.stderr)
+
+    def test_blocking_release_stops_after_first_failed_case(self) -> None:
+        """Persist the completed prefix and skip later release agents after failure."""
+
+        completed = self.run_harness(
+            environment={"FAKE_CODEX_SKIP_SKILL_FOR": "Add useful module"},
+        )
+        self.assertEqual(completed.returncode, 1, completed.stderr)
+        run_dir = next(self.results.iterdir())
+        summary = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["terminal_reason"], "failed_fast")
+        self.assertEqual(
+            [result["evaluation_id"] for result in summary["results"]],
+            ["CD-Activation-Explicit", "CD-Activation-Implicit"],
+        )
+        validated = subprocess.run(
+            [str(RUN_VALIDATOR), str(run_dir), "--root", str(self.project)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

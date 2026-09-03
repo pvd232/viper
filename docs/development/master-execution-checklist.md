@@ -20,10 +20,11 @@ comparisons, reconstruct one auditable research episode, curate reviewed
 learning examples, evaluate a retrieval-memory challenger, search the resulting
 evidence graph through a local MCP server, and restore their artifacts.
 
-Before implementation begins, VIPER compiles the reviewed source and contract
-stack into a deterministic system impact graph. Every later phase closes only
-after its candidate diff reaches the implementation, verifier, test, contract,
-and checklist surfaces reported by that graph.
+Before a code-changing contract closes, VIPER compiles its baseline and
+candidate source into deterministic `SourceGraph` records. The System Impact
+Check compares every declared target with the candidate, reports typed direct
+dependents, rejects unplanned declarations, and binds the passing plan and
+source bytes to the accepted commit.
 
 The authoring program uses decorated stage and metric functions:
 
@@ -272,7 +273,7 @@ scheduled phase and dependency order.
 | [Contract Traceability](contract-traceability.md) | Implemented through `P0-CRT-07` for executable PairBlocks | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Implemented | One defining module for API operations, verification operations, and verification types |
-| [System Impact Check](system-impact-compiler.md) | Implementation started through `P0-SIG-01`; remaining blocks pending | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
+| [System Impact Check](system-impact-compiler.md) | Implemented through `P0-SIG-05` | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
@@ -324,11 +325,11 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=706a8a386ca123e179d0efa3c8e0278808167f3f8633b0704325f5b131205d55 -->
+<!-- contract-baseline: contract-traceability.md sha256=99ea5bed80ac5b692b0d459376c6a955a37704326666ee5beb28b3c26fd44a6b -->
 
 <!-- contract-baseline: project-data-root.md sha256=03049cafba7be2bcc521ba4d219b8b57b130ce18ecf5fbe36ce435ffc67a6dc3 -->
 <!-- contract-baseline: module-ownership.md sha256=3894a5d392103d25c3b5490d1b54a2eff3232359458605428fb9525720f259e5 -->
-<!-- contract-baseline: system-impact-compiler.md sha256=7772a88a72d0224b183d8476a9a18327da0d1788f46c8e5bb72d08aaaee0a544 -->
+<!-- contract-baseline: system-impact-compiler.md sha256=69ac7bc3215e50995c6799d09a73ea1342f0b7b7dfdaea67886ad9983ef1b89e -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=00808701b78fd2cb335a6ac5b8236b4f29ffb325c6fff910ea6999f31778cffe -->
 <!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
@@ -795,45 +796,46 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- contract-implementation: requirement=SIG-01 rule=system.source.canonical state=implemented owner=src/viper/system_impact.py:SourceGraph -->
       <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=implemented test=tests/test_system_impact.py:test_source_graph_is_canonical -->
       <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.identity state=implemented owner=src/viper/system_impact.py:CodeQLIdentity -->
-- [ ] Analyze one immutable source snapshot with the pinned query pack and
+- [x] Analyze one immutable source snapshot with the pinned query pack and
       retain the command, identity, source digest, optional commit, exit status,
       database digest, and decoded-row digest.
       <!-- pair-block: P0-SIG-02 -->
       <!-- verifies: SIG-05 -->
-      <!-- contract-verification: requirement=SIG-05 rule=system.codeql.identity state=planned test=tests/test_system_impact.py:test_codeql_receipt_binds_revision_and_identity -->
-- [ ] Resolve every selected CTG target against the baseline graph; extract the
+      <!-- contract-verification: requirement=SIG-05 rule=system.codeql.identity state=implemented test=tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse -->
+- [x] Resolve every selected CTG target against the baseline graph; extract the
       exact authored declaration bytes, including decorators and UTF-8 byte
       columns; classify its `ChangeKind`; and report only the direct dependents
       selected by impact-policy version 1 while preserving every PairBlock.
       <!-- pair-block: P0-SIG-03 -->
       <!-- implements: SIG-02 -->
       <!-- verifies: SIG-02 -->
-      <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=planned owner=src/viper/system_impact.py:inspect_plan -->
-      <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=planned test=tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes -->
-      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates -->
-      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents -->
-      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_removed_target_reports_all_represented_direct_dependents -->
-      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=planned test=tests/test_system_impact.py:test_unclassified_change_uses_conservative_one_hop_edges -->
-- [ ] Freeze the selected PairBlocks and candidate source once, analyze that
+      <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=implemented owner=src/viper/system_impact.py:inspect_plan -->
+      <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=implemented test=tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes -->
+      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=implemented test=tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates -->
+      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=implemented test=tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents -->
+      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=implemented test=tests/test_system_impact.py:test_removed_target_reports_all_represented_direct_dependents -->
+      <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=implemented test=tests/test_system_impact.py:test_unclassified_change_uses_conservative_one_hop_edges -->
+- [x] Freeze the selected PairBlocks and candidate source once, analyze that
       snapshot with the same CodeQL identity, check every planned transition,
-      run each frozen PairBlock gate, validate prior dependency acceptance,
+      run each frozen PairBlock gate, validate omitted dependencies against
+      their baseline target states,
       reject any unplanned declaration, and bind the passing check to the
       commit containing the checked source and selected plan.
       <!-- pair-block: P0-SIG-04 -->
       <!-- implements: SIG-03 -->
       <!-- verifies: SIG-03 -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.realized state=planned owner=src/viper/system_impact.py:check_plan -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=planned owner=src/viper/system_impact.py:accept -->
-      <!-- contract-verification: requirement=SIG-03 rule=system.plan.realized state=planned test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
-      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies -->
-      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=planned test=tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan -->
-- [ ] Replay the committed `model_support` to `models` migration and one
+      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.realized state=implemented owner=src/viper/system_impact.py:check_plan -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=implemented owner=src/viper/system_impact.py:accept -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.realized state=implemented test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=implemented test=tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies -->
+      <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=implemented test=tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan -->
+- [x] Replay the committed `model_support` to `models` migration and one
       completed VIPER PairBlock against their exact Git diffs.
       <!-- pair-block: P0-SIG-05 -->
       <!-- implements: SIG-04 -->
       <!-- verifies: SIG-04 -->
-      <!-- contract-implementation: requirement=SIG-04 rule=system.fixture.replayed state=planned owner=tests/test_system_impact.py:test_committed_manifest_rename -->
-      <!-- contract-verification: requirement=SIG-04 rule=system.fixture.replayed state=planned test=tests/test_system_impact.py:test_committed_manifest_rename -->
+      <!-- contract-implementation: requirement=SIG-04 rule=system.fixture.replayed state=implemented owner=tests/test_system_impact.py:test_committed_manifest_rename -->
+      <!-- contract-verification: requirement=SIG-04 rule=system.fixture.replayed state=implemented test=tests/test_system_impact.py:test_committed_manifest_rename -->
 
 The [System Impact Check](system-impact-compiler.md#10-implementation-order)
 defines the exact five blocks. It consumes the closed CTG produced by

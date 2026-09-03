@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "fixture_id": "viper-p0-proof-05",
+  "origin_repository": "https://github.com/pvd232/viper.git",
+  "baseline_revision": "1e33d9a7bd12327702397c0e7aaf96e490dec46e",
+  "realized_revision": "5c78ff5d33bdfa9c7b92b7bb9ff5c0fefdc7eef8",
+  "test_source_suffix": ".source",
+  "source_files": [
+    {
+      "path": "tests/test_documentation.py",
+      "baseline_sha256": "b189ca1004dc4e670d2298a9d2708e409c7e7f702ba25b19cef2bed6c32eeb30",
+      "realized_sha256": "926fc6ad2a4b2ed04756ae75621f41a03b41b3ef06b1f3fd0cb3e10dae82ed6e"
+    },
+    {
+      "path": "tests/test_project_init.py",
+      "baseline_sha256": "842c703c89e9097252269678d6f398a98209c63c33ffd38d5daf0154158815dc",
+      "realized_sha256": "d8bd6524f1f5b79f8b453e8afb3a2be4a6952fcb1716680a9e78daaca8bd09f7"
+    }
+  ],
+  "expected_changed_declarations": [
+    {
+      "path": "tests/test_documentation.py",
+      "symbol": "_CHECKBOX_BLOCK",
+      "action": "update",
+      "baseline_sha256": "f72e199b50c236a818136eab572436dc98b2469506bd34c0ba4c60aba4244272",
+      "realized_sha256": "83e7d30c409e6530fda174bfd2fc029c1adfb0d88d91889888aa2e410ceec107"
+    },
+    {
+      "path": "tests/test_documentation.py",
+      "symbol": "test_contract_requirements_map_to_plan_tasks_and_tests",
+      "action": "update",
+      "baseline_sha256": "d7e81312b0a137f4fc635e2215a9a3684b5f2b136e40ba59dcb9e26e68fe0e8e",
+      "realized_sha256": "3db9971febc31cb1f19e3600aa309d6c09e63f12b8366290e80f80dede6ca770"
+    },
+    {
+      "path": "tests/test_project_init.py",
+      "symbol": "find_project_root",
+      "action": "add",
+      "baseline_sha256": null,
+      "realized_sha256": "36e30d941c2b613468defb30ad0a7ecb1b49d5af65c0a1817087700da3eb9b3b"
+    },
+    {
+      "path": "tests/test_project_init.py",
+      "symbol": "initialize_project",
+      "action": "add",
+      "baseline_sha256": null,
+      "realized_sha256": "579f2e07ac4bcbc61dd741eb9ab3fc5f61c1e7f293291883847444a3ed26cd38"
+    },
+    {
+      "path": "tests/test_project_init.py",
+      "symbol": "resolve_project_root",
+      "action": "add",
+      "baseline_sha256": null,
+      "realized_sha256": "36e30d941c2b613468defb30ad0a7ecb1b49d5af65c0a1817087700da3eb9b3b"
+    },
+    {
+      "path": "tests/test_project_init.py",
+      "symbol": "test_init_project_establishes_discoverable_root",
+      "action": "add",
+      "baseline_sha256": null,
+      "realized_sha256": "1f422afafd965f2b3cc240a3a0ec202467693b38516006049d7cafed55a34d26"
+    }
+  ]
+}

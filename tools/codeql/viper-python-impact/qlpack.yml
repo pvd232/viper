@@ -1,0 +1,4 @@
+name: viper/python-impact
+version: 1.0.0
+dependencies:
+  codeql/python-all: 7.2.4

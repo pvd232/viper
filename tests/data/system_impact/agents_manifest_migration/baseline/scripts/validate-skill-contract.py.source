@@ -1,0 +1,618 @@
+#!/usr/bin/env python3
+"""Validate normalized Agent Skill evaluation manifests."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+
+ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+REQUIREMENT_CATEGORIES = {"outcome", "process", "style", "efficiency"}
+METHODS = {"deterministic", "rubric"}
+MODEL_ROLES = {"acceptance", "candidate", "stress", "calibration"}
+ACTIVATION_CASES = {"explicit", "implicit", "contextual", "negative"}
+EXECUTION_CASES = {"outcome", "process", "style", "efficiency"}
+
+
+class ManifestError(ValueError):
+    """Report one deterministic skill-contract violation."""
+
+
+def require(condition: bool, message: str) -> None:
+    """Raise a manifest error when one condition fails."""
+
+    if not condition:
+        raise ManifestError(message)
+
+
+def require_keys(
+    value: dict[str, Any],
+    required: set[str],
+    optional: set[str],
+    label: str,
+) -> None:
+    """Require one object to contain the allowed fields."""
+
+    missing = required - value.keys()
+    extra = value.keys() - required - optional
+    require(not missing, f"{label}: missing fields {sorted(missing)}")
+    require(not extra, f"{label}: unexpected fields {sorted(extra)}")
+
+
+def require_id(value: Any, label: str) -> str:
+    """Return one valid open-vocabulary identifier."""
+
+    require(
+        isinstance(value, str) and ID_PATTERN.fullmatch(value) is not None,
+        f"{label}: invalid identifier",
+    )
+    return value
+
+
+def require_text(value: Any, label: str) -> str:
+    """Return one non-empty string."""
+
+    require(
+        isinstance(value, str) and bool(value.strip()),
+        f"{label}: expected a non-empty string",
+    )
+    return value
+
+
+def require_path(value: Any, label: str) -> str:
+    """Return one normalized repository-relative path."""
+
+    text = require_text(value, label)
+    path = PurePosixPath(text)
+    require(not path.is_absolute(), f"{label}: path must be relative")
+    require(".." not in path.parts, f"{label}: path escapes its root")
+    require(text == path.as_posix(), f"{label}: path must be normalized")
+    return text
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    """Load one JSON object from disk."""
+
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ManifestError(f"{path}: {exc}") from exc
+    require(isinstance(value, dict), f"{path}: top level must be an object")
+    return value
+
+
+def require_text_list(value: Any, label: str) -> list[str]:
+    """Return one non-empty list of non-empty strings."""
+
+    require(
+        isinstance(value, list) and bool(value),
+        f"{label}: expected one or more entries",
+    )
+    values = [
+        require_text(item, f"{label}[{index}]") for index, item in enumerate(value)
+    ]
+    require(len(values) == len(set(values)), f"{label}: duplicate entry")
+    return values
+
+
+def validate_checks(value: Any, label: str) -> list[dict[str, Any]]:
+    """Validate deterministic graders attached to one evaluation."""
+
+    require(isinstance(value, list), f"{label}: expected an array")
+    checks: list[dict[str, Any]] = []
+    for index, check in enumerate(value):
+        check_label = f"{label}[{index}]"
+        require(isinstance(check, dict), f"{check_label}: expected an object")
+        kind = check.get("kind")
+        if kind == "command":
+            require_keys(
+                check,
+                {"kind", "argv", "expected_exit"},
+                {"stdout_contains", "stderr_contains"},
+                check_label,
+            )
+            argv = require_text_list(check["argv"], f"{check_label}.argv")
+            expected_exit = check["expected_exit"]
+            require(
+                type(expected_exit) is int,
+                f"{check_label}.expected_exit: expected an integer",
+            )
+            normalized = {
+                "kind": kind,
+                "argv": argv,
+                "expected_exit": expected_exit,
+                "stdout_contains": check.get("stdout_contains", []),
+                "stderr_contains": check.get("stderr_contains", []),
+            }
+            for field in ("stdout_contains", "stderr_contains"):
+                values = normalized[field]
+                require(
+                    isinstance(values, list),
+                    f"{check_label}.{field}: expected an array",
+                )
+                normalized[field] = [
+                    require_text(item, f"{check_label}.{field}[{item_index}]")
+                    for item_index, item in enumerate(values)
+                ]
+            checks.append(normalized)
+        elif kind == "changed_paths":
+            require_keys(
+                check,
+                {"kind", "allowed", "required"},
+                set(),
+                check_label,
+            )
+            allowed = [
+                require_path(item, f"{check_label}.allowed[{item_index}]")
+                for item_index, item in enumerate(
+                    require_text_list(check["allowed"], f"{check_label}.allowed")
+                )
+            ]
+            required = [
+                require_path(item, f"{check_label}.required[{item_index}]")
+                for item_index, item in enumerate(
+                    require_text_list(check["required"], f"{check_label}.required")
+                )
+            ]
+            require(
+                set(required) <= set(allowed),
+                f"{check_label}.required: path is outside allowed",
+            )
+            checks.append({"kind": kind, "allowed": allowed, "required": required})
+        elif kind == "trace_command":
+            require_keys(check, {"kind", "contains"}, set(), check_label)
+            checks.append(
+                {
+                    "kind": kind,
+                    "contains": require_text_list(
+                        check["contains"],
+                        f"{check_label}.contains",
+                    ),
+                }
+            )
+        else:
+            raise ManifestError(f"{check_label}.kind: invalid value")
+    return checks
+
+
+def load_cases(path: Path, root: Path) -> dict[str, dict[str, Any]]:
+    """Load one case fixture and index its concrete cases by stable ID."""
+
+    data = load_json(path)
+    schema_version = data["schema_version"]
+    require(
+        schema_version in {1, 2},
+        f"{path}: schema_version must equal 1 or 2",
+    )
+    workspaces: dict[str, dict[str, Any]] = {}
+    if schema_version == 1:
+        require_keys(data, {"schema_version", "cases"}, set(), str(path))
+    else:
+        require_keys(data, {"schema_version", "workspaces", "cases"}, set(), str(path))
+        raw_workspaces = data["workspaces"]
+        require(
+            isinstance(raw_workspaces, list) and bool(raw_workspaces),
+            f"{path}.workspaces: expected one or more entries",
+        )
+        for index, workspace in enumerate(raw_workspaces):
+            label = f"{path}.workspaces[{index}]"
+            require(isinstance(workspace, dict), f"{label}: expected an object")
+            require_keys(workspace, {"workspace_id", "files"}, set(), label)
+            workspace_id = require_id(
+                workspace["workspace_id"],
+                f"{label}.workspace_id",
+            )
+            require(
+                workspace_id not in workspaces,
+                f"{label}: duplicate workspace_id {workspace_id}",
+            )
+            files = workspace["files"]
+            require(
+                isinstance(files, list) and bool(files),
+                f"{label}.files: expected one or more entries",
+            )
+            normalized_files: list[dict[str, str]] = []
+            targets: set[str] = set()
+            for file_index, file_ref in enumerate(files):
+                file_label = f"{label}.files[{file_index}]"
+                require(isinstance(file_ref, dict), f"{file_label}: expected an object")
+                require_keys(file_ref, {"source", "target"}, set(), file_label)
+                source = require_path(file_ref["source"], f"{file_label}.source")
+                target = require_path(file_ref["target"], f"{file_label}.target")
+                require(
+                    (root / source).is_file(),
+                    f"{file_label}.source: file does not exist: {root / source}",
+                )
+                require(
+                    target not in targets, f"{file_label}: duplicate target {target}"
+                )
+                targets.add(target)
+                normalized_files.append({"source": source, "target": target})
+            workspaces[workspace_id] = {
+                "workspace_id": workspace_id,
+                "files": normalized_files,
+            }
+    cases = data["cases"]
+    require(
+        isinstance(cases, list) and bool(cases),
+        f"{path}.cases: expected one or more entries",
+    )
+
+    indexed: dict[str, dict[str, Any]] = {}
+    for index, case in enumerate(cases):
+        label = f"{path}.cases[{index}]"
+        require(isinstance(case, dict), f"{label}: expected an object")
+        required = {"case_id", "surface", "kind", "prompt"}
+        if schema_version == 2:
+            required.add("workspace_id")
+        require_keys(case, required, set(), label)
+        case_id = require_id(case["case_id"], f"{label}.case_id")
+        require(case_id not in indexed, f"{label}: duplicate case_id {case_id}")
+        surface = case["surface"]
+        kind = case["kind"]
+        require(
+            surface in {"activation", "execution"}, f"{label}.surface: invalid value"
+        )
+        if surface == "activation":
+            require(kind in ACTIVATION_CASES, f"{label}.kind: invalid activation kind")
+        else:
+            require(kind in EXECUTION_CASES, f"{label}.kind: invalid execution kind")
+        require_text(case["prompt"], f"{label}.prompt")
+        normalized = dict(case)
+        if schema_version == 2:
+            workspace_id = require_id(
+                case["workspace_id"],
+                f"{label}.workspace_id",
+            )
+            require(
+                workspace_id in workspaces,
+                f"{label}.workspace_id: unknown workspace {workspace_id}",
+            )
+            normalized["workspace"] = workspaces[workspace_id]
+        indexed[case_id] = normalized
+    return indexed
+
+
+def compile_manifest(path: Path, root: Path) -> list[dict[str, Any]]:
+    """Validate one skill contract and return its resolved evaluation plan."""
+
+    data = load_json(path)
+    require_keys(
+        data,
+        {"schema_version", "skill", "requirements", "evaluations", "regressions"},
+        {"model_support"},
+        str(path),
+    )
+    require(data["schema_version"] == 2, f"{path}: schema_version must equal 2")
+
+    skill = data["skill"]
+    require(isinstance(skill, dict), f"{path}.skill: expected an object")
+    require_keys(skill, {"name", "path", "revision", "sha256"}, set(), f"{path}.skill")
+    require_id(skill["name"], f"{path}.skill.name")
+    skill_path = require_path(skill["path"], f"{path}.skill.path")
+    require_text(skill["revision"], f"{path}.skill.revision")
+    digest = skill["sha256"]
+    require(
+        isinstance(digest, str) and SHA256_PATTERN.fullmatch(digest),
+        f"{path}.skill.sha256: expected a lowercase SHA-256 digest",
+    )
+    source = root / skill_path
+    require(source.is_file(), f"{path}.skill.path: file does not exist: {source}")
+    actual_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    require(
+        digest == actual_digest,
+        f"{path}.skill.sha256: expected {actual_digest}, received {digest}",
+    )
+
+    model_support = data.get("model_support", [])
+    require(isinstance(model_support, list), f"{path}.model_support: expected an array")
+    model_keys: set[tuple[str, str]] = set()
+    model_roles: set[str] = set()
+    for index, model in enumerate(model_support):
+        label = f"{path}.model_support[{index}]"
+        require(isinstance(model, dict), f"{label}: expected an object")
+        require_keys(model, {"model", "reasoning", "role"}, set(), label)
+        model_alias = require_text(model["model"], f"{label}.model")
+        reasoning = require_text(model["reasoning"], f"{label}.reasoning")
+        role = model["role"]
+        require(role in MODEL_ROLES, f"{label}.role: invalid value")
+        key = (model_alias, reasoning)
+        require(key not in model_keys, f"{label}: duplicate model and reasoning")
+        model_keys.add(key)
+        model_roles.add(role)
+
+    requirements = data["requirements"]
+    require(
+        isinstance(requirements, list) and bool(requirements),
+        f"{path}.requirements: expected one or more entries",
+    )
+    requirement_ids: set[str] = set()
+    for index, requirement in enumerate(requirements):
+        label = f"{path}.requirements[{index}]"
+        require(isinstance(requirement, dict), f"{label}: expected an object")
+        require_keys(
+            requirement,
+            {"requirement_id", "category", "statement"},
+            set(),
+            label,
+        )
+        requirement_id = require_id(
+            requirement["requirement_id"], f"{label}.requirement_id"
+        )
+        require(
+            requirement_id not in requirement_ids,
+            f"{label}: duplicate requirement_id {requirement_id}",
+        )
+        requirement_ids.add(requirement_id)
+        require(
+            requirement["category"] in REQUIREMENT_CATEGORIES,
+            f"{label}.category: invalid value",
+        )
+        require_text(requirement["statement"], f"{label}.statement")
+
+    evaluations = data["evaluations"]
+    require(
+        isinstance(evaluations, list) and bool(evaluations),
+        f"{path}.evaluations: expected one or more entries",
+    )
+    evaluation_ids: set[str] = set()
+    covered_requirements: set[str] = set()
+    activation_cases: set[str] = set()
+    execution_cases: set[str] = set()
+    case_cache: dict[Path, dict[str, dict[str, Any]]] = {}
+    referenced_cases: dict[Path, set[str]] = {}
+    resolved_evaluations: list[dict[str, Any]] = []
+    for index, evaluation in enumerate(evaluations):
+        label = f"{path}.evaluations[{index}]"
+        require(isinstance(evaluation, dict), f"{label}: expected an object")
+        require_keys(
+            evaluation,
+            {
+                "evaluation_id",
+                "requirement_ids",
+                "method",
+                "fixture",
+                "fixture_case_id",
+            },
+            {"expected", "rubric", "checks"},
+            label,
+        )
+        evaluation_id = require_id(
+            evaluation["evaluation_id"], f"{label}.evaluation_id"
+        )
+        require(
+            evaluation_id not in evaluation_ids,
+            f"{label}: duplicate evaluation_id {evaluation_id}",
+        )
+        evaluation_ids.add(evaluation_id)
+        linked_requirements = evaluation["requirement_ids"]
+        require(
+            isinstance(linked_requirements, list) and bool(linked_requirements),
+            f"{label}.requirement_ids: expected one or more entries",
+        )
+        require(
+            len(linked_requirements) == len(set(linked_requirements)),
+            f"{label}.requirement_ids: duplicate requirement",
+        )
+        for requirement_id in linked_requirements:
+            require(
+                requirement_id in requirement_ids,
+                f"{label}: unknown requirement_id {requirement_id}",
+            )
+            covered_requirements.add(requirement_id)
+        method = evaluation["method"]
+        require(method in METHODS, f"{label}.method: invalid value")
+        fixture = require_path(evaluation["fixture"], f"{label}.fixture")
+        fixture_path = root / fixture
+        require(
+            fixture_path.is_file(),
+            f"{label}.fixture: file does not exist: {fixture_path}",
+        )
+        fixture_case_id = require_id(
+            evaluation["fixture_case_id"],
+            f"{label}.fixture_case_id",
+        )
+        if fixture_path not in case_cache:
+            case_cache[fixture_path] = load_cases(fixture_path, root)
+        fixture_cases = case_cache[fixture_path]
+        require(
+            fixture_case_id in fixture_cases,
+            f"{label}: fixture has no case_id {fixture_case_id}",
+        )
+        seen_fixture_cases = referenced_cases.setdefault(fixture_path, set())
+        require(
+            fixture_case_id not in seen_fixture_cases,
+            f"{label}: fixture case {fixture_case_id} is already assigned",
+        )
+        seen_fixture_cases.add(fixture_case_id)
+
+        selected_case = fixture_cases[fixture_case_id]
+        surface = selected_case["surface"]
+        case_kind = selected_case["kind"]
+        if surface == "activation":
+            activation_cases.add(case_kind)
+            require(
+                method == "deterministic",
+                f"{label}: activation evaluations must be deterministic",
+            )
+            require(
+                isinstance(evaluation.get("expected"), bool),
+                f"{label}.expected: activation result must be Boolean",
+            )
+        else:
+            execution_cases.add(case_kind)
+        if method == "deterministic":
+            require(
+                "expected" in evaluation,
+                f"{label}: deterministic evaluations require expected",
+            )
+            require(
+                "rubric" not in evaluation,
+                f"{label}: deterministic evaluations cannot define rubric",
+            )
+        else:
+            require_text(evaluation.get("rubric"), f"{label}.rubric")
+            require(
+                "expected" not in evaluation,
+                f"{label}: rubric evaluations cannot define expected",
+            )
+        checks = validate_checks(evaluation.get("checks", []), f"{label}.checks")
+        if (
+            surface == "execution"
+            and method == "deterministic"
+            and "workspace" in selected_case
+        ):
+            require(
+                isinstance(evaluation["expected"], bool),
+                f"{label}.expected: execution result must be Boolean",
+            )
+            require(
+                bool(checks),
+                f"{label}.checks: deterministic execution requires a check",
+            )
+
+        resolved_evaluation = {
+            "evaluation_id": evaluation_id,
+            "requirement_ids": linked_requirements,
+            "surface": surface,
+            "kind": case_kind,
+            "prompt": selected_case["prompt"],
+            "method": method,
+            "checks": checks,
+        }
+        if "workspace" in selected_case:
+            resolved_evaluation["workspace"] = selected_case["workspace"]
+        if method == "deterministic":
+            resolved_evaluation["expected"] = evaluation["expected"]
+        else:
+            resolved_evaluation["rubric"] = evaluation["rubric"]
+        resolved_evaluations.append(resolved_evaluation)
+
+    require(
+        covered_requirements == requirement_ids,
+        f"{path}: evaluation coverage mismatch; "
+        f"missing={sorted(requirement_ids - covered_requirements)}",
+    )
+    require(
+        activation_cases == ACTIVATION_CASES,
+        f"{path}: activation cases must equal {sorted(ACTIVATION_CASES)}",
+    )
+    require(
+        execution_cases == EXECUTION_CASES,
+        f"{path}: execution cases must equal {sorted(EXECUTION_CASES)}",
+    )
+    for fixture_path, fixture_cases in case_cache.items():
+        orphaned = fixture_cases.keys() - referenced_cases[fixture_path]
+        require(
+            not orphaned,
+            f"{path}: unassigned cases in {fixture_path}: {sorted(orphaned)}",
+        )
+    if any("workspace" in evaluation for evaluation in resolved_evaluations):
+        require(model_support, f"{path}.model_support: runnable cases require models")
+        require(
+            "acceptance" in model_roles,
+            f"{path}.model_support: runnable cases require an acceptance model",
+        )
+
+    regressions = data["regressions"]
+    require(isinstance(regressions, list), f"{path}.regressions: expected an array")
+    regression_ids: set[str] = set()
+    for index, regression in enumerate(regressions):
+        label = f"{path}.regressions[{index}]"
+        require(isinstance(regression, dict), f"{label}: expected an object")
+        require_keys(
+            regression,
+            {
+                "regression_id",
+                "evaluation_id",
+                "fixture",
+                "observed_failure",
+                "expected_behavior",
+            },
+            set(),
+            label,
+        )
+        regression_id = require_id(
+            regression["regression_id"], f"{label}.regression_id"
+        )
+        require(
+            regression_id not in regression_ids,
+            f"{label}: duplicate regression_id {regression_id}",
+        )
+        regression_ids.add(regression_id)
+        require(
+            regression["evaluation_id"] in evaluation_ids,
+            f"{label}: unknown evaluation_id {regression['evaluation_id']}",
+        )
+        fixture = require_path(regression["fixture"], f"{label}.fixture")
+        require(
+            (root / fixture).is_file(),
+            f"{label}.fixture: file does not exist: {root / fixture}",
+        )
+        require_text(regression["observed_failure"], f"{label}.observed_failure")
+        require_text(regression["expected_behavior"], f"{label}.expected_behavior")
+    return resolved_evaluations
+
+
+def validate_manifest(path: Path, root: Path) -> None:
+    """Validate one skill contract and all referenced fixtures."""
+
+    compile_manifest(path, root)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+
+    parser = argparse.ArgumentParser(
+        description="Validate global Agent Skill evaluation manifests."
+    )
+    parser.add_argument("manifests", nargs="+", type=Path)
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository root used to resolve manifest paths.",
+    )
+    parser.add_argument(
+        "--show-plan",
+        action="store_true",
+        help="Print the resolved evaluation plan as JSON.",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Validate every requested manifest and print a compact result."""
+
+    args = parse_args()
+    root = args.root.resolve()
+    try:
+        plans = [
+            {
+                "manifest": require_path(
+                    manifest.resolve().relative_to(root).as_posix(),
+                    "manifest",
+                ),
+                "evaluations": compile_manifest(manifest.resolve(), root),
+            }
+            for manifest in args.manifests
+        ]
+    except ManifestError as exc:
+        print(f"skill-contract: {exc}", file=sys.stderr)
+        return 1
+    if args.show_plan:
+        print(json.dumps({"plans": plans}, indent=2))
+        return 0
+    print(f"skill-contract: {len(args.manifests)} manifest(s) valid")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
