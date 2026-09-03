@@ -29,10 +29,9 @@ one proof-backed System Impact Compiler specification ready for implementation.
 - Added the initial `ContractTraceabilityGraph` model safeguards and the
   documentation checks that protect requirement, rule, owner, test, source
   span, model, example, and diagram structure.
-- Produced the complete [Contract Traceability Pair-Coding
-  Guide](../docs/development/contract-traceability-pair-coding.md), including
-  production blocks `P0-CRT-01` through `P0-CRT-05` and their acceptance
-  blocks.
+- Produced the original separate Contract Traceability pair-coding guide,
+  including production blocks `P0-CRT-01` through `P0-CRT-05` and their
+  acceptance blocks. Its live blocks now reside in the governing contract.
 - Fixed the compiler boundary: `compile_contract_traceability()` derives
   `ContractTraceabilityGraph` from the selected repository, while
   `compile_system()` lowers that graph with source facts and bootstrap

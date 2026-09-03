@@ -41,7 +41,8 @@ checklist ready to begin public module ownership.
 ### Contract Traceability
 
 - Standardized `P0-CRT-01` through `P0-CRT-05` and `P0-PROOF-01` through
-  `P0-PROOF-04` in the Contract Traceability Pair-Coding Guide.
+  `P0-PROOF-04` in the original separate guide. The live PairBlocks now reside
+  in the governing contract.
 - Implemented requirement and verifier-rule parsing, exact checklist edge
   parsing, planned-versus-implemented target handling, Python symbol
   resolution, cardinality checks, source declarations, and canonical JSON

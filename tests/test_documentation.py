@@ -53,9 +53,6 @@ RETIRED_SYSTEM_IMPACT_DOCUMENTS = (
     ROOT / "docs/development/proof/graph_transformation/appendix-a-foundations.md",
 )
 MASTER_PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/foundation-pair-coding.md"
-CONTRACT_TRACEABILITY_PAIR_CODING = (
-    ROOT / "docs/development/contract-traceability-pair-coding.md"
-)
 MODULE_OWNERSHIP_PAIR_CODING = ROOT / "docs/development/module-ownership-pair-coding.md"
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-traceability.md",
@@ -1719,9 +1716,6 @@ def test_contract_and_schedule_names_are_canonical() -> None:
     """Keep capability names separate from checklist-owned phase names."""
     expected_titles = {
         CONTRACT_TRACEABILITY: "# Contract Traceability",
-        CONTRACT_TRACEABILITY_PAIR_CODING: (
-            "# Contract Traceability Pair-Coding Guide"
-        ),
         MODULE_OWNERSHIP_PAIR_CODING: ("# Public Module Ownership Pair-Coding Guide"),
         MASTER_PHASE_ZERO_PAIR_CODING: "# Foundation Pair-Coding Guide",
         MASTER_EXECUTION_CHECKLIST: "# VIPER Master Execution Checklist",
@@ -1746,44 +1740,19 @@ def test_contract_and_schedule_names_are_canonical() -> None:
             assert re.search(r"^## \d+\. Master Phase \d+", text, re.MULTILINE) is None
 
 
-def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
-    """Require every CRT cycle to carry one exact parseable edit and gate."""
-    text = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
-    headings = (
-        "## 1. Status and boundary",
-        "## 2. Pair-cycle contract",
-        "## 3. Production PairBlocks",
-        "## 4. Acceptance PairBlocks",
-        "## 5. Pair execution",
-        "## 6. Guide gate",
-        "## 7. System Impact handoff",
-    )
-    positions = tuple(text.index(heading) for heading in headings)
-    assert positions == tuple(sorted(positions))
-
+def test_contract_traceability_owns_active_pair_blocks() -> None:
+    """Keep each active CRT implementation block in its governing contract."""
+    text = CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
     definitions = tuple(_PAIR_BLOCK_DEFINITION.finditer(text))
-    expected_ids = (
-        "P0-CRT-01",
-        "P0-CRT-02",
-        "P0-CRT-03",
-        "P0-CRT-04",
-        "P0-CRT-05",
+    assert tuple(item.group("id") for item in definitions) == (
         "P0-CRT-06",
         "P0-CRT-07",
-        "P0-PROOF-01",
-        "P0-PROOF-02",
-        "P0-PROOF-03",
-        "P0-PROOF-04",
         "P0-PROOF-08",
     )
-    assert tuple(item.group("id") for item in definitions) == expected_ids
 
-    manifests: dict[str, dict[str, Any]] = {}
-    declarations: dict[str, set[str]] = {}
     for definition in definitions:
-        block_id = definition.group("id")
         manifest = tomllib.loads(definition.group("manifest"))
-        assert manifest["id"] == block_id
+        assert manifest["id"] == definition.group("id")
         assert set(manifest) == {
             "id",
             "requirements",
@@ -1796,74 +1765,11 @@ def test_contract_traceability_pair_guide_covers_each_cycle() -> None:
         assert manifest["targets"]
         assert manifest["tests"]
         assert str(manifest["gate"]).startswith("conda run -n mantra ")
+        assert definition.group("body").count("**Context:**") == 1
 
-        body = definition.group("body")
-        assert body.count("**Context:**") == 1, block_id
-
-        edits = tuple(_PAIR_EDIT.finditer(body))
-        assert len(edits) == 1, block_id
-        file_edits = tuple(_FILE_PAIR_EDIT.finditer(body))
-        assert len(file_edits) == len(edits), block_id
-        target_paths = {target.partition(":")[0] for target in manifest["targets"]}
-        assert {edit.group("path") for edit in file_edits} <= target_paths, block_id
-        code = edits[0].group("code")
-        assert _PAIR_PLACEHOLDER.search(code) is None, block_id
-        tree = ast.parse(
-            code,
-            filename=f"{CONTRACT_TRACEABILITY_PAIR_CODING.name}:{block_id}",
-        )
-        names: set[str] = set()
-        for node in tree.body:
-            if isinstance(
-                node,
-                (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
-            ):
-                names.add(node.name)
-            if isinstance(node, (ast.Assign, ast.AnnAssign)):
-                targets = (
-                    node.targets if isinstance(node, ast.Assign) else (node.target,)
-                )
-                names.update(
-                    target.id for target in targets if isinstance(target, ast.Name)
-                )
-        declarations[block_id] = names
-        manifests[block_id] = manifest
-
-    target_pattern = re.compile(
-        r"^(?:src|tests)/[a-z0-9_/]+\.py:[A-Za-z_][A-Za-z0-9_.]*$"
-    )
-    all_targets = {
-        target for manifest in manifests.values() for target in manifest["targets"]
-    }
-    order = {block_id: index for index, block_id in enumerate(expected_ids)}
-    for block_id, manifest in manifests.items():
-        assert all(target_pattern.fullmatch(target) for target in manifest["targets"])
-        for target in manifest["targets"]:
-            assert target.partition(":")[2] in declarations[block_id], (
-                block_id,
-                target,
-            )
-        for test in manifest["tests"]:
-            test_path = test.partition(":")[0]
-            assert (ROOT / test_path).is_file() or any(
-                target.partition(":")[0] == test_path for target in all_targets
-            )
-
-        dependencies = manifest["depends_on"]
-        assert len(dependencies) == len(set(dependencies)), block_id
-        for dependency in dependencies:
-            if dependency == "P0-PDR-05":
-                continue
-            assert dependency in manifests, (block_id, dependency)
-            assert order[dependency] < order[block_id], (
-                block_id,
-                dependency,
-            )
-
-    pending_contracts = {contract.name for contract in IMPLEMENTATION_CONTRACTS[4:]}
-    assert pending_contracts == {
-        name for name in pending_contracts if f"`{name}`" in text
-    }
+    assert not (ROOT / "docs/development/contract-traceability-pair-coding.md").exists()
+    assert text.count("class ContractTarget(ProtocolModel):") == 1
+    assert text.count("class PairBlock(ProtocolModel):") == 1
 
 
 def test_module_ownership_pair_guide_covers_each_cycle() -> None:
@@ -1964,13 +1870,13 @@ def test_module_ownership_pair_guide_covers_each_cycle() -> None:
 def test_system_impact_consumes_the_closed_ctg_plan() -> None:
     """Keep plan authorship in CRT and source observation in System Impact."""
     contract = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
-    crt_guide = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+    crt_contract = CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
 
     assert "compile_contract_traceability() -> closed CTG plan" in contract
     assert "analyze_source(R0, K) -> G0 + receipt" in contract
     assert "check_plan(selected CTG, G0, G1) -> PlanCheck" in contract
     assert "accept(repository root, PlanCheck, revision) -> Acceptance" in contract
-    assert "accepts the closed CTG without reparsing" in crt_guide
+    assert "contract-only compilation" in crt_contract
 
     definition = next(
         item
@@ -1984,15 +1890,15 @@ def test_system_impact_consumes_the_closed_ctg_plan() -> None:
 
 
 def test_contract_target_declaration_has_one_meaning() -> None:
-    """Keep the target payload boundary identical in contract and pair guide."""
+    """Keep one contract-owned meaning for the target payload boundary."""
     description = (
         "            "
-        '"Authored PairBlock payload containing the desired declaration for "\n'
-        '            "an add or update, or the exact removal marker for a removal."'
+        '"Exact contract-owned payload containing the desired declaration "\n'
+        '            "for an add or update, or the removal marker for a removal."'
     )
 
     assert description in CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
-    assert description in CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+    assert CONTRACT_TRACEABILITY.read_text(encoding="utf-8").count(description) == 1
 
 
 def test_system_impact_check_has_one_bounded_proof_obligation() -> None:
@@ -2003,77 +1909,6 @@ def test_system_impact_check_has_one_bounded_proof_obligation() -> None:
     assert "G_1=\\operatorname{Analyze}_{K}(R_1)" in contract
     assert "C=\\operatorname{CheckPlan}(P,G_0,G_1)" in contract
     assert "The check does not generate a plan" in contract
-
-
-def test_contract_traceability_pair_guide_executes_as_one_workflow(
-    tmp_path: Path,
-) -> None:
-    """Execute the proposed CRT code and every focused acceptance case."""
-    text = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
-    definitions: dict[str, str] = {}
-    for definition in _PAIR_BLOCK_DEFINITION.finditer(text):
-        edit = _PAIR_EDIT.search(definition.group("body"))
-        assert edit is not None
-        definitions[definition.group("id")] = edit.group("code")
-
-    namespace = dict(vars(traceability))
-    for block_id in (
-        "P0-CRT-01",
-        "P0-CRT-02",
-        "P0-CRT-03",
-        "P0-CRT-05",
-    ):
-        exec(
-            compile(definitions[block_id], f"<{block_id}>", "exec"),
-            namespace,
-        )
-
-    documentation_namespace = {
-        "IMPLEMENTATION_CONTRACTS": IMPLEMENTATION_CONTRACTS,
-    }
-    exec(
-        compile(definitions["P0-CRT-04"], "<P0-CRT-04>", "exec"),
-        documentation_namespace,
-    )
-    assert documentation_namespace["CONTRACTS_WITH_COMPLETE_EXAMPLES"] == (
-        IMPLEMENTATION_CONTRACTS
-    )
-
-    for block_id in (
-        "P0-PROOF-01",
-        "P0-PROOF-02",
-        "P0-PROOF-03",
-        "P0-PROOF-04",
-    ):
-        tree = ast.parse(definitions[block_id], filename=f"<{block_id}>")
-        tree.body = [
-            node
-            for node in tree.body
-            if not (
-                isinstance(node, ast.ImportFrom)
-                and node.module == "viper._contract_traceability"
-            )
-        ]
-        exec(compile(tree, f"<{block_id}>", "exec"), namespace)
-
-    tests = (
-        "test_requirement_rows_and_rules_compile",
-        "test_requirement_rows_reject_duplicate_and_orphan_ids",
-        "test_rule_edges_resolve_one_owner_and_tests",
-        "test_rule_edges_reject_missing_symbols",
-        "test_contract_examples_reject_incomplete_structure",
-        "test_contract_examples_reject_undeclared_inventory_symbol",
-        "test_contract_examples_reject_unused_inventory_symbol",
-        "test_contract_symbols_compile_complete_inventory",
-        "test_contract_symbols_reject_missing_section_model",
-        "test_contract_examples_require_registered_symbols",
-        "test_contract_traceability_graph_is_canonical",
-        "test_contract_traceability_graph_rejects_duplicate_ids",
-    )
-    for index, test_name in enumerate(tests):
-        case_root = tmp_path / str(index)
-        case_root.mkdir()
-        namespace[test_name](case_root)
 
 
 def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
@@ -2105,7 +1940,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         and definition.group("id")
         not in {"P0-PROOF-09", "P0-PROOF-10", "P0-PROOF-11", "P0-PROOF-12"}
     )
-    contract_reference = CONTRACT_TRACEABILITY_PAIR_CODING.read_text(encoding="utf-8")
+    contract_reference = CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
     contract_definitions = tuple(
         definition for definition in _PAIR_BLOCK_DEFINITION.finditer(contract_reference)
     )
@@ -2138,7 +1973,8 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     )
     definition_ids = [definition.group("id") for definition in definitions]
     assert len(definition_ids) == len(set(definition_ids))
-    assert set(definition_ids) == set(marker_ids)
+    assert set(definition_ids) <= set(marker_ids)
+    assert set(marker_ids) - implemented_ids <= set(definition_ids)
 
     requirement_ids = {
         match.group("requirement")
@@ -2188,6 +2024,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         edits = tuple(_PAIR_EDIT.finditer(body))
         edit_tree: ast.Module | None = None
         if block_id.startswith("P0-SIG-") or block_id in {
+            "P0-PROOF-08",
             "P0-PROOF-09",
             "P0-PROOF-10",
             "P0-PROOF-11",
@@ -2221,7 +2058,11 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
                 body=[node for tree in trees for node in tree.body],
                 type_ignores=[],
             )
-        if block_id not in implemented_ids and edits:
+        if (
+            block_id not in implemented_ids
+            and edits
+            and not block_id.startswith("P0-CRT-")
+        ):
             assert edit_tree is not None
             declarations: set[str] = set()
             for node in edit_tree.body:
@@ -2262,6 +2103,8 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
         assert isinstance(dependencies, list)
         assert len(dependencies) == len(set(dependencies)), block_id
         for dependency in dependencies:
+            if dependency in implemented_ids:
+                continue
             assert dependency in manifests, (block_id, dependency)
             assert order[dependency] < order[block_id], (block_id, dependency)
 
@@ -2685,7 +2528,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
 
     planned_test_paths = {
         value.partition(":")[0]
-        for guide in (CONTRACT_TRACEABILITY_PAIR_CODING, SYSTEM_IMPACT_COMPILER)
+        for guide in (CONTRACT_TRACEABILITY, SYSTEM_IMPACT_COMPILER)
         for definition in _PAIR_BLOCK_DEFINITION.finditer(
             guide.read_text(encoding="utf-8")
         )
@@ -2892,7 +2735,7 @@ def test_master_checklist_names_existing_test_modules() -> None:
     )
     pair_guides = (
         MASTER_PHASE_ZERO_PAIR_CODING,
-        CONTRACT_TRACEABILITY_PAIR_CODING,
+        CONTRACT_TRACEABILITY,
         SYSTEM_IMPACT_COMPILER,
     )
     planned_tests = {

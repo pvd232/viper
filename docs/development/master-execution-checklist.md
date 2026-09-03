@@ -226,7 +226,7 @@ ExternalInputDraft
 One development change crosses the review system like this:
 
 ```text
-contracts + checklist + PairBlock guides
+contracts with embedded PairBlocks + checklist
 -> closed ContractTraceabilityGraph
 
 baseline source + pinned CodeQL identity
@@ -254,7 +254,7 @@ The documentation uses one name for each artifact family:
 | Artifact | Naming rule | Current example |
 | --- | --- | --- |
 | Governing contract | Stable capability name | [Contract Traceability](contract-traceability.md) |
-| Pair-coding guide | `<Capability> Pair-Coding Guide` | [Contract Traceability Pair-Coding Guide](contract-traceability-pair-coding.md) |
+| Executable plan | PairBlocks embedded in the governing contract | [Contract Traceability](contract-traceability.md#contract-owned-pairblocks) |
 | Cross-contract schedule | `VIPER Master Execution Checklist` | This document |
 | Scheduled phase | `Master Phase N` | Master Phase 0 |
 | Stable work identity | Existing PairBlock ID | `P0-PDR-01` |
@@ -324,7 +324,7 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=74cea859e2307dd1ca981682ae5d227ab606464863abbaf938d6833fcb129fab -->
+<!-- contract-baseline: contract-traceability.md sha256=ca7393c35260f84bccf42203171c4f9fa91952f18ce3dbde9b0d91de3d6682ea -->
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
 <!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
@@ -567,9 +567,9 @@ Phase 5. Master Phases 3 and 6 both feed Master Phase 7.
 ## 6. Pair-coding protocol
 
 The [Foundation Pair-Coding Guide](foundation-pair-coding.md) owns the
-project-root and module work. The [Contract Traceability Pair-Coding
-Guide](contract-traceability-pair-coding.md) owns every `P0-CRT` block
-and its `P0-PROOF` acceptance blocks. The [System Impact
+project-root work. [Contract Traceability](contract-traceability.md#contract-owned-pairblocks)
+owns its remaining `P0-CRT` blocks. The [Public Module Ownership
+contract](module-ownership.md) owns module work. The [System Impact
 Check](system-impact-compiler.md#10-implementation-order)
 owns every `P0-SIG` block. Every marked checkbox
 resolves to one block containing requirements, prerequisites, targets, tests,
@@ -735,11 +735,11 @@ system graph consumes its ownership links directly.
 
 #### Pair-coding blocks
 
-The [Contract Traceability Pair-Coding
-Guide](contract-traceability-pair-coding.md) owns the complete
-`P0-CRT-01` through `P0-CRT-07` production edits and
-`P0-PROOF-01` through `P0-PROOF-04` plus `P0-PROOF-08` acceptance edits. The checklist owns
-their order and state; the guide owns their exact code and focused gates.
+The [Contract Traceability contract](contract-traceability.md#contract-owned-pairblocks)
+owns the remaining exact code and focused gates. This checklist owns their
+cross-contract order and state. Completed CRT blocks remain evidenced by the
+checked tasks, implementation, tests, and Git history; their old edit recipes
+are not duplicated.
 
 ### 7.3 Public module ownership
 

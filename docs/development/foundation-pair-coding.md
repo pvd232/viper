@@ -910,11 +910,10 @@ replaces immutable-file retrieval after the operation validates its root.
 
 ## 3. Contract traceability
 
-The dedicated [Contract Traceability Pair-Coding
-guide](contract-traceability-pair-coding.md) owns `P0-CRT-01` through
-`P0-CRT-07`, `P0-PROOF-01` through `P0-PROOF-04`, and `P0-PROOF-08`. It contains the
-complete proposed edits, focused tests, dependencies, stop conditions, and
-phase gate. This combined reference links to that single source.
+The [Contract Traceability contract](contract-traceability.md#contract-owned-pairblocks)
+owns its remaining executable PairBlocks. Completed CRT work is represented by
+the implementation, tests, checklist state, and Git history rather than copied
+edit recipes.
 
 ## 4. Public module ownership
 
@@ -928,8 +927,8 @@ dependencies, stop conditions, and handoff to the System Impact Check.
 These blocks add the tests named by the checklist. Imports belong at the top
 of each target test module.
 
-The [contract traceability guide](contract-traceability-pair-coding.md)
-owns `P0-PROOF-01` through `P0-PROOF-04`.
+Completed `P0-PROOF-01` through `P0-PROOF-04` work is retained in the test
+suite and checklist rather than repeated here.
 
 <!-- pair-block-definition: P0-PROOF-05 -->
 ```toml pair-block
