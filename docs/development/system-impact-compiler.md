@@ -27,7 +27,7 @@ gate remains the behavioral acceptance boundary.
 | ID | Implementation obligation |
 | --- | --- |
 | SIG-01 <!-- contract-requirement: SIG-01 phase=0 test=tests/test_system_impact.py --> | Run one pinned CodeQL query pack over an immutable source snapshot and return a canonical `SourceGraph` whose nodes retain exact UTF-8 byte spans and declaration digests. |
-| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_system_impact.py --> | Resolve every `ContractTarget` against the baseline graph, reject an impossible action, and report every baseline source node that depends on an existing target. |
+| SIG-02 <!-- contract-requirement: SIG-02 phase=0 test=tests/test_system_impact.py --> | Resolve every `ContractTarget` against the baseline `SourceGraph`, classify its planned declaration change, reject an impossible action, and report every direct baseline dependent connected through an `EdgeKind` selected by impact-policy version 1. |
 | SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_system_impact.py --> | Freeze the selected PairBlocks and candidate source once; verify their plan digest, dependencies, gates, target actions, and exact declarations; reject unplanned source changes; and bind a passing check to the commit containing the checked source and selected plan. |
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_system_impact.py --> | Replay the check over the committed `model_support` to `models` migration and one completed VIPER PairBlock, then compare its result with the exact Git diff. |
 | SIG-05 <!-- contract-requirement: SIG-05 phase=0 test=tests/test_system_impact.py --> | Persist the CodeQL command, version, query-pack digest, source-snapshot digest, optional commit, exit status, and decoded-result digest for both source graphs; reject identity or receipt drift. |
@@ -42,7 +42,7 @@ answer:
 Did every planned add, update, or removal occur?
 Did the realized declaration equal the declaration required by the plan?
 Did implementation change any source declaration absent from the plan?
-Which baseline source declarations depended on the planned targets?
+Which direct baseline source declarations may be affected by each planned target change?
 Did both observations use the same CodeQL identity?
 ```
 
@@ -96,9 +96,13 @@ committed tree. Both values must equal `PlanCheck.realized.source_sha256` and
 rejects the commit. This final operation binds the passing check to the exact
 source and PairBlocks consumed by later dependency checks.
 
-The reverse dependency set identifies source declarations that may need
-attention. The set supports review. A `ContractTarget` identifies each
-dependent declaration that must change.
+The impact report identifies direct source declarations that may need
+attention. `classify_target_change()` compares each baseline declaration with
+its authored replacement. Impact-policy version 1 selects the `SourceEdge.kind`
+values that can carry that kind of change. The report is complete only over
+the direct edges present in the pinned baseline `SourceGraph`. Runtime
+dependency coverage remains outside this guarantee. A `ContractTarget`
+identifies each dependent declaration that must change.
 The realized-delta check supplies the enforceable boundary: if implementation
 does change a dependent, that declaration must already be a `ContractTarget`.
 
@@ -156,11 +160,12 @@ flowchart TB
     Plan -->|"selected plan"| Freeze
     Plan -->|"recompute plan digest"| Check
     Identity -->|"analyze R0"| Baseline
-    Baseline -->|"reverse dependencies"| Impact
+    Baseline -->|"typed direct dependents"| Impact
     Freeze -->|"authored declaration"| Resolved
     Freeze -->|"immutable candidate"| Realized
     Identity -->|"analyze candidate"| Realized
     Baseline -->|"before facts"| Resolved
+    Resolved -->|"ChangeKind"| Impact
     Resolved -->|"expected digest"| Target
     Realized -->|"after facts"| Target
     Impact -->|"review evidence"| Check
@@ -193,11 +198,11 @@ flowchart TB
     CTG["ContractTraceabilityGraph"]
     CodeQL["CodeQLIdentity"]
     G0["SourceGraph G0"]
-    Impact["Impact<br/>reverse dependencies"]
+    Impact["Impact<br/>typed direct dependents"]
     Execute["Execute existing PairBlocks"]
     Freeze["Freeze selected plan<br/>and candidate source"]
     G1["SourceGraph G1"]
-    Resolved["ResolvedContractTarget<br/>exact expected digest"]
+    Resolved["ResolvedContractTarget<br/>digest and ChangeKind"]
     Check["PlanCheck"]
     Gates["Run frozen PairBlock gates"]
     Prior["Prior Acceptance records"]
@@ -214,13 +219,14 @@ flowchart TB
     Block -->|"record"| CTG
     CodeQL -->|"analyze R0"| G0
     CTG -->|"resolve targets"| G0
-    G0 -->|"reverse reachability"| Impact
+    G0 -->|"one-hop policy selection"| Impact
     Block -->|"ordered work"| Execute
     Execute -->|"candidate edits"| Freeze
     CTG -->|"selected blocks"| Freeze
     Freeze -->|"immutable source snapshot"| G1
     Freeze -->|"resolve authored declarations"| Resolved
     CodeQL -->|"analyze candidate"| G1
+    Resolved -->|"ChangeKind"| Impact
     CTG -->|"expected actions"| Check
     Resolved -->|"expected digests"| Check
     G0 -->|"before facts"| Check
@@ -272,6 +278,14 @@ from viper._schema import NonEmptyStr, ProtocolModel, RepoRelPath, SHA256
 CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 NodeId = NonEmptyStr
 EdgeKind = Literal["imports", "calls", "constructs", "inherits", "reads", "writes"]
+ChangeKind = Literal[
+    "added",
+    "removed",
+    "callable_interface_changed",
+    "type_interface_changed",
+    "implementation_changed",
+    "unclassified",
+]
 CheckState = Literal["passed", "failed", "unresolved"]
 
 
@@ -342,22 +356,24 @@ class SourceGraph(ProtocolModel):
 
 
 class Impact(ProtocolModel):
-    """Report baseline declarations that depend on planned existing targets."""
+    """Report direct baseline dependents selected by the impact policy."""
 
-    baseline: SourceSnapshot = Field(description="Baseline source snapshot used for traversal.")
+    policy_version: Literal[1] = Field(default=1, description="ChangeKind-to-EdgeKind policy version.")
+    baseline: SourceSnapshot = Field(description="Baseline source snapshot used for direct-edge selection.")
     targets: tuple[NodeId, ...] = Field(description="Resolved existing CTG target nodes.")
-    affected: tuple[NodeId, ...] = Field(description="Reverse-reachable baseline nodes.")
-    edges: tuple[SHA256, ...] = Field(description="Source edges proving the paths.")
+    affected: tuple[NodeId, ...] = Field(description="Unique direct dependents selected by the impact policy.")
+    edges: tuple[SHA256, ...] = Field(description="Direct SourceEdge records supporting affected.")
     unresolved: tuple[RepoSymbolRef, ...] = Field(description="Targets absent from the baseline graph.")
 
 
 class ResolvedContractTarget(ProtocolModel):
-    """Resolve one authored target into the bytes required at acceptance."""
+    """Resolve one authored target and classify its planned change."""
 
     target: ContractTarget = Field(description="Selected CTG target being resolved.")
     baseline_node: NodeId | None = Field(description="Baseline node, absent for an addition.")
     baseline_sha256: SHA256 | None = Field(description="Baseline declaration digest, absent for an addition.")
     expected_sha256: SHA256 | None = Field(description="Authored declaration digest, absent for a removal.")
+    change_kind: ChangeKind = Field(description="Planned declaration transition used to select direct dependency edges.")
 
 
 class TargetCheck(ProtocolModel):
@@ -378,7 +394,7 @@ class PlanCheck(ProtocolModel):
     blocks: tuple[NonEmptyStr, ...] = Field(min_length=1, description="Selected PairBlocks checked in this run.")
     acceptances: tuple[SHA256, ...] = Field(default=(), description="Prior Acceptance digests used to satisfy omitted dependencies.")
     plan_sha256: SHA256 = Field(description="Digest of the frozen selected blocks, targets, dependencies, tests, and gates.")
-    impact: Impact = Field(description="Baseline reverse-dependency report.")
+    impact: Impact = Field(description="Typed direct-impact report for the baseline targets.")
     targets: tuple[TargetCheck, ...] = Field(description="One result per selected ContractTarget.")
     unexpected: tuple[RepoSymbolRef, ...] = Field(description="Changed declarations absent from the selected plan.")
     passed: bool = Field(description="True only when targets, gates, dependencies, plan identity, and source receipts pass.")
@@ -395,11 +411,11 @@ Baseline and expected digests are optional because additions have no baseline
 declaration and removals have no expected or realized declaration.
 
 <!-- contract-symbols:
-{"models":["Acceptance","CodeQLIdentity","CodeQLReceipt","Impact","PlanCheck","ResolvedContractTarget","SourceEdge","SourceGraph","SourceNode","SourceSnapshot","TargetCheck"],"aliases":["CheckState","CommitId","EdgeKind","NodeId"],"functions":[]}
+{"models":["Acceptance","CodeQLIdentity","CodeQLReceipt","Impact","PlanCheck","ResolvedContractTarget","SourceEdge","SourceGraph","SourceNode","SourceSnapshot","TargetCheck"],"aliases":["ChangeKind","CheckState","CommitId","EdgeKind","NodeId"],"functions":[]}
 -->
 
 <!-- contract-example-symbols:
-["CommitId", "NodeId", "EdgeKind", "CheckState", "CodeQLIdentity", "SourceSnapshot", "CodeQLReceipt", "SourceNode", "SourceEdge", "SourceGraph", "Impact", "ResolvedContractTarget", "TargetCheck", "PlanCheck", "Acceptance"]
+["CommitId", "NodeId", "EdgeKind", "ChangeKind", "CheckState", "CodeQLIdentity", "SourceSnapshot", "CodeQLReceipt", "SourceNode", "SourceEdge", "SourceGraph", "Impact", "ResolvedContractTarget", "TargetCheck", "PlanCheck", "Acceptance"]
 -->
 
 ### Illustrative worked example
@@ -414,6 +430,7 @@ baseline_id: CommitId = "6eb74b8e8bba2ddf2f2f9fa3822e11c5d9a3d06b"
 realized_id: CommitId = "18083057eeb92c755ead031122afd48e8a77d653"
 node_id: NodeId = "scripts/validate-skill-contract.py:compile_manifest"
 edge_kind: EdgeKind = "calls"
+change_kind: ChangeKind = "implementation_changed"
 check_state: CheckState = "passed"
 target_declaration = DeclarationRef(
     path="docs/development/skill-evaluation-pair-coding.md",
@@ -435,9 +452,9 @@ dependency = SourceEdge(edge_id="b" * 64, source=consumer.node_id, target=old_no
 
 baseline = SourceGraph(snapshot=baseline_snapshot, identity=identity, nodes=(consumer, old_node), edges=(dependency,), receipt=baseline_receipt)
 realized = SourceGraph(snapshot=realized_snapshot, identity=identity, nodes=(new_node,), edges=(), receipt=realized_receipt)
-impact = Impact(baseline=baseline.snapshot, targets=(old_node.node_id,), affected=(consumer.node_id, old_node.node_id), edges=(dependency.edge_id,), unresolved=())
+impact = Impact(policy_version=1, baseline=baseline.snapshot, targets=(old_node.node_id,), affected=(consumer.node_id,), edges=(dependency.edge_id,), unresolved=())
 planned = ContractTarget(requirements=("SKE-01",), block_id="P0-SKE-01", action="update", target=RepoSymbolRef(path=new_node.path, symbol=new_node.symbol), declaration=target_declaration)
-resolved = ResolvedContractTarget(target=planned, baseline_node=old_node.node_id, baseline_sha256=old_node.sha256, expected_sha256=new_node.sha256)
+resolved = ResolvedContractTarget(target=planned, baseline_node=old_node.node_id, baseline_sha256=old_node.sha256, expected_sha256=new_node.sha256, change_kind=change_kind)
 target = TargetCheck(resolved=resolved, after_sha256=new_node.sha256, state=check_state, message="The realized field declaration matches the planned replacement.")
 result = PlanCheck(baseline=baseline.snapshot, realized=realized.snapshot, blocks=(planned.block_id,), acceptances=(), plan_sha256="9" * 64, impact=impact, targets=(target,), unexpected=(), passed=True)
 acceptance = Acceptance(check="f" * 64, revision=realized_id)
@@ -456,7 +473,7 @@ assert acceptance.revision == result.realized.revision
 ```text
 compile_contract_traceability() -> closed CTG plan
 analyze_source(R0, K) -> G0 + receipt
-inspect_plan(CTG, G0) -> baseline action checks + reverse dependency report
+inspect_plan(CTG, G0) -> action checks + typed one-hop impact report
 execute the selected PairBlocks and their focused tests -> candidate source
 freeze selected plan + candidate source -> plan_sha256 + R1
 analyze_source(R1, K) -> G1 + receipt
@@ -466,7 +483,8 @@ accept(repository root, PlanCheck, revision) -> Acceptance
 ```
 
 CodeQL emits declaration nodes and dependency edges. VIPER canonicalizes those
-rows, hashes each declaration span, and performs traversal and equality checks.
+rows, hashes each declaration span, classifies each planned change, selects
+its direct dependency edges, and performs equality checks.
 CodeQL never authors requirements, targets, or PairBlocks.
 
 `check_plan()` recomputes `plan_sha256`, resolves every referenced prior
@@ -501,6 +519,76 @@ For an `add` or `update`, the extractor runs once on the PairBlock's authored
 fence and once on the candidate source file. A fence may contain several
 declarations; the qualified symbol selects one. For a `remove`, the planned
 digest is absent and the candidate graph must omit the baseline symbol.
+
+### Change-sensitive direct impact
+
+One internal operation classifies the planned transition before PairBlock
+execution:
+
+```python
+def classify_target_change(
+    *,
+    action: Literal["add", "update", "remove"],
+    baseline: bytes | None,
+    expected: bytes | None,
+) -> ChangeKind:
+    """Classify one planned declaration transition."""
+```
+
+`add` returns `added`, and `remove` returns `removed`. For `update`, the
+operation parses the baseline and expected declarations and applies these
+rules in order:
+
+1. A function or method whose synchronous or asynchronous form, decorators,
+   type parameters, parameters, or return annotation changed returns
+   `callable_interface_changed`.
+2. A class whose decorators, type parameters, bases, keywords, directly
+   declared field names or annotations, or directly declared method headers
+   changed returns `type_interface_changed`.
+3. An assignment whose target or annotation changed returns
+   `type_interface_changed`.
+4. A supported declaration with the same interface and different body returns
+   `implementation_changed`.
+5. An unsupported, ambiguous, or kind-changing comparison returns
+   `unclassified`.
+
+Interface changes take precedence when the same declaration also changes its
+body. Impact-policy version 1 maps each `ChangeKind` to the existing
+`EdgeKind` vocabulary:
+
+```python
+IMPACT_EDGE_KINDS_V1: dict[ChangeKind, frozenset[EdgeKind]] = {
+    "added": frozenset(),
+    "removed": frozenset(
+        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+    ),
+    "callable_interface_changed": frozenset({"calls", "constructs"}),
+    "type_interface_changed": frozenset(
+        {"constructs", "inherits", "reads", "writes"}
+    ),
+    "implementation_changed": frozenset({"calls", "reads"}),
+    "unclassified": frozenset(
+        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+    ),
+}
+```
+
+For each `ResolvedContractTarget` $r$ with a baseline node,
+`inspect_plan()` selects exactly these incoming baseline edges:
+
+```python
+{
+    edge
+    for edge in baseline.edges
+    if edge.target == r.baseline_node
+    and edge.kind in IMPACT_EDGE_KINDS_V1[r.change_kind]
+}
+```
+
+`Impact.edges` stores the selected edge identifiers. `Impact.affected` stores
+their unique `source` node identifiers. The operation stops after this direct
+step. If review adds one reported dependent as another `ContractTarget`, that
+target receives its own classification and direct-impact report.
 
 This work is linear in the bytes of each selected fence and source file. Cache
 the parsed declaration index by file digest, so several targets in one file
@@ -606,7 +694,7 @@ digests of any prior acceptance records used to satisfy omitted dependencies.
 | Rule | Executable requirement |
 | --- | --- |
 | `system.source.canonical` <!-- verifier-rule: system.source.canonical requirement=SIG-01 --> | Repeated analysis of one immutable source snapshot with one identity produces byte-identical `SourceGraph` JSON; each declaration span includes exact UTF-8 byte columns and hashes the original bytes. |
-| `system.plan.resolved` <!-- verifier-rule: system.plan.resolved requirement=SIG-02 --> | Every CTG target has a baseline state compatible with its action, and every existing target has one reverse-dependency result. |
+| `system.plan.resolved` <!-- verifier-rule: system.plan.resolved requirement=SIG-02 --> | Every CTG target has a baseline state compatible with its action and one `ChangeKind`; `Impact` contains exactly the direct incoming baseline edges permitted by impact-policy version 1 and their source nodes. |
 | `system.plan.realized` <!-- verifier-rule: system.plan.realized requirement=SIG-03 --> | Every selected target has the required after-state and exact declaration digest. |
 | `system.plan.closed` <!-- verifier-rule: system.plan.closed requirement=SIG-03 --> | `check_plan()` recomputes `plan_sha256`, requires every selected PairBlock gate to exit with code `0`, and accepts an omitted dependency only through an ancestral `Acceptance`; `accept()` then requires the committed source and selected-plan digests to equal the checked values. |
 | `system.fixture.replayed` <!-- verifier-rule: system.fixture.replayed requirement=SIG-04 --> | Both committed fixtures reproduce their reviewed changed-path sets and target results. |
@@ -618,8 +706,8 @@ digests of any prior acceptance records used to satisfy omitted dependencies.
 | --- | --- |
 | `src/viper/system_impact.py` | Add the public records, baseline inspection, realized-plan checking, and post-commit `accept()` operation. |
 | `src/viper/_system_impact/codeql.py` | Create and query CodeQL databases and return validated canonical rows. |
-| `src/viper/_system_impact/source.py` | Resolve qualified Python symbols and extract exact UTF-8 declaration bytes, including decorators. |
-| `tests/test_system_impact.py` | Cover exact declaration extraction, action transitions, unexpected changes, reverse dependency reporting, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
+| `src/viper/_system_impact/source.py` | Resolve qualified Python symbols, extract exact UTF-8 declaration bytes including decorators, and implement `classify_target_change()`. |
+| `tests/test_system_impact.py` | Cover exact declaration extraction, change classification, typed one-hop impact selection, action transitions, unexpected changes, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
 | `docs/development/contract-traceability.md` | Make `CRT-06` the sole owner of targets, PairBlocks, rule-block joins, and plan closure. |
 | `docs/development/master-execution-checklist.md` | Replace the old graph-transformation blocks with the five bounded blocks below. |
 
@@ -659,6 +747,12 @@ digest, missing target, failed gate, invalid plan digest, unsatisfied
 dependency, CodeQL identity drift, and a commit whose source or selected plan
 differs from the checked candidate.
 
+The focused impact fixtures use `A -> B -> C` with `C` as the planned target.
+Policy-selected direct impact contains `B` and excludes `A`. Separate fixtures
+require a callable-interface update to select `calls`, a removal to select all
+six represented edge kinds, and an `unclassified` update to use the same
+conservative direct-edge fallback.
+
 ## 10. Implementation order
 
 <!-- pair-block-definition: P0-SIG-01 -->
@@ -685,9 +779,9 @@ depends_on = ["P0-SIG-01"]
 ```toml pair-block
 id = "P0-SIG-03"
 requirements = ["SIG-01", "SIG-02"]
-targets = ["src/viper/_system_impact/source.py:extract_declaration_bytes", "src/viper/system_impact.py:Impact", "src/viper/system_impact.py:ResolvedContractTarget", "src/viper/system_impact.py:inspect_plan"]
-tests = ["tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes", "tests/test_system_impact.py:test_plan_targets_resolve_and_report_dependents"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'declaration_extraction or plan_targets_resolve' -q"
+targets = ["src/viper/_system_impact/source.py:extract_declaration_bytes", "src/viper/_system_impact/source.py:classify_target_change", "src/viper/system_impact.py:ChangeKind", "src/viper/system_impact.py:Impact", "src/viper/system_impact.py:ResolvedContractTarget", "src/viper/system_impact.py:inspect_plan"]
+tests = ["tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes", "tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates", "tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents", "tests/test_system_impact.py:test_removed_target_reports_all_represented_direct_dependents", "tests/test_system_impact.py:test_unclassified_change_uses_conservative_one_hop_edges"]
+gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'declaration_extraction or change_classifier or policy_selected_one_hop or removed_target or unclassified_change' -q"
 depends_on = ["P0-SIG-02"]
 ```
 
@@ -729,8 +823,13 @@ module passes, and the review-cycle commit is synchronized with its upstream.
   [`merge-base --is-ancestor`](https://git-scm.com/docs/git-merge-base#Documentation/git-merge-base.txt---is-ancestor),
   provides the ancestry check used when a selected block consumes an earlier
   accepted block without rerunning it.
+- Ramakrishna Bairi et al.,
+  [CodePlan: Repository-level Coding using LLMs and Planning](https://arxiv.org/abs/2309.12499),
+  provides the change-classification and dependency-relation selection pattern.
+  VIPER uses a deterministic one-hop advisory policy. Adaptive plan generation
+  remains outside Master Phase 0.
 - Gregg Rothermel and Mary Jean Harrold,
   [A Safe, Efficient Regression Test Selection Technique](https://doi.org/10.1145/248233.248262),
   provides the dependency-based regression-selection framing. VIPER uses the
-  reverse dependency set as review evidence and does not claim safe test
-  selection under that paper's proof conditions.
+  typed direct-impact set as review evidence. Safe test selection under that
+  paper's proof conditions remains outside this contract.

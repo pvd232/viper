@@ -310,6 +310,7 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Freeze", "Realized"),
         ("Identity", "Realized"),
         ("Baseline", "Resolved"),
+        ("Resolved", "Impact"),
         ("Resolved", "Target"),
         ("Realized", "Target"),
         ("Impact", "Check"),
@@ -340,6 +341,7 @@ SYSTEM_IMPACT_DAG_EDGES = (
         ("Freeze", "G1"),
         ("Freeze", "Resolved"),
         ("CodeQL", "G1"),
+        ("Resolved", "Impact"),
         ("CTG", "Check"),
         ("Resolved", "Check"),
         ("G0", "Check"),
@@ -2277,9 +2279,14 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
     for operation in ("imports", "calls", "constructs", "inherits", "reads", "writes"):
         assert f'"{operation}"' in specification
     for boundary in (
+        "ChangeKind = Literal[",
+        "policy_version: Literal[1]",
+        "change_kind: ChangeKind",
         "start_col: int",
         "end_col: int",
         "def extract_declaration_bytes(",
+        "def classify_target_change(",
+        "IMPACT_EDGE_KINDS_V1",
         "block_id` appears in `PlanCheck.blocks`",
         "runs every frozen selected `PairBlock.gate`",
         "source digest and selected-plan digest from the",
@@ -2298,6 +2305,39 @@ def test_phase_zero_system_impact_models_match_bounded_contract() -> None:
     assert "performs the final reconciliation" in checklist
     for retired in ("SystemGraph", "ContractDelta", "PropagationPlan", "SCC"):
         assert f"class {retired}" not in specification
+
+
+def test_system_impact_uses_change_sensitive_one_hop_advice() -> None:
+    """Keep impact typed, direct, advisory, and owned by P0-SIG-03."""
+    specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
+
+    for claim in (
+        "The operation stops after this direct",
+        "complete only over",
+        "impact-policy version 1",
+        "typed one-hop impact report",
+    ):
+        assert claim in specification
+    assert "classify its `ChangeKind`" in checklist
+
+    definition = next(
+        item
+        for item in _SYSTEM_PAIR_BLOCK_DEFINITION.finditer(specification)
+        if item.group("id") == "P0-SIG-03"
+    )
+    manifest = tomllib.loads(definition.group("manifest"))
+    assert "src/viper/system_impact.py:ChangeKind" in manifest["targets"]
+    assert (
+        "src/viper/_system_impact/source.py:classify_target_change"
+        in manifest["targets"]
+    )
+    assert {
+        "tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates",
+        "tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents",
+        "tests/test_system_impact.py:test_removed_target_reports_all_represented_direct_dependents",
+        "tests/test_system_impact.py:test_unclassified_change_uses_conservative_one_hop_edges",
+    } <= set(manifest["tests"])
 
 
 def test_system_impact_codeql_backend_is_end_to_end() -> None:
@@ -2695,6 +2735,7 @@ def test_system_impact_rule_owners_match_the_bounded_check() -> None:
     """Keep verifier owners on the exact source-check operations."""
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
     required_owners = {
+        "src/viper/_system_impact/source.py:classify_target_change",
         "src/viper/system_impact.py:SourceGraph",
         "src/viper/system_impact.py:CodeQLIdentity",
         "src/viper/system_impact.py:inspect_plan",
