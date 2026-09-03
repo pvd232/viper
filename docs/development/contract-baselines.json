@@ -37,9 +37,10 @@
         "SIG-02",
         "SIG-03",
         "SIG-04",
-        "SIG-05"
+        "SIG-05",
+        "SIG-06"
       ],
-      "sha256": "ed89a7152284ba548b0bb4e99c9f5d9ff6338ef56e937b5159225e4e6d652509"
+      "sha256": "0c8e9127b5f5ed98f5db7b5fca2cc39412454f6134ac5e735e1376a50dd6380d"
     },
     {
       "path": "docs/development/child-process-launching.md",

@@ -16,9 +16,9 @@ validated ContractTraceabilityGraph
 -> reject unplanned source changes
 ```
 
-The check does not generate a plan, choose repairs, rewrite PairBlocks, or claim
-that static source analysis proves runtime behavior. Each selected PairBlock
-gate remains the behavioral acceptance boundary.
+The check does not generate a plan. `ContractTraceabilityGraph` supplies the
+selected PairBlocks, and each PairBlock gate remains the behavioral acceptance
+boundary.
 
 ## 1. Status
 
@@ -31,6 +31,7 @@ gate remains the behavioral acceptance boundary.
 | SIG-03 <!-- contract-requirement: SIG-03 phase=0 test=tests/test_system_impact.py --> | Freeze the selected PairBlocks and candidate source once; verify their plan digest, dependencies, gates, target actions, and exact declarations; reject unplanned source changes; and bind a passing check to the commit containing the checked source and selected plan. |
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_system_impact.py --> | Replay the check over the committed `model_support` to `models` migration and one completed VIPER PairBlock, then compare its result with the exact Git diff. |
 | SIG-05 <!-- contract-requirement: SIG-05 phase=0 test=tests/test_system_impact.py --> | Persist the CodeQL command, version, query-pack digest, source-snapshot digest, optional commit, exit status, and decoded-result digest for both source graphs; reject identity or receipt drift. |
+| SIG-06 <!-- contract-requirement: SIG-06 phase=0 test=tests/test_system_impact.py --> | Emit `writes` edges for direct name and attribute assignments whose writing declaration and assignment target both resolve to `SourceNode` records, retaining the assignment location as edge evidence. |
 
 ## 2. Required claim
 
@@ -905,11 +906,10 @@ Phase 0 binds the reported CLI version, launcher bytes, and query-pack bytes,
 and trusts the verified distribution installed behind that identity.
 
 Query-pack version `1.0.0` emits `calls`, `constructs`, `inherits`, `imports`,
-and `reads`. `writes` remains in the closed `EdgeKind` schema and impact-policy
-fallback for another conforming source-fact provider, but this first CodeQL
-pack does not emit it. Therefore, the Phase 0 advisory report makes no write-edge
-coverage claim. The checked-in QL pack and its lock file are
-`P0-SIG-02` supporting assets bound by `plan_sha256`.
+`reads`, and `writes`. A `writes` edge is emitted only when the writing scope
+and the canonical module or class assignment both resolve to `SourceNode`
+records. Local variables and attributes without an existing assignment node
+remain outside the Phase 0 graph.
 
 CodeQL identifies repository declarations and dependency evidence. Python's
 AST selects the exact original byte span for each CodeQL declaration row and
@@ -1142,6 +1142,7 @@ the Phase 0 checker returns the complete records to its caller.
 | `system.plan.closed` <!-- verifier-rule: system.plan.closed requirement=SIG-03 --> | `check_plan()` recomputes `plan_sha256`, requires every selected PairBlock gate to exit with code `0`, and accepts an omitted dependency only when all of its target states exist in the baseline; `accept()` then requires the committed source, selected-plan, and supporting-asset bytes to equal the checked values. |
 | `system.fixture.replayed` <!-- verifier-rule: system.fixture.replayed requirement=SIG-04 --> | Both committed fixtures reproduce their reviewed changed-path sets and target results. |
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
+| `system.source.writes` <!-- verifier-rule: system.source.writes requirement=SIG-06 --> | The checked-in CodeQL pack emits `writes` edges for a function writing a declared module variable and a method writing a declared class attribute; every emitted edge retains the assignment location. |
 
 ## 8. Propagation
 
@@ -1152,7 +1153,7 @@ the Phase 0 checker returns the complete records to its caller.
 | `src/viper/_system_impact/source.py` | Resolve qualified Python symbols, extract exact UTF-8 declaration bytes including decorators, and implement `classify_target_change()`. |
 | `tests/test_system_impact.py` | Cover exact declaration extraction, change classification, typed one-hop impact selection, action transitions, unexpected changes, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
 | `docs/development/contract-traceability.md` | Make `CRT-06` the sole owner of targets, PairBlocks, rule-block joins, and plan closure. |
-| `docs/development/master-execution-checklist.md` | Replace the old graph-transformation blocks with the five bounded blocks below. |
+| `docs/development/master-execution-checklist.md` | Replace the old graph-transformation blocks with the six bounded blocks below. |
 
 ### Removed design
 
@@ -1250,7 +1251,19 @@ gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'com
 depends_on = ["P0-SIG-04"]
 ```
 
-The implementation closes after all five focused gates pass, the complete test
+
+<!-- pair-block-definition: P0-SIG-06 -->
+```toml pair-block
+id = "P0-SIG-06"
+requirements = ["SIG-06"]
+targets = ["tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
+assets = ["tools/codeql/viper-python-impact/Dependencies.ql"]
+tests = ["tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
+gate = "conda run -n mantra env VIPER_RUN_CODEQL_TESTS=1 python -m pytest tests/test_system_impact.py::test_checked_in_codeql_pack_analyzes_tiny_repository -q"
+depends_on = ["P0-SIG-05"]
+```
+
+The implementation closes after all six focused gates pass, the complete test
 module passes, and the review-cycle commit is synchronized with its upstream.
 
 ## 11. Contract-owned internal declarations
@@ -1888,6 +1901,111 @@ def test_completed_viper_pair_block(tmp_path: Path) -> None:
         "5c78ff5d33bdfa9c7b92b7bb9ff5c0fefdc7eef8",
         tmp_path,
     )
+```
+
+### CodeQL write-edge integration test
+
+<!-- contract-target: requirements=SIG-06 block=P0-SIG-06 action=update target=tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository -->
+
+```python contract-target
+@pytest.mark.integration
+def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None:
+    """Compile the checked-in QL pack and verify call and write dependencies."""
+    if os.environ.get("VIPER_RUN_CODEQL_TESTS") != "1":
+        pytest.skip("set VIPER_RUN_CODEQL_TESTS=1 to run the real CodeQL check")
+
+    configured = os.environ.get("VIPER_CODEQL")
+    executable_value = configured or shutil.which("codeql")
+    assert executable_value is not None, "CodeQL is unavailable"
+    executable = Path(executable_value).resolve()
+
+    checked_in_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
+    query_pack = tmp_path / "query-pack"
+    shutil.copytree(checked_in_pack, query_pack)
+
+    installed = subprocess.run(
+        (str(executable), "pack", "install", str(query_pack)),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+
+    version = subprocess.run(
+        (str(executable), "version", "--format=json"),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    root = tmp_path / "source"
+    _sig02_source_fixture(root)
+    (root / "src/writes.py").write_text(
+        "state = 0\n"
+        "\n"
+        "def update_state(value: int) -> None:\n"
+        "    global state\n"
+        "    state = value\n"
+        "\n"
+        "class Counter:\n"
+        "    value = 0\n"
+        "\n"
+        "    def update(self, value: int) -> None:\n"
+        "        self.value = value\n",
+        encoding="utf-8",
+    )
+
+    snapshot = SourceSnapshot(
+        base_revision=_REVISION,
+        source_sha256=source_digest(root),
+        revision=None,
+    )
+    identity = CodeQLIdentity(
+        version=json.loads(version.stdout)["version"],
+        platform=sys.platform,
+        executable_sha256=_sha256(executable.read_bytes()),
+        pack="viper/python-impact@1.0.0",
+        pack_sha256=_tree_digest(query_pack),
+    )
+
+    graph = analyze_source(
+        root,
+        snapshot=snapshot,
+        identity=identity,
+        codeql_executable=executable,
+        query_pack=query_pack,
+        cache_root=tmp_path / "cache",
+        artifact_root=tmp_path / "artifacts",
+    )
+
+    assert {node.symbol for node in graph.nodes} >= {
+        "dependency",
+        "dependent",
+        "state",
+        "update_state",
+        "Counter",
+        "Counter.value",
+        "Counter.update",
+    }
+    assert any(
+        edge.source == "src/example.py:dependent"
+        and edge.target == "src/example.py:dependency"
+        and edge.kind == "calls"
+        for edge in graph.edges
+    )
+
+    write_edges = {
+        (edge.source, edge.target): (edge.path, edge.line)
+        for edge in graph.edges
+        if edge.kind == "writes"
+    }
+    assert write_edges[("src/writes.py:update_state", "src/writes.py:state")] == (
+        "src/writes.py",
+        5,
+    )
+    assert write_edges[
+        ("src/writes.py:Counter.update", "src/writes.py:Counter.value")
+    ] == ("src/writes.py", 11)
 ```
 
 

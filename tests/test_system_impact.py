@@ -12,8 +12,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
@@ -1039,32 +1038,51 @@ def test_analyze_source_rejects_source_pack_and_cli_identity_drift(
 
 @pytest.mark.integration
 def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None:
-    """Compile and execute the checked-in QL pack when explicitly enabled."""
+    """Compile the checked-in QL pack and verify call and write dependencies."""
     if os.environ.get("VIPER_RUN_CODEQL_TESTS") != "1":
         pytest.skip("set VIPER_RUN_CODEQL_TESTS=1 to run the real CodeQL check")
+
     configured = os.environ.get("VIPER_CODEQL")
     executable_value = configured or shutil.which("codeql")
-    if executable_value is None:
-        pytest.skip("CodeQL is unavailable")
+    assert executable_value is not None, "CodeQL is unavailable"
     executable = Path(executable_value).resolve()
+
     checked_in_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
     query_pack = tmp_path / "query-pack"
     shutil.copytree(checked_in_pack, query_pack)
-    installed = subprocess.run(  # noqa: S603 - explicit opt-in tool path.
+
+    installed = subprocess.run(
         (str(executable), "pack", "install", str(query_pack)),
         check=False,
         capture_output=True,
         text=True,
     )
     assert installed.returncode == 0, installed.stdout + installed.stderr
-    version = subprocess.run(  # noqa: S603 - explicit opt-in tool path.
+
+    version = subprocess.run(
         (str(executable), "version", "--format=json"),
         check=True,
         capture_output=True,
         text=True,
     )
+
     root = tmp_path / "source"
     _sig02_source_fixture(root)
+    (root / "src/writes.py").write_text(
+        "state = 0\n"
+        "\n"
+        "def update_state(value: int) -> None:\n"
+        "    global state\n"
+        "    state = value\n"
+        "\n"
+        "class Counter:\n"
+        "    value = 0\n"
+        "\n"
+        "    def update(self, value: int) -> None:\n"
+        "        self.value = value\n",
+        encoding="utf-8",
+    )
+
     snapshot = SourceSnapshot(
         base_revision=_REVISION,
         source_sha256=source_digest(root),
@@ -1088,13 +1106,34 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
         artifact_root=tmp_path / "artifacts",
     )
 
-    assert {node.symbol for node in graph.nodes} >= {"dependency", "dependent"}
+    assert {node.symbol for node in graph.nodes} >= {
+        "dependency",
+        "dependent",
+        "state",
+        "update_state",
+        "Counter",
+        "Counter.value",
+        "Counter.update",
+    }
     assert any(
         edge.source == "src/example.py:dependent"
         and edge.target == "src/example.py:dependency"
         and edge.kind == "calls"
         for edge in graph.edges
     )
+
+    write_edges = {
+        (edge.source, edge.target): (edge.path, edge.line)
+        for edge in graph.edges
+        if edge.kind == "writes"
+    }
+    assert write_edges[("src/writes.py:update_state", "src/writes.py:state")] == (
+        "src/writes.py",
+        5,
+    )
+    assert write_edges[
+        ("src/writes.py:Counter.update", "src/writes.py:Counter.value")
+    ] == ("src/writes.py", 11)
 
 
 # SIG-04 strict closure and commit acceptance

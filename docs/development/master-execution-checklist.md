@@ -862,9 +862,17 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- verifies: SIG-04 -->
       <!-- contract-implementation: requirement=SIG-04 rule=system.fixture.replayed state=implemented owner=tests/test_system_impact.py:test_committed_manifest_rename -->
       <!-- contract-verification: requirement=SIG-04 rule=system.fixture.replayed state=implemented test=tests/test_system_impact.py:test_committed_manifest_rename -->
+- [x] Emit source-backed `writes` edges for direct writes to declared module
+      variables and class attributes.
+      <!-- pair-block: P0-SIG-06 -->
+      <!-- pair-block-contract: P0-SIG-06 contract=system-impact-compiler.md -->
+      <!-- implements: SIG-06 -->
+      <!-- verifies: SIG-06 -->
+      <!-- contract-implementation: requirement=SIG-06 rule=system.source.writes state=implemented owner=src/viper/_system_impact/codeql.py:analyze_source -->
+      <!-- contract-verification: requirement=SIG-06 rule=system.source.writes state=implemented test=tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository -->
 
 The [System Impact Check](system-impact-compiler.md#10-implementation-order)
-defines the exact five blocks. It consumes the closed CTG produced by
+defines the exact six blocks. It consumes the closed CTG produced by
 `P0-CRT-07`; it does not own plan construction.
 ### 7.5 Focused proof
 
