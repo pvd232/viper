@@ -36,7 +36,8 @@ from ..stages import (
     InternalSpec,
 )
 from ..storage import LocalArtifactStore, snapshot_file
-from ..verification import VerificationError, VerificationPolicy, verify_run_result
+from ..verification import verify_run_result
+from ..verification.models import VerificationError, VerificationPolicy
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
 from ._materialization import resolve_inputs, retrieve_download_inputs
 from ._metric import MetricExecutionError, run_after_stage_metrics

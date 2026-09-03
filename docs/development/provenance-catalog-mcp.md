@@ -755,7 +755,7 @@ adds MCP polling metadata only.
 | `src/viper/catalog.py` | Add the derived models, SQLite schema, refresh, exact run, artifact, measurement, and benchmark queries, and stage-reuse lookup. |
 | `src/viper/inspection.py` | Share normalized lineage extraction with catalog refresh. |
 | `src/viper/api.py` | Add catalog refresh and run, artifact, measurement, and benchmark search request and success models. |
-| `src/viper/_api/handlers.py` | Route catalog requests through `Catalog`. |
+| `src/viper/api.py` | Route catalog requests through `Catalog`. |
 | `src/viper/mcp.py` | Generate tools from typed operation registries; implement stateless request metadata, `server/discover`, verified resources, cache metadata, `subscriptions/listen`, typed templates, user-selected prompts, MRTR elicitation, and the Tasks extension. |
 | `src/viper/research.py` | Own provider-backed model invocation receipts, review records, learning records, and policy-promotion semantics consumed by MCP. |
 | `src/viper/cli.py` | Add `catalog refresh`, catalog search commands, and `mcp --access read|execute|learn`. |

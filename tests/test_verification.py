@@ -126,12 +126,14 @@ from viper.stages import (
     TrainSpec,
 )
 from viper.verification import (
+    verify_attempt_future_inputs,
+    verify_stored_input_selections,
+)
+from viper.verification.models import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,
     VerifiedSnapshotFile,
-    verify_attempt_future_inputs,
-    verify_stored_input_selections,
 )
 
 GIT_COMMIT = "a" * 40

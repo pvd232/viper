@@ -55,7 +55,6 @@ RETIRED_SYSTEM_IMPACT_DOCUMENTS = (
     ROOT / "docs/development/proof/graph_transformation/appendix-a-foundations.md",
 )
 MASTER_PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/foundation-pair-coding.md"
-MODULE_OWNERSHIP_PAIR_CODING = ROOT / "docs/development/module-ownership-pair-coding.md"
 IMPLEMENTATION_CONTRACTS = (
     ROOT / "docs/development/contract-traceability.md",
     ROOT / "docs/development/project-data-root.md",
@@ -133,10 +132,6 @@ _CONTRACT_WORKED_EXAMPLE = re.compile(
 _PYTHON_FENCE = re.compile(r"```python\n(?P<body>.*?)\n```", re.DOTALL)
 _TRACEABILITY_MODEL_FENCE = re.compile(
     r"```python contract-target\n(?P<body>.*?)\n```",
-    re.DOTALL,
-)
-_CONTRACT_EXPORTS = re.compile(
-    r"```python contract-exports\n(?P<body>.*?)\n```",
     re.DOTALL,
 )
 _MERMAID_FENCE = re.compile(r"```mermaid\n(?P<body>.*?)\n```", re.DOTALL)
@@ -1726,7 +1721,6 @@ def test_contract_and_schedule_names_are_canonical() -> None:
     """Keep capability names separate from checklist-owned phase names."""
     expected_titles = {
         CONTRACT_TRACEABILITY: "# Contract Traceability",
-        MODULE_OWNERSHIP_PAIR_CODING: ("# Public Module Ownership Pair-Coding Guide"),
         MASTER_PHASE_ZERO_PAIR_CODING: "# Foundation Pair-Coding Guide",
         MASTER_EXECUTION_CHECKLIST: "# VIPER Master Execution Checklist",
         SYSTEM_IMPACT_COMPILER: "# System Impact Check",
@@ -1782,20 +1776,9 @@ def test_contract_traceability_owns_active_pair_blocks() -> None:
     assert text.count("class PairBlock(ProtocolModel):") == 1
 
 
-def test_module_ownership_pair_guide_covers_each_cycle() -> None:
-    """Require every MOD cycle to carry file-separated code and one gate."""
-    text = MODULE_OWNERSHIP_PAIR_CODING.read_text(encoding="utf-8")
-    headings = (
-        "## 1. Status and boundary",
-        "## 2. Pair-cycle contract",
-        "## 3. Production PairBlocks",
-        "## 4. Pair execution",
-        "## 5. Guide gate",
-        "## 6. System Impact handoff",
-    )
-    positions = tuple(text.index(heading) for heading in headings)
-    assert positions == tuple(sorted(positions))
-
+def test_module_ownership_contract_owns_each_pair_block() -> None:
+    """Require every MOD cycle to live in its governing contract."""
+    text = MODULE_OWNERSHIP.read_text(encoding="utf-8")
     definitions = tuple(_PAIR_BLOCK_DEFINITION.finditer(text))
     expected_ids = (
         "P0-MOD-01",
@@ -1826,8 +1809,16 @@ def test_module_ownership_pair_guide_covers_each_cycle() -> None:
 
         body = definition.group("body")
         assert body.count("**Context:**") == 1, block_id
-        edits = tuple(_PAIR_EDIT.finditer(body))
-        file_edits = tuple(_FILE_PAIR_EDIT.finditer(body))
+        edits = tuple(_TRACEABILITY_MODEL_FENCE.finditer(body))
+        file_edits = tuple(
+            re.finditer(
+                r"`(?P<path>(?:src|tests)/[a-z0-9_/]+\.py)`\s*\n\s*"
+                r"(?:<!-- contract-target: [^\n]+ -->\s*)+"
+                r"```python contract-target\n(?P<code>.*?)\n```",
+                body,
+                re.DOTALL,
+            )
+        )
         assert edits, block_id
         assert len(file_edits) == len(edits), block_id
         assert len({edit.group("path") for edit in file_edits}) == len(edits)
@@ -1835,10 +1826,10 @@ def test_module_ownership_pair_guide_covers_each_cycle() -> None:
         assert {edit.group("path") for edit in file_edits} <= target_paths, block_id
         symbols_by_path: dict[str, set[str]] = {}
         for edit in edits:
-            assert _PAIR_PLACEHOLDER.search(edit.group("code")) is None, block_id
+            assert _PAIR_PLACEHOLDER.search(edit.group("body")) is None, block_id
             ast.parse(
-                edit.group("code"),
-                filename=f"{MODULE_OWNERSHIP_PAIR_CODING.name}:{block_id}",
+                edit.group("body"),
+                filename=f"{MODULE_OWNERSHIP.name}:{block_id}",
             )
         for edit in file_edits:
             tree = ast.parse(edit.group("code"))
@@ -1871,7 +1862,7 @@ def test_module_ownership_pair_guide_covers_each_cycle() -> None:
         dependencies = manifest["depends_on"]
         assert len(dependencies) == len(set(dependencies)), block_id
         for dependency in dependencies:
-            if dependency == "P0-CRT-07":
+            if dependency == "P0-CRT-06":
                 continue
             assert dependency in manifests, (block_id, dependency)
             assert order[dependency] < order[block_id], (block_id, dependency)
@@ -1954,7 +1945,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     contract_definitions = tuple(
         definition for definition in _PAIR_BLOCK_DEFINITION.finditer(contract_reference)
     )
-    module_reference = MODULE_OWNERSHIP_PAIR_CODING.read_text(encoding="utf-8")
+    module_reference = MODULE_OWNERSHIP.read_text(encoding="utf-8")
     module_definitions = tuple(
         definition for definition in _PAIR_BLOCK_DEFINITION.finditer(module_reference)
     )
@@ -2136,8 +2127,8 @@ def test_retired_system_impact_hardening_is_not_scheduled() -> None:
 
 
 def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
-    """Keep each planned move equal to the complete current definition set."""
-    reference = MODULE_OWNERSHIP_PAIR_CODING.read_text(encoding="utf-8")
+    """Keep each realized owner equal to its reviewed PairBlock."""
+    reference = MODULE_OWNERSHIP.read_text(encoding="utf-8")
 
     def exports(tree: ast.Module) -> tuple[str, ...]:
         assignment = next(
@@ -2162,38 +2153,14 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
             for match in _PAIR_BLOCK_DEFINITION.finditer(reference)
             if match.group("id") == block_id
         )
-        edit = _PAIR_EDIT.search(definition.group("body"))
+        edit = _TRACEABILITY_MODEL_FENCE.search(definition.group("body"))
         assert edit is not None
-        return ast.parse(edit.group("code"))
+        return ast.parse(edit.group("body"))
 
-    verification_source = ast.parse(
-        (ROOT / "src/viper/verification.py").read_text(encoding="utf-8")
+    model_target = planned_tree("P0-MOD-01")
+    model_source = ast.parse(
+        (ROOT / "src/viper/verification/models.py").read_text(encoding="utf-8")
     )
-    verification_target = planned_tree("P0-MOD-02")
-    operation_exports = (
-        "verify_attempt_future_inputs",
-        "verify_benchmark_result",
-        "verify_promoted_artifact",
-        "verify_run_result",
-        "verify_stored_input_selections",
-        "verify_stored_inputs",
-    )
-    assert exports(verification_target) == operation_exports
-    source_operations = {
-        node.name: node
-        for node in verification_source.body
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("verify_")
-    }
-    target_operations = {
-        node.name: node
-        for node in verification_target.body
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("verify_")
-    }
-    assert source_operations.keys() == target_operations.keys()
-    assert {name: _normalized(node) for name, node in source_operations.items()} == {
-        name: _normalized(node) for name, node in target_operations.items()
-    }
-
     model_names = {
         "VerificationError",
         "VerificationPolicy",
@@ -2204,72 +2171,55 @@ def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
         "VerifiedRunResult",
         "VerifiedBenchmarkResult",
     }
-    model_target = planned_tree("P0-MOD-01")
-    model_exports = (
-        "StageSnapshot",
-        "StorageFetcher",
-        "VerificationError",
-        "VerificationPolicy",
-        "VerifiedArtifact",
-        "VerifiedBenchmarkResult",
-        "VerifiedInput",
-        "VerifiedRunPlan",
-        "VerifiedRunResult",
-        "VerifiedSnapshotFile",
-    )
-    assert exports(model_target) == model_exports
-    source_models = {
-        node.name: node
-        for node in verification_source.body
-        if isinstance(node, ast.ClassDef) and node.name in model_names
-    }
     target_models = {
         node.name: node
         for node in model_target.body
+        if isinstance(node, ast.ClassDef) and node.name in model_names
+    }
+    source_models = {
+        node.name: node
+        for node in model_source.body
         if isinstance(node, ast.ClassDef) and node.name in model_names
     }
     assert source_models.keys() == target_models.keys()
     assert {name: _normalized(node) for name, node in source_models.items()} == {
         name: _normalized(node) for name, node in target_models.items()
     }
+    assert exports(model_source) == exports(model_target)
 
-    contract_exports = tuple(
-        exports(ast.parse(match.group("body")))
-        for match in _CONTRACT_EXPORTS.finditer(
-            MODULE_OWNERSHIP.read_text(encoding="utf-8")
-        )
+    verification_target = planned_tree("P0-MOD-02")
+    verification_source = ast.parse(
+        (ROOT / "src/viper/verification/__init__.py").read_text(encoding="utf-8")
     )
-    assert contract_exports == (model_exports, operation_exports)
-
-    api_source = ast.parse(
-        (ROOT / "src/viper/_api/handlers.py").read_text(encoding="utf-8")
-    )
-    api_target = planned_tree("P0-MOD-03")
-    source_handlers = {
-        node.name: node for node in api_source.body if isinstance(node, ast.FunctionDef)
+    target_operations = {
+        node.name: node
+        for node in verification_target.body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("verify_")
     }
+    source_operations = {
+        node.name: node
+        for node in verification_source.body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("verify_")
+    }
+    assert source_operations.keys() == target_operations.keys()
+    assert {name: _normalized(node) for name, node in source_operations.items()} == {
+        name: _normalized(node) for name, node in target_operations.items()
+    }
+    assert exports(verification_source) == exports(verification_target)
+
+    api_target = planned_tree("P0-MOD-03")
+    api_source = ast.parse((ROOT / "src/viper/api.py").read_text(encoding="utf-8"))
     target_handlers = {
         node.name: node for node in api_target.body if isinstance(node, ast.FunctionDef)
     }
-    root_migration = {
-        "freeze_run",
-        "preflight",
-        "execute_stage",
-        "run_request",
-        "retry_request",
-        "execute_benchmark",
-        "plan_diff",
-        "verify_run",
-        "lineage",
-        "compare_runs",
-        "verify_benchmark",
-        "verify_pointer",
+    source_handlers = {
+        node.name: node
+        for node in api_source.body
+        if isinstance(node, ast.FunctionDef) and node.name in target_handlers
     }
-    added_helpers = {"_root", "_local_fetcher"}
-    assert target_handlers.keys() == source_handlers.keys() | added_helpers
-    unchanged = source_handlers.keys() - root_migration
-    assert {name: _normalized(source_handlers[name]) for name in unchanged} == {
-        name: _normalized(target_handlers[name]) for name in unchanged
+    assert source_handlers.keys() == target_handlers.keys()
+    assert {name: _normalized(node) for name, node in source_handlers.items()} == {
+        name: _normalized(node) for name, node in target_handlers.items()
     }
 
 
@@ -2826,13 +2776,10 @@ def test_system_impact_status_matches_the_master_checklist() -> None:
     specification = SYSTEM_IMPACT_COMPILER.read_text(encoding="utf-8")
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
 
-    assert (
-        "**Contract status:** approved replacement design; implementation pending."
-        in specification
-    )
+    assert "**Contract status:** implemented." in specification
     assert (
         "| [System Impact Check](system-impact-compiler.md) "
-        "| Approved replacement design; implementation pending |" in checklist
+        "| Implemented |" in checklist
     )
 
 

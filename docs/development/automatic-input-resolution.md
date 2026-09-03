@@ -2738,7 +2738,7 @@ declared producer stage and artifact name.
 successful attempt, selected stage, loaded stage specification, and declared
 artifact files. It rejects a missing stage, undeclared artifact, invalid run,
 or failed required benchmark.
-See [`src/viper/verification.py`](../../src/viper/verification.py).
+See [`src/viper/verification`](../../src/viper/verification/__init__.py).
 
 ### `input.bytes`
 
@@ -3159,7 +3159,7 @@ same Python authoring API works with local storage and Viper Cloud.
 - [Stage models and decorators](../../src/viper/stages.py)
 - [Run-plan authoring](../../src/viper/authoring.py)
 - [Artifact and pointer models](../../src/viper/artifacts.py)
-- [Pointer and artifact verification](../../src/viper/verification.py)
+- [Pointer and artifact verification](../../src/viper/verification/__init__.py)
 - [Input materialization](../../src/viper/execution/_materialization.py)
 - [Pointer acceptance construction](../../tests/test_generated_project_acceptance.py)
 - [Public stage example](../../README.md#define-a-stage)

@@ -792,7 +792,7 @@ build = PairBlock(
     ),
     depends_on=("P0-CRT-06",),
     declaration=declaration_ref(
-        Path("docs/development/module-ownership-pair-coding.md"),
+        Path("docs/development/module-ownership.md"),
         'id = "P0-MOD-01"',
     ),
 )
@@ -805,7 +805,7 @@ proof = PairBlock(
     gate=build.gate,
     depends_on=(build.block_id,),
     declaration=declaration_ref(
-        Path("docs/development/module-ownership-pair-coding.md"),
+        Path("docs/development/module-ownership.md"),
         'id = "P0-MOD-04"',
     ),
 )

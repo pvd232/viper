@@ -149,11 +149,11 @@ from viper.stages import (
     TrainSpec,
 )
 from viper.verification import (
-    VerificationError,
     verify_benchmark_result,
     verify_promoted_artifact,
     verify_run_result,
 )
+from viper.verification.models import VerificationError
 
 SOURCE_REPOSITORY = HttpUrl("https://github.com/example/viper-project")
 ARTIFACT_REPOSITORY = "example/viper-runs"

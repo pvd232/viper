@@ -218,8 +218,8 @@ example, `_write_materialized_file()` remains local to `_materialization.py`.
 
 ### Shared verification functions
 
-[`verification.py`](../../src/viper/verification.py) and the private attempt
-verifier import two functions from `_verification/storage.py`.
+[`verification`](../../src/viper/verification/__init__.py) and the private
+attempt verifier import two functions from `_verification/storage.py`.
 
 | Current | Proposed |
 | --- | --- |
@@ -412,8 +412,8 @@ python -m pytest tests/test_parameter_validation.py tests/test_preflight.py -q
 **Acceptance gate**
 
 ```bash
-ruff check src/viper/execution src/viper/_verification src/viper/verification.py \
-  src/viper/_api src/viper/api.py tests/test_run_execution.py \
+ruff check src/viper/execution src/viper/_verification src/viper/verification \
+  src/viper/api.py tests/test_run_execution.py \
   tests/test_verification.py tests/test_api.py
 pyright
 python -m pytest tests/test_run_execution.py tests/test_verification.py \

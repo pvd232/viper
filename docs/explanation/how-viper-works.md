@@ -168,7 +168,7 @@ operation.
 Every input and output has a data-use role. Training stages can consume
 training inputs. Evaluation and benchmark inputs stay outside the training
 path. An output inherits the strongest restriction carried by its inputs. The
-[verifier](../../src/viper/verification.py) enforces these joins across the
+[verifier](../../src/viper/verification/__init__.py) enforces these joins across the
 complete plan.
 
 Download stages use frozen HTTP requests. A request fixes the URL, accepted
@@ -251,7 +251,7 @@ RunSpec
 
 `verify_run_result()` returns the connected plan, attempts, stage results, and
 measurements after those checks pass. The
-[verification module](../../src/viper/verification.py) owns the public
+[verification package](../../src/viper/verification/__init__.py) owns the public
 verification operations.
 
 ## 10. Benchmarks confirm one frozen evaluation

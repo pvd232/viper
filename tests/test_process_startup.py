@@ -21,7 +21,7 @@ from viper.runtime import (
     apply_reproducibility,
     process_environment,
 )
-from viper.verification import VerificationError
+from viper.verification.models import VerificationError
 
 
 def _controls() -> ReproducibilitySpec:

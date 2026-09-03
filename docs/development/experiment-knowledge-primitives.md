@@ -1057,9 +1057,9 @@ refresh tools. Execute mode routes them through the same typed handlers.
 | --- | --- |
 | `src/viper/knowledge.py` | Add every ontology, assignment, modulation, effect, impact, diagnostic, journal, vector, retrieval-judgment, and publication model. |
 | `src/viper/catalog.py` | Add verified knowledge rows, graph edges, exact queries, vector-view metadata, and HNSW rebuilds. |
-| `src/viper/verification.py` | Dispatch ontology, assignment, comparison, impact, signature, assertion, vector, and retrieval-judgment verification. |
+| `src/viper/verification/__init__.py` | Dispatch ontology, assignment, comparison, impact, signature, assertion, vector, and retrieval-judgment verification. |
 | `src/viper/api.py` | Add typed publication and search request and success models. |
-| `src/viper/_api/handlers.py` | Route knowledge operations through `KnowledgeStore` and `Catalog`. |
+| `src/viper/api.py` | Route knowledge operations through `KnowledgeStore` and `Catalog`. |
 | `src/viper/cli.py` | Add `knowledge publish`, `knowledge search`, and `knowledge refresh` commands. |
 | `src/viper/mcp.py` | Add read searches and execute-only publication and refresh tools from the typed operation registry. |
 | `src/viper/__init__.py` | Export `knowledge` and the public protocol and query models. |

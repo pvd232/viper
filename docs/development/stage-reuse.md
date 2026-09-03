@@ -547,7 +547,7 @@ through ordinary execution.
 | `src/viper/execution/_metric.py` | Link source metric evidence while preserving its original measurement identity. |
 | `src/viper/_verification/attempt.py` | Dispatch executed and reused completion checks. |
 | `src/viper/_verification/metrics.py` | Accept source metric evidence only through a verified reuse receipt. |
-| `src/viper/verification.py` | Verify source runs, key equality, file remapping, and reuse lineage. |
+| `src/viper/verification/__init__.py` | Verify source runs, key equality, file remapping, and reuse lineage. |
 | `src/viper/inspection.py` | Add `reuses` lineage edges and comparison fields. |
 | `src/viper/api.py` | Include reuse status in run, status, lineage, and comparison results. |
 | `tests/test_protocol.py` | Cover exact models, discriminators, and invalid states. |

@@ -35,11 +35,8 @@ from ..stages import (
     InternalSpec,
 )
 from ..storage import LocalArtifactStore
-from ..verification import (
-    VerificationPolicy,
-    VerifiedArtifact,
-    verify_promoted_artifact,
-)
+from ..verification import verify_promoted_artifact
+from ..verification.models import VerificationPolicy, VerifiedArtifact
 from ..workspace import AttemptWorkspace
 from ._source import RunFetcher
 from .errors import RunError

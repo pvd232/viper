@@ -80,14 +80,11 @@ def benchmark(
     timeout_seconds: float | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute, assemble, verify, and publish one benchmark confirmation."""
+    from .._verification.attempt import verify_attempt_stages
     from ..serialization import document_digest, parse_yaml_bytes, serialize_document
     from ..storage import LocalArtifactStore
-    from ..verification import (
-        VerificationPolicy,
-        verify_attempt_stages,
-        verify_benchmark_result,
-        verify_run_result,
-    )
+    from ..verification import verify_benchmark_result, verify_run_result
+    from ..verification.models import VerificationPolicy
     from ._run import execute_benchmark_confirmation
     from ._source import RunFetcher
 

@@ -76,7 +76,8 @@ from viper.stages import (
     TrainSpec,
 )
 from viper.storage import LocalArtifactStore
-from viper.verification import VerificationError, VerificationPolicy, verify_run_result
+from viper.verification import verify_run_result
+from viper.verification.models import VerificationError, VerificationPolicy
 
 REPOSITORY = "https://github.com/example/viper-signal-project"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"

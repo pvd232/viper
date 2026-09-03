@@ -917,10 +917,9 @@ edit recipes.
 
 ## 4. Public module ownership
 
-The dedicated [Public Module Ownership Pair-Coding
-Guide](module-ownership-pair-coding.md) owns `P0-MOD-01` through
-`P0-MOD-04`. It contains the complete file-separated edits, focused tests,
-dependencies, stop conditions, and handoff to the System Impact Check.
+The [Public Module Ownership contract](module-ownership.md#11-contract-owned-pairblocks)
+owns `P0-MOD-01` through `P0-MOD-04`, including their file-separated edits,
+focused tests, dependencies, and System Impact handoff.
 
 ## 5. Focused proof
 

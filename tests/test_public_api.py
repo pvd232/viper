@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import inspect
 from importlib import resources
 from pathlib import Path
 
@@ -12,9 +11,10 @@ import viper
 import viper.api as api
 import viper.execution as execution
 import viper.stages as stages
-from viper._api import handlers
+import viper.verification as verification
 from viper.execution.errors import BenchmarkExecutionError, RunError
 from viper.execution.results import BenchmarkExecutionResult, RunResult
+from viper.verification import models as verification_models
 
 PUBLIC_MODULES = (
     "api",
@@ -137,32 +137,59 @@ def test_api_exports_and_registries_are_complete() -> None:
     assert tuple(api.HANDLER_REGISTRY) == api.OPERATIONS
 
 
-def test_api_wrappers_preserve_handler_signatures() -> None:
-    """Keep each public wrapper's arguments identical to its handler."""
-    for name in (
-        "validate_stage",
-        "validate_resolved_stage",
-        "validate_run_spec",
-        "freeze_run",
-        "preflight",
-        "execute_stage",
-        "run_request",
-        "retry_request",
-        "execute_benchmark",
-        "plan_diff",
-        "lineage",
-        "status",
-        "compare_runs",
-        "verify_run",
-        "verify_benchmark",
-        "verify_pointer",
-        "get_schema",
-        "get_capabilities",
-        "init_project",
-    ):
-        assert inspect.signature(getattr(api, name)) == inspect.signature(
-            getattr(handlers, name)
-        )
+def test_api_operations_are_locally_defined() -> None:
+    """Require each registered API operation to be defined by viper.api."""
+    assert tuple(api.HANDLER_REGISTRY) == api.OPERATIONS
+    for operation in api.HANDLER_REGISTRY.values():
+        assert operation.__module__ == "viper.api"
+    package = Path(api.__file__).parent
+    assert not package.joinpath("_api", "handlers.py").exists()
+
+
+def test_verification_namespace_separates_operations_and_models() -> None:
+    """Keep verification operations and types in their defining modules."""
+    operations = (
+        verification.verify_run_result,
+        verification.verify_promoted_artifact,
+        verification.verify_stored_input_selections,
+        verification.verify_stored_inputs,
+        verification.verify_attempt_future_inputs,
+        verification.verify_benchmark_result,
+    )
+    models = (
+        verification_models.VerificationError,
+        verification_models.VerificationPolicy,
+        verification_models.VerifiedArtifact,
+        verification_models.VerifiedBenchmarkResult,
+        verification_models.VerifiedInput,
+        verification_models.VerifiedRunPlan,
+        verification_models.VerifiedRunResult,
+        verification_models.VerifiedSnapshotFile,
+    )
+    assert all(value.__module__ == "viper.verification" for value in operations)
+    assert all(value.__module__ == "viper.verification.models" for value in models)
+    assert verification.__all__ == [
+        "verify_attempt_future_inputs",
+        "verify_benchmark_result",
+        "verify_promoted_artifact",
+        "verify_run_result",
+        "verify_stored_input_selections",
+        "verify_stored_inputs",
+    ]
+    assert verification_models.__all__ == [
+        "StageSnapshot",
+        "StorageFetcher",
+        "VerificationError",
+        "VerificationPolicy",
+        "VerifiedArtifact",
+        "VerifiedBenchmarkResult",
+        "VerifiedInput",
+        "VerifiedRunPlan",
+        "VerifiedRunResult",
+        "VerifiedSnapshotFile",
+    ]
+    package = Path(viper.__file__).parent
+    assert not package.joinpath("verification.py").exists()
 
 
 def test_parameter_categories_form_the_public_extension_namespace() -> None:

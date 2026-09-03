@@ -14,7 +14,8 @@ from tests.test_verification_acceptance import (
     yaml_bytes,
 )
 from viper.metrics import MetricVerificationReceipt
-from viper.verification import VerificationError, verify_run_result
+from viper.verification import verify_run_result
+from viper.verification.models import VerificationError
 
 
 def test_recomputed_metric_requires_one_verification_receipt() -> None:

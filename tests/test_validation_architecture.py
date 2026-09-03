@@ -104,9 +104,7 @@ def test_project_paths_reject_symlinks(tmp_path: Path) -> None:
 
 def test_operations_resolve_project_root_once() -> None:
     """Resolve each selected project root once at its operation boundary."""
-    source = ast.parse(
-        (ROOT / "src/viper/_api/handlers.py").read_text(encoding="utf-8")
-    )
+    source = ast.parse((ROOT / "src/viper/api.py").read_text(encoding="utf-8"))
     expected_calls = {
         "freeze_run": 1,
         "preflight": 1,

@@ -27,7 +27,7 @@ from ..runtime import (
 )
 from ..serialization import parse_yaml_bytes
 from ..stages import BaseSpec, ResolvedBaseSpec
-from ..verification import (
+from ..verification.models import (
     VerificationError,
     VerificationPolicy,
     VerifiedArtifact,

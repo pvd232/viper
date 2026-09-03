@@ -559,7 +559,10 @@ def test_pair_block_dependencies_are_acyclic(tmp_path: Path) -> None:
 
 def test_contract_traceability_graph_covers_migrated_contracts() -> None:
     """Compile every contract migrated to contract-owned PairBlocks."""
-    contracts = (ROOT / "docs/development/contract-traceability.md",)
+    contracts = (
+        ROOT / "docs/development/contract-traceability.md",
+        ROOT / "docs/development/module-ownership.md",
+    )
     graph = compile_contract_traceability(
         ROOT,
         MASTER_CHECKLIST,

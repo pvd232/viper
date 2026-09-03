@@ -1,16 +1,12 @@
-"""Cross-file verification for VIPER provenance records."""
-
-# Public verification types must exist before private verifier modules import them.
-# ruff: noqa: E402
+"""Verify connected VIPER provenance records."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
 
 import yaml
 
-from ._schema import (
+from .._schema import (
     PARAMETERS,
     PARAMETERS_INPUT,
     PREDICTIONS,
@@ -19,157 +15,37 @@ from ._schema import (
     DataRole,
     RepoRelPath,
 )
-from .artifacts import ArtifactPointer, ResolvedArtifact, StageArtifactRef
-from .benchmark import BenchmarkResult, BenchmarkSpec
-from .experiments import ExperimentSpec, VariantSpec
-from .ids import InputName, StageId
-from .inputs import (
+from ..artifacts import ArtifactPointer, StageArtifactRef
+from ..benchmark import BenchmarkResult, BenchmarkSpec
+from ..ids import InputName, StageId
+from ..inputs import (
     FutureInputRef,
     ResolvedFutureInputRef,
     ResolvedStoredInputRef,
     StoredInputRef,
 )
-from .metrics import Measurement, MetricVerificationReceipt
-from .references import (
-    GitFileRef,
-    LocalStageResultSnapshotRef,
-    ResolvedFileRef,
-    SnapshotFileRef,
-    StageResultSnapshotRef,
-    StorageModel,
-)
-from .runs import ResolvedRun, RunAttempt, RunSpec
-from .serialization import document_digest, parse_yaml_bytes
-from .stages import (
-    BaseSpec,
+from ..metrics import Measurement, MetricVerificationReceipt
+from ..references import GitFileRef, ResolvedFileRef
+from ..runs import ResolvedRun, RunAttempt, RunSpec
+from ..serialization import document_digest, parse_yaml_bytes
+from ..stages import (
     EvaluateSpec,
     InternalSpec,
     ResolvedBaseSpec,
     ResolvedInternalSpec,
     TrainSpec,
 )
-
-
-class VerificationError(ValueError):
-    """A referenced file could not be retrieved or failed verification."""
-
-
-@dataclass(frozen=True)
-class VerificationPolicy:
-    """Define which source repositories may execute project-owned code."""
-
-    trusted_source_repositories: frozenset[str]
-
-    def permits_source(self, repository: object) -> bool:
-        """Return whether project code from one repository may execute."""
-        normalized = str(repository).rstrip("/")
-        return normalized in {
-            trusted.rstrip("/") for trusted in self.trusted_source_repositories
-        }
-
-
-@dataclass(frozen=True)
-class VerifiedSnapshotFile:
-    """One snapshot file whose bytes match its recorded identity."""
-
-    reference: SnapshotFileRef
-    content: bytes
-
-
-@dataclass(frozen=True)
-class VerifiedArtifact:
-    """One resolved artifact and all of its verified files."""
-
-    artifact: ResolvedArtifact
-    files: tuple[VerifiedSnapshotFile, ...]
-    data_role: DataRole
-    references: tuple[ResolvedFileRef, ...] = ()
-
-
-@dataclass(frozen=True)
-class VerifiedInput:
-    """A verified artifact and the local path where a stage consumes it."""
-
-    path: RepoRelPath
-    data_role: DataRole
-    artifact: ResolvedArtifact
-    files: tuple[VerifiedSnapshotFile, ...]
-    references: tuple[ResolvedFileRef, ...] = ()
-
-
-@dataclass(frozen=True)
-class VerifiedRunPlan:
-    """The connected records constituting one verified run plan."""
-
-    run: RunSpec
-    experiment: ExperimentSpec
-    variant: VariantSpec
-    benchmark: BenchmarkSpec | None
-    stages: dict[StageId, BaseSpec]
-
-
-@dataclass(frozen=True)
-class VerifiedRunResult:
-    """A verified terminal run and its connected records."""
-
-    result: ResolvedRun
-    plan: VerifiedRunPlan
-    attempts: tuple[RunAttempt, ...]
-    resolved_stages: dict[StageId, ResolvedBaseSpec]
-    measurements: tuple[Measurement, ...]
-
-
-@dataclass(frozen=True)
-class VerifiedBenchmarkResult:
-    """A benchmark result and its verified run and confirmation execution."""
-
-    result: BenchmarkResult
-    run: VerifiedRunResult
-    confirmation: RunAttempt
-    confirmation_stages: dict[StageId, ResolvedBaseSpec]
-    confirmation_measurements: tuple[Measurement, ...]
-
-
-StorageFetcher = Callable[[StorageModel], bytes]
-StageSnapshot = StageResultSnapshotRef | LocalStageResultSnapshotRef
-
-
-from ._verification.attempt import (
-    verify_attempt_files,
-    verify_attempt_journal,
-    verify_attempt_stages,
-    verify_measurement_stage_times,
-)
-from ._verification.metrics import (
-    verify_recomputed_metrics,
-)
-from ._verification.paths import (
-    run_root,
-)
-from ._verification.plan import (
-    verify_run_plan,
-)
-from ._verification.storage import (
-    artifact_revision_identity,
-    load_verified_artifact,
-    read_attempt_reference,
-    read_resolved_file,
-    snapshot_identity,
-    verify_run_attempt_references,
-    verify_snapshot_artifact,
+from .models import (
+    StorageFetcher,
+    VerificationError,
+    VerificationPolicy,
+    VerifiedArtifact,
+    VerifiedBenchmarkResult,
+    VerifiedInput,
+    VerifiedRunResult,
 )
 
 __all__ = [
-    "StageSnapshot",
-    "StorageFetcher",
-    "VerificationError",
-    "VerificationPolicy",
-    "VerifiedArtifact",
-    "VerifiedBenchmarkResult",
-    "VerifiedInput",
-    "VerifiedRunPlan",
-    "VerifiedRunResult",
-    "VerifiedSnapshotFile",
     "verify_attempt_future_inputs",
     "verify_benchmark_result",
     "verify_promoted_artifact",
@@ -177,6 +53,9 @@ __all__ = [
     "verify_stored_input_selections",
     "verify_stored_inputs",
 ]
+
+# Loading verification models must not initialize the private verifier graph.
+# Public operations resolve those private dependencies only when called.
 
 
 def verify_run_result(
@@ -186,6 +65,20 @@ def verify_run_result(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedRunResult:
     """Verify a terminal run from its RunSpec through every completed attempt."""
+    from .._verification.attempt import (
+        verify_attempt_files,
+        verify_attempt_journal,
+        verify_attempt_stages,
+        verify_measurement_stage_times,
+    )
+    from .._verification.metrics import verify_recomputed_metrics
+    from .._verification.plan import verify_run_plan
+    from .._verification.storage import (
+        artifact_revision_identity,
+        snapshot_identity,
+        verify_run_attempt_references,
+    )
+
     plan = verify_run_plan(resolved_run, fetcher=fetcher)
     attempts = verify_run_attempt_references(
         resolved_run,
@@ -301,6 +194,13 @@ def verify_promoted_artifact(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedArtifact:
     """Follow a promoted artifact pointer through its completed producer run."""
+    from .._verification.paths import run_root
+    from .._verification.storage import (
+        load_verified_artifact,
+        read_resolved_file,
+        verify_snapshot_artifact,
+    )
+
     resolved_run_raw = read_resolved_file(pointer.run, fetcher=fetcher)
     try:
         resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(resolved_run_raw))
@@ -462,6 +362,8 @@ def verify_stored_inputs(
     fetcher: StorageFetcher | None = None,
 ) -> dict[StageId, dict[InputName, VerifiedInput]]:
     """Verify every promoted artifact consumed by the resolved stages."""
+    from .._verification.storage import read_resolved_file
+
     verified_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
 
     for stage_id, resolved_stage in resolved_stages.items():
@@ -537,6 +439,8 @@ def verify_attempt_future_inputs(
     fetcher: StorageFetcher | None = None,
 ) -> dict[StageId, dict[InputName, VerifiedInput]]:
     """Verify same-attempt inputs consumed by every completed stage."""
+    from .._verification.storage import verify_snapshot_artifact
+
     stage_positions: dict[StageId, int] = {}
     for position, stage_reference in enumerate(run.stages):
         stage_positions[stage_reference.stage_id] = position
@@ -644,6 +548,20 @@ def verify_benchmark_result(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedBenchmarkResult:
     """Verify benchmark parity and metric criteria across two executions."""
+    from .._verification.attempt import (
+        verify_attempt_files,
+        verify_attempt_stages,
+        verify_measurement_stage_times,
+    )
+    from .._verification.metrics import verify_recomputed_metrics
+    from .._verification.paths import run_root
+    from .._verification.storage import (
+        artifact_revision_identity,
+        read_attempt_reference,
+        read_resolved_file,
+        snapshot_identity,
+    )
+
     benchmark_raw = read_resolved_file(result.benchmark, fetcher=fetcher)
     try:
         benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))

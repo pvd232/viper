@@ -40,7 +40,7 @@ from ..references import (
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
-from ..verification import (
+from ..verification.models import (
     StageSnapshot,
     StorageFetcher,
     VerificationError,

@@ -15,7 +15,7 @@ from .journal import ATTEMPT_STATE_TRANSITIONS, AttemptState, DurableJournal
 from .runs import RunSpec
 from .serialization import load_stage_spec, parse_yaml_bytes
 from .stages import InternalSpec
-from .verification import VerifiedRunResult
+from .verification.models import VerifiedRunResult
 
 
 class InspectionError(RuntimeError):

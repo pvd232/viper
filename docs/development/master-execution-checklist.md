@@ -271,7 +271,7 @@ scheduled phase and dependency order.
 | [Module privacy](module-privacy.md) | Implemented | Public modules, shared internal names, and private-module checks |
 | [Contract Traceability](contract-traceability.md) | Implemented through `CRT-05`; `CRT-06` draft pending review | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
 | [Project data root](project-data-root.md) | Audited; owner approval pending | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
-| [Public module ownership](module-ownership.md) | Approved design; implementation pending | One defining module for API operations, verification operations, and verification types |
+| [Public module ownership](module-ownership.md) | Implemented | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Approved replacement design; implementation pending | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Audited; owner approval pending | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Audited; owner approval pending | Local root capture, HTTP root evidence, and input-edge meaning |
@@ -324,21 +324,21 @@ functions. The baselines below bind this checklist to the exact
 reviewed contract bytes. A contract edit requires another checklist review and
 a new digest.
 
-<!-- contract-baseline: contract-traceability.md sha256=1efcb82c879ec79e366408e75d0d398331f8053ed5f89b1d96f7ba7cacd52a85 -->
+<!-- contract-baseline: contract-traceability.md sha256=4447c20665987bef501e3a986eed261b8169af96608f4f3969018c93d531c8d7 -->
 
 <!-- contract-baseline: project-data-root.md sha256=3051ec41f6678b9fe51520899722d41ba8b358f4fdb6498837ac938decdcc522 -->
-<!-- contract-baseline: module-ownership.md sha256=60393d1f493c65eb6ab813f541955e4fe3b9a023bc50bea2a374a1c756b0a00d -->
+<!-- contract-baseline: module-ownership.md sha256=15712c4d1932e2d0ea73219924b6b6d7e62827b46eece8c8fbc6fa85a37b95de -->
 <!-- contract-baseline: system-impact-compiler.md sha256=f7e43771fb1e525e2d3c6ceeea28e82ac094352b26227c2b91e8d8b3bef80cf9 -->
 <!-- contract-baseline: download-retrieval-artifacts.md sha256=4d08708b958f15779c08357bf1853036a7951cc77ac5daac3774fa6c53c8afa2 -->
 <!-- contract-baseline: external-input-roots.md sha256=9e93f3d88a111dfe6f4e0f497573274e43e01ce9351e85fb3e223ef661d350e7 -->
 <!-- contract-baseline: unified-metric-drafting.md sha256=384948bee88f1b713d5db7ddf7ff14eba95254854c05d138d16072ed8c085909 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=966f1fef0f936bb824b906b6e07173597281f1bdcc5a3cb58edf8c379a3c4c8e -->
+<!-- contract-baseline: automatic-input-resolution.md sha256=a4d17639ce266136212c9650c35786164caa824c3dc3805e0c9f615d5be5c7d4 -->
 <!-- contract-baseline: frozen-plan-git-identity.md sha256=cbff443e9ccf4191b509eafcb3a235d979a45494482b1fa30fe11e97a90c7fd3 -->
 <!-- contract-baseline: remote-storage.md sha256=da39fe2d55bf6dc0107e4630146e793dd62aaca437d784f5dfd00f2fef6b8173 -->
 <!-- contract-baseline: experiment-expansion.md sha256=59a8d5978632c3298c2a7163194c4862c80f70a7a001252d6f21dd884e20e96d -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=ed746617b1387f02e0210d09477e253ddb4619f97b1965ee87323cd8752439f3 -->
-<!-- contract-baseline: stage-reuse.md sha256=fc734baeddb89402007cd7cad9f38f26c48bf9eae4c8ddfa135064a8510fa10e -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=2e46766c5351175e96bfe48c489a5a43a4f7df100acc25efd903188b3ad3b71c -->
+<!-- contract-baseline: provenance-catalog-mcp.md sha256=06dd7fd41b7211911b3b1c2d8d473e796236832f8c3e5256e5fd517081e1e436 -->
+<!-- contract-baseline: stage-reuse.md sha256=ee1f16ea213c1e45b95ac08429dc436486e6c1491a9d754a3e72bea259402b1c -->
+<!-- contract-baseline: experiment-knowledge-primitives.md sha256=bb0a0ee2593f901dbca4311e71e7d681e015f4aa2cea7f77c11fa7e8a6a34f1b -->
 <!-- contract-baseline: research-memory-roadmap.md sha256=afba4d2a3caf4a823cdb59bc055badc84abacf3b9d31844e8923ca198a60b6f9 -->
 
 ## 4. Specification-system review
@@ -743,24 +743,24 @@ are not duplicated.
 
 ### 7.3 Public module ownership
 
-- [ ] Stage verification errors, policies, result dataclasses, aliases, and the
+- [x] Stage verification errors, policies, result dataclasses, aliases, and the
       exact model export list in `src/viper/verification/models.py`. Keep
       `verification.py` active until `P0-MOD-02` performs the atomic cutover.
       <!-- pair-block: P0-MOD-01 -->
-      <!-- contract-implementation: requirement=MOD-01 rule=module.verification.owner state=planned owner=src/viper/verification/models.py:VerificationPolicy -->
-      <!-- contract-implementation: requirement=MOD-01 rule=module.verification.model_exports state=planned owner=src/viper/verification/models.py:__all__ -->
-- [ ] Replace `src/viper/verification.py` with the public
+      <!-- contract-implementation: requirement=MOD-01 rule=module.verification.owner state=implemented owner=src/viper/verification/models.py:VerificationPolicy -->
+      <!-- contract-implementation: requirement=MOD-01 rule=module.verification.model_exports state=implemented owner=src/viper/verification/models.py:__all__ -->
+- [x] Replace `src/viper/verification.py` with the public
       `src/viper/verification/__init__.py` package module. Move every public
       verification operation there and update each importer to use the defining
       operation or model module.
       <!-- pair-block: P0-MOD-02 -->
-      <!-- contract-implementation: requirement=MOD-01 rule=module.verification.operation_exports state=planned owner=src/viper/verification/__init__.py:__all__ -->
-- [ ] Move every helper and operation body from `src/viper/_api/handlers.py`
+      <!-- contract-implementation: requirement=MOD-01 rule=module.verification.operation_exports state=implemented owner=src/viper/verification/__init__.py:__all__ -->
+- [x] Move every helper and operation body from `src/viper/_api/handlers.py`
       into `src/viper/api.py`. Point `HANDLER_REGISTRY` at those local
       functions, then delete the pass-through wrappers and private handler
       module. <!-- implements: MOD-01 -->
       <!-- pair-block: P0-MOD-03 -->
-      <!-- contract-implementation: requirement=MOD-01 rule=module.api.owner state=planned owner=src/viper/api.py:HANDLER_REGISTRY -->
+      <!-- contract-implementation: requirement=MOD-01 rule=module.api.owner state=implemented owner=src/viper/api.py:HANDLER_REGISTRY -->
 
 <details>
 <summary>Hints</summary>
@@ -778,10 +778,9 @@ the new owner.
 
 #### Pair-coding blocks
 
-The [Public Module Ownership Pair-Coding
-Guide](module-ownership-pair-coding.md) owns the complete `P0-MOD-01` through
-`P0-MOD-04` edits and focused gates. The checklist owns their order and state;
-the guide owns their file-separated code.
+The [Public Module Ownership contract](module-ownership.md#11-contract-owned-pairblocks)
+owns the complete `P0-MOD-01` through `P0-MOD-04` edits and focused gates. The
+checklist owns their order and completion state.
 
 ### 7.4 System impact check
 
@@ -841,16 +840,16 @@ defines the exact five blocks. It consumes the closed CTG produced by
 `P0-CRT-07`; it does not own plan construction.
 ### 7.5 Focused proof
 
-- [ ] In `tests/test_public_api.py`, require every API registry callable and
+- [x] In `tests/test_public_api.py`, require every API registry callable and
       verification operation to belong to its public module; require every
       verification type to belong to `viper.verification.models`; reject both
       retired source files; and preserve existing API and verification results.
       <!-- pair-block: P0-MOD-04 -->
       <!-- verifies: MOD-01 -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=planned test=tests/test_public_api.py:test_api_operations_are_locally_defined -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=planned test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.verification.model_exports state=planned test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.verification.operation_exports state=planned test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_public_api.py:test_api_operations_are_locally_defined -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.model_exports state=implemented test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.operation_exports state=implemented test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
       <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.model_exports state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
