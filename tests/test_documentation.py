@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib
+import json
 import re
 import tomllib
 from collections import Counter
@@ -15,6 +16,7 @@ from urllib.parse import unquote
 import pytest
 
 import viper._contract_traceability as traceability
+from tools.refresh_contract_baselines import rendered_manifest
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
@@ -39,6 +41,7 @@ TRAINING_GUIDES = (
 )
 
 MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
+CONTRACT_BASELINE_MANIFEST = ROOT / "docs/development/contract-baselines.json"
 CONTRACT_TRACEABILITY = ROOT / "docs/development/contract-traceability.md"
 MODULE_OWNERSHIP = ROOT / "docs/development/module-ownership.md"
 SYSTEM_IMPACT_COMPILER = ROOT / "docs/development/system-impact-compiler.md"
@@ -55,23 +58,9 @@ RETIRED_SYSTEM_IMPACT_DOCUMENTS = (
     ROOT / "docs/development/proof/graph_transformation/appendix-a-foundations.md",
 )
 MASTER_PHASE_ZERO_PAIR_CODING = ROOT / "docs/development/foundation-pair-coding.md"
-IMPLEMENTATION_CONTRACTS = (
-    ROOT / "docs/development/contract-traceability.md",
-    ROOT / "docs/development/project-data-root.md",
-    MODULE_OWNERSHIP,
-    SYSTEM_IMPACT_COMPILER,
-    CHILD_PROCESS_LAUNCHING,
-    ROOT / "docs/development/download-retrieval-artifacts.md",
-    ROOT / "docs/development/external-input-roots.md",
-    ROOT / "docs/development/unified-metric-drafting.md",
-    AUTOMATIC_INPUT_RESOLUTION,
-    ROOT / "docs/development/frozen-plan-git-identity.md",
-    ROOT / "docs/development/remote-storage.md",
-    ROOT / "docs/development/experiment-expansion.md",
-    ROOT / "docs/development/provenance-catalog-mcp.md",
-    ROOT / "docs/development/stage-reuse.md",
-    ROOT / "docs/development/experiment-knowledge-primitives.md",
-    RESEARCH_MEMORY,
+CONTRACT_BASELINE_DATA = json.loads(CONTRACT_BASELINE_MANIFEST.read_text())
+IMPLEMENTATION_CONTRACTS = tuple(
+    ROOT / record["path"] for record in CONTRACT_BASELINE_DATA["contracts"]
 )
 
 FOUNDATION_CONTRACTS = IMPLEMENTATION_CONTRACTS[:4]
@@ -100,10 +89,6 @@ _CONTRACT_REQUIREMENT = re.compile(
 )
 _CHECKLIST_MAPPING = re.compile(
     r"<!-- (?P<role>implements|verifies): (?P<requirements>[A-Z0-9, -]+) -->"
-)
-_CONTRACT_BASELINE = re.compile(
-    r"<!-- contract-baseline: (?P<name>[a-z0-9-]+\.md) "
-    r"sha256=(?P<sha256>[0-9a-f]{64}) -->"
 )
 _PHASE_HEADING = re.compile(r"^## \d+\. Master Phase (?P<phase>\d+)\b.*$", re.MULTILINE)
 _SUBSECTION_HEADING = re.compile(
@@ -2692,6 +2677,15 @@ def test_traceability_declaration_ref_rejects_reversed_span() -> None:
 
 def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
     """Bind every pending contract requirement to one plan phase and test."""
+    assert CONTRACT_BASELINE_MANIFEST.read_bytes() == rendered_manifest(
+        ROOT, CONTRACT_BASELINE_MANIFEST
+    )
+    baseline_records = CONTRACT_BASELINE_DATA["contracts"]
+    assert tuple(record["path"] for record in baseline_records) == tuple(
+        contract.relative_to(ROOT).as_posix() for contract in IMPLEMENTATION_CONTRACTS
+    )
+    baselines = {record["path"]: record for record in baseline_records}
+
     declarations: dict[str, tuple[Path, int, Path]] = {}
     declaration_counts: Counter[str] = Counter()
     for contract in IMPLEMENTATION_CONTRACTS:
@@ -2710,18 +2704,16 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
 
     assert all(count == 1 for count in declaration_counts.values())
 
-    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
-    baselines = {
-        match.group("name"): match.group("sha256")
-        for match in _CONTRACT_BASELINE.finditer(checklist)
-    }
-    assert set(baselines) == {contract.name for contract in IMPLEMENTATION_CONTRACTS}
     for contract in IMPLEMENTATION_CONTRACTS:
-        assert (
-            hashlib.sha256(contract.read_bytes()).hexdigest()
-            == baselines[contract.name]
+        relative_path = contract.relative_to(ROOT).as_posix()
+        record = baselines[relative_path]
+        assert hashlib.sha256(contract.read_bytes()).hexdigest() == record["sha256"]
+        assert record["requirement_ids"] == sorted(
+            match.group("requirement")
+            for match in _CONTRACT_REQUIREMENT.finditer(contract.read_text())
         )
 
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
     phase_matches = tuple(_PHASE_HEADING.finditer(checklist))
     assert len(phase_matches) == 22
     mappings: dict[str, dict[str, list[tuple[int, str]]]] = {

@@ -329,27 +329,12 @@ Each pending contract declares stable requirement IDs with an owning phase and
 focused test. The matching phase contains one requirement-level `implements`
 marker and one requirement-level `verifies` marker for every ID. The contract
 traceability phase adds rule-level implementation owners and exact test
-functions. The baselines below bind this checklist to the exact
-reviewed contract bytes. A contract edit requires another checklist review and
-a new digest.
-
-<!-- contract-baseline: contract-traceability.md sha256=257fafc1e36192765b1d8733353a7a65c4834aab2b645376b144094d4280f72e -->
-
-<!-- contract-baseline: project-data-root.md sha256=fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb -->
-<!-- contract-baseline: module-ownership.md sha256=135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea -->
-<!-- contract-baseline: system-impact-compiler.md sha256=ed89a7152284ba548b0bb4e99c9f5d9ff6338ef56e937b5159225e4e6d652509 -->
-<!-- contract-baseline: child-process-launching.md sha256=e50e7bfec6c26928b23e2fedd2b06b0becaa2bbd62bfa8fed65c8e2bd9988d06 -->
-<!-- contract-baseline: download-retrieval-artifacts.md sha256=c4ee06aaefa8fc60f812ab213a5b2a12c720c082a2f88f4ad9c3312bd0692112 -->
-<!-- contract-baseline: external-input-roots.md sha256=a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709 -->
-<!-- contract-baseline: unified-metric-drafting.md sha256=4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8 -->
-<!-- contract-baseline: automatic-input-resolution.md sha256=fde97fbf294f74170bac1e64bc2557ec0e97ef5db6d219c4eb30eef76a3f9184 -->
-<!-- contract-baseline: frozen-plan-git-identity.md sha256=53b4af9b238a2083e24f0c77a7601da81045eed1ff2ccfc3f1639fd57bdca56e -->
-<!-- contract-baseline: remote-storage.md sha256=a7a23950508c2e7a3e29e4511c36b7e2bcca9096338d42a634016c9cc98be1ef -->
-<!-- contract-baseline: experiment-expansion.md sha256=27f3bf85e1a701108b7a08dfd46b3b5ef35bc2a42b2ecd57d0336e58d7c96349 -->
-<!-- contract-baseline: provenance-catalog-mcp.md sha256=b06dd2eed63fb3652dc7e1d571430d5781abff81ed6dd952ed12713451d899ca -->
-<!-- contract-baseline: stage-reuse.md sha256=15f05d57a895a5be73e5e3259738966169b666599314b527c55f12c3a87e5163 -->
-<!-- contract-baseline: experiment-knowledge-primitives.md sha256=d70166a38a7855dd9ba31e19145fc281f1e34247fd807c294d699e45ab743aa5 -->
-<!-- contract-baseline: research-memory-roadmap.md sha256=f22cccf9d2a598f0598849843930c8861f47ff4beded4556fbe2560121c7e6e3 -->
+functions. The generated [contract baseline manifest](contract-baselines.json)
+binds the checklist to the exact reviewed contract bytes and requirement IDs.
+After an approved contract edit, run
+`python tools/refresh_contract_baselines.py --write`. The documentation gate
+rejects a stale manifest. A contract edit no longer requires copying a digest
+into this checklist.
 
 ## 4. Specification-system review
 
@@ -373,8 +358,8 @@ The executable schema gate is `tests/test_documentation.py`:
   contract digest and checks requirement, phase, implementation, verification,
   and test coverage.
 
-The baseline hashes in Section 3.2 identify the exact contract revisions under
-review.
+The generated baseline manifest linked in Section 3.2 identifies the exact
+contract revisions under review.
 
 **Current result:** `python -m pytest tests/test_documentation.py -q` completed
 with `62 passed`.

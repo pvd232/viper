@@ -1,6 +1,5 @@
 """Verify contract declarations, rule edges, examples, and canonical graphs."""
 
-import re
 from pathlib import Path
 from textwrap import dedent
 
@@ -19,9 +18,6 @@ from viper._contract_traceability import (
 
 ROOT = Path(__file__).resolve().parents[1]
 MASTER_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
-_CONTRACT_BASELINE = re.compile(
-    r"<!-- contract-baseline: (?P<name>[a-z0-9-]+\.md) sha256=[0-9a-f]{64} -->"
-)
 
 
 def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:

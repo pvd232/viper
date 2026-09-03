@@ -1,0 +1,181 @@
+{
+  "contracts": [
+    {
+      "path": "docs/development/contract-traceability.md",
+      "requirement_ids": [
+        "CRT-01",
+        "CRT-02",
+        "CRT-03",
+        "CRT-04",
+        "CRT-05",
+        "CRT-06",
+        "CRT-07"
+      ],
+      "sha256": "7a773b9abd911fe7c42b97edcde1d9df94e0892446993180338e3691d3da915f"
+    },
+    {
+      "path": "docs/development/project-data-root.md",
+      "requirement_ids": [
+        "PDR-01",
+        "PDR-02",
+        "PDR-03",
+        "PDR-04"
+      ],
+      "sha256": "fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb"
+    },
+    {
+      "path": "docs/development/module-ownership.md",
+      "requirement_ids": [
+        "MOD-01"
+      ],
+      "sha256": "135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea"
+    },
+    {
+      "path": "docs/development/system-impact-compiler.md",
+      "requirement_ids": [
+        "SIG-01",
+        "SIG-02",
+        "SIG-03",
+        "SIG-04",
+        "SIG-05"
+      ],
+      "sha256": "ed89a7152284ba548b0bb4e99c9f5d9ff6338ef56e937b5159225e4e6d652509"
+    },
+    {
+      "path": "docs/development/child-process-launching.md",
+      "requirement_ids": [
+        "CPL-01",
+        "CPL-02"
+      ],
+      "sha256": "e50e7bfec6c26928b23e2fedd2b06b0becaa2bbd62bfa8fed65c8e2bd9988d06"
+    },
+    {
+      "path": "docs/development/download-retrieval-artifacts.md",
+      "requirement_ids": [
+        "DRA-01",
+        "DRA-02",
+        "DRA-03",
+        "DRA-04",
+        "DRA-05",
+        "DRA-06"
+      ],
+      "sha256": "c4ee06aaefa8fc60f812ab213a5b2a12c720c082a2f88f4ad9c3312bd0692112"
+    },
+    {
+      "path": "docs/development/external-input-roots.md",
+      "requirement_ids": [
+        "EIR-01",
+        "EIR-02",
+        "EIR-03",
+        "EIR-04",
+        "EIR-05"
+      ],
+      "sha256": "a0711733113b50bf72df654c11808b16a64fe50af6616522236a35fbc308c709"
+    },
+    {
+      "path": "docs/development/unified-metric-drafting.md",
+      "requirement_ids": [
+        "UMD-01",
+        "UMD-02",
+        "UMD-03",
+        "UMD-04",
+        "UMD-05",
+        "UMD-06"
+      ],
+      "sha256": "4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8"
+    },
+    {
+      "path": "docs/development/automatic-input-resolution.md",
+      "requirement_ids": [
+        "AIR-01",
+        "AIR-02",
+        "AIR-03",
+        "AIR-04",
+        "AIR-05",
+        "AIR-06"
+      ],
+      "sha256": "fde97fbf294f74170bac1e64bc2557ec0e97ef5db6d219c4eb30eef76a3f9184"
+    },
+    {
+      "path": "docs/development/frozen-plan-git-identity.md",
+      "requirement_ids": [
+        "FPG-01",
+        "FPG-02",
+        "FPG-03",
+        "FPG-04",
+        "FPG-05"
+      ],
+      "sha256": "53b4af9b238a2083e24f0c77a7601da81045eed1ff2ccfc3f1639fd57bdca56e"
+    },
+    {
+      "path": "docs/development/remote-storage.md",
+      "requirement_ids": [
+        "RSP-01",
+        "RSP-02",
+        "RSP-03",
+        "RSP-04",
+        "RSP-05",
+        "RSP-06",
+        "RSP-07",
+        "RSP-08",
+        "RSP-09"
+      ],
+      "sha256": "a7a23950508c2e7a3e29e4511c36b7e2bcca9096338d42a634016c9cc98be1ef"
+    },
+    {
+      "path": "docs/development/experiment-expansion.md",
+      "requirement_ids": [
+        "EXP-01",
+        "EXP-02",
+        "EXP-03"
+      ],
+      "sha256": "27f3bf85e1a701108b7a08dfd46b3b5ef35bc2a42b2ecd57d0336e58d7c96349"
+    },
+    {
+      "path": "docs/development/provenance-catalog-mcp.md",
+      "requirement_ids": [
+        "PCM-01",
+        "PCM-02",
+        "PCM-03",
+        "PCM-04",
+        "PCM-05",
+        "PCM-06",
+        "PCM-07"
+      ],
+      "sha256": "b06dd2eed63fb3652dc7e1d571430d5781abff81ed6dd952ed12713451d899ca"
+    },
+    {
+      "path": "docs/development/stage-reuse.md",
+      "requirement_ids": [
+        "SRU-01",
+        "SRU-02",
+        "SRU-03",
+        "SRU-04"
+      ],
+      "sha256": "15f05d57a895a5be73e5e3259738966169b666599314b527c55f12c3a87e5163"
+    },
+    {
+      "path": "docs/development/experiment-knowledge-primitives.md",
+      "requirement_ids": [
+        "EKP-01",
+        "EKP-02",
+        "EKP-03",
+        "EKP-04"
+      ],
+      "sha256": "d70166a38a7855dd9ba31e19145fc281f1e34247fd807c294d699e45ab743aa5"
+    },
+    {
+      "path": "docs/development/research-memory-roadmap.md",
+      "requirement_ids": [
+        "RML-01",
+        "RML-02",
+        "RML-03",
+        "RML-04",
+        "RML-05",
+        "RML-06"
+      ],
+      "sha256": "f22cccf9d2a598f0598849843930c8861f47ff4beded4556fbe2560121c7e6e3"
+    }
+  ],
+  "schema_version": 1
+}

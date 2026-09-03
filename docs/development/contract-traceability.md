@@ -77,7 +77,8 @@ function.
 
 ### Inspected path
 
-`tests/test_documentation.py` currently parses three marker families:
+`tests/test_documentation.py` currently parses two marker families and one
+generated manifest:
 
 ```text
 contract-requirement
@@ -86,13 +87,15 @@ contract-requirement
 implements / verifies
 -> checklist checkbox + requirement ID
 
-contract-baseline
--> contract file + reviewed SHA-256 digest
+docs/development/contract-baselines.json
+-> contract path + reviewed SHA-256 digest + requirement IDs
 ```
 
 The test requires each requirement to appear once in an `implements` marker
-and once in a `verifies` marker. It also requires the named test file to exist
-and appear in the verification checkbox.
+and once in a `verifies` marker. It also requires the named test file to exist,
+appear in the verification checkbox, and agree with the contract identities in
+the generated manifest. `tools/refresh_contract_baselines.py --write` rebuilds
+that manifest after an approved contract edit.
 
 That check proves phase placement and document coverage. The implemented CRT
 compiler now adds rules, owners, tests, and documentation-symbol inventories.
