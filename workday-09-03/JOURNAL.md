@@ -88,9 +88,14 @@ candidate dependency edges under one `CodeQLIdentity`. The final precommit
 or unsatisfied dependencies, and returned zero from both PairBlock gates. The
 checked plan digest is
 `c66eb8d9e6018da01c9f312dbfccfb42be8995949c077b335aef835f00aebdc9`.
-The exact combined gate passed 98 tests with 1 skip and 2 subtests and created
+The exact combined gate passed 160 tests with 1 skip and 2 subtests and created
 no new macOS crash report. The documentation and Contract Traceability gate
 passed 82 tests.
+
+System Impact accepted implementation commit
+`19691b101470f532408a17e783be9fd4007261de`. The acceptance receipt binds that
+commit to passing `PlanCheck`
+`432355b3c7006a148f6dd63eb0f16e89ef2fe1d4c597b0144e38c6b387b7eff8`.
 
 ## Acceptance evidence
 
