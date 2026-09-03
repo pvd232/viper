@@ -924,6 +924,88 @@ interface and compile one acyclic block order for the tranche, accept the
 contracts through one combined plan, or revise the contract boundaries to
 remove the cycle.
 
+### Partition PairBlock work across agents
+
+The contract condensation DAG supplies the order among contracts. Agent
+assignment requires a second graph whose vertices are the selected `PairBlock`
+records. This lower-level graph would combine `PairBlock.depends_on` with the
+source and planned-symbol relationships projected onto each block's
+`PairBlock.targets`.
+
+SCC condensation and workload partitioning perform different operations. SCC
+condensation collapses dependency cycles and produces an acyclic scheduling
+graph. Workload partitioning assigns the ready components of that graph to
+agents while balancing expected work and limiting dependencies that cross
+agent boundaries. Hard dependency edges determine legal execution order.
+Weights influence the performance of a legal assignment.
+
+The first scheduler should derive vertex weights from observed PairBlock
+duration, token use, and focused-test runtime. It should derive coupling
+weights from shared source files, overlapping `RepoSymbolRef` targets,
+source-dependency edges, and required context transfer. These weights are
+proposed scheduler inputs. The current `PairBlock` schema omits them.
+
+```mermaid
+flowchart TB
+    CTG["ContractTraceabilityGraph.blocks<br/>selected PairBlocks"]
+    ContractOrder["Contract condensation DAG<br/>eligible contracts"]
+    WorkGraph["Proposed PairBlock graph<br/>hard dependencies"]
+    Weights["Proposed workload evidence<br/>vertex and coupling weights"]
+    Components["PairBlock SCCs<br/>cycle-safe units"]
+    Ready["Ready components<br/>predecessors accepted"]
+    Partitions["Proposed agent partitions<br/>balanced · low coupling"]
+    Worktrees["Proposed isolated worktrees<br/>one owner per PairBlock"]
+    Integration["Proposed sequential integration<br/>accepted revision chain"]
+    Observed["CodeQL analysis<br/>integrated SourceGraph"]
+    Verification["check_plan() and accept()<br/>integrated verification"]
+
+    CTG -->|"PairBlock records"| WorkGraph
+    ContractOrder -->|"eligible contract components"| WorkGraph
+    WorkGraph -->|"combined dependency edges"| Components
+    Components -->|"zero-indegree frontier"| Ready
+    Weights -->|"cost and coupling estimates"| Partitions
+    Ready -->|"assign ready work"| Partitions
+    Partitions -->|"exclusive ownership"| Worktrees
+    Worktrees -->|"candidate commits"| Integration
+    Integration -->|"combined repository state"| Observed
+    Observed -->|"observed declarations and edges"| Verification
+
+    class CTG,Observed,Verification current
+    class ContractOrder,WorkGraph,Weights,Components,Ready,Partitions,Worktrees,Integration proposed
+    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+```
+
+The proposed execution protocol must enforce five invariants:
+
+1. **Assignment coverage.** Each selected `PairBlock.block_id` belongs to
+   exactly one agent partition in one execution epoch.
+2. **Precedence.** A component becomes ready only after the accepted results of
+   every predecessor are present in its baseline revision.
+3. **Cycle containment.** One SCC remains one coordinated execution unit unless
+   a reviewed shared interface removes the cycle before assignment.
+4. **Write ownership.** PairBlocks with overlapping `PairBlock.targets` execute
+   in one partition or under an explicit serial order. File-level overlap that
+   falls outside the declared targets must also block parallel integration.
+5. **Integrated acceptance.** Candidate commits enter the accepted revision
+   chain sequentially. CodeQL then constructs the integrated `SourceGraph`,
+   and `check_plan()` plus `accept()` verify that state before dependent work
+   begins.
+
+Independent branches of the ready-component DAG may run concurrently in
+separate worktrees. Components inside an unresolved SCC require one coordinated
+tranche. The master checklist continues to govern contract-level order; the
+proposed runtime partitions eligible PairBlock work beneath that order.
+
+The scheduler remains useful only when parallel execution improves a measured
+outcome. Its promotion fixture must compare the same accepted PairBlocks under
+sequential and partitioned execution and record correctness, wall time, token
+or API cost, merge conflicts, and cross-agent context transfers. A recent
+preprint reports gains from cohesion-aware partitioning on repository coding
+tasks. The result motivates this controlled comparison. VIPER requires direct
+evidence from its own contracts and execution protocol.
+
 ### Execute independent contracts from accepted revisions
 
 Two contracts may perform implementation work in parallel when the projected
@@ -1025,3 +1107,17 @@ contract work.
   [Depth-First Search and Linear Graph Algorithms](https://doi.org/10.1137/0201010),
   gives the linear-time strongly connected component algorithm used by the
   proposed condensation step.
+- George Karypis and Vipin Kumar,
+  [Multilevel k-way Partitioning Scheme for Irregular Graphs](https://www.maths.tcd.ie/~eoin/index/karypis.kumar_metis96.html),
+  supplies the workload-balancing and edge-cut foundation for the proposed
+  partitioning objective.
+- Grzegorz Malewicz et al.,
+  [Pregel: A System for Large-Scale Graph Processing](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/),
+  provides a distributed graph-execution precedent based on partitioned graph
+  state and coordinated iterations. VIPER requires separate evidence for
+  multi-agent coding correctness.
+- Xu Yang et al.,
+  [When Parallelism Pays Off: Cohesion-Aware Task Partitioning for Multi-Agent Coding](https://arxiv.org/abs/2606.00953),
+  models repository-level multi-agent coding as a weighted dependency-graph
+  partitioning problem. The 2026 result is a preprint and supplies motivation
+  for VIPER's proposed comparison. VIPER must measure its own gains.

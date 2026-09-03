@@ -2358,6 +2358,10 @@ def test_system_impact_defers_cross_contract_scc_scheduling() -> None:
         "planned-symbol relationship",
         "Strongly connected components",
         "condensation DAG",
+        "Each selected `PairBlock.block_id` belongs to\n   exactly one agent partition",
+        "accepted results of\n   every predecessor",
+        "overlapping `PairBlock.targets`",
+        "same accepted PairBlocks under\nsequential and partitioned execution",
         "master checklist manually",
         "`check_plan()` uses\n$G_{i+1}$ as the baseline graph",
         "`TargetSpecification` would describe the admissible outcomes",
@@ -2398,6 +2402,33 @@ def test_system_impact_defers_cross_contract_scc_scheduling() -> None:
         "proposed": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
     }
     assert TRACEABILITY_LINK_STYLE in diagram
+
+    execution_diagram = list(_MERMAID_FENCE.finditer(appendix))[1].group("body")
+    execution_edges = {
+        (edge.group("source"), edge.group("target"))
+        for line in execution_diagram.splitlines()
+        if (edge := _MERMAID_EDGE.match(line)) is not None
+    }
+    assert execution_edges == {
+        ("CTG", "WorkGraph"),
+        ("ContractOrder", "WorkGraph"),
+        ("WorkGraph", "Components"),
+        ("Components", "Ready"),
+        ("Weights", "Partitions"),
+        ("Ready", "Partitions"),
+        ("Partitions", "Worktrees"),
+        ("Worktrees", "Integration"),
+        ("Integration", "Observed"),
+        ("Observed", "Verification"),
+    }
+    assert {
+        match.group("role"): match.group("style")
+        for match in _MERMAID_CLASS_DEF.finditer(execution_diagram)
+    } == {
+        "current": "fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px",
+        "proposed": "fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px",
+    }
+    assert TRACEABILITY_LINK_STYLE in execution_diagram
 
 
 def test_system_impact_codeql_backend_is_end_to_end() -> None:
