@@ -156,9 +156,10 @@ imported name that disappears without its own removal target. Version 1
 rejects nested additions because `ContractTarget` does not yet carry a
 class-body insertion point.
 
-Before Pyright, `tools/plan/check.py` runs Ruff and imports every added or
-changed `viper` module in its own isolated process. An import failure records
-the module and traceback under `stage="imports"`.
+Before Pyright, `tools/plan/check.py` requires the materialized files to pass
+Ruff without rewriting them, then imports every added or changed `viper` module
+in its own isolated process. An import failure records the module and traceback
+under `stage="imports"`.
 
 The existing `analyze_source()` operation analyzes that materialized tree with
 the same pinned `CodeQLIdentity` used for the baseline. `build_block_graph()`
@@ -184,7 +185,7 @@ evidence used to update it, not an automatic checklist mutation.
 
 | Rule | Executable condition |
 | --- | --- |
-| `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into the exact terminal planned source without changing the baseline tree; unordered repeat writers and unowned import removals fail; Ruff and isolated imports pass before Pyright. |
+| `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into the exact terminal planned source without changing either tree during validation; unordered repeat writers and unowned import removals fail; Ruff and isolated imports pass before Pyright. |
 | `schedule.graph.closed` <!-- verifier-rule: schedule.graph.closed requirement=SCH-02 --> | Every graph endpoint is selected; explicit and planned source dependencies point prerequisite-first; blocks writing one file receive one deterministic serial order. |
 | `schedule.waves.complete` <!-- verifier-rule: schedule.waves.complete requirement=SCH-03 --> | Every selected block occurs in exactly one SCC group and one wave; every predecessor group occurs in an earlier wave. |
 
@@ -280,6 +281,11 @@ targets = [
     "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
+    "tests/conftest.py:TIER_BY_MODULE",
+    "tests/conftest.py:DOMAIN_BY_MODULE",
+    "tests/test_plan_check.py:Path",
+    "tests/test_plan_check.py:check",
+    "tests/test_plan_check.py:test_ruff_does_not_rewrite_planned_source",
     "tools/plan/check.py:annotations",
     "tools/plan/check.py:argparse",
     "tools/plan/check.py:hashlib",
@@ -316,6 +322,7 @@ targets = [
     "tools/plan/check.py:_unconsumed_private_owners",
     "tools/plan/check.py:_changed_modules",
     "tools/plan/check.py:_import_failure",
+    "tools/plan/check.py:_ruff",
     "tools/plan/check.py:validate",
     "tools/plan/check.py:main",
 ]
@@ -328,8 +335,9 @@ tests = [
     "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
+    "tests/test_plan_check.py:test_ruff_does_not_rewrite_planned_source",
 ]
-gate = "python -m pytest tests/test_system_impact.py -k 'materialize_plan or pre_pairing_modules' -q"
+gate = "python -m pytest tests/test_system_impact.py tests/test_plan_check.py -k 'materialize_plan or pre_pairing_modules or ruff_does_not_rewrite' -q"
 depends_on = ["P0-SIG-06"]
 ```
 
@@ -1319,6 +1327,134 @@ def test_pre_pairing_command_loads() -> None:
     assert checked.returncode == 0, checked.stderr
 ```
 
+**File: `tests/conftest.py`**
+
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=update target=tests/conftest.py:TIER_BY_MODULE -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=update target=tests/conftest.py:DOMAIN_BY_MODULE -->
+```python contract-target
+TIER_BY_MODULE = {
+    "test_api": "contract",
+    "test_api_json": "unit",
+    "test_artifact_validation": "contract",
+    "test_authoring": "contract",
+    "test_benchmark_execution": "contract",
+    "test_cli": "integration",
+    "test_cloud_execution": "contract",
+    "test_code_style": "unit",
+    "test_contract_documentation": "contract",
+    "test_contract_traceability": "contract",
+    "test_documentation": "contract",
+    "test_execution_acceptance": "integration",
+    "test_generated_project_acceptance": "release",
+    "test_http_retrieval": "contract",
+    "test_inspection": "contract",
+    "test_live_process_startup": "integration",
+    "test_storage": "unit",
+    "test_system_impact": "unit",
+    "test_metric_interface": "contract",
+    "test_metric_provenance": "integration",
+    "test_parameter_validation": "contract",
+    "test_plan_check": "unit",
+    "test_plan_execution": "contract",
+    "test_preflight": "contract",
+    "test_process_startup": "unit",
+    "test_project_init": "contract",
+    "test_protocol": "contract",
+    "test_public_api": "contract",
+    "test_release_tools": "unit",
+    "test_resume": "integration",
+    "test_run_execution": "integration",
+    "test_execution_signals": "integration",
+    "test_stage_invocation": "contract",
+    "test_validation_architecture": "contract",
+    "test_verification": "contract",
+    "test_verification_acceptance": "integration",
+    "test_worker": "integration",
+    "test_workflow_documentation": "contract",
+}
+
+DOMAIN_BY_MODULE = {
+    "test_api": "domain_application",
+    "test_api_json": "domain_application",
+    "test_artifact_validation": "domain_artifacts",
+    "test_authoring": "domain_authoring",
+    "test_benchmark_execution": "domain_execution",
+    "test_cli": "domain_application",
+    "test_cloud_execution": "domain_execution",
+    "test_code_style": "domain_protocol",
+    "test_contract_documentation": "domain_protocol",
+    "test_contract_traceability": "domain_protocol",
+    "test_documentation": "domain_protocol",
+    "test_execution_acceptance": "domain_execution",
+    "test_generated_project_acceptance": "domain_release",
+    "test_http_retrieval": "domain_http",
+    "test_inspection": "domain_verification",
+    "test_live_process_startup": "domain_execution",
+    "test_storage": "domain_storage",
+    "test_system_impact": "domain_protocol",
+    "test_metric_interface": "domain_metrics",
+    "test_metric_provenance": "domain_metrics",
+    "test_parameter_validation": "domain_parameters",
+    "test_plan_check": "domain_protocol",
+    "test_plan_execution": "domain_execution",
+    "test_preflight": "domain_verification",
+    "test_process_startup": "domain_execution",
+    "test_project_init": "domain_application",
+    "test_protocol": "domain_protocol",
+    "test_public_api": "domain_application",
+    "test_release_tools": "domain_release",
+    "test_resume": "domain_execution",
+    "test_run_execution": "domain_execution",
+    "test_execution_signals": "domain_execution",
+    "test_stage_invocation": "domain_execution",
+    "test_validation_architecture": "domain_protocol",
+    "test_verification": "domain_verification",
+    "test_verification_acceptance": "domain_verification",
+    "test_worker": "domain_execution",
+    "test_workflow_documentation": "domain_release",
+}
+```
+
+**File: `tests/test_plan_check.py`**
+
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_plan_check.py:Path -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_plan_check.py:check -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_plan_check.py:test_ruff_does_not_rewrite_planned_source -->
+```python contract-target
+"""Verify the pre-pairing plan command."""
+
+from pathlib import Path
+
+from tools.plan import check
+
+
+def test_ruff_does_not_rewrite_planned_source() -> None:
+    """Reject unformatted code without changing the planned candidate."""
+    python = Path(".venv/bin/python")
+    target = "src/viper/example.py"
+
+    commands = dict(check._ruff(python, (target,)))
+
+    assert commands["ruff-format"] == (
+        str(python),
+        "-m",
+        "ruff",
+        "format",
+        "--check",
+        target,
+    )
+    assert commands["ruff-imports"] == (
+        str(python),
+        "-m",
+        "ruff",
+        "check",
+        "--select",
+        "I001",
+        target,
+    )
+    assert all("--fix" not in command for command in commands.values())
+```
+
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure -->
 ```python contract-target
 def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None:
@@ -1387,6 +1523,7 @@ def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_unconsumed_private_owners -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_changed_modules -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_import_failure -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_ruff -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:validate -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:main -->
 ```python contract-target
@@ -1419,12 +1556,12 @@ from viper._system_impact.codeql import (
     analyze_source,
     source_digest,
 )
-from viper.system_impact.check import check_plan
 from viper.scheduling import (
     ScheduleError,
     materialize_plan,
     select_blocks,
 )
+from viper.system_impact.check import check_plan
 
 ROOT = Path(__file__).parents[2]
 _IMPORT_SCRIPT = (
@@ -1433,6 +1570,7 @@ _IMPORT_SCRIPT = (
     "sys.path.insert(0, sys.argv[1])\n"
     "importlib.import_module(sys.argv[2])\n"
 )
+
 
 class PlanValidationError(RuntimeError):
     """Report a failed pre-pairing plan check."""
@@ -1620,6 +1758,27 @@ def _import_failure(
     return None
 
 
+def _ruff(
+    python: Path,
+    targets: tuple[str, ...],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Build Ruff checks that never rewrite the planned source."""
+    return (
+        (
+            "ruff-format",
+            (str(python), "-m", "ruff", "format", "--check", *targets),
+        ),
+        (
+            "ruff-imports",
+            (str(python), "-m", "ruff", "check", "--select", "I001", *targets),
+        ),
+        (
+            "ruff",
+            (str(python), "-m", "ruff", "check", "--ignore", "D100", *targets),
+        ),
+    )
+
+
 def validate(
     *,
     root: Path,
@@ -1712,30 +1871,7 @@ def validate(
             }
         )
     )
-    checks = (
-        (
-            "ruff-format",
-            (str(python), "-m", "ruff", "format", *python_targets),
-        ),
-        (
-            "ruff-imports",
-            (
-                str(python),
-                "-m",
-                "ruff",
-                "check",
-                "--fix",
-                "--select",
-                "I001",
-                *python_targets,
-            ),
-        ),
-        (
-            "ruff",
-            (str(python), "-m", "ruff", "check", "--ignore", "D100", *python_targets),
-        ),
-    )
-    for stage, command in checks:
+    for stage, command in _ruff(python, python_targets):
         completed = _run(command, cwd=candidate)
         if completed.returncode != 0:
             result = {
@@ -1802,6 +1938,10 @@ def validate(
         return result
 
     # Pyright checks types first; CodeQL then observes G*.
+    original_path = os.environ.get("PATH")
+    os.environ["PATH"] = os.pathsep.join(
+        part for part in (str(python.parent), original_path) if part
+    )
     planned = _analyze(
         candidate,
         revision=revision,
@@ -1846,6 +1986,10 @@ def validate(
         os.environ.pop("PYTHONPATH", None)
     else:
         os.environ["PYTHONPATH"] = original_pythonpath
+    if original_path is None:
+        os.environ.pop("PATH", None)
+    else:
+        os.environ["PATH"] = original_path
     return result
 
 
@@ -1863,16 +2007,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--cache", type=Path, default=ROOT / ".viper/codeql-cache")
     parser.add_argument("--results", type=Path, required=True)
+    parser.add_argument("--root", type=Path, default=ROOT)
     args = parser.parse_args(argv)
     if args.codeql is None:
         parser.error("codeql is unavailable on PATH; install or expose CodeQL first")
     if args.java_home is not None:
         os.environ["CODEQL_JAVA_HOME"] = str(args.java_home.resolve())
     result = validate(
-        root=ROOT,
+        root=args.root.resolve(),
         blocks=tuple(args.block),
         codeql=args.codeql.resolve(),
-        python=args.python.resolve(),
+        python=Path(os.path.abspath(args.python)),
         cache=args.cache.resolve(),
         results=args.results.resolve(),
     )

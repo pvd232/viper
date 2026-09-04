@@ -229,6 +229,27 @@ def _import_failure(
     return None
 
 
+def _ruff(
+    python: Path,
+    targets: tuple[str, ...],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Build Ruff checks that never rewrite the planned source."""
+    return (
+        (
+            "ruff-format",
+            (str(python), "-m", "ruff", "format", "--check", *targets),
+        ),
+        (
+            "ruff-imports",
+            (str(python), "-m", "ruff", "check", "--select", "I001", *targets),
+        ),
+        (
+            "ruff",
+            (str(python), "-m", "ruff", "check", "--ignore", "D100", *targets),
+        ),
+    )
+
+
 def validate(
     *,
     root: Path,
@@ -321,30 +342,7 @@ def validate(
             }
         )
     )
-    checks = (
-        (
-            "ruff-format",
-            (str(python), "-m", "ruff", "format", *python_targets),
-        ),
-        (
-            "ruff-imports",
-            (
-                str(python),
-                "-m",
-                "ruff",
-                "check",
-                "--fix",
-                "--select",
-                "I001",
-                *python_targets,
-            ),
-        ),
-        (
-            "ruff",
-            (str(python), "-m", "ruff", "check", "--ignore", "D100", *python_targets),
-        ),
-    )
-    for stage, command in checks:
+    for stage, command in _ruff(python, python_targets):
         completed = _run(command, cwd=candidate)
         if completed.returncode != 0:
             result = {
