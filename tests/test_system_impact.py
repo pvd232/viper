@@ -332,7 +332,7 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     assert (destination / "module.py").read_bytes() == b"\n"
 
 
-def test_materialize_plan_rejects_unowned_sibling_import_removal(
+def test_materialize_plan_preserves_untargeted_imports(
     tmp_path: Path,
 ) -> None:
     """Keep an untargeted name when one shared import is updated."""
@@ -373,18 +373,19 @@ def test_materialize_plan_rejects_unowned_sibling_import_removal(
         )
     )
 
-    with pytest.raises(
-        scheduling.ScheduleError,
-        match=r"removed unowned imports from module.py: \['Second'\]",
-    ):
-        scheduling.materialize_plan(
-            baseline_root,
-            plan_root,
-            traceability,
-            (_BLOCK_ID,),
-            graph,
-            tmp_path / "planned",
-        )
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from package import Second\nfrom replacement import First\n"
+    )
 
 
 def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None:

@@ -298,6 +298,39 @@ def _imports(source: bytes) -> frozenset[str]:
     return frozenset(names)
 
 
+def _drop_import(source: bytes, symbol: str) -> bytes:
+    """Remove one imported name while keeping the rest of its statement."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as error:
+        raise ScheduleError("planned import cannot be parsed") from error
+
+    found = False
+    statements: list[ast.Import | ast.ImportFrom] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            raise ScheduleError("planned import edit contains non-import code")
+        aliases: list[ast.alias] = []
+        for alias in node.names:
+            local = alias.asname
+            if local is None:
+                local = (
+                    alias.name.split(".", maxsplit=1)[0]
+                    if isinstance(node, ast.Import)
+                    else alias.name
+                )
+            if local == symbol:
+                found = True
+            else:
+                aliases.append(alias)
+        if aliases:
+            node.names = aliases
+            statements.append(node)
+    if not found:
+        raise ScheduleError(f"planned import does not bind {symbol!r}")
+    return "\n".join(ast.unparse(statement) for statement in statements).encode()
+
+
 def _guard_imports(
     path: str,
     before: bytes,
@@ -377,6 +410,16 @@ def materialize_plan(
             )
             assert payload is not None or target.action == "remove"
             span = (start, end)
+            if node.kind == "import":
+                existing = replacements.get(span, source[start:end])
+                remaining = _drop_import(existing, target.target.symbol)
+                replacement = remaining
+                if payload is not None:
+                    replacement = b"\n".join(
+                        part for part in (remaining, payload) if part
+                    )
+                replacements[span] = replacement
+                continue
             replacement = b"" if payload is None else payload
             # Removing one name and updating the shared statement are one edit.
             if span in replacements and replacements[span] != replacement:

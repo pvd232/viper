@@ -266,6 +266,7 @@ targets = [
     "src/viper/scheduling.py:_precedes",
     "src/viper/scheduling.py:final_targets",
     "src/viper/scheduling.py:_imports",
+    "src/viper/scheduling.py:_drop_import",
     "src/viper/scheduling.py:_guard_imports",
     "src/viper/scheduling.py:materialize_plan",
     "src/viper/scheduling.py:__all__",
@@ -274,7 +275,7 @@ targets = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
-    "tests/test_system_impact.py:test_materialize_plan_rejects_unowned_sibling_import_removal",
+    "tests/test_system_impact.py:test_materialize_plan_preserves_untargeted_imports",
     "tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets",
     "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
@@ -321,7 +322,7 @@ tests = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
-    "tests/test_system_impact.py:test_materialize_plan_rejects_unowned_sibling_import_removal",
+    "tests/test_system_impact.py:test_materialize_plan_preserves_untargeted_imports",
     "tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets",
     "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
@@ -440,6 +441,7 @@ from .system_impact import SourceGraph
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_precedes -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:final_targets -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_imports -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_drop_import -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_guard_imports -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:materialize_plan -->
 ```python contract-target
@@ -632,6 +634,39 @@ def _imports(source: bytes) -> frozenset[str]:
     return frozenset(names)
 
 
+def _drop_import(source: bytes, symbol: str) -> bytes:
+    """Remove one imported name while keeping the rest of its statement."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as error:
+        raise ScheduleError("planned import cannot be parsed") from error
+
+    found = False
+    statements: list[ast.Import | ast.ImportFrom] = []
+    for node in tree.body:
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            raise ScheduleError("planned import edit contains non-import code")
+        aliases: list[ast.alias] = []
+        for alias in node.names:
+            local = alias.asname
+            if local is None:
+                local = (
+                    alias.name.split(".", maxsplit=1)[0]
+                    if isinstance(node, ast.Import)
+                    else alias.name
+                )
+            if local == symbol:
+                found = True
+            else:
+                aliases.append(alias)
+        if aliases:
+            node.names = aliases
+            statements.append(node)
+    if not found:
+        raise ScheduleError(f"planned import does not bind {symbol!r}")
+    return "\n".join(ast.unparse(statement) for statement in statements).encode()
+
+
 def _guard_imports(
     path: str,
     before: bytes,
@@ -711,6 +746,16 @@ def materialize_plan(
             )
             assert payload is not None or target.action == "remove"
             span = (start, end)
+            if node.kind == "import":
+                existing = replacements.get(span, source[start:end])
+                remaining = _drop_import(existing, target.target.symbol)
+                replacement = remaining
+                if payload is not None:
+                    replacement = b"\n".join(
+                        part for part in (remaining, payload) if part
+                    )
+                replacements[span] = replacement
+                continue
             replacement = b"" if payload is None else payload
             # Removing one name and updating the shared statement are one edit.
             if span in replacements and replacements[span] != replacement:
@@ -1105,9 +1150,9 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     assert (destination / "module.py").read_bytes() == b"\n"
 ```
 
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_rejects_unowned_sibling_import_removal -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_preserves_untargeted_imports -->
 ```python contract-target
-def test_materialize_plan_rejects_unowned_sibling_import_removal(
+def test_materialize_plan_preserves_untargeted_imports(
     tmp_path: Path,
 ) -> None:
     """Keep an untargeted name when one shared import is updated."""
@@ -1148,18 +1193,19 @@ def test_materialize_plan_rejects_unowned_sibling_import_removal(
         )
     )
 
-    with pytest.raises(
-        scheduling.ScheduleError,
-        match=r"removed unowned imports from module.py: \['Second'\]",
-    ):
-        scheduling.materialize_plan(
-            baseline_root,
-            plan_root,
-            traceability,
-            (_BLOCK_ID,),
-            graph,
-            tmp_path / "planned",
-        )
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from package import Second\nfrom replacement import First\n"
+    )
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets -->
