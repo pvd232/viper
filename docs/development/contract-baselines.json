@@ -83,7 +83,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "4e588da5b87f246d069c2437925fb7b24fc77f3c0ec8e1991d0fc7fe47e568a8"
+      "sha256": "4b2cce794441f786213aa778d527baa15feb40becce45e25bd638ca4324a8ce9"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -121,7 +121,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "edc426fb9f097da9991051030c921140797e8f468f76703a55a01eabd1bdb6f7"
+      "sha256": "4c2b160b44a95d751710f59d1fd674a7a74f378faef5e3a3557910b0646ba0a8"
     },
     {
       "path": "docs/development/experiment-expansion.md",

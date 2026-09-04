@@ -78,7 +78,7 @@ and execution use the same bound destination.
 
 ## 3. Current gap
 
-### Fixed scenario
+### Inspected path
 
 A training stage declares this artifact:
 
@@ -88,7 +88,7 @@ experiments/tiny/runs/baseline/<run-id>/artifacts/model/parameters.bin
 
 The stage writes 400 MiB of model weights at that path and exits successfully.
 
-### Current local path
+**Current local path**
 
 The attempt executor performs this sequence:
 
@@ -107,7 +107,7 @@ collects the resolved stage document and artifact bytes.
 [`LocalArtifactStore.snapshot()`](../../src/viper/storage.py) publishes the
 immutable local snapshot.
 
-### Missing connector
+**Observed missing connector**
 
 `LocalArtifactStore.snapshot()` accepts paths mapped to bytes. It writes those
 bytes locally and returns `LocalStageResultSnapshotRef`. Cloud publication
@@ -147,6 +147,12 @@ flowchart LR
     classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
+
+### Missing connector
+
+The current storage API cannot turn one snapshot location and one
+`SnapshotFileRef` into a retrievable `ResolvedFileRef` without publishing the
+same payload again.
 
 ### Proposed-change DAG
 
@@ -1497,6 +1503,37 @@ tests = ["tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifi
 gate = "python -m pytest tests/test_run_execution.py -q"
 depends_on = ["P1-RSP-02", "P1-RSP-03"]
 ```
+
+<!-- pair-block-definition: P4-RSP-01 -->
+```toml pair-block
+id = "P4-RSP-01"
+requirements = ["RSP-03"]
+targets = [
+    "src/viper/references.py:resolve_snapshot_file_ref",
+    "src/viper/execution/_materialization.py:resolve_inputs",
+    "src/viper/execution/_attempt.py:execute_attempt",
+    "src/viper/execution/_metric.py:_publish_metric_dependency",
+    "src/viper/execution/_metric.py:_artifact_files",
+    "src/viper/execution/_metric.py:_resolve_metric_dependencies",
+    "src/viper/execution/_metric.py:run_after_stage_metrics",
+    "src/viper/_verification/storage.py:verify_snapshot_artifact",
+    "src/viper/_verification/metrics.py:verify_metric_dependency_references",
+    "src/viper/_verification/metrics.py:verify_recomputed_metrics",
+    "tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references",
+    "tests/test_metric_provenance.py:test_metric_dependency_rejects_republished_payload",
+]
+tests = [
+    "tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references",
+    "tests/test_metric_provenance.py:test_metric_dependency_rejects_republished_payload",
+]
+gate = "python -m pytest tests/test_metric_provenance.py -q"
+depends_on = ["P3-EIR-03"]
+```
+
+**Context:** Recomputed metrics currently read dependency paths and publish the
+same bytes into a new local revision. This block carries the references already
+owned by current, producer, or pointer-selected stage snapshots and makes the
+verifier compare the complete storage location as well as content identity.
 
 <!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:json -->
 <!-- contract-target: requirements=RSP-01 block=P1-RSP-01 action=add target=src/viper/storage.py:tomllib -->
@@ -3360,9 +3397,1228 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         )
 ```
 
+### P4-RSP-01 — reuse metric dependency snapshots
+
+**File: `src/viper/references.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/references.py:resolve_snapshot_file_ref -->
+```python contract-target
+def resolve_snapshot_file_ref(
+    snapshot: StageResultSnapshot,
+    file: SnapshotFileRef,
+) -> ResolvedFileRef:
+    """Address one snapshot member without reading or republishing its bytes."""
+    stored_at: StorageModel
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        stored_at = LocalFileRef(
+            store=snapshot.store,
+            commit=snapshot.commit,
+            path=file.path,
+        )
+    else:
+        stored_at = HuggingFaceFileRef(
+            repository=snapshot.repository,
+            commit=snapshot.commit,
+            path=file.path,
+            repo_type=snapshot.repo_type,
+        )
+    return ResolvedFileRef(
+        sha256=file.sha256,
+        bytes=file.bytes,
+        stored_at=stored_at,
+    )
+```
+
+**File: `src/viper/execution/_materialization.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_materialization.py:resolve_inputs -->
+```python contract-target
+def resolve_inputs(
+    root: Path,
+    workspace: AttemptWorkspace,
+    run_id: RunId,
+    attempt_id: int,
+    stage_id: StageId,
+    stage: InternalSpec,
+    completed: Mapping[StageId, ResolvedStageRef],
+    stage_specs: Mapping[StageId, BaseSpec],
+    fetcher: RunFetcher,
+    policy: VerificationPolicy,
+) -> tuple[
+    dict[InputName, ResolvedInputRef],
+    dict[str, Path],
+    dict[InputName, SnapshotFileRef],
+    dict[InputName, tuple[ResolvedFileRef, ...]],
+]:
+    """Materialize inputs and retain their existing immutable references."""
+    resolved: dict[InputName, ResolvedInputRef] = {}
+    paths: dict[str, Path] = {}
+    captured: dict[InputName, SnapshotFileRef] = {}
+    stored: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
+    for name, input_ref in stage.inputs.items():
+        if input_ref.kind == "future":
+            producer = completed.get(input_ref.producer_stage_id)
+            if producer is None:
+                raise RunError("future input producer has not completed")
+            resolved[name] = ResolvedFutureInputRef(producer=producer)
+            producer_spec = stage_specs[input_ref.producer_stage_id]
+            artifact = producer_spec.artifacts[input_ref.producer_artifact]
+            paths[name] = root / artifact.path
+        elif input_ref.kind == "external":
+            resolved_input, captured_path = capture_external_input(
+                root,
+                workspace,
+                run_id=run_id,
+                attempt_id=attempt_id,
+                stage_id=stage_id,
+                input_name=name,
+                input_ref=input_ref,
+            )
+            resolved[name] = resolved_input
+            paths[name] = captured_path
+            captured[name] = resolved_input.file
+        elif input_ref.kind == "stored":
+            pointer_raw = fetcher(input_ref.pointer)
+            pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
+            verified = verify_promoted_artifact(
+                pointer,
+                policy=policy,
+                expected_data_role=input_ref.data_role,
+                fetcher=fetcher,
+            )
+            _materialize_verified_artifact(root, input_ref.path, verified)
+            resolved[name] = ResolvedStoredInputRef(
+                pointer=ResolvedArtifactPointerRef(
+                    sha256=hashlib.sha256(pointer_raw).hexdigest(),
+                    bytes=len(pointer_raw),
+                    stored_at=input_ref.pointer,
+                )
+            )
+            paths[name] = root / input_ref.path
+            stored[name] = verified.references
+    return resolved, paths, captured, stored
+```
+
+**File: `src/viper/execution/_attempt.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:execute_attempt -->
+```python contract-target
+def execute_attempt(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+    retry: bool = False,
+    purpose: AttemptPurpose = "run",
+) -> RunResult | ConfirmationRunResult:
+    """Execute one ordinary or benchmark-confirmation attempt."""
+    root = repository_root.resolve()
+    run_path = run_spec_path.resolve()
+    run_raw = run_path.read_bytes()
+    run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
+    origin = run_git(root, "remote", "get-url", "origin").decode().strip()
+    if origin != str(run.source.repository):
+        raise RunError("Git origin differs from RunSpec.source.repository")
+    plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
+    relative_run_path = run_path.relative_to(root).as_posix()
+    if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
+        raise RunError("RunSpec bytes are absent from the current Git commit")
+
+    store = LocalArtifactStore(root)
+    destination = bind_run_destination(
+        root,
+        run.run_id,
+        load_storage_settings(root).destination,
+    )
+    snapshot_publisher = create_snapshot_publisher(root, destination)
+    fetcher = RunFetcher(root, store, str(run.source.repository))
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({str(run.source.repository)})
+    )
+    experiment = ExperimentSpec.model_validate(
+        parse_yaml_bytes(
+            fetcher(
+                GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=f"experiments/{run.experiment_id}/spec.yaml",
+                )
+            )
+        )
+    )
+    run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+
+    workspace_root = root / ".viper" / "workspaces"
+    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
+    run_lock.acquire()
+    terminal_path = run_path.parent / "resolved.yaml"
+    previous_run: ResolvedRun | None = None
+    if terminal_path.is_file():
+        previous_run = ResolvedRun.model_validate(
+            parse_yaml_bytes(terminal_path.read_bytes())
+        )
+        if purpose == "run" and not retry:
+            run_lock.release()
+            raise RunError("run already has terminal attempt history; use retry")
+        if purpose == "run" and previous_run.status == "succeeded":
+            run_lock.release()
+            raise RunError("a successful run cannot be retried")
+    elif purpose == "benchmark_confirmation":
+        run_lock.release()
+        raise RunError("benchmark confirmation requires a terminal candidate run")
+    if purpose == "benchmark_confirmation" and previous_run is not None:
+        if previous_run.status != "succeeded":
+            run_lock.release()
+            raise RunError("benchmark confirmation requires a successful candidate run")
+    known_attempts = (
+        ()
+        if previous_run is None
+        else tuple(
+            read_attempt_reference(reference, run, fetcher=fetcher)
+            for reference in previous_run.attempts
+        )
+    )
+    previous_attempts = reconcile_abandoned_attempts(
+        root,
+        workspace_root,
+        run,
+        run_root,
+        destination,
+        known_attempts,
+    )
+    attempt_id = max(
+        next_attempt_id(workspace_root, run.run_id),
+        max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
+    )
+    workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
+    journal = DurableJournal(workspace.control / "journal.jsonl")
+    attempt_started = datetime.now(UTC)
+    resolved_stage_refs: list[ResolvedStageRef] = []
+    invocation_refs: list[ResolvedStageInvocationRef] = []
+    completed: dict[StageId, ResolvedStageRef] = {}
+    completed_results: dict[StageId, ResolvedBaseSpec] = {}
+    loaded_stages: dict[StageId, BaseSpec] = {}
+    measurement_paths: list[Path] = []
+    metric_verification_paths: list[Path] = []
+    log_files: dict[str, bytes] = {}
+    active_stage_id: StageId | None = None
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def cancel_attempt(signum: int, frame: object) -> None:
+        """Convert an interrupt request into a durable cancellation outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("cancelled")
+
+    def preempt_attempt(signum: int, frame: object) -> None:
+        """Convert host termination into a durable preemption outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("preempted")
+
+    signal.signal(signal.SIGINT, cancel_attempt)
+    signal.signal(signal.SIGTERM, preempt_attempt)
+    try:
+        journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
+        preflight = preflight_plan(root, run_path)
+        preflight_path = workspace.control / "preflight.json"
+        write_synchronized(
+            preflight_path,
+            f"{preflight.model_dump_json()}\n".encode(),
+        )
+        journal.append(
+            "preflighting",
+            "preflight completed and frozen plan located in Git",
+            recorded_at=datetime.now(UTC),
+            details={
+                "plan_commit": plan_commit,
+                "report": preflight_path.relative_to(workspace.root).as_posix(),
+            },
+        )
+        if not preflight.ready:
+            failed_codes = ", ".join(
+                check.code for check in preflight.checks if check.status == "failure"
+            )
+            raise RunError(f"plan preflight failed: {failed_codes}")
+        for stage_reference in run.stages:
+            active_stage_id = stage_reference.stage_id
+            stage = load_stage_spec(root / stage_reference.spec)
+            loaded_stages[stage_reference.stage_id] = stage
+            effective_environment = stage.environment or run.environment
+            resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
+            resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
+            captured_inputs: dict[InputName, SnapshotFileRef] = {}
+            stored_input_references: dict[
+                InputName, tuple[ResolvedFileRef, ...]
+            ] = {}
+            input_paths: dict[str, Path] = {}
+            process = None
+            journal.append(
+                "running_stage",
+                "stage execution started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+
+            if isinstance(stage, DownloadSpec):
+                runner_environment, execution_context = resolve_runner_environment(
+                    fetcher,
+                    effective_environment,
+                )
+                (
+                    resolved_retrievals,
+                    resolved_artifacts,
+                    input_paths,
+                ) = retrieve_download_inputs(
+                    root,
+                    workspace,
+                    stage_reference.stage_id,
+                    stage,
+                )
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_download_stage(
+                    stage,
+                    environment=runner_environment,
+                    execution_context=execution_context,
+                    artifacts=resolved_artifacts,
+                    retrievals=resolved_retrievals,
+                    completed_at=stage_completed,
+                )
+            else:
+                if not isinstance(stage, ParameterizedSpec):
+                    raise RunError("project stage lacks its parameterized contract")
+                source_location = GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=stage.implementation.path,
+                )
+                source = resolve_git_file(fetcher, source_location)
+                if (root / stage.implementation.path).read_bytes() != fetcher(
+                    source_location
+                ):
+                    raise RunError("stage source differs from the frozen source")
+                if isinstance(stage, InternalSpec):
+                    (
+                        resolved_inputs,
+                        input_paths,
+                        captured_inputs,
+                        stored_input_references,
+                    ) = resolve_inputs(
+                        root,
+                        workspace,
+                        run.run_id,
+                        attempt_id,
+                        stage_reference.stage_id,
+                        stage,
+                        completed,
+                        loaded_stages,
+                        fetcher,
+                        policy,
+                    )
+                try:
+                    process = execute_stage_process(
+                        root,
+                        run,
+                        stage_reference,
+                        stage,
+                        attempt_id=attempt_id,
+                        input_paths=input_paths,
+                        timeout_seconds=timeout_seconds,
+                    )
+                except (StageExecutionError, StageProcessInterrupted) as exc:
+                    run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stdout.log"
+                    ] = exc.stdout
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stderr.log"
+                    ] = exc.stderr
+                    if exc.invocation is not None:
+                        invocation_path = (
+                            f"{run_root}/attempts/{attempt_id}/invocations/"
+                            f"{stage_reference.stage_id}.yaml"
+                        )
+                        invocation_refs.append(
+                            publish_invocation_receipt(
+                                root,
+                                destination,
+                                invocation_path,
+                                exc.invocation,
+                            )
+                        )
+                    raise
+                invocation_path = (
+                    f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                    f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
+                )
+                invocation_ref = publish_invocation_receipt(
+                    root,
+                    destination,
+                    invocation_path,
+                    process.invocation,
+                )
+                invocation_refs.append(invocation_ref)
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_stage(
+                    stage,
+                    source=source,
+                    environment=resolve_environment(
+                        fetcher,
+                        effective_environment,
+                        process,
+                    ),
+                    process=process,
+                    invocation=invocation_ref,
+                    inputs=resolved_inputs,
+                    completed_at=stage_completed,
+                )
+                resolved_artifacts = process.artifacts
+                metric_specs = {
+                    metric.metric_id: metric for metric in experiment.metrics
+                }
+                for metric_id in stage.metric_ids:
+                    if metric_specs[metric_id].mode != "live":
+                        continue
+                    live_path = (
+                        root
+                        / (
+                            f"experiments/{run.experiment_id}/runs/"
+                            f"{run.variant_id}/{run.run_id}"
+                        )
+                        / f"attempts/{attempt_id}/measurements"
+                        / f"{stage_reference.stage_id}.{metric_id}.jsonl"
+                    )
+                    if live_path.is_file() and live_path not in measurement_paths:
+                        measurement_paths.append(live_path)
+            resolved_path = (
+                f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                f"/stages/{stage_reference.stage_id}/resolved.yaml"
+            )
+            resolved_raw = serialize_document(resolved)
+            verify_captured_inputs(root, captured_inputs)
+            snapshot_paths: dict[str, Path] = {
+                reference.path: root / reference.path
+                for reference in captured_inputs.values()
+            }
+            if resolved_retrievals is not None:
+                for retrieval in resolved_retrievals.values():
+                    retrieval_path = retrieval.body.path
+                    snapshot_paths[retrieval_path] = root / retrieval_path
+            for artifact in resolved_artifacts.values():
+                artifact_references: tuple[SnapshotFileRef, ...]
+                if artifact.kind == "file":
+                    artifact_references = (artifact.file,)
+                else:
+                    artifact_references = tuple(
+                        member.file for member in artifact.members
+                    )
+                for reference in artifact_references:
+                    snapshot_paths[reference.path] = root / reference.path
+            journal.append(
+                "publishing_stage",
+                "stage snapshot publication started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+            snapshot = snapshot_publisher.publish(
+                resolved_stage_path=resolved_path,
+                resolved_stage=resolved_raw,
+                files=snapshot_paths,
+            )
+            resolved_stage_ref = ResolvedStageRef(
+                stage_id=stage_reference.stage_id,
+                snapshot=snapshot,
+                resolved_spec=snapshot_file(resolved_path, resolved_raw),
+            )
+            resolved_stage_refs.append(resolved_stage_ref)
+            completed[stage_reference.stage_id] = resolved_stage_ref
+            completed_results[stage_reference.stage_id] = resolved
+            if isinstance(stage, InternalSpec):
+                assert isinstance(resolved, ResolvedInternalSpec)
+                run_after_stage_metrics(
+                    root,
+                    run,
+                    stage_reference.stage_id,
+                    stage,
+                    resolved,
+                    resolved_stage_ref,
+                    completed_results,
+                    stored_input_references,
+                    experiment,
+                    input_paths,
+                    measurement_paths,
+                    metric_verification_paths,
+                    timeout_seconds,
+                    attempt_id,
+                )
+            if process is not None:
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stdout.log"
+                ] = process.stdout
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stderr.log"
+                ] = process.stderr
+            active_stage_id = None
+
+        journal.append(
+            "closing_attempt",
+            "all planned stages completed",
+            recorded_at=datetime.now(UTC),
+        )
+        journal.append(
+            "publishing_attempt_files",
+            "attempt evidence publication started",
+            recorded_at=datetime.now(UTC),
+            details={},
+        )
+        journal.append(
+            "terminal",
+            "attempt succeeded",
+            recorded_at=datetime.now(UTC),
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+        )
+        attempt_completed = datetime.now(UTC)
+        attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status="succeeded",
+            started_at=attempt_started,
+            completed_at=attempt_completed,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=None,
+        )
+        run_reference = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+        attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            attempt,
+            destination,
+        )
+        if purpose == "benchmark_confirmation":
+            return ConfirmationRunResult(
+                attempt=attempt,
+                attempt_reference=attempt_reference,
+                attempt_path=(
+                    root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+                ),
+                journal_path=journal.path,
+            )
+        attempt_references = tuple(
+            write_attempt_document(root, run_root, value, destination)
+            for value in previous_attempts
+        ) + (attempt_reference,)
+        resolved_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=run_reference,
+            ),
+            status="succeeded",
+            attempts=attempt_references,
+            successful_attempt_id=attempt_id,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(resolved_run)
+        verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+        replace_synchronized(terminal_path, terminal_raw)
+        write_synchronized(workspace.terminal, terminal_raw)
+        return RunResult(
+            resolved_run=resolved_run,
+            resolved_run_path=terminal_path,
+            journal_path=journal.path,
+        )
+    except (Exception, KeyboardInterrupt) as exc:
+        failed_at = datetime.now(UTC)
+        status: Literal["failed", "cancelled", "preempted"]
+        if isinstance(exc, StageProcessInterrupted):
+            status = exc.outcome
+        elif isinstance(exc, KeyboardInterrupt):
+            status = "cancelled"
+        else:
+            status = "failed"
+        latest = journal.latest()
+        if latest is not None and latest.state != "terminal":
+            journal.append(
+                "terminal",
+                f"attempt {status}",
+                recorded_at=failed_at,
+                details={
+                    "stage_id": active_stage_id,
+                    "exception": type(exc).__name__,
+                },
+            )
+        code = (
+            "cancelled"
+            if status == "cancelled"
+            else "preempted"
+            if status == "preempted"
+            else "preflight_failed"
+            if isinstance(exc, RunError)
+            and str(exc).startswith("plan preflight failed")
+            else "verification_failed"
+            if isinstance(exc, VerificationError)
+            else "execution_failed"
+            if isinstance(
+                exc,
+                (StageExecutionError, MetricExecutionError, HttpRetrievalError),
+            )
+            else "internal_error"
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+        )
+        completed_at = datetime.now(UTC)
+        failed_attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status=status,
+            started_at=attempt_started,
+            completed_at=completed_at,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=AttemptFailure(
+                code=code,
+                stage_id=active_stage_id,
+                message=str(exc) or type(exc).__name__,
+                occurred_at=failed_at,
+            ),
+        )
+        run_reference = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+        failed_attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            failed_attempt,
+            destination,
+        )
+        if purpose == "benchmark_confirmation":
+            failed_attempt_path = (
+                root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+            )
+            raise RunError(
+                f"benchmark confirmation attempt {attempt_id} failed; evidence "
+                f"written to {failed_attempt_path}"
+            ) from exc
+        attempt_references = tuple(
+            write_attempt_document(root, run_root, value, destination)
+            for value in previous_attempts
+        ) + (failed_attempt_reference,)
+        failed_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=run_reference,
+            ),
+            status="cancelled" if status == "cancelled" else "failed",
+            attempts=attempt_references,
+            successful_attempt_id=None,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(failed_run)
+        replace_synchronized(terminal_path, terminal_raw)
+        replace_synchronized(workspace.terminal, terminal_raw)
+        raise RunError(
+            f"attempt {attempt_id} failed; evidence written to {terminal_path}"
+        ) from exc
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
+        run_lock.release()
+```
+
+**File: `src/viper/execution/_metric.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=remove target=src/viper/execution/_metric.py:_publish_metric_dependency -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:_artifact_files -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_metric.py:_resolve_metric_dependencies -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_metric.py:run_after_stage_metrics -->
+```python contract-target
+def _artifact_files(artifact: ResolvedArtifact) -> tuple[SnapshotFileRef, ...]:
+    """Return every snapshot member represented by one resolved artifact."""
+    if isinstance(artifact, ResolvedSingleFileArtifact):
+        return (artifact.file,)
+    return tuple(member.file for member in artifact.members)
+
+
+def _resolve_metric_dependencies(
+    stage: InternalSpec,
+    resolved_stage: ResolvedInternalSpec,
+    current_stage: ResolvedStageRef,
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
+    metric: MetricSpec,
+    stored_inputs: Mapping[InputName, tuple[ResolvedFileRef, ...]],
+) -> tuple[ResolvedMetricDependency, ...]:
+    """Reuse the immutable snapshot references selected by each dependency."""
+    resolved: list[ResolvedMetricDependency] = []
+    for dependency in metric.dependencies:
+        if dependency.source == "artifact":
+            files = tuple(
+                resolve_snapshot_file_ref(current_stage.snapshot, file)
+                for file in _artifact_files(
+                    resolved_stage.artifacts[dependency.name]
+                )
+            )
+        else:
+            declared = stage.inputs[dependency.name]
+            realized = resolved_stage.inputs[dependency.name]
+            if isinstance(realized, ResolvedExternalInputRef):
+                files = (
+                    resolve_snapshot_file_ref(
+                        current_stage.snapshot,
+                        realized.file,
+                    ),
+                )
+            elif isinstance(realized, ResolvedFutureInputRef):
+                assert isinstance(declared, FutureInputRef)
+                producer = completed_results[declared.producer_stage_id]
+                files = tuple(
+                    resolve_snapshot_file_ref(realized.producer.snapshot, file)
+                    for file in _artifact_files(
+                        producer.artifacts[declared.producer_artifact]
+                    )
+                )
+            elif isinstance(realized, ResolvedStoredInputRef):
+                files = stored_inputs[dependency.name]
+            else:
+                raise TypeError(
+                    f"unsupported resolved input: {type(realized).__name__}"
+                )
+        resolved.append(
+            ResolvedMetricDependency(
+                dependency=dependency,
+                files=files,
+            )
+        )
+    return tuple(resolved)
+
+
+def run_after_stage_metrics(
+    root: Path,
+    run: RunSpec,
+    stage_id: StageId,
+    stage: InternalSpec,
+    resolved_stage: ResolvedInternalSpec,
+    current_stage: ResolvedStageRef,
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
+    stored_inputs: Mapping[InputName, tuple[ResolvedFileRef, ...]],
+    experiment: ExperimentSpec,
+    input_paths: Mapping[str, Path],
+    measurement_paths: list[Path],
+    metric_verification_paths: list[Path],
+    timeout_seconds: float | None,
+    attempt_id: int,
+) -> None:
+    """Invoke selected recomputed metrics with existing immutable references."""
+    metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    for metric_id in stage.metric_ids:
+        metric = metrics[metric_id]
+        if metric.mode != "recompute":
+            continue
+        dependencies = _resolve_metric_dependencies(
+            stage,
+            resolved_stage,
+            current_stage,
+            completed_results,
+            metric,
+            stored_inputs,
+        )
+        available_artifacts = _artifact_paths(root, stage)
+        metric_inputs = {
+            dependency.name: input_paths[dependency.name]
+            for dependency in metric.dependencies
+            if dependency.source == "input"
+        }
+        metric_artifacts = {
+            dependency.name: available_artifacts[dependency.name]
+            for dependency in metric.dependencies
+            if dependency.source == "artifact"
+        }
+        try:
+            production = execute_metric_process(
+                root,
+                run,
+                stage_id,
+                stage,
+                metric,
+                purpose="measurement",
+                attempt_id=attempt_id,
+                input_paths=metric_inputs,
+                artifact_paths=metric_artifacts,
+                dependencies=dependencies,
+                timeout_seconds=timeout_seconds,
+            )
+        except MetricExecutionError as exc:
+            raise RunError(f"metric {metric_id!r} invocation failed") from exc
+        path = (
+            root
+            / f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+            / f"attempts/{attempt_id}/measurements"
+            / f"{stage_id}.{metric_id}.jsonl"
+        )
+        measurement = MeasurementSink(
+            path,
+            run_id=run.run_id,
+            attempt_id=attempt_id,
+            stage_id=stage_id,
+            metric_id=metric_id,
+        ).append(production.receipt.value)
+        measurement_paths.append(path)
+        try:
+            recomputation = execute_metric_process(
+                root,
+                run,
+                stage_id,
+                stage,
+                metric,
+                purpose="verification",
+                attempt_id=attempt_id,
+                input_paths=metric_inputs,
+                artifact_paths=metric_artifacts,
+                dependencies=dependencies,
+                timeout_seconds=timeout_seconds,
+            )
+        except MetricExecutionError as exc:
+            raise RunError(f"metric {metric_id!r} verification failed") from exc
+        comparator = cast(FloatComparator, metric.comparator)
+        passed = compare_metric_values(
+            measurement.value,
+            recomputation.receipt.value,
+            comparator,
+        )
+        receipt = MetricVerificationReceipt(
+            metric_id=metric_id,
+            stage_id=stage_id,
+            measurement=measurement,
+            production=production.receipt,
+            recomputation=recomputation.receipt,
+            comparator=comparator,
+            passed=passed,
+            completed_at=datetime.now(UTC),
+        )
+        receipt_path = (
+            root
+            / f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+            / f"attempts/{attempt_id}/metric_verification"
+            / f"{stage_id}.{metric_id}.yaml"
+        )
+        write_synchronized(receipt_path, serialize_document(receipt))
+        metric_verification_paths.append(receipt_path)
+        if not passed:
+            raise RunError(f"metric {metric_id!r} failed independent recomputation")
+```
+
+**File: `src/viper/_verification/storage.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:verify_snapshot_artifact -->
+```python contract-target
+def verify_snapshot_artifact(
+    stage: ResolvedStageRef,
+    artifact: ResolvedArtifact,
+    *,
+    data_role: DataRole,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedArtifact:
+    """Verify every file representing one artifact in a stage snapshot."""
+    if isinstance(artifact, ResolvedSingleFileArtifact):
+        references = (artifact.file,)
+    elif isinstance(artifact, ResolvedBundleArtifact):
+        roots: set[str] = set()
+        for member in artifact.members:
+            full_path = str(member.file.path)
+            relative_path = str(member.relative_path)
+            suffix = f"/{relative_path}"
+            if not full_path.endswith(suffix):
+                raise VerificationError(
+                    "artifact.bundle: member path differs from its relative path"
+                )
+            roots.add(full_path[: -len(suffix)])
+        if len(roots) != 1:
+            raise VerificationError(
+                "artifact.bundle: members do not share one bundle root"
+            )
+        bundle_root = next(iter(roots))
+        declared_paths = tuple(member.file.path for member in artifact.members)
+        published_paths = tuple(
+            path
+            for path in list_snapshot_files(stage.snapshot, fetcher=fetcher)
+            if str(path).startswith(f"{bundle_root}/")
+        )
+        if published_paths != declared_paths:
+            raise VerificationError(
+                "artifact.bundle: published members differ from the resolved list"
+            )
+        references = tuple(member.file for member in artifact.members)
+    else:
+        raise TypeError(f"unsupported resolved artifact: {type(artifact).__name__}")
+
+    files = tuple(
+        VerifiedSnapshotFile(
+            reference=reference,
+            content=read_snapshot_file(
+                stage.snapshot,
+                reference,
+                fetcher=fetcher,
+            ),
+        )
+        for reference in references
+    )
+    resolved_references = tuple(
+        resolve_snapshot_file_ref(stage.snapshot, reference)
+        for reference in references
+    )
+    return VerifiedArtifact(
+        artifact=artifact,
+        files=files,
+        data_role=data_role,
+        references=resolved_references,
+    )
+```
+
+**File: `src/viper/_verification/metrics.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/_verification/metrics.py:verify_metric_dependency_references -->
+```python contract-target
+def verify_metric_dependency_references(
+    received: ResolvedMetricDependency,
+    expected: ResolvedMetricDependency,
+    metric_id: MetricId,
+) -> None:
+    """Require one metric dependency to retain its exact storage references."""
+    if received.files != expected.files:
+        raise VerificationError(
+            f"metric {metric_id!r} dependency references differ"
+        )
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/metrics.py:verify_recomputed_metrics -->
+```python contract-target
+def verify_recomputed_metrics(
+    attempt: RunAttempt,
+    plan: VerifiedRunPlan,
+    resolved_stages: Mapping[StageId, ResolvedBaseSpec],
+    measurements: tuple[Measurement, ...],
+    stored_inputs: Mapping[StageId, Mapping[InputName, VerifiedInput]],
+    future_inputs: Mapping[StageId, Mapping[InputName, VerifiedInput]],
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> None:
+    """Verify persisted production and recomputation evidence for each metric."""
+    del policy
+    metric_specs = {metric.metric_id: metric for metric in plan.experiment.metrics}
+    stage_refs = {stage.stage_id: stage for stage in attempt.resolved_stages}
+    expected_keys = {
+        (stage_id, metric_id)
+        for stage_id, stage in plan.stages.items()
+        if stage_id in stage_refs
+        for metric_id in stage.metric_ids
+        if metric_specs[metric_id].mode == "recompute"
+    }
+    if len(attempt.metric_verification_files) != len(expected_keys):
+        raise VerificationError(
+            "recomputed metrics require one immutable verification receipt each"
+        )
+    receipts: dict[tuple[StageId, str], MetricVerificationReceipt] = {}
+    root_path = run_root(plan.run)
+    for reference in attempt.metric_verification_files:
+        if not isinstance(reference.stored_at, (HuggingFaceFileRef, LocalFileRef)):
+            raise VerificationError(
+                "metric verification files must use immutable artifact storage"
+            )
+        raw = read_resolved_file(reference, fetcher=fetcher)
+        try:
+            receipt = MetricVerificationReceipt.model_validate(parse_yaml_bytes(raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError("metric verification receipt is invalid") from exc
+        expected_path = (
+            f"{root_path}/attempts/{attempt.attempt_id}/metric_verification/"
+            f"{receipt.stage_id}.{receipt.metric_id}.yaml"
+        )
+        if reference.stored_at.path != expected_path:
+            raise VerificationError(
+                "metric verification receipt is outside its canonical path"
+            )
+        key = (receipt.stage_id, receipt.metric_id)
+        if key in receipts:
+            raise VerificationError(
+                "metric verification receipt identity is duplicated"
+            )
+        receipts[key] = receipt
+    if set(receipts) != expected_keys:
+        raise VerificationError("metric verification receipts select different metrics")
+
+    for stage_id, stage in plan.stages.items():
+        if stage_id not in stage_refs:
+            continue
+        for metric_id in stage.metric_ids:
+            metric = metric_specs[metric_id]
+            if metric.mode != "recompute":
+                continue
+            recorded = tuple(
+                measurement
+                for measurement in measurements
+                if measurement.stage_id == stage_id
+                and measurement.metric_id == metric_id
+            )
+            if len(recorded) != 1:
+                raise VerificationError(
+                    f"recomputed metric {metric_id!r} of stage {stage_id!r} "
+                    "requires exactly one measurement"
+                )
+            receipt = receipts[(stage_id, metric_id)]
+            if receipt.measurement != recorded[0]:
+                raise VerificationError(
+                    f"metric {metric_id!r} receipt embeds a different measurement"
+                )
+            if receipt.production.implementation != metric.implementation:
+                raise VerificationError(
+                    f"metric {metric_id!r} production implementation differs"
+                )
+            if receipt.production.params != metric.params:
+                raise VerificationError(
+                    f"metric {metric_id!r} production parameters differ"
+                )
+            if receipt.comparator != metric.comparator:
+                raise VerificationError(
+                    f"metric {metric_id!r} comparator differs from MetricSpec"
+                )
+            resolved_stage = resolved_stages[stage_id]
+            stage_ref = stage_refs[stage_id]
+            verified_artifacts = {
+                name: verify_snapshot_artifact(
+                    stage_ref,
+                    resolved_artifact,
+                    data_role=stage.artifacts[name].data_role,
+                    fetcher=fetcher,
+                )
+                for name, resolved_artifact in resolved_stage.artifacts.items()
+            }
+            inputs = {
+                **stored_inputs.get(stage_id, {}),
+                **future_inputs.get(stage_id, {}),
+            }
+            metric_inputs: dict[str, VerifiedInput] = {}
+            metric_artifacts: dict[str, VerifiedArtifact] = {}
+            for dependency in metric.dependencies:
+                if dependency.source == "input":
+                    selected_input = inputs.get(dependency.name)
+                    if selected_input is None:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} is absent"
+                        )
+                    if selected_input.data_role != dependency.required_data_role:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} data role differs"
+                        )
+                    metric_inputs[dependency.name] = selected_input
+                else:
+                    selected_artifact = verified_artifacts.get(dependency.name)
+                    if selected_artifact is None:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} is absent"
+                        )
+                    if selected_artifact.data_role != dependency.required_data_role:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} data role differs"
+                        )
+                    metric_artifacts[dependency.name] = selected_artifact
+            expected_dependencies = tuple(
+                ResolvedMetricDependency(
+                    dependency=dependency,
+                    files=(
+                        metric_inputs[dependency.name].references
+                        if dependency.source == "input"
+                        else metric_artifacts[dependency.name].references
+                    ),
+                )
+                for dependency in metric.dependencies
+            )
+            if tuple(
+                value.dependency for value in receipt.production.dependencies
+            ) != tuple(value.dependency for value in expected_dependencies):
+                raise VerificationError(
+                    f"metric {metric_id!r} dependency declarations differ"
+                )
+            for received, expected in zip(
+                receipt.production.dependencies,
+                expected_dependencies,
+                strict=True,
+            ):
+                verify_metric_dependency_references(received, expected, metric_id)
+                for reference in received.files:
+                    read_resolved_file(reference, fetcher=fetcher)
+            for worker in (receipt.production, receipt.recomputation):
+                _verify_metric_worker_runtime(plan.run, stage, worker)
+            if not (
+                resolved_stage.completed_at
+                <= receipt.production.started_at
+                < receipt.production.completed_at
+                <= recorded[0].measured_at
+                <= receipt.recomputation.started_at
+                < receipt.recomputation.completed_at
+                <= receipt.completed_at
+                <= attempt.completed_at
+            ):
+                raise VerificationError(
+                    f"metric {metric_id!r} execution timing is inconsistent"
+                )
+            if not compare_metric_values(
+                recorded[0].value,
+                receipt.recomputation.value,
+                cast(FloatComparator, metric.comparator),
+            ):
+                raise VerificationError(
+                    f"recomputed metric {metric_id!r} does not match its measurement"
+                )
+            if not receipt.passed:
+                raise VerificationError(
+                    f"metric {metric_id!r} verification receipt records failure"
+                )
+```
+
+**File: `tests/test_metric_provenance.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:test_metric_dependency_rejects_republished_payload -->
+```python contract-target
+def test_metric_dependencies_reuse_snapshot_references() -> None:
+    """Derive a metric artifact reference from its enclosing stage snapshot."""
+    from types import SimpleNamespace
+
+    from viper.artifacts import ResolvedSingleFileArtifact
+    from viper.execution._metric import _resolve_metric_dependencies
+    from viper.metrics import MetricDependency
+    from viper.references import (
+        LocalFileRef,
+        LocalStageResultSnapshotRef,
+        ResolvedStageRef,
+        SnapshotFileRef,
+    )
+
+    file = SnapshotFileRef(path="artifacts/predictions.bin", sha256="a" * 64, bytes=4)
+    stage_ref = ResolvedStageRef(
+        stage_id="eval",
+        snapshot=LocalStageResultSnapshotRef(commit="b" * 64),
+        resolved_spec=SnapshotFileRef(
+            path="stages/eval/resolved.yaml",
+            sha256="c" * 64,
+            bytes=10,
+        ),
+    )
+    dependency = MetricDependency(
+        source="artifact",
+        name="predictions",
+        required_data_role="evaluation",
+    )
+    resolved = _resolve_metric_dependencies(
+        SimpleNamespace(inputs={}),
+        SimpleNamespace(
+            inputs={},
+            artifacts={"predictions": ResolvedSingleFileArtifact(file=file)},
+        ),
+        stage_ref,
+        {},
+        SimpleNamespace(dependencies=(dependency,)),
+        {},
+    )
+
+    assert resolved[0].files[0].stored_at == LocalFileRef(
+        commit="b" * 64,
+        path=file.path,
+    )
+
+
+def test_metric_dependency_rejects_republished_payload() -> None:
+    """Treat equal bytes at another immutable revision as a different reference."""
+    import pytest
+
+    from viper._verification.metrics import verify_metric_dependency_references
+    from viper.metrics import MetricDependency, ResolvedMetricDependency
+    from viper.references import LocalFileRef, ResolvedFileRef
+    from viper.verification.models import VerificationError
+
+    expected = ResolvedFileRef(
+        sha256="a" * 64,
+        bytes=4,
+        stored_at=LocalFileRef(commit="b" * 64, path="predictions.bin"),
+    )
+    republished = expected.model_copy(
+        update={
+            "stored_at": LocalFileRef(
+                commit="c" * 64,
+                path="predictions.bin",
+            )
+        }
+    )
+
+    dependency = MetricDependency(
+        source="artifact",
+        name="predictions",
+        required_data_role="evaluation",
+    )
+    with pytest.raises(VerificationError, match="dependency references differ"):
+        verify_metric_dependency_references(
+            ResolvedMetricDependency(
+                dependency=dependency,
+                files=(republished,),
+            ),
+            ResolvedMetricDependency(
+                dependency=dependency,
+                files=(expected,),
+            ),
+            "accuracy",
+        )
+```
+
 The first three blocks define and verify the destination boundary. The fourth
-block routes the existing local executor through that boundary. Master Phases
-4, 9, 10, and 11 retain the remaining requirements in this contract.
+block routes the existing local executor through that boundary. `P4-RSP-01`
+then reuses those immutable stage references for metric dependencies. Master
+Phases 9, 10, and 11 retain the remaining requirements in this contract.
 
 ## Implementation sources
 

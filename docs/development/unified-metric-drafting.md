@@ -14,7 +14,7 @@ and run documents.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** planned; Phase 4 code specified.
 
 These requirements bind the contract to the master checklist:
 
@@ -86,6 +86,8 @@ before it evaluates those criteria.
 
 ## 3. Current gap
 
+### Inspected path
+
 Hold this evaluation fixed:
 
 ```text
@@ -146,6 +148,12 @@ flowchart LR
     classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
+
+### Missing connector
+
+No contract-owned object joins the decorated implementation, frozen parameter
+class and values, runtime context, objective role, and optional benchmark
+criterion into one verified path.
 
 ### Proposed-change DAG
 
@@ -1771,3 +1779,1092 @@ evaluation conditions, with optional threshold judgments.
 
 **Commit boundary:** the metric, experiment, stage, benchmark, verifier, and
 documentation surfaces describe one implemented contract.
+
+## 11. Contract-owned PairBlocks
+
+<!-- pair-block-definition: P4-UMD-01 -->
+```toml pair-block
+id = "P4-UMD-01"
+requirements = ["UMD-01"]
+targets = [
+    "src/viper/metrics.py:MetricParamsT",
+    "src/viper/metrics.py:DecoratedMetricT",
+    "src/viper/metrics.py:ObjectiveDirection",
+    "src/viper/metrics.py:MetricDefinition",
+    "src/viper/metrics.py:DecoratedMetric",
+    "src/viper/metrics.py:MetricDraft",
+    "src/viper/metrics.py:MetricObjectiveDraft",
+    "src/viper/metrics.py:MetricCriterionDraft",
+    "src/viper/metrics.py:metric",
+    "src/viper/metrics.py:metric_definition",
+    "src/viper/metrics.py:measure",
+    "src/viper/metrics.py:min",
+    "src/viper/metrics.py:max",
+    "src/viper/benchmark.py:at_least",
+    "src/viper/benchmark.py:at_most",
+    "tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors",
+]
+tests = ["tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors"]
+gate = "python -m pytest tests/test_metric_interface.py -q"
+depends_on = []
+```
+
+**Context:** Metrics currently expose decorator metadata but require callers to
+construct protocol records by hand. This block adds the public draft objects
+and constructors while retaining one decorated implementation identity.
+
+<!-- pair-block-definition: P4-UMD-02 -->
+```toml pair-block
+id = "P4-UMD-02"
+requirements = ["UMD-02"]
+targets = [
+    "src/viper/_schema.py:PythonSourceRelPath",
+    "src/viper/parameters.py:ParameterModelOwner",
+    "src/viper/parameters.py:ParameterModelRef",
+    "src/viper/_parameter/validation.py:parameter_model_path",
+    "src/viper/metrics.py:MetricSpec",
+    "src/viper/metrics.py:MetricExecutionReceipt",
+    "src/viper/metrics.py:MetricVerificationReceipt",
+    "src/viper/metrics.py:MetricContext",
+    "src/viper/metrics.py:StatefulMetric",
+    "src/viper/metrics.py:invoke_metric",
+    "src/viper/metrics.py:MetricHandle",
+    "src/viper/metrics.py:bind_live_metric",
+    "src/viper/_workers/stages.py:_live_metric_handles",
+    "src/viper/_workers/metrics.py:main",
+    "tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution",
+]
+tests = ["tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution"]
+gate = "python -m pytest tests/test_metric_interface.py tests/test_metric_provenance.py -q"
+depends_on = ["P4-UMD-01"]
+```
+
+**Context:** Live handles currently omit the frozen parameter object, while the
+recompute worker receives only its serialized base-model shape. This block
+records the parameter class, reconstructs it from the correct source root, and
+passes one typed `MetricContext` through both invocation paths.
+
+<!-- pair-block-definition: P4-UMD-03 -->
+```toml pair-block
+id = "P4-UMD-03"
+requirements = ["UMD-03"]
+targets = [
+    "src/viper/metrics.py:MetricObjectiveSpec",
+    "src/viper/stages.py:EmbedSpec",
+    "src/viper/stages.py:TrainSpec",
+    "src/viper/stages.py:EvaluateSpec",
+    "src/viper/_verification/plan.py:verify_stage_objectives",
+    "src/viper/_verification/plan.py:verify_run_plan_relationships",
+    "tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction",
+]
+tests = ["tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction"]
+gate = "python -m pytest tests/test_protocol.py tests/test_verification.py -k objective -q"
+depends_on = ["P4-UMD-02"]
+```
+
+**Context:** Stage metric IDs currently say only which values to record. This
+block stores the primary metric and direction together, requires that metric
+to be selected by the stage, and checks the stage-specific live or recompute
+mode against the frozen experiment registry.
+
+## 12. Accepted `ContractTarget` declarations
+
+Each payload below is the reviewed Phase 4 declaration for one PairBlock
+target. A later guided edit may add a directly changed caller before the final
+plan freeze; it may not weaken the requirement or omit a changed declaration.
+
+### P4-UMD-01 — metric drafts
+
+**File: `src/viper/metrics.py`**
+
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:MetricParamsT -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:DecoratedMetricT -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:ObjectiveDirection -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=src/viper/metrics.py:MetricDefinition -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:DecoratedMetric -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:MetricDraft -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:MetricObjectiveDraft -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:MetricCriterionDraft -->
+```python contract-target
+MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
+DecoratedMetricT = TypeVar(
+    "DecoratedMetricT",
+    bound=Callable[..., Any] | type[Any],
+)
+ObjectiveDirection = Literal["min", "max"]
+
+
+@dataclass(frozen=True)
+class MetricDefinition:
+    """Store authoring metadata attached to one metric implementation."""
+
+    metric_id: MetricId
+    mode: MetricMode
+
+
+DecoratedMetric = Callable[..., Any] | type[Any]
+
+
+class MetricDraft(BaseModel, Generic[MetricParamsT]):
+    """Hold one configured metric before protocol freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    implementation: DecoratedMetric
+    params: MetricParamsT
+    dependencies: tuple[MetricDependency, ...] = ()
+    comparator: FloatComparator | None = None
+
+
+class MetricObjectiveDraft(BaseModel):
+    """Select one metric and its desired direction of improvement."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    metric: MetricDraft[Any]
+    direction: ObjectiveDirection
+
+
+class MetricCriterionDraft(BaseModel):
+    """Apply one optional threshold to a configured metric."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    metric: MetricDraft[Any]
+    comparison: Literal["ge", "le"]
+    threshold: float = Field(allow_inf_nan=False)
+```
+
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=src/viper/metrics.py:metric -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=src/viper/metrics.py:metric_definition -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:measure -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:min -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:max -->
+```python contract-target
+def metric(
+    *,
+    metric_id: MetricId,
+    mode: MetricMode,
+) -> Callable[[DecoratedMetricT], DecoratedMetricT]:
+    """Attach one metric identity and invocation mode to an implementation."""
+    definition = MetricDefinition(metric_id=metric_id, mode=mode)
+
+    def decorate(value: DecoratedMetricT) -> DecoratedMetricT:
+        """Store the immutable definition on the selected Python object."""
+        setattr(value, "__viper_metric__", definition)
+        return value
+
+    return decorate
+
+
+def metric_definition(implementation: DecoratedMetric) -> MetricDefinition:
+    """Return the metric definition attached to one implementation."""
+    definition = getattr(implementation, "__viper_metric__", None)
+    if not isinstance(definition, MetricDefinition):
+        raise MetricError("metric implementation lacks a VIPER metric decorator")
+    return definition
+
+
+def measure(
+    implementation: DecoratedMetric,
+    *,
+    params: MetricParamsT | None = None,
+    dependencies: tuple[MetricDependency, ...] = (),
+    comparator: FloatComparator | None = None,
+) -> MetricDraft[MetricParamsT | parameters.Metric]:
+    """Configure one decorated metric for later freezing."""
+    definition = metric_definition(implementation)
+    selected_params = parameters.Metric() if params is None else params
+    identities = tuple((item.source, item.name) for item in dependencies)
+    if len(set(identities)) != len(identities):
+        raise MetricError("metric dependencies must be unique")
+    if definition.mode == "recompute":
+        if not dependencies:
+            raise MetricError("recomputed metrics require dependencies")
+        if comparator is None:
+            raise MetricError("recomputed metrics require a comparator")
+    elif dependencies or comparator is not None:
+        raise MetricError("live metrics do not declare dependencies or a comparator")
+    return MetricDraft(
+        implementation=implementation,
+        params=selected_params,
+        dependencies=dependencies,
+        comparator=comparator,
+    )
+
+
+def min(metric: MetricDraft[Any]) -> MetricObjectiveDraft:
+    """Make one configured metric a minimization objective."""
+    return MetricObjectiveDraft(metric=metric, direction="min")
+
+
+def max(metric: MetricDraft[Any]) -> MetricObjectiveDraft:
+    """Make one configured metric a maximization objective."""
+    return MetricObjectiveDraft(metric=metric, direction="max")
+```
+
+**File: `src/viper/benchmark.py`**
+
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:at_least -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:at_most -->
+```python contract-target
+def at_least(metric: MetricDraft[Any], threshold: float) -> MetricCriterionDraft:
+    """Require a benchmark metric value at or above one threshold."""
+    return MetricCriterionDraft(metric=metric, comparison="ge", threshold=threshold)
+
+
+def at_most(metric: MetricDraft[Any], threshold: float) -> MetricCriterionDraft:
+    """Require a benchmark metric value at or below one threshold."""
+    return MetricCriterionDraft(metric=metric, comparison="le", threshold=threshold)
+```
+
+**File: `tests/test_metric_interface.py`**
+
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors -->
+```python contract-target
+def test_metric_drafts_freeze_through_public_constructors() -> None:
+    """Build metric, objective, and criterion drafts from one decorated callable."""
+    from viper.benchmark import at_least
+    from viper.metrics import FloatComparator, MetricContext, max, measure, metric
+
+    @metric(metric_id="accuracy", mode="recompute")
+    def accuracy(context: MetricContext[parameters.Metric]) -> float:
+        return float(context.params.model_dump()["value"])
+
+    draft = measure(
+        accuracy,
+        params=parameters.Metric.model_validate({"value": 0.9}),
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name="predictions",
+                required_data_role="evaluation",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+
+    assert max(draft).metric is draft
+    assert at_least(draft, 0.8).threshold == 0.8
+    assert draft.implementation is accuracy
+```
+
+### P4-UMD-02 — frozen parameter delivery
+
+**File: `src/viper/_schema.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_schema.py:PythonSourceRelPath -->
+```python contract-target
+PythonSourceRelPath = Annotated[
+    str,
+    AfterValidator(validate_repo_rel_path),
+    AfterValidator(validate_python_file_path),
+]
+```
+
+**File: `src/viper/parameters.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:ParameterModelOwner -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/parameters.py:ParameterModelRef -->
+```python contract-target
+ParameterModelOwner = Literal["project", "viper"]
+
+
+class ParameterModelRef(ProtocolModel):
+    """Identify one parameter class by owner, source bytes, and symbol."""
+
+    owner: ParameterModelOwner
+    path: PythonSourceRelPath
+    symbol: PythonSymbol
+    sha256: SHA256
+    bytes: int = Field(gt=0)
+```
+
+**File: `src/viper/_parameter/validation.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_parameter/validation.py:parameter_model_path -->
+```python contract-target
+def parameter_model_path(
+    project_root: Path,
+    reference: ParameterModelRef,
+) -> Path:
+    """Resolve a parameter-model path against its declared source owner."""
+    base = (
+        project_root.resolve()
+        if reference.owner == "project"
+        else Path(parameters.__file__).resolve().parent
+    )
+    path = (base / reference.path).resolve()
+    if not path.is_relative_to(base):
+        raise ParameterValidationError("parameter model escapes its source root")
+    return path
+```
+
+**File: `src/viper/metrics.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricSpec -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
+```python contract-target
+class MetricSpec(ProtocolModel):
+    """Bind one metric identity to its implementation and frozen parameters."""
+
+    schema_version: Literal[1] = 1
+    metric_id: MetricId
+    implementation: MetricImplementationRef
+    parameter_model: ParameterModelRef
+    params: parameters.Metric
+    mode: MetricMode
+    dependencies: tuple[MetricDependency, ...] = ()
+    comparator: FloatComparator | None = None
+
+    @model_validator(mode="after")
+    def validate_lifecycle(self) -> MetricSpec:
+        """Require one complete live or recomputed metric configuration."""
+        identities = tuple((item.source, item.name) for item in self.dependencies)
+        if len(set(identities)) != len(identities):
+            raise ValueError("metric dependencies must be unique")
+        if self.mode == "recompute":
+            if not self.dependencies:
+                raise ValueError("recomputed metrics require dependencies")
+            if self.comparator is None:
+                raise ValueError("recomputed metrics require a comparator")
+        elif self.dependencies or self.comparator is not None:
+            raise ValueError("live metrics do not declare dependencies or a comparator")
+        return self
+
+
+class MetricExecutionReceipt(ProtocolModel):
+    """Record one controlled metric worker execution and its scalar result."""
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    attempt_id: int = Field(ge=1)
+    metric_id: MetricId
+    stage_id: StageId
+    purpose: Literal["measurement", "verification"]
+    implementation: MetricImplementationRef
+    parameter_model: ParameterModelRef
+    params: parameters.Metric
+    dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
+    startup: ProcessStartupReceipt
+    execution_context: ExecutionContext
+    python_environment: PythonEnvironmentSpec
+    value: float = Field(allow_inf_nan=False)
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+    outcome: Literal["succeeded"] = "succeeded"
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricVerificationReceipt -->
+```python contract-target
+class MetricVerificationReceipt(ProtocolModel):
+    """Bind one measurement to independent recomputation evidence."""
+
+    schema_version: Literal[1] = 1
+    metric_id: MetricId
+    stage_id: StageId
+    measurement: Measurement
+    production: MetricExecutionReceipt
+    recomputation: MetricExecutionReceipt
+    comparator: FloatComparator
+    passed: bool
+    completed_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_execution_ownership(self) -> MetricVerificationReceipt:
+        """Require both workers to select one frozen metric invocation."""
+        expected = (
+            self.measurement.run_id,
+            self.measurement.attempt_id,
+            self.stage_id,
+            self.metric_id,
+        )
+        if self.measurement.stage_id != self.stage_id:
+            raise ValueError("verification stage ID differs from its measurement")
+        if self.measurement.metric_id != self.metric_id:
+            raise ValueError("verification metric ID differs from its measurement")
+        for receipt in (self.production, self.recomputation):
+            received = (
+                receipt.run_id,
+                receipt.attempt_id,
+                receipt.stage_id,
+                receipt.metric_id,
+            )
+            if received != expected:
+                raise ValueError("metric worker identity differs from its measurement")
+        if self.production.purpose != "measurement":
+            raise ValueError("production receipt must use measurement purpose")
+        if self.recomputation.purpose != "verification":
+            raise ValueError("recomputation receipt must use verification purpose")
+        bindings = (
+            "implementation",
+            "parameter_model",
+            "params",
+            "dependencies",
+        )
+        if any(
+            getattr(self.production, field) != getattr(self.recomputation, field)
+            for field in bindings
+        ):
+            raise ValueError("metric worker invocation bindings differ")
+        if self.production.value != self.measurement.value:
+            raise ValueError("production value differs from its measurement")
+        if self.completed_at < max(
+            self.production.completed_at,
+            self.recomputation.completed_at,
+        ):
+            raise ValueError("verification completion precedes a worker receipt")
+        return self
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricContext -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:StatefulMetric -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/metrics.py:invoke_metric -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricHandle -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:bind_live_metric -->
+```python contract-target
+class MetricContext(BaseModel, Generic[MetricParamsT]):
+    """Supply verified paths and frozen parameters to one metric invocation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    inputs: Mapping[str, Path] = Field(default_factory=dict)
+    artifacts: Mapping[str, Path] = Field(default_factory=dict)
+    params: MetricParamsT
+
+
+class StatefulMetric(ABC, Generic[MetricParamsT]):
+    """Accumulate metric state under one frozen invocation context."""
+
+    @abstractmethod
+    def __init__(self, context: MetricContext[MetricParamsT]) -> None:
+        """Bind the frozen invocation context once."""
+
+    @abstractmethod
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        """Consume one stage observation and update internal state."""
+
+    @abstractmethod
+    def compute(self) -> float:
+        """Return the metric represented by the accumulated state."""
+
+
+def invoke_metric(
+    implementation: Callable[..., Any],
+    context: MetricContext[Any],
+    *args: Any,
+    **kwargs: Any,
+) -> float:
+    """Invoke one stateless metric with its frozen context first."""
+    return float(implementation(context, *args, **kwargs))
+
+
+class MetricHandle:
+    """Bind one live metric implementation, context, and measurement sink."""
+
+    def __init__(
+        self,
+        implementation: Callable[..., Any] | type[Any],
+        sink: MeasurementSink,
+        context: MetricContext[Any],
+    ) -> None:
+        """Instantiate a stateful metric or retain one stateless function."""
+        self._sink = sink
+        self._context = context
+        self._function: Callable[..., Any] | None = None
+        self._stateful: StatefulMetric[Any] | None = None
+        if inspect.isclass(implementation):
+            if not issubclass(implementation, StatefulMetric):
+                raise MetricError("live metric class must subclass StatefulMetric")
+            self._stateful = implementation(context)
+        else:
+            self._function = implementation
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        """Advance one stateful metric with a stage observation."""
+        if self._stateful is None:
+            raise MetricError("stateless metric handles do not support update")
+        self._stateful.update(*args, **kwargs)
+
+    def record(
+        self,
+        *args: Any,
+        epoch: int | None = None,
+        step: int | None = None,
+        **kwargs: Any,
+    ) -> Measurement:
+        """Compute and persist one live measurement."""
+        if self._stateful is not None:
+            if args or kwargs:
+                raise MetricError("stateful metric record uses accumulated state only")
+            value = self._stateful.compute()
+        else:
+            assert self._function is not None
+            value = invoke_metric(self._function, self._context, *args, **kwargs)
+        return self._sink.append(value, epoch=epoch, step=step)
+
+
+def bind_live_metric(
+    repository_root: Path,
+    spec: MetricSpec,
+    sink: MeasurementSink,
+    context: MetricContext[Any],
+) -> MetricHandle:
+    """Validate and bind one frozen live metric to its context and sink."""
+    if spec.mode != "live":
+        raise MetricError("metric handle requires live mode")
+    validate_metric_definition(repository_root, spec)
+    implementation = load_metric_object(
+        repository_root.resolve() / spec.implementation.path,
+        spec.implementation.symbol,
+    )
+    return MetricHandle(implementation, sink, context)
+```
+
+**File: `src/viper/_workers/stages.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/stages.py:_live_metric_handles -->
+```python contract-target
+def _live_metric_handles(
+    root: Path,
+    run: RunSpec,
+    stage: ParameterizedSpec,
+    binding: StageContextBinding,
+) -> dict[str, MetricHandle]:
+    """Bind every selected live metric to frozen parameters and stage paths."""
+    if not stage.metric_ids:
+        return {}
+
+    experiment_path = root / f"experiments/{run.experiment_id}/spec.yaml"
+    experiment = ExperimentSpec.model_validate(
+        parse_yaml_bytes(experiment_path.read_bytes())
+    )
+    if experiment.experiment_id != run.experiment_id:
+        raise ValueError("startup.plan: experiment ID differs from RunSpec")
+    metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    inputs = MappingProxyType(_workspace_paths(root, binding.inputs))
+    artifacts = MappingProxyType(_workspace_paths(root, binding.artifacts))
+    handles: dict[str, MetricHandle] = {}
+    for metric_id in stage.metric_ids:
+        spec = metrics.get(metric_id)
+        if spec is None:
+            raise ValueError("startup.plan: stage selects an undeclared metric")
+        if spec.mode != "live":
+            continue
+        params = instantiate_parameters(
+            parameter_model_path(root, spec.parameter_model),
+            spec.parameter_model,
+            spec.params,
+            parameters.Metric,
+        )
+        path = (
+            root
+            / f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+            / f"attempts/{binding.attempt_id}/measurements"
+            / f"{binding.stage_id}.{metric_id}.jsonl"
+        )
+        handles[metric_id] = bind_live_metric(
+            root,
+            spec,
+            MeasurementSink(
+                path,
+                run_id=run.run_id,
+                attempt_id=binding.attempt_id,
+                stage_id=binding.stage_id,
+                metric_id=metric_id,
+            ),
+            MetricContext(inputs=inputs, artifacts=artifacts, params=params),
+        )
+    return handles
+```
+
+**File: `src/viper/_workers/metrics.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/metrics.py:main -->
+```python contract-target
+def main(argv: list[str] | None = None) -> int:
+    """Apply controls, invoke one metric, and emit its execution receipt."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments:
+        raise ValueError(
+            "metric worker accepts context through VIPER_METRIC_CONTEXT_PATH"
+        )
+    context_value = os.environ.get("VIPER_METRIC_CONTEXT_PATH")
+    if context_value is None:
+        raise ValueError("VIPER_METRIC_CONTEXT_PATH is required")
+    context = MetricWorkerContext.model_validate_json(
+        Path(context_value).read_text(encoding="utf-8")
+    )
+    root = context.repository_root.resolve()
+    started_at = datetime.now(UTC)
+    try:
+        if context.metric.metric_id not in context.stage.metric_ids:
+            raise ValueError("metric is absent from the selected stage")
+        if tuple(value.dependency for value in context.dependencies) != tuple(
+            context.metric.dependencies
+        ):
+            raise ValueError("metric dependency bindings differ from MetricSpec")
+        validate_metric_definition(root, context.metric)
+        implementation = load_metric(
+            root / context.metric.implementation.path,
+            context.metric.implementation.symbol,
+        )
+        if metric_definition(implementation).mode != "recompute":
+            raise ValueError("dedicated metric worker requires recompute mode")
+
+        initialization = apply_reproducibility(
+            context.run.seed,
+            context.run.reproducibility,
+        )
+        effective_environment = context.stage.environment or context.run.environment
+        python_environment = observe_python_environment()
+        if python_environment != effective_environment.python_environment:
+            raise ValueError("startup.python: installed Python environment differs")
+        execution_context = observe_execution(effective_environment)
+        input_paths = _validated_paths(root, context.input_paths)
+        artifact_paths = _validated_paths(root, context.artifact_paths)
+        for binding in context.dependencies:
+            path = (
+                input_paths[binding.dependency.name]
+                if binding.dependency.source == "input"
+                else artifact_paths[binding.dependency.name]
+            )
+            recorded = tuple((file.sha256, file.bytes) for file in binding.files)
+            if _path_identities(path) != recorded:
+                raise ValueError("metric dependency bytes differ from their receipt")
+        params = instantiate_parameters(
+            parameter_model_path(root, context.metric.parameter_model),
+            context.metric.parameter_model,
+            context.metric.params,
+            parameters.Metric,
+        )
+        metric_context = MetricContext(
+            inputs=input_paths,
+            artifacts=artifact_paths,
+            params=params,
+        )
+        with autocast_context(context.run.reproducibility):
+            value = invoke_metric(implementation, metric_context)
+        completed_at = datetime.now(UTC)
+        receipt = MetricExecutionReceipt(
+            run_id=context.run.run_id,
+            attempt_id=context.attempt_id,
+            metric_id=context.metric.metric_id,
+            stage_id=context.stage_id,
+            purpose=context.purpose,
+            implementation=context.metric.implementation,
+            parameter_model=context.metric.parameter_model,
+            params=context.metric.params,
+            dependencies=context.dependencies,
+            startup=initialization.receipt,
+            execution_context=execution_context,
+            python_environment=python_environment,
+            value=value,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+    except Exception as exc:
+        _write_result(
+            context.result_path,
+            MetricWorkerResult(error=f"{type(exc).__name__}: {exc}"),
+        )
+        return 1
+    _write_result(context.result_path, MetricWorkerResult(receipt=receipt))
+    return 0
+```
+
+**File: `tests/test_metric_provenance.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
+```python contract-target
+def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> None:
+    """Pass one custom parameter instance through both metric invocation paths."""
+    from pydantic import Field
+
+    from viper import parameters
+    from viper.metrics import (
+        MeasurementSink,
+        MetricContext,
+        MetricHandle,
+        invoke_metric,
+    )
+
+    class Scale(parameters.Metric):
+        factor: float = Field(gt=0)
+
+    received: list[Scale] = []
+
+    def scaled(context: MetricContext[Scale], value: float) -> float:
+        received.append(context.params)
+        return value * context.params.factor
+
+    params = Scale(factor=2.0)
+    context = MetricContext(params=params)
+    sink = MeasurementSink(
+        tmp_path / "scaled.jsonl",
+        run_id="01JABCDEFGHJKMNPQRSTVWXYZ0",
+        attempt_id=1,
+        stage_id="train",
+        metric_id="scaled",
+    )
+
+    assert MetricHandle(scaled, sink, context).record(3.0).value == 6.0
+    assert invoke_metric(scaled, context, 4.0) == 8.0
+    assert received == [params, params]
+```
+
+### P4-UMD-03 — stage objectives
+
+**File: `src/viper/metrics.py`**
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=src/viper/metrics.py:MetricObjectiveSpec -->
+```python contract-target
+class MetricObjectiveSpec(ProtocolModel):
+    """Persist one objective metric and its direction of improvement."""
+
+    metric_id: MetricId
+    direction: ObjectiveDirection
+```
+
+**File: `src/viper/stages.py`**
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:EmbedSpec -->
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:TrainSpec -->
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:EvaluateSpec -->
+```python contract-target
+class EmbedSpec(InternalSpec):
+    """Request construction of a project-defined embedding artifact."""
+
+    kind: Literal["embed"] = "embed"
+    objective: MetricObjectiveSpec | None = None
+    params: parameters.Embed
+
+    @model_validator(mode="after")
+    def validate_objective(self) -> EmbedSpec:
+        """Require a selected embedding objective to occur in metric_ids."""
+        if self.objective is not None and self.objective.metric_id not in self.metric_ids:
+            raise ValueError("embedding objective must occur in stage metric IDs")
+        return self
+
+
+class TrainSpec(InternalSpec):
+    """Request training with a measured minimization or maximization objective."""
+
+    kind: Literal["train"] = "train"
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    objective: MetricObjectiveSpec
+    params: parameters.Train
+
+    @model_validator(mode="after")
+    def validate_training_contract(self) -> TrainSpec:
+        """Require the objective and canonical terminal checkpoint contract."""
+        if self.objective.metric_id not in self.metric_ids:
+            raise ValueError("training objective must occur in stage metric IDs")
+        required_artifacts = {PARAMETERS, RESUME_STATE}
+        missing = required_artifacts - set(self.artifacts)
+        if missing:
+            raise ValueError(
+                "training stages must declare terminal checkpoint artifacts: "
+                + ", ".join(sorted(missing))
+            )
+        model_input = self.inputs.get(PARAMETERS_INPUT)
+        state_input = self.inputs.get(RESUME_STATE_INPUT)
+        if (model_input is None) != (state_input is None):
+            raise ValueError("checkpoint inputs must be declared together")
+        if model_input is None or state_input is None:
+            return self
+        if model_input.kind != state_input.kind:
+            raise ValueError("checkpoint inputs must use the same input kind")
+        if model_input.kind == "stored" and state_input.kind == "stored":
+            if any(
+                value.pointer.path.split("/")[1] != "models"
+                for value in (model_input, state_input)
+            ):
+                raise ValueError("stored checkpoint inputs must use inputs/models")
+        if model_input.kind == "future" and state_input.kind == "future":
+            if model_input.producer_stage_id != state_input.producer_stage_id:
+                raise ValueError("checkpoint inputs must select one producer stage")
+            if model_input.producer_artifact != PARAMETERS:
+                raise ValueError("parameters input must select parameters")
+            if state_input.producer_artifact != RESUME_STATE:
+                raise ValueError("resume_state input must select resume_state")
+        return self
+
+
+class EvaluateSpec(InternalSpec):
+    """Request prediction and recomputed metrics for one fixed evaluation."""
+
+    kind: Literal["evaluate"] = "evaluate"
+    evaluation_id: EvaluationId
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    objective: MetricObjectiveSpec
+    split_inputs: tuple[InputName, ...] = Field(min_length=1)
+    params: parameters.Evaluate
+
+    @model_validator(mode="after")
+    def validate_evaluation_contract(self) -> EvaluateSpec:
+        """Require the objective, fixed inputs, splits, and prediction artifact."""
+        if self.objective.metric_id not in self.metric_ids:
+            raise ValueError("evaluation objective must occur in stage metric IDs")
+        if len(set(self.metric_ids)) != len(self.metric_ids):
+            raise ValueError("evaluation metric IDs must be unique")
+        if len(set(self.split_inputs)) != len(self.split_inputs):
+            raise ValueError("evaluation split input names must be unique")
+        if PARAMETERS_INPUT not in self.inputs:
+            raise ValueError("evaluation requires a parameters input")
+        dataset = self.inputs.get(EVALUATION_DATASET_INPUT)
+        if dataset is None:
+            raise ValueError("evaluation requires an evaluation_dataset input")
+        if dataset.kind != "stored":
+            raise ValueError("evaluation_dataset must be a stored input")
+        if dataset.pointer.path.split("/")[1] != "datasets":
+            raise ValueError("evaluation_dataset must use inputs/datasets")
+        if dataset.data_role not in {"evaluation", "benchmark"}:
+            raise ValueError("evaluation_dataset has an invalid data role")
+        reserved = {PARAMETERS_INPUT, EVALUATION_DATASET_INPUT}
+        if reserved & set(self.split_inputs):
+            raise ValueError("evaluation splits must differ from reserved inputs")
+        if any(name not in self.inputs for name in self.split_inputs):
+            raise ValueError("evaluation split input is absent")
+        predictions = self.artifacts.get(PREDICTIONS)
+        if predictions is None:
+            raise ValueError("evaluation requires a predictions artifact")
+        return self
+```
+
+**File: `src/viper/_verification/plan.py`**
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=src/viper/_verification/plan.py:verify_stage_objectives -->
+```python contract-target
+def verify_stage_objectives(
+    stages: Mapping[StageId, BaseSpec],
+    experiment: ExperimentSpec,
+) -> None:
+    """Match every stage objective with one selected metric of an allowed mode."""
+    metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    for stage_id, stage in stages.items():
+        objective = getattr(stage, "objective", None)
+        if isinstance(stage, (TrainSpec, EvaluateSpec)) and objective is None:
+            raise VerificationError(f"stage {stage_id!r} requires an objective")
+        if objective is None:
+            continue
+        if objective.metric_id not in stage.metric_ids:
+            raise VerificationError(
+                f"objective of stage {stage_id!r} is absent from metric IDs"
+            )
+        metric = metrics.get(objective.metric_id)
+        if metric is None:
+            raise VerificationError(
+                f"objective of stage {stage_id!r} is absent from the experiment"
+            )
+        if isinstance(stage, TrainSpec) and metric.mode != "live":
+            raise VerificationError("training objectives require live metrics")
+        if isinstance(stage, EvaluateSpec) and metric.mode != "recompute":
+            raise VerificationError("evaluation objectives require recomputed metrics")
+```
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/_verification/plan.py:verify_run_plan_relationships -->
+```python contract-target
+def verify_run_plan_relationships(
+    run: RunSpec,
+    experiment: ExperimentSpec,
+    variant: VariantSpec,
+    benchmark: BenchmarkSpec | None,
+    stages: Mapping[StageId, BaseSpec],
+) -> None:
+    """Verify plan relationships spanning experiment, variant, and stages."""
+
+    def require_source_snapshot(location: GitFileRef, label: str) -> None:
+        if (
+            location.repository != run.source.repository
+            or location.commit != run.source.commit
+        ):
+            raise VerificationError(f"{label} must belong to the run source snapshot")
+
+    require_source_snapshot(run.environment.lockfile, "shared lockfile")
+
+    for stage_id, stage in stages.items():
+        if stage.environment is not None:
+            require_source_snapshot(
+                stage.environment.lockfile,
+                f"environment lockfile of stage {stage_id!r}",
+            )
+
+    prior_stages: dict[StageId, BaseSpec] = {}
+    prior_stages_by_id: dict[StageId, dict[StageId, BaseSpec]] = {}
+    for stage_reference in run.stages:
+        stage = stages[stage_reference.stage_id]
+        prior_stages_by_id[stage_reference.stage_id] = dict(prior_stages)
+        _verify_stage_data_roles(stage_reference.stage_id, stage, prior_stages)
+        prior_stages[stage_reference.stage_id] = stage
+
+    parameterized_stages = {
+        stage_id: stage
+        for stage_id, stage in stages.items()
+        if isinstance(stage, (BuildSpec, EmbedSpec, TrainSpec, EvaluateSpec))
+    }
+    variant_params = {stage.stage_id: stage for stage in variant.stage_params}
+
+    if set(variant_params) != set(parameterized_stages):
+        raise VerificationError(
+            "variant stage parameters must match all parameterized run stages"
+        )
+
+    for stage_id, stage in parameterized_stages.items():
+        selected = variant_params[stage_id]
+        if selected.kind != stage.kind or selected.params != stage.params:
+            raise VerificationError(
+                f"variant parameters do not match stage {stage_id!r}"
+            )
+
+    estimator_stage = stages.get(run.estimator.stage_id)
+    if not isinstance(estimator_stage, TrainSpec):
+        raise VerificationError("run estimator must select a training stage")
+
+    experiment_metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    for stage_id, stage in stages.items():
+        undeclared_metrics = set(stage.metric_ids) - set(experiment_metrics)
+        if undeclared_metrics:
+            raise VerificationError(f"stage {stage_id!r} selects undeclared metrics")
+
+    verify_stage_objectives(stages, experiment)
+
+    evaluation_stages = [
+        stage for stage in stages.values() if isinstance(stage, EvaluateSpec)
+    ]
+    expected_evaluation_role: DataRole = (
+        "benchmark" if benchmark is not None else "evaluation"
+    )
+    for evaluation in evaluation_stages:
+        dataset_input = evaluation.inputs["evaluation_dataset"]
+        assert isinstance(dataset_input, StoredInputRef)
+        if dataset_input.data_role != expected_evaluation_role:
+            raise VerificationError(
+                f"evaluation {evaluation.evaluation_id!r} must use "
+                f"{expected_evaluation_role!r} data_role"
+            )
+
+    for stage_id, stage in stages.items():
+        input_roles = (
+            _stage_input_roles(stage_id, stage, prior_stages_by_id[stage_id])
+            if isinstance(stage, InternalSpec)
+            else {}
+        )
+        for metric_id in stage.metric_ids:
+            metric = experiment_metrics[metric_id]
+            for dependency in metric.dependencies:
+                if dependency.source == "input":
+                    role = input_roles.get(dependency.name)
+                else:
+                    artifact = stage.artifacts.get(dependency.name)
+                    role = None if artifact is None else artifact.data_role
+                if role is None:
+                    raise VerificationError(
+                        f"metric {metric_id!r} selects absent {dependency.source} "
+                        f"dependency {dependency.name!r}"
+                    )
+                if role != dependency.required_data_role:
+                    raise VerificationError(
+                        f"metric {metric_id!r} dependency {dependency.name!r} "
+                        "data role differs from its stage declaration"
+                    )
+
+    if benchmark is None:
+        return
+
+    if len(evaluation_stages) != 1:
+        raise VerificationError("benchmark runs require exactly one evaluation stage")
+
+    evaluation = evaluation_stages[0]
+    model_input = evaluation.inputs[PARAMETERS_INPUT]
+    if not isinstance(model_input, FutureInputRef):
+        raise VerificationError(
+            "benchmark evaluation model must select the run estimator"
+        )
+    if (
+        model_input.producer_stage_id != run.estimator.stage_id
+        or model_input.producer_artifact != run.estimator.artifact_name
+    ):
+        raise VerificationError(
+            "benchmark evaluation model must select the run estimator"
+        )
+
+    if evaluation.evaluation_id != benchmark.evaluation_id:
+        raise VerificationError(
+            "evaluation stage ID does not match the benchmark evaluation ID"
+        )
+
+    dataset_input = evaluation.inputs["evaluation_dataset"]
+    if not isinstance(dataset_input, StoredInputRef):
+        raise VerificationError("benchmark evaluation dataset must be stored")
+    if dataset_input.pointer != benchmark.evaluation_dataset:
+        raise VerificationError(
+            "evaluation dataset does not match the benchmark specification"
+        )
+
+    if set(evaluation.split_inputs) != set(benchmark.splits):
+        raise VerificationError(
+            "evaluation split names do not match the benchmark specification"
+        )
+    for split_name, pointer in benchmark.splits.items():
+        split_input = evaluation.inputs[split_name]
+        if not isinstance(split_input, StoredInputRef):
+            raise VerificationError(f"benchmark split {split_name!r} must be stored")
+        if split_input.pointer != pointer:
+            raise VerificationError(
+                f"evaluation split {split_name!r} does not match the benchmark"
+            )
+
+    benchmark_metric_ids = {criterion.metric_id for criterion in benchmark.metrics}
+    if set(evaluation.metric_ids) != benchmark_metric_ids:
+        raise VerificationError(
+            "evaluation metrics do not match the benchmark specification"
+        )
+    for criterion in benchmark.metrics:
+        metric = experiment_metrics[criterion.metric_id]
+        if metric.mode != "recompute":
+            raise VerificationError(
+                f"benchmark criterion {criterion.metric_id!r} must select a "
+                "recomputed metric"
+            )
+```
+
+**File: `tests/test_verification.py`**
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction -->
+```python contract-target
+def test_stage_objectives_preserve_identity_and_direction() -> None:
+    """Accept matching objective modes and reject a mismatched training metric."""
+    from viper._verification.plan import verify_stage_objectives
+    from viper.experiments import ExperimentSpec
+    from viper.metrics import MetricObjectiveSpec, MetricSpec
+    from viper.stages import TrainSpec
+
+    stage = TrainSpec.model_construct(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
+    )
+    live = MetricSpec.model_construct(
+        metric_id="training_loss",
+        mode="live",
+    )
+    experiment = ExperimentSpec.model_construct(
+        metrics=(live,),
+    )
+
+    verify_stage_objectives({"train": stage}, experiment)
+    assert stage.objective.direction == "min"
+
+    recomputed = MetricSpec.model_construct(
+        metric_id="training_loss",
+        mode="recompute",
+    )
+    invalid = ExperimentSpec.model_construct(
+        metrics=(recomputed,),
+    )
+    with pytest.raises(VerificationError, match="training objectives require live"):
+        verify_stage_objectives({"train": stage}, invalid)
+```

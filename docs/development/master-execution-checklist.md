@@ -283,7 +283,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks drafted | Local input capture and identity verification |
-| [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
+| [Unified metric drafting](unified-metric-drafting.md) | Planned; Phase 4 code specified | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
 | [Direct Viper Cloud publication](remote-storage.md) | In progress | Destination-neutral publication, cloud references, retrieval, and restore |
@@ -1345,16 +1345,7 @@ python -m pytest \
 
 ## 11. Master Phase 4 — unified metric runtime and protocol
 
-<!-- contract-implementation: requirement=UMD-01 rule=metric.authoring.complete state=planned owner=src/viper/metrics.py:measure -->
-<!-- contract-verification: requirement=UMD-01 rule=metric.authoring.complete state=planned test=tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors -->
-<!-- contract-implementation: requirement=UMD-02 rule=metric.params.delivered state=planned owner=src/viper/metrics.py:invoke_metric -->
-<!-- contract-verification: requirement=UMD-02 rule=metric.params.delivered state=planned test=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
-<!-- contract-implementation: requirement=UMD-03 rule=metric.objective.enforced state=planned owner=src/viper/protocol.py:MetricObjectiveSpec -->
-<!-- contract-verification: requirement=UMD-03 rule=metric.objective.enforced state=planned test=tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction -->
-<!-- contract-implementation: requirement=RSP-03 rule=metric.reference.reused state=planned owner=src/viper/storage.py:resolve_metric_dependency -->
-<!-- contract-verification: requirement=RSP-03 rule=metric.reference.reused state=planned test=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
-
-**Depends on:** Master Phase 1.
+**Depends on:** Master Phases 1 and 3.
 
 **Contracts:** [Unified metric drafting](unified-metric-drafting.md) and
 [direct Viper Cloud publication](remote-storage.md)
@@ -1376,10 +1367,20 @@ parameter class and values reach the calculation in both modes.
 - [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
 - [ ] Add `viper.metrics.measure()`, `viper.metrics.min()`,
       `viper.metrics.max()`, `viper.benchmark.at_least()`, and
-      `viper.benchmark.at_most()`. <!-- implements: UMD-01 -->
+      `viper.benchmark.at_most()`.
+      <!-- pair-block: P4-UMD-01 -->
+      <!-- pair-block-contract: P4-UMD-01 contract=unified-metric-drafting.md -->
+      <!-- implements: UMD-01 -->
+      <!-- contract-implementation: requirement=UMD-01 rule=metric.authoring.complete state=planned owner=src/viper/metrics.py:measure -->
+      <!-- contract-verification: requirement=UMD-01 rule=metric.authoring.complete state=planned test=tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors -->
 - [ ] Derive the parameter class from `type(MetricDraft.params)`.
 - [ ] Write a mandatory `ParameterModelRef` to `MetricSpec` and
-      `MetricExecutionReceipt`. <!-- implements: UMD-02 -->
+      `MetricExecutionReceipt`.
+      <!-- pair-block: P4-UMD-02 -->
+      <!-- pair-block-contract: P4-UMD-02 contract=unified-metric-drafting.md -->
+      <!-- implements: UMD-02 -->
+      <!-- contract-implementation: requirement=UMD-02 rule=metric.params.delivered state=planned owner=src/viper/metrics.py:invoke_metric -->
+      <!-- contract-verification: requirement=UMD-02 rule=metric.params.delivered state=planned test=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
 
 ### 11.2 Runtime delivery
 
@@ -1398,7 +1399,11 @@ parameter class and values reach the calculation in both modes.
 - [ ] Replace `_publish_metric_dependency()` with snapshot-reference
       derivation. Join each selected `SnapshotFileRef` to its enclosing current,
       producer, or pointer-selected stage snapshot.
+      <!-- pair-block: P4-RSP-01 -->
+      <!-- pair-block-contract: P4-RSP-01 contract=remote-storage.md -->
       <!-- implements: RSP-03 -->
+      <!-- contract-implementation: requirement=RSP-03 rule=metric.reference.reused state=planned owner=src/viper/execution/_metric.py:_resolve_metric_dependencies -->
+      <!-- contract-verification: requirement=RSP-03 rule=metric.reference.reused state=planned test=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
 - [ ] Construct `ResolvedMetricDependency.files` from those snapshot locations
       and reuse the existing dependency payload.
 
@@ -1422,7 +1427,12 @@ A stored input follows its pointer to the producer snapshot.
 
 ### 11.3 Objectives and verification
 
-- [ ] Add `MetricObjectiveSpec`. <!-- implements: UMD-03 -->
+- [ ] Add `MetricObjectiveSpec`.
+      <!-- pair-block: P4-UMD-03 -->
+      <!-- pair-block-contract: P4-UMD-03 contract=unified-metric-drafting.md -->
+      <!-- implements: UMD-03 -->
+      <!-- contract-implementation: requirement=UMD-03 rule=metric.objective.enforced state=planned owner=src/viper/_verification/plan.py:verify_stage_objectives -->
+      <!-- contract-verification: requirement=UMD-03 rule=metric.objective.enforced state=planned test=tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction -->
 - [ ] Add required objectives to `TrainSpec` and `EvalSpec`.
 - [ ] Add an optional objective to `EmbedSpec`.
 - [ ] Put the objective metric first in `metric_ids`.
