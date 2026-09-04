@@ -411,6 +411,10 @@ def validate(
         return result
 
     # Pyright checks types first; CodeQL then observes G*.
+    original_path = os.environ.get("PATH")
+    os.environ["PATH"] = os.pathsep.join(
+        part for part in (str(python.parent), original_path) if part
+    )
     planned = _analyze(
         candidate,
         revision=revision,
@@ -455,6 +459,10 @@ def validate(
         os.environ.pop("PYTHONPATH", None)
     else:
         os.environ["PYTHONPATH"] = original_pythonpath
+    if original_path is None:
+        os.environ.pop("PATH", None)
+    else:
+        os.environ["PATH"] = original_path
     return result
 
 
@@ -482,7 +490,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         root=args.root.resolve(),
         blocks=tuple(args.block),
         codeql=args.codeql.resolve(),
-        python=args.python.resolve(),
+        python=Path(os.path.abspath(args.python)),
         cache=args.cache.resolve(),
         results=args.results.resolve(),
     )

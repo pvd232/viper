@@ -529,6 +529,42 @@ def test_pre_pairing_command_loads() -> None:
         assert checked.returncode == 0, checked.stderr
 
 
+def test_pre_pairing_keeps_virtual_environment_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep an invoked Python symlink instead of replacing it with its target."""
+    executable = tmp_path / "environment/bin/python"
+    executable.parent.mkdir(parents=True)
+    executable.symlink_to(sys.executable)
+    captured: dict[str, Path] = {}
+
+    def fake_validate(**kwargs: object) -> dict[str, object]:
+        """Capture the executable passed through the command boundary."""
+        python = kwargs["python"]
+        assert isinstance(python, Path)
+        captured["python"] = python
+        return {"passed": True, "blocks": ("P0-SIG-01",)}
+
+    monkeypatch.setattr(preflight, "validate", fake_validate)
+    monkeypatch.setattr(preflight.shutil, "which", lambda _: "/usr/bin/true")
+
+    assert (
+        preflight.main(
+            (
+                "--block",
+                "P0-SIG-01",
+                "--python",
+                str(executable),
+                "--results",
+                str(tmp_path / "results"),
+            )
+        )
+        == 0
+    )
+    assert captured["python"] == executable.absolute()
+
+
 def _schedule_fixture() -> tuple[ContractTraceabilityGraph, SourceGraph, SourceGraph]:
     """Build four blocks with one dependency and one shared-file conflict."""
     declaration = _declaration_ref()
