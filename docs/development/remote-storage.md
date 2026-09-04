@@ -1527,7 +1527,7 @@ tests = [
     "tests/test_metric_provenance.py:test_metric_dependency_rejects_republished_payload",
 ]
 gate = "python -m pytest tests/test_metric_provenance.py -q"
-depends_on = ["P3-EIR-03"]
+depends_on = ["P3-EIR-03", "P4-SCH-03"]
 ```
 
 **Context:** Recomputed metrics currently read dependency paths and publish the

@@ -40,7 +40,16 @@
         "SIG-05",
         "SIG-06"
       ],
-      "sha256": "601b07bdbd8a72ec6436f8e32cbe0e793bde055a48abb652433fba2cefe07ac4"
+      "sha256": "41ea3f70093b60c6b036554006b5c965772a8230d15d5d741cf7f49e30555941"
+    },
+    {
+      "path": "docs/development/pair-block-scheduling.md",
+      "requirement_ids": [
+        "SCH-01",
+        "SCH-02",
+        "SCH-03"
+      ],
+      "sha256": "e4bd10d6c55f40d3c90e02def01de5e0f37bb775980a29fdd8547fa75884988e"
     },
     {
       "path": "docs/development/child-process-launching.md",
@@ -83,7 +92,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "4b2cce794441f786213aa778d527baa15feb40becce45e25bd638ca4324a8ce9"
+      "sha256": "8d271d50bd07a44a58c799b0533f060ec2da52484a647111d74355305e60e140"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -121,7 +130,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "4c2b160b44a95d751710f59d1fd674a7a74f378faef5e3a3557910b0646ba0a8"
+      "sha256": "61701750a6cdcb57319dad4f9355a70200dfc432b07796c9ddad9c116fdcc24a"
     },
     {
       "path": "docs/development/experiment-expansion.md",

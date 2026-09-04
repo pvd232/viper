@@ -280,6 +280,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
+| [PairBlock scheduling](pair-block-scheduling.md) | Planned | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks drafted | Local input capture and identity verification |
@@ -303,6 +304,7 @@ The contracts share models. One contract owns each shared decision:
 | Public API and verification symbols are implemented in the modules callers import | Public module ownership |
 | Requirements, targets, rule edges, tests, gates, and dependency order form one closed implementation plan | Contract Traceability |
 | Pinned CodeQL observations report policy-selected direct baseline dependents and prove whether realized source changes match that closed plan | System Impact Check |
+| Explicit dependencies, planned source edges, and shared-file writes determine safe PairBlock execution waves | PairBlock scheduling |
 | Repository-owned child processes use the spawn-safe facade on macOS | Child-process launching |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
 | HTTP root is `ResolvedHttpRetrieval` | Download retrieval artifacts |
@@ -874,6 +876,7 @@ The public records and checks live in `src/viper/system_impact.py`.
 The [System Impact Check](system-impact-compiler.md#10-implementation-order)
 defines the exact six blocks. It consumes the closed CTG produced by
 `P0-CRT-07`; it does not own plan construction.
+
 ### 7.5 Focused proof
 
 - [x] In `tests/test_public_api.py`, require every API registry callable and
@@ -1347,11 +1350,45 @@ python -m pytest \
 
 **Depends on:** Master Phases 1 and 3.
 
-**Contracts:** [Unified metric drafting](unified-metric-drafting.md) and
+**Contracts:** [PairBlock scheduling](pair-block-scheduling.md),
+[Unified metric drafting](unified-metric-drafting.md), and
 [direct Viper Cloud publication](remote-storage.md)
 
 **Outcome:** One configured metric can run live or after a stage. Its frozen
 parameter class and values reach the calculation in both modes.
+
+### 11.0 PairBlock scheduling
+
+- [ ] Compose selected target chains into one terminal planned source tree.
+      Require repeated writers of one symbol to have an explicit dependency
+      path before CodeQL analyzes the planned source.
+      <!-- pair-block: P4-SCH-01 -->
+      <!-- pair-block-contract: P4-SCH-01 contract=pair-block-scheduling.md -->
+      <!-- implements: SCH-01 -->
+      <!-- verifies: SCH-01 -->
+      <!-- contract-implementation: requirement=SCH-01 rule=schedule.plan.materialized state=planned owner=src/viper/scheduling.py:materialize_plan -->
+      <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=planned test=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
+      <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=planned test=tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations -->
+- [ ] Project declared dependencies, baseline and planned CodeQL edges, and
+      shared-file writes onto the selected PairBlocks.
+      <!-- pair-block: P4-SCH-02 -->
+      <!-- pair-block-contract: P4-SCH-02 contract=pair-block-scheduling.md -->
+      <!-- implements: SCH-02 -->
+      <!-- verifies: SCH-02 -->
+      <!-- contract-implementation: requirement=SCH-02 rule=schedule.graph.closed state=planned owner=src/viper/scheduling.py:build_block_graph -->
+      <!-- contract-verification: requirement=SCH-02 rule=schedule.graph.closed state=planned test=tests/test_system_impact.py:test_block_graph_combines_dependencies_and_write_conflicts -->
+- [ ] Condense graph cycles and emit deterministic execution waves. Run the
+      focused scheduler cases in `tests/test_system_impact.py`.
+      <!-- pair-block: P4-SCH-03 -->
+      <!-- pair-block-contract: P4-SCH-03 contract=pair-block-scheduling.md -->
+      <!-- implements: SCH-03 -->
+      <!-- verifies: SCH-03 -->
+      <!-- contract-implementation: requirement=SCH-03 rule=schedule.waves.complete state=planned owner=src/viper/scheduling.py:schedule_blocks -->
+      <!-- contract-verification: requirement=SCH-03 rule=schedule.waves.complete state=planned test=tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves -->
+
+The [PairBlock scheduling contract](pair-block-scheduling.md) owns the complete
+code and focused gates. Its generated waves advise checklist order; a reviewed
+checklist revision remains the execution authority.
 
 ### 11.1 Definitions and drafts
 

@@ -1806,7 +1806,7 @@ targets = [
 ]
 tests = ["tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors"]
 gate = "python -m pytest tests/test_metric_interface.py -q"
-depends_on = []
+depends_on = ["P4-SCH-03"]
 ```
 
 **Context:** Metrics currently expose decorator metadata but require callers to
