@@ -581,7 +581,7 @@ One contract session is the default guided boundary:
 1. Synchronize the repository and record the baseline commit.
 2. Compile the contract's starting PairBlocks and select its remaining work.
 3. Materialize the selected PairBlocks over that clean baseline with
-   `python tools/check_plan.py --block BLOCK_ID --results
+   `python tools/plan/check.py --block BLOCK_ID --results
    .viper/checks/BLOCK_ID`. The command resolves the repository Python and
    CodeQL from the login environment. Start source editing only after Pyright
    and the same-identity source-graph check pass. Keep a failure as a contract
@@ -817,7 +817,9 @@ checklist owns their order and completion state.
 ### 7.4 System impact check
 
 Production source analysis lives in `src/viper/_system_impact/codeql.py`.
-The public records and checks live in `src/viper/system_impact.py`.
+Public records live in `src/viper/system_impact/models.py`; planning lives in
+`src/viper/system_impact/plan.py`; checking and acceptance live in
+`src/viper/system_impact/check.py`.
 
 - [x] Add `CodeQLIdentity`, `SourceSnapshot`, `CodeQLReceipt`, `SourceNode`,
       `SourceEdge`, and `SourceGraph` with canonical serialization.
@@ -825,9 +827,9 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- pair-block-contract: P0-SIG-01 contract=system-impact-compiler.md -->
       <!-- implements: SIG-01, SIG-05 -->
       <!-- verifies: SIG-01 -->
-      <!-- contract-implementation: requirement=SIG-01 rule=system.source.canonical state=implemented owner=src/viper/system_impact.py:SourceGraph -->
+      <!-- contract-implementation: requirement=SIG-01 rule=system.source.canonical state=implemented owner=src/viper/system_impact/models.py:SourceGraph -->
       <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=implemented test=tests/test_system_impact.py:test_source_graph_is_canonical -->
-      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.identity state=implemented owner=src/viper/system_impact.py:CodeQLIdentity -->
+      <!-- contract-implementation: requirement=SIG-05 rule=system.codeql.identity state=implemented owner=src/viper/system_impact/models.py:CodeQLIdentity -->
 - [x] Analyze one immutable source snapshot with the pinned query pack and
       retain the command, identity, source digest, optional commit, exit status,
       database digest, and decoded-row digest.
@@ -843,7 +845,7 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- pair-block-contract: P0-SIG-03 contract=system-impact-compiler.md -->
       <!-- implements: SIG-02 -->
       <!-- verifies: SIG-02 -->
-      <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=implemented owner=src/viper/system_impact.py:inspect_plan -->
+      <!-- contract-implementation: requirement=SIG-02 rule=system.plan.resolved state=implemented owner=src/viper/system_impact/plan.py:inspect_plan -->
       <!-- contract-verification: requirement=SIG-01 rule=system.source.canonical state=implemented test=tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes -->
       <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=implemented test=tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates -->
       <!-- contract-verification: requirement=SIG-02 rule=system.plan.resolved state=implemented test=tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents -->
@@ -859,8 +861,8 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- pair-block-contract: P0-SIG-04 contract=system-impact-compiler.md -->
       <!-- implements: SIG-03 -->
       <!-- verifies: SIG-03 -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.realized state=implemented owner=src/viper/system_impact.py:check_plan -->
-      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=implemented owner=src/viper/system_impact.py:accept -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.realized state=implemented owner=src/viper/system_impact/check.py:check_plan -->
+      <!-- contract-implementation: requirement=SIG-03 rule=system.plan.closed state=implemented owner=src/viper/system_impact/check.py:accept -->
       <!-- contract-verification: requirement=SIG-03 rule=system.plan.realized state=implemented test=tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change -->
       <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=implemented test=tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies -->
       <!-- contract-verification: requirement=SIG-03 rule=system.plan.closed state=implemented test=tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan -->
@@ -887,9 +889,9 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- pair-block-contract: P0-SIG-07 contract=system-impact-compiler.md -->
       <!-- implements: SIG-07 -->
       <!-- verifies: SIG-07 -->
-      <!-- contract-implementation: requirement=SIG-07 rule=system.one_hop.recorded state=implemented owner=src/viper/_system_impact/check.py:check_plan -->
+      <!-- contract-implementation: requirement=SIG-07 rule=system.one_hop.recorded state=implemented owner=src/viper/system_impact/check.py:check_plan -->
       <!-- contract-verification: requirement=SIG-07 rule=system.one_hop.recorded state=implemented test=tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors -->
-      <!-- contract-implementation: requirement=SIG-07 rule=system.candidate.typed state=implemented owner=tools/check_plan.py:validate -->
+      <!-- contract-implementation: requirement=SIG-07 rule=system.candidate.typed state=implemented owner=tools/plan/check.py:validate -->
       <!-- contract-verification: requirement=SIG-07 rule=system.candidate.typed state=implemented test=tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller -->
 
 The [System Impact Check](system-impact-compiler.md#10-implementation-order)

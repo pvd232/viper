@@ -156,7 +156,7 @@ imported name that disappears without its own removal target. Version 1
 rejects nested additions because `ContractTarget` does not yet carry a
 class-body insertion point.
 
-Before Pyright, `tools/check_plan.py` runs Ruff and imports every added or
+Before Pyright, `tools/plan/check.py` runs Ruff and imports every added or
 changed `viper` module in its own isolated process. An import failure records
 the module and traceback under `stage="imports"`.
 
@@ -280,43 +280,44 @@ targets = [
     "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
-    "tools/check_plan.py:annotations",
-    "tools/check_plan.py:argparse",
-    "tools/check_plan.py:hashlib",
-    "tools/check_plan.py:json",
-    "tools/check_plan.py:os",
-    "tools/check_plan.py:platform",
-    "tools/check_plan.py:shutil",
-    "tools/check_plan.py:sys",
-    "tools/check_plan.py:Sequence",
-    "tools/check_plan.py:Path",
-    "tools/check_plan.py:Any",
-    "tools/check_plan.py:ROOT",
-    "tools/check_plan.py:_IMPORT_SCRIPT",
-    "tools/check_plan.py:impact",
-    "tools/check_plan.py:subprocess",
-    "tools/check_plan.py:ContractTraceabilityGraph",
-    "tools/check_plan.py:PairBlockId",
-    "tools/check_plan.py:_implemented_pair_blocks",
-    "tools/check_plan.py:compile_contract_plan",
-    "tools/check_plan.py:compile_contract_traceability",
-    "tools/check_plan.py:_tree_digest",
-    "tools/check_plan.py:analyze_source",
-    "tools/check_plan.py:source_digest",
-    "tools/check_plan.py:ScheduleError",
-    "tools/check_plan.py:materialize_plan",
-    "tools/check_plan.py:select_blocks",
-    "tools/check_plan.py:PlanValidationError",
-    "tools/check_plan.py:_run",
-    "tools/check_plan.py:_git_revision",
-    "tools/check_plan.py:_contracts",
-    "tools/check_plan.py:_identity",
-    "tools/check_plan.py:_analyze",
-    "tools/check_plan.py:_unconsumed_private_owners",
-    "tools/check_plan.py:_changed_modules",
-    "tools/check_plan.py:_import_failure",
-    "tools/check_plan.py:validate",
-    "tools/check_plan.py:main",
+    "tools/plan/check.py:annotations",
+    "tools/plan/check.py:argparse",
+    "tools/plan/check.py:hashlib",
+    "tools/plan/check.py:json",
+    "tools/plan/check.py:os",
+    "tools/plan/check.py:platform",
+    "tools/plan/check.py:shutil",
+    "tools/plan/check.py:sys",
+    "tools/plan/check.py:Sequence",
+    "tools/plan/check.py:Path",
+    "tools/plan/check.py:Any",
+    "tools/plan/check.py:ROOT",
+    "tools/plan/check.py:_IMPORT_SCRIPT",
+    "tools/plan/check.py:impact",
+    "tools/plan/check.py:check_plan",
+    "tools/plan/check.py:subprocess",
+    "tools/plan/check.py:ContractTraceabilityGraph",
+    "tools/plan/check.py:PairBlockId",
+    "tools/plan/check.py:_implemented_pair_blocks",
+    "tools/plan/check.py:compile_contract_plan",
+    "tools/plan/check.py:compile_contract_traceability",
+    "tools/plan/check.py:_tree_digest",
+    "tools/plan/check.py:analyze_source",
+    "tools/plan/check.py:source_digest",
+    "tools/plan/check.py:ScheduleError",
+    "tools/plan/check.py:materialize_plan",
+    "tools/plan/check.py:select_blocks",
+    "tools/plan/check.py:PlanValidationError",
+    "tools/plan/check.py:_run",
+    "tools/plan/check.py:_git_revision",
+    "tools/plan/check.py:_contracts",
+    "tools/plan/check.py:_identity",
+    "tools/plan/check.py:_analyze",
+    "tools/plan/check.py:_unconsumed_private_owners",
+    "tools/plan/check.py:_changed_modules",
+    "tools/plan/check.py:_import_failure",
+    "tools/plan/check.py:validate",
+    "tools/plan/check.py:main",
 ]
 tests = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
@@ -431,7 +432,7 @@ from ._contract_traceability import (
     TargetAction,
 )
 from ._system_impact.source import declaration_payload as _declaration_payload
-from .system_impact import SourceGraph
+from .system_impact.models import SourceGraph
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:ScheduleError -->
@@ -1293,7 +1294,7 @@ def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> 
 def test_pre_pairing_modules_document_every_operation() -> None:
     """Require docstrings on public, private, and nested pre-pairing operations."""
     missing: list[str] = []
-    for relative_path in ("src/viper/scheduling.py", "tools/check_plan.py"):
+    for relative_path in ("src/viper/scheduling.py", "tools/plan/check.py"):
         tree = ast.parse(Path(relative_path).read_text(), filename=relative_path)
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -1308,7 +1309,7 @@ def test_pre_pairing_modules_document_every_operation() -> None:
 def test_pre_pairing_command_loads() -> None:
     """Load the pre-pairing command without relying on prior package imports."""
     checked = run_subprocess(
-        (sys.executable, "tools/check_plan.py", "--help"),
+        (sys.executable, "tools/plan/check.py", "--help"),
         cwd=Path(__file__).parents[1],
         check=False,
         capture_output=True,
@@ -1348,45 +1349,46 @@ def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None
     assert "RuntimeError: broken candidate" in failure["error"]
 ```
 
-**File: `tools/check_plan.py`**
+**File: `tools/plan/check.py`**
 
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:annotations -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:argparse -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:hashlib -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:json -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:os -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:platform -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:shutil -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:sys -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Sequence -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Path -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Any -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ROOT -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_IMPORT_SCRIPT -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:impact -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:subprocess -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ContractTraceabilityGraph -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:PairBlockId -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_implemented_pair_blocks -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:compile_contract_plan -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:compile_contract_traceability -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_tree_digest -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:analyze_source -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:source_digest -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ScheduleError -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:materialize_plan -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:select_blocks -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:PlanValidationError -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_run -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_git_revision -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_contracts -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_identity -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_analyze -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_unconsumed_private_owners -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_changed_modules -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_import_failure -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:validate -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:main -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:annotations -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:argparse -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:hashlib -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:json -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:os -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:platform -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:shutil -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:sys -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:Sequence -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:Path -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:Any -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:ROOT -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_IMPORT_SCRIPT -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:impact -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:check_plan -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:subprocess -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:ContractTraceabilityGraph -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:PairBlockId -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_implemented_pair_blocks -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:compile_contract_plan -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:compile_contract_traceability -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_tree_digest -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:analyze_source -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:source_digest -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:ScheduleError -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:materialize_plan -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:select_blocks -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:PlanValidationError -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_run -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_git_revision -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_contracts -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_identity -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_analyze -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_unconsumed_private_owners -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_changed_modules -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_import_failure -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:validate -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:main -->
 ```python contract-target
 """Check selected PairBlocks before editing source."""
 
@@ -1403,38 +1405,34 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-
-_IMPORT_SCRIPT = (
-    "import importlib\n"
-    "import sys\n"
-    "sys.path.insert(0, sys.argv[1])\n"
-    "importlib.import_module(sys.argv[2])\n"
-)
-
-# The private CodeQL adapter imports the public models while loading.
-import viper.system_impact as impact  # noqa: E402
-
-from viper import _subprocess as subprocess  # noqa: E402
-from viper._contract_traceability import (  # noqa: E402
+import viper.system_impact.models as impact
+from viper import _subprocess as subprocess
+from viper._contract_traceability import (
     ContractTraceabilityGraph,
     PairBlockId,
     _implemented_pair_blocks,
     compile_contract_plan,
     compile_contract_traceability,
 )
-from viper._system_impact.codeql import (  # noqa: E402
+from viper._system_impact.codeql import (
     _tree_digest,
     analyze_source,
     source_digest,
 )
-from viper.scheduling import (  # noqa: E402
+from viper.system_impact.check import check_plan
+from viper.scheduling import (
     ScheduleError,
     materialize_plan,
     select_blocks,
 )
 
+ROOT = Path(__file__).parents[2]
+_IMPORT_SCRIPT = (
+    "import importlib\n"
+    "import sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "importlib.import_module(sys.argv[2])\n"
+)
 
 class PlanValidationError(RuntimeError):
     """Report a failed pre-pairing plan check."""
@@ -1819,7 +1817,7 @@ def validate(
         frozenset(selected),
         planned,
     )
-    checked = impact.check_plan(
+    checked = check_plan(
         root=candidate,
         baseline_root=root,
         traceability=traceability,

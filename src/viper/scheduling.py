@@ -19,7 +19,7 @@ from ._contract_traceability import (
 )
 from ._schema import SHA256, NonEmptyStr, ProtocolModel
 from ._system_impact.source import declaration_payload as _declaration_payload
-from .system_impact import SourceGraph
+from .system_impact.models import SourceGraph
 
 ScheduleEdgeKind = Literal["declared", "source", "write_conflict"]
 

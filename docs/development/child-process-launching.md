@@ -244,7 +244,7 @@ targets = [
     "src/viper/runtime.py:subprocess",
     "src/viper/authoring.py:subprocess",
     "src/viper/_system_impact/codeql.py:subprocess",
-    "src/viper/_system_impact/check.py:subprocess",
+    "src/viper/system_impact/check.py:subprocess",
     "src/viper/_verification/storage.py:subprocess",
     "src/viper/execution/_source.py:subprocess",
     "src/viper/execution/_stage.py:subprocess",
@@ -733,9 +733,9 @@ import viper._subprocess as subprocess
 import viper._subprocess as subprocess
 ```
 
-**File: `src/viper/_system_impact/check.py`**
+**File: `src/viper/system_impact/check.py`**
 
-<!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/_system_impact/check.py:subprocess -->
+<!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/system_impact/check.py:subprocess -->
 ```python contract-target
 import viper._subprocess as subprocess
 ```

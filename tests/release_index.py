@@ -48,7 +48,7 @@ def fetch_published_hashes(index: str, project: str, version: str) -> dict[str, 
         f"{index.rstrip('/')}/pypi/{quote(project, safe='')}/"
         f"{quote(version, safe='')}/json"
     )
-    with urlopen(endpoint, timeout=30) as response:  # noqa: S310
+    with urlopen(endpoint, timeout=30) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):
         raise ValueError("package-index response must be an object")

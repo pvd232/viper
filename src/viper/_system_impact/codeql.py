@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import viper._subprocess as subprocess
 
-from ..system_impact import (
+from ..system_impact.models import (
     CodeQLIdentity,
     CodeQLReceipt,
     EdgeKind,
@@ -112,7 +112,7 @@ def _database_is_reusable(
 
 
 def _run(command: Sequence[str], *, cwd: Path) -> tuple[bytes, bytes]:
-    completed = subprocess.run(  # noqa: S603 - executable is an explicit input.
+    completed = subprocess.run(
         tuple(command),
         cwd=cwd,
         check=False,

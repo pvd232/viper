@@ -391,49 +391,44 @@ purple for proposed or generated records, and red for an unsupported gap.
 
 ## 4. Models
 
-<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:CodeQLIdentity -->
-<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceSnapshot -->
-<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:CodeQLReceipt -->
-<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceNode -->
-<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceEdge -->
-<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceGraph -->
-<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=update target=src/viper/system_impact.py:CodeQLReceipt -->
-<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/system_impact.py:SourceNodeKind -->
-<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/system_impact.py:SourceNode -->
-<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/system_impact.py:SourceGraph -->
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:ChangeKind -->
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:Impact -->
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:ResolvedContractTarget -->
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:PlanInspection -->
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact.py:inspect_plan -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:CheckState -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:TargetCheck -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:GateCheck -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:PlanCheck -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:Acceptance -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:check_plan -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact.py:accept -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=update target=src/viper/system_impact.py:__all__ -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact/models.py:CodeQLIdentity -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact/models.py:SourceSnapshot -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact/models.py:CodeQLReceipt -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact/models.py:SourceNode -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact/models.py:SourceEdge -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-01 action=add target=src/viper/system_impact/models.py:SourceGraph -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=update target=src/viper/system_impact/models.py:CodeQLReceipt -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/system_impact/models.py:SourceNodeKind -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/system_impact/models.py:SourceNode -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/system_impact/models.py:SourceGraph -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact/models.py:ChangeKind -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact/models.py:Impact -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact/models.py:ResolvedContractTarget -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact/models.py:PlanInspection -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/models.py:CheckState -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/models.py:TargetCheck -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/models.py:GateCheck -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/models.py:PlanCheck -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/models.py:Acceptance -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=update target=src/viper/system_impact/models.py:__all__ -->
 
 ```python contract-target
-"""Define public source-analysis records for System Impact checks."""
+"""Define public records for System Impact checks."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from ._contract_traceability import (
+from .._contract_traceability import (
     ContractTarget,
-    ContractTraceabilityGraph,
     PairBlockId,
     RepoSymbolRef,
 )
-from ._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
+from .._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 NodeId = NonEmptyStr
@@ -784,62 +779,6 @@ class PlanInspection(ProtocolModel):
     )
 
 
-def inspect_plan(
-    *,
-    plan_root: Path,
-    baseline_root: Path,
-    traceability: ContractTraceabilityGraph,
-    block_ids: tuple[PairBlockId, ...],
-    baseline: SourceGraph,
-) -> PlanInspection:
-    """Resolve selected targets and report their policy-selected direct impact."""
-    from ._system_impact.plan import inspect_plan as _inspect_plan
-
-    return _inspect_plan(
-        plan_root=plan_root,
-        baseline_root=baseline_root,
-        traceability=traceability,
-        block_ids=block_ids,
-        baseline=baseline,
-    )
-
-
-def check_plan(
-    *,
-    root: Path,
-    baseline_root: Path,
-    traceability: ContractTraceabilityGraph,
-    block_ids: tuple[PairBlockId, ...],
-    baseline: SourceGraph,
-    realized: SourceGraph,
-    gate_timeout_seconds: float = 900.0,
-) -> PlanCheck:
-    """Check selected PairBlocks against independently observed source graphs."""
-    from ._system_impact.check import check_plan as _check_plan
-
-    return _check_plan(
-        root=root,
-        baseline_root=baseline_root,
-        traceability=traceability,
-        block_ids=block_ids,
-        baseline=baseline,
-        realized=realized,
-        gate_timeout_seconds=gate_timeout_seconds,
-    )
-
-
-def accept(
-    *,
-    root: Path,
-    check: PlanCheck,
-    revision: CommitId,
-) -> Acceptance:
-    """Bind a passing plan check to identical committed source and plan bytes."""
-    from ._system_impact.check import accept as _accept
-
-    return _accept(root=root, check=check, revision=revision)
-
-
 __all__ = [
     "Acceptance",
     "CodeQLIdentity",
@@ -860,9 +799,6 @@ __all__ = [
     "SourceNodeKind",
     "SourceSnapshot",
     "TargetCheck",
-    "accept",
-    "check_plan",
-    "inspect_plan",
 ]
 ```
 
@@ -1270,16 +1206,18 @@ the Phase 0 checker returns the complete records to its caller.
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 | `system.source.writes` <!-- verifier-rule: system.source.writes requirement=SIG-06 --> | The checked-in CodeQL pack emits `writes` edges for a function writing a declared module variable and a method writing a declared class attribute; every emitted edge retains the assignment location. |
 | `system.one_hop.recorded` <!-- verifier-rule: system.one_hop.recorded requirement=SIG-07 --> | `check_plan()` derives the exact added and removed policy-selected one-hop edges from the valid baseline and materialized source graphs; the realized-delta check rejects changed declarations outside the selected PairBlocks. |
-| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/check_plan.py:validate` runs Pyright against the fully materialized production source and stops before candidate CodeQL analysis or PairBlock gates when static interfaces are incompatible. PairBlock gates own test behavior. |
+| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/plan/check.py:validate` runs Pyright against the fully materialized production source and stops before candidate CodeQL analysis or PairBlock gates when static interfaces are incompatible. PairBlock gates own test behavior. |
 
 ## 8. Propagation
 
 | Surface | Required change |
 | --- | --- |
-| `src/viper/system_impact.py` | Add the public records, baseline inspection, realized-plan checking, and post-commit `accept()` operation. |
+| `src/viper/system_impact/models.py` | Define the public System Impact records. |
+| `src/viper/system_impact/plan.py` | Resolve contract targets against the baseline graph. |
+| `src/viper/system_impact/check.py` | Check the realized plan and bind it to its commit. |
 | `src/viper/_system_impact/codeql.py` | Create and query CodeQL databases and return validated canonical rows. |
 | `src/viper/_system_impact/source.py` | Resolve qualified Python symbols, extract exact UTF-8 declaration bytes including decorators, and implement `classify_target_change()`. |
-| `tools/check_plan.py` | Run Pyright against the materialized candidate before candidate CodeQL analysis and restore the caller's `PYTHONPATH` after the check. |
+| `tools/plan/check.py` | Run Pyright against the materialized candidate before candidate CodeQL analysis and restore the caller's `PYTHONPATH` after the check. |
 | `tests/test_system_impact.py` | Cover exact declaration extraction, change classification, typed one-hop impact selection, action transitions, unexpected changes, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
 | `docs/development/contract-traceability.md` | Make `CRT-06` the sole owner of targets, PairBlocks, rule-block joins, and plan closure. |
 | `docs/development/master-execution-checklist.md` | Replace the old graph-transformation blocks with the six bounded blocks below. |
@@ -1339,7 +1277,7 @@ PairBlock gate runs.
 ```toml pair-block
 id = "P0-SIG-01"
 requirements = ["SIG-01", "SIG-05"]
-targets = ["src/viper/system_impact.py:CodeQLIdentity", "src/viper/system_impact.py:SourceSnapshot", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceEdge", "src/viper/system_impact.py:SourceGraph"]
+targets = ["src/viper/system_impact/models.py:CodeQLIdentity", "src/viper/system_impact/models.py:SourceSnapshot", "src/viper/system_impact/models.py:CodeQLReceipt", "src/viper/system_impact/models.py:SourceNode", "src/viper/system_impact/models.py:SourceEdge", "src/viper/system_impact/models.py:SourceGraph"]
 tests = ["tests/test_system_impact.py:test_source_graph_is_canonical"]
 gate = "python -m pytest tests/test_system_impact.py -k source_graph_is_canonical -q"
 depends_on = ["P0-CRT-07"]
@@ -1349,7 +1287,7 @@ depends_on = ["P0-CRT-07"]
 ```toml pair-block
 id = "P0-SIG-02"
 requirements = ["SIG-01", "SIG-05"]
-targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:_node_span", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNodeKind", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
+targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:_node_span", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact/models.py:CodeQLReceipt", "src/viper/system_impact/models.py:SourceNodeKind", "src/viper/system_impact/models.py:SourceNode", "src/viper/system_impact/models.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
 assets = ["tools/codeql/viper-python-impact/qlpack.yml", "tools/codeql/viper-python-impact/codeql-pack.lock.yml", "tools/codeql/viper-python-impact/source-facts.qls", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
 tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
 gate = "python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack or node_span' -q"
@@ -1360,7 +1298,7 @@ depends_on = ["P0-SIG-01"]
 ```toml pair-block
 id = "P0-SIG-03"
 requirements = ["SIG-01", "SIG-02"]
-targets = ["src/viper/_system_impact/source.py:SourceDeclarationError", "src/viper/_system_impact/source.py:extract_declaration_bytes", "src/viper/_system_impact/source.py:classify_target_change", "src/viper/_system_impact/plan.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/plan.py:PlanInspectionError", "src/viper/_system_impact/plan.py:inspect_plan", "src/viper/system_impact.py:ChangeKind", "src/viper/system_impact.py:Impact", "src/viper/system_impact.py:ResolvedContractTarget", "src/viper/system_impact.py:PlanInspection", "src/viper/system_impact.py:inspect_plan"]
+targets = ["src/viper/_system_impact/source.py:SourceDeclarationError", "src/viper/_system_impact/source.py:extract_declaration_bytes", "src/viper/_system_impact/source.py:classify_target_change", "src/viper/system_impact/plan.py:IMPACT_EDGE_KINDS_V1", "src/viper/system_impact/plan.py:PlanInspectionError", "src/viper/system_impact/plan.py:inspect_plan", "src/viper/system_impact/models.py:ChangeKind", "src/viper/system_impact/models.py:Impact", "src/viper/system_impact/models.py:ResolvedContractTarget", "src/viper/system_impact/models.py:PlanInspection"]
 tests = ["tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes", "tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates", "tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents", "tests/test_system_impact.py:test_removed_target_reports_all_represented_direct_dependents", "tests/test_system_impact.py:test_unclassified_change_uses_conservative_one_hop_edges"]
 gate = "python -m pytest tests/test_system_impact.py -k 'declaration_extraction or change_classifier or policy_selected_one_hop or removed_target or unclassified_change' -q"
 depends_on = ["P0-SIG-02"]
@@ -1370,7 +1308,7 @@ depends_on = ["P0-SIG-02"]
 ```toml pair-block
 id = "P0-SIG-04"
 requirements = ["SIG-03"]
-targets = ["src/viper/_contract_traceability.py:compile_contract_plan", "src/viper/_system_impact/check.py:SystemImpactCheckError", "src/viper/_system_impact/check.py:check_plan", "src/viper/_system_impact/check.py:accept", "src/viper/system_impact.py:CheckState", "src/viper/system_impact.py:TargetCheck", "src/viper/system_impact.py:GateCheck", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:Acceptance", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:__all__"]
+targets = ["src/viper/_contract_traceability.py:compile_contract_plan", "src/viper/system_impact/check.py:SystemImpactCheckError", "src/viper/system_impact/check.py:check_plan", "src/viper/system_impact/check.py:accept", "src/viper/system_impact/models.py:CheckState", "src/viper/system_impact/models.py:TargetCheck", "src/viper/system_impact/models.py:GateCheck", "src/viper/system_impact/models.py:PlanCheck", "src/viper/system_impact/models.py:Acceptance", "src/viper/system_impact/models.py:__all__"]
 tests = ["tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change", "tests/test_system_impact.py:test_plan_check_rejects_wrong_target_and_receipt_identity", "tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies", "tests/test_system_impact.py:test_plan_check_rejects_asset_changed_by_gate", "tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan"]
 gate = "python -m pytest tests/test_system_impact.py -k 'plan_check or acceptance' -q"
 depends_on = ["P0-SIG-03"]
@@ -1403,7 +1341,7 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/_system_impact/check.py:ast", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:extract_declaration_bytes", "src/viper/_system_impact/check.py:import_binding", "src/viper/_system_impact/check.py:_target_is_satisfied", "src/viper/_system_impact/check.py:_target_checks", "src/viper/_system_impact/check.py:_unexpected_changes", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+targets = ["src/viper/system_impact/models.py:OneHop", "src/viper/system_impact/models.py:PlanCheck", "src/viper/system_impact/models.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/system_impact/check.py:ast", "src/viper/system_impact/check.py:Acceptance", "src/viper/system_impact/check.py:CommitId", "src/viper/system_impact/check.py:GateCheck", "src/viper/system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/system_impact/check.py:OneHop", "src/viper/system_impact/check.py:PlanCheck", "src/viper/system_impact/check.py:ResolvedContractTarget", "src/viper/system_impact/check.py:SourceGraph", "src/viper/system_impact/check.py:SourceNode", "src/viper/system_impact/check.py:TargetCheck", "src/viper/system_impact/check.py:inspect_plan", "src/viper/system_impact/check.py:extract_declaration_bytes", "src/viper/system_impact/check.py:import_binding", "src/viper/system_impact/check.py:_target_is_satisfied", "src/viper/system_impact/check.py:_target_checks", "src/viper/system_impact/check.py:_unexpected_changes", "src/viper/system_impact/check.py:_one_hop", "src/viper/system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 tests = ["tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 gate = "python -m pytest tests/test_system_impact.py -k 'class_target_owns or import_target_owns or formatting_only or one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
@@ -1801,9 +1739,9 @@ def classify_target_change(
     return "unclassified"
 ```
 
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/plan.py:IMPACT_EDGE_KINDS_V1 -->
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/plan.py:PlanInspectionError -->
-<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/plan.py:inspect_plan -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact/plan.py:IMPACT_EDGE_KINDS_V1 -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact/plan.py:PlanInspectionError -->
+<!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/system_impact/plan.py:inspect_plan -->
 
 ```python contract-target
 IMPACT_EDGE_KINDS_V1: dict[str, frozenset[EdgeKind]] = {
@@ -1910,9 +1848,9 @@ def compile_contract_plan(
 
 ### Plan checking and acceptance
 
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/_system_impact/check.py:SystemImpactCheckError -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/_system_impact/check.py:check_plan -->
-<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/_system_impact/check.py:accept -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/check.py:SystemImpactCheckError -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/check.py:check_plan -->
+<!-- contract-target: requirements=SIG-03 block=P0-SIG-04 action=add target=src/viper/system_impact/check.py:accept -->
 
 ```python contract-target
 class SystemImpactCheckError(ValueError):
@@ -2055,7 +1993,7 @@ def accept(
     )
     if resolved_revision != revision:
         raise SystemImpactCheckError("accept requires one exact full commit ID")
-    ancestry = subprocess.run(  # noqa: S603
+    ancestry = subprocess.run(
         (
             "git",
             "merge-base",
@@ -2245,10 +2183,10 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
 
 ### One-hop pre-pairing check
 
-**File: `src/viper/system_impact.py`**
+**File: `src/viper/system_impact/models.py`**
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:OneHop -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:PlanCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/models.py:OneHop -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/models.py:PlanCheck -->
 
 ```python contract-target
 class OneHop(ProtocolModel):
@@ -2365,80 +2303,7 @@ class PlanCheck(ProtocolModel):
     )
 ```
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:_inspect_plan -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:inspect_plan -->
-
-```python contract-target
-# The plan module constructs the models above, so load it after they exist.
-from ._system_impact.plan import inspect_plan as _inspect_plan  # noqa: E402
-
-
-def inspect_plan(
-    *,
-    plan_root: Path,
-    baseline_root: Path,
-    traceability: ContractTraceabilityGraph,
-    block_ids: tuple[PairBlockId, ...],
-    baseline: SourceGraph,
-) -> PlanInspection:
-    """Resolve selected targets and report their policy-selected direct impact."""
-    return _inspect_plan(
-        plan_root=plan_root,
-        baseline_root=baseline_root,
-        traceability=traceability,
-        block_ids=block_ids,
-        baseline=baseline,
-    )
-```
-
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:_accept -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:_check_plan -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:check_plan -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:accept -->
-
-```python contract-target
-# The check module imports inspect_plan, so load it after that operation exists.
-from ._system_impact.check import (  # noqa: E402
-    accept as _accept,
-)
-from ._system_impact.check import (  # noqa: E402
-    check_plan as _check_plan,
-)
-
-
-def check_plan(
-    *,
-    root: Path,
-    baseline_root: Path,
-    traceability: ContractTraceabilityGraph,
-    block_ids: tuple[PairBlockId, ...],
-    baseline: SourceGraph,
-    realized: SourceGraph,
-    gate_timeout_seconds: float = 900.0,
-) -> PlanCheck:
-    """Check selected PairBlocks against independently observed source graphs."""
-    return _check_plan(
-        root=root,
-        baseline_root=baseline_root,
-        traceability=traceability,
-        block_ids=block_ids,
-        baseline=baseline,
-        realized=realized,
-        gate_timeout_seconds=gate_timeout_seconds,
-    )
-
-
-def accept(
-    *,
-    root: Path,
-    check: PlanCheck,
-    revision: CommitId,
-) -> Acceptance:
-    """Bind a passing plan check to identical committed source and plan bytes."""
-    return _accept(root=root, check=check, revision=revision)
-```
-
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:__all__ -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/models.py:__all__ -->
 
 ```python contract-target
 __all__ = [
@@ -2462,35 +2327,32 @@ __all__ = [
     "SourceNodeKind",
     "SourceSnapshot",
     "TargetCheck",
-    "accept",
-    "check_plan",
-    "inspect_plan",
 ]
 ```
 
-**File: `src/viper/_system_impact/check.py`**
+**File: `src/viper/system_impact/check.py`**
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:ast -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/check.py:ast -->
 ```python contract-target
 import ast
 ```
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:Acceptance -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:CommitId -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:GateCheck -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1 -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:OneHop -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:PlanCheck -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:ResolvedContractTarget -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:SourceGraph -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:SourceNode -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:TargetCheck -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:inspect_plan -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:extract_declaration_bytes -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:import_binding -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:Acceptance -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:CommitId -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:GateCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/check.py:IMPACT_EDGE_KINDS_V1 -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/check.py:OneHop -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:PlanCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:ResolvedContractTarget -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:SourceGraph -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:SourceNode -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:TargetCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:inspect_plan -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/check.py:extract_declaration_bytes -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/check.py:import_binding -->
 
 ```python contract-target
-from ..system_impact import (
+from .models import (
     Acceptance,
     CommitId,
     GateCheck,
@@ -2500,13 +2362,12 @@ from ..system_impact import (
     SourceGraph,
     SourceNode,
     TargetCheck,
-    inspect_plan,
 )
-from .plan import IMPACT_EDGE_KINDS_V1
-from .source import extract_declaration_bytes, import_binding
+from .plan import IMPACT_EDGE_KINDS_V1, inspect_plan
+from .._system_impact.source import extract_declaration_bytes, import_binding
 ```
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:_target_is_satisfied -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:_target_is_satisfied -->
 ```python contract-target
 def _target_is_satisfied(
     *,
@@ -2528,7 +2389,7 @@ def _target_is_satisfied(
     return node is not None and node.sha256 == _sha256(expected)
 ```
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:_target_checks -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:_target_checks -->
 ```python contract-target
 def _target_checks(
     *,
@@ -2578,7 +2439,7 @@ def _target_checks(
     return tuple(checks)
 ```
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:_unexpected_changes -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/check.py:_unexpected_changes -->
 ```python contract-target
 def _unexpected_changes(
     *,
@@ -2672,8 +2533,8 @@ def _unexpected_changes(
     )
 ```
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:_one_hop -->
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:check_plan -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact/check.py:_one_hop -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact/check.py:check_plan -->
 
 ```python contract-target
 def _one_hop(

@@ -19,7 +19,14 @@ from .._contract_traceability import (
     RepoSymbolRef,
     compile_contract_plan,
 )
-from ..system_impact import (
+from .._system_impact.codeql import IGNORED_PARTS, source_digest
+from .._system_impact.source import (
+    SourceDeclarationError,
+    declaration_payload,
+    extract_declaration_bytes,
+    import_binding,
+)
+from .models import (
     Acceptance,
     CommitId,
     GateCheck,
@@ -29,16 +36,8 @@ from ..system_impact import (
     SourceGraph,
     SourceNode,
     TargetCheck,
-    inspect_plan,
 )
-from .codeql import IGNORED_PARTS, source_digest
-from .plan import IMPACT_EDGE_KINDS_V1
-from .source import (
-    SourceDeclarationError,
-    declaration_payload,
-    extract_declaration_bytes,
-    import_binding,
-)
+from .plan import IMPACT_EDGE_KINDS_V1, inspect_plan
 
 
 class SystemImpactCheckError(ValueError):
@@ -308,7 +307,7 @@ def _run_gate(
         )
 
     try:
-        completed = subprocess.run(  # noqa: S603
+        completed = subprocess.run(
             command,
             cwd=root,
             check=False,
@@ -623,7 +622,7 @@ def _git(
     *,
     input_bytes: bytes | None = None,
 ) -> bytes:
-    completed = subprocess.run(  # noqa: S603
+    completed = subprocess.run(
         ("git", *arguments),
         cwd=root,
         input=input_bytes,
@@ -756,7 +755,7 @@ def accept(
     )
     if resolved_revision != revision:
         raise SystemImpactCheckError("accept requires one exact full commit ID")
-    ancestry = subprocess.run(  # noqa: S603
+    ancestry = subprocess.run(
         (
             "git",
             "merge-base",

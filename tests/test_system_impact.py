@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 
 import viper.scheduling as scheduling
-from tools import check_plan as preflight
+from tools.plan import check as preflight
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
@@ -28,7 +28,6 @@ from viper._contract_traceability import (
     compile_contract_plan,
 )
 from viper._subprocess import run as run_subprocess
-from viper._system_impact.check import SystemImpactCheckError, _unexpected_changes
 from viper._system_impact.codeql import (
     CodeQLAnalysisError,
     _node_span,
@@ -43,7 +42,13 @@ from viper._system_impact.source import (
     extract_declaration_bytes,
     import_binding,
 )
-from viper.system_impact import (
+from viper.system_impact.check import (
+    SystemImpactCheckError,
+    _unexpected_changes,
+    accept,
+    check_plan,
+)
+from viper.system_impact.models import (
     CodeQLIdentity,
     CodeQLReceipt,
     EdgeKind,
@@ -52,10 +57,8 @@ from viper.system_impact import (
     SourceNode,
     SourceNodeKind,
     SourceSnapshot,
-    accept,
-    check_plan,
-    inspect_plan,
 )
+from viper.system_impact.plan import inspect_plan
 
 _BLOCK_ID = "P0-SIG-03"
 _REQUIREMENT_ID = "SIG-02"
@@ -497,7 +500,11 @@ def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> 
 def test_pre_pairing_modules_document_every_operation() -> None:
     """Require docstrings on public, private, and nested pre-pairing operations."""
     missing: list[str] = []
-    for relative_path in ("src/viper/scheduling.py", "tools/check_plan.py"):
+    for relative_path in (
+        "src/viper/scheduling.py",
+        "tools/plan/check.py",
+        "tools/plan/accept.py",
+    ):
         tree = ast.parse(Path(relative_path).read_text(), filename=relative_path)
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -509,15 +516,16 @@ def test_pre_pairing_modules_document_every_operation() -> None:
 
 def test_pre_pairing_command_loads() -> None:
     """Load the pre-pairing command without relying on prior package imports."""
-    checked = run_subprocess(
-        (sys.executable, "tools/check_plan.py", "--help"),
-        cwd=Path(__file__).parents[1],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    for module in ("tools.plan.check", "tools.plan.accept"):
+        checked = run_subprocess(
+            (sys.executable, "-m", module, "--help"),
+            cwd=Path(__file__).parents[1],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
-    assert checked.returncode == 0, checked.stderr
+        assert checked.returncode == 0, checked.stderr
 
 
 def _schedule_fixture() -> tuple[ContractTraceabilityGraph, SourceGraph, SourceGraph]:

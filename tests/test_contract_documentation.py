@@ -1373,8 +1373,8 @@ def test_system_impact_consumes_the_closed_ctg_plan() -> None:
     )
     manifest = tomllib.loads(definition.group("manifest"))
     assert manifest["depends_on"] == ["P0-SIG-03"]
-    assert "src/viper/system_impact.py:check_plan" in manifest["targets"]
-    assert "src/viper/system_impact.py:accept" in manifest["targets"]
+    assert "src/viper/system_impact/check.py:check_plan" in manifest["targets"]
+    assert "src/viper/system_impact/check.py:accept" in manifest["targets"]
 
 
 def test_contract_target_declaration_has_one_meaning() -> None:
@@ -1813,7 +1813,7 @@ def test_system_impact_uses_change_sensitive_one_hop_advice() -> None:
         if item.group("id") == "P0-SIG-03"
     )
     manifest = tomllib.loads(definition.group("manifest"))
-    assert "src/viper/system_impact.py:ChangeKind" in manifest["targets"]
+    assert "src/viper/system_impact/models.py:ChangeKind" in manifest["targets"]
     assert (
         "src/viper/_system_impact/source.py:classify_target_change"
         in manifest["targets"]
@@ -2136,11 +2136,11 @@ def test_system_impact_rule_owners_match_the_bounded_check() -> None:
     """Keep verifier owners on the exact source-check operations."""
     checklist = MASTER_EXECUTION_CHECKLIST.read_text(encoding="utf-8")
     required_owners = {
-        "src/viper/system_impact.py:SourceGraph",
-        "src/viper/system_impact.py:CodeQLIdentity",
-        "src/viper/system_impact.py:inspect_plan",
-        "src/viper/system_impact.py:check_plan",
-        "src/viper/system_impact.py:accept",
+        "src/viper/system_impact/models.py:SourceGraph",
+        "src/viper/system_impact/models.py:CodeQLIdentity",
+        "src/viper/system_impact/plan.py:inspect_plan",
+        "src/viper/system_impact/check.py:check_plan",
+        "src/viper/system_impact/check.py:accept",
         "tests/test_system_impact.py:test_committed_manifest_rename",
     }
     owners = set(

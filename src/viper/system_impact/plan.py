@@ -10,7 +10,8 @@ from .._contract_traceability import (
     ContractTraceabilityGraph,
     PairBlockId,
 )
-from ..system_impact import (
+from .._system_impact.source import classify_target_change, extract_declaration_bytes
+from .models import (
     EdgeKind,
     Impact,
     PlanInspection,
@@ -18,7 +19,6 @@ from ..system_impact import (
     SourceGraph,
     SourceNode,
 )
-from .source import classify_target_change, extract_declaration_bytes
 
 IMPACT_EDGE_KINDS_V1: dict[str, frozenset[EdgeKind]] = {
     "satisfied": frozenset(),

@@ -1,21 +1,19 @@
-"""Define public source-analysis records for System Impact checks."""
+"""Define public records for System Impact checks."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from ._contract_traceability import (
+from .._contract_traceability import (
     ContractTarget,
-    ContractTraceabilityGraph,
     PairBlockId,
     RepoSymbolRef,
 )
-from ._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
+from .._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 NodeId = NonEmptyStr
@@ -406,69 +404,6 @@ class PlanInspection(ProtocolModel):
     )
 
 
-# The plan module constructs the models above, so load it after they exist.
-from ._system_impact.plan import inspect_plan as _inspect_plan  # noqa: E402
-
-
-def inspect_plan(
-    *,
-    plan_root: Path,
-    baseline_root: Path,
-    traceability: ContractTraceabilityGraph,
-    block_ids: tuple[PairBlockId, ...],
-    baseline: SourceGraph,
-) -> PlanInspection:
-    """Resolve selected targets and report their policy-selected direct impact."""
-    return _inspect_plan(
-        plan_root=plan_root,
-        baseline_root=baseline_root,
-        traceability=traceability,
-        block_ids=block_ids,
-        baseline=baseline,
-    )
-
-
-# The check module imports inspect_plan, so load it after that operation exists.
-from ._system_impact.check import (  # noqa: E402
-    accept as _accept,
-)
-from ._system_impact.check import (  # noqa: E402
-    check_plan as _check_plan,
-)
-
-
-def check_plan(
-    *,
-    root: Path,
-    baseline_root: Path,
-    traceability: ContractTraceabilityGraph,
-    block_ids: tuple[PairBlockId, ...],
-    baseline: SourceGraph,
-    realized: SourceGraph,
-    gate_timeout_seconds: float = 900.0,
-) -> PlanCheck:
-    """Check selected PairBlocks against independently observed source graphs."""
-    return _check_plan(
-        root=root,
-        baseline_root=baseline_root,
-        traceability=traceability,
-        block_ids=block_ids,
-        baseline=baseline,
-        realized=realized,
-        gate_timeout_seconds=gate_timeout_seconds,
-    )
-
-
-def accept(
-    *,
-    root: Path,
-    check: PlanCheck,
-    revision: CommitId,
-) -> Acceptance:
-    """Bind a passing plan check to identical committed source and plan bytes."""
-    return _accept(root=root, check=check, revision=revision)
-
-
 __all__ = [
     "Acceptance",
     "CodeQLIdentity",
@@ -490,7 +425,4 @@ __all__ = [
     "SourceNodeKind",
     "SourceSnapshot",
     "TargetCheck",
-    "accept",
-    "check_plan",
-    "inspect_plan",
 ]

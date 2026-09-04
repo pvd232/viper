@@ -13,35 +13,33 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-
-_IMPORT_SCRIPT = (
-    "import importlib\n"
-    "import sys\n"
-    "sys.path.insert(0, sys.argv[1])\n"
-    "importlib.import_module(sys.argv[2])\n"
-)
-
-# The private CodeQL adapter imports the public models while loading.
-import viper.system_impact as impact  # noqa: E402
-from viper import _subprocess as subprocess  # noqa: E402
-from viper._contract_traceability import (  # noqa: E402
+import viper.system_impact.models as impact
+from viper import _subprocess as subprocess
+from viper._contract_traceability import (
     ContractTraceabilityGraph,
     PairBlockId,
     _implemented_pair_blocks,
     compile_contract_plan,
     compile_contract_traceability,
 )
-from viper._system_impact.codeql import (  # noqa: E402
+from viper._system_impact.codeql import (
     _tree_digest,
     analyze_source,
     source_digest,
 )
-from viper.scheduling import (  # noqa: E402
+from viper.scheduling import (
     ScheduleError,
     materialize_plan,
     select_blocks,
+)
+from viper.system_impact.check import check_plan
+
+ROOT = Path(__file__).parents[2]
+_IMPORT_SCRIPT = (
+    "import importlib\n"
+    "import sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "importlib.import_module(sys.argv[2])\n"
 )
 
 
@@ -428,7 +426,7 @@ def validate(
         frozenset(selected),
         planned,
     )
-    checked = impact.check_plan(
+    checked = check_plan(
         root=candidate,
         baseline_root=root,
         traceability=traceability,
@@ -474,13 +472,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--cache", type=Path, default=ROOT / ".viper/codeql-cache")
     parser.add_argument("--results", type=Path, required=True)
+    parser.add_argument("--root", type=Path, default=ROOT)
     args = parser.parse_args(argv)
     if args.codeql is None:
         parser.error("codeql is unavailable on PATH; install or expose CodeQL first")
     if args.java_home is not None:
         os.environ["CODEQL_JAVA_HOME"] = str(args.java_home.resolve())
     result = validate(
-        root=ROOT,
+        root=args.root.resolve(),
         blocks=tuple(args.block),
         codeql=args.codeql.resolve(),
         python=args.python.resolve(),
