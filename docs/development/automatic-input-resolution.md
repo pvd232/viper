@@ -2624,6 +2624,7 @@ targets = [
     "src/viper/metrics.py:MetricParamsT",
     "src/viper/_verification/plan.py:EvaluateSpec",
     "src/viper/_verification/plan.py:EvalSpec",
+    "src/viper/_verification/plan.py:BaseSpec",
     "src/viper/_verification/plan.py:ResolvedFileRef",
     "src/viper/_verification/plan.py:_DATA_ROLE_RANK",
     "src/viper/_verification/plan.py:_verify_stage_data_roles",
@@ -2673,6 +2674,7 @@ targets = [
     "src/viper/metrics.py:measure",
     "src/viper/benchmark.py:EvaluationId",
     "src/viper/benchmark.py:EvalId",
+    "src/viper/benchmark.py:ProtocolModel",
     "src/viper/benchmark.py:BenchmarkSpec",
     "src/viper/execution/_benchmark.py:_metric_receipts",
     "src/viper/execution/_benchmark.py:benchmark",
@@ -2712,8 +2714,10 @@ targets = [
     "src/viper/_verification/attempt.py:ResolvedEnv",
     "src/viper/_verification/attempt.py:ResolvedGCEEnv",
     "src/viper/_verification/metrics.py:GCEHostContext",
+    "src/viper/_verification/metrics.py:GCEEnvironmentSpec",
     "src/viper/_verification/metrics.py:GCEEnvSpec",
     "src/viper/_workers/metrics.py:observe_execution",
+    "src/viper/_workers/metrics.py:observe_python_environment",
     "src/viper/_workers/metrics.py:observe_python_env",
     "src/viper/_workers/metrics.py:parameters",
     "src/viper/_workers/metrics.py:instantiate_parameters",
@@ -2721,15 +2725,24 @@ targets = [
     "src/viper/_workers/metrics.py:invoke_metric",
     "src/viper/_workers/metrics.py:MetricContext",
     "src/viper/_workers/stages.py:observe_execution",
+    "src/viper/_workers/stages.py:observe_python_environment",
     "src/viper/_workers/stages.py:observe_python_env",
     "src/viper/_workers/stages.py:parameters",
     "src/viper/_workers/stages.py:params",
     "src/viper/_workers/stages.py:_live_metric_handles",
     "src/viper/execution/_attempt.py:resolve_download_stage",
+    "src/viper/execution/_attempt.py:resolve_environment",
+    "src/viper/execution/_attempt.py:resolve_runner_environment",
     "src/viper/execution/_attempt.py:resolve_env",
     "src/viper/execution/_attempt.py:resolve_runner_env",
     "src/viper/execution/_attempt.py:resolve_stage",
     "src/viper/execution/_resolution.py:ExecutionContext",
+    "src/viper/execution/_resolution.py:EnvironmentSpec",
+    "src/viper/execution/_resolution.py:GCEEnvironmentSpec",
+    "src/viper/execution/_resolution.py:ResolvedEvaluateSpec",
+    "src/viper/execution/_resolution.py:ResolvedGCEEnvironment",
+    "src/viper/execution/_resolution.py:ResolvedLocalEnvironment",
+    "src/viper/execution/_resolution.py:observe_python_environment",
     "src/viper/execution/_resolution.py:EnvSpec",
     "src/viper/execution/_resolution.py:GCEEnvSpec",
     "src/viper/execution/_resolution.py:ResolvedGCEEnv",
@@ -2739,14 +2752,29 @@ targets = [
     "src/viper/execution/_resolution.py:ResolvedSpec",
     "src/viper/execution/_resolution.py:ResolvedEvalSpec",
     "src/viper/execution/_stage.py:ProcessStartupReceipt",
+    "src/viper/execution/_stage.py:PythonEnvironmentSpec",
     "src/viper/execution/_stage.py:PythonEnvSpec",
     "src/viper/preflight.py:GCEHostContext",
+    "src/viper/preflight.py:GCEEnvironmentSpec",
     "src/viper/preflight.py:GCEEnvSpec",
     "src/viper/preflight.py:observe_gce_execution",
+    "src/viper/preflight.py:observe_python_environment",
     "src/viper/preflight.py:observe_python_env",
     "src/viper/runs.py:ReproducibilitySpec",
+    "src/viper/runs.py:EnvironmentSpec",
     "src/viper/runs.py:EnvSpec",
     "src/viper/stages.py:parameters",
+    "src/viper/stages.py:EVALUATION_DATASET_INPUT",
+    "src/viper/stages.py:EnvironmentSpec",
+    "src/viper/stages.py:EvaluationId",
+    "src/viper/stages.py:GCEEnvironmentSpec",
+    "src/viper/stages.py:PARAMETERS",
+    "src/viper/stages.py:PARAMETERS_INPUT",
+    "src/viper/stages.py:PREDICTIONS",
+    "src/viper/stages.py:RESUME_STATE",
+    "src/viper/stages.py:RESUME_STATE_INPUT",
+    "src/viper/stages.py:ResolvedEnvironment",
+    "src/viper/stages.py:ResolvedGCEEnvironment",
     "src/viper/stages.py:keys",
     "src/viper/stages.py:params",
     "src/viper/stages.py:SHA256",
@@ -2782,6 +2810,8 @@ targets = [
     "src/viper/metrics.py:MetricExecutionReceipt",
     "src/viper/metrics.py:PythonEnvironmentSpec",
     "src/viper/metrics.py:PythonEnvSpec",
+    "src/viper/metrics.py:ExecutionContext",
+    "src/viper/metrics.py:ProcessStartupReceipt",
     "src/viper/execution/_resolution.py:resolve_environment",
     "src/viper/execution/_resolution.py:resolve_runner_environment",
     "src/viper/execution/_resolution.py:resolve_env",
@@ -2860,6 +2890,8 @@ targets = [
     "src/viper/authoring.py:HttpImplementationRef",
     "src/viper/authoring.py:HttpImplementationSpec",
     "src/viper/authoring.py:ProjectHttpImplementationSpec",
+    "src/viper/authoring.py:resolve_http",
+    "src/viper/authoring.py:validate_request_policy",
     "src/viper/authoring.py:ParameterModelRef",
     "tests/test_authoring.py:params",
     "tests/test_authoring.py:artifact",
@@ -2915,6 +2947,12 @@ targets = [
     "src/viper/authoring.py:dataclass",
     "src/viper/authoring.py:subprocess",
     "src/viper/authoring.py:ParameterValidationError",
+    "src/viper/authoring.py:EnvironmentSpec",
+    "src/viper/authoring.py:ParameterizedSpec",
+    "src/viper/authoring.py:StageDefinitionError",
+    "src/viper/authoring.py:validate_stage_definition",
+    "src/viper/authoring.py:validate_stage_parameters",
+    "src/viper/authoring.py:verify_parameter_model_bytes",
     "src/viper/authoring.py:Mapping",
     "src/viper/authoring.py:Callable",
     "src/viper/authoring.py:Annotated",
@@ -3126,13 +3164,25 @@ from .params import ParameterModelRef
 MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
 ```
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/_verification/plan.py:EvalSpec -->
-```python contract-target
-from ..stages import EvalSpec
-```
-
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_verification/plan.py:EvaluateSpec -->
 <!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_verification/plan.py:BaseSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/_verification/plan.py:EvalSpec -->
+```python contract-target
+from ..stages import (
+    BaseSpec,
+    BuildSpec,
+    EmbedSpec,
+    EvalSpec,
+    InternalSpec,
+    ParameterizedSpec,
+    Spec,
+    StageDefinitionError,
+    TrainSpec,
+    verify_stage_implementation_bytes,
+)
+```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_verification/plan.py:ResolvedFileRef -->
 ```python contract-target
@@ -3215,6 +3265,9 @@ from ..runtime import (
 )
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/metrics.py:GCEEnvironmentSpec -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/metrics.py:GCEHostContext -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/metrics.py:GCEEnvSpec -->
 ```python contract-target
@@ -3225,6 +3278,9 @@ from ..runtime import (
     process_environment,
 )
 ```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_workers/metrics.py:observe_python_environment -->
+<!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_workers/metrics.py:observe_execution -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_workers/metrics.py:observe_python_env -->
@@ -3260,6 +3316,9 @@ from ..metrics import (
 )
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_workers/stages.py:observe_python_environment -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_workers/stages.py:observe_execution -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_workers/stages.py:observe_python_env -->
 ```python contract-target
@@ -3279,6 +3338,12 @@ from ..runtime import (
 from .. import params
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_attempt.py:resolve_environment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_attempt.py:resolve_runner_environment -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_attempt.py:resolve_download_stage -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/execution/_attempt.py:resolve_env -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/execution/_attempt.py:resolve_runner_env -->
@@ -3291,6 +3356,24 @@ from ._resolution import (
     resolve_stage,
 )
 ```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:EnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:GCEEnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:ResolvedEvaluateSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:ResolvedGCEEnvironment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:ResolvedLocalEnvironment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:observe_python_environment -->
+<!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_resolution.py:ExecutionContext -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/execution/_resolution.py:EnvSpec -->
@@ -3327,6 +3410,9 @@ from ..stages import (
 )
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_stage.py:PythonEnvironmentSpec -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_stage.py:ProcessStartupReceipt -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/execution/_stage.py:PythonEnvSpec -->
 ```python contract-target
@@ -3338,6 +3424,12 @@ from ..runtime import (
     select_cuda_device,
 )
 ```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/preflight.py:GCEEnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/preflight.py:observe_python_environment -->
+<!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/preflight.py:GCEHostContext -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/preflight.py:GCEEnvSpec -->
@@ -3353,6 +3445,9 @@ from .runtime import (
 )
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runs.py:EnvironmentSpec -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/runs.py:ReproducibilitySpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runs.py:EnvSpec -->
 ```python contract-target
@@ -3360,6 +3455,27 @@ from .runtime import EnvSpec, ReproducibilitySpec
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:parameters -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:EVALUATION_DATASET_INPUT -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:EvaluationId -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:PARAMETERS -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:PARAMETERS_INPUT -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:PREDICTIONS -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:RESUME_STATE -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:RESUME_STATE_INPUT -->
 <!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/stages.py:keys -->
@@ -3391,6 +3507,18 @@ from .ids import EvalId, HumanId, InputName, MetricId, RunId, StageId
 ```python contract-target
 from .params import ParameterModelRef
 ```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:EnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:GCEEnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:ResolvedEnvironment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:ResolvedGCEEnvironment -->
+<!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/stages.py:ExecutionContext -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/stages.py:EnvSpec -->
@@ -3525,6 +3653,12 @@ from .artifacts import (
 )
 ```
 
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=remove target=src/viper/authoring.py:resolve_http -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=remove target=src/viper/authoring.py:validate_request_policy -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/authoring.py:BuiltinHttpImplementationSpec -->
 <!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/authoring.py:HttpDefinition -->
 <!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/authoring.py:HttpDraft -->
@@ -3576,6 +3710,24 @@ from dataclasses import dataclass
 <!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:ParameterValidationError -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:verify_parameter_model_bytes -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:validate_stage_parameters -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:EnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:ParameterizedSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:StageDefinitionError -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:validate_stage_definition -->
 <!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:SingleFileArtifactDraft -->
@@ -4156,6 +4308,11 @@ def measure(
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/benchmark.py:EvaluationId -->
 <!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/benchmark.py:ProtocolModel -->
+```python contract-target
+from ._schema import SHA256, BenchmarkId, ProtocolModel
+```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/benchmark.py:EvalId -->
 ```python contract-target
@@ -5133,9 +5290,11 @@ class RunSpec(ProtocolModel):
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/metrics.py:PythonEnvironmentSpec -->
 <!-- contract-remove -->
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/metrics.py:ExecutionContext -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/metrics.py:ProcessStartupReceipt -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/metrics.py:PythonEnvSpec -->
 ```python contract-target
-from .runtime import PythonEnvSpec
+from .runtime import ExecutionContext, ProcessStartupReceipt, PythonEnvSpec
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
