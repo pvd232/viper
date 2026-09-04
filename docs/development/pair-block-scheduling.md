@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-**Contract status:** Planned.
+**Contract status:** In progress.
 
 | ID | Implementation obligation |
 | --- | --- |
@@ -241,14 +241,62 @@ resolved uniquely.
 id = "P4-SCH-01"
 requirements = ["SCH-01"]
 targets = [
+    "src/viper/scheduling.py:annotations",
+    "src/viper/scheduling.py:shutil",
+    "src/viper/scheduling.py:defaultdict",
+    "src/viper/scheduling.py:Path",
+    "src/viper/scheduling.py:ContractTarget",
+    "src/viper/scheduling.py:ContractTraceabilityGraph",
+    "src/viper/scheduling.py:PairBlockId",
+    "src/viper/scheduling.py:TargetAction",
+    "src/viper/scheduling.py:_declaration_payload",
+    "src/viper/scheduling.py:SourceGraph",
     "src/viper/scheduling.py:ScheduleError",
     "src/viper/scheduling.py:select_blocks",
     "src/viper/scheduling.py:order_blocks",
     "src/viper/scheduling.py:_precedes",
     "src/viper/scheduling.py:final_targets",
     "src/viper/scheduling.py:materialize_plan",
+    "src/viper/scheduling.py:__all__",
+    "tests/test_system_impact.py:scheduling",
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
+    "tools/check_plan.py:annotations",
+    "tools/check_plan.py:argparse",
+    "tools/check_plan.py:hashlib",
+    "tools/check_plan.py:json",
+    "tools/check_plan.py:os",
+    "tools/check_plan.py:platform",
+    "tools/check_plan.py:sys",
+    "tools/check_plan.py:tempfile",
+    "tools/check_plan.py:Sequence",
+    "tools/check_plan.py:Path",
+    "tools/check_plan.py:Any",
+    "tools/check_plan.py:ROOT",
+    "tools/check_plan.py:subprocess",
+    "tools/check_plan.py:ContractTraceabilityGraph",
+    "tools/check_plan.py:PairBlockId",
+    "tools/check_plan.py:_implemented_pair_blocks",
+    "tools/check_plan.py:compile_contract_plan",
+    "tools/check_plan.py:compile_contract_traceability",
+    "tools/check_plan.py:_tree_digest",
+    "tools/check_plan.py:analyze_source",
+    "tools/check_plan.py:source_digest",
+    "tools/check_plan.py:materialize_plan",
+    "tools/check_plan.py:select_blocks",
+    "tools/check_plan.py:CodeQLIdentity",
+    "tools/check_plan.py:SourceGraph",
+    "tools/check_plan.py:SourceSnapshot",
+    "tools/check_plan.py:check_plan",
+    "tools/check_plan.py:PlanValidationError",
+    "tools/check_plan.py:_run",
+    "tools/check_plan.py:_git_revision",
+    "tools/check_plan.py:_contracts",
+    "tools/check_plan.py:_identity",
+    "tools/check_plan.py:_analyze",
+    "tools/check_plan.py:_unconsumed_private_owners",
+    "tools/check_plan.py:validate",
+    "tools/check_plan.py:main",
 ]
 tests = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
@@ -311,6 +359,33 @@ deterministic frontier available at each step.
 
 **File: `src/viper/scheduling.py`**
 
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:annotations -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:shutil -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:defaultdict -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:Path -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:ContractTarget -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:ContractTraceabilityGraph -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:PairBlockId -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:TargetAction -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_declaration_payload -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:SourceGraph -->
+```python contract-target
+from __future__ import annotations
+
+import shutil
+from collections import defaultdict
+from pathlib import Path
+
+from ._contract_traceability import (
+    ContractTarget,
+    ContractTraceabilityGraph,
+    PairBlockId,
+    TargetAction,
+)
+from ._system_impact.check import _declaration_payload
+from .system_impact import SourceGraph
+```
+
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:ScheduleError -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:select_blocks -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:order_blocks -->
@@ -367,11 +442,7 @@ def order_blocks(
 
     ordered: list[PairBlockId] = []
     while len(ordered) < len(known):
-        ready = sorted(
-            block
-            for block in known - set(ordered)
-            if indegree[block] == 0
-        )
+        ready = sorted(block for block in known - set(ordered) if indegree[block] == 0)
         if not ready:
             raise ScheduleError("selected PairBlocks contain a dependency cycle")
         for block in ready:
@@ -466,7 +537,7 @@ def materialize_plan(
     shutil.copytree(
         baseline_root,
         destination,
-        ignore=shutil.ignore_patterns(".git", ".venv", "__pycache__"),
+        ignore=shutil.ignore_patterns(".git", ".venv", ".viper", "__pycache__"),
     )
     selected = select_blocks(traceability, block_ids, completed=completed)
     ordered = order_blocks(traceability, selected)
@@ -496,14 +567,17 @@ def materialize_plan(
                     raise ScheduleError("version 1 cannot place a nested added target")
                 payload = _declaration_payload(plan_root, target)
                 assert payload is not None
-                additions.append(payload)
+                if payload not in additions:
+                    additions.append(payload)
                 continue
             if node is None:
                 raise ScheduleError(f"baseline target is absent: {target.target}")
             start = starts[node.start_line - 1] + node.start_col
             end = starts[node.end_line - 1] + node.end_col
             payload = (
-                b"" if target.action == "remove" else _declaration_payload(plan_root, target)
+                b""
+                if target.action == "remove"
+                else _declaration_payload(plan_root, target)
             )
             assert payload is not None or target.action == "remove"
             replacements.append((start, end, b"" if payload is None else payload))
@@ -521,13 +595,31 @@ def materialize_plan(
         for start, end, payload in reversed(ordered_replacements):
             source = source[:start] + payload + source[end:]
         if additions:
-            separator = b"" if not source else (b"\n" if source.endswith(b"\n") else b"\n\n")
+            separator = (
+                b"" if not source else (b"\n" if source.endswith(b"\n") else b"\n\n")
+            )
             source += separator + b"\n\n".join(additions) + b"\n"
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(source)
 ```
 
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:__all__ -->
+```python contract-target
+__all__ = [
+    "ScheduleError",
+    "final_targets",
+    "materialize_plan",
+    "order_blocks",
+    "select_blocks",
+]
+```
+
 **File: `tests/test_system_impact.py`**
+
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:scheduling -->
+```python contract-target
+import viper.scheduling as scheduling
+```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
 ```python contract-target
@@ -587,7 +679,7 @@ def test_final_targets_compose_ordered_revisions() -> None:
         nodes=(_node(path="module.py", symbol="load", kind="function"),)
     )
 
-    resolved = final_targets(traceability, (first, second), baseline)
+    resolved = scheduling.final_targets(traceability, (first, second), baseline)
 
     assert len(resolved) == 1
     assert resolved[0].block_id == second
@@ -602,8 +694,8 @@ def test_final_targets_compose_ordered_revisions() -> None:
             )
         }
     )
-    with pytest.raises(ScheduleError, match="explicit dependency path"):
-        final_targets(unordered, (first, second), baseline)
+    with pytest.raises(scheduling.ScheduleError, match="explicit dependency path"):
+        scheduling.final_targets(unordered, (first, second), baseline)
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations -->
@@ -618,7 +710,6 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
     updated = b"def old():\n    return 3"
     added = b"def added():\n    return old()"
     update_ref = _write_target_fence(plan_root, updated + b"\n\n" + added)
-    add_ref = update_ref
     remove_ref = DeclarationRef(
         path="contract.md",
         start_line=1,
@@ -669,13 +760,13 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
                 action="add",
                 path="module.py",
                 symbol="added",
-                declaration=add_ref,
+                declaration=update_ref,
             ),
         ),
     )
 
     destination = tmp_path / "planned"
-    materialize_plan(
+    scheduling.materialize_plan(
         baseline_root,
         plan_root,
         traceability,
@@ -688,6 +779,371 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
         "def old():\n    return 3\n\n\n\ndef added():\n    return old()\n"
     )
     assert (baseline_root / "module.py").read_bytes() == source
+```
+
+**File: `tools/check_plan.py`**
+
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:annotations -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:argparse -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:hashlib -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:json -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:os -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:platform -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:sys -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:tempfile -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Sequence -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Path -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Any -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ROOT -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:subprocess -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ContractTraceabilityGraph -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:PairBlockId -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_implemented_pair_blocks -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:compile_contract_plan -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:compile_contract_traceability -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_tree_digest -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:analyze_source -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:source_digest -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:materialize_plan -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:select_blocks -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:CodeQLIdentity -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:SourceGraph -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:SourceSnapshot -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:check_plan -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:PlanValidationError -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_run -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_git_revision -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_contracts -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_identity -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_analyze -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_unconsumed_private_owners -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:validate -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:main -->
+```python contract-target
+"""Validate complete ContractTarget payloads before source editing begins."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import sys
+import tempfile
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from viper import _subprocess as subprocess  # noqa: E402
+from viper._contract_traceability import (  # noqa: E402
+    ContractTraceabilityGraph,
+    PairBlockId,
+    _implemented_pair_blocks,
+    compile_contract_plan,
+    compile_contract_traceability,
+)
+from viper._system_impact.codeql import (  # noqa: E402
+    _tree_digest,
+    analyze_source,
+    source_digest,
+)
+from viper.scheduling import materialize_plan, select_blocks  # noqa: E402
+from viper.system_impact import (  # noqa: E402
+    CodeQLIdentity,
+    SourceGraph,
+    SourceSnapshot,
+    check_plan,
+)
+
+
+class PlanValidationError(RuntimeError):
+    """Report a failed pre-pairing plan check."""
+
+
+def _run(command: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    completed = subprocess.run(
+        tuple(command),
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed
+
+
+def _git_revision(root: Path) -> str:
+    status = _run(("git", "status", "--porcelain"), cwd=root)
+    if status.returncode != 0:
+        raise PlanValidationError(status.stderr.strip() or "git status failed")
+    if status.stdout:
+        raise PlanValidationError("pre-pairing validation requires a clean baseline")
+    revision = _run(("git", "rev-parse", "HEAD"), cwd=root)
+    if revision.returncode != 0:
+        raise PlanValidationError(revision.stderr.strip() or "git rev-parse failed")
+    return revision.stdout.strip()
+
+
+def _contracts(root: Path) -> tuple[Path, ...]:
+    manifest = json.loads(
+        (root / "docs/development/contract-baselines.json").read_text()
+    )
+    return tuple(root / record["path"] for record in manifest["contracts"])
+
+
+def _identity(executable: Path, query_pack: Path) -> CodeQLIdentity:
+    version = _run((str(executable), "version", "--format=json"), cwd=ROOT)
+    if version.returncode != 0:
+        raise PlanValidationError(version.stderr.strip() or "CodeQL version failed")
+    payload = json.loads(version.stdout)
+    pack_result = _run(
+        (
+            sys.executable,
+            "-c",
+            (
+                "import json,yaml,pathlib; "
+                "p=yaml.safe_load(pathlib.Path('qlpack.yml').read_text()); "
+                "print(json.dumps(p))"
+            ),
+        ),
+        cwd=query_pack,
+    )
+    if pack_result.returncode != 0:
+        raise PlanValidationError(
+            pack_result.stderr.strip() or "CodeQL pack inspection failed"
+        )
+    pack = json.loads(pack_result.stdout)
+    return CodeQLIdentity(
+        version=payload["version"],
+        platform=f"{platform.system().lower()}-{platform.machine()}",
+        executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
+        pack=f"{pack['name']}@{pack['version']}",
+        pack_sha256=_tree_digest(query_pack),
+    )
+
+
+def _analyze(
+    root: Path,
+    *,
+    revision: str,
+    committed: bool,
+    identity: CodeQLIdentity,
+    executable: Path,
+    query_pack: Path,
+    cache: Path,
+    artifacts: Path,
+) -> SourceGraph:
+    snapshot = SourceSnapshot(
+        base_revision=revision,
+        source_sha256=source_digest(root),
+        revision=revision if committed else None,
+    )
+    return analyze_source(
+        root,
+        snapshot=snapshot,
+        identity=identity,
+        codeql_executable=executable,
+        query_pack=query_pack,
+        cache_root=cache,
+        artifact_root=artifacts,
+    )
+
+
+def _unconsumed_private_owners(
+    traceability: ContractTraceabilityGraph,
+    selected: frozenset[PairBlockId],
+    graph: SourceGraph,
+) -> tuple[str, ...]:
+    targets = {
+        (target.block_id, target.target): target
+        for target in traceability.targets
+        if target.block_id in selected
+    }
+    nodes = {(node.path, node.symbol): node for node in graph.nodes}
+    incoming = {edge.target for edge in graph.edges}
+    missing: list[str] = []
+    for edge in traceability.edges:
+        if edge.kind != "implementation" or edge.block_id not in selected:
+            continue
+        target = targets.get((edge.block_id, edge.target))
+        if target is None or target.action != "add":
+            continue
+        if not edge.target.symbol.rsplit(".", maxsplit=1)[-1].startswith("_"):
+            continue
+        node = nodes.get((edge.target.path, edge.target.symbol))
+        if node is not None and node.node_id not in incoming:
+            missing.append(f"{edge.target.path}:{edge.target.symbol}")
+    return tuple(sorted(missing))
+
+
+def validate(
+    *,
+    root: Path,
+    blocks: tuple[PairBlockId, ...],
+    codeql: Path,
+    python: Path,
+    cache: Path,
+    results: Path,
+) -> dict[str, Any]:
+    """Materialize and validate one complete PairBlock selection."""
+    revision = _git_revision(root)
+    contracts = _contracts(root)
+    raw_blocks, raw_targets = compile_contract_plan(root, contracts)
+    completed = _implemented_pair_blocks(
+        root / "docs/development/master-execution-checklist.md"
+    )
+    plan = ContractTraceabilityGraph.model_construct(
+        requirements=(),
+        rules=(),
+        edges=(),
+        targets=raw_targets,
+        blocks=raw_blocks,
+    )
+    selected = select_blocks(plan, blocks, completed=completed)
+    if not selected:
+        raise PlanValidationError("selected PairBlocks are already implemented")
+    selected_ids = set(selected)
+    requirement_ids = tuple(
+        sorted(
+            {
+                requirement
+                for block in raw_blocks
+                if block.block_id in selected_ids
+                for requirement in block.requirements
+            }
+        )
+    )
+    traceability = compile_contract_traceability(
+        root,
+        root / "docs/development/master-execution-checklist.md",
+        contracts,
+        requirement_ids=requirement_ids,
+    )
+    identity = _identity(codeql, root / "tools/codeql/viper-python-impact")
+    results.mkdir(parents=True, exist_ok=False)
+    baseline = _analyze(
+        root,
+        revision=revision,
+        committed=True,
+        identity=identity,
+        executable=codeql,
+        query_pack=root / "tools/codeql/viper-python-impact",
+        cache=cache,
+        artifacts=results / "baseline-codeql",
+    )
+
+    with tempfile.TemporaryDirectory(prefix="viper-plan-") as temporary:
+        candidate = Path(temporary) / "candidate"
+        materialize_plan(
+            root,
+            root,
+            traceability,
+            selected,
+            baseline,
+            candidate,
+            completed=completed,
+        )
+        pyright = _run(
+            (
+                str(python),
+                "-m",
+                "pyright",
+                "--project",
+                str(candidate / "pyrightconfig.json"),
+                "--pythonpath",
+                str(python),
+            ),
+            cwd=candidate,
+        )
+        if pyright.returncode != 0:
+            result = {
+                "passed": False,
+                "stage": "pyright",
+                "revision": revision,
+                "blocks": selected,
+                "command": tuple(pyright.args),
+                "stdout": pyright.stdout,
+                "stderr": pyright.stderr,
+            }
+            (results / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
+            return result
+
+        planned = _analyze(
+            candidate,
+            revision=revision,
+            committed=False,
+            identity=identity,
+            executable=codeql,
+            query_pack=root / "tools/codeql/viper-python-impact",
+            cache=cache,
+            artifacts=results / "planned-codeql",
+        )
+        unconsumed = _unconsumed_private_owners(
+            traceability,
+            frozenset(selected),
+            planned,
+        )
+        checked = check_plan(
+            root=candidate,
+            baseline_root=root,
+            traceability=traceability,
+            block_ids=selected,
+            baseline=baseline,
+            realized=planned,
+        )
+        result = {
+            "passed": checked.passed and not unconsumed,
+            "stage": "complete",
+            "revision": revision,
+            "blocks": selected,
+            "pyright": {
+                "command": tuple(pyright.args),
+                "stdout": pyright.stdout,
+                "stderr": pyright.stderr,
+            },
+            "unconsumed_private_owners": unconsumed,
+            "check": checked.model_dump(mode="json"),
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the pre-pairing plan gate from explicit repository inputs."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--block", action="append", required=True)
+    parser.add_argument("--codeql", type=Path, required=True)
+    parser.add_argument("--python", type=Path, required=True)
+    parser.add_argument("--java-home", type=Path)
+    parser.add_argument("--cache", type=Path, default=ROOT / ".viper/codeql-cache")
+    parser.add_argument("--results", type=Path, required=True)
+    args = parser.parse_args(argv)
+    if args.java_home is not None:
+        os.environ["CODEQL_JAVA_HOME"] = str(args.java_home.resolve())
+    result = validate(
+        root=ROOT,
+        blocks=tuple(args.block),
+        codeql=args.codeql.resolve(),
+        python=args.python.resolve(),
+        cache=args.cache.resolve(),
+        results=args.results.resolve(),
+    )
+    if result["passed"]:
+        print(f"planned source passed: {', '.join(result['blocks'])}")
+        return 0
+    print(f"planned source failed during {result['stage']}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 ```
 
 ### P4-SCH-02 — block graph

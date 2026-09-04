@@ -269,6 +269,70 @@ def test_requirement_rows_reject_duplicate_and_orphan_ids(
         _parse_verifier_rules(tmp_path, contract, markers)
 
 
+def test_requirement_requires_a_verifier_rule(tmp_path: Path) -> None:
+    """Reject a requirement omitted from the contract's verifier rules."""
+    contract, _ = _write_fixture(tmp_path)
+    contract.write_text(
+        contract.read_text(encoding="utf-8").replace(
+            "| `contract.rule` <!-- verifier-rule: contract.rule "
+            "requirement=CRT-01 --> | One owner and one test exist. |",
+            "",
+        ),
+        encoding="utf-8",
+    )
+    markers = _parse_requirement_markers(tmp_path, contract)
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="requirements w/o verifier rules",
+    ):
+        _parse_verifier_rules(tmp_path, contract, markers)
+
+
+def test_verifier_rule_requires_a_verification_edge(tmp_path: Path) -> None:
+    """Reject a verifier rule omitted from the checklist's test edges."""
+    contract, checklist = _write_fixture(tmp_path)
+    checklist.write_text(
+        "\n".join(
+            line
+            for line in checklist.read_text(encoding="utf-8").splitlines()
+            if "contract-verification:" not in line
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    markers = _parse_requirement_markers(tmp_path, contract)
+    rules = _parse_verifier_rules(tmp_path, contract, markers)
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="requires at least one verification edge",
+    ):
+        _parse_rule_edges(tmp_path, checklist, markers, rules)
+
+
+def test_verifier_rule_requires_one_implementation_edge(tmp_path: Path) -> None:
+    """Reject a verifier rule omitted from the checklist's owner edges."""
+    contract, checklist = _write_fixture(tmp_path)
+    checklist.write_text(
+        "\n".join(
+            line
+            for line in checklist.read_text(encoding="utf-8").splitlines()
+            if "contract-implementation:" not in line
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    markers = _parse_requirement_markers(tmp_path, contract)
+    rules = _parse_verifier_rules(tmp_path, contract, markers)
+
+    with pytest.raises(
+        ContractTraceabilityError,
+        match="requires exactly one implementation edge",
+    ):
+        _parse_rule_edges(tmp_path, checklist, markers, rules)
+
+
 def test_rule_edges_resolve_one_owner_and_tests(tmp_path: Path) -> None:
     """Resolve one implementation edge and one verification edge."""
     contract, checklist = _write_fixture(tmp_path)

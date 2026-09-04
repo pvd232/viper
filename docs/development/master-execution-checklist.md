@@ -280,10 +280,10 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
-| [PairBlock scheduling](pair-block-scheduling.md) | Planned | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
+| [PairBlock scheduling](pair-block-scheduling.md) | In progress | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
-| [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks drafted | Local input capture and identity verification |
+| [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks in guided execution | Local input capture and identity verification |
 | [Unified metric drafting](unified-metric-drafting.md) | Planned; Phase 4 code specified | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | Planned | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
@@ -578,27 +578,31 @@ One contract session is the default guided boundary:
 
 1. Synchronize the repository and record the baseline commit.
 2. Compile the contract's starting PairBlocks and select its remaining work.
-3. Before reading `Impact.affected`, record the selected targets and any other
+3. Materialize the selected PairBlocks over that clean baseline with
+   `tools/check_plan.py`. Start source editing only after Pyright and the
+   same-identity source-graph check pass. Keep a failure as a contract defect;
+   do not work around it in the implementation.
+4. Before reading `Impact.affected`, record the selected targets and any other
    declarations already chosen for propagation review in the
    [CodeQL impact observations](codeql-impact-observations.md) ledger.
-4. Run `inspect_plan()` against the baseline and review every reported direct
+5. Run `inspect_plan()` against the baseline and review every reported direct
    dependent.
-5. Implement one bounded PairBlock edit at a time and run focused tests where
+6. Implement one bounded PairBlock edit at a time and run focused tests where
    they provide useful feedback.
-6. Preserve intermediate review cycles as checkpoint commits while the
+7. Preserve intermediate review cycles as checkpoint commits while the
    PairBlocks remain planned.
-7. At the end of pair coding, compare the complete Git diff with every selected
+8. At the end of pair coding, compare the complete Git diff with every selected
    `ContractTarget`.
-8. Update the plan for an intentional discovery only after user approval;
+9. Update the plan for an intentional discovery only after user approval;
    remove accidental changes or move them to a separately approved plan.
-9. Freeze the reconciled plan and candidate source, run one strict System
+10. Freeze the reconciled plan and candidate source, run one strict System
    Impact check, and accept only the blocks whose gates pass.
-10. Record the report's novel dependents, resulting actions, review-only cases,
+11. Record the report's novel dependents, resulting actions, review-only cases,
     and dependencies discovered outside the report in the observation ledger.
-11. Update each accepted block's checklist checkbox, preserve its governing
+12. Update each accepted block's checklist checkbox, preserve its governing
    contract in the adjacent `pair-block-contract` marker, refresh the contract
    status in Section 3.1, and update the contract digest in Section 3.2.
-12. Run the checklist mapping and documentation checks, then commit and push the
+13. Run the checklist mapping and documentation checks, then commit and push the
    exact accepted implementation and checklist state together.
 
 The user writes the code during guided PairBlocks. Codex inspects each bounded
@@ -1359,16 +1363,16 @@ parameter class and values reach the calculation in both modes.
 
 ### 11.0 PairBlock scheduling
 
-- [ ] Compose selected target chains into one terminal planned source tree.
+- [x] Compose selected target chains into one terminal planned source tree.
       Require repeated writers of one symbol to have an explicit dependency
       path before CodeQL analyzes the planned source.
       <!-- pair-block: P4-SCH-01 -->
       <!-- pair-block-contract: P4-SCH-01 contract=pair-block-scheduling.md -->
       <!-- implements: SCH-01 -->
       <!-- verifies: SCH-01 -->
-      <!-- contract-implementation: requirement=SCH-01 rule=schedule.plan.materialized state=planned owner=src/viper/scheduling.py:materialize_plan -->
-      <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=planned test=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
-      <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=planned test=tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations -->
+      <!-- contract-implementation: requirement=SCH-01 rule=schedule.plan.materialized state=implemented owner=src/viper/scheduling.py:materialize_plan -->
+      <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=implemented test=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
+      <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=implemented test=tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations -->
 - [ ] Project declared dependencies, baseline and planned CodeQL edges, and
       shared-file writes onto the selected PairBlocks.
       <!-- pair-block: P4-SCH-02 -->

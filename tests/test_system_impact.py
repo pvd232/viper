@@ -13,6 +13,7 @@ from typing import cast
 
 import pytest
 
+import viper.scheduling as scheduling
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
@@ -90,6 +91,162 @@ def _write_target_fence(plan_root: Path, body: bytes) -> DeclarationRef:
         end_line=payload.count(b"\n") + 1,
         sha256=_sha256(payload),
     )
+
+
+def test_final_targets_compose_ordered_revisions() -> None:
+    """Use the last explicitly ordered declaration as the terminal target."""
+    first = "P0-TST-01"
+    second = "P0-TST-02"
+    declaration = _declaration_ref()
+    final_declaration = declaration.model_copy(update={"sha256": "1" * 64})
+    target = RepoSymbolRef(path="module.py", symbol="load")
+    targets = (
+        ContractTarget.model_construct(
+            requirements=("SCH-01",),
+            block_id=first,
+            action="update",
+            target=target,
+            declaration=declaration,
+        ),
+        ContractTarget.model_construct(
+            requirements=("SCH-01",),
+            block_id=second,
+            action="update",
+            target=target,
+            declaration=final_declaration,
+        ),
+    )
+    blocks = (
+        PairBlock.model_construct(
+            block_id=first,
+            requirements=("SCH-01",),
+            targets=(target,),
+            assets=(),
+            tests=(),
+            gate="true",
+            depends_on=(),
+            declaration=declaration,
+        ),
+        PairBlock.model_construct(
+            block_id=second,
+            requirements=("SCH-01",),
+            targets=(target,),
+            assets=(),
+            tests=(),
+            gate="true",
+            depends_on=(first,),
+            declaration=declaration,
+        ),
+    )
+    traceability = ContractTraceabilityGraph.model_construct(
+        requirements=(),
+        rules=(),
+        edges=(),
+        targets=targets,
+        blocks=blocks,
+    )
+    baseline = _source_graph(
+        nodes=(_node(path="module.py", symbol="load", kind="function"),)
+    )
+
+    resolved = scheduling.final_targets(traceability, (first, second), baseline)
+
+    assert len(resolved) == 1
+    assert resolved[0].block_id == second
+    assert resolved[0].action == "update"
+    assert resolved[0].declaration == final_declaration
+
+    unordered = traceability.model_copy(
+        update={
+            "blocks": (
+                blocks[0],
+                blocks[1].model_copy(update={"depends_on": ()}),
+            )
+        }
+    )
+    with pytest.raises(scheduling.ScheduleError, match="explicit dependency path"):
+        scheduling.final_targets(unordered, (first, second), baseline)
+
+
+def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
+    """Apply one update, removal, and top-level addition to an isolated tree."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"def old():\n    return 1\n\ndef removed():\n    return 2\n"
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    updated = b"def old():\n    return 3"
+    added = b"def added():\n    return old()"
+    update_ref = _write_target_fence(plan_root, updated + b"\n\n" + added)
+    remove_ref = DeclarationRef(
+        path="contract.md",
+        start_line=1,
+        end_line=1,
+        sha256=hashlib.sha256(b"<!-- contract-remove -->").hexdigest(),
+    )
+    graph = _source_graph(
+        nodes=(
+            SourceNode(
+                node_id="module.py:old",
+                path="module.py",
+                symbol="old",
+                kind="function",
+                start_line=1,
+                start_col=0,
+                end_line=2,
+                end_col=12,
+                sha256=hashlib.sha256(b"def old():\n    return 1").hexdigest(),
+            ),
+            SourceNode(
+                node_id="module.py:removed",
+                path="module.py",
+                symbol="removed",
+                kind="function",
+                start_line=4,
+                start_col=0,
+                end_line=5,
+                end_col=12,
+                sha256=hashlib.sha256(b"def removed():\n    return 2").hexdigest(),
+            ),
+        ),
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="update",
+                path="module.py",
+                symbol="old",
+                declaration=update_ref,
+            ),
+            _target(
+                action="remove",
+                path="module.py",
+                symbol="removed",
+                declaration=remove_ref,
+            ),
+            _target(
+                action="add",
+                path="module.py",
+                symbol="added",
+                declaration=update_ref,
+            ),
+        ),
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_text() == (
+        "def old():\n    return 3\n\n\n\ndef added():\n    return old()\n"
+    )
+    assert (baseline_root / "module.py").read_bytes() == source
 
 
 def _traceability(
