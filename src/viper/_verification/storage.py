@@ -38,6 +38,7 @@ from ..references import (
     SnapshotFileRef,
     StageResultSnapshotRef,
     StorageModel,
+    resolve_snapshot_file_ref,
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
@@ -456,25 +457,7 @@ def verify_snapshot_artifact(
         for reference in references
     )
     resolved_references = tuple(
-        ResolvedFileRef(
-            sha256=reference.sha256,
-            bytes=reference.bytes,
-            stored_at=(
-                LocalFileRef(
-                    store=stage.snapshot.store,
-                    commit=stage.snapshot.commit,
-                    path=reference.path,
-                )
-                if isinstance(stage.snapshot, LocalStageResultSnapshotRef)
-                else HuggingFaceFileRef(
-                    repository=stage.snapshot.repository,
-                    commit=stage.snapshot.commit,
-                    path=reference.path,
-                    repo_type=stage.snapshot.repo_type,
-                )
-            ),
-        )
-        for reference in references
+        resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references
     )
     return VerifiedArtifact(
         artifact=artifact,

@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 from pydantic import Field
 
+import viper._verification.metrics as metric_verification
+import viper.artifacts as artifacts
+import viper.execution._metric as metric_execution
+import viper.metrics as metrics
+import viper.references as references
 from tests.test_verification_acceptance import (
     POLICY,
     build_complete_fixture,
@@ -119,3 +125,75 @@ def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> No
     assert MetricHandle(scaled, sink, context).record(3.0).value == 6.0
     assert invoke_metric(scaled, context, 4.0) == 8.0
     assert received == [params, params]
+
+
+def test_metric_dependencies_reuse_snapshot_references() -> None:
+    """Derive a metric artifact reference from its enclosing stage snapshot."""
+    file = references.SnapshotFileRef(
+        path="artifacts/predictions.bin", sha256="a" * 64, bytes=4
+    )
+    stage_ref = references.ResolvedStageRef(
+        stage_id="eval",
+        snapshot=references.LocalStageResultSnapshotRef(commit="b" * 64),
+        resolved_spec=references.SnapshotFileRef(
+            path="stages/eval/resolved.yaml",
+            sha256="c" * 64,
+            bytes=10,
+        ),
+    )
+    dependency = metrics.MetricDependency(
+        source="artifact",
+        name="predictions",
+        required_data_role="evaluation",
+    )
+    resolved = metric_execution._resolve_metric_dependencies(
+        SimpleNamespace(inputs={}),
+        SimpleNamespace(
+            inputs={},
+            artifacts={"predictions": artifacts.ResolvedSingleFileArtifact(file=file)},
+        ),
+        stage_ref,
+        {},
+        SimpleNamespace(dependencies=(dependency,)),
+        {},
+    )
+
+    assert resolved[0].files[0].stored_at == references.LocalFileRef(
+        commit="b" * 64,
+        path=file.path,
+    )
+
+
+def test_metric_dependency_rejects_republished_payload() -> None:
+    """Treat equal bytes at another immutable revision as a different reference."""
+    expected = references.ResolvedFileRef(
+        sha256="a" * 64,
+        bytes=4,
+        stored_at=references.LocalFileRef(commit="b" * 64, path="predictions.bin"),
+    )
+    republished = expected.model_copy(
+        update={
+            "stored_at": references.LocalFileRef(
+                commit="c" * 64,
+                path="predictions.bin",
+            )
+        }
+    )
+
+    dependency = metrics.MetricDependency(
+        source="artifact",
+        name="predictions",
+        required_data_role="evaluation",
+    )
+    with pytest.raises(VerificationError, match="dependency references differ"):
+        metric_verification.verify_metric_dependency_references(
+            metrics.ResolvedMetricDependency(
+                dependency=dependency,
+                files=(republished,),
+            ),
+            metrics.ResolvedMetricDependency(
+                dependency=dependency,
+                files=(expected,),
+            ),
+            "accuracy",
+        )

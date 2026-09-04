@@ -8,7 +8,7 @@ from typing import cast
 
 import yaml
 
-from ..ids import InputName, StageId
+from ..ids import InputName, MetricId, StageId
 from ..metrics import (
     FloatComparator,
     Measurement,
@@ -99,6 +99,16 @@ def _verify_metric_worker_runtime(
             raise VerificationError("metric worker CUDA device count differs")
         if any(device.model != compute.model for device in context.backend.gpu_devices):
             raise VerificationError("metric worker CUDA model differs")
+
+
+def verify_metric_dependency_references(
+    received: ResolvedMetricDependency,
+    expected: ResolvedMetricDependency,
+    metric_id: MetricId,
+) -> None:
+    """Require one metric dependency to retain its exact storage references."""
+    if received.files != expected.files:
+        raise VerificationError(f"metric {metric_id!r} dependency references differ")
 
 
 def verify_recomputed_metrics(
@@ -253,16 +263,7 @@ def verify_recomputed_metrics(
                 expected_dependencies,
                 strict=True,
             ):
-                received_identities = tuple(
-                    (reference.sha256, reference.bytes) for reference in received.files
-                )
-                expected_identities = tuple(
-                    (reference.sha256, reference.bytes) for reference in expected.files
-                )
-                if received_identities != expected_identities:
-                    raise VerificationError(
-                        f"metric {metric_id!r} dependency file identities differ"
-                    )
+                verify_metric_dependency_references(received, expected, metric_id)
                 for reference in received.files:
                     read_resolved_file(reference, fetcher=fetcher)
             for worker in (receipt.production, receipt.recomputation):
