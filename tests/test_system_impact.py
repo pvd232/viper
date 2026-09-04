@@ -1835,3 +1835,93 @@ def test_completed_viper_pair_block(tmp_path: Path) -> None:
         "5c78ff5d33bdfa9c7b92b7bb9ff5c0fefdc7eef8",
         tmp_path,
     )
+
+
+def test_one_hop_records_baseline_and_candidate_neighbors(tmp_path: Path) -> None:
+    """Record direct dependents found before and after a selected update."""
+    baseline_root = tmp_path / "baseline"
+    realized_root = tmp_path / "realized"
+    _write_check_source(baseline_root, target_increment=0)
+    _write_check_source(realized_root, target_increment=1)
+    traceability = _write_check_contract(
+        realized_root,
+        gate=f"{sys.executable} -c pass",
+    )
+    baseline_target = _node(
+        path="src/example.py",
+        symbol="target",
+        kind="function",
+        declaration=b"def target(value: int) -> int:\n    return value + 0",
+    )
+    realized_target = _node(
+        path="src/example.py",
+        symbol="target",
+        kind="function",
+        declaration=b"def target(value: int) -> int:\n    return value + 1",
+    )
+    caller = _node(path="src/caller.py", symbol="caller", kind="function")
+    adapter = _node(path="src/adapter.py", symbol="adapter", kind="function")
+    before = _edge(index=21, source=caller, target=baseline_target, kind="calls")
+    after = _edge(index=22, source=adapter, target=realized_target, kind="calls")
+
+    result = check_plan(
+        root=realized_root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=("P0-SIG-04",),
+        baseline=_source_graph(
+            nodes=(baseline_target, caller),
+            edges=(before,),
+            source_sha256=source_digest(baseline_root),
+        ),
+        realized=_source_graph(
+            nodes=(realized_target, adapter),
+            edges=(after,),
+            source_sha256=source_digest(realized_root),
+            revision=None,
+        ),
+    )
+
+    assert result.one_hop.targets == (baseline_target.node_id,)
+    assert result.one_hop.neighbors == (adapter.node_id, caller.node_id)
+    assert result.one_hop.changed == (adapter.node_id, caller.node_id)
+    assert result.one_hop.before == (before.edge_id,)
+    assert result.one_hop.after == (after.edge_id,)
+
+
+def test_pre_pairing_pyright_rejects_stale_caller(tmp_path: Path) -> None:
+    """Reject a caller that omits a new required parameter."""
+    root = tmp_path / "candidate"
+    source = root / "src/example.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def save(path: str, overwrite: bool) -> None:\n"
+        "    pass\n"
+        "\n"
+        "def publish() -> None:\n"
+        "    save('artifact')\n",
+        encoding="utf-8",
+    )
+    (root / "pyrightconfig.json").write_text(
+        json.dumps({"include": ["src"], "typeCheckingMode": "standard"}),
+        encoding="utf-8",
+    )
+
+    checked = run_subprocess(
+        (
+            sys.executable,
+            "-m",
+            "pyright",
+            "--project",
+            str(root / "pyrightconfig.json"),
+            "--pythonpath",
+            sys.executable,
+        ),
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert checked.returncode != 0
+    assert "overwrite" in checked.stdout

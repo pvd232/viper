@@ -269,11 +269,31 @@ class GateCheck(ProtocolModel):
     )
 
 
+class OneHop(ProtocolModel):
+    """Record direct dependents around the selected targets in both graphs."""
+
+    targets: tuple[NodeId, ...] = Field(
+        description="Selected target nodes present in either graph."
+    )
+    neighbors: tuple[NodeId, ...] = Field(
+        description="Direct dependents found before or after the planned change."
+    )
+    changed: tuple[NodeId, ...] = Field(
+        description="Direct dependents whose declaration state changed."
+    )
+    before: tuple[SHA256, ...] = Field(
+        description="Policy-selected incoming edge IDs in the baseline graph."
+    )
+    after: tuple[SHA256, ...] = Field(
+        description="Policy-selected incoming edge IDs in the candidate graph."
+    )
+
+
 class PlanCheck(ProtocolModel):
     """Record the complete result of checking selected PairBlocks."""
 
-    schema_version: Literal[1] = Field(
-        default=1,
+    schema_version: Literal[2] = Field(
+        default=2,
         description="Plan-check record format version.",
     )
     baseline: SourceSnapshot = Field(
@@ -312,6 +332,9 @@ class PlanCheck(ProtocolModel):
     )
     impact: Impact = Field(
         description="Direct advisory dependency report for the selected targets."
+    )
+    one_hop: OneHop = Field(
+        description="Direct target neighborhood observed in both source graphs."
     )
     targets: tuple[TargetCheck, ...] = Field(
         description="One realized result for every selected ContractTarget."
@@ -432,6 +455,7 @@ __all__ = [
     "GateCheck",
     "Impact",
     "NodeId",
+    "OneHop",
     "PlanCheck",
     "PlanInspection",
     "ResolvedContractTarget",

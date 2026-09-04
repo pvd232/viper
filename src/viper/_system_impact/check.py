@@ -22,6 +22,7 @@ from ..system_impact import (
     Acceptance,
     CommitId,
     GateCheck,
+    OneHop,
     PlanCheck,
     ResolvedContractTarget,
     SourceGraph,
@@ -30,6 +31,7 @@ from ..system_impact import (
     inspect_plan,
 )
 from .codeql import IGNORED_PARTS, source_digest
+from .plan import IMPACT_EDGE_KINDS_V1
 from .source import SourceDeclarationError, extract_declaration_bytes
 
 
@@ -143,6 +145,65 @@ def _asset_manifest_sha256(
             content = _git(root, ("show", f"{revision}:{relative}"))
         rows.append({"path": relative, "sha256": _sha256(content)})
     return _sha256(_canonical_json(rows))
+
+
+def _one_hop(
+    *,
+    targets: tuple[ResolvedContractTarget, ...],
+    baseline: SourceGraph,
+    realized: SourceGraph,
+) -> OneHop:
+    """Record direct dependents selected by the existing impact policy."""
+    baseline_nodes = {node.node_id: node for node in baseline.nodes}
+    realized_nodes = {node.node_id: node for node in realized.nodes}
+    indexes = (_node_index(baseline), _node_index(realized))
+    node_kinds: dict[str, set[str]] = {}
+    for target in targets:
+        key = _target_key(target.target)
+        kinds = IMPACT_EDGE_KINDS_V1[target.change_kind]
+
+        # Adds exist only afterward and removals only beforehand, so each target
+        # must be resolved in both graphs.
+        for index in indexes:
+            node = index.get(key)
+            if node is not None:
+                node_kinds.setdefault(node.node_id, set()).update(kinds)
+
+    before = tuple(
+        sorted(
+            edge.edge_id
+            for edge in baseline.edges
+            if edge.target in node_kinds and edge.kind in node_kinds[edge.target]
+        )
+    )
+    after = tuple(
+        sorted(
+            edge.edge_id
+            for edge in realized.edges
+            if edge.target in node_kinds and edge.kind in node_kinds[edge.target]
+        )
+    )
+    selected_ids = set(before) | set(after)
+    selected_edges = tuple(
+        edge
+        for edge in (*baseline.edges, *realized.edges)
+        if edge.edge_id in selected_ids
+    )
+    neighbors = tuple(sorted({edge.source for edge in selected_edges}))
+    changed = tuple(
+        node_id
+        for node_id in neighbors
+        if baseline_nodes.get(node_id) is None
+        or realized_nodes.get(node_id) is None
+        or baseline_nodes[node_id].sha256 != realized_nodes[node_id].sha256
+    )
+    return OneHop(
+        targets=tuple(sorted(node_kinds)),
+        neighbors=neighbors,
+        changed=changed,
+        before=before,
+        after=after,
+    )
 
 
 def _declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
@@ -438,6 +499,11 @@ def check_plan(
         resolved_targets=inspection.targets,
         realized_nodes=realized_nodes,
     )
+    one_hop = _one_hop(
+        targets=inspection.targets,
+        baseline=baseline,
+        realized=realized,
+    )
     unexpected = _unexpected_changes(
         baseline_nodes=baseline_nodes,
         realized_nodes=realized_nodes,
@@ -498,6 +564,7 @@ def check_plan(
         unsatisfied_dependencies=unsatisfied_dependencies,
         plan_sha256=plan_sha256,
         impact=inspection.impact,
+        one_hop=one_hop,
         targets=target_checks,
         unexpected=unexpected,
         gates=gates,
