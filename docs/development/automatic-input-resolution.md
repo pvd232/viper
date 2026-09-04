@@ -7,13 +7,13 @@ contract will define explicit harness mode.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** planned.
 
 These requirements bind the contract to the master checklist:
 
 | ID | Implementation obligation |
 | --- | --- |
-| AIR-01 <!-- contract-requirement: AIR-01 phase=5 test=tests/test_public_api.py --> | Add the final stage decorators, parameter namespace, and `Train` and `Eval` keys. |
+| AIR-01 <!-- contract-requirement: AIR-01 phase=5 test=tests/test_public_api.py --> | Add the final stage decorators, parameter and `env` vocabulary, and `Train` and `Eval` keys. |
 | AIR-02 <!-- contract-requirement: AIR-02 phase=5 test=tests/test_authoring.py --> | Add artifact and HTTP drafts with callable-backed freezing. |
 | AIR-03 <!-- contract-requirement: AIR-03 phase=5 test=tests/test_authoring.py --> | Replace YAML-backed stage drafts with Python `StageSpecDraft` models and artifact handles. |
 | AIR-04 <!-- contract-requirement: AIR-04 phase=6 test=tests/test_authoring.py --> | Compile experiment, variant, replicate, metric, stage, benchmark, and run documents from one plan. |
@@ -207,28 +207,10 @@ flowchart LR
 
 ### Protocol-owned stage keys
 
-VIPER defines the map keys required by training and evaluation stages:
-
-```python
-from enum import StrEnum
-
-
-class Train(StrEnum):
-    MODEL = "model"
-    STATE = "state"
-
-
-class Eval(StrEnum):
-    MODEL = "model"
-    TEST = "test"
-    PREDS = "preds"
-
-
-EvalId = HumanId
-
-
-DataRole = Literal["training", "validation", "eval", "benchmark"]
-```
+VIPER defines the map keys required by training and evaluation stages. The
+exact `Train`, `Eval`, `EvalId`, and `DataRole` declarations are the
+`P5-AIR-01` targets in [Accepted `ContractTarget`
+declarations](#13-accepted-contracttarget-declarations).
 
 The public import is:
 
@@ -288,20 +270,8 @@ later receives one complete `TrainParams` instance and places those values in
 `TrainSpec.params`. The executor continues to pass a `Path` through
 `context.inputs["dataset"]` and metric handles through `context.metrics`.
 
-The target decorator signatures are:
-
-```python
-def build(*, params: type[BuildParamsT]) -> StageDecorator[BuildParamsT]: ...
-def embed(*, params: type[EmbedParamsT]) -> StageDecorator[EmbedParamsT]: ...
-def train(*, params: type[TrainParamsT]) -> StageDecorator[TrainParamsT]: ...
-def eval(*, params: type[EvalParamsT]) -> StageDecorator[EvalParamsT]: ...
-def http(
-    *,
-    id: HumanId,
-    params: type[HttpParamsT] = parameters.Http,
-    executables: tuple[ExternalExecutableSpec, ...] = (),
-) -> HttpDecorator[HttpParamsT]: ...
-```
+`P5-AIR-04` owns the complete stage decorator declarations. `P5-AIR-03` owns
+the complete `http()` declaration.
 
 `viper.params` is the public alias for the existing parameter categories in
 `viper.parameters`. The persisted field remains `parameter_model` because it
@@ -310,94 +280,19 @@ The reference uses `owner="viper"` for a built-in base class and
 `owner="project"` for a project subclass. Its path is relative to that owner's
 source root.
 
-```python
-ParameterModelOwner = Literal["project", "viper"]
-PythonSourceRelPath = Annotated[
-    str,
-    AfterValidator(validate_repo_rel_path),
-    AfterValidator(validate_python_file_path),
-]
-
-
-class ParameterModelRef(ProtocolModel):
-    owner: ParameterModelOwner
-    path: PythonSourceRelPath
-    symbol: PythonSymbol
-    sha256: SHA256
-    bytes: int = Field(gt=0)
-```
-
-This replaces the current project-only meaning of `ParameterModelRef`. Stage,
-HTTP, and metric parameter references all use the same owner rule.
+[`unified-metric-drafting.md`](unified-metric-drafting.md) owns the complete
+`ParameterModelOwner`, `PythonSourceRelPath`, and `ParameterModelRef`
+declarations. `P5-AIR-01` moves the parameter declarations into the public
+`viper.params` module without changing that owner rule.
 
 ### Target `env` vocabulary
 
 Python identifiers and persisted field names use `env`. English prose,
 `environment.yml`, and `os.environ` retain their existing meanings.
 
-```python
-class PythonEnvSpec(ProtocolModel):
-    python_version: NonEmptyStr
-    distributions: tuple[PythonDistributionSpec, ...] = Field(min_length=1)
-
-
-class GCEEnvSpec(ProtocolModel):
-    kind: Literal["gce"] = "gce"
-    provisioning: GCEProvisioningRef
-    machine_type: NonEmptyStr
-    compute: ComputeSpec
-    lockfile: GitFileRef
-    python_env: PythonEnvSpec
-
-
-class ResolvedGCEEnv(ProtocolModel):
-    kind: Literal["gce"] = "gce"
-    provisioning: GCEProvisioningRef
-    machine_type: NonEmptyStr
-    compute: ComputeSpec
-    lockfile: ResolvedGitFileRef
-    python_env: PythonEnvSpec
-
-
-class LocalEnvSpec(ProtocolModel):
-    kind: Literal["local"] = "local"
-    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
-    lockfile: GitFileRef
-    python_env: PythonEnvSpec
-
-
-class ResolvedLocalEnv(ProtocolModel):
-    kind: Literal["local"] = "local"
-    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
-    lockfile: ResolvedGitFileRef
-    python_env: PythonEnvSpec
-
-
-EnvSpec = Annotated[
-    GCEEnvSpec | LocalEnvSpec,
-    Field(discriminator="kind"),
-]
-
-
-ResolvedEnv = Annotated[
-    ResolvedGCEEnv | ResolvedLocalEnv,
-    Field(discriminator="kind"),
-]
-
-
-class ProcessStartupReceipt(ProtocolModel):
-    env: dict[StartupVariable, str]
-    reproducibility: ReproducibilitySpec
-    generators: tuple[GeneratorInitializationReceipt, ...]
-
-
-class EnvSecretRef(ProtocolModel):
-    kind: Literal["env"] = "env"
-    variable: NonEmptyStr
-    header: HttpHeaderName
-    prefix: str = ""
-    authorized_origins: frozenset[HttpOrigin] = Field(min_length=1)
-```
+`P5-AIR-02` owns the complete runtime and protocol declarations that replace
+the long environment identifiers with `env`. `P5-AIR-03` owns `EnvSecretRef`
+because that declaration changes with the HTTP authoring boundary.
 
 `observe_python_env()` returns `PythonEnvSpec`. `resolve_env()` converts one
 `EnvSpec` into `ResolvedEnv`. `RunPlanDraft.env`, `RunSpec.env`,
@@ -428,128 +323,9 @@ metric function or stateful metric class
 `viper.authoring.freeze()` records the source file, Python symbol, SHA-256 digest, and
 byte count for each definition. The frozen YAML stores those records.
 
-```python
-def validate_run_artifact_path(value: str) -> str:
-    path = validate_repo_rel_path(value)
-    parts = path.split("/")
-    if len(parts) < 3 or parts[0] != "artifacts":
-        raise ValueError(
-            "draft artifact path must begin with artifacts/<category>/<entity_id>"
-        )
-    return path
-
-
-RunArtifactPath = Annotated[
-    str,
-    AfterValidator(validate_run_artifact_path),
-]
-
-
-class SingleFileArtifactDraft(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-    kind: Literal["file"] = "file"
-    path: RunArtifactPath
-    loader: Callable[[Path], object]
-    data_role: DataRole
-
-
-class BundleArtifactDraft(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-    kind: Literal["bundle"] = "bundle"
-    path: RunArtifactPath
-    loader: Callable[[Path], object]
-    data_role: DataRole
-
-
-ArtifactDraft = Annotated[
-    SingleFileArtifactDraft | BundleArtifactDraft,
-    Field(discriminator="kind"),
-]
-
-
-@dataclass(frozen=True)
-class CustomHttpDraft:
-    id: HumanId
-    implementation: HttpCallable[Any]
-    params: parameters.Http
-    executables: tuple[ExternalExecutableSpec, ...] = ()
-
-
-HttpDraft = BuiltinHttpImplementationSpec | CustomHttpDraft
-
-
-class HttpImplementationRef(ProtocolModel):
-    path: PythonRepoRelPath
-    symbol: PythonSymbol
-    sha256: SHA256
-    bytes: int = Field(gt=0)
-
-
-class BuiltinHttpImplementationSpec(ProtocolModel):
-    kind: Literal["builtin"] = "builtin"
-    id: Literal["httpx"] = "httpx"
-
-
-class ProjectHttpImplementationSpec(ProtocolModel):
-    kind: Literal["project"] = "project"
-    id: HumanId
-    implementation: HttpImplementationRef
-    parameter_model: ParameterModelRef
-    params: parameters.Http
-    executables: tuple[ExternalExecutableSpec, ...] = ()
-
-
-HttpImplementationSpec = Annotated[
-    BuiltinHttpImplementationSpec | ProjectHttpImplementationSpec,
-    Field(discriminator="kind"),
-]
-
-
-class ResolvedHttpImplementation(ProtocolModel):
-    spec: HttpImplementationSpec
-    external_executables: tuple[ResolvedExternalExecutable, ...] = ()
-
-
-HttpParamsT = TypeVar("HttpParamsT", bound=parameters.Http)
-
-
-@dataclass(frozen=True)
-class HttpContext(Generic[HttpParamsT]):
-    request: HttpRequestSpec
-    credential: RuntimeHttpCredential | None
-    workspace: Path
-    destination: Path
-    policy: HttpRetrievalPolicy
-    params: HttpParamsT
-    executables: Mapping[HumanId, Path]
-
-
-@dataclass(frozen=True)
-class HttpResult:
-    body: Path
-    response: ObservedHttpResponse
-
-
-@dataclass(frozen=True)
-class HttpDefinition(Generic[HttpParamsT]):
-    id: HumanId
-    parameter_model: type[HttpParamsT]
-    executables: tuple[ExternalExecutableSpec, ...] = ()
-
-
-class HttpCallable(Protocol[HttpParamsT]):
-    def __call__(self, context: HttpContext[HttpParamsT]) -> HttpResult: ...
-```
+The complete callable-backed artifact and HTTP declarations are the
+`P5-AIR-03` targets. Existing frozen HTTP records that retain their field shape
+remain defined by [`src/viper/http.py`](../../src/viper/http.py).
 
 The HTTP vocabulary names the user action directly. `http()` from `viper.http`
 decorates the function that sends the request. `download(http=request)` from
@@ -592,18 +368,9 @@ The run-relative draft path lets one `VariantDraft` serve every declared
 replicate while preserving the user's chosen artifact category, entity ID,
 filename, and subdirectories.
 
-A custom HTTP function can use VIPER's base settings. The user writes:
-
-```python
-from viper.http import HttpContext, HttpResult, http
-
-
-@http(id="project_httpx")
-def request(context: HttpContext) -> HttpResult:
-    ...
-```
-
-VIPER uses `viper.params.Http` for that function.
+A custom HTTP function can use VIPER's base settings. The complete callable
+appears in the worked example; VIPER uses `viper.params.Http` when the
+decorator omits `params=`.
 
 A configurable HTTP function defines its own parameter class. The decorator's
 `params=` argument receives the class. `viper.authoring.download(params=...)` receives
@@ -624,115 +391,8 @@ experiment.
 declarations. VIPER runs each request. The other four stage drafts contain one
 decorated project function and one parameter object.
 
-```python
-@dataclass(frozen=True)
-class StageDraftArtifactRef:
-    producer: "StageDraft"
-    artifact_name: ArtifactName
-
-
-class ExternalInputDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    path: RepoRelPath
-    data_role: DataRole
-
-
-class RunArtifactDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    resolved_run: Path | ResolvedRunRef
-    stage_id: StageId
-    artifact_name: ArtifactName
-
-
-StageInputDraft = ExternalInputDraft | StageDraftArtifactRef | RunArtifactDraft
-
-
-class BaseSpecDraft(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-    kind: str
-    env: EnvSpec | None = None
-    metrics: tuple[MetricDraft, ...] = ()
-    artifacts: dict[ArtifactName, ArtifactDraft] = Field(min_length=1)
-
-
-class ParameterizedSpecDraft(BaseSpecDraft):
-    implementation: DecoratedStage
-    params: parameters.ParameterSet
-    reuse: StageReuseMode = "never"
-
-
-class DownloadSpecDraft(BaseSpecDraft):
-    kind: Literal["download"] = "download"
-    inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    http: HttpDraft
-    policy: HttpRetrievalPolicy
-
-
-class InternalSpecDraft(ParameterizedSpecDraft):
-    inputs: dict[InputName, StageInputDraft] = Field(min_length=1)
-
-
-class BuildSpecDraft(InternalSpecDraft):
-    kind: Literal["build"] = "build"
-    params: parameters.Build
-
-
-class EmbedSpecDraft(InternalSpecDraft):
-    kind: Literal["embed"] = "embed"
-    objective: MetricObjectiveDraft | None = None
-    params: parameters.Embed
-
-
-class TrainSpecDraft(InternalSpecDraft):
-    kind: Literal["train"] = "train"
-    objective: MetricObjectiveDraft
-    params: parameters.Train
-
-
-class EvalSpecDraft(InternalSpecDraft):
-    kind: Literal["eval"] = "eval"
-    eval_id: EvalId
-    objective: MetricObjectiveDraft
-    split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: parameters.Eval
-
-
-StageSpecDraft = Annotated[
-    DownloadSpecDraft
-    | BuildSpecDraft
-    | EmbedSpecDraft
-    | TrainSpecDraft
-    | EvalSpecDraft,
-    Field(discriminator="kind"),
-]
-
-
-class StageDraft(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-    spec: StageSpecDraft
-
-    @property
-    def artifacts(self) -> dict[ArtifactName, StageDraftArtifactRef]:
-        return {
-            name: StageDraftArtifactRef(
-                producer=self,
-                artifact_name=name,
-            )
-            for name in self.spec.artifacts
-        }
-```
+The complete Python draft hierarchy and `StageDraft.artifacts` handle are the
+`P5-AIR-04` targets.
 
 `DownloadSpecDraft` rejects unequal input and artifact keys and rejects every
 artifact value except `SingleFileArtifactDraft`. The frozen `DownloadSpec`
@@ -755,67 +415,9 @@ It freezes the metric ID and improvement direction as one
 Runner-owned download execution moves implementation identity and parameter
 identity out of the common stage base. The target frozen models are:
 
-```python
-class BaseSpec(ProtocolModel):
-    kind: str
-    schema_version: Literal[1] = 1
-    env: EnvSpec | None = None
-    metric_ids: tuple[MetricId, ...] = ()
-    artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
-
-
-class ParameterizedSpec(BaseSpec):
-    implementation: StageImplementationRef
-    parameter_model: ParameterModelRef
-    reuse: StageReuseMode = "never"
-
-
-class DownloadSpec(BaseSpec):
-    kind: Literal["download"] = "download"
-    inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
-    http: HttpImplementationSpec
-    policy: HttpRetrievalPolicy
-
-
-class InternalSpec(ParameterizedSpec):
-    inputs: dict[InputName, InputRef] = Field(min_length=1)
-
-
-class BuildSpec(InternalSpec):
-    kind: Literal["build"] = "build"
-    params: parameters.Build
-
-
-class EmbedSpec(InternalSpec):
-    kind: Literal["embed"] = "embed"
-    objective: MetricObjectiveSpec | None = None
-    params: parameters.Embed
-
-
-class TrainSpec(InternalSpec):
-    kind: Literal["train"] = "train"
-    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
-    objective: MetricObjectiveSpec
-    params: parameters.Train
-
-
-class EvalSpec(InternalSpec):
-    kind: Literal["eval"] = "eval"
-    eval_id: EvalId
-    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
-    objective: MetricObjectiveSpec
-    split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: parameters.Eval
-
-
-ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvalSpec
-
-
-Spec = Annotated[
-    DownloadSpec | ParameterizedStageSpec,
-    Field(discriminator="kind"),
-]
-```
+The complete frozen stage declarations are the `P5-AIR-04` targets. They
+retain the validators described below and consume the metric objective records
+produced by `P4-UMD-03`.
 
 `BaseSpec.validate_artifact_paths()` retains metric, artifact-category,
 reserved-name, and artifact-overlap checks. The implementation-path collision
@@ -861,65 +463,9 @@ preflight resolve each reference to its artifact declaration and require an
 `eval` or `benchmark` data role. This replaces the active validator that
 requires stored inputs solely because they were authored as pointers.
 
-The target resolved hierarchy separates runner-owned download evidence from
-project-callable completion evidence. A project-owned stage records either an
-execution or a verified reuse:
-
-```python
-class ResolvedBaseSpec(ProtocolModel):
-    schema_version: Literal[1] = 1
-    kind: str
-    spec: BaseSpec
-    artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
-    completed_at: AwareDatetime
-
-
-class ResolvedExecutedSpec(ResolvedBaseSpec):
-    env: ResolvedEnv
-    execution_context: ExecutionContext
-
-
-class ExecutedStageCompletion(ProtocolModel):
-    kind: Literal["executed"] = "executed"
-    source: ResolvedGitFileRef
-    env: ResolvedEnv
-    execution_context: ExecutionContext
-    startup: ProcessStartupReceipt
-    invocation: ResolvedStageInvocationRef
-    command: tuple[str, ...] = Field(min_length=1)
-
-
-class ReusedStageCompletion(ProtocolModel):
-    kind: Literal["reused"] = "reused"
-    receipt: ResolvedStageReuseRef
-
-
-StageCompletion = Annotated[
-    ExecutedStageCompletion | ReusedStageCompletion,
-    Field(discriminator="kind"),
-]
-
-
-class ResolvedParameterizedSpec(ResolvedBaseSpec):
-    spec: ParameterizedSpec
-    completion: StageCompletion
-
-
-class ResolvedDownloadSpec(ResolvedExecutedSpec):
-    kind: Literal["download"] = "download"
-    spec: DownloadSpec
-    retrievals: dict[InputName, ResolvedHttpRetrieval]
-
-
-class ResolvedInternalSpec(ResolvedParameterizedSpec):
-    spec: InternalSpec
-    inputs: dict[InputName, ResolvedInputRef]
-
-
-class ResolvedEvalSpec(ResolvedInternalSpec):
-    kind: Literal["eval"] = "eval"
-    spec: EvalSpec
-```
+The Phase 5 resolved-stage changes are limited to the `env` and `Eval`
+vocabulary in `P5-AIR-02` and `P5-AIR-04`. The later stage-reuse contract owns
+the execution-versus-reuse completion union and its corresponding hierarchy.
 
 `ResolvedDownloadSpec` records the environment and execution context of the
 VIPER process that invoked the HTTP function. Each `ResolvedHttpRetrieval`
@@ -988,26 +534,9 @@ role. The compiler prefixes the selected run root when it creates
 handles that another draft can select as inputs. The public workflow uses the
 handle; `StageDraftArtifactRef` remains an authoring-layer type.
 
-The plan mapping assigns stage IDs:
-
-```python
-class RunPlanDraft(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-    schema_version: Literal[1] = 1
-    run_id: RunId
-    experiment: ExperimentDraft
-    variant: VariantId
-    replicate: ReplicateId
-    benchmark: BenchmarkDraft | None = None
-    source: GitSource
-    env: EnvSpec
-    reproducibility: ReproducibilitySpec
-```
+The Phase 5 `RunPlanDraft` maps stage IDs directly to `StageDraft` values.
+Master Phase 6 replaces that intermediate shape with the final experiment,
+variant, replicate, and benchmark composition.
 
 The compiler selects
 `RunPlanDraft.experiment.variants[RunPlanDraft.variant]` and walks that
@@ -1060,75 +589,10 @@ complete experiment merge rules belong to
 
 ### Target public constructors
 
-The public constructors produce the draft models above:
-
-```python
-def artifact(
-    *,
-    path: RunArtifactPath,
-    loader: Callable[[Path], object],
-    data_role: DataRole,
-    kind: Literal["file", "bundle"] = "file",
-) -> ArtifactDraft: ...
-
-
-def input(
-    *,
-    path: RepoRelPath,
-    data_role: DataRole,
-) -> ExternalInputDraft: ...
-
-
-def run_artifact(
-    *,
-    resolved_run: Path | ResolvedRunRef,
-    stage: StageId,
-    artifact: ArtifactName,
-) -> RunArtifactDraft: ...
-
-
-def download(
-    *,
-    inputs: dict[InputName, HttpRequestSpec],
-    policy: HttpRetrievalPolicy,
-    artifacts: dict[ArtifactName, ArtifactDraft],
-    http: DecoratedHttp | None = None,
-    params: parameters.Http | None = None,
-    env: EnvSpec | None = None,
-    metrics: tuple[MetricDraft, ...] = (),
-) -> StageDraft: ...
-
-
-def stage(
-    implementation: DecoratedStage,
-    *,
-    params: parameters.ParameterSet,
-    inputs: dict[InputName, StageInputDraft],
-    artifacts: dict[ArtifactName, ArtifactDraft],
-    env: EnvSpec | None = None,
-    objective: MetricObjectiveDraft | None = None,
-    metrics: tuple[MetricDraft, ...] = (),
-    eval_id: EvalId | None = None,
-    split_inputs: tuple[InputName, ...] = (),
-    reuse: StageReuseMode = "never",
-) -> StageDraft: ...
-
-
-def plan(
-    *,
-    run_id: RunId,
-    experiment: ExperimentDraft,
-    variant: VariantId,
-    replicate: ReplicateId,
-    benchmark: BenchmarkDraft | None = None,
-    source: GitSource,
-    env: EnvSpec,
-    reproducibility: ReproducibilitySpec,
-) -> RunPlanDraft: ...
-
-
-def freeze(plan: RunPlanDraft, *, root: Path | None = None) -> FrozenPlanFiles: ...
-```
+`P5-AIR-03` owns `artifact()`. `P5-AIR-04` owns `input()`, `run_artifact()`,
+`download()`, `stage()`, and `freeze_run_plan()`. Master Phase 6 owns the final
+`plan()` and `freeze()` convenience functions after experiment, variant, and
+replicate drafts exist.
 
 `artifact()` from `viper.artifacts` declares one named stage output. Omitting `kind` returns a
 `SingleFileArtifactDraft`. Passing `kind="bundle"` returns a
@@ -2674,7 +2138,9 @@ bundle uses the sibling directory itself.
 | Rule | Executable condition |
 | --- | --- |
 | `stage.api.complete` <!-- verifier-rule: stage.api.complete requirement=AIR-01 --> | Public stage decorators, parameter classes, and `Train` and `Eval` keys freeze to their target protocol forms. |
-| `artifact.http.authoring` <!-- verifier-rule: artifact.http.authoring requirement=AIR-02 --> | Artifact and HTTP drafts preserve callable-backed identity through freezing. |
+| `env.vocabulary.complete` <!-- verifier-rule: env.vocabulary.complete requirement=AIR-01 --> | Runtime models, functions, fields, and verification codes use `env` while ordinary process-environment names remain unchanged. |
+| `artifact.authoring.complete` <!-- verifier-rule: artifact.authoring.complete requirement=AIR-02 --> | Artifact drafts preserve their loader identity and freeze to the selected file or bundle protocol form. |
+| `http.authoring.complete` <!-- verifier-rule: http.authoring.complete requirement=AIR-02 --> | HTTP drafts preserve their callable, parameter-model, parameter-value, and executable identities through freezing. |
 | `stage.draft.complete` <!-- verifier-rule: stage.draft.complete requirement=AIR-03 --> | Python stage drafts replace YAML-backed stage drafting and expose typed artifact handles. |
 | `plan.freeze.complete` <!-- verifier-rule: plan.freeze.complete requirement=AIR-04 --> | One plan freezes its experiment, variant, replicate, metrics, stages, benchmark, and run documents. |
 | `input.pointer.complete` <!-- verifier-rule: input.pointer.complete requirement=AIR-05 --> | Local, same-run, and prior-run inputs compile to exact references, and prior-run selection publishes a resolved pointer. |
@@ -3115,7 +2581,6116 @@ the internal protocol separately.
 - [ ] Define how explicit promotion interacts with automatically generated
       pointers.
 
-## 12. Verdict
+## 12. Contract-owned PairBlocks
+
+<!-- pair-block-definition: P5-AIR-01 -->
+```toml pair-block
+id = "P5-AIR-01"
+requirements = ["AIR-01"]
+targets = [
+    "src/viper/keys.py:Train",
+    "src/viper/keys.py:Eval",
+    "src/viper/keys.py:__all__",
+    "src/viper/ids.py:EvalId",
+    "src/viper/params.py:ParameterSet",
+    "src/viper/params.py:Build",
+    "src/viper/params.py:Embed",
+    "src/viper/params.py:Train",
+    "src/viper/params.py:Eval",
+    "src/viper/params.py:Metric",
+    "src/viper/params.py:Http",
+    "src/viper/params.py:ParameterModelOwner",
+    "src/viper/params.py:ParameterModelRef",
+    "src/viper/params.py:__all__",
+    "src/viper/_schema.py:DataRole",
+    "src/viper/_schema.py:EvaluationId",
+    "src/viper/_schema.py:PARAMETERS",
+    "src/viper/_schema.py:RESUME_STATE",
+    "src/viper/_schema.py:PARAMETERS_INPUT",
+    "src/viper/_schema.py:RESUME_STATE_INPUT",
+    "src/viper/_schema.py:EVALUATION_DATASET_INPUT",
+    "src/viper/_schema.py:PREDICTIONS",
+    "src/viper/_parameter/validation.py:parameter_model_path",
+    "src/viper/_parameter/validation.py:load_parameter_model",
+    "src/viper/_parameter/validation.py:validate_parameters",
+    "src/viper/_parameter/validation.py:instantiate_parameters",
+    "src/viper/_parameter/validation.py:validate_stage_parameters",
+    "src/viper/experiments.py:BuildVariantStageParams",
+    "src/viper/experiments.py:EmbedVariantStageParams",
+    "src/viper/experiments.py:TrainVariantStageParams",
+    "src/viper/experiments.py:EvaluateVariantStageParams",
+    "src/viper/experiments.py:EvalVariantStageParams",
+    "src/viper/experiments.py:VariantStageParams",
+    "src/viper/metrics.py:MetricParamsT",
+    "src/viper/metrics.py:MetricDraft",
+    "src/viper/metrics.py:MetricSpec",
+    "src/viper/metrics.py:MetricExecutionReceipt",
+    "src/viper/metrics.py:MetricContext",
+    "src/viper/metrics.py:measure",
+    "src/viper/benchmark.py:BenchmarkSpec",
+    "src/viper/execution/_benchmark.py:_metric_receipts",
+    "src/viper/execution/_benchmark.py:benchmark",
+    "src/viper/verification/__init__.py:verify_stored_input_selections",
+    "src/viper/verification/__init__.py:verify_benchmark_result",
+    "src/viper/artifact_loaders.py:validate_artifact_context",
+    "src/viper/_workers/parameters.py:main",
+    "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
+]
+tests = [
+    "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
+]
+gate = "python -m pytest tests/test_parameter_validation.py tests/test_public_api.py tests/test_protocol.py -k 'params or keys or eval' -q"
+depends_on = ["P2-DRA-04", "P4-UMD-03", "P4-RSP-01"]
+```
+
+**Context:** VIPER currently splits stage keys and parameter categories across
+private constants and the long `parameters` vocabulary. This block establishes
+`viper.keys`, `viper.params`, and `Eval` as the only Python and protocol names
+consumed by later Phase 5 blocks.
+
+<!-- pair-block-definition: P5-AIR-02 -->
+```toml pair-block
+id = "P5-AIR-02"
+requirements = ["AIR-01"]
+targets = [
+    "src/viper/runtime.py:PythonEnvironmentSpec",
+    "src/viper/runtime.py:GCEEnvironmentSpec",
+    "src/viper/runtime.py:ResolvedGCEEnvironment",
+    "src/viper/runtime.py:LocalEnvironmentSpec",
+    "src/viper/runtime.py:ResolvedLocalEnvironment",
+    "src/viper/runtime.py:EnvironmentSpec",
+    "src/viper/runtime.py:ResolvedEnvironment",
+    "src/viper/runtime.py:observe_python_environment",
+    "src/viper/runtime.py:PythonEnvSpec",
+    "src/viper/runtime.py:GCEEnvSpec",
+    "src/viper/runtime.py:ResolvedGCEEnv",
+    "src/viper/runtime.py:LocalEnvSpec",
+    "src/viper/runtime.py:ResolvedLocalEnv",
+    "src/viper/runtime.py:EnvSpec",
+    "src/viper/runtime.py:ResolvedEnv",
+    "src/viper/runtime.py:ProcessStartupReceipt",
+    "src/viper/runtime.py:observe_python_env",
+    "src/viper/runtime.py:apply_reproducibility",
+    "src/viper/runtime.py:observe_execution",
+    "src/viper/runs.py:RunSpec",
+    "src/viper/metrics.py:MetricExecutionReceipt",
+    "src/viper/execution/_resolution.py:resolve_environment",
+    "src/viper/execution/_resolution.py:resolve_runner_environment",
+    "src/viper/execution/_resolution.py:resolve_env",
+    "src/viper/execution/_resolution.py:resolve_runner_env",
+    "src/viper/execution/_resolution.py:resolve_stage",
+    "src/viper/execution/_resolution.py:resolve_download_stage",
+    "src/viper/execution/_attempt.py:execute_attempt",
+    "src/viper/execution/_stage.py:StageWorkerResult",
+    "src/viper/execution/_stage.py:StageProcessResult",
+    "src/viper/execution/_stage.py:execute_stage_process",
+    "src/viper/execution/_metric.py:execute_metric_process",
+    "src/viper/_workers/stages.py:main",
+    "src/viper/_workers/metrics.py:main",
+    "src/viper/preflight.py:PreflightCheckCode",
+    "src/viper/preflight.py:preflight_plan",
+    "src/viper/_verification/attempt.py:_verify_effective_environment",
+    "src/viper/_verification/attempt.py:_verify_effective_env",
+    "src/viper/_verification/attempt.py:_verify_stage_invocation",
+    "src/viper/_verification/attempt.py:verify_attempt_stages",
+    "src/viper/_verification/metrics.py:_verify_metric_worker_runtime",
+    "src/viper/_verification/metrics.py:verify_recomputed_metrics",
+    "src/viper/_verification/plan.py:verify_run_plan_relationships",
+    "tests/test_public_api.py:test_env_vocabulary_is_complete",
+]
+tests = ["tests/test_public_api.py:test_env_vocabulary_is_complete"]
+gate = "python -m pytest tests/test_cloud_execution.py tests/test_preflight.py tests/test_run_execution.py tests/test_verification.py -k 'env or environment' -q"
+depends_on = ["P5-AIR-01"]
+```
+
+**Context:** Runtime models currently persist `environment` and
+`python_environment` while the target authoring API uses `env`. This block
+applies one spelling across protocol models, execution, and verification while
+leaving `os.environ` and `environment.yml` unchanged.
+
+<!-- pair-block-definition: P5-AIR-03 -->
+```toml pair-block
+id = "P5-AIR-03"
+requirements = ["AIR-02"]
+targets = [
+    "src/viper/artifacts.py:validate_run_artifact_path",
+    "src/viper/artifacts.py:RunArtifactPath",
+    "src/viper/artifacts.py:SingleFileArtifactDraft",
+    "src/viper/artifacts.py:BundleArtifactDraft",
+    "src/viper/artifacts.py:ArtifactDraft",
+    "src/viper/artifacts.py:artifact",
+    "src/viper/artifacts.py:__all__",
+    "src/viper/http.py:EnvironmentSecretRef",
+    "src/viper/http.py:EnvSecretRef",
+    "src/viper/http.py:HttpRequestSpec",
+    "src/viper/http.py:CustomHttpDraft",
+    "src/viper/http.py:HttpDraft",
+    "src/viper/http.py:HttpDefinition",
+    "src/viper/http.py:HttpParamsT",
+    "src/viper/http.py:http",
+    "src/viper/http.py:ProjectHttpImplementationSpec",
+    "src/viper/http.py:resolve_http",
+    "src/viper/http.py:_httpx_request",
+    "src/viper/http.py:invoke_http",
+    "src/viper/authoring.py:_freeze_artifact",
+    "src/viper/authoring.py:_freeze_http",
+    "tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity",
+    "tests/test_authoring.py:test_artifact_constructor_selects_file_or_bundle",
+]
+tests = [
+    "tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity",
+    "tests/test_authoring.py:test_artifact_constructor_selects_file_or_bundle",
+    "tests/test_http_retrieval.py:test_project_http_receives_typed_parameters_and_exact_destination",
+]
+gate = "python -m pytest tests/test_authoring.py tests/test_http_retrieval.py -k 'artifact or http' -q"
+depends_on = ["P5-AIR-02"]
+```
+
+**Context:** Frozen artifact and HTTP records exist, but users still construct
+those protocol objects directly. This block adds callable-backed drafts and
+freezes each loader, HTTP function, parameter class, and executable into the
+existing protocol identities.
+
+<!-- pair-block-definition: P5-AIR-04 -->
+```toml pair-block
+id = "P5-AIR-04"
+requirements = ["AIR-01", "AIR-02", "AIR-03"]
+targets = [
+    "src/viper/stages.py:ParamsT",
+    "src/viper/stages.py:BaseSpec",
+    "src/viper/stages.py:EmbedSpec",
+    "src/viper/stages.py:TrainSpec",
+    "src/viper/stages.py:EvaluateSpec",
+    "src/viper/stages.py:EvalSpec",
+    "src/viper/stages.py:ParameterizedStageSpec",
+    "src/viper/stages.py:Spec",
+    "src/viper/stages.py:ResolvedBaseSpec",
+    "src/viper/stages.py:ResolvedEvaluateSpec",
+    "src/viper/stages.py:ResolvedEvalSpec",
+    "src/viper/stages.py:ResolvedSpec",
+    "src/viper/stages.py:_stage_decorator",
+    "src/viper/stages.py:build",
+    "src/viper/stages.py:embed",
+    "src/viper/stages.py:train",
+    "src/viper/stages.py:eval",
+    "src/viper/authoring.py:StageDraftArtifactRef",
+    "src/viper/authoring.py:ExternalInputDraft",
+    "src/viper/authoring.py:RunArtifactDraft",
+    "src/viper/authoring.py:StageInputDraft",
+    "src/viper/authoring.py:BaseSpecDraft",
+    "src/viper/authoring.py:ParameterizedSpecDraft",
+    "src/viper/authoring.py:DownloadSpecDraft",
+    "src/viper/authoring.py:InternalSpecDraft",
+    "src/viper/authoring.py:BuildSpecDraft",
+    "src/viper/authoring.py:EmbedSpecDraft",
+    "src/viper/authoring.py:TrainSpecDraft",
+    "src/viper/authoring.py:EvalSpecDraft",
+    "src/viper/authoring.py:StageSpecDraft",
+    "src/viper/authoring.py:StageDraft",
+    "src/viper/authoring.py:RunPlanDraft",
+    "src/viper/authoring.py:SPEC_ADAPTER",
+    "src/viper/authoring.py:load_run_plan_draft",
+    "src/viper/authoring.py:_freeze_input",
+    "src/viper/authoring.py:_freeze_stage",
+    "src/viper/authoring.py:input",
+    "src/viper/authoring.py:run_artifact",
+    "src/viper/authoring.py:download",
+    "src/viper/authoring.py:stage",
+    "src/viper/authoring.py:freeze_run_plan",
+    "src/viper/project.py:_project_files",
+    "src/viper/parameters.py:ParameterSet",
+    "src/viper/parameters.py:Build",
+    "src/viper/parameters.py:Embed",
+    "src/viper/parameters.py:Train",
+    "src/viper/parameters.py:Evaluate",
+    "src/viper/parameters.py:Metric",
+    "src/viper/parameters.py:Http",
+    "src/viper/parameters.py:ParameterModelOwner",
+    "src/viper/parameters.py:ParameterModelRef",
+    "src/viper/parameters.py:__all__",
+    "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
+    "tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring",
+    "tests/test_protocol.py:test_python_stage_drafts_freeze_to_protocol_specs",
+]
+tests = [
+    "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
+    "tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring",
+    "tests/test_protocol.py:test_python_stage_drafts_freeze_to_protocol_specs",
+]
+gate = "python -m pytest tests/test_authoring.py tests/test_public_api.py tests/test_protocol.py tests/test_generated_project_acceptance.py -q"
+depends_on = ["P5-AIR-03"]
+```
+
+**Context:** `StageDraft` currently points to YAML that the user must write.
+This block stores typed Python stage drafts, derives frozen stage identities
+and references from those objects, and leaves Phase 6 to assemble the complete
+experiment graph.
+
+## 13. Accepted `ContractTarget` declarations
+
+Each payload below is the reviewed Phase 5 declaration for one PairBlock
+target. A guided edit may add a directly changed caller before the final plan
+freeze; it may not omit a changed declaration or weaken its requirement.
+
+### P5-AIR-01
+
+**File: `src/viper/keys.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/keys.py:Train -->
+```python contract-target
+class Train:
+    """Canonical artifact and input names used by training stages."""
+
+    MODEL: Final[ArtifactName] = "model"
+    STATE: Final[ArtifactName] = "state"
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/keys.py:Eval -->
+```python contract-target
+class Eval:
+    """Canonical input and artifact names used by evaluation stages."""
+
+    MODEL: Final[InputName] = "model"
+    TEST: Final[InputName] = "test"
+    PREDS: Final[ArtifactName] = "preds"
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/keys.py:__all__ -->
+```python contract-target
+__all__ = ["Eval", "Train"]
+```
+
+**File: `src/viper/ids.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/ids.py:EvalId -->
+```python contract-target
+EvalId = HumanId
+```
+
+**File: `src/viper/params.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:ParameterSet -->
+```python contract-target
+class ParameterSet(BaseModel):
+    """A versioned JSON parameter mapping that project classes may specialize."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    __pydantic_extra__: dict[str, JsonValue] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+        init=False
+    )
+    schema_version: Literal[1] = 1
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Build -->
+```python contract-target
+class Build(ParameterSet):
+    """Parameters consumed by one project-defined prior builder."""
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Embed -->
+```python contract-target
+class Embed(ParameterSet):
+    """Parameters consumed by one project-defined embedding stage."""
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Train -->
+```python contract-target
+class Train(ParameterSet):
+    """Parameters consumed by one project-defined training procedure."""
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Eval -->
+```python contract-target
+class Eval(ParameterSet):
+    """Model-specific parameters outside the shared eval contract."""
+
+    @model_validator(mode="after")
+    def exclude_shared_fields(self) -> Self:
+        """Keep metric IDs and split inputs on EvalSpec."""
+        supplied = set(self.model_extra or {})
+        if {"metric_ids", "split_inputs"} & supplied:
+            raise ValueError(
+                "metric_ids and split_inputs belong directly on EvalSpec"
+            )
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Metric -->
+```python contract-target
+class Metric(ParameterSet):
+    """Parameters consumed by one project-defined metric."""
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Http -->
+```python contract-target
+class Http(ParameterSet):
+    """Parameters consumed by one project-defined HTTP implementation."""
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:ParameterModelOwner -->
+```python contract-target
+ParameterModelOwner = Literal["project", "viper"]
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:ParameterModelRef -->
+```python contract-target
+class ParameterModelRef(ProtocolModel):
+    """Identify one parameter class by owner, source bytes, and symbol."""
+
+    owner: ParameterModelOwner
+    path: PythonSourceRelPath
+    symbol: PythonSymbol
+    sha256: SHA256
+    bytes: int = Field(gt=0)
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:__all__ -->
+```python contract-target
+__all__ = [
+    "Build",
+    "Embed",
+    "Eval",
+    "Http",
+    "Metric",
+    "ParameterModelOwner",
+    "ParameterModelRef",
+    "ParameterSet",
+    "Train",
+]
+```
+
+**File: `src/viper/_schema.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_schema.py:DataRole -->
+```python contract-target
+DataRole = Literal["training", "validation", "eval", "benchmark"]
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:EvaluationId -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:PARAMETERS -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:RESUME_STATE -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:PARAMETERS_INPUT -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:RESUME_STATE_INPUT -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:EVALUATION_DATASET_INPUT -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:PREDICTIONS -->
+<!-- contract-remove -->
+
+**File: `src/viper/_parameter/validation.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/_parameter/validation.py:parameter_model_path -->
+```python contract-target
+def parameter_model_path(
+    project_root: Path,
+    reference: ParameterModelRef,
+) -> Path:
+    """Resolve a parameter-model path against its declared source owner."""
+    base = (
+        project_root.resolve()
+        if reference.owner == "project"
+        else Path(params.__file__).resolve().parent
+    )
+    path = (base / reference.path).resolve()
+    if not path.is_relative_to(base):
+        raise ParameterValidationError("parameter model escapes its source root")
+    return path
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:load_parameter_model -->
+```python contract-target
+def load_parameter_model(
+    path: Path,
+    symbol: str,
+    expected_base: type[params.ParameterSet],
+) -> type[params.ParameterSet]:
+    """Load one top-level Pydantic class and enforce its stage-specific base."""
+    module_name = f"_viper_parameter_model_{path.stem}_{abs(hash(path.resolve()))}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise ParameterValidationError("parameter model module could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        raise ParameterValidationError(
+            "parameter model module raised during import"
+        ) from exc
+    value = getattr(module, symbol, None)
+    if not isinstance(value, type) or not issubclass(value, expected_base):
+        raise ParameterValidationError(
+            f"parameter model must subclass {expected_base.__name__}"
+        )
+    return cast(type[params.ParameterSet], value)
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:validate_parameters -->
+```python contract-target
+def validate_parameters(
+    path: Path,
+    reference: ParameterModelRef,
+    params: params.ParameterSet,
+    expected_base: type[params.ParameterSet],
+) -> dict[str, JsonValue]:
+    """Validate one frozen parameter mapping with its selected project class."""
+    raw = path.read_bytes()
+    verify_parameter_model_bytes(reference, raw)
+    model = load_parameter_model(path, reference.symbol, expected_base)
+    frozen = cast(dict[str, JsonValue], params.model_dump(mode="json"))
+    validated = model.model_validate(frozen, strict=True)
+    effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
+    if effective != frozen:
+        raise ParameterValidationError(
+            "frozen parameters must contain every effective project-model value"
+        )
+    return effective
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:instantiate_parameters -->
+```python contract-target
+def instantiate_parameters(
+    path: Path,
+    reference: ParameterModelRef,
+    params: params.ParameterSet,
+    expected_base: type[params.ParameterSet],
+) -> params.ParameterSet:
+    """Construct the exact project parameter class from one frozen mapping."""
+    raw = path.read_bytes()
+    verify_parameter_model_bytes(reference, raw)
+    model = load_parameter_model(path, reference.symbol, expected_base)
+    frozen = cast(dict[str, JsonValue], params.model_dump(mode="json"))
+    validated = model.model_validate(frozen, strict=True)
+    effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
+    if effective != frozen:
+        raise ParameterValidationError(
+            "frozen parameters must contain every effective project-model value"
+        )
+    return validated
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:validate_stage_parameters -->
+```python contract-target
+def validate_stage_parameters(
+    repository_root: Path,
+    stage_spec_path: Path,
+    stage: ParameterizedSpec,
+    *,
+    timeout_seconds: float | None = None,
+) -> dict[str, JsonValue]:
+    """Validate one stage in a separate trusted-local worker process."""
+    root = repository_root.resolve()
+    package_root = str(Path(__file__).resolve().parents[2])
+    existing_python_path = os.environ.get("PYTHONPATH")
+    python_path = (
+        package_root
+        if existing_python_path is None
+        else f"{package_root}{os.pathsep}{existing_python_path}"
+    )
+    state_root = root / ".viper" / "parameter-validation"
+    state_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=state_root) as directory:
+        workspace = Path(directory)
+        context_path = workspace / "context.json"
+        result_path = workspace / "result.json"
+        context_path.write_text(
+            ParameterValidationContext(
+                stage_spec_path=stage_spec_path.resolve(),
+                result_path=result_path,
+            ).model_dump_json(),
+            encoding="utf-8",
+        )
+        try:
+            execute_worker(
+                WorkerRequest(
+                    workspace_root=root,
+                    working_directory=root,
+                    context_path=context_path,
+                    command=(
+                        sys.executable,
+                        "-m",
+                        "viper._workers.parameters",
+                    ),
+                    environment={"PYTHONPATH": python_path},
+                    policy=ExecutionPolicy(timeout_seconds=timeout_seconds),
+                )
+            )
+        except Exception as exc:
+            raise ParameterValidationError(
+                "parameter validation worker failed"
+            ) from exc
+        if not result_path.is_file():
+            raise ParameterValidationError(
+                "parameter validation worker wrote no result"
+            )
+        value = json.loads(result_path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ParameterValidationError(
+                "parameter validation worker returned no mapping"
+            )
+        return cast(dict[str, JsonValue], value)
+```
+
+**File: `src/viper/experiments.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/experiments.py:BuildVariantStageParams -->
+```python contract-target
+class BuildVariantStageParams(ProtocolModel):
+    """Bind one build stage to its selected variant params."""
+
+    kind: Literal["build"] = "build"
+    stage_id: StageId
+    params: params.Build
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/experiments.py:EmbedVariantStageParams -->
+```python contract-target
+class EmbedVariantStageParams(ProtocolModel):
+    """Bind one embedding stage to its selected variant params."""
+
+    kind: Literal["embed"] = "embed"
+    stage_id: StageId
+    params: params.Embed
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/experiments.py:TrainVariantStageParams -->
+```python contract-target
+class TrainVariantStageParams(ProtocolModel):
+    """Bind one training stage to its selected variant params."""
+
+    kind: Literal["train"] = "train"
+    stage_id: StageId
+    params: params.Train
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/experiments.py:EvaluateVariantStageParams -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/experiments.py:EvalVariantStageParams -->
+```python contract-target
+class EvalVariantStageParams(ProtocolModel):
+    """Bind one eval stage to its selected variant params."""
+
+    kind: Literal["eval"] = "eval"
+    stage_id: StageId
+    params: params.Eval
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/experiments.py:VariantStageParams -->
+```python contract-target
+VariantStageParams = Annotated[
+    BuildVariantStageParams
+    | EmbedVariantStageParams
+    | TrainVariantStageParams
+    | EvalVariantStageParams,
+    Field(discriminator="kind"),
+]
+```
+
+**File: `src/viper/metrics.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricParamsT -->
+```python contract-target
+MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricDraft -->
+```python contract-target
+class MetricDraft(BaseModel, Generic[MetricParamsT]):
+    """Hold one configured metric before protocol freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    implementation: DecoratedMetric
+    params: MetricParamsT
+    dependencies: tuple[MetricDependency, ...] = ()
+    comparator: FloatComparator | None = None
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricSpec -->
+```python contract-target
+class MetricSpec(ProtocolModel):
+    """Bind one metric identity to its implementation and frozen params."""
+
+    schema_version: Literal[1] = 1
+    metric_id: MetricId
+    implementation: MetricImplementationRef
+    parameter_model: ParameterModelRef
+    params: params.Metric
+    mode: MetricMode
+    dependencies: tuple[MetricDependency, ...] = ()
+    comparator: FloatComparator | None = None
+
+    @model_validator(mode="after")
+    def validate_lifecycle(self) -> MetricSpec:
+        """Require one complete live or recomputed metric configuration."""
+        identities = tuple((item.source, item.name) for item in self.dependencies)
+        if len(set(identities)) != len(identities):
+            raise ValueError("metric dependencies must be unique")
+        if self.mode == "recompute":
+            if not self.dependencies:
+                raise ValueError("recomputed metrics require dependencies")
+            if self.comparator is None:
+                raise ValueError("recomputed metrics require a comparator")
+        elif self.dependencies or self.comparator is not None:
+            raise ValueError("live metrics do not declare dependencies or a comparator")
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
+```python contract-target
+class MetricExecutionReceipt(ProtocolModel):
+    """Record one controlled metric worker execution and its scalar result."""
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    attempt_id: int = Field(ge=1)
+    metric_id: MetricId
+    stage_id: StageId
+    purpose: Literal["measurement", "verification"]
+    implementation: MetricImplementationRef
+    parameter_model: ParameterModelRef
+    params: params.Metric
+    dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
+    startup: ProcessStartupReceipt
+    execution_context: ExecutionContext
+    python_environment: PythonEnvironmentSpec
+    value: float = Field(allow_inf_nan=False)
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+    outcome: Literal["succeeded"] = "succeeded"
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricContext -->
+```python contract-target
+class MetricContext(BaseModel, Generic[MetricParamsT]):
+    """Supply verified paths and frozen parameters to one metric invocation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    inputs: Mapping[str, Path] = Field(default_factory=dict)
+    artifacts: Mapping[str, Path] = Field(default_factory=dict)
+    params: MetricParamsT
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:measure -->
+```python contract-target
+def measure(
+    implementation: DecoratedMetric,
+    *,
+    params: MetricParamsT | None = None,
+    dependencies: tuple[MetricDependency, ...] = (),
+    comparator: FloatComparator | None = None,
+) -> MetricDraft[MetricParamsT | params.Metric]:
+    """Configure one decorated metric for later freezing."""
+    definition = metric_definition(implementation)
+    selected_params = params.Metric() if params is None else params
+    identities = tuple((item.source, item.name) for item in dependencies)
+    if len(set(identities)) != len(identities):
+        raise MetricError("metric dependencies must be unique")
+    if definition.mode == "recompute":
+        if not dependencies:
+            raise MetricError("recomputed metrics require dependencies")
+        if comparator is None:
+            raise MetricError("recomputed metrics require a comparator")
+    elif dependencies or comparator is not None:
+        raise MetricError("live metrics do not declare dependencies or a comparator")
+    return MetricDraft(
+        implementation=implementation,
+        params=selected_params,
+        dependencies=dependencies,
+        comparator=comparator,
+    )
+```
+
+**File: `src/viper/benchmark.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/benchmark.py:BenchmarkSpec -->
+```python contract-target
+class BenchmarkSpec(ProtocolModel):
+    """Define the fixed eval and criteria for a strict benchmark."""
+
+    schema_version: Literal[1] = 1
+    benchmark_id: BenchmarkId
+    eval_id: EvaluationId
+    eval_dataset: ArtifactPointerRef
+    splits: dict[InputName, ArtifactPointerRef] = Field(min_length=1)
+    metrics: tuple[MetricCriterion, ...] = Field(min_length=1)
+    execution_count: Literal[2] = 2
+
+    @model_validator(mode="after")
+    def validate_unique_metrics(self) -> BenchmarkSpec:
+        """Require one criterion per benchmark metric."""
+        metric_ids = tuple(criterion.metric_id for criterion in self.metrics)
+        if len(set(metric_ids)) != len(metric_ids):
+            raise ValueError("benchmark metric IDs must be unique")
+        return self
+```
+
+**File: `src/viper/execution/_benchmark.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/execution/_benchmark.py:_metric_receipts -->
+```python contract-target
+def _metric_receipts(
+    attempt: RunAttempt,
+    store: LocalArtifactStore,
+    eval_stage_id: str,
+) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
+    """Load the recomputation receipt for each eval metric."""
+    from ..serialization import parse_yaml_bytes
+
+    receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
+    for reference in attempt.metric_verification_files:
+        receipt = MetricVerificationReceipt.model_validate(
+            parse_yaml_bytes(store.fetch(reference.stored_at))
+        )
+        if receipt.stage_id == eval_stage_id:
+            receipts[receipt.metric_id] = (reference, receipt)
+    return receipts
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/execution/_benchmark.py:benchmark -->
+```python contract-target
+def benchmark(
+    repository_root: Path,
+    resolved_run_path: Path,
+    benchmark_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> BenchmarkExecutionResult:
+    """Execute, assemble, verify, and publish one benchmark confirmation."""
+    from .._verification.attempt import verify_attempt_stages
+    from ..serialization import document_digest, parse_yaml_bytes, serialize_document
+    from ..storage import LocalArtifactStore
+    from ..verification import verify_benchmark_result, verify_run_result
+    from ..verification.models import VerificationPolicy
+    from ._run import execute_benchmark_confirmation
+    from ._source import RunFetcher
+
+    root = repository_root.resolve()
+    candidate_path = resolved_run_path.resolve()
+    candidate_raw = candidate_path.read_bytes()
+    candidate = ResolvedRun.model_validate(parse_yaml_bytes(candidate_raw))
+    run_spec_path = candidate_path.with_name("spec.yaml")
+    store = LocalArtifactStore(root)
+
+    run = candidate.spec
+    fetcher = RunFetcher(root, store, str(run.stored_at.repository))
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({str(run.stored_at.repository)})
+    )
+    verified_candidate = verify_run_result(
+        candidate,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    plan = verified_candidate.plan
+    if plan.benchmark is None or plan.run.benchmark_id is None:
+        raise BenchmarkExecutionError("candidate run has no benchmark specification")
+
+    expected_benchmark_path = (
+        root / f"benchmarks/{plan.benchmark.benchmark_id}.spec.yaml"
+    )
+    selected_benchmark_path = benchmark_spec_path.resolve()
+    if selected_benchmark_path != expected_benchmark_path.resolve():
+        raise BenchmarkExecutionError("benchmark path differs from the frozen plan")
+    benchmark_raw = selected_benchmark_path.read_bytes()
+    benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
+    if benchmark != plan.benchmark:
+        raise BenchmarkExecutionError("benchmark document differs from the frozen plan")
+    benchmark_location = GitFileRef(
+        repository=plan.run.source.repository,
+        commit=plan.run.source.commit,
+        path=f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
+    )
+    if fetcher(benchmark_location) != benchmark_raw:
+        raise BenchmarkExecutionError("benchmark bytes differ from the frozen source")
+
+    result_path = candidate_path.with_name("benchmark.result.yaml")
+    if result_path.exists():
+        raise BenchmarkExecutionError("benchmark result already exists")
+    confirmation_result = execute_benchmark_confirmation(
+        root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+    )
+    confirmation = confirmation_result.attempt
+    confirmation_stages = verify_attempt_stages(
+        confirmation,
+        plan.run,
+        plan.stages,
+        require_complete=True,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    selected_attempt = next(
+        attempt
+        for attempt in verified_candidate.attempts
+        if attempt.attempt_id == candidate.successful_attempt_id
+    )
+    selected_stage_refs = {
+        stage.stage_id: stage for stage in selected_attempt.resolved_stages
+    }
+    confirmation_stage_refs = {
+        stage.stage_id: stage for stage in confirmation.resolved_stages
+    }
+
+    eval_stage_ids = tuple(
+        stage_id
+        for stage_id, stage in plan.stages.items()
+        if isinstance(stage, EvalSpec)
+    )
+    if len(eval_stage_ids) != 1:
+        raise BenchmarkExecutionError("benchmark requires one eval stage")
+    eval_stage_id = eval_stage_ids[0]
+    artifact_selectors = (
+        plan.run.estimator,
+        StageArtifactRef(
+            stage_id=eval_stage_id,
+            artifact_name=PREDICTIONS,
+        ),
+    )
+    artifact_receipts: list[ArtifactComparisonReceipt] = []
+    for selector in artifact_selectors:
+        candidate_artifact = verified_candidate.resolved_stages[
+            selector.stage_id
+        ].artifacts[selector.artifact_name]
+        confirmation_artifact = confirmation_stages[selector.stage_id].artifacts[
+            selector.artifact_name
+        ]
+        candidate_digest = document_digest(candidate_artifact)
+        confirmation_digest = document_digest(confirmation_artifact)
+        artifact_receipts.append(
+            ArtifactComparisonReceipt(
+                artifact=selector,
+                candidate_stage=selected_stage_refs[selector.stage_id],
+                confirmation_stage=confirmation_stage_refs[selector.stage_id],
+                candidate_digest=candidate_digest,
+                confirmation_digest=confirmation_digest,
+                passed=candidate_digest == confirmation_digest,
+            )
+        )
+
+    candidate_metrics = _metric_receipts(selected_attempt, store, eval_stage_id)
+    confirmation_metrics = _metric_receipts(
+        confirmation,
+        store,
+        eval_stage_id,
+    )
+    metric_receipts: list[MetricCriterionReceipt] = []
+    for criterion in benchmark.metrics:
+        try:
+            candidate_ref, candidate_receipt = candidate_metrics[criterion.metric_id]
+            confirmation_ref, confirmation_receipt = confirmation_metrics[
+                criterion.metric_id
+            ]
+        except KeyError as exc:
+            raise BenchmarkExecutionError(
+                f"benchmark metric {criterion.metric_id!r} lacks verification evidence"
+            ) from exc
+        values = (
+            candidate_receipt.recomputation.value,
+            confirmation_receipt.recomputation.value,
+        )
+        passed = (
+            all(value >= criterion.threshold for value in values)
+            if criterion.comparison == "ge"
+            else all(value <= criterion.threshold for value in values)
+        )
+        metric_receipts.append(
+            MetricCriterionReceipt(
+                metric_id=criterion.metric_id,
+                candidate_verification=candidate_ref,
+                confirmation_verification=confirmation_ref,
+                comparison=criterion.comparison,
+                threshold=criterion.threshold,
+                passed=passed,
+            )
+        )
+
+    candidate_reference = store.resolved_files(
+        {candidate_path.relative_to(root).as_posix(): candidate_raw}
+    )[0]
+    result = BenchmarkResult(
+        benchmark=ResolvedBenchmarkSpecRef(
+            sha256=hashlib.sha256(benchmark_raw).hexdigest(),
+            bytes=len(benchmark_raw),
+            stored_at=benchmark_location,
+        ),
+        run=ResolvedRunRef(
+            sha256=candidate_reference.sha256,
+            bytes=candidate_reference.bytes,
+            stored_at=candidate_reference.stored_at,
+        ),
+        confirmation=confirmation_result.attempt_reference,
+        artifacts=tuple(artifact_receipts),
+        metrics=tuple(metric_receipts),
+        status=(
+            "passed"
+            if all(receipt.passed for receipt in artifact_receipts)
+            and all(receipt.passed for receipt in metric_receipts)
+            else "failed"
+        ),
+        completed_at=datetime.now(UTC),
+    )
+    verify_benchmark_result(result, policy=policy, fetcher=fetcher)
+    _write_new(result_path, serialize_document(result))
+    return BenchmarkExecutionResult(result=result, result_path=result_path)
+```
+
+**File: `src/viper/verification/__init__.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/verification/__init__.py:verify_stored_input_selections -->
+```python contract-target
+def verify_stored_input_selections(
+    stage_id: StageId,
+    stage_spec: InternalSpec,
+    pointers: Mapping[InputName, ArtifactPointer],
+) -> None:
+    """Verify relationships among stored pointers consumed by one stage."""
+    if isinstance(stage_spec, TrainSpec):
+        model_input = stage_spec.inputs.get(PARAMETERS_INPUT)
+        state_input = stage_spec.inputs.get(RESUME_STATE_INPUT)
+        if isinstance(model_input, StoredInputRef) and isinstance(
+            state_input,
+            StoredInputRef,
+        ):
+            model_pointer = pointers[PARAMETERS_INPUT]
+            state_pointer = pointers[RESUME_STATE_INPUT]
+            if model_pointer.run != state_pointer.run:
+                raise VerificationError(
+                    f"stored checkpoint inputs of stage {stage_id!r} must select "
+                    "one resolved run"
+                )
+            if model_pointer.artifact.stage_id != state_pointer.artifact.stage_id:
+                raise VerificationError(
+                    f"stored checkpoint inputs of stage {stage_id!r} must select "
+                    "one producer stage"
+                )
+            if model_pointer.artifact.artifact_name != PARAMETERS:
+                raise VerificationError(
+                    f"stored checkpoint model input of stage {stage_id!r} must "
+                    "select parameters"
+                )
+            if state_pointer.artifact.artifact_name != RESUME_STATE:
+                raise VerificationError(
+                    f"stored checkpoint state input of stage {stage_id!r} must "
+                    "select resume_state"
+                )
+
+    if isinstance(stage_spec, EvalSpec):
+        model_input = stage_spec.inputs[PARAMETERS_INPUT]
+        if isinstance(model_input, StoredInputRef):
+            model_pointer = pointers[PARAMETERS_INPUT]
+            if model_pointer.artifact.artifact_name != PARAMETERS:
+                raise VerificationError(
+                    f"stored eval model input of stage {stage_id!r} must "
+                    "select parameters"
+                )
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/verification/__init__.py:verify_benchmark_result -->
+```python contract-target
+def verify_benchmark_result(
+    result: BenchmarkResult,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedBenchmarkResult:
+    """Verify benchmark parity and metric criteria across two executions."""
+    from .._verification.attempt import (
+        verify_attempt_files,
+        verify_attempt_stages,
+        verify_measurement_stage_times,
+    )
+    from .._verification.metrics import verify_recomputed_metrics
+    from .._verification.paths import run_root
+    from .._verification.storage import (
+        artifact_revision_identity,
+        read_attempt_reference,
+        read_resolved_file,
+        snapshot_identity,
+    )
+
+    benchmark_raw = read_resolved_file(result.benchmark, fetcher=fetcher)
+    try:
+        benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            "benchmark result does not reference a valid BenchmarkSpec"
+        ) from exc
+
+    run_raw = read_resolved_file(result.run, fetcher=fetcher)
+    try:
+        resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(run_raw))
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            "benchmark result does not reference a valid ResolvedRun"
+        ) from exc
+
+    verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+
+    if result.completed_at < resolved_run.completed_at:
+        raise VerificationError(
+            "benchmark result cannot precede the selected run completion"
+        )
+
+    expected_run_location = f"{run_root(verified_run.plan.run)}/resolved.yaml"
+    if result.run.stored_at.path != expected_run_location:
+        raise VerificationError(
+            "benchmark result run reference is outside the canonical run path"
+        )
+
+    expected_benchmark_location = GitFileRef(
+        repository=verified_run.plan.run.source.repository,
+        commit=verified_run.plan.run.source.commit,
+        path=f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
+    )
+    if result.benchmark.stored_at != expected_benchmark_location:
+        raise VerificationError(
+            "benchmark result reference does not match the run source snapshot"
+        )
+
+    if verified_run.plan.benchmark != benchmark:
+        raise VerificationError(
+            "benchmark result and run plan select different benchmark specs"
+        )
+
+    confirmation = read_attempt_reference(
+        result.confirmation,
+        verified_run.plan.run,
+        fetcher=fetcher,
+    )
+    if confirmation.status != "succeeded":
+        raise VerificationError("benchmark confirmation attempt must succeed")
+    if confirmation.purpose != "benchmark_confirmation":
+        raise VerificationError("benchmark confirmation has the wrong purpose")
+    if result.completed_at < confirmation.completed_at:
+        raise VerificationError(
+            "benchmark result cannot precede confirmation completion"
+        )
+
+    selected_attempt = next(
+        attempt
+        for attempt in verified_run.attempts
+        if attempt.attempt_id == resolved_run.successful_attempt_id
+    )
+    original_attempt_ids = {attempt.attempt_id for attempt in verified_run.attempts}
+    if confirmation.attempt_id in original_attempt_ids:
+        raise VerificationError("benchmark confirmation must use a new attempt ID")
+    if confirmation.attempt_id <= max(original_attempt_ids):
+        raise VerificationError(
+            "benchmark confirmation attempt ID must follow the candidate history"
+        )
+
+    original_snapshots = {
+        snapshot_identity(stage.snapshot)
+        for attempt in verified_run.attempts
+        for stage in attempt.resolved_stages
+    }
+    confirmation_snapshots = {
+        snapshot_identity(stage.snapshot) for stage in confirmation.resolved_stages
+    }
+    if original_snapshots & confirmation_snapshots:
+        raise VerificationError(
+            "benchmark confirmation must use new stage-result snapshots"
+        )
+
+    original_attempt_file_snapshots = {
+        identity
+        for attempt in verified_run.attempts
+        for reference in (
+            attempt.journal,
+            *attempt.measurement_files,
+            *attempt.metric_verification_files,
+            *attempt.log_files,
+        )
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
+    }
+    confirmation_attempt_file_snapshots = {
+        identity
+        for reference in (
+            confirmation.journal,
+            *confirmation.measurement_files,
+            *confirmation.metric_verification_files,
+            *confirmation.log_files,
+        )
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
+    }
+    if original_attempt_file_snapshots & confirmation_attempt_file_snapshots:
+        raise VerificationError(
+            "benchmark confirmation must use a new measurement and log snapshot"
+        )
+    if confirmation_snapshots & confirmation_attempt_file_snapshots:
+        raise VerificationError(
+            "benchmark confirmation stage-result and attempt-file snapshots "
+            "must be distinct"
+        )
+
+    confirmation_stages = verify_attempt_stages(
+        confirmation,
+        verified_run.plan.run,
+        verified_run.plan.stages,
+        require_complete=True,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    confirmation_stored_inputs = verify_stored_inputs(
+        confirmation_stages,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    confirmation_future_inputs = verify_attempt_future_inputs(
+        confirmation,
+        verified_run.plan.run,
+        confirmation_stages,
+        fetcher=fetcher,
+    )
+    confirmation_measurements = verify_attempt_files(
+        confirmation,
+        verified_run.plan.run,
+        verified_run.plan.experiment,
+        verified_run.plan.stages,
+        fetcher=fetcher,
+    )
+    verify_measurement_stage_times(
+        confirmation_stages,
+        confirmation_measurements,
+        verified_run.plan.experiment,
+    )
+    verify_recomputed_metrics(
+        confirmation,
+        verified_run.plan,
+        confirmation_stages,
+        confirmation_measurements,
+        confirmation_stored_inputs,
+        confirmation_future_inputs,
+        policy=policy,
+        fetcher=fetcher,
+    )
+
+    estimator_ref = verified_run.plan.run.estimator
+    selected_estimator = verified_run.resolved_stages[estimator_ref.stage_id].artifacts[
+        estimator_ref.artifact_name
+    ]
+    confirmation_estimator = confirmation_stages[estimator_ref.stage_id].artifacts[
+        estimator_ref.artifact_name
+    ]
+    estimator_parity = selected_estimator == confirmation_estimator
+
+    eval_stage_ids = [
+        stage_id
+        for stage_id, stage in verified_run.plan.stages.items()
+        if isinstance(stage, EvalSpec)
+    ]
+    if len(eval_stage_ids) != 1:
+        raise VerificationError("benchmark verification requires one eval stage")
+    eval_stage_id = eval_stage_ids[0]
+    selected_predictions = verified_run.resolved_stages[eval_stage_id].artifacts[
+        PREDICTIONS
+    ]
+    confirmation_predictions = confirmation_stages[eval_stage_id].artifacts[
+        PREDICTIONS
+    ]
+    prediction_parity = selected_predictions == confirmation_predictions
+
+    expected_artifacts = {
+        (estimator_ref.stage_id, estimator_ref.artifact_name): (
+            estimator_ref,
+            next(
+                stage
+                for stage in selected_attempt.resolved_stages
+                if stage.stage_id == estimator_ref.stage_id
+            ),
+            next(
+                stage
+                for stage in confirmation.resolved_stages
+                if stage.stage_id == estimator_ref.stage_id
+            ),
+            selected_estimator,
+            confirmation_estimator,
+        ),
+        (eval_stage_id, PREDICTIONS): (
+            StageArtifactRef(
+                stage_id=eval_stage_id,
+                artifact_name=PREDICTIONS,
+            ),
+            next(
+                stage
+                for stage in selected_attempt.resolved_stages
+                if stage.stage_id == eval_stage_id
+            ),
+            next(
+                stage
+                for stage in confirmation.resolved_stages
+                if stage.stage_id == eval_stage_id
+            ),
+            selected_predictions,
+            confirmation_predictions,
+        ),
+    }
+    received_artifacts = {
+        (receipt.artifact.stage_id, receipt.artifact.artifact_name): receipt
+        for receipt in result.artifacts
+    }
+    if set(received_artifacts) != set(expected_artifacts):
+        raise VerificationError(
+            "benchmark.artifacts: result must compare parameters and predictions"
+        )
+    for artifact_key, expected in expected_artifacts.items():
+        (
+            artifact_ref,
+            candidate_stage,
+            confirmation_stage,
+            candidate,
+            confirmed,
+        ) = expected
+        receipt = received_artifacts[artifact_key]
+        expected_candidate_digest = document_digest(candidate)
+        expected_confirmation_digest = document_digest(confirmed)
+        if (
+            receipt.candidate_stage != candidate_stage
+            or receipt.confirmation_stage != confirmation_stage
+            or receipt.candidate_digest != expected_candidate_digest
+            or receipt.confirmation_digest != expected_confirmation_digest
+            or receipt.passed
+            != (expected_candidate_digest == expected_confirmation_digest)
+        ):
+            raise VerificationError(
+                "benchmark.artifacts: artifact comparison receipt differs"
+            )
+
+    def metric_receipts(
+        attempt: RunAttempt,
+    ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
+        """Load the eval metric receipts owned by one attempt."""
+        receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
+        for reference in attempt.metric_verification_files:
+            raw = read_resolved_file(reference, fetcher=fetcher)
+            try:
+                receipt = MetricVerificationReceipt.model_validate(
+                    parse_yaml_bytes(raw)
+                )
+            except (yaml.YAMLError, ValueError) as exc:
+                raise VerificationError(
+                    "benchmark.metrics: metric verification receipt is invalid"
+                ) from exc
+            if receipt.stage_id != eval_stage_id:
+                continue
+            receipts[receipt.metric_id] = (reference, receipt)
+        return receipts
+
+    candidate_metric_receipts = metric_receipts(selected_attempt)
+    confirmation_metric_receipts = metric_receipts(confirmation)
+    criteria = {criterion.metric_id: criterion for criterion in benchmark.metrics}
+    received_metrics = {receipt.metric_id: receipt for receipt in result.metrics}
+    if set(received_metrics) != set(criteria):
+        raise VerificationError(
+            "benchmark.metrics: result metric IDs differ from the benchmark"
+        )
+    criteria_pass = True
+    for metric_id, criterion in criteria.items():
+        if (
+            metric_id not in candidate_metric_receipts
+            or metric_id not in confirmation_metric_receipts
+        ):
+            raise VerificationError(
+                f"benchmark.metrics: metric {metric_id!r} lacks verification evidence"
+            )
+        candidate_ref, candidate_receipt = candidate_metric_receipts[metric_id]
+        confirmation_ref, confirmation_receipt = confirmation_metric_receipts[metric_id]
+        values = (
+            candidate_receipt.recomputation.value,
+            confirmation_receipt.recomputation.value,
+        )
+        criterion_passed = (
+            all(value >= criterion.threshold for value in values)
+            if criterion.comparison == "ge"
+            else all(value <= criterion.threshold for value in values)
+        )
+        receipt = received_metrics[metric_id]
+        if (
+            not candidate_receipt.passed
+            or not confirmation_receipt.passed
+            or receipt.candidate_verification != candidate_ref
+            or receipt.confirmation_verification != confirmation_ref
+            or receipt.comparison != criterion.comparison
+            or receipt.threshold != criterion.threshold
+            or receipt.passed != criterion_passed
+        ):
+            raise VerificationError(
+                "benchmark.metrics: metric criterion receipt differs"
+            )
+        criteria_pass &= criterion_passed
+
+    passed = estimator_parity and prediction_parity and criteria_pass
+    expected_status = "passed" if passed else "failed"
+    if result.status != expected_status:
+        raise VerificationError(
+            "benchmark result status does not match parity and metric checks"
+        )
+
+    return VerifiedBenchmarkResult(
+        result=result,
+        run=verified_run,
+        confirmation=confirmation,
+        confirmation_stages=confirmation_stages,
+        confirmation_measurements=confirmation_measurements,
+    )
+```
+
+**File: `src/viper/artifact_loaders.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/artifact_loaders.py:validate_artifact_context -->
+```python contract-target
+def validate_artifact_context(
+    context: ArtifactLoaderWorkerContext,
+) -> ArtifactValidationResult:
+    """Invoke one loader and apply the reserved validator when applicable."""
+    value = _load_artifact_value(context)
+    if context.artifact_name == RESUME_STATE:
+        _validate_resume_state(value, context.run)
+        return ArtifactValidationResult(guarantee="artifact.semantic.resume_state")
+    return ArtifactValidationResult(guarantee="artifact.loadability")
+```
+
+**File: `src/viper/_workers/parameters.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_workers/parameters.py:main -->
+```python contract-target
+def main() -> int:
+    """Validate frozen stage parameters and write their effective JSON mapping."""
+    context_path = os.environ.get("VIPER_CONTEXT_PATH")
+    if context_path is None:
+        raise ValueError("VIPER_CONTEXT_PATH is required")
+    context = ParameterValidationContext.model_validate_json(
+        Path(context_path).read_text(encoding="utf-8")
+    )
+    stage = load_stage_spec(context.stage_spec_path)
+    if not isinstance(stage, ParameterizedSpec):
+        raise ValueError("parameter validation requires a parameterized stage")
+    reference = stage.parameter_model
+    validated = validate_parameters(
+        Path.cwd() / reference.path,
+        reference,
+        stage.params,
+        type(stage.params),
+    )
+    context.result_path.write_text(
+        json.dumps(validated, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return 0
+```
+
+**File: `tests/test_public_api.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys -->
+```python contract-target
+def test_stage_api_uses_target_decorators_params_and_keys() -> None:
+    """Expose the concise parameter, key, and evaluation vocabulary."""
+    from viper import keys, params
+    from viper.stages import eval
+
+    assert keys.Train.MODEL == "model"
+    assert keys.Train.STATE == "state"
+    assert keys.Eval.MODEL == "model"
+    assert keys.Eval.TEST == "test"
+    assert keys.Eval.PREDS == "preds"
+    assert issubclass(params.Eval, params.ParameterSet)
+    assert callable(eval)
+```
+
+### P5-AIR-02
+
+**File: `src/viper/runtime.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:PythonEnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:GCEEnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:ResolvedGCEEnvironment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:LocalEnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:ResolvedLocalEnvironment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:EnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:ResolvedEnvironment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runtime.py:observe_python_environment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:PythonEnvSpec -->
+```python contract-target
+class PythonEnvSpec(ProtocolModel):
+    """Fix the interpreter and installed distributions used by a stage."""
+
+    python_version: NonEmptyStr
+    distributions: tuple[PythonDistributionSpec, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_distribution_order(self) -> PythonEnvSpec:
+        """Require one canonically ordered entry for each distribution name."""
+        names = tuple(distribution.name for distribution in self.distributions)
+        if names != tuple(sorted(names)):
+            raise ValueError("Python distributions must be sorted by name")
+        if len(set(names)) != len(names):
+            raise ValueError("Python distribution names must be unique")
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:GCEEnvSpec -->
+```python contract-target
+class GCEEnvSpec(ProtocolModel):
+    """Declare the requested Google Compute Engine env."""
+
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: GitFileRef
+    python_env: PythonEnvSpec
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:ResolvedGCEEnv -->
+```python contract-target
+class ResolvedGCEEnv(ProtocolModel):
+    """Record the env realized for one stage execution."""
+
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: ResolvedGitFileRef
+    python_env: PythonEnvSpec
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:LocalEnvSpec -->
+```python contract-target
+class LocalEnvSpec(ProtocolModel):
+    """Declare a local development env fixed by one lockfile."""
+
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: GitFileRef
+    python_env: PythonEnvSpec
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:ResolvedLocalEnv -->
+```python contract-target
+class ResolvedLocalEnv(ProtocolModel):
+    """Record the local development env used by one stage."""
+
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: ResolvedGitFileRef
+    python_env: PythonEnvSpec
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:EnvSpec -->
+```python contract-target
+EnvSpec = Annotated[
+    GCEEnvSpec | LocalEnvSpec,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:ResolvedEnv -->
+```python contract-target
+ResolvedEnv = Annotated[
+    ResolvedGCEEnv | ResolvedLocalEnv,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/runtime.py:ProcessStartupReceipt -->
+```python contract-target
+class ProcessStartupReceipt(ProtocolModel):
+    """Record the startup env, applied controls, and seeded generators."""
+
+    env: dict[StartupVariable, str]
+    reproducibility: ReproducibilitySpec
+    generators: tuple[GeneratorInitializationReceipt, ...]
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runtime.py:observe_python_env -->
+```python contract-target
+def observe_python_env() -> PythonEnvSpec:
+    """Record the interpreter and every installed Python distribution."""
+    versions: dict[str, str] = {}
+    for distribution in importlib.metadata.distributions():
+        try:
+            raw_name = distribution.metadata["Name"]
+        except KeyError:
+            continue
+        name = re.sub(r"[-_.]+", "-", raw_name).lower()
+        version = distribution.version
+        previous = versions.get(name)
+        if previous is not None and previous != version:
+            raise RuntimeError(f"installed distribution {name!r} has multiple versions")
+        versions[name] = version
+    if not versions:
+        raise RuntimeError("the active Python env has no distributions")
+    return PythonEnvSpec(
+        python_version=platform.python_version(),
+        distributions=tuple(
+            PythonDistributionSpec(name=name, version=versions[name])
+            for name in sorted(versions)
+        ),
+    )
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/runtime.py:apply_reproducibility -->
+```python contract-target
+def apply_reproducibility(
+    seed: RNGSeed,
+    reproducibility: ReproducibilitySpec,
+) -> RuntimeInitialization:
+    """Apply run controls and return the exact initialized generator objects."""
+    random.seed(seed)
+    receipts = [
+        GeneratorInitializationReceipt(
+            family="python",
+            seed=seed,
+            state_sha256=_sha256(pickle.dumps(random.getstate(), protocol=5)),
+        )
+    ]
+
+    named_generators = {
+        name: np.random.Generator(np.random.PCG64(seed))
+        for name in sorted(reproducibility.numpy_randomness.generators)
+    }
+    receipts.extend(
+        GeneratorInitializationReceipt(
+            family="numpy_generator",
+            name=name,
+            seed=seed,
+            state_sha256=_sha256(_numpy_state_bytes(generator)),
+        )
+        for name, generator in named_generators.items()
+    )
+    if reproducibility.numpy_randomness.capture_legacy_global:
+        np.random.seed(seed)
+        receipts.append(
+            GeneratorInitializationReceipt(
+                family="numpy_legacy",
+                seed=seed,
+                state_sha256=_sha256(pickle.dumps(np.random.get_state(), protocol=5)),
+            )
+        )
+
+    torch.manual_seed(seed)
+    receipts.append(
+        GeneratorInitializationReceipt(
+            family="torch_cpu",
+            seed=seed,
+            state_sha256=_sha256(torch.get_rng_state().numpy().tobytes()),
+        )
+    )
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        receipts.extend(
+            GeneratorInitializationReceipt(
+                family="torch_cuda",
+                seed=seed,
+                device_index=index,
+                state_sha256=_sha256(state.cpu().numpy().tobytes()),
+            )
+            for index, state in enumerate(torch.cuda.get_rng_state_all())
+        )
+
+    determinism = reproducibility.determinism
+    torch.use_deterministic_algorithms(
+        determinism.deterministic_algorithms,
+        warn_only=determinism.deterministic_warn_only,
+    )
+    torch.backends.cudnn.deterministic = determinism.cudnn_deterministic
+    torch.backends.cudnn.benchmark = determinism.cudnn_benchmark
+
+    precision = reproducibility.precision
+    torch.set_float32_matmul_precision(precision.float32_matmul_precision)
+    torch.backends.cudnn.allow_tf32 = precision.cudnn_allow_tf32
+
+    parallelism = reproducibility.parallelism
+    torch.set_num_threads(parallelism.torch_intraop_threads)
+    torch.set_num_interop_threads(parallelism.torch_interop_threads)
+
+    return RuntimeInitialization(
+        numpy_generators=named_generators,
+        receipt=ProcessStartupReceipt(
+            env=_startup_environment(),
+            reproducibility=reproducibility,
+            generators=tuple(receipts),
+        ),
+    )
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/runtime.py:observe_execution -->
+```python contract-target
+def observe_execution(env: EnvSpec) -> ExecutionContext:
+    """Observe the host and backend selected by one effective env."""
+    if isinstance(env, GCEEnvSpec):
+        return observe_gce_execution(env.compute)
+    return observe_local_execution(env.compute)
+```
+
+**File: `src/viper/runs.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/runs.py:RunSpec -->
+```python contract-target
+class RunSpec(ProtocolModel):
+    """Freeze one run plan and its ordered stage specifications."""
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    experiment_id: ExperimentId
+    variant_id: VariantId
+    replicate_id: ReplicateId
+    benchmark_id: BenchmarkId | None = None
+
+    seed: RNGSeed
+    source: GitSource
+    env: EnvSpec
+    reproducibility: ReproducibilitySpec
+
+    stages: tuple[RunStageRef, ...] = Field(min_length=1)
+    estimator: StageArtifactRef
+
+    @model_validator(mode="after")
+    def validate_common_invariants(self) -> RunSpec:
+        """Enforce ordered-stage identity and estimator selection invariants."""
+        stage_ids = tuple(stage.stage_id for stage in self.stages)
+        if len(set(stage_ids)) != len(stage_ids):
+            raise ValueError("stage IDs must be unique")
+
+        stage_spec_paths = tuple(stage.spec for stage in self.stages)
+        if len(set(stage_spec_paths)) != len(stage_spec_paths):
+            raise ValueError("stage spec paths must be unique")
+
+        run_root = (
+            f"experiments/{self.experiment_id}/runs/{self.variant_id}/{self.run_id}"
+        )
+        for stage in self.stages:
+            expected_path = f"{run_root}/stages/{stage.stage_id}/spec.yaml"
+            if stage.spec != expected_path:
+                raise ValueError(
+                    f"stage {stage.stage_id!r} spec must use its canonical run path"
+                )
+
+        if self.estimator.stage_id not in set(stage_ids):
+            raise ValueError("estimator must select a declared run stage")
+
+        if self.estimator.artifact_name != PARAMETERS:
+            raise ValueError("estimator must select the parameters artifact")
+
+        return self
+```
+
+**File: `src/viper/metrics.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
+```python contract-target
+class MetricExecutionReceipt(ProtocolModel):
+    """Record one controlled metric worker execution and its scalar result."""
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    attempt_id: int = Field(ge=1)
+    metric_id: MetricId
+    stage_id: StageId
+    purpose: Literal["measurement", "verification"]
+    implementation: MetricImplementationRef
+    parameter_model: ParameterModelRef
+    params: params.Metric
+    dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
+    startup: ProcessStartupReceipt
+    execution_context: ExecutionContext
+    python_environment: PythonEnvironmentSpec
+    value: float = Field(allow_inf_nan=False)
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+    outcome: Literal["succeeded"] = "succeeded"
+```
+
+**File: `src/viper/execution/_resolution.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:resolve_environment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/execution/_resolution.py:resolve_runner_environment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/execution/_resolution.py:resolve_env -->
+```python contract-target
+def resolve_env(
+    fetcher: RunFetcher,
+    env: EnvSpec,
+    process: StageProcessResult,
+) -> ResolvedLocalEnv | ResolvedGCEEnv:
+    """Resolve one requested env from child-observed runtime evidence."""
+    if isinstance(env, GCEEnvSpec):
+        host = process.execution_context.host
+        if not isinstance(host, GCEHostContext):
+            raise RunError("GCE execution omitted its observed GCE host")
+        return ResolvedGCEEnv(
+            provisioning=host.provisioning,
+            machine_type=host.machine_type,
+            compute=env.compute,
+            lockfile=resolve_git_file(fetcher, env.lockfile),
+            python_env=process.python_env,
+        )
+    return ResolvedLocalEnv(
+        compute=env.compute,
+        lockfile=resolve_git_file(fetcher, env.lockfile),
+        python_env=process.python_env,
+    )
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/execution/_resolution.py:resolve_runner_env -->
+```python contract-target
+def resolve_runner_env(
+    fetcher: RunFetcher,
+    env: EnvSpec,
+) -> tuple[ResolvedLocalEnv | ResolvedGCEEnv, ExecutionContext]:
+    """Resolve the env observed by a runner-owned stage."""
+    python_env = observe_python_env()
+    if python_env != env.python_env:
+        raise RunError("runner Python env differs from the stage request")
+    execution_context = observe_execution(env)
+    if isinstance(env, GCEEnvSpec):
+        host = execution_context.host
+        if not isinstance(host, GCEHostContext):
+            raise RunError("GCE download omitted its observed GCE host")
+        resolved: ResolvedLocalEnv | ResolvedGCEEnv = (
+            ResolvedGCEEnv(
+                provisioning=host.provisioning,
+                machine_type=host.machine_type,
+                compute=env.compute,
+                lockfile=resolve_git_file(fetcher, env.lockfile),
+                python_env=python_env,
+            )
+        )
+    else:
+        resolved = ResolvedLocalEnv(
+            compute=env.compute,
+            lockfile=resolve_git_file(fetcher, env.lockfile),
+            python_env=python_env,
+        )
+    return resolved, execution_context
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_resolution.py:resolve_stage -->
+```python contract-target
+def resolve_stage(
+    stage: ParameterizedSpec,
+    *,
+    source: ResolvedGitFileRef,
+    env: ResolvedLocalEnv | ResolvedGCEEnv,
+    process: StageProcessResult,
+    invocation: ResolvedStageInvocationRef,
+    inputs: dict[InputName, ResolvedInputRef] | None,
+    completed_at: datetime,
+) -> ResolvedSpec:
+    """Construct the resolved subtype for one completed project stage."""
+    result = process
+    common = {
+        "spec": stage,
+        "source": source,
+        "env": env,
+        "execution_context": result.execution_context,
+        "startup": result.startup,
+        "invocation": invocation,
+        "command": result.command,
+        "artifacts": result.artifacts,
+        "completed_at": completed_at,
+    }
+    assert inputs is not None
+    if stage.kind == "build":
+        return ResolvedBuildSpec(**common, inputs=inputs)
+    if stage.kind == "embed":
+        return ResolvedEmbedSpec(**common, inputs=inputs)
+    if stage.kind == "train":
+        return ResolvedTrainSpec(**common, inputs=inputs)
+    return ResolvedEvalSpec(**common, inputs=inputs)
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_resolution.py:resolve_download_stage -->
+```python contract-target
+def resolve_download_stage(
+    stage: DownloadSpec,
+    *,
+    env: ResolvedLocalEnv | ResolvedGCEEnv,
+    execution_context: ExecutionContext,
+    artifacts: dict[str, ResolvedArtifact],
+    retrievals: dict[InputName, ResolvedHttpRetrieval],
+    completed_at: datetime,
+) -> ResolvedDownloadSpec:
+    """Construct one runner-owned resolved download record."""
+    return ResolvedDownloadSpec(
+        spec=stage,
+        env=env,
+        execution_context=execution_context,
+        artifacts=artifacts,
+        retrievals=retrievals,
+        completed_at=completed_at,
+    )
+```
+
+**File: `src/viper/execution/_attempt.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_attempt.py:execute_attempt -->
+```python contract-target
+def execute_attempt(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+    retry: bool = False,
+    purpose: AttemptPurpose = "run",
+) -> RunResult | ConfirmationRunResult:
+    """Execute one ordinary or benchmark-confirmation attempt."""
+    root = repository_root.resolve()
+    run_path = run_spec_path.resolve()
+    run_raw = run_path.read_bytes()
+    run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
+    origin = run_git(root, "remote", "get-url", "origin").decode().strip()
+    if origin != str(run.source.repository):
+        raise RunError("Git origin differs from RunSpec.source.repository")
+    plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
+    relative_run_path = run_path.relative_to(root).as_posix()
+    if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
+        raise RunError("RunSpec bytes are absent from the current Git commit")
+
+    store = LocalArtifactStore(root)
+    destination = bind_run_destination(
+        root,
+        run.run_id,
+        load_storage_settings(root).destination,
+    )
+    snapshot_publisher = create_snapshot_publisher(root, destination)
+    fetcher = RunFetcher(root, store, str(run.source.repository))
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({str(run.source.repository)})
+    )
+    experiment = ExperimentSpec.model_validate(
+        parse_yaml_bytes(
+            fetcher(
+                GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=f"experiments/{run.experiment_id}/spec.yaml",
+                )
+            )
+        )
+    )
+    run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+
+    workspace_root = root / ".viper" / "workspaces"
+    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
+    run_lock.acquire()
+    terminal_path = run_path.parent / "resolved.yaml"
+    previous_run: ResolvedRun | None = None
+    if terminal_path.is_file():
+        previous_run = ResolvedRun.model_validate(
+            parse_yaml_bytes(terminal_path.read_bytes())
+        )
+        if purpose == "run" and not retry:
+            run_lock.release()
+            raise RunError("run already has terminal attempt history; use retry")
+        if purpose == "run" and previous_run.status == "succeeded":
+            run_lock.release()
+            raise RunError("a successful run cannot be retried")
+    elif purpose == "benchmark_confirmation":
+        run_lock.release()
+        raise RunError("benchmark confirmation requires a terminal candidate run")
+    if purpose == "benchmark_confirmation" and previous_run is not None:
+        if previous_run.status != "succeeded":
+            run_lock.release()
+            raise RunError("benchmark confirmation requires a successful candidate run")
+    known_attempts = (
+        ()
+        if previous_run is None
+        else tuple(
+            read_attempt_reference(reference, run, fetcher=fetcher)
+            for reference in previous_run.attempts
+        )
+    )
+    previous_attempts = reconcile_abandoned_attempts(
+        root,
+        workspace_root,
+        run,
+        run_root,
+        destination,
+        known_attempts,
+    )
+    attempt_id = max(
+        next_attempt_id(workspace_root, run.run_id),
+        max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
+    )
+    workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
+    journal = DurableJournal(workspace.control / "journal.jsonl")
+    attempt_started = datetime.now(UTC)
+    resolved_stage_refs: list[ResolvedStageRef] = []
+    invocation_refs: list[ResolvedStageInvocationRef] = []
+    completed: dict[StageId, ResolvedStageRef] = {}
+    loaded_stages: dict[StageId, BaseSpec] = {}
+    measurement_paths: list[Path] = []
+    metric_verification_paths: list[Path] = []
+    log_files: dict[str, bytes] = {}
+    active_stage_id: StageId | None = None
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def cancel_attempt(signum: int, frame: object) -> None:
+        """Convert an interrupt request into a durable cancellation outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("cancelled")
+
+    def preempt_attempt(signum: int, frame: object) -> None:
+        """Convert host termination into a durable preemption outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("preempted")
+
+    signal.signal(signal.SIGINT, cancel_attempt)
+    signal.signal(signal.SIGTERM, preempt_attempt)
+    try:
+        journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
+        preflight = preflight_plan(root, run_path)
+        preflight_path = workspace.control / "preflight.json"
+        write_synchronized(
+            preflight_path,
+            f"{preflight.model_dump_json()}\n".encode(),
+        )
+        journal.append(
+            "preflighting",
+            "preflight completed and frozen plan located in Git",
+            recorded_at=datetime.now(UTC),
+            details={
+                "plan_commit": plan_commit,
+                "report": preflight_path.relative_to(workspace.root).as_posix(),
+            },
+        )
+        if not preflight.ready:
+            failed_codes = ", ".join(
+                check.code for check in preflight.checks if check.status == "failure"
+            )
+            raise RunError(f"plan preflight failed: {failed_codes}")
+        for stage_reference in run.stages:
+            active_stage_id = stage_reference.stage_id
+            stage = load_stage_spec(root / stage_reference.spec)
+            loaded_stages[stage_reference.stage_id] = stage
+            effective_environment = stage.env or run.env
+            resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
+            resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
+            input_paths: dict[str, Path] = {}
+            process = None
+            journal.append(
+                "running_stage",
+                "stage execution started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+
+            if isinstance(stage, DownloadSpec):
+                runner_environment, execution_context = resolve_runner_env(
+                    fetcher,
+                    effective_environment,
+                )
+                (
+                    resolved_retrievals,
+                    resolved_artifacts,
+                    input_paths,
+                ) = retrieve_download_inputs(
+                    root,
+                    workspace,
+                    stage_reference.stage_id,
+                    stage,
+                )
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_download_stage(
+                    stage,
+                    env=runner_environment,
+                    execution_context=execution_context,
+                    artifacts=resolved_artifacts,
+                    retrievals=resolved_retrievals,
+                    completed_at=stage_completed,
+                )
+            else:
+                if not isinstance(stage, ParameterizedSpec):
+                    raise RunError("project stage lacks its parameterized contract")
+                source_location = GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=stage.implementation.path,
+                )
+                source = resolve_git_file(fetcher, source_location)
+                if (root / stage.implementation.path).read_bytes() != fetcher(
+                    source_location
+                ):
+                    raise RunError("stage source differs from the frozen source")
+                if isinstance(stage, InternalSpec):
+                    resolved_inputs, input_paths = resolve_inputs(
+                        root,
+                        workspace,
+                        stage_reference.stage_id,
+                        stage,
+                        completed,
+                        loaded_stages,
+                        fetcher,
+                        policy,
+                        store,
+                    )
+                try:
+                    process = execute_stage_process(
+                        root,
+                        run,
+                        stage_reference,
+                        stage,
+                        attempt_id=attempt_id,
+                        input_paths=input_paths,
+                        timeout_seconds=timeout_seconds,
+                    )
+                except (StageExecutionError, StageProcessInterrupted) as exc:
+                    run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stdout.log"
+                    ] = exc.stdout
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stderr.log"
+                    ] = exc.stderr
+                    if exc.invocation is not None:
+                        invocation_path = (
+                            f"{run_root}/attempts/{attempt_id}/invocations/"
+                            f"{stage_reference.stage_id}.yaml"
+                        )
+                        invocation_refs.append(
+                            publish_invocation_receipt(
+                                root,
+                                destination,
+                                invocation_path,
+                                exc.invocation,
+                            )
+                        )
+                    raise
+                invocation_path = (
+                    f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                    f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
+                )
+                invocation_ref = publish_invocation_receipt(
+                    root,
+                    destination,
+                    invocation_path,
+                    process.invocation,
+                )
+                invocation_refs.append(invocation_ref)
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_stage(
+                    stage,
+                    source=source,
+                    env=resolve_env(
+                        fetcher,
+                        effective_environment,
+                        process,
+                    ),
+                    process=process,
+                    invocation=invocation_ref,
+                    inputs=resolved_inputs,
+                    completed_at=stage_completed,
+                )
+                resolved_artifacts = process.artifacts
+                metric_specs = {
+                    metric.metric_id: metric for metric in experiment.metrics
+                }
+                for metric_id in stage.metric_ids:
+                    if metric_specs[metric_id].mode != "live":
+                        continue
+                    live_path = (
+                        root
+                        / (
+                            f"experiments/{run.experiment_id}/runs/"
+                            f"{run.variant_id}/{run.run_id}"
+                        )
+                        / f"attempts/{attempt_id}/measurements"
+                        / f"{stage_reference.stage_id}.{metric_id}.jsonl"
+                    )
+                    if live_path.is_file() and live_path not in measurement_paths:
+                        measurement_paths.append(live_path)
+            resolved_path = (
+                f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                f"/stages/{stage_reference.stage_id}/resolved.yaml"
+            )
+            resolved_raw = serialize_document(resolved)
+            snapshot_paths: dict[str, Path] = {}
+            if resolved_retrievals is not None:
+                for retrieval in resolved_retrievals.values():
+                    retrieval_path = retrieval.body.path
+                    snapshot_paths[retrieval_path] = root / retrieval_path
+            for artifact in resolved_artifacts.values():
+                artifact_references: tuple[SnapshotFileRef, ...]
+                if artifact.kind == "file":
+                    artifact_references = (artifact.file,)
+                else:
+                    artifact_references = tuple(
+                        member.file for member in artifact.members
+                    )
+                for reference in artifact_references:
+                    snapshot_paths[reference.path] = root / reference.path
+            journal.append(
+                "publishing_stage",
+                "stage snapshot publication started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+            snapshot = snapshot_publisher.publish(
+                resolved_stage_path=resolved_path,
+                resolved_stage=resolved_raw,
+                files=snapshot_paths,
+            )
+            resolved_stage_ref = ResolvedStageRef(
+                stage_id=stage_reference.stage_id,
+                snapshot=snapshot,
+                resolved_spec=snapshot_file(resolved_path, resolved_raw),
+            )
+            resolved_stage_refs.append(resolved_stage_ref)
+            completed[stage_reference.stage_id] = resolved_stage_ref
+            run_after_stage_metrics(
+                root,
+                run,
+                stage_reference.stage_id,
+                stage,
+                experiment,
+                input_paths,
+                measurement_paths,
+                metric_verification_paths,
+                store,
+                timeout_seconds,
+                attempt_id,
+            )
+            if process is not None:
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stdout.log"
+                ] = process.stdout
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stderr.log"
+                ] = process.stderr
+            active_stage_id = None
+
+        journal.append(
+            "closing_attempt",
+            "all planned stages completed",
+            recorded_at=datetime.now(UTC),
+        )
+        journal.append(
+            "publishing_attempt_files",
+            "attempt evidence publication started",
+            recorded_at=datetime.now(UTC),
+            details={},
+        )
+        journal.append(
+            "terminal",
+            "attempt succeeded",
+            recorded_at=datetime.now(UTC),
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+        )
+        attempt_completed = datetime.now(UTC)
+        attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status="succeeded",
+            started_at=attempt_started,
+            completed_at=attempt_completed,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=None,
+        )
+        run_reference = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+        attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            attempt,
+            destination,
+        )
+        if purpose == "benchmark_confirmation":
+            return ConfirmationRunResult(
+                attempt=attempt,
+                attempt_reference=attempt_reference,
+                attempt_path=(
+                    root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+                ),
+                journal_path=journal.path,
+            )
+        attempt_references = tuple(
+            write_attempt_document(root, run_root, value, destination)
+            for value in previous_attempts
+        ) + (attempt_reference,)
+        resolved_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=run_reference,
+            ),
+            status="succeeded",
+            attempts=attempt_references,
+            successful_attempt_id=attempt_id,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(resolved_run)
+        verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+        replace_synchronized(terminal_path, terminal_raw)
+        write_synchronized(workspace.terminal, terminal_raw)
+        return RunResult(
+            resolved_run=resolved_run,
+            resolved_run_path=terminal_path,
+            journal_path=journal.path,
+        )
+    except (Exception, KeyboardInterrupt) as exc:
+        failed_at = datetime.now(UTC)
+        status: Literal["failed", "cancelled", "preempted"]
+        if isinstance(exc, StageProcessInterrupted):
+            status = exc.outcome
+        elif isinstance(exc, KeyboardInterrupt):
+            status = "cancelled"
+        else:
+            status = "failed"
+        latest = journal.latest()
+        if latest is not None and latest.state != "terminal":
+            journal.append(
+                "terminal",
+                f"attempt {status}",
+                recorded_at=failed_at,
+                details={
+                    "stage_id": active_stage_id,
+                    "exception": type(exc).__name__,
+                },
+            )
+        code = (
+            "cancelled"
+            if status == "cancelled"
+            else "preempted"
+            if status == "preempted"
+            else "preflight_failed"
+            if isinstance(exc, RunError)
+            and str(exc).startswith("plan preflight failed")
+            else "verification_failed"
+            if isinstance(exc, VerificationError)
+            else "execution_failed"
+            if isinstance(
+                exc,
+                (StageExecutionError, MetricExecutionError, HttpRetrievalError),
+            )
+            else "internal_error"
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+        )
+        completed_at = datetime.now(UTC)
+        failed_attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status=status,
+            started_at=attempt_started,
+            completed_at=completed_at,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=AttemptFailure(
+                code=code,
+                stage_id=active_stage_id,
+                message=str(exc) or type(exc).__name__,
+                occurred_at=failed_at,
+            ),
+        )
+        run_reference = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+        failed_attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            failed_attempt,
+            destination,
+        )
+        if purpose == "benchmark_confirmation":
+            failed_attempt_path = (
+                root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+            )
+            raise RunError(
+                f"benchmark confirmation attempt {attempt_id} failed; evidence "
+                f"written to {failed_attempt_path}"
+            ) from exc
+        attempt_references = tuple(
+            write_attempt_document(root, run_root, value, destination)
+            for value in previous_attempts
+        ) + (failed_attempt_reference,)
+        failed_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=run_reference,
+            ),
+            status="cancelled" if status == "cancelled" else "failed",
+            attempts=attempt_references,
+            successful_attempt_id=None,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(failed_run)
+        replace_synchronized(terminal_path, terminal_raw)
+        replace_synchronized(workspace.terminal, terminal_raw)
+        raise RunError(
+            f"attempt {attempt_id} failed; evidence written to {terminal_path}"
+        ) from exc
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
+        run_lock.release()
+```
+
+**File: `src/viper/execution/_stage.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_stage.py:StageWorkerResult -->
+```python contract-target
+class StageWorkerResult(BaseModel):
+    """Return the evidence produced by one controlled stage child."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    execution_context: ExecutionContext | None
+    python_env: PythonEnvSpec | None
+    startup: ProcessStartupReceipt | None
+    invocation: StageInvocationReceipt
+    error: str | None = None
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_stage.py:StageProcessResult -->
+```python contract-target
+@dataclass(frozen=True)
+class StageProcessResult:
+    """Record one local stage invocation and its exact output file identities."""
+
+    command: tuple[str, ...]
+    started_at: datetime
+    completed_at: datetime
+    artifacts: dict[ArtifactName, ResolvedArtifact]
+    execution_context: ExecutionContext
+    python_env: PythonEnvSpec
+    startup: ProcessStartupReceipt
+    invocation: StageInvocationReceipt
+    stdout: bytes
+    stderr: bytes
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_stage.py:execute_stage_process -->
+```python contract-target
+def execute_stage_process(
+    repository_root: Path,
+    run: RunSpec,
+    stage_reference: RunStageRef,
+    stage_spec: ParameterizedSpec,
+    *,
+    attempt_id: int = 1,
+    input_paths: dict[str, Path] | None = None,
+    timeout_seconds: float | None = None,
+) -> StageProcessResult:
+    """Invoke one frozen callable and hash every declared output file."""
+    root = repository_root.resolve()
+    spec_path = _workspace_path(root, stage_reference.spec)
+    spec_raw = spec_path.read_bytes()
+    if hashlib.sha256(spec_raw).hexdigest() != stage_reference.sha256:
+        raise StageExecutionError("stage spec SHA-256 does not match RunStageRef")
+    if len(spec_raw) != stage_reference.bytes:
+        raise StageExecutionError("stage spec byte count does not match RunStageRef")
+
+    implementation_path = _workspace_path(root, stage_spec.implementation.path)
+    if not implementation_path.is_file():
+        raise StageExecutionError(
+            f"stage implementation is missing: {stage_spec.implementation.path}"
+        )
+    implementation_raw = implementation_path.read_bytes()
+    if len(implementation_raw) != stage_spec.implementation.bytes:
+        raise StageExecutionError("stage implementation byte count differs")
+    if hashlib.sha256(implementation_raw).hexdigest() != (
+        stage_spec.implementation.sha256
+    ):
+        raise StageExecutionError("stage implementation SHA-256 differs")
+
+    parameterized_stage = cast(ParameterizedStageSpec, stage_spec)
+    try:
+        validate_stage_parameters(
+            root,
+            spec_path,
+            parameterized_stage,
+            timeout_seconds=timeout_seconds,
+        )
+    except ParameterValidationError as exc:
+        raise StageExecutionError("stage parameter validation failed") from exc
+
+    run_spec_path = (
+        f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}/spec.yaml"
+    )
+    supplied_inputs = {} if input_paths is None else input_paths
+    logical_inputs: dict[str, str] = {}
+    for name, path in supplied_inputs.items():
+        resolved_path = path.resolve()
+        if not resolved_path.is_relative_to(root):
+            raise StageExecutionError("stage input path escapes the repository root")
+        logical_inputs[name] = resolved_path.relative_to(root).as_posix()
+    binding = StageContextBinding(
+        run_id=run.run_id,
+        attempt_id=attempt_id,
+        stage_id=stage_reference.stage_id,
+        parameter_model=parameterized_stage.parameter_model,
+        parameter_digest=document_digest(parameterized_stage.params),
+        inputs=logical_inputs,
+        artifacts={
+            name: artifact.path for name, artifact in stage_spec.artifacts.items()
+        },
+        metric_ids=stage_spec.metric_ids,
+        numpy_generator_names=tuple(
+            sorted(run.reproducibility.numpy_randomness.generators)
+        ),
+    )
+    command = ("python", "-m", "viper._workers.stages")
+    env = os.environ.copy()
+    effective_environment = stage_spec.env or run.env
+    compute = effective_environment.compute
+    cuda_ordinal = select_cuda_device(compute.model) if compute.kind == "cuda" else None
+    startup_environment = process_environment(
+        run.seed,
+        run.reproducibility,
+        compute,
+        cuda_ordinal=cuda_ordinal,
+    )
+    env.update({str(key): value for key, value in startup_environment.items()})
+    package_root = str(Path(__file__).resolve().parents[2])
+    existing_python_path = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        package_root
+        if existing_python_path is None
+        else f"{package_root}{os.pathsep}{existing_python_path}"
+    )
+    runtime_root = root / ".viper" / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    context_path = runtime_root / (
+        f"{run.run_id}.{attempt_id}.{stage_reference.stage_id}.context.json"
+    )
+    result_path = runtime_root / (
+        f"{run.run_id}.{attempt_id}.{stage_reference.stage_id}.result.json"
+    )
+    result_path.unlink(missing_ok=True)
+    context_path.write_text(
+        StageWorkerContext(
+            repository_root=root,
+            run_spec_path=root / run_spec_path,
+            stage_spec_path=spec_path,
+            binding=binding,
+            result_path=result_path,
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    env["VIPER_CONTEXT_PATH"] = str(context_path)
+    started_at = datetime.now(UTC)
+    process = subprocess.Popen(
+        (sys.executable, *command[1:]),
+        cwd=root,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except StageProcessInterrupted as exc:
+        stdout, stderr = _stop_process_group(process)
+        completed_at = datetime.now(UTC)
+        exc.invocation = StageInvocationReceipt(
+            implementation=stage_spec.implementation,
+            context=binding,
+            context_digest=document_digest(binding),
+            started_at=started_at,
+            completed_at=completed_at,
+            outcome=exc.outcome,
+        )
+        exc.stdout = stdout
+        exc.stderr = stderr
+        raise
+    except subprocess.TimeoutExpired as exc:
+        stdout, stderr = _stop_process_group(process)
+        completed_at = datetime.now(UTC)
+        raise StageExecutionError(
+            "stage command exceeded its timeout",
+            invocation=StageInvocationReceipt(
+                implementation=stage_spec.implementation,
+                context=binding,
+                context_digest=document_digest(binding),
+                started_at=started_at,
+                completed_at=completed_at,
+                outcome="failed",
+            ),
+            stdout=stdout,
+            stderr=stderr,
+        ) from exc
+    completed_at = datetime.now(UTC)
+    if not result_path.is_file():
+        raise StageExecutionError(
+            f"stage command exited with status {process.returncode} without "
+            "writing invocation evidence",
+            invocation=StageInvocationReceipt(
+                implementation=stage_spec.implementation,
+                context=binding,
+                context_digest=document_digest(binding),
+                started_at=started_at,
+                completed_at=completed_at,
+                outcome="failed",
+            ),
+            stdout=stdout,
+            stderr=stderr,
+        )
+    try:
+        worker_result = StageWorkerResult.model_validate_json(
+            result_path.read_text(encoding="utf-8")
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise StageExecutionError("stage worker wrote an invalid result") from exc
+    if process.returncode != 0 or worker_result.error is not None:
+        message = worker_result.error or stderr.decode(errors="replace").strip()
+        raise StageExecutionError(
+            f"stage command exited with status {process.returncode}: {message}",
+            invocation=worker_result.invocation,
+            stdout=stdout,
+            stderr=stderr,
+        )
+    if (
+        worker_result.execution_context is None
+        or worker_result.python_env is None
+        or worker_result.startup is None
+    ):
+        raise StageExecutionError("successful stage omitted runtime evidence")
+
+    artifacts = {
+        name: _resolve_artifact(root, declaration)
+        for name, declaration in stage_spec.artifacts.items()
+    }
+    return StageProcessResult(
+        command=command,
+        started_at=started_at,
+        completed_at=completed_at,
+        artifacts=artifacts,
+        execution_context=worker_result.execution_context,
+        python_env=worker_result.python_env,
+        startup=worker_result.startup,
+        invocation=worker_result.invocation,
+        stdout=stdout,
+        stderr=stderr,
+    )
+```
+
+**File: `src/viper/execution/_metric.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_metric.py:execute_metric_process -->
+```python contract-target
+def execute_metric_process(
+    repository_root: Path,
+    run: RunSpec,
+    stage_id: StageId,
+    stage: BaseSpec,
+    metric: MetricSpec,
+    *,
+    attempt_id: int = 1,
+    purpose: Literal["measurement", "verification"],
+    input_paths: dict[InputName, Path],
+    artifact_paths: dict[ArtifactName, Path],
+    dependencies: tuple[ResolvedMetricDependency, ...],
+    timeout_seconds: float | None = None,
+) -> MetricProcessResult:
+    """Apply startup controls and execute one frozen metric callable."""
+    root = repository_root.resolve()
+    if metric.mode != "recompute":
+        raise MetricExecutionError("metric worker requires recompute mode")
+    if metric.metric_id not in stage.metric_ids:
+        raise MetricExecutionError("stage does not select the metric")
+    expected_dependencies = tuple(metric.dependencies)
+    if tuple(value.dependency for value in dependencies) != expected_dependencies:
+        raise MetricExecutionError(
+            "resolved metric dependencies differ from MetricSpec"
+        )
+
+    effective_environment = stage.env or run.env
+    compute = effective_environment.compute
+    cuda_ordinal = select_cuda_device(compute.model) if compute.kind == "cuda" else None
+    env = os.environ.copy()
+    env.update(
+        {
+            str(key): value
+            for key, value in process_environment(
+                run.seed,
+                run.reproducibility,
+                compute,
+                cuda_ordinal=cuda_ordinal,
+            ).items()
+        }
+    )
+    package_root = str(Path(__file__).resolve().parents[2])
+    existing_python_path = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        package_root
+        if existing_python_path is None
+        else f"{package_root}{os.pathsep}{existing_python_path}"
+    )
+
+    runtime_root = root / ".viper" / "runtime"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    prefix = f"{run.run_id}.{attempt_id}.{stage_id}.{metric.metric_id}.{purpose}"
+    context_path = runtime_root / f"{prefix}.context.json"
+    result_path = runtime_root / f"{prefix}.result.json"
+    result_path.unlink(missing_ok=True)
+    context = MetricWorkerContext(
+        repository_root=root,
+        run=run,
+        attempt_id=attempt_id,
+        stage_id=stage_id,
+        stage=stage,
+        metric=metric,
+        purpose=purpose,
+        input_paths=input_paths,
+        artifact_paths=artifact_paths,
+        dependencies=dependencies,
+        result_path=result_path,
+    )
+    context_path.write_text(context.model_dump_json(), encoding="utf-8")
+    env["VIPER_METRIC_CONTEXT_PATH"] = str(context_path)
+
+    completed = subprocess.run(
+        (sys.executable, "-m", "viper._workers.metrics"),
+        cwd=root,
+        env=env,
+        capture_output=True,
+        check=False,
+        timeout=timeout_seconds,
+    )
+    if not result_path.is_file():
+        raise MetricExecutionError(
+            f"metric worker exited with status {completed.returncode} without a result"
+        )
+    try:
+        worker_result = MetricWorkerResult.model_validate_json(
+            result_path.read_text(encoding="utf-8")
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise MetricExecutionError("metric worker wrote an invalid result") from exc
+    if completed.returncode != 0 or worker_result.error is not None:
+        detail = worker_result.error or completed.stderr.decode(errors="replace")
+        raise MetricExecutionError(
+            f"metric worker exited with status {completed.returncode}: {detail.strip()}"
+        )
+    if worker_result.receipt is None:
+        raise MetricExecutionError("successful metric worker omitted its receipt")
+    return MetricProcessResult(
+        receipt=worker_result.receipt,
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+    )
+```
+
+**File: `src/viper/_workers/stages.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_workers/stages.py:main -->
+```python contract-target
+def main(argv: list[str] | None = None) -> int:
+    """Apply controls, construct the typed context, and invoke one callable."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments:
+        raise ValueError("stage worker accepts its context through VIPER_CONTEXT_PATH")
+    context_path_value = os.environ.get("VIPER_CONTEXT_PATH")
+    if context_path_value is None:
+        raise ValueError("VIPER_CONTEXT_PATH is required")
+    worker_context = StageWorkerContext.model_validate_json(
+        Path(context_path_value).read_text(encoding="utf-8")
+    )
+    root = worker_context.repository_root.resolve()
+    run = RunSpec.model_validate(
+        parse_yaml_bytes(worker_context.run_spec_path.read_bytes())
+    )
+    stage = load_stage_spec(worker_context.stage_spec_path)
+    binding = worker_context.binding
+    started_at = datetime.now(UTC)
+    initialization = None
+    execution_context = None
+    python_env = None
+    if not isinstance(stage, ParameterizedSpec):
+        raise ValueError("stage worker requires a parameterized stage")
+    try:
+        planned_stage, expected_inputs = _planned_stage_context(
+            root,
+            run,
+            binding.stage_id,
+        )
+        if stage != planned_stage:
+            raise ValueError("startup.plan: selected stage differs from RunSpec")
+        if (
+            worker_context.stage_spec_path.resolve()
+            != (
+                root
+                / next(
+                    reference.spec
+                    for reference in run.stages
+                    if reference.stage_id == binding.stage_id
+                )
+            ).resolve()
+        ):
+            raise ValueError("startup.plan: selected stage path differs")
+        if binding.run_id != run.run_id:
+            raise ValueError("startup.plan: context run ID differs from RunSpec")
+        if binding.parameter_model != stage.parameter_model:
+            raise ValueError("startup.context: parameter model differs")
+        if binding.parameter_digest != document_digest(stage.params):
+            raise ValueError("startup.context: parameter digest differs")
+        if binding.inputs != expected_inputs:
+            raise ValueError("startup.context: input paths differ")
+        expected_artifacts = {
+            name: str(artifact.path) for name, artifact in stage.artifacts.items()
+        }
+        if binding.artifacts != expected_artifacts:
+            raise ValueError("startup.context: artifact paths differ")
+        if binding.metric_ids != stage.metric_ids:
+            raise ValueError("startup.context: metric IDs differ")
+
+        effective_environment = stage.env or run.env
+        initialization = apply_reproducibility(run.seed, run.reproducibility)
+        generator_names = tuple(sorted(initialization.numpy_generators))
+        if generator_names != binding.numpy_generator_names:
+            raise ValueError("startup.context: NumPy generator names differ")
+        python_env = observe_python_env()
+        if python_env != effective_environment.python_env:
+            raise ValueError("startup.python: installed Python env differs")
+        execution_context = observe_execution(effective_environment)
+
+        params = instantiate_parameters(
+            root / stage.parameter_model.path,
+            stage.parameter_model,
+            stage.params,
+            type(stage.params),
+        )
+        function = load_stage_callable(
+            root / stage.implementation.path,
+            stage.implementation,
+            import_root=root,
+        )
+        definition = stage_definition(function)
+        if definition.kind != stage.kind:
+            raise ValueError("startup.callable: decorator kind differs")
+        if definition.parameter_model.__name__ != stage.parameter_model.symbol:
+            raise ValueError("startup.callable: decorator parameter class differs")
+        parameter_source = getattr(function, "__viper_parameter_source__", None)
+        if (
+            parameter_source is None
+            or Path(parameter_source).resolve()
+            != (root / stage.parameter_model.path).resolve()
+        ):
+            raise ValueError("startup.callable: parameter model source differs")
+
+        context = Context(
+            run_id=binding.run_id,
+            attempt_id=binding.attempt_id,
+            stage_id=binding.stage_id,
+            params=params,
+            inputs=MappingProxyType(_workspace_paths(root, binding.inputs)),
+            artifacts=MappingProxyType(_workspace_paths(root, binding.artifacts)),
+            metrics=MappingProxyType(_live_metric_handles(root, run, stage, binding)),
+            numpy_generators=MappingProxyType(initialization.numpy_generators),
+        )
+        with autocast_context(run.reproducibility):
+            function(context)
+    except Exception as exc:
+        completed_at = datetime.now(UTC)
+        invocation = StageInvocationReceipt(
+            implementation=stage.implementation,
+            context=binding,
+            context_digest=document_digest(binding),
+            started_at=started_at,
+            completed_at=completed_at,
+            outcome="failed",
+        )
+        _write_result(
+            worker_context.result_path,
+            StageWorkerResult(
+                execution_context=execution_context,
+                python_env=python_env,
+                startup=None if initialization is None else initialization.receipt,
+                invocation=invocation,
+                error=f"{type(exc).__name__}: {exc}",
+            ),
+        )
+        return 1
+
+    completed_at = datetime.now(UTC)
+    invocation = StageInvocationReceipt(
+        implementation=stage.implementation,
+        context=binding,
+        context_digest=document_digest(binding),
+        started_at=started_at,
+        completed_at=completed_at,
+        outcome="succeeded",
+    )
+    assert initialization is not None
+    assert execution_context is not None
+    assert python_env is not None
+    _write_result(
+        worker_context.result_path,
+        StageWorkerResult(
+            execution_context=execution_context,
+            python_env=python_env,
+            startup=initialization.receipt,
+            invocation=invocation,
+        ),
+    )
+    return 0
+```
+
+**File: `src/viper/_workers/metrics.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_workers/metrics.py:main -->
+```python contract-target
+def main(argv: list[str] | None = None) -> int:
+    """Apply controls, invoke one metric, and emit its execution receipt."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments:
+        raise ValueError(
+            "metric worker accepts context through VIPER_METRIC_CONTEXT_PATH"
+        )
+    context_value = os.environ.get("VIPER_METRIC_CONTEXT_PATH")
+    if context_value is None:
+        raise ValueError("VIPER_METRIC_CONTEXT_PATH is required")
+    context = MetricWorkerContext.model_validate_json(
+        Path(context_value).read_text(encoding="utf-8")
+    )
+    root = context.repository_root.resolve()
+    started_at = datetime.now(UTC)
+    try:
+        if context.metric.metric_id not in context.stage.metric_ids:
+            raise ValueError("metric is absent from the selected stage")
+        if tuple(value.dependency for value in context.dependencies) != tuple(
+            context.metric.dependencies
+        ):
+            raise ValueError("metric dependency bindings differ from MetricSpec")
+        validate_metric_definition(root, context.metric)
+        definition = metric_definition(
+            load_metric(
+                root / context.metric.implementation.path,
+                context.metric.implementation.symbol,
+            )
+        )
+        if definition.mode != "recompute":
+            raise ValueError("dedicated metric worker requires recompute mode")
+
+        initialization = apply_reproducibility(
+            context.run.seed,
+            context.run.reproducibility,
+        )
+        effective_environment = context.stage.env or context.run.env
+        python_env = observe_python_env()
+        if python_env != effective_environment.python_env:
+            raise ValueError("startup.python: installed Python env differs")
+        execution_context = observe_execution(effective_environment)
+        callable_metric = load_metric(
+            root / context.metric.implementation.path,
+            context.metric.implementation.symbol,
+        )
+        input_paths = _validated_paths(root, context.input_paths)
+        artifact_paths = _validated_paths(root, context.artifact_paths)
+        for binding in context.dependencies:
+            path = (
+                input_paths[binding.dependency.name]
+                if binding.dependency.source == "input"
+                else artifact_paths[binding.dependency.name]
+            )
+            recorded_identities = tuple(
+                (file.sha256, file.bytes) for file in binding.files
+            )
+            if _path_identities(path) != recorded_identities:
+                raise ValueError("metric dependency bytes differ from their receipt")
+        with autocast_context(context.run.reproducibility):
+            value = float(
+                callable_metric(
+                    MetricContext(
+                        inputs=input_paths,
+                        artifacts=artifact_paths,
+                        params=context.metric.params,
+                    )
+                )
+            )
+        completed_at = datetime.now(UTC)
+        receipt = MetricExecutionReceipt(
+            run_id=context.run.run_id,
+            attempt_id=context.attempt_id,
+            metric_id=context.metric.metric_id,
+            stage_id=context.stage_id,
+            purpose=context.purpose,
+            implementation=context.metric.implementation,
+            params=context.metric.params,
+            dependencies=context.dependencies,
+            startup=initialization.receipt,
+            execution_context=execution_context,
+            python_env=python_env,
+            value=value,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+    except Exception as exc:
+        _write_result(
+            context.result_path,
+            MetricWorkerResult(error=f"{type(exc).__name__}: {exc}"),
+        )
+        return 1
+    _write_result(context.result_path, MetricWorkerResult(receipt=receipt))
+    return 0
+```
+
+**File: `src/viper/preflight.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/preflight.py:PreflightCheckCode -->
+```python contract-target
+PreflightCheckCode = Literal[
+    "artifact.loader",
+    "env.gce",
+    "env.python",
+    "http.credentials",
+    "http.request",
+    "http.implementation",
+    "input.future",
+    "metric.implementation",
+    "parameter_model.identity",
+    "parameter_model.validation",
+    "plan.document",
+    "plan.git_identity",
+    "plan.records",
+    "plan.relationships",
+    "source.repository",
+    "stage.callable",
+    "stage.document",
+    "stage.identity",
+    "stage.implementation",
+    "startup.compute",
+    "startup.distributed",
+]
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/preflight.py:preflight_plan -->
+```python contract-target
+def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightReport:
+    """Validate plan bytes, host requirements, and same-run dependencies."""
+    root = repository_root.resolve()
+    checks: list[PreflightCheck] = []
+    try:
+        run = RunSpec.model_validate(parse_yaml_bytes(run_spec_path.read_bytes()))
+    except Exception:
+        return PreflightReport(
+            run_id=None,
+            checks=(
+                PreflightCheck(
+                    code="plan.document",
+                    status="failure",
+                    target=run_spec_path.as_posix(),
+                    message="run specification failed validation",
+                ),
+            ),
+        )
+    checks.append(_check("plan.document", run_spec_path.as_posix(), True, ""))
+
+    def fetch(location: StorageModel) -> bytes:
+        """Retrieve source-repository files locally and dispatch other backends."""
+        if (
+            isinstance(location, GitFileRef)
+            and location.repository == run.source.repository
+        ):
+            return _git_bytes(root, location.commit, location.path)
+        return fetch_storage_bytes(location)
+
+    try:
+        relative_run_path = run_spec_path.resolve().relative_to(root).as_posix()
+        plan_raw = _git_bytes(root, "HEAD", relative_run_path)
+        plan_is_frozen = plan_raw == run_spec_path.read_bytes()
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        plan_is_frozen = False
+    checks.append(
+        _check(
+            "plan.git_identity",
+            run_spec_path.as_posix(),
+            plan_is_frozen,
+            "run specification bytes are absent from the current Git commit",
+        )
+    )
+
+    try:
+        origin = subprocess.run(
+            ("git", "-C", str(root), "remote", "get-url", "origin"),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        source_repository_matches = origin == str(run.source.repository)
+    except (OSError, subprocess.CalledProcessError):
+        source_repository_matches = False
+    checks.append(
+        _check(
+            "source.repository",
+            str(run.source.repository),
+            source_repository_matches,
+            "local Git origin differs from RunSpec.source.repository",
+        )
+    )
+
+    active_python_env = observe_python_env()
+
+    loaded: dict[StageId, BaseSpec] = {}
+    prior: set[StageId] = set()
+    for reference in run.stages:
+        target = root / reference.spec
+        raw = target.read_bytes() if target.is_file() else b""
+        identity_matches = (
+            target.is_file()
+            and len(raw) == reference.bytes
+            and hashlib.sha256(raw).hexdigest() == reference.sha256
+        )
+        checks.append(
+            _check(
+                "stage.identity",
+                reference.stage_id,
+                identity_matches,
+                "stage specification bytes differ from RunStageRef",
+            )
+        )
+        if not identity_matches:
+            continue
+        try:
+            stage = load_stage_spec(target)
+        except Exception:
+            checks.append(
+                PreflightCheck(
+                    code="stage.document",
+                    status="failure",
+                    target=reference.stage_id,
+                    message="stage specification failed validation",
+                )
+            )
+            continue
+        checks.append(_check("stage.document", reference.stage_id, True, ""))
+        loaded[reference.stage_id] = stage
+
+        if isinstance(stage, ParameterizedSpec):
+            implementation_path = root / stage.implementation.path
+            try:
+                implementation_raw = implementation_path.read_bytes()
+                verify_stage_implementation_bytes(
+                    stage.implementation,
+                    implementation_raw,
+                )
+                implementation_exists = (
+                    implementation_path.is_file()
+                    and implementation_raw
+                    == _git_bytes(root, run.source.commit, stage.implementation.path)
+                )
+            except (OSError, subprocess.CalledProcessError, StageDefinitionError):
+                implementation_exists = False
+            checks.append(
+                _check(
+                    "stage.implementation",
+                    reference.stage_id,
+                    implementation_exists,
+                    "stage implementation differs from the frozen source commit",
+                )
+            )
+            callable_valid = False
+            if implementation_exists:
+                try:
+                    validate_stage_definition(root, stage)
+                    callable_valid = True
+                except (OSError, StageDefinitionError):
+                    pass
+            checks.append(
+                _check(
+                    "stage.callable",
+                    reference.stage_id,
+                    callable_valid,
+                    "stage callable decorator differs from the frozen stage contract",
+                )
+            )
+        effective_environment = stage.env or run.env
+        checks.append(
+            _check(
+                "env.python",
+                reference.stage_id,
+                active_python_env == effective_environment.python_env,
+                "installed Python env differs from the frozen plan",
+            )
+        )
+        if isinstance(effective_environment, GCEEnvSpec):
+            try:
+                observed_gce = observe_gce_execution(effective_environment.compute)
+                observed_host = observed_gce.host
+                gce_matches = (
+                    isinstance(observed_host, GCEHostContext)
+                    and observed_host.provisioning == effective_environment.provisioning
+                    and observed_host.machine_type == effective_environment.machine_type
+                )
+            except (OSError, RuntimeError):
+                gce_matches = False
+            checks.append(
+                _check(
+                    "env.gce",
+                    reference.stage_id,
+                    gce_matches,
+                    "active GCE host differs from the frozen env",
+                )
+            )
+        checks.append(
+            _check(
+                "startup.distributed",
+                reference.stage_id,
+                not (
+                    effective_environment.compute.kind == "cuda"
+                    and effective_environment.compute.count > 1
+                ),
+                "VIPER 0.1 supports one CUDA device per stage",
+            )
+        )
+        compute_available = True
+        if (
+            effective_environment.compute.kind == "cuda"
+            and effective_environment.compute.count == 1
+        ):
+            try:
+                select_cuda_device(effective_environment.compute.model)
+            except RuntimeError:
+                compute_available = False
+        checks.append(
+            _check(
+                "startup.compute",
+                reference.stage_id,
+                compute_available,
+                "requested CUDA device model is unavailable on this host",
+            )
+        )
+        loaders_exist = True
+        for artifact in stage.artifacts.values():
+            loader = artifact.loader
+            loader_path = root / loader.path
+            try:
+                loader_raw = loader_path.read_bytes()
+                if (
+                    not loader_path.is_file()
+                    or len(loader_raw) != loader.bytes
+                    or hashlib.sha256(loader_raw).hexdigest() != loader.sha256
+                    or loader_raw != _git_bytes(root, run.source.commit, loader.path)
+                ):
+                    loaders_exist = False
+            except (OSError, subprocess.CalledProcessError):
+                loaders_exist = False
+        checks.append(
+            _check(
+                "artifact.loader",
+                reference.stage_id,
+                loaders_exist,
+                "one or more artifact loaders are absent from the source tree",
+            )
+        )
+
+        if isinstance(stage, ParameterizedSpec):
+            parameter_identity_valid = False
+            parameter_validation_valid = False
+            parameter_reference = stage.parameter_model
+            model_path = root / parameter_reference.path
+            try:
+                local_raw = model_path.read_bytes()
+                verify_parameter_model_bytes(parameter_reference, local_raw)
+                parameter_identity_valid = local_raw == _git_bytes(
+                    root,
+                    run.source.commit,
+                    parameter_reference.path,
+                )
+            except (
+                OSError,
+                subprocess.CalledProcessError,
+                ParameterValidationError,
+            ):
+                parameter_identity_valid = False
+            if parameter_identity_valid:
+                try:
+                    validate_stage_parameters(root, target, stage)
+                    parameter_validation_valid = True
+                except (ParameterValidationError, OSError):
+                    parameter_validation_valid = False
+            checks.append(
+                _check(
+                    "parameter_model.identity",
+                    reference.stage_id,
+                    parameter_identity_valid,
+                    "parameter model differs from its frozen source identity",
+                )
+            )
+            checks.append(
+                _check(
+                    "parameter_model.validation",
+                    reference.stage_id,
+                    parameter_validation_valid,
+                    "stage parameters failed their project parameter model",
+                )
+            )
+
+        if isinstance(stage, DownloadSpec):
+            request_policy_valid = True
+            credentials_available = True
+            for request in stage.inputs.values():
+                try:
+                    validate_request_policy(request, stage.policy)
+                except HttpRetrievalError:
+                    request_policy_valid = False
+                if request.credentials is not None and not os.environ.get(
+                    request.credentials.variable
+                ):
+                    credentials_available = False
+            checks.append(
+                _check(
+                    "http.request",
+                    reference.stage_id,
+                    request_policy_valid,
+                    "one or more frozen HTTP requests violate stage policy",
+                )
+            )
+            checks.append(
+                _check(
+                    "http.credentials",
+                    reference.stage_id,
+                    credentials_available,
+                    "one or more required HTTP credentials are unavailable",
+                )
+            )
+            implementation_valid = True
+            try:
+                resolve_http(root, stage.http)
+                if isinstance(stage.http, ProjectHttpImplementationSpec):
+                    implementation_valid = (
+                        root / stage.http.implementation.path
+                    ).read_bytes() == _git_bytes(
+                        root,
+                        run.source.commit,
+                        stage.http.implementation.path,
+                    ) and (
+                        root / stage.http.parameter_model.path
+                    ).read_bytes() == _git_bytes(
+                        root,
+                        run.source.commit,
+                        stage.http.parameter_model.path,
+                    )
+            except (
+                HttpRetrievalError,
+                OSError,
+                subprocess.CalledProcessError,
+            ):
+                implementation_valid = False
+            checks.append(
+                _check(
+                    "http.implementation",
+                    reference.stage_id,
+                    implementation_valid,
+                    "selected HTTP implementation failed source or executable checks",
+                )
+            )
+
+        valid_future_inputs = True
+        if isinstance(stage, InternalSpec):
+            for input_ref in stage.inputs.values():
+                if not isinstance(input_ref, FutureInputRef):
+                    continue
+                producer = loaded.get(input_ref.producer_stage_id)
+                if (
+                    input_ref.producer_stage_id not in prior
+                    or producer is None
+                    or input_ref.producer_artifact not in producer.artifacts
+                ):
+                    valid_future_inputs = False
+        checks.append(
+            _check(
+                "input.future",
+                reference.stage_id,
+                valid_future_inputs,
+                "future input lacks an earlier declared producer artifact",
+            )
+        )
+        prior.add(reference.stage_id)
+
+    experiment = None
+    variant = None
+    benchmark = None
+    try:
+        experiment, variant = verify_experiment_and_variant(run, fetcher=fetch)
+        benchmark = verify_benchmark_spec(run, fetcher=fetch)
+        plan_records_valid = True
+    except (VerificationError, OSError, subprocess.CalledProcessError):
+        plan_records_valid = False
+    checks.append(
+        _check(
+            "plan.records",
+            str(run.run_id),
+            plan_records_valid,
+            "experiment, variant, or benchmark records failed verification",
+        )
+    )
+
+    relationships_valid = False
+    if (
+        plan_records_valid
+        and experiment is not None
+        and variant is not None
+        and len(loaded) == len(run.stages)
+    ):
+        try:
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                benchmark,
+                loaded,
+            )
+            relationships_valid = True
+        except VerificationError:
+            pass
+    checks.append(
+        _check(
+            "plan.relationships",
+            str(run.run_id),
+            relationships_valid,
+            "run, experiment, variant, benchmark, and stage relationships conflict",
+        )
+    )
+
+    implementations_valid = experiment is not None
+    if experiment is not None:
+        selected_metric_ids = {
+            metric_id for stage in loaded.values() for metric_id in stage.metric_ids
+        }
+        metrics = {metric.metric_id: metric for metric in experiment.metrics}
+        for metric_id in selected_metric_ids:
+            metric = metrics.get(metric_id)
+            if metric is None:
+                implementations_valid = False
+                continue
+            implementation = metric.implementation
+            implementation_path = root / implementation.path
+            try:
+                raw = implementation_path.read_bytes()
+                if (
+                    not implementation_path.is_file()
+                    or len(raw) != implementation.bytes
+                    or hashlib.sha256(raw).hexdigest() != implementation.sha256
+                    or raw != _git_bytes(root, run.source.commit, implementation.path)
+                ):
+                    implementations_valid = False
+                    continue
+                validate_metric_definition(root, metric)
+            except (OSError, subprocess.CalledProcessError, MetricError):
+                implementations_valid = False
+    checks.append(
+        _check(
+            "metric.implementation",
+            str(run.run_id),
+            implementations_valid,
+            "one or more selected metric implementations differ from frozen source",
+        )
+    )
+
+    return PreflightReport(run_id=run.run_id, checks=tuple(checks))
+```
+
+**File: `src/viper/_verification/attempt.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:_verify_effective_environment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:_verify_effective_env -->
+```python contract-target
+def _verify_effective_env(
+    stage_id: StageId,
+    requested: EnvSpec,
+    resolved: ResolvedEnv,
+    context: ExecutionContext,
+) -> None:
+    """Join the frozen env to its resolved and observed evidence."""
+    if resolved.kind != requested.kind:
+        raise VerificationError(
+            f"env.kind: stage {stage_id!r} realized another host kind"
+        )
+    if resolved.compute != requested.compute:
+        raise VerificationError(
+            f"env.compute: stage {stage_id!r} realized another compute request"
+        )
+    if resolved.lockfile.stored_at != requested.lockfile:
+        raise VerificationError(
+            f"env.lockfile: stage {stage_id!r} resolved another lockfile"
+        )
+    if resolved.python_env != requested.python_env:
+        raise VerificationError(
+            f"env.python: stage {stage_id!r} observed another Python "
+            "env"
+        )
+    if context.host.provider != requested.kind:
+        raise VerificationError(
+            f"env.host: stage {stage_id!r} ran on another host kind"
+        )
+    if isinstance(requested, GCEEnvSpec):
+        if not isinstance(resolved, ResolvedGCEEnv):
+            raise VerificationError(
+                f"gce.env: stage {stage_id!r} omitted its GCE env"
+            )
+        if not isinstance(context.host, GCEHostContext):
+            raise VerificationError(
+                f"gce.host: stage {stage_id!r} omitted its GCE host evidence"
+            )
+        if (
+            resolved.provisioning != requested.provisioning
+            or context.host.provisioning != requested.provisioning
+        ):
+            raise VerificationError(
+                f"gce.provisioning: stage {stage_id!r} used another provisioning source"
+            )
+        if (
+            resolved.machine_type != requested.machine_type
+            or context.host.machine_type != requested.machine_type
+        ):
+            raise VerificationError(
+                f"gce.machine_type: stage {stage_id!r} used another machine type"
+            )
+    elif not isinstance(context.host, LocalHostContext):
+        raise VerificationError(
+            f"env.host: stage {stage_id!r} omitted its local host evidence"
+        )
+    _verify_startup_backend(stage_id, requested.compute, context.backend)
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:_verify_stage_invocation -->
+```python contract-target
+def _verify_stage_invocation(
+    reference: ResolvedStageInvocationRef,
+    *,
+    attempt: RunAttempt,
+    run: RunSpec,
+    stage_id: StageId,
+    stage: ParameterizedStageSpec,
+    stage_specs: Mapping[StageId, BaseSpec],
+    resolved_stage: ResolvedParameterizedSpec,
+    fetcher: StorageFetcher | None,
+) -> StageInvocationReceipt:
+    """Verify one invocation receipt against its plan, context, and startup facts."""
+    if reference.stored_at.path != stage_invocation_path(
+        run, attempt.attempt_id, stage_id
+    ):
+        raise VerificationError(
+            f"stage {stage_id!r} invocation receipt is outside its canonical path"
+        )
+    raw = read_resolved_file(reference, fetcher=fetcher)
+    try:
+        receipt = StageInvocationReceipt.model_validate(parse_yaml_bytes(raw))
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            f"stage {stage_id!r} invocation receipt is invalid"
+        ) from exc
+    expected_binding = StageContextBinding(
+        run_id=run.run_id,
+        attempt_id=attempt.attempt_id,
+        stage_id=stage_id,
+        parameter_model=stage.parameter_model,
+        parameter_digest=document_digest(stage.params),
+        inputs=_logical_input_paths(run, stage_id, stage, stage_specs),
+        artifacts={name: value.path for name, value in stage.artifacts.items()},
+        metric_ids=stage.metric_ids,
+        numpy_generator_names=tuple(
+            sorted(run.reproducibility.numpy_randomness.generators)
+        ),
+    )
+    if receipt.implementation != stage.implementation:
+        raise VerificationError(
+            f"stage {stage_id!r} invocation used a different implementation"
+        )
+    if receipt.context != expected_binding:
+        raise VerificationError(
+            f"stage {stage_id!r} invocation context differs from the plan"
+        )
+    expected_digest = document_digest(expected_binding)
+    if receipt.context_digest != expected_digest:
+        raise VerificationError(f"stage {stage_id!r} invocation context digest differs")
+    if receipt.outcome != "succeeded":
+        raise VerificationError(
+            f"resolved stage {stage_id!r} requires a successful invocation"
+        )
+    if not (
+        attempt.started_at
+        <= receipt.started_at
+        < receipt.completed_at
+        <= resolved_stage.completed_at
+    ):
+        raise VerificationError(
+            f"stage {stage_id!r} invocation timing falls outside its stage"
+        )
+
+    startup = resolved_stage.startup
+    if startup.reproducibility != run.reproducibility:
+        raise VerificationError(
+            f"stage {stage_id!r} startup controls differ from the run plan"
+        )
+    compute = (stage.env or run.env).compute
+    recorded_cuda = startup.env.get("CUDA_VISIBLE_DEVICES")
+    if compute.kind == "cuda":
+        if recorded_cuda is None or not recorded_cuda.isdigit():
+            raise VerificationError(
+                f"stage {stage_id!r} startup omitted its selected CUDA device"
+            )
+        expected_environment = process_environment(
+            run.seed,
+            run.reproducibility,
+            compute,
+            cuda_ordinal=int(recorded_cuda),
+        )
+    else:
+        expected_environment = process_environment(
+            run.seed,
+            run.reproducibility,
+            compute,
+        )
+    if startup.env != expected_environment:
+        raise VerificationError(
+            f"stage {stage_id!r} startup env differs from the plan"
+        )
+    _verify_startup_backend(
+        stage_id,
+        compute,
+        resolved_stage.execution_context.backend,
+    )
+
+    generators = startup.generators
+    if any(generator.seed != run.seed for generator in generators):
+        raise VerificationError(
+            f"stage {stage_id!r} generator receipt uses a different seed"
+        )
+    family_counts = Counter(generator.family for generator in generators)
+    if family_counts["python"] != 1 or family_counts["torch_cpu"] != 1:
+        raise VerificationError(
+            f"stage {stage_id!r} startup requires one Python and one CPU Torch "
+            "generator receipt"
+        )
+    configured_names = set(expected_binding.numpy_generator_names)
+    received_names = {
+        generator.name
+        for generator in generators
+        if generator.family == "numpy_generator"
+    }
+    if received_names != configured_names:
+        raise VerificationError(
+            f"stage {stage_id!r} named NumPy generator receipts differ"
+        )
+    if family_counts["numpy_generator"] != len(configured_names):
+        raise VerificationError(
+            f"stage {stage_id!r} named NumPy generator receipts are duplicated"
+        )
+    legacy_count = sum(generator.family == "numpy_legacy" for generator in generators)
+    if legacy_count != int(run.reproducibility.numpy_randomness.capture_legacy_global):
+        raise VerificationError(
+            f"stage {stage_id!r} legacy NumPy generator receipt differs"
+        )
+    cuda_receipts = tuple(
+        generator for generator in generators if generator.family == "torch_cuda"
+    )
+    if compute.kind == "cpu" and cuda_receipts:
+        raise VerificationError(
+            f"stage {stage_id!r} CPU startup includes a CUDA generator receipt"
+        )
+    if compute.kind == "cuda" and (
+        len(cuda_receipts) != 1 or cuda_receipts[0].device_index != 0
+    ):
+        raise VerificationError(
+            f"stage {stage_id!r} CUDA startup requires one visible-device receipt"
+        )
+    return receipt
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:verify_attempt_stages -->
+```python contract-target
+def verify_attempt_stages(
+    attempt: RunAttempt,
+    run: RunSpec,
+    stage_specs: Mapping[StageId, BaseSpec],
+    *,
+    require_complete: bool,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> dict[StageId, ResolvedBaseSpec]:
+    """Verify the ordered resolved-stage prefix retained by one attempt."""
+    expected_stage_ids = tuple(stage.stage_id for stage in run.stages)
+    resolved_stage_ids = tuple(stage.stage_id for stage in attempt.resolved_stages)
+    if resolved_stage_ids != expected_stage_ids[: len(resolved_stage_ids)]:
+        raise VerificationError(
+            "attempt resolved stages must form an ordered run-stage prefix"
+        )
+    if require_complete and resolved_stage_ids != expected_stage_ids:
+        raise VerificationError("successful attempt must contain every run stage")
+
+    if set(stage_specs) != set(expected_stage_ids):
+        raise VerificationError("loaded stage specs do not match the run stage plan")
+    resolved_parameterized_ids = tuple(
+        stage_id
+        for stage_id in resolved_stage_ids
+        if isinstance(stage_specs[stage_id], ParameterizedSpec)
+    )
+    planned_parameterized_ids = tuple(
+        stage_id
+        for stage_id in expected_stage_ids
+        if isinstance(stage_specs[stage_id], ParameterizedSpec)
+    )
+    if len(attempt.invocations) < len(resolved_parameterized_ids):
+        raise VerificationError(
+            "attempt must retain an invocation receipt for every project stage"
+        )
+    if len(attempt.invocations) > len(planned_parameterized_ids):
+        raise VerificationError("attempt contains more invocations than planned stages")
+    if len(attempt.invocations) > len(resolved_parameterized_ids) + 1:
+        raise VerificationError(
+            "attempt contains invocations after its unresolved active stage"
+        )
+    for index, invocation in enumerate(attempt.invocations):
+        expected_path = stage_invocation_path(
+            run,
+            attempt.attempt_id,
+            planned_parameterized_ids[index],
+        )
+        if invocation.stored_at.path != expected_path:
+            raise VerificationError(
+                "attempt invocation receipts must follow planned stage order"
+            )
+
+    verified_stages: dict[StageId, ResolvedBaseSpec] = {}
+
+    for stage_index, stage_reference in enumerate(attempt.resolved_stages):
+        expected_resolved_path = resolved_stage_spec_path(
+            run,
+            stage_reference.stage_id,
+        )
+        if stage_reference.resolved_spec.path != expected_resolved_path:
+            raise VerificationError(
+                f"stage {stage_reference.stage_id!r} resolved spec is outside "
+                "its canonical run path"
+            )
+
+        raw = read_snapshot_file(
+            stage_reference.snapshot,
+            stage_reference.resolved_spec,
+            fetcher=fetcher,
+        )
+        try:
+            resolved_spec = RESOLVED_SPEC_ADAPTER.validate_python(parse_yaml_bytes(raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError(
+                f"stage {stage_reference.stage_id!r} file is not a valid "
+                "resolved stage spec"
+            ) from exc
+
+        stage_spec = stage_specs[stage_reference.stage_id]
+
+        for artifact_name, artifact_spec in stage_spec.artifacts.items():
+            if repo_file_paths_overlap(
+                stage_reference.resolved_spec.path,
+                artifact_spec.path,
+            ):
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} resolved spec collides "
+                    f"with artifact {artifact_name!r}"
+                )
+
+        if resolved_spec.spec != stage_spec:
+            raise VerificationError(
+                f"stage {stage_reference.stage_id!r} does not embed its stage spec"
+            )
+
+        if isinstance(stage_spec, ParameterizedSpec):
+            if not isinstance(resolved_spec, ResolvedParameterizedSpec):
+                raise VerificationError("project stage omitted invocation evidence")
+            invocation_index = resolved_parameterized_ids.index(
+                stage_reference.stage_id
+            )
+            invocation_reference = attempt.invocations[invocation_index]
+            if resolved_spec.invocation != invocation_reference:
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} invocation reference differs "
+                    "from its attempt"
+                )
+            _verify_stage_invocation(
+                invocation_reference,
+                attempt=attempt,
+                run=run,
+                stage_id=stage_reference.stage_id,
+                stage=cast(ParameterizedStageSpec, stage_spec),
+                stage_specs=stage_specs,
+                resolved_stage=resolved_spec,
+                fetcher=fetcher,
+            )
+
+            source_location = resolved_spec.source.stored_at
+            if (
+                source_location.repository != run.source.repository
+                or source_location.commit != run.source.commit
+            ):
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} source does not match the "
+                    "run source snapshot"
+                )
+
+        if not (
+            attempt.started_at < resolved_spec.completed_at <= attempt.completed_at
+        ):
+            raise VerificationError(
+                f"stage {stage_reference.stage_id!r} completion time falls outside "
+                "its containing attempt"
+            )
+
+        if isinstance(resolved_spec, ResolvedDownloadSpec):
+            _verify_download_retrievals(
+                attempt,
+                run,
+                stage_reference.stage_id,
+                resolved_spec,
+                stage_reference.snapshot,
+                fetcher=fetcher,
+            )
+
+        if verified_stages:
+            previous_completed_at = next(
+                reversed(verified_stages.values())
+            ).completed_at
+            if resolved_spec.completed_at < previous_completed_at:
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} completed before its "
+                    "preceding stage"
+                )
+
+        if isinstance(resolved_spec, ResolvedParameterizedSpec):
+            read_resolved_file(resolved_spec.source, fetcher=fetcher)
+        read_resolved_file(resolved_spec.env.lockfile, fetcher=fetcher)
+
+        requested_environment = stage_spec.env or run.env
+        resolved_environment = resolved_spec.env
+        _verify_effective_env(
+            stage_reference.stage_id,
+            requested_environment,
+            resolved_environment,
+            resolved_spec.execution_context,
+        )
+
+        if isinstance(resolved_spec, ResolvedParameterizedSpec):
+            expected_command = (
+                "python",
+                "-m",
+                "viper._workers.stages",
+            )
+            if resolved_spec.command != expected_command:
+                raise VerificationError(
+                    f"stage {stage_reference.stage_id!r} command does not match "
+                    "the run plan"
+                )
+
+        for artifact_name, artifact in resolved_spec.artifacts.items():
+            declaration = stage_spec.artifacts[artifact_name]
+            verified_artifact = verify_snapshot_artifact(
+                stage_reference,
+                artifact,
+                data_role=declaration.data_role,
+                fetcher=fetcher,
+            )
+            load_verified_artifact(
+                run,
+                declaration,
+                artifact_name,
+                verified_artifact,
+                policy=policy,
+                fetcher=fetcher,
+            )
+
+        verified_stages[stage_reference.stage_id] = resolved_spec
+
+    if len(attempt.invocations) == len(resolved_parameterized_ids) + 1:
+        stage_id = expected_stage_ids[len(attempt.resolved_stages)]
+        stage_spec = stage_specs[stage_id]
+        if not isinstance(stage_spec, ParameterizedSpec):
+            raise VerificationError("unresolved stage invocation is not parameterized")
+        _verify_unresolved_stage_invocation(
+            attempt.invocations[-1],
+            attempt=attempt,
+            run=run,
+            stage_id=stage_id,
+            stage=cast(ParameterizedStageSpec, stage_spec),
+            stage_specs=stage_specs,
+            fetcher=fetcher,
+        )
+
+    return verified_stages
+```
+
+**File: `src/viper/_verification/metrics.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/metrics.py:_verify_metric_worker_runtime -->
+```python contract-target
+def _verify_metric_worker_runtime(
+    run: RunSpec,
+    stage: BaseSpec,
+    receipt: MetricExecutionReceipt,
+) -> None:
+    """Match one metric worker's startup and runtime facts to the run plan."""
+    startup = receipt.startup
+    if startup.reproducibility != run.reproducibility:
+        raise VerificationError("metric worker reproducibility controls differ")
+    compute = (stage.env or run.env).compute
+    recorded_cuda = startup.env.get("CUDA_VISIBLE_DEVICES")
+    if compute.kind == "cuda":
+        if recorded_cuda is None or not recorded_cuda.isdigit():
+            raise VerificationError("metric worker omitted its selected CUDA device")
+        expected_environment = process_environment(
+            run.seed,
+            run.reproducibility,
+            compute,
+            cuda_ordinal=int(recorded_cuda),
+        )
+    else:
+        expected_environment = process_environment(
+            run.seed,
+            run.reproducibility,
+            compute,
+        )
+    if startup.env != expected_environment:
+        raise VerificationError("metric worker startup env differs")
+    if any(generator.seed != run.seed for generator in startup.generators):
+        raise VerificationError("metric worker generator seed differs")
+    family_counts = Counter(generator.family for generator in startup.generators)
+    if family_counts["python"] != 1 or family_counts["torch_cpu"] != 1:
+        raise VerificationError("metric worker generator receipts are incomplete")
+    expected_numpy_names = set(run.reproducibility.numpy_randomness.generators)
+    received_numpy_names = {
+        generator.name
+        for generator in startup.generators
+        if generator.family == "numpy_generator"
+    }
+    if received_numpy_names != expected_numpy_names:
+        raise VerificationError("metric worker NumPy generators differ")
+    context = receipt.execution_context
+    effective_environment = stage.env or run.env
+    if receipt.python_env != effective_environment.python_env:
+        raise VerificationError("metric worker Python env differs")
+    if context.host.provider != effective_environment.kind:
+        raise VerificationError("metric worker host provider differs")
+    if isinstance(effective_environment, GCEEnvSpec):
+        if not isinstance(context.host, GCEHostContext):
+            raise VerificationError("metric worker omitted its GCE host context")
+        if context.host.machine_type != effective_environment.machine_type:
+            raise VerificationError("metric worker machine type differs")
+    if context.backend.kind != compute.kind:
+        raise VerificationError("metric worker compute backend differs")
+    if compute.kind == "cuda":
+        if not isinstance(context.backend, CUDABackendContext):
+            raise VerificationError("metric worker omitted its CUDA context")
+        if len(context.backend.gpu_devices) != compute.count:
+            raise VerificationError("metric worker CUDA device count differs")
+        if any(device.model != compute.model for device in context.backend.gpu_devices):
+            raise VerificationError("metric worker CUDA model differs")
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/metrics.py:verify_recomputed_metrics -->
+```python contract-target
+def verify_recomputed_metrics(
+    attempt: RunAttempt,
+    plan: VerifiedRunPlan,
+    resolved_stages: Mapping[StageId, ResolvedBaseSpec],
+    measurements: tuple[Measurement, ...],
+    stored_inputs: Mapping[StageId, Mapping[InputName, VerifiedInput]],
+    future_inputs: Mapping[StageId, Mapping[InputName, VerifiedInput]],
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> None:
+    """Verify persisted production and recomputation evidence for each metric."""
+    del policy
+    metric_specs = {metric.metric_id: metric for metric in plan.experiment.metrics}
+    stage_refs = {stage.stage_id: stage for stage in attempt.resolved_stages}
+    expected_keys = {
+        (stage_id, metric_id)
+        for stage_id, stage in plan.stages.items()
+        if stage_id in stage_refs
+        for metric_id in stage.metric_ids
+        if metric_specs[metric_id].mode == "recompute"
+    }
+    if len(attempt.metric_verification_files) != len(expected_keys):
+        raise VerificationError(
+            "recomputed metrics require one immutable verification receipt each"
+        )
+    receipts: dict[tuple[StageId, str], MetricVerificationReceipt] = {}
+    root_path = run_root(plan.run)
+    for reference in attempt.metric_verification_files:
+        if not isinstance(reference.stored_at, (HuggingFaceFileRef, LocalFileRef)):
+            raise VerificationError(
+                "metric verification files must use immutable artifact storage"
+            )
+        raw = read_resolved_file(reference, fetcher=fetcher)
+        try:
+            receipt = MetricVerificationReceipt.model_validate(parse_yaml_bytes(raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError("metric verification receipt is invalid") from exc
+        expected_path = (
+            f"{root_path}/attempts/{attempt.attempt_id}/metric_verification/"
+            f"{receipt.stage_id}.{receipt.metric_id}.yaml"
+        )
+        if reference.stored_at.path != expected_path:
+            raise VerificationError(
+                "metric verification receipt is outside its canonical path"
+            )
+        key = (receipt.stage_id, receipt.metric_id)
+        if key in receipts:
+            raise VerificationError(
+                "metric verification receipt identity is duplicated"
+            )
+        receipts[key] = receipt
+    if set(receipts) != expected_keys:
+        raise VerificationError("metric verification receipts select different metrics")
+
+    for stage_id, stage in plan.stages.items():
+        if stage_id not in stage_refs:
+            continue
+        for metric_id in stage.metric_ids:
+            metric = metric_specs[metric_id]
+            if metric.mode != "recompute":
+                continue
+            recorded = tuple(
+                measurement
+                for measurement in measurements
+                if measurement.stage_id == stage_id
+                and measurement.metric_id == metric_id
+            )
+            if len(recorded) != 1:
+                raise VerificationError(
+                    f"recomputed metric {metric_id!r} of stage {stage_id!r} "
+                    "requires exactly one measurement"
+                )
+            receipt = receipts[(stage_id, metric_id)]
+            if receipt.measurement != recorded[0]:
+                raise VerificationError(
+                    f"metric {metric_id!r} receipt embeds a different measurement"
+                )
+            if receipt.production.implementation != metric.implementation:
+                raise VerificationError(
+                    f"metric {metric_id!r} production implementation differs"
+                )
+            if receipt.production.params != metric.params:
+                raise VerificationError(
+                    f"metric {metric_id!r} production parameters differ"
+                )
+            if receipt.comparator != metric.comparator:
+                raise VerificationError(
+                    f"metric {metric_id!r} comparator differs from MetricSpec"
+                )
+            resolved_stage = resolved_stages[stage_id]
+            stage_ref = stage_refs[stage_id]
+            verified_artifacts = {
+                name: verify_snapshot_artifact(
+                    stage_ref,
+                    resolved_artifact,
+                    data_role=stage.artifacts[name].data_role,
+                    fetcher=fetcher,
+                )
+                for name, resolved_artifact in resolved_stage.artifacts.items()
+            }
+            inputs = {
+                **stored_inputs.get(stage_id, {}),
+                **future_inputs.get(stage_id, {}),
+            }
+            metric_inputs: dict[str, VerifiedInput] = {}
+            metric_artifacts: dict[str, VerifiedArtifact] = {}
+            for dependency in metric.dependencies:
+                if dependency.source == "input":
+                    selected_input = inputs.get(dependency.name)
+                    if selected_input is None:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} is absent"
+                        )
+                    if selected_input.data_role != dependency.required_data_role:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} data role differs"
+                        )
+                    metric_inputs[dependency.name] = selected_input
+                else:
+                    selected_artifact = verified_artifacts.get(dependency.name)
+                    if selected_artifact is None:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} is absent"
+                        )
+                    if selected_artifact.data_role != dependency.required_data_role:
+                        raise VerificationError(
+                            f"metric dependency {dependency.name!r} data role differs"
+                        )
+                    metric_artifacts[dependency.name] = selected_artifact
+            expected_dependencies = tuple(
+                ResolvedMetricDependency(
+                    dependency=dependency,
+                    files=(
+                        metric_inputs[dependency.name].references
+                        if dependency.source == "input"
+                        else metric_artifacts[dependency.name].references
+                    ),
+                )
+                for dependency in metric.dependencies
+            )
+            if tuple(
+                value.dependency for value in receipt.production.dependencies
+            ) != tuple(value.dependency for value in expected_dependencies):
+                raise VerificationError(
+                    f"metric {metric_id!r} dependency declarations differ"
+                )
+            for received, expected in zip(
+                receipt.production.dependencies,
+                expected_dependencies,
+                strict=True,
+            ):
+                received_identities = tuple(
+                    (reference.sha256, reference.bytes) for reference in received.files
+                )
+                expected_identities = tuple(
+                    (reference.sha256, reference.bytes) for reference in expected.files
+                )
+                if received_identities != expected_identities:
+                    raise VerificationError(
+                        f"metric {metric_id!r} dependency file identities differ"
+                    )
+                for reference in received.files:
+                    read_resolved_file(reference, fetcher=fetcher)
+            for worker in (receipt.production, receipt.recomputation):
+                _verify_metric_worker_runtime(plan.run, stage, worker)
+            if not (
+                resolved_stage.completed_at
+                <= receipt.production.started_at
+                < receipt.production.completed_at
+                <= recorded[0].measured_at
+                <= receipt.recomputation.started_at
+                < receipt.recomputation.completed_at
+                <= receipt.completed_at
+                <= attempt.completed_at
+            ):
+                raise VerificationError(
+                    f"metric {metric_id!r} execution timing is inconsistent"
+                )
+            if not compare_metric_values(
+                recorded[0].value,
+                receipt.recomputation.value,
+                cast(FloatComparator, metric.comparator),
+            ):
+                raise VerificationError(
+                    f"recomputed metric {metric_id!r} does not match its measurement"
+                )
+            if not receipt.passed:
+                raise VerificationError(
+                    f"metric {metric_id!r} verification receipt records failure"
+                )
+```
+
+**File: `src/viper/_verification/plan.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/plan.py:verify_run_plan_relationships -->
+```python contract-target
+def verify_run_plan_relationships(
+    run: RunSpec,
+    experiment: ExperimentSpec,
+    variant: VariantSpec,
+    benchmark: BenchmarkSpec | None,
+    stages: Mapping[StageId, BaseSpec],
+) -> None:
+    """Verify plan relationships spanning experiment, variant, and stages."""
+
+    def require_source_snapshot(location: GitFileRef, label: str) -> None:
+        if (
+            location.repository != run.source.repository
+            or location.commit != run.source.commit
+        ):
+            raise VerificationError(f"{label} must belong to the run source snapshot")
+
+    require_source_snapshot(run.env.lockfile, "shared lockfile")
+
+    for stage_id, stage in stages.items():
+        if stage.env is not None:
+            require_source_snapshot(
+                stage.env.lockfile,
+                f"env lockfile of stage {stage_id!r}",
+            )
+
+    prior_stages: dict[StageId, BaseSpec] = {}
+    prior_stages_by_id: dict[StageId, dict[StageId, BaseSpec]] = {}
+    for stage_reference in run.stages:
+        stage = stages[stage_reference.stage_id]
+        prior_stages_by_id[stage_reference.stage_id] = dict(prior_stages)
+        _verify_stage_data_roles(stage_reference.stage_id, stage, prior_stages)
+        prior_stages[stage_reference.stage_id] = stage
+
+    parameterized_stages = {
+        stage_id: stage
+        for stage_id, stage in stages.items()
+        if isinstance(
+            stage,
+            (BuildSpec, EmbedSpec, TrainSpec, EvalSpec),
+        )
+    }
+    variant_params = {stage.stage_id: stage for stage in variant.stage_params}
+
+    if set(variant_params) != set(parameterized_stages):
+        raise VerificationError(
+            "variant stage parameters must match all parameterized run stages"
+        )
+
+    for stage_id, stage in parameterized_stages.items():
+        selected = variant_params[stage_id]
+        if selected.kind != stage.kind or selected.params != stage.params:
+            raise VerificationError(
+                f"variant parameters do not match stage {stage_id!r}"
+            )
+
+    estimator_stage = stages.get(run.estimator.stage_id)
+    if not isinstance(estimator_stage, TrainSpec):
+        raise VerificationError("run estimator must select a training stage")
+
+    experiment_metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    for stage_id, stage in stages.items():
+        undeclared_metrics = set(stage.metric_ids) - set(experiment_metrics)
+        if undeclared_metrics:
+            raise VerificationError(f"stage {stage_id!r} selects undeclared metrics")
+
+        selected_kinds = {
+            experiment_metrics[metric_id].kind for metric_id in stage.metric_ids
+        }
+        if isinstance(stage, EvalSpec):
+            if selected_kinds - {"eval"}:
+                raise VerificationError(
+                    f"eval stage {stage_id!r} must select eval metrics"
+                )
+        elif isinstance(stage, TrainSpec):
+            if selected_kinds - {"training", "diagnostic"}:
+                raise VerificationError(
+                    f"training stage {stage_id!r} selects an incompatible metric"
+                )
+        elif selected_kinds - {"diagnostic"}:
+            raise VerificationError(
+                f"stage {stage_id!r} must select diagnostic metrics"
+            )
+
+    eval_stages = [
+        stage for stage in stages.values() if isinstance(stage, EvalSpec)
+    ]
+    expected_eval_role: DataRole = (
+        "benchmark" if benchmark is not None else "eval"
+    )
+    for eval in eval_stages:
+        dataset_input = eval.inputs["eval_dataset"]
+        assert isinstance(dataset_input, StoredInputRef)
+        if dataset_input.data_role != expected_eval_role:
+            raise VerificationError(
+                f"eval {eval.eval_id!r} must use "
+                f"{expected_eval_role!r} data_role"
+            )
+
+    for stage_id, stage in stages.items():
+        input_roles = (
+            _stage_input_roles(stage_id, stage, prior_stages_by_id[stage_id])
+            if isinstance(stage, InternalSpec)
+            else {}
+        )
+        for metric_id in stage.metric_ids:
+            metric = experiment_metrics[metric_id]
+            for dependency in metric.dependencies:
+                if dependency.source == "input":
+                    role = input_roles.get(dependency.name)
+                else:
+                    artifact = stage.artifacts.get(dependency.name)
+                    role = None if artifact is None else artifact.data_role
+                if role is None:
+                    raise VerificationError(
+                        f"metric {metric_id!r} selects absent {dependency.source} "
+                        f"dependency {dependency.name!r}"
+                    )
+                if role != dependency.required_data_role:
+                    raise VerificationError(
+                        f"metric {metric_id!r} dependency {dependency.name!r} "
+                        "data role differs from its stage declaration"
+                    )
+
+    if benchmark is None:
+        return
+
+    if len(eval_stages) != 1:
+        raise VerificationError("benchmark runs require exactly one eval stage")
+
+    eval = eval_stages[0]
+    model_input = eval.inputs[PARAMETERS_INPUT]
+    if not isinstance(model_input, FutureInputRef):
+        raise VerificationError(
+            "benchmark eval model must select the run estimator"
+        )
+    if (
+        model_input.producer_stage_id != run.estimator.stage_id
+        or model_input.producer_artifact != run.estimator.artifact_name
+    ):
+        raise VerificationError(
+            "benchmark eval model must select the run estimator"
+        )
+
+    if eval.eval_id != benchmark.eval_id:
+        raise VerificationError(
+            "eval stage ID does not match the benchmark eval ID"
+        )
+
+    dataset_input = eval.inputs["eval_dataset"]
+    if not isinstance(dataset_input, StoredInputRef):
+        raise VerificationError("benchmark eval dataset must be stored")
+    if dataset_input.pointer != benchmark.eval_dataset:
+        raise VerificationError(
+            "eval dataset does not match the benchmark specification"
+        )
+
+    if set(eval.split_inputs) != set(benchmark.splits):
+        raise VerificationError(
+            "eval split names do not match the benchmark specification"
+        )
+    for split_name, pointer in benchmark.splits.items():
+        split_input = eval.inputs[split_name]
+        if not isinstance(split_input, StoredInputRef):
+            raise VerificationError(f"benchmark split {split_name!r} must be stored")
+        if split_input.pointer != pointer:
+            raise VerificationError(
+                f"eval split {split_name!r} does not match the benchmark"
+            )
+
+    benchmark_metric_ids = {criterion.metric_id for criterion in benchmark.metrics}
+    if set(eval.metric_ids) != benchmark_metric_ids:
+        raise VerificationError(
+            "eval metrics do not match the benchmark specification"
+        )
+    for criterion in benchmark.metrics:
+        metric = experiment_metrics[criterion.metric_id]
+        if metric.kind != "eval" or metric.mode != "recompute":
+            raise VerificationError(
+                f"benchmark criterion {criterion.metric_id!r} must select a "
+                "recomputed eval metric"
+            )
+```
+
+**File: `tests/test_public_api.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=tests/test_public_api.py:test_env_vocabulary_is_complete -->
+```python contract-target
+def test_env_vocabulary_is_complete() -> None:
+    """Expose only the concise environment protocol vocabulary."""
+    import viper.runtime as runtime
+
+    assert runtime.PythonEnvSpec.__name__ == "PythonEnvSpec"
+    assert runtime.EnvSpec is not None
+    assert runtime.ResolvedEnv is not None
+    assert callable(runtime.observe_python_env)
+    assert not hasattr(runtime, "PythonEnvironmentSpec")
+    assert not hasattr(runtime, "EnvironmentSpec")
+```
+
+### P5-AIR-03
+
+**File: `src/viper/artifacts.py`**
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/artifacts.py:validate_run_artifact_path -->
+```python contract-target
+def validate_run_artifact_path(value: str) -> str:
+    """Require a run-relative path beneath the artifact directory."""
+    path = validate_repo_rel_path(value)
+    if not path.startswith("artifacts/"):
+        raise ValueError("run artifact path must start with artifacts/")
+    return path
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/artifacts.py:RunArtifactPath -->
+```python contract-target
+RunArtifactPath = Annotated[str, AfterValidator(validate_run_artifact_path)]
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/artifacts.py:SingleFileArtifactDraft -->
+```python contract-target
+class SingleFileArtifactDraft(BaseModel):
+    """Hold one callable-backed file artifact before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    kind: Literal["file"] = "file"
+    path: RunArtifactPath
+    loader: Callable[[Path], Any]
+    data_role: DataRole
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/artifacts.py:BundleArtifactDraft -->
+```python contract-target
+class BundleArtifactDraft(BaseModel):
+    """Hold one callable-backed artifact directory before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    kind: Literal["bundle"] = "bundle"
+    path: RunArtifactPath
+    loader: Callable[[Path], Any]
+    data_role: DataRole
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/artifacts.py:ArtifactDraft -->
+```python contract-target
+ArtifactDraft = Annotated[
+    SingleFileArtifactDraft | BundleArtifactDraft,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/artifacts.py:artifact -->
+```python contract-target
+def artifact(
+    *,
+    path: RunArtifactPath,
+    loader: Callable[[Path], Any],
+    data_role: DataRole,
+    kind: Literal["file", "bundle"] = "file",
+) -> ArtifactDraft:
+    """Declare one callable-backed run artifact."""
+    draft = {
+        "kind": kind,
+        "path": path,
+        "loader": loader,
+        "data_role": data_role,
+    }
+    if kind == "bundle":
+        return BundleArtifactDraft.model_validate(draft)
+    return SingleFileArtifactDraft.model_validate(draft)
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/artifacts.py:__all__ -->
+```python contract-target
+__all__ = [
+    "ArtifactDraft",
+    "ArtifactLoaderRef",
+    "ArtifactPointer",
+    "ArtifactSpec",
+    "BundleArtifactDraft",
+    "BundleArtifactSpec",
+    "ResolvedArtifact",
+    "ResolvedBundleArtifact",
+    "ResolvedBundleMember",
+    "ResolvedSingleFileArtifact",
+    "RunArtifactPath",
+    "SingleFileArtifactDraft",
+    "SingleFileArtifactSpec",
+    "StageArtifactRef",
+    "artifact",
+]
+```
+
+**File: `src/viper/http.py`**
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=remove target=src/viper/http.py:EnvironmentSecretRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/http.py:EnvSecretRef -->
+```python contract-target
+class EnvSecretRef(ProtocolModel):
+    """Select one runtime secret and the HTTP origins authorized to receive it."""
+
+    kind: Literal["env"] = "env"
+    variable: NonEmptyStr
+    header: HttpHeaderName
+    prefix: str = ""
+    authorized_origins: frozenset[HttpOrigin] = Field(min_length=1)
+
+    @field_validator("variable")
+    @classmethod
+    def validate_variable_name(cls, value: str) -> str:
+        """Require a portable env-variable name."""
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value) is None:
+            raise ValueError("secret variable must be an env-variable name")
+        return value
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:HttpRequestSpec -->
+```python contract-target
+class HttpRequestSpec(ProtocolModel):
+    """Freeze one experimental HTTP request and its expected response body."""
+
+    kind: Literal["http"] = "http"
+    method: Literal["GET"] = "GET"
+    url: HttpUrl
+    headers: dict[HttpHeaderName, NonEmptyStr] = Field(default_factory=dict)
+    version: NonEmptyStr
+    expected_body_sha256: SHA256
+    expected_body_bytes: int = Field(gt=0)
+    credentials: EnvSecretRef | None = None
+
+    @model_validator(mode="after")
+    def validate_public_headers_and_credential_origin(self) -> HttpRequestSpec:
+        """Keep literal credentials out and authorize the initial request origin."""
+        if self.url.username is not None or self.url.password is not None:
+            raise ValueError("HTTP request URL must not contain user information")
+        if self.url.fragment is not None:
+            raise ValueError("HTTP request URL must not contain a fragment")
+        sensitive = {"authorization", "cookie", "proxy-authorization"}
+        if sensitive & set(self.headers):
+            raise ValueError("HTTP request headers contain a literal credential")
+        if self.credentials is not None:
+            if self.credentials.header in self.headers:
+                raise ValueError("credential header must not appear in public headers")
+            if http_origin(self.url) not in self.credentials.authorized_origins:
+                raise ValueError(
+                    "request origin is not authorized to receive credential"
+                )
+        return self
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/http.py:CustomHttpDraft -->
+```python contract-target
+class CustomHttpDraft(BaseModel, Generic[HttpParamsT]):
+    """Hold one configured project HTTP callable before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    implementation: Callable[[HttpContext[HttpParamsT]], HttpResult]
+    params: HttpParamsT
+    executables: tuple[ExternalExecutableSpec, ...] = ()
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/http.py:HttpDraft -->
+```python contract-target
+HttpDraft = BuiltinHttpImplementationSpec | CustomHttpDraft[Any]
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:HttpDefinition -->
+```python contract-target
+@dataclass(frozen=True)
+class HttpDefinition(Generic[HttpParamsT]):
+    """Store authoring metadata attached to one project HTTP callable."""
+
+    id: HumanId
+    parameter_model: type[HttpParamsT]
+    executables: tuple[ExternalExecutableSpec, ...]
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:HttpParamsT -->
+```python contract-target
+HttpParamsT = TypeVar("HttpParamsT", bound=params.Http)
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:http -->
+```python contract-target
+def http(
+    *,
+    id: HumanId,
+    params: type[HttpParamsT] = params.Http,
+    executables: tuple[ExternalExecutableSpec, ...] = (),
+) -> Callable[[DecoratedHttp], DecoratedHttp]:
+    """Declare one project-owned HTTP callable."""
+    if not issubclass(params, ParameterSet):
+        raise TypeError("HTTP parameter model must subclass viper.params.ParameterSet")
+    definition = HttpDefinition(
+        id=id,
+        parameter_model=params,
+        executables=executables,
+    )
+
+    def decorate(function: DecoratedHttp) -> DecoratedHttp:
+        """Validate the callable signature and attach its authoring metadata."""
+        parameters = tuple(inspect.signature(function).parameters.values())
+        if len(parameters) != 1:
+            raise TypeError("an HTTP callable must accept one HttpContext")
+        setattr(function, "__viper_http__", definition)
+        return function
+
+    return decorate
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:ProjectHttpImplementationSpec -->
+```python contract-target
+class ProjectHttpImplementationSpec(ProtocolModel):
+    """Select one frozen project-owned HTTP implementation."""
+
+    kind: Literal["project"] = "project"
+    id: HumanId
+    implementation: HttpImplementationRef
+    parameter_model: ParameterModelRef
+    params: params.Http
+    executables: tuple[ExternalExecutableSpec, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_unique_executables(self) -> ProjectHttpImplementationSpec:
+        """Require one external executable requirement per identifier."""
+        identifiers = tuple(value.executable_id for value in self.executables)
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("external executable IDs must be unique")
+        return self
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:resolve_http -->
+```python contract-target
+def resolve_http(
+    repository_root: Path,
+    spec: HttpImplementationSpec,
+) -> ResolvedHttpImplementation:
+    """Validate source and executable identities before one HTTP call."""
+    from ._parameter.validation import (  # Avoid an HTTP-validation cycle.
+        instantiate_parameters,
+        verify_parameter_model_bytes,
+    )
+
+    if isinstance(spec, BuiltinHttpImplementationSpec):
+        return ResolvedHttpImplementation(spec=spec)
+    root = repository_root.resolve()
+    implementation_path = root / spec.implementation.path
+    _verify_implementation_bytes(spec.implementation, implementation_path.read_bytes())
+    parameter_path = root / spec.parameter_model.path
+    verify_parameter_model_bytes(spec.parameter_model, parameter_path.read_bytes())
+    _load_project_http(root, spec)
+    instantiate_parameters(
+        parameter_path,
+        spec.parameter_model,
+        spec.params,
+        params.Http,
+    )
+    executables = tuple(_resolve_executable(value) for value in spec.executables)
+    return ResolvedHttpImplementation(spec=spec, external_executables=executables)
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:_httpx_request -->
+```python contract-target
+def _httpx_request(
+    context: HttpContext[params.Http],
+) -> HttpResult:
+    """Retrieve one exact response body through a bounded HTTPX client."""
+    started = time.monotonic()
+    current_url = context.request.url
+    redirects = 0
+    context.workspace.mkdir(parents=True, exist_ok=True)
+    destination = context.destination.resolve()
+    if not destination.is_relative_to(context.workspace.resolve()):
+        raise HttpRetrievalError("HTTP destination escapes its retrieval workspace")
+    if destination.is_symlink():
+        raise HttpRetrievalError("HTTP destination must not be a symlink")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with httpx.Client(follow_redirects=False, trust_env=False) as client:
+            while True:
+                validate_request_policy(
+                    context.request.model_copy(update={"url": current_url}),
+                    context.policy,
+                )
+                remaining = context.policy.timeout_seconds - (
+                    time.monotonic() - started
+                )
+                if remaining <= 0:
+                    raise HttpRetrievalError("HTTP retrieval exceeded its timeout")
+                headers = _credential_headers(
+                    context.request,
+                    context.credential,
+                    current_url,
+                )
+                with client.stream(
+                    context.request.method,
+                    str(current_url),
+                    headers=headers,
+                    timeout=remaining,
+                ) as response:
+                    if response.status_code in _REDIRECT_STATUSES:
+                        location = response.headers.get("location")
+                        if location is None:
+                            raise HttpRetrievalError("HTTP redirect omitted Location")
+                        if redirects >= context.policy.max_redirects:
+                            raise HttpRetrievalError("HTTP redirect limit exceeded")
+                        current_url = _HTTP_URL_ADAPTER.validate_python(
+                            urljoin(str(current_url), location)
+                        )
+                        redirects += 1
+                        continue
+                    if response.status_code not in context.policy.accepted_statuses:
+                        raise HttpRetrievalError("HTTP terminal status is unaccepted")
+                    descriptor, temporary_name = tempfile.mkstemp(
+                        dir=destination.parent,
+                        prefix=f".{destination.name}.",
+                    )
+                    temporary_path = Path(temporary_name)
+                    size = 0
+                    with os.fdopen(descriptor, "wb") as body:
+                        for chunk in response.iter_raw():
+                            size += len(chunk)
+                            if size > context.policy.max_body_bytes:
+                                raise HttpRetrievalError(
+                                    "HTTP body exceeds the policy limit"
+                                )
+                            if (
+                                time.monotonic() - started
+                                > context.policy.timeout_seconds
+                            ):
+                                raise HttpRetrievalError(
+                                    "HTTP retrieval exceeded its timeout"
+                                )
+                            body.write(chunk)
+                        body.flush()
+                        os.fsync(body.fileno())
+                    os.replace(temporary_path, destination)
+                    temporary_path = None
+                    return HttpResult(
+                        body=destination,
+                        response=ObservedHttpResponse(
+                            response_url=_HTTP_URL_ADAPTER.validate_python(
+                                str(response.url)
+                            ),
+                            status=response.status_code,
+                            response_headers=_persisted_headers(response),
+                        ),
+                    )
+    except httpx.TimeoutException as exc:
+        raise HttpRetrievalError("HTTP retrieval exceeded its timeout") from exc
+    except httpx.HTTPError as exc:
+        raise HttpRetrievalError("HTTP request failed") from exc
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=src/viper/http.py:invoke_http -->
+```python contract-target
+def invoke_http(
+    repository_root: Path,
+    implementation: ResolvedHttpImplementation,
+    request: HttpRequestSpec,
+    policy: HttpRetrievalPolicy,
+    workspace: Path,
+    destination: Path,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> HttpResult:
+    """Invoke the selected HTTP implementation and verify its result."""
+    from ._parameter.validation import (  # Avoid an HTTP-validation cycle.
+        instantiate_parameters,
+    )
+
+    root = repository_root.resolve()
+    validate_request_policy(request, policy)
+    credential = _resolve_credential(
+        request.credentials,
+        os.environ if env is None else env,
+    )
+    resolved_workspace = workspace.resolve()
+    resolved_destination = destination.resolve()
+    if not resolved_destination.is_relative_to(resolved_workspace):
+        raise HttpRetrievalError("HTTP destination escapes its retrieval workspace")
+    if destination.is_symlink():
+        raise HttpRetrievalError("HTTP destination must not be a symlink")
+    if isinstance(implementation.spec, BuiltinHttpImplementationSpec):
+        params = params.Http()
+        function: HttpCallable[Any] = _httpx_request
+    else:
+        project = implementation.spec
+        params = cast(
+            params.Http,
+            instantiate_parameters(
+                root / project.parameter_model.path,
+                project.parameter_model,
+                project.params,
+                params.Http,
+            ),
+        )
+        function = _load_project_http(root, project)
+    context = HttpContext(
+        request=request,
+        credential=credential,
+        workspace=resolved_workspace,
+        destination=resolved_destination,
+        policy=policy,
+        params=params,
+        executables={
+            value.spec.executable_id: value.path
+            for value in implementation.external_executables
+        },
+    )
+    started = time.monotonic()
+    result = function(context)
+    if time.monotonic() - started > policy.timeout_seconds:
+        raise HttpRetrievalError("HTTP retrieval exceeded its timeout")
+    expected_destination = destination.resolve()
+    if result.body.resolve() != expected_destination:
+        raise HttpRetrievalError("HTTP implementation returned another body path")
+    if result.body.is_symlink() or not result.body.is_file():
+        raise HttpRetrievalError("HTTP implementation returned no regular body file")
+    if result.response.status not in policy.accepted_statuses:
+        raise HttpRetrievalError("HTTP terminal status is unaccepted")
+    terminal_request = request.model_copy(update={"url": result.response.response_url})
+    validate_request_policy(terminal_request, policy)
+    raw = result.body.read_bytes()
+    if len(raw) > policy.max_body_bytes:
+        raise HttpRetrievalError("HTTP body exceeds the policy limit")
+    if len(raw) != request.expected_body_bytes:
+        raise HttpRetrievalError("HTTP body byte count differs from frozen request")
+    if hashlib.sha256(raw).hexdigest() != request.expected_body_sha256:
+        raise HttpRetrievalError("HTTP body SHA-256 differs from frozen request")
+    return result
+```
+
+**File: `src/viper/authoring.py`**
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/authoring.py:_freeze_artifact -->
+```python contract-target
+def _freeze_artifact(
+    root: Path,
+    run_root: str,
+    draft: ArtifactDraft,
+) -> ArtifactSpec:
+    """Freeze one artifact loader and prefix its run-relative path."""
+    source = inspect.getsourcefile(draft.loader)
+    if source is None:
+        raise ValueError("artifact loader has no Python source")
+    path = Path(source).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("artifact loader is outside the project root")
+    raw = path.read_bytes()
+    loader = ArtifactLoaderRef(
+        path=path.relative_to(root).as_posix(),
+        symbol=draft.loader.__name__,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+    fields = {
+        "path": f"{run_root}/{draft.path}",
+        "loader": loader,
+        "data_role": draft.data_role,
+    }
+    if isinstance(draft, BundleArtifactDraft):
+        return BundleArtifactSpec(**fields)
+    return SingleFileArtifactSpec(**fields)
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=src/viper/authoring.py:_freeze_http -->
+```python contract-target
+def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
+    """Freeze one built-in selection or decorated project HTTP callable."""
+    if isinstance(draft, BuiltinHttpImplementationSpec):
+        return draft
+    definition = getattr(draft.implementation, "__viper_http__", None)
+    if not isinstance(definition, HttpDefinition):
+        raise ValueError("HTTP callable lacks a VIPER decorator")
+    source = inspect.getsourcefile(draft.implementation)
+    parameter_source = inspect.getsourcefile(definition.parameter_model)
+    if source is None or parameter_source is None:
+        raise ValueError("HTTP callable or parameter model has no Python source")
+    implementation_path = Path(source).resolve()
+    parameter_path = Path(parameter_source).resolve()
+    if not implementation_path.is_relative_to(root):
+        raise ValueError("HTTP callable is outside the project root")
+    if not parameter_path.is_relative_to(root):
+        raise ValueError("HTTP parameter model is outside the project root")
+    implementation_raw = implementation_path.read_bytes()
+    parameter_raw = parameter_path.read_bytes()
+    return ProjectHttpImplementationSpec(
+        id=definition.id,
+        implementation=HttpImplementationRef(
+            path=implementation_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(implementation_raw).hexdigest(),
+            bytes=len(implementation_raw),
+        ),
+        parameter_model=ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        ),
+        params=draft.params,
+        executables=definition.executables,
+    )
+```
+
+**File: `tests/test_authoring.py`**
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity -->
+```python contract-target
+def test_artifact_and_http_drafts_preserve_callable_identity() -> None:
+    """Keep selected Python callables attached to their authoring drafts."""
+    from viper import params
+    from viper.artifacts import artifact
+    from viper.http import HttpContext, HttpResult, CustomHttpDraft, http
+
+    def load(path: Path) -> bytes:
+        return path.read_bytes()
+
+    @http(id="dataset")
+    def fetch(context: HttpContext[params.Http]) -> HttpResult:
+        return HttpResult(body=context.destination, response=context.request)
+
+    artifact_draft = artifact(
+        path="artifacts/data.csv", loader=load, data_role="training"
+    )
+    http_draft = CustomHttpDraft(implementation=fetch, params=params.Http())
+
+    assert artifact_draft.loader is load
+    assert http_draft.implementation is fetch
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=tests/test_authoring.py:test_artifact_constructor_selects_file_or_bundle -->
+```python contract-target
+def test_artifact_constructor_selects_file_or_bundle() -> None:
+    """Select the artifact draft type from the explicit kind."""
+    from viper.artifacts import BundleArtifactDraft, SingleFileArtifactDraft, artifact
+
+    def load(path: Path) -> bytes:
+        return path.read_bytes()
+
+    file = artifact(path="artifacts/model.bin", loader=load, data_role="training")
+    bundle = artifact(
+        path="artifacts/tokenizer",
+        loader=load,
+        data_role="training",
+        kind="bundle",
+    )
+
+    assert isinstance(file, SingleFileArtifactDraft)
+    assert isinstance(bundle, BundleArtifactDraft)
+```
+
+### P5-AIR-04
+
+**File: `src/viper/stages.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:ParamsT -->
+```python contract-target
+ParamsT = TypeVar("ParamsT", bound=params.ParameterSet)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:BaseSpec -->
+```python contract-target
+class BaseSpec(ProtocolModel):
+    """Execution request recorded before a stage runs."""
+
+    kind: str
+    schema_version: Literal[1] = 1
+
+    env: EnvSpec | None = None
+    metric_ids: tuple[MetricId, ...] = ()
+
+    artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_artifact_paths(self) -> BaseSpec:
+        """Enforce entrypoint, artifact, and metric declarations."""
+        if len(set(self.metric_ids)) != len(self.metric_ids):
+            raise ValueError("stage metric IDs must be unique")
+
+        artifact_categories = {
+            "download": "datasets",
+            "build": "priors",
+            "embed": "models",
+            "train": "models",
+            "eval": "evals",
+        }
+        artifact_category = artifact_categories.get(self.kind)
+        if artifact_category is None:
+            raise ValueError("stage kind has no artifact category contract")
+
+        checkpoint_artifacts = {keys.Train.MODEL, keys.Train.STATE}
+        if self.kind != "train" and checkpoint_artifacts & set(self.artifacts):
+            raise ValueError(
+                "parameters and resume_state are reserved for training stages"
+            )
+        if self.kind != "eval" and keys.Eval.PREDS in self.artifacts:
+            raise ValueError("predictions is reserved for eval stages")
+
+        artifact_roots: dict[RepoRelPath, ArtifactName] = {}
+
+        for name, artifact in self.artifacts.items():
+            parts = artifact.path.split("/")
+            if (
+                len(parts) < 8
+                or parts[0] != "experiments"
+                or parts[2] != "runs"
+                or parts[5] != "artifacts"
+                or parts[6] != artifact_category
+                or re.fullmatch(r"[a-z][a-z0-9_]*", parts[7]) is None
+                or (artifact.kind == "file" and len(parts) < 9)
+            ):
+                raise ValueError(
+                    f"artifact {name!r} path must use a run artifact category "
+                    "and entity ID"
+                )
+
+            for previous_path, previous_name in artifact_roots.items():
+                if repo_file_paths_overlap(artifact.path, previous_path):
+                    raise ValueError(
+                        f"artifact roots for {previous_name!r} and {name!r} "
+                        f"overlap: {previous_path} and {artifact.path}"
+                    )
+
+            artifact_roots[artifact.path] = name
+
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:EmbedSpec -->
+```python contract-target
+class EmbedSpec(InternalSpec):
+    """Request construction of a project-defined embedding artifact."""
+
+    kind: Literal["embed"] = "embed"
+    objective: MetricObjectiveSpec | None = None
+    params: params.Embed
+
+    @model_validator(mode="after")
+    def validate_objective(self) -> EmbedSpec:
+        """Require a selected embedding objective to occur in metric_ids."""
+        if self.objective is not None and self.objective.metric_id not in self.metric_ids:
+            raise ValueError("embedding objective must occur in stage metric IDs")
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:TrainSpec -->
+```python contract-target
+class TrainSpec(InternalSpec):
+    """Request training with a measured minimization or maximization objective."""
+
+    kind: Literal["train"] = "train"
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    objective: MetricObjectiveSpec
+    params: params.Train
+
+    @model_validator(mode="after")
+    def validate_training_contract(self) -> TrainSpec:
+        """Require the objective and canonical terminal checkpoint contract."""
+        if self.objective.metric_id not in self.metric_ids:
+            raise ValueError("training objective must occur in stage metric IDs")
+        required_artifacts = {keys.Train.MODEL, keys.Train.STATE}
+        missing = required_artifacts - set(self.artifacts)
+        if missing:
+            raise ValueError(
+                "training stages must declare terminal checkpoint artifacts: "
+                + ", ".join(sorted(missing))
+            )
+        model_input = self.inputs.get(keys.Train.MODEL)
+        state_input = self.inputs.get(keys.Train.STATE)
+        if (model_input is None) != (state_input is None):
+            raise ValueError("checkpoint inputs must be declared together")
+        if model_input is None or state_input is None:
+            return self
+        if model_input.kind != state_input.kind:
+            raise ValueError("checkpoint inputs must use the same input kind")
+        if model_input.kind == "stored" and state_input.kind == "stored":
+            if any(
+                value.pointer.path.split("/")[1] != "models"
+                for value in (model_input, state_input)
+            ):
+                raise ValueError("stored checkpoint inputs must use inputs/models")
+        if model_input.kind == "future" and state_input.kind == "future":
+            if model_input.producer_stage_id != state_input.producer_stage_id:
+                raise ValueError("checkpoint inputs must select one producer stage")
+            if model_input.producer_artifact != keys.Train.MODEL:
+                raise ValueError("parameters input must select parameters")
+            if state_input.producer_artifact != keys.Train.STATE:
+                raise ValueError("resume_state input must select resume_state")
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/stages.py:EvaluateSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/stages.py:EvalSpec -->
+```python contract-target
+class EvalSpec(InternalSpec):
+    """Request prediction and recomputed metrics for one fixed eval."""
+
+    kind: Literal["eval"] = "eval"
+    eval_id: EvalId
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    objective: MetricObjectiveSpec
+    split_inputs: tuple[InputName, ...] = Field(min_length=1)
+    params: params.Eval
+
+    @model_validator(mode="after")
+    def validate_eval_contract(self) -> EvalSpec:
+        """Require the objective, fixed inputs, splits, and prediction artifact."""
+        if self.objective.metric_id not in self.metric_ids:
+            raise ValueError("eval objective must occur in stage metric IDs")
+        if len(set(self.metric_ids)) != len(self.metric_ids):
+            raise ValueError("eval metric IDs must be unique")
+        if len(set(self.split_inputs)) != len(self.split_inputs):
+            raise ValueError("eval split input names must be unique")
+        if keys.Train.MODEL not in self.inputs:
+            raise ValueError("eval requires a parameters input")
+        dataset = self.inputs.get(keys.Eval.TEST)
+        if dataset is None:
+            raise ValueError("eval requires an eval_dataset input")
+        if dataset.kind != "stored":
+            raise ValueError("eval_dataset must be a stored input")
+        if dataset.pointer.path.split("/")[1] != "datasets":
+            raise ValueError("eval_dataset must use inputs/datasets")
+        if dataset.data_role not in {"eval", "benchmark"}:
+            raise ValueError("eval_dataset has an invalid data role")
+        reserved = {keys.Train.MODEL, keys.Eval.TEST}
+        if reserved & set(self.split_inputs):
+            raise ValueError("eval splits must differ from reserved inputs")
+        if any(name not in self.inputs for name in self.split_inputs):
+            raise ValueError("eval split input is absent")
+        predictions = self.artifacts.get(keys.Eval.PREDS)
+        if predictions is None:
+            raise ValueError("eval requires a predictions artifact")
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:ParameterizedStageSpec -->
+```python contract-target
+ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvalSpec
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:Spec -->
+```python contract-target
+Spec = Annotated[
+    DownloadSpec | ParameterizedStageSpec,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:ResolvedBaseSpec -->
+```python contract-target
+class ResolvedBaseSpec(ProtocolModel):
+    """Record an execution and the exact output files it produced."""
+
+    schema_version: Literal[1] = 1
+    kind: str
+
+    spec: BaseSpec
+    env: ResolvedEnv
+    execution_context: ExecutionContext
+    artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
+    completed_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_common_invariants(self) -> ResolvedBaseSpec:
+        """Match realized source, artifacts, env, and context to the request."""
+        if set(self.artifacts) != set(self.spec.artifacts):
+            raise ValueError(
+                "resolved artifact names must match declared artifact names"
+            )
+
+        for name, resolved_artifact in self.artifacts.items():
+            declared_artifact = self.spec.artifacts[name]
+
+            if resolved_artifact.kind != declared_artifact.kind:
+                raise ValueError(
+                    f"resolved artifact {name!r} kind must match its declaration"
+                )
+
+            if declared_artifact.kind == "file" and resolved_artifact.kind == "file":
+                if resolved_artifact.file.path != declared_artifact.path:
+                    raise ValueError(
+                        f"resolved artifact {name!r} path must match its declaration"
+                    )
+                continue
+
+            if (
+                declared_artifact.kind == "bundle"
+                and resolved_artifact.kind == "bundle"
+            ):
+                for member in resolved_artifact.members:
+                    expected_path = f"{declared_artifact.path}/{member.relative_path}"
+                    if member.file.path != expected_path:
+                        raise ValueError(
+                            f"resolved artifact {name!r} member path must equal "
+                            "its declared bundle root plus relative path"
+                        )
+
+        requested_environment = self.spec.env
+        if requested_environment is not None:
+            if self.env.kind != requested_environment.kind:
+                raise ValueError("resolved env kind must match its request")
+
+            if isinstance(self.env, ResolvedGCEEnv) and isinstance(
+                requested_environment,
+                GCEEnvSpec,
+            ):
+                if self.env.provisioning != requested_environment.provisioning:
+                    raise ValueError(
+                        "resolved GCE provisioning source must match the stage "
+                        "env override"
+                    )
+                if self.env.machine_type != requested_environment.machine_type:
+                    raise ValueError(
+                        "resolved machine type must match the stage "
+                        "env override"
+                    )
+
+            if self.env.compute != requested_environment.compute:
+                raise ValueError(
+                    "resolved compute must match the stage env override"
+                )
+
+            if (
+                self.env.python_env
+                != requested_environment.python_env
+            ):
+                raise ValueError(
+                    "resolved Python env must match the stage "
+                    "env override"
+                )
+
+            resolved_lockfile = self.env.lockfile
+            requested_lockfile = requested_environment.lockfile
+
+            if (
+                resolved_lockfile.stored_at.repository != requested_lockfile.repository
+                or resolved_lockfile.stored_at.commit != requested_lockfile.commit
+                or resolved_lockfile.stored_at.path != requested_lockfile.path
+            ):
+                raise ValueError(
+                    "resolved lockfile must match the stage env override"
+                )
+
+        host = self.execution_context.host
+        if self.env.kind != host.provider:
+            raise ValueError("resolved env kind must match the observed host")
+        if isinstance(self.env, ResolvedGCEEnv) and isinstance(
+            host,
+            GCEHostContext,
+        ):
+            if self.env.provisioning != host.provisioning:
+                raise ValueError(
+                    "resolved GCE provisioning source must match the observed host"
+                )
+            if self.env.machine_type != host.machine_type:
+                raise ValueError(
+                    "resolved machine type must match the observed host machine type"
+                )
+
+        compute = self.env.compute
+        backend = self.execution_context.backend
+
+        if compute.kind != backend.kind:
+            raise ValueError("resolved compute kind must match the observed backend")
+
+        if compute.kind == "cuda" and backend.kind == "cuda":
+            if len(backend.gpu_devices) != compute.count:
+                raise ValueError(
+                    "observed CUDA device count must match the resolved compute"
+                )
+            if any(device.model != compute.model for device in backend.gpu_devices):
+                raise ValueError(
+                    "observed CUDA device models must match the resolved compute"
+                )
+
+        return self
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/stages.py:ResolvedEvaluateSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/stages.py:ResolvedEvalSpec -->
+```python contract-target
+class ResolvedEvalSpec(ResolvedInternalSpec):
+    """Record the realized execution of one eval stage."""
+
+    kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
+    spec: EvalSpec  # pyright: ignore[reportIncompatibleVariableOverride]
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:ResolvedSpec -->
+```python contract-target
+ResolvedSpec = Annotated[
+    ResolvedDownloadSpec
+    | ResolvedBuildSpec
+    | ResolvedEmbedSpec
+    | ResolvedTrainSpec
+    | ResolvedEvalSpec,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:_stage_decorator -->
+```python contract-target
+def _stage_decorator(
+    kind: str,
+    parameter_model: type[ParamsT],
+) -> Callable[[DecoratedStage], DecoratedStage]:
+    """Create one stage decorator with fixed authoring metadata."""
+    if not issubclass(parameter_model, params.ParameterSet):
+        raise TypeError("stage parameter model must subclass ParameterSet")
+
+    definition = StageDefinition(kind=kind, parameter_model=parameter_model)
+
+    def decorate(function: DecoratedStage) -> DecoratedStage:
+        """Validate the callable interface and attach its immutable definition."""
+        parameters = tuple(inspect.signature(function).params.values())
+        if len(parameters) != 1:
+            raise TypeError("a stage callable must accept one Context argument")
+        setattr(function, "__viper_stage__", definition)
+        return function
+
+    return decorate
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:build -->
+```python contract-target
+def build(
+    *, params: type[params.Build]
+) -> Callable[[DecoratedStage], DecoratedStage]:
+    """Declare one build-stage callable."""
+    return _stage_decorator("build", params)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:embed -->
+```python contract-target
+def embed(
+    *, params: type[params.Embed]
+) -> Callable[[DecoratedStage], DecoratedStage]:
+    """Declare one embedding-stage callable."""
+    return _stage_decorator("embed", params)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:train -->
+```python contract-target
+def train(
+    *, params: type[params.Train]
+) -> Callable[[DecoratedStage], DecoratedStage]:
+    """Declare one training-stage callable."""
+    return _stage_decorator("train", params)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/stages.py:eval -->
+```python contract-target
+def eval(
+    *, params: type[params.Eval]
+) -> Callable[[DecoratedStage], DecoratedStage]:
+    """Declare one eval-stage callable."""
+    return _stage_decorator("eval", params)
+```
+
+**File: `src/viper/authoring.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:StageDraftArtifactRef -->
+```python contract-target
+@dataclass(frozen=True)
+class StageDraftArtifactRef:
+    """Select one artifact produced by an in-memory stage draft."""
+
+    producer: StageDraft
+    artifact_name: ArtifactName
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:ExternalInputDraft -->
+```python contract-target
+class ExternalInputDraft(BaseModel):
+    """Select one repository file as a future stage input."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: RepoRelPath
+    data_role: DataRole
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:RunArtifactDraft -->
+```python contract-target
+class RunArtifactDraft(BaseModel):
+    """Select one artifact from a completed run for later pointer freezing."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: ResolvedRunRef
+    artifact: StageArtifactRef
+    path: RepoRelPath
+    data_role: DataRole
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:StageInputDraft -->
+```python contract-target
+StageInputDraft = ExternalInputDraft | RunArtifactDraft | StageDraftArtifactRef
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:BaseSpecDraft -->
+```python contract-target
+class BaseSpecDraft(BaseModel):
+    """Hold fields shared by every Python-authored stage."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    kind: str
+    artifacts: dict[ArtifactName, ArtifactDraft] = Field(min_length=1)
+    env: EnvSpec | None = None
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:ParameterizedSpecDraft -->
+```python contract-target
+class ParameterizedSpecDraft(BaseSpecDraft):
+    """Hold one decorated project stage and its parameter values."""
+
+    implementation: Callable[[Context[Any]], None]
+    params: params.ParameterSet
+    metrics: tuple[MetricDraft[Any], ...] = ()
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:DownloadSpecDraft -->
+```python contract-target
+class DownloadSpecDraft(BaseSpecDraft):
+    """Hold runner-owned HTTP requests and their output artifacts."""
+
+    kind: Literal["download"] = "download"
+    inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
+    http: HttpDraft = Field(default_factory=BuiltinHttpImplementationSpec)
+    policy: HttpRetrievalPolicy
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:InternalSpecDraft -->
+```python contract-target
+class InternalSpecDraft(ParameterizedSpecDraft):
+    """Hold a project stage that consumes authored inputs."""
+
+    inputs: dict[InputName, StageInputDraft] = Field(min_length=1)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:BuildSpecDraft -->
+```python contract-target
+class BuildSpecDraft(InternalSpecDraft):
+    """Hold one project-defined prior builder."""
+
+    kind: Literal["build"] = "build"
+    params: params.Build
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:EmbedSpecDraft -->
+```python contract-target
+class EmbedSpecDraft(InternalSpecDraft):
+    """Hold one configured embedding stage."""
+
+    kind: Literal["embed"] = "embed"
+    params: params.Embed
+    objective: MetricObjectiveDraft | None = None
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:TrainSpecDraft -->
+```python contract-target
+class TrainSpecDraft(InternalSpecDraft):
+    """Hold one configured training stage and required objective."""
+
+    kind: Literal["train"] = "train"
+    params: params.Train
+    objective: MetricObjectiveDraft
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:EvalSpecDraft -->
+```python contract-target
+class EvalSpecDraft(InternalSpecDraft):
+    """Hold one configured evaluation stage and required objective."""
+
+    kind: Literal["eval"] = "eval"
+    eval_id: EvalId
+    params: params.Eval
+    objective: MetricObjectiveDraft
+    split_inputs: tuple[InputName, ...] = Field(min_length=1)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:StageSpecDraft -->
+```python contract-target
+StageSpecDraft = Annotated[
+    DownloadSpecDraft
+    | BuildSpecDraft
+    | EmbedSpecDraft
+    | TrainSpecDraft
+    | EvalSpecDraft,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/authoring.py:StageDraft -->
+```python contract-target
+class StageDraft(BaseModel):
+    """Hold one validated Python stage declaration before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    spec: StageSpecDraft
+
+    @property
+    def artifacts(self) -> dict[ArtifactName, StageDraftArtifactRef]:
+        """Return opaque handles for every artifact produced by this stage."""
+        return {
+            name: StageDraftArtifactRef(producer=self, artifact_name=name)
+            for name in self.spec.artifacts
+        }
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/authoring.py:RunPlanDraft -->
+```python contract-target
+class RunPlanDraft(BaseModel):
+    """Collect run-level and Python stage selections before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    experiment_id: ExperimentId
+    variant_id: VariantId
+    replicate_id: ReplicateId
+    benchmark_id: BenchmarkId | None = None
+    seed: RNGSeed
+    source: GitSource
+    env: EnvSpec
+    reproducibility: ReproducibilitySpec
+    stages: dict[StageId, StageDraft] = Field(min_length=1)
+    estimator: StageDraftArtifactRef
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:SPEC_ADAPTER -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:load_run_plan_draft -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:_freeze_input -->
+```python contract-target
+def _freeze_input(
+    root: Path,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageInputDraft,
+) -> InputRef:
+    """Compile one local or same-run draft into a frozen input reference."""
+    if isinstance(draft, ExternalInputDraft):
+        path = resolve_path(root, draft.path, operation="read")
+        return ExternalInputRef(
+            source=LocalSource(path=path.relative_to(root).as_posix()),
+            path=draft.path,
+            data_role=draft.data_role,
+        )
+    if isinstance(draft, StageDraftArtifactRef):
+        owners = [name for name, stage in stages.items() if stage is draft.producer]
+        if len(owners) != 1:
+            raise ValueError("stage artifact must have one producer in this plan")
+        return FutureInputRef(
+            producer_stage_id=owners[0],
+            producer_artifact=draft.artifact_name,
+        )
+    raise ValueError("prior-run inputs are compiled in Master Phase 7")
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:_freeze_stage -->
+```python contract-target
+def _freeze_stage(
+    root: Path,
+    run_root: str,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageSpecDraft,
+) -> Spec:
+    """Freeze one Python stage draft into its protocol declaration."""
+    artifacts = {
+        name: _freeze_artifact(root, run_root, artifact)
+        for name, artifact in draft.artifacts.items()
+    }
+    if isinstance(draft, DownloadSpecDraft):
+        return DownloadSpec(
+            artifacts=artifacts,
+            env=draft.env,
+            inputs=draft.inputs,
+            http=_freeze_http(root, draft.http),
+            policy=draft.policy,
+        )
+    definition = stage_definition(draft.implementation)
+    source = inspect.getsourcefile(draft.implementation)
+    parameter_source = inspect.getsourcefile(definition.parameter_model)
+    if source is None or parameter_source is None:
+        raise ValueError("stage callable or parameter model has no Python source")
+    source_path = Path(source).resolve()
+    parameter_path = Path(parameter_source).resolve()
+    source_raw = source_path.read_bytes()
+    parameter_raw = parameter_path.read_bytes()
+    common = {
+        "artifacts": artifacts,
+        "env": draft.env,
+        "implementation": StageImplementationRef(
+            path=source_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(source_raw).hexdigest(),
+            bytes=len(source_raw),
+        ),
+        "parameter_model": ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        ),
+        "params": draft.params,
+        "inputs": {
+            name: _freeze_input(root, stages, value)
+            for name, value in draft.inputs.items()
+        },
+        "metric_ids": tuple(
+            metric_definition(metric.implementation).metric_id
+            for metric in draft.metrics
+        ),
+    }
+    if isinstance(draft, BuildSpecDraft):
+        return BuildSpec(**common)
+    objective = (
+        None
+        if draft.objective is None
+        else MetricObjectiveSpec(
+            metric_id=metric_definition(draft.objective.metric.implementation).metric_id,
+            direction=draft.objective.direction,
+        )
+    )
+    if isinstance(draft, EmbedSpecDraft):
+        return EmbedSpec(**common, objective=objective)
+    if isinstance(draft, TrainSpecDraft):
+        return TrainSpec(**common, objective=objective)
+    return EvalSpec(
+        **common,
+        objective=objective,
+        eval_id=draft.eval_id,
+        split_inputs=draft.split_inputs,
+    )
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:input -->
+```python contract-target
+def input(path: RepoRelPath, *, data_role: DataRole) -> ExternalInputDraft:
+    """Select one repository file as a stage input."""
+    return ExternalInputDraft(path=path, data_role=data_role)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:run_artifact -->
+```python contract-target
+def run_artifact(
+    run: ResolvedRunRef,
+    artifact: StageArtifactRef,
+    *,
+    path: RepoRelPath,
+    data_role: DataRole,
+) -> RunArtifactDraft:
+    """Select one completed-run artifact for pointer compilation in Phase 7."""
+    return RunArtifactDraft(
+        run=run, artifact=artifact, path=path, data_role=data_role
+    )
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:download -->
+```python contract-target
+def download(
+    *,
+    inputs: dict[InputName, HttpRequestSpec],
+    artifacts: dict[ArtifactName, SingleFileArtifactDraft],
+    policy: HttpRetrievalPolicy,
+    http: HttpDraft | None = None,
+    env: EnvSpec | None = None,
+) -> StageDraft:
+    """Declare one runner-owned HTTP download stage."""
+    selected_http = BuiltinHttpImplementationSpec() if http is None else http
+    return StageDraft(
+        spec=DownloadSpecDraft(
+            inputs=inputs, artifacts=artifacts, policy=policy, http=selected_http, env=env
+        )
+    )
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:stage -->
+```python contract-target
+def stage(
+    implementation: Callable[[Context[Any]], None],
+    *,
+    params: params.ParameterSet,
+    inputs: dict[InputName, StageInputDraft],
+    artifacts: dict[ArtifactName, ArtifactDraft],
+    metrics: tuple[MetricDraft[Any], ...] = (),
+    objective: MetricObjectiveDraft | None = None,
+    env: EnvSpec | None = None,
+    eval_id: EvalId | None = None,
+    split_inputs: tuple[InputName, ...] = (),
+) -> StageDraft:
+    """Build the draft class selected by one decorated project callable."""
+    definition = stage_definition(implementation)
+    values = {
+        "implementation": implementation,
+        "params": params,
+        "inputs": inputs,
+        "artifacts": artifacts,
+        "metrics": metrics,
+        "env": env,
+    }
+    if definition.kind == "build":
+        spec: StageSpecDraft = BuildSpecDraft(**values)
+    elif definition.kind == "embed":
+        spec = EmbedSpecDraft(**values, objective=objective)
+    elif definition.kind == "train":
+        if objective is None:
+            raise ValueError("training stages require an objective")
+        spec = TrainSpecDraft(**values, objective=objective)
+    elif definition.kind == "eval":
+        if objective is None or eval_id is None:
+            raise ValueError("evaluation stages require an ID and objective")
+        spec = EvalSpecDraft(
+            **values, objective=objective, eval_id=eval_id, split_inputs=split_inputs
+        )
+    else:
+        raise ValueError(f"unsupported stage kind: {definition.kind}")
+    return StageDraft(spec=spec)
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/authoring.py:freeze_run_plan -->
+```python contract-target
+def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
+    """Freeze Python stage drafts and write one exact run plan."""
+    project_root = resolve_root(root)
+    run_root = (
+        f"experiments/{draft.experiment_id}/runs/{draft.variant_id}/{draft.run_id}"
+    )
+    files: list[tuple[Path, bytes]] = []
+    stage_refs: list[RunStageRef] = []
+    for stage_id, stage in draft.stages.items():
+        spec = _freeze_stage(project_root, run_root, draft.stages, stage.spec)
+        raw = serialize_document(spec)
+        relative = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files.append((_target_path(project_root, relative), raw))
+        stage_refs.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=relative,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    estimator_stage = next(
+        (name for name, stage in draft.stages.items() if stage is draft.estimator.producer),
+        None,
+    )
+    if estimator_stage is None:
+        raise ValueError("estimator producer is absent from the plan")
+    run = RunSpec(
+        run_id=draft.run_id,
+        experiment_id=draft.experiment_id,
+        variant_id=draft.variant_id,
+        replicate_id=draft.replicate_id,
+        benchmark_id=draft.benchmark_id,
+        seed=draft.seed,
+        source=draft.source,
+        env=draft.env,
+        reproducibility=draft.reproducibility,
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id=estimator_stage,
+            artifact_name=draft.estimator.artifact_name,
+        ),
+    )
+    files.append((_target_path(project_root, f"{run_root}/spec.yaml"), serialize_document(run)))
+    for path, raw in files:
+        _write_exact_file(path, raw)
+    return FrozenPlanFiles(run=run, files=tuple(path for path, _ in files))
+```
+
+**File: `src/viper/project.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/project.py:_project_files -->
+```python contract-target
+def _project_files(package: str) -> dict[str, str]:
+    """Return the complete starter-project file mapping."""
+    stage_definitions = {
+        "build": ("BuildParameters", "build", "prior"),
+        "embed": ("EmbedParameters", "embed", "embedding"),
+        "train": ("TrainParameters", "train", "parameters"),
+        "eval": ("EvalParameters", "eval", "predictions"),
+    }
+    files: dict[str, str] = {
+        **ROOT_FILES,
+        ".gitignore": ".viper/\n__pycache__/\n*.egg-info/\n",
+        "README.md": f"""# {package}
+
+This project contains one decorated callable for each VIPER stage kind.
+
+Run the focused project tests:
+
+    python -m pytest -q
+
+After replacing the stage templates, commit the project and write an experiment
+draft under `experiments/`. The draft selects the stages and files for one run.
+`viper freeze-run` turns that draft into the exact plan used for execution.
+
+Benchmark specifications belong under `benchmarks/`.
+""",
+        "pyproject.toml": f'''[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{package.replace("_", "-")}"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["viper-provenance>=0.1.0a2"]
+
+[project.optional-dependencies]
+test = ["pytest>=9,<10"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+''',
+        f"src/{package}/__init__.py": (
+            f'"""Project-owned stages and provenance extensions for {package}."""\n'
+        ),
+        f"src/{package}/params.py": (
+            '''"""Define project-owned stage parameter models."""
+
+from pydantic import Field
+from viper import parameters
+
+
+class BuildParameters(params.Build):
+    """Select the delimiter consumed by the prior builder."""
+
+    delimiter: str = ","
+
+
+class EmbedParameters(params.Embed):
+    """Select the dimension of the example embedding."""
+
+    dimensions: int = Field(default=2, gt=0)
+
+
+class TrainParameters(params.Train):
+    """Select the number of example training passes."""
+
+    epochs: int = Field(default=1, gt=0)
+
+
+class EvalParameters(params.Eval):
+    """Select the label written beside the example predictions."""
+
+    label: str = "baseline"
+'''
+        ),
+        f"src/{package}/artifact_loaders/__init__.py": (
+            '"""Project-owned artifact reconstruction functions."""\n'
+        ),
+        f"src/{package}/artifact_loaders/bytes_file.py": (
+            '''"""Load one file artifact as exact bytes."""
+
+from pathlib import Path
+
+
+def load(path: Path) -> bytes:
+    """Return the complete file contents."""
+    return path.read_bytes()
+'''
+        ),
+        f"src/{package}/artifact_loaders/resume_state.py": (
+            '''"""Reconstruct the example terminal training state."""
+
+from pathlib import Path
+
+from viper.randomness import (
+    LegacyNumPyRNGState,
+    MainProcessRNGState,
+    NumPyRNGState,
+    PCG64GeneratorState,
+    PCG64InternalState,
+    PythonRNGState,
+)
+from viper.resume import (
+    DataLoaderConfiguration,
+    DataLoaderResumeState,
+    ResumeState,
+)
+
+
+def load(path: Path) -> ResumeState:
+    """Return the example resume state after confirming the file exists."""
+    path.read_bytes()
+    return ResumeState(
+        optimizer_state={"state": {}, "param_groups": []},
+        main_process_rng=MainProcessRNGState(
+            python=PythonRNGState(
+                version=3,
+                internal_state=(1,),
+                gaussian_cache=None,
+            ),
+            numpy=NumPyRNGState(
+                generators={
+                    "training": PCG64GeneratorState(
+                        state=PCG64InternalState(state=1, inc=1),
+                        has_uint32=0,
+                        uinteger=0,
+                    )
+                },
+                legacy_global=LegacyNumPyRNGState(
+                    keys=(0,) * 624,
+                    position=0,
+                    has_gaussian=0,
+                    cached_gaussian=0.0,
+                ),
+            ),
+            torch_cpu=b"torch-cpu",
+            torch_cuda=(),
+        ),
+        dataloader=DataLoaderResumeState(
+            configuration=DataLoaderConfiguration(workers=0),
+            state_dict={"num_yielded": 1},
+        ),
+    )
+'''
+        ),
+        f"src/{package}/metrics/__init__.py": (
+            '"""Project-owned metric implementations."""\n'
+        ),
+        f"src/{package}/metrics/eval.py": (
+            '''"""Define one recomputed eval metric."""
+
+from viper.metrics import metric
+
+
+@metric(metric_id="prediction_bytes", kind="eval", mode="recompute")
+def prediction_bytes(context) -> float:
+    """Return the byte count of the verified prediction artifact."""
+    return float(len(context.artifacts["predictions"].read_bytes()))
+'''
+        ),
+        "experiments/README.md": """# Experiments
+
+Freeze authored experiment, variant, stage, and run documents here. VIPER
+binds every implementation through its repository-relative path and exact
+source identity.
+""",
+        "benchmarks/README.md": """# Benchmarks
+
+A benchmark governs one eval contract across candidate run plans and
+requires an independently executed confirmation.
+""",
+        "train.py": f'''"""Run one frozen project plan."""
+
+from {package}.stages.train import train
+from viper.api import run
+
+
+def main() -> None:
+    """Execute the complete plan selected by the command-line arguments."""
+    run(train)
+
+
+if __name__ == "__main__":
+    main()
+''',
+        "tests/test_stage_definitions.py": (
+            f'''"""Verify generated stages expose their VIPER definitions."""
+
+from {package}.stages.build import build
+from {package}.stages.embed import embed
+from {package}.stages.eval import eval
+from {package}.stages.train import train
+
+from viper.stages import stage_definition
+
+
+def test_stage_kinds() -> None:
+    """Match each callable with the stage kind fixed by its decorator."""
+    stages = (build, embed, train, eval)
+
+    assert tuple(stage_definition(stage).kind for stage in stages) == (
+        "build",
+        "embed",
+        "train",
+        "eval",
+    )
+'''
+        ),
+    }
+    for stage, (parameter_class, decorator, artifact) in stage_definitions.items():
+        if stage == "eval":
+            input_read = "    payload = context.inputs['parameters'].read_bytes()\n"
+        else:
+            input_read = (
+                "    source = next(iter(context.inputs.values()))\n"
+                "    payload = source.read_bytes()\n"
+            )
+        extra_artifact = ""
+        if stage == "train":
+            extra_artifact = (
+                "    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            )
+        destination_line = f'    destination = context.artifacts["{artifact}"]\n'
+        stage_body = f"""{input_read}{destination_line}\
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(payload)
+{extra_artifact}"""
+        files[
+            f"src/{package}/stages/{stage}.py"
+        ] = f'''"""Execute the example {stage} stage."""
+
+from {package}.parameters import {parameter_class}
+from viper.stages import {decorator}
+
+
+@{decorator}(params={parameter_class})
+def {stage}(context) -> None:
+    """Write the declared {artifact} artifact from verified inputs."""
+{stage_body}'''
+    files[f"src/{package}/stages/__init__.py"] = (
+        '"""Project-owned decorated stage callables."""\n'
+    )
+    return files
+```
+
+**File: `src/viper/parameters.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:ParameterSet -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Build -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Embed -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Train -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Evaluate -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Metric -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Http -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:ParameterModelOwner -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:ParameterModelRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:__all__ -->
+<!-- contract-remove -->
+
+**File: `tests/test_public_api.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys -->
+```python contract-target
+def test_stage_api_uses_target_decorators_params_and_keys() -> None:
+    """Expose typed stage decorators, concise parameters, and canonical keys."""
+    from viper import keys, params
+    from viper.stages import build, embed, eval, train
+
+    assert keys.Train.MODEL == "model"
+    assert keys.Eval.TEST == "test"
+    assert all(callable(value) for value in (build, embed, train, eval))
+    assert issubclass(params.Eval, params.ParameterSet)
+```
+
+**File: `tests/test_authoring.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring -->
+```python contract-target
+def test_python_stage_drafts_replace_yaml_authoring() -> None:
+    """Keep a decorated callable and artifact handle in one Python stage draft."""
+    from viper import params
+    from viper.artifacts import artifact
+    from viper.authoring import stage
+    from viper.stages import Context, train
+
+    @train(params=params.Train)
+    def fit(context: Context[params.Train]) -> None:
+        context.artifacts["model"].write_bytes(b"model")
+
+    model = artifact(
+        path="artifacts/model.bin",
+        loader=lambda path: path.read_bytes(),
+        data_role="training",
+    )
+    draft = stage(
+        fit, params=params.Train(), inputs={}, artifacts={"model": model}
+    )
+
+    assert draft.spec.implementation is fit
+    assert draft.artifacts["model"].producer is draft
+```
+
+**File: `tests/test_protocol.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_protocol.py:test_python_stage_drafts_freeze_to_protocol_specs -->
+```python contract-target
+def test_python_stage_drafts_freeze_to_protocol_specs(tmp_path: Path) -> None:
+    """Freeze one Python stage mapping without reading authored stage YAML."""
+    from viper.authoring import RunPlanDraft
+
+    assert "stages" in RunPlanDraft.model_fields
+    assert "spec_source" not in RunPlanDraft.model_fields
+```
+
+<!-- phase-5-contract-targets -->
+
+## 14. Verdict
 
 **Proposed decision:** implement automatic pointer generation beneath the
 Python authoring API defined in this contract.
@@ -3134,7 +8709,7 @@ will define harness mode under the project-root `inputs/` directory.
 captured files. Each `StorageRef` tells VIPER where to retrieve its file. The
 same Python authoring API works with local storage and Viper Cloud.
 
-## Implementation sources
+## 15. Implementation sources
 
 - [Stage models and decorators](../../src/viper/stages.py)
 - [Run-plan authoring](../../src/viper/authoring.py)

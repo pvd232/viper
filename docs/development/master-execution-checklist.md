@@ -284,7 +284,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks drafted | Local input capture and identity verification |
 | [Unified metric drafting](unified-metric-drafting.md) | Planned; Phase 4 code specified | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
-| [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
+| [Automatic input resolution](automatic-input-resolution.md) | Planned | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
 | [Direct Viper Cloud publication](remote-storage.md) | In progress | Destination-neutral publication, cloud references, retrieval, and restore |
 | [Experiment expansion](experiment-expansion.md) | Audited; owner approval pending | Deterministic variant-replicate expansion and bounded multi-run execution |
@@ -1467,13 +1467,6 @@ python -m pytest \
 
 ## 12. Master Phase 5 — Python stage, artifact, and HTTP drafts
 
-<!-- contract-implementation: requirement=AIR-01 rule=stage.api.complete state=planned owner=src/viper/keys.py:Train -->
-<!-- contract-verification: requirement=AIR-01 rule=stage.api.complete state=planned test=tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys -->
-<!-- contract-implementation: requirement=AIR-02 rule=artifact.http.authoring state=planned owner=src/viper/authoring.py:http -->
-<!-- contract-verification: requirement=AIR-02 rule=artifact.http.authoring state=planned test=tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity -->
-<!-- contract-implementation: requirement=AIR-03 rule=stage.draft.complete state=planned owner=src/viper/authoring.py:stage -->
-<!-- contract-verification: requirement=AIR-03 rule=stage.draft.complete state=planned test=tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring -->
-
 **Depends on:** Master Phases 2 and 4.
 
 **Contract:** [Automatic input resolution](automatic-input-resolution.md)
@@ -1484,7 +1477,10 @@ writing stage YAML by hand.
 ### 12.1 Public names
 
 - [ ] Add `src/viper/keys.py` and complete the `Train` and `Eval` public key
-      migration in Section 11.1. <!-- implements: AIR-01 -->
+      migration in Section 11.1.
+      <!-- pair-block: P5-AIR-01 -->
+      <!-- pair-block-contract: P5-AIR-01 contract=automatic-input-resolution.md -->
+      <!-- implements: AIR-01 -->
 - [ ] Define `Train.MODEL = "model"` and `Train.STATE = "state"`.
 - [ ] Define `Eval.MODEL = "model"`, `Eval.TEST = "test"`, and
       `Eval.PREDS = "preds"`.
@@ -1518,6 +1514,10 @@ writing stage YAML by hand.
       `ResolvedEnvironment` to `PythonEnvSpec`, `GCEEnvSpec`,
       `ResolvedGCEEnv`, `LocalEnvSpec`, `ResolvedLocalEnv`, `EnvSpec`, and
       `ResolvedEnv` in `src/viper/runtime.py`.
+      <!-- pair-block: P5-AIR-02 -->
+      <!-- pair-block-contract: P5-AIR-02 contract=automatic-input-resolution.md -->
+      <!-- contract-implementation: requirement=AIR-01 rule=env.vocabulary.complete state=planned owner=src/viper/runtime.py:EnvSpec -->
+      <!-- contract-verification: requirement=AIR-01 rule=env.vocabulary.complete state=planned test=tests/test_public_api.py:test_env_vocabulary_is_complete -->
 - [ ] Rename `EnvironmentSecretRef` to `EnvSecretRef` in
       `src/viper/http.py`. Change its discriminator from `kind="environment"`
       to `kind="env"`.
@@ -1550,6 +1550,13 @@ writing stage YAML by hand.
       `download(http=..., params=...)` from `viper.authoring`; remove
       `transport()`.
 - [ ] Add `RunArtifactPath` validation.
+      <!-- pair-block: P5-AIR-03 -->
+      <!-- pair-block-contract: P5-AIR-03 contract=automatic-input-resolution.md -->
+      <!-- implements: AIR-02 -->
+      <!-- contract-implementation: requirement=AIR-02 rule=artifact.authoring.complete state=planned owner=src/viper/authoring.py:_freeze_artifact -->
+      <!-- contract-verification: requirement=AIR-02 rule=artifact.authoring.complete state=planned test=tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity -->
+      <!-- contract-implementation: requirement=AIR-02 rule=http.authoring.complete state=planned owner=src/viper/authoring.py:_freeze_http -->
+      <!-- contract-verification: requirement=AIR-02 rule=http.authoring.complete state=planned test=tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity -->
 - [ ] Add `SingleFileArtifactDraft` and `BundleArtifactDraft`.
 - [ ] Add one `artifact()` constructor to `viper.artifacts`. It returns a
       single-file draft by default and a bundle draft when `kind="bundle"`.
@@ -1557,14 +1564,19 @@ writing stage YAML by hand.
       of forwarding exports and omit a second public constructor.
 - [ ] Add `BuiltinHttpImplementationSpec | CustomHttpDraft` authoring and
       compile it into `HttpImplementationSpec`.
-      <!-- implements: AIR-02 -->
 
 ### 12.4 Stage drafts
 
 - [ ] Replace `StageDraft(stage_id, spec_source)` with `StageDraft(spec)`.
+      <!-- pair-block: P5-AIR-04 -->
+      <!-- pair-block-contract: P5-AIR-04 contract=automatic-input-resolution.md -->
+      <!-- contract-implementation: requirement=AIR-01 rule=stage.api.complete state=planned owner=src/viper/authoring.py:_freeze_stage -->
+      <!-- contract-verification: requirement=AIR-01 rule=stage.api.complete state=planned test=tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys -->
+      <!-- implements: AIR-03 -->
+      <!-- contract-implementation: requirement=AIR-03 rule=stage.draft.complete state=planned owner=src/viper/authoring.py:freeze_run_plan -->
+      <!-- contract-verification: requirement=AIR-03 rule=stage.draft.complete state=planned test=tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring -->
 - [ ] Add `BaseSpecDraft`, `InternalSpecDraft`, `BuildSpecDraft`,
       `EmbedSpecDraft`, `TrainSpecDraft`, and `EvalSpecDraft`.
-      <!-- implements: AIR-03 -->
 - [ ] Add `objective` and `metrics` fields to the applicable stage drafts and
       compile them into `MetricObjectiveSpec` and `metric_ids`.
 - [ ] Add runner-owned `DownloadSpecDraft` and `download()` to
