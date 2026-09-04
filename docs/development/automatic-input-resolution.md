@@ -2621,7 +2621,6 @@ targets = [
     "src/viper/experiments.py:EvaluateVariantStageParams",
     "src/viper/experiments.py:EvalVariantStageParams",
     "src/viper/experiments.py:VariantStageParams",
-    "src/viper/metrics.py:MetricParamsT",
     "src/viper/metrics.py:MetricDraft",
     "src/viper/metrics.py:MetricSpec",
     "src/viper/metrics.py:MetricContext",
@@ -3197,14 +3196,9 @@ VariantStageParams = Annotated[
 
 **File: `src/viper/metrics.py`**
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricParamsT -->
-```python contract-target
-MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
-```
-
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricDraft -->
 ```python contract-target
-class MetricDraft(BaseModel, Generic[MetricParamsT]):
+class MetricDraft[MetricParamsT: params.Metric](BaseModel):
     """Hold one configured metric before protocol freezing."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
@@ -3247,7 +3241,7 @@ class MetricSpec(ProtocolModel):
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricContext -->
 ```python contract-target
-class MetricContext(BaseModel, Generic[MetricParamsT]):
+class MetricContext[MetricParamsT: params.Metric](BaseModel):
     """Supply verified paths and frozen parameters to one metric invocation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -3259,7 +3253,7 @@ class MetricContext(BaseModel, Generic[MetricParamsT]):
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:measure -->
 ```python contract-target
-def measure(
+def measure[MetricParamsT: params.Metric](
     implementation: DecoratedMetric,
     *,
     params: MetricParamsT | None = None,
