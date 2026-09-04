@@ -2619,6 +2619,7 @@ targets = [
     "src/viper/metrics.py:Generic",
     "src/viper/metrics.py:parameters",
     "src/viper/metrics.py:params",
+    "src/viper/metrics.py:MetricParams",
     "src/viper/metrics.py:ParameterModelRef",
     "src/viper/metrics.py:MetricParamsT",
     "src/viper/_verification/metrics.py:MetricId",
@@ -2651,12 +2652,7 @@ targets = [
     "src/viper/params.py:__all__",
     "src/viper/_schema.py:DataRole",
     "src/viper/_schema.py:EvaluationId",
-    "src/viper/_schema.py:PARAMETERS",
-    "src/viper/_schema.py:RESUME_STATE",
-    "src/viper/_schema.py:PARAMETERS_INPUT",
-    "src/viper/_schema.py:RESUME_STATE_INPUT",
     "src/viper/_schema.py:EVALUATION_DATASET_INPUT",
-    "src/viper/_schema.py:PREDICTIONS",
     "src/viper/_parameter/validation.py:parameter_model_path",
     "src/viper/_parameter/validation.py:load_parameter_model",
     "src/viper/_parameter/validation.py:validate_parameters",
@@ -2981,7 +2977,6 @@ targets = [
     "src/viper/authoring.py:StageDraft",
     "src/viper/authoring.py:RunPlanDraft",
     "src/viper/authoring.py:SPEC_ADAPTER",
-    "src/viper/authoring.py:load_run_plan_draft",
     "src/viper/authoring.py:_freeze_input",
     "src/viper/authoring.py:_freeze_stage",
     "src/viper/authoring.py:input",
@@ -2990,23 +2985,6 @@ targets = [
     "src/viper/authoring.py:stage",
     "src/viper/authoring.py:freeze_run_plan",
     "src/viper/project.py:_project_files",
-    "src/viper/parameters.py:hashlib",
-    "src/viper/parameters.py:Path",
-    "src/viper/parameters.py:ParameterSet",
-    "src/viper/parameters.py:Build",
-    "src/viper/parameters.py:Embed",
-    "src/viper/parameters.py:Train",
-    "src/viper/parameters.py:Evaluate",
-    "src/viper/parameters.py:Metric",
-    "src/viper/parameters.py:Http",
-    "src/viper/parameters.py:ParameterModelOwner",
-    "src/viper/parameters.py:ParameterModelRef",
-    "src/viper/parameters.py:__all__",
-    "src/viper/parameters.py:model_ref",
-    "src/viper/parameters.py:Literal",
-    "src/viper/parameters.py:BaseModel",
-    "src/viper/parameters.py:SHA256",
-    "src/viper/parameters.py:PythonSourceRelPath",
     "tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring",
     "tests/test_protocol.py:test_python_stage_drafts_freeze_to_protocol_specs",
 ]
@@ -3119,6 +3097,11 @@ from typing import Any, Generic, Literal, TypeVar, cast
 from . import params
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/metrics.py:MetricParams -->
+```python contract-target
+from .params import Metric as MetricParams
+```
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/metrics.py:ParameterModelRef -->
 ```python contract-target
 from .params import ParameterModelRef
@@ -3177,7 +3160,8 @@ from ..stages import (
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=tests/test_public_api.py:keys -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=tests/test_public_api.py:params -->
 ```python contract-target
-from viper import keys, params
+import viper.keys as keys
+import viper.params as params
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=tests/test_public_api.py:eval -->
@@ -3541,7 +3525,7 @@ from .params import ParameterModelRef
 
 <!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=tests/test_authoring.py:params -->
 ```python contract-target
-from viper import params
+import viper.params as params
 ```
 
 <!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=add target=tests/test_authoring.py:artifact -->
@@ -3850,22 +3834,7 @@ DataRole = Literal["training", "validation", "eval", "benchmark"]
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:EvaluationId -->
 <!-- contract-remove -->
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:PARAMETERS -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:RESUME_STATE -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:PARAMETERS_INPUT -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:RESUME_STATE_INPUT -->
-<!-- contract-remove -->
-
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:EVALUATION_DATASET_INPUT -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_schema.py:PREDICTIONS -->
 <!-- contract-remove -->
 
 **File: `src/viper/_parameter/validation.py`**
@@ -4038,7 +4007,7 @@ class BuildVariantStageParams(ProtocolModel):
 class EmbedVariantStageParams(ProtocolModel):
     """Bind one embedding stage to its selected variant params."""
 
-    kind: Literal["embed"] = "embed"
+    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     stage_id: StageId
     params: params.Embed
 ```
@@ -4142,10 +4111,10 @@ def measure(
     params: MetricParamsT | None = None,
     dependencies: tuple[MetricDependency, ...] = (),
     comparator: FloatComparator | None = None,
-) -> MetricDraft[MetricParamsT | params.Metric]:
+) -> MetricDraft[MetricParamsT | MetricParams]:
     """Configure one decorated metric for later freezing."""
     definition = metric_definition(implementation)
-    selected_params = params.Metric() if params is None else params
+    selected_params = MetricParams() if params is None else params
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")
@@ -8224,11 +8193,11 @@ def invoke_http(
     if destination.is_symlink():
         raise HttpRetrievalError("HTTP destination must not be a symlink")
     if isinstance(implementation.spec, BuiltinHttpImplementationSpec):
-        params = params.Http()
+        values = params.Http()
         function: HttpCallable[Any] = _httpx_request
     else:
         project = implementation.spec
-        params = cast(
+        values = cast(
             params.Http,
             instantiate_parameters(
                 root / project.parameter_model.path,
@@ -8244,7 +8213,7 @@ def invoke_http(
         workspace=resolved_workspace,
         destination=resolved_destination,
         policy=policy,
-        params=params,
+        params=values,
         executables={
             value.spec.executable_id: value.path
             for value in implementation.external_executables
@@ -8479,7 +8448,7 @@ class BaseSpec(ProtocolModel):
 class EmbedSpec(InternalSpec):
     """Request construction of a project-defined embedding artifact."""
 
-    kind: Literal["embed"] = "embed"
+    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveSpec | None = None
     params: params.Embed
 
@@ -8499,8 +8468,8 @@ class EmbedSpec(InternalSpec):
 class TrainSpec(InternalSpec):
     """Request training with a measured minimization or maximization objective."""
 
-    kind: Literal["train"] = "train"
-    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
     objective: MetricObjectiveSpec
     params: params.Train
 
@@ -8533,9 +8502,9 @@ class TrainSpec(InternalSpec):
         if model_input.kind == "future" and state_input.kind == "future":
             if model_input.producer_stage_id != state_input.producer_stage_id:
                 raise ValueError("checkpoint inputs must select one producer stage")
-            if model_input.producer_artifact != keys.Train.MODEL:
+            if model_input.name != keys.Train.MODEL:
                 raise ValueError("parameters input must select parameters")
-            if state_input.producer_artifact != keys.Train.STATE:
+            if state_input.name != keys.Train.STATE:
                 raise ValueError("resume_state input must select resume_state")
         return self
 ```
@@ -8548,9 +8517,9 @@ class TrainSpec(InternalSpec):
 class EvalSpec(InternalSpec):
     """Request prediction and recomputed metrics for one fixed eval."""
 
-    kind: Literal["eval"] = "eval"
+    kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
     eval_id: EvalId
-    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
     objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
     params: params.Eval
@@ -8758,7 +8727,7 @@ def _stage_decorator(
 
     def decorate(function: DecoratedStage) -> DecoratedStage:
         """Validate the callable interface and attach its immutable definition."""
-        parameters = tuple(inspect.signature(function).params.values())
+        parameters = tuple(inspect.signature(function).parameters.values())
         if len(parameters) != 1:
             raise TypeError("a stage callable must accept one Context argument")
         setattr(function, "__viper_stage__", definition)
@@ -8863,7 +8832,7 @@ class ParameterizedSpecDraft(BaseSpecDraft):
 class DownloadSpecDraft(BaseSpecDraft):
     """Hold runner-owned HTTP requests and their output artifacts."""
 
-    kind: Literal["download"] = "download"
+    kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
     http: HttpDraft = Field(default_factory=BuiltinHttpImplementationSpec)
     policy: HttpRetrievalPolicy
@@ -8882,8 +8851,8 @@ class InternalSpecDraft(ParameterizedSpecDraft):
 class BuildSpecDraft(InternalSpecDraft):
     """Hold one project-defined prior builder."""
 
-    kind: Literal["build"] = "build"
-    params: params.Build
+    kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
+    params: params.Build  # pyright: ignore[reportIncompatibleVariableOverride]
 ```
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:EmbedSpecDraft -->
@@ -8891,8 +8860,8 @@ class BuildSpecDraft(InternalSpecDraft):
 class EmbedSpecDraft(InternalSpecDraft):
     """Hold one configured embedding stage."""
 
-    kind: Literal["embed"] = "embed"
-    params: params.Embed
+    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
+    params: params.Embed  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft | None = None
 ```
 
@@ -8901,8 +8870,8 @@ class EmbedSpecDraft(InternalSpecDraft):
 class TrainSpecDraft(InternalSpecDraft):
     """Hold one configured training stage and required objective."""
 
-    kind: Literal["train"] = "train"
-    params: params.Train
+    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
+    params: params.Train  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft
 ```
 
@@ -8911,9 +8880,9 @@ class TrainSpecDraft(InternalSpecDraft):
 class EvalSpecDraft(InternalSpecDraft):
     """Hold one configured evaluation stage and required objective."""
 
-    kind: Literal["eval"] = "eval"
+    kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
     eval_id: EvalId
-    params: params.Eval
+    params: params.Eval  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
 ```
@@ -8970,9 +8939,6 @@ class RunPlanDraft(BaseModel):
 ```
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:SPEC_ADAPTER -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:load_run_plan_draft -->
 <!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:_freeze_input -->
@@ -9475,59 +9441,6 @@ def {stage}(context) -> None:
     )
     return files
 ```
-
-**File: `src/viper/parameters.py`**
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:hashlib -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Path -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Literal -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:BaseModel -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:SHA256 -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:PythonSourceRelPath -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:model_ref -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:ParameterSet -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Build -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Embed -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Train -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Evaluate -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Metric -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Http -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:ParameterModelOwner -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:ParameterModelRef -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:__all__ -->
-<!-- contract-remove -->
 
 **File: `tests/test_public_api.py`**
 
