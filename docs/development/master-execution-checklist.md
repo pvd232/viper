@@ -581,7 +581,7 @@ One contract session is the default guided boundary:
 1. Synchronize the repository and record the baseline commit.
 2. Compile the contract's starting PairBlocks and select its remaining work.
 3. Materialize the selected PairBlocks over that clean baseline with
-   `conda run -n mantra python tools/check_plan.py --block BLOCK_ID --results
+   `python tools/check_plan.py --block BLOCK_ID --results
    .viper/checks/BLOCK_ID`. The command resolves the repository Python and
    CodeQL from the login environment. Start source editing only after Pyright
    and the same-identity source-graph check pass. Keep a failure as a contract

@@ -28,13 +28,13 @@ Impact Check records, and PairBlocks produced by those phases.
 Run repository-owned Python commands through:
 
 ```bash
-/Users/machina/miniconda3/bin/conda run -n mantra python ...
+python ...
 ```
 
 Before each PairBlock, confirm the interpreter is:
 
 ```text
-/Users/machina/miniconda3/envs/mantra/bin/python
+<repository>/.venv/bin/python
 ```
 
 ## 2. Pair cycle
@@ -104,7 +104,7 @@ requirements = ["RML-01"]
 depends_on = []
 targets = ["src/viper/research.py:ResearchObjectiveId", "src/viper/research.py:HypothesisId", "src/viper/research.py:CandidateId", "src/viper/research.py:EpisodeId", "src/viper/research.py:PolicyId", "src/viper/research.py:DatasetId", "src/viper/research.py:ResearchConstraintId", "src/viper/research.py:ResearchConstraint", "src/viper/research.py:ResearchObjective", "src/viper/research.py:AnalysisPlan", "src/viper/research.py:HypothesisSpec", "src/viper/research.py:ResourceLimit", "src/viper/research.py:ResourceBudget"]
 tests = ["tests/test_protocol.py:test_research_core_records_are_frozen_and_canonical"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py -k research_core_records_are_frozen_and_canonical -q"
+gate = "python -m pytest tests/test_protocol.py -k research_core_records_are_frozen_and_canonical -q"
 ```
 
 Add the exact identifier aliases and six models from Sections 6 and 7 of the
@@ -115,7 +115,7 @@ round-trip tests.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_protocol.py -q
+python -m pytest tests/test_protocol.py -q
 ```
 
 Stop if the existing schema owners require a different exact reference type.
@@ -129,7 +129,7 @@ requirements = ["RML-01", "RML-02"]
 depends_on = ["P18-RML-01"]
 targets = ["src/viper/research.py:ExperimentCandidate", "src/viper/research.py:SelectionPolicyIdentity", "src/viper/research.py:CandidateScore", "src/viper/research.py:ExperimentSelection"]
 tests = ["tests/test_protocol.py:test_experiment_selection_is_total_and_budgeted"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py -k experiment_selection_is_total_and_budgeted -q"
+gate = "python -m pytest tests/test_protocol.py -k experiment_selection_is_total_and_budgeted -q"
 ```
 
 Implement the candidate and selection models. Add validators for unique
@@ -144,7 +144,7 @@ unselected, and one ineligible with a rejection reason. Preserve all three.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_protocol.py -q
+python -m pytest tests/test_protocol.py -q
 ```
 
 ### P18-RML-03 — invocation receipts and complete episode
@@ -155,7 +155,7 @@ requirements = ["RML-01"]
 depends_on = ["P18-RML-02"]
 targets = ["src/viper/research.py:AgentModelIdentity", "src/viper/research.py:AgentPolicyIdentity", "src/viper/research.py:AgentModelInvocationReceipt", "src/viper/research.py:AgentToolInvocationReceipt", "src/viper/research.py:ResearchObservation", "src/viper/research.py:ResearchReview", "src/viper/research.py:ResearchEpisode"]
 tests = ["tests/test_protocol.py:test_research_episode_preserves_decision_and_execution_provenance"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py -k research_episode_preserves_decision_and_execution_provenance -q"
+gate = "python -m pytest tests/test_protocol.py -k research_episode_preserves_decision_and_execution_provenance -q"
 ```
 
 Implement the exact model identity, policy, invocation, observation, review,
@@ -178,7 +178,7 @@ recomputed cost and wall time
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_protocol.py -q
+python -m pytest tests/test_protocol.py -q
 ```
 
 ### P18-RML-04 — immutable publication
@@ -189,7 +189,7 @@ requirements = ["RML-01"]
 depends_on = ["P18-RML-03"]
 targets = ["src/viper/research.py:ResearchRecordKind", "src/viper/research.py:ResearchRecord", "src/viper/research.py:ResearchRecordEnvelope", "src/viper/research.py:ResearchManifest", "src/viper/research.py:publish_research_record", "src/viper/catalog.py:Catalog.refresh"]
 tests = ["tests/test_inspection.py:test_research_manifest_rebuild_is_canonical"]
-gate = "conda run -n mantra python -m pytest tests/test_inspection.py -k research_manifest_rebuild_is_canonical -q"
+gate = "python -m pytest tests/test_inspection.py -k research_manifest_rebuild_is_canonical -q"
 ```
 
 Implement the closed `ResearchRecordKind` and `ResearchRecord` unions.
@@ -204,7 +204,7 @@ equal rows after deletion.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_inspection.py -q
+python -m pytest tests/test_inspection.py -q
 ```
 
 ### P18-RML-05 — research verification
@@ -215,7 +215,7 @@ requirements = ["RML-01", "RML-02"]
 depends_on = ["P18-RML-04"]
 targets = ["src/viper/verification/__init__.py:verify_research_record", "src/viper/_verification/research.py:verify_research_record"]
 tests = ["tests/test_verification_acceptance.py:test_research_verifier_rejects_invalid_episode"]
-gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -k research_verifier_rejects_invalid_episode -q"
+gate = "python -m pytest tests/test_verification_acceptance.py -k research_verifier_rejects_invalid_episode -q"
 ```
 
 Verify every nested reference and every recomputable value. Add the exact
@@ -237,7 +237,7 @@ unrecomputed multiplicity claim
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_verification_acceptance.py -q
+python -m pytest tests/test_verification_acceptance.py -q
 ```
 
 ### P18-RML-06 — complete episode acceptance
@@ -248,7 +248,7 @@ requirements = ["RML-01", "RML-02"]
 depends_on = ["P18-RML-05"]
 targets = ["tests/test_protocol.py:test_research_episode_round_trip", "tests/test_inspection.py:test_research_episode_is_queryable_from_every_identity", "tests/test_verification_acceptance.py:test_research_episode_acceptance_covers_validity_failures"]
 tests = ["tests/test_protocol.py:test_research_episode_round_trip", "tests/test_inspection.py:test_research_episode_is_queryable_from_every_identity", "tests/test_verification_acceptance.py:test_research_episode_acceptance_covers_validity_failures"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py tests/test_inspection.py tests/test_verification_acceptance.py -q"
+gate = "python -m pytest tests/test_protocol.py tests/test_inspection.py tests/test_verification_acceptance.py -q"
 ```
 
 Publish and verify the complete fixed-budget fixture. Delete and rebuild the
@@ -256,7 +256,7 @@ catalog. Query the episode from the question, selected candidate, run,
 diagnostic, and policy directions. Then run:
 
 ```bash
-conda run -n mantra python -m pytest \
+python -m pytest \
   tests/test_protocol.py \
   tests/test_inspection.py \
   tests/test_verification_acceptance.py -q
@@ -274,7 +274,7 @@ requirements = ["RML-03"]
 depends_on = ["P18-RML-06"]
 targets = ["src/viper/research.py:LearningOrigin", "src/viper/research.py:LearningTarget", "src/viper/research.py:LearningExample", "src/viper/research.py:DatasetMember", "src/viper/research.py:DatasetSplit", "src/viper/research.py:LeakageCheck", "src/viper/research.py:LearningDatasetManifest", "src/viper/catalog.py:Catalog.refresh"]
 tests = ["tests/test_protocol.py:test_learning_dataset_manifest_preserves_origin_and_splits", "tests/test_verification_acceptance.py:test_learning_dataset_rejects_group_and_time_leakage"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q"
+gate = "python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q"
 ```
 
 Implement curation and manifest records. Group by research question, source
@@ -285,7 +285,7 @@ label, and any synthetic example without complete ancestors and origin counts.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q
+python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q
 ```
 
 ### P19-RML-02 — baseline and challenger evaluation
@@ -296,7 +296,7 @@ requirements = ["RML-04"]
 depends_on = ["P19-RML-01"]
 targets = ["src/viper/research.py:LearningUpdateSpec", "src/viper/research.py:LearningUpdateReceipt", "src/viper/research.py:EvaluationMetric", "src/viper/research.py:AgentEvaluationPlan", "src/viper/research.py:AgentEvaluationResult"]
 tests = ["tests/test_protocol.py:test_agent_evaluation_records_baseline_challenger_and_gates", "tests/test_verification_acceptance.py:test_agent_evaluation_recomputes_slice_gates"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q"
+gate = "python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q"
 ```
 
 Implement `memory_publish` first. Freeze the baseline and challenger policy,
@@ -307,7 +307,7 @@ results and recompute every gate.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q
+python -m pytest tests/test_protocol.py tests/test_verification_acceptance.py -q
 ```
 
 ### P19-RML-03 — promotion and rollback
@@ -318,7 +318,7 @@ requirements = ["RML-04"]
 depends_on = ["P19-RML-02"]
 targets = ["src/viper/research.py:PolicyPromotionDecision"]
 tests = ["tests/test_verification_acceptance.py:test_policy_promotion_requires_passing_gates_and_rollback"]
-gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -k policy_promotion_requires_passing_gates_and_rollback -q"
+gate = "python -m pytest tests/test_verification_acceptance.py -k policy_promotion_requires_passing_gates_and_rollback -q"
 ```
 
 Require a passing evaluation, explicit promotion reviewer, and loadable rollback policy.
@@ -329,7 +329,7 @@ smoke-test the recorded rollback policy.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_verification_acceptance.py -q
+python -m pytest tests/test_verification_acceptance.py -q
 ```
 
 **Commit boundary:** `Evaluate and promote reviewed research memory`
@@ -344,7 +344,7 @@ requirements = ["RML-05", "PCM-06"]
 depends_on = ["P19-RML-03"]
 targets = ["src/viper/api.py:OperationName", "src/viper/api.py:OPERATIONS", "src/viper/api.py:REQUEST_REGISTRY", "src/viper/api.py:HANDLER_REGISTRY", "src/viper/mcp.py:create_server", "src/viper/cli.py:main"]
 tests = ["tests/test_api.py:test_research_mcp_schemas_resources_prompts_and_review_custody", "tests/test_cli.py:test_mcp_learn_access_isolated"]
-gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q"
+gate = "python -m pytest tests/test_api.py tests/test_cli.py -q"
 ```
 
 Add the exact research operations to the typed API registry. Add `learn`
@@ -358,7 +358,7 @@ The CLI boundary is `viper mcp --root <path> --access learn`.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q
+python -m pytest tests/test_api.py tests/test_cli.py -q
 ```
 
 ### P20-RML-02 — task parity
@@ -369,7 +369,7 @@ requirements = ["PCM-07"]
 depends_on = ["P20-RML-01"]
 targets = ["src/viper/mcp.py:create_server"]
 tests = ["tests/test_api.py:test_research_tasks_preserve_operation_identity", "tests/test_cli.py:test_research_tasks_match_ordinary_status_and_cancellation"]
-gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q"
+gate = "python -m pytest tests/test_api.py tests/test_cli.py -q"
 ```
 
 Advertise `io.modelcontextprotocol/tasks` only for the four operations named by
@@ -381,7 +381,7 @@ cancellation, result, and side effects.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py -q
+python -m pytest tests/test_api.py tests/test_cli.py -q
 ```
 
 ### P20-RML-03 — anchored literature
@@ -392,7 +392,7 @@ requirements = ["RML-06"]
 depends_on = ["P20-RML-02"]
 targets = ["src/viper/research.py:LiteratureWork", "src/viper/research.py:LiteratureVersion", "src/viper/research.py:EvidenceAnchor", "src/viper/research.py:LiteratureClaim", "src/viper/catalog.py:Catalog.refresh"]
 tests = ["tests/test_inspection.py:test_literature_records_rebuild_and_link_to_research", "tests/test_verification_acceptance.py:test_literature_verifier_rejects_invalid_versions_and_anchors"]
-gate = "conda run -n mantra python -m pytest tests/test_inspection.py tests/test_verification_acceptance.py -q"
+gate = "python -m pytest tests/test_inspection.py tests/test_verification_acceptance.py -q"
 ```
 
 Implement literature records, version chains, exact source anchors, extraction
@@ -403,7 +403,7 @@ RO-Crate and verify that deleting the export changes no VIPER evidence.
 Focused check:
 
 ```bash
-conda run -n mantra python -m pytest tests/test_inspection.py tests/test_verification_acceptance.py -q
+python -m pytest tests/test_inspection.py tests/test_verification_acceptance.py -q
 ```
 
 ### P20-RML-04 — integrated gate
@@ -414,13 +414,13 @@ requirements = ["RML-05", "RML-06", "PCM-06", "PCM-07"]
 depends_on = ["P20-RML-03"]
 targets = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_contract_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
 tests = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_contract_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
-gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py tests/test_inspection.py tests/test_verification_acceptance.py tests/test_contract_documentation.py -q"
+gate = "python -m pytest tests/test_api.py tests/test_cli.py tests/test_inspection.py tests/test_verification_acceptance.py tests/test_contract_documentation.py -q"
 ```
 
 Run the complete research/MCP boundary:
 
 ```bash
-conda run -n mantra python -m pytest \
+python -m pytest \
   tests/test_api.py \
   tests/test_cli.py \
   tests/test_inspection.py \

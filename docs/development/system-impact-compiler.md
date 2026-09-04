@@ -1341,7 +1341,7 @@ id = "P0-SIG-01"
 requirements = ["SIG-01", "SIG-05"]
 targets = ["src/viper/system_impact.py:CodeQLIdentity", "src/viper/system_impact.py:SourceSnapshot", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceEdge", "src/viper/system_impact.py:SourceGraph"]
 tests = ["tests/test_system_impact.py:test_source_graph_is_canonical"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k source_graph_is_canonical -q"
+gate = "python -m pytest tests/test_system_impact.py -k source_graph_is_canonical -q"
 depends_on = ["P0-CRT-07"]
 ```
 
@@ -1352,7 +1352,7 @@ requirements = ["SIG-01", "SIG-05"]
 targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:_node_span", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNodeKind", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
 assets = ["tools/codeql/viper-python-impact/qlpack.yml", "tools/codeql/viper-python-impact/codeql-pack.lock.yml", "tools/codeql/viper-python-impact/source-facts.qls", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
 tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack or node_span' -q"
+gate = "python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack or node_span' -q"
 depends_on = ["P0-SIG-01"]
 ```
 
@@ -1362,7 +1362,7 @@ id = "P0-SIG-03"
 requirements = ["SIG-01", "SIG-02"]
 targets = ["src/viper/_system_impact/source.py:SourceDeclarationError", "src/viper/_system_impact/source.py:extract_declaration_bytes", "src/viper/_system_impact/source.py:classify_target_change", "src/viper/_system_impact/plan.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/plan.py:PlanInspectionError", "src/viper/_system_impact/plan.py:inspect_plan", "src/viper/system_impact.py:ChangeKind", "src/viper/system_impact.py:Impact", "src/viper/system_impact.py:ResolvedContractTarget", "src/viper/system_impact.py:PlanInspection", "src/viper/system_impact.py:inspect_plan"]
 tests = ["tests/test_system_impact.py:test_declaration_extraction_preserves_exact_decorated_bytes", "tests/test_system_impact.py:test_change_classifier_distinguishes_interface_and_body_updates", "tests/test_system_impact.py:test_plan_reports_only_policy_selected_one_hop_dependents", "tests/test_system_impact.py:test_removed_target_reports_all_represented_direct_dependents", "tests/test_system_impact.py:test_unclassified_change_uses_conservative_one_hop_edges"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'declaration_extraction or change_classifier or policy_selected_one_hop or removed_target or unclassified_change' -q"
+gate = "python -m pytest tests/test_system_impact.py -k 'declaration_extraction or change_classifier or policy_selected_one_hop or removed_target or unclassified_change' -q"
 depends_on = ["P0-SIG-02"]
 ```
 
@@ -1372,7 +1372,7 @@ id = "P0-SIG-04"
 requirements = ["SIG-03"]
 targets = ["src/viper/_contract_traceability.py:compile_contract_plan", "src/viper/_system_impact/check.py:SystemImpactCheckError", "src/viper/_system_impact/check.py:check_plan", "src/viper/_system_impact/check.py:accept", "src/viper/system_impact.py:CheckState", "src/viper/system_impact.py:TargetCheck", "src/viper/system_impact.py:GateCheck", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:Acceptance", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:__all__"]
 tests = ["tests/test_system_impact.py:test_plan_check_rejects_unplanned_source_change", "tests/test_system_impact.py:test_plan_check_rejects_wrong_target_and_receipt_identity", "tests/test_system_impact.py:test_plan_check_runs_gates_and_validates_dependencies", "tests/test_system_impact.py:test_plan_check_rejects_asset_changed_by_gate", "tests/test_system_impact.py:test_acceptance_binds_commit_to_checked_source_and_plan"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'plan_check or acceptance' -q"
+gate = "python -m pytest tests/test_system_impact.py -k 'plan_check or acceptance' -q"
 depends_on = ["P0-SIG-03"]
 ```
 
@@ -1383,7 +1383,7 @@ requirements = ["SIG-04"]
 targets = ["tests/test_system_impact.py:test_committed_manifest_rename", "tests/test_system_impact.py:test_completed_viper_pair_block"]
 assets = ["tests/data/system_impact/agents_manifest_migration/metadata.json", "tests/data/system_impact/agents_manifest_migration/baseline/scripts/run-skill-evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/scripts/validate-skill-contract.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/scripts/validate-skill-evaluation-run.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/tests/test_run_skill_evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/baseline/tests/test_skill_contract.py.source", "tests/data/system_impact/agents_manifest_migration/realized/scripts/run-skill-evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/realized/scripts/validate-skill-contract.py.source", "tests/data/system_impact/agents_manifest_migration/realized/scripts/validate-skill-evaluation-run.py.source", "tests/data/system_impact/agents_manifest_migration/realized/tests/test_run_skill_evaluations.py.source", "tests/data/system_impact/agents_manifest_migration/realized/tests/test_skill_contract.py.source", "tests/data/system_impact/viper_p0_proof_05/metadata.json", "tests/data/system_impact/viper_p0_proof_05/baseline/tests/test_documentation.py.source", "tests/data/system_impact/viper_p0_proof_05/baseline/tests/test_project_init.py.source", "tests/data/system_impact/viper_p0_proof_05/realized/tests/test_documentation.py.source", "tests/data/system_impact/viper_p0_proof_05/realized/tests/test_project_init.py.source"]
 tests = ["tests/test_system_impact.py:test_committed_manifest_rename", "tests/test_system_impact.py:test_completed_viper_pair_block"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'committed_manifest_rename or completed_viper_pair_block' -q"
+gate = "python -m pytest tests/test_system_impact.py -k 'committed_manifest_rename or completed_viper_pair_block' -q"
 depends_on = ["P0-SIG-04"]
 ```
 
@@ -1395,7 +1395,7 @@ requirements = ["SIG-06"]
 targets = ["tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
 assets = ["tools/codeql/viper-python-impact/Dependencies.ql"]
 tests = ["tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
-gate = "conda run -n mantra env VIPER_RUN_CODEQL_TESTS=1 python -m pytest tests/test_system_impact.py::test_checked_in_codeql_pack_analyzes_tiny_repository -q"
+gate = "VIPER_RUN_CODEQL_TESTS=1 python -m pytest tests/test_system_impact.py::test_checked_in_codeql_pack_analyzes_tiny_repository -q"
 depends_on = ["P0-SIG-05"]
 ```
 
@@ -1405,7 +1405,7 @@ id = "P0-SIG-07"
 requirements = ["SIG-07"]
 targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/_system_impact/check.py:ast", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:extract_declaration_bytes", "src/viper/_system_impact/check.py:import_binding", "src/viper/_system_impact/check.py:_target_is_satisfied", "src/viper/_system_impact/check.py:_target_checks", "src/viper/_system_impact/check.py:_unexpected_changes", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 tests = ["tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'class_target_owns or import_target_owns or formatting_only or one_hop_records or pre_pairing_pyright' -q"
+gate = "python -m pytest tests/test_system_impact.py -k 'class_target_owns or import_target_owns or formatting_only or one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
 ```
 

@@ -353,7 +353,7 @@ id = "P0-MOD-01"
 requirements = ["MOD-01"]
 targets = ["src/viper/verification/models.py:VerificationPolicy", "src/viper/verification/models.py:VerifiedRunResult", "src/viper/verification/models.py:__all__"]
 tests = ["tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
-gate = "conda run -n mantra python -m pytest tests/test_contract_documentation.py -k module_ownership_pair_blocks_cover_every_moved_definition -q"
+gate = "python -m pytest tests/test_contract_documentation.py -k module_ownership_pair_blocks_cover_every_moved_definition -q"
 depends_on = ["P0-CRT-06"]
 ```
 
@@ -498,7 +498,7 @@ id = "P0-MOD-02"
 requirements = ["MOD-01"]
 targets = ["src/viper/verification/__init__.py:verify_run_result", "src/viper/verification/__init__.py:__all__", "src/viper/_api/handlers.py:VerificationPolicy", "src/viper/_verification/attempt.py:VerificationPolicy", "src/viper/_verification/metrics.py:VerifiedRunPlan", "src/viper/_verification/plan.py:VerifiedRunPlan", "src/viper/_verification/storage.py:StageSnapshot", "src/viper/api.py:StorageFetcher", "src/viper/execution/_attempt.py:verify_run_result", "src/viper/execution/_benchmark.py:verify_attempt_stages", "src/viper/execution/_materialization.py:verify_promoted_artifact", "src/viper/inspection.py:VerifiedRunResult", "src/viper/preflight.py:VerificationError", "tests/fixtures.py:VerificationPolicy", "tests/test_cloud_execution.py:VerificationError", "tests/test_execution_signals.py:verify_run_result", "tests/test_inspection.py:VerifiedRunPlan", "tests/test_metric_provenance.py:verify_run_result", "tests/test_process_startup.py:VerificationError", "tests/test_run_execution.py:verify_run_result", "tests/test_verification.py:verify_attempt_future_inputs", "tests/test_verification_acceptance.py:verify_benchmark_result"]
 tests = ["tests/test_public_api.py:test_verification_namespace_separates_operations_and_models", "tests/test_verification_acceptance.py:CompleteProvenanceAcceptanceTests.test_complete_dummy_run_passes_full_verification"]
-gate = "conda run -n mantra python -m pytest tests/test_public_api.py::test_verification_namespace_separates_operations_and_models tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_dummy_run_passes_full_verification -q"
+gate = "python -m pytest tests/test_public_api.py::test_verification_namespace_separates_operations_and_models tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_dummy_run_passes_full_verification -q"
 depends_on = ["P0-MOD-01"]
 ```
 
@@ -1624,7 +1624,7 @@ id = "P0-MOD-03"
 requirements = ["MOD-01"]
 targets = ["src/viper/api.py:validate_stage", "src/viper/api.py:HANDLER_REGISTRY", "tests/test_validation_architecture.py:test_operations_resolve_project_root_once", "tests/test_benchmark_execution.py:test_api_returns_the_verified_benchmark_result"]
 tests = ["tests/test_public_api.py:test_api_operations_are_locally_defined", "tests/test_api.py:test_validate_stage_returns_typed_success", "tests/test_validation_architecture.py:test_operations_resolve_project_root_once", "tests/test_benchmark_execution.py:test_api_returns_the_verified_benchmark_result"]
-gate = "conda run -n mantra python -m pytest tests/test_public_api.py tests/test_api.py tests/test_validation_architecture.py tests/test_benchmark_execution.py -k 'api_operations_are_locally_defined or validate_stage_returns_typed_success or operations_resolve_project_root_once or api_returns_the_verified_benchmark_result' -q"
+gate = "python -m pytest tests/test_public_api.py tests/test_api.py tests/test_validation_architecture.py tests/test_benchmark_execution.py -k 'api_operations_are_locally_defined or validate_stage_returns_typed_success or operations_resolve_project_root_once or api_returns_the_verified_benchmark_result' -q"
 depends_on = ["P0-MOD-02"]
 ```
 
@@ -2387,7 +2387,7 @@ id = "P0-MOD-04"
 requirements = ["MOD-01"]
 targets = ["tests/test_public_api.py:test_api_operations_are_locally_defined", "tests/test_public_api.py:test_verification_namespace_separates_operations_and_models", "tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
 tests = ["tests/test_public_api.py:test_api_operations_are_locally_defined", "tests/test_public_api.py:test_verification_namespace_separates_operations_and_models", "tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
-gate = "conda run -n mantra python -m pytest tests/test_public_api.py::test_api_operations_are_locally_defined tests/test_public_api.py::test_verification_namespace_separates_operations_and_models tests/test_api.py::test_validate_stage_returns_typed_success tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_dummy_run_passes_full_verification tests/test_contract_documentation.py::test_module_ownership_pair_blocks_cover_every_moved_definition -q"
+gate = "python -m pytest tests/test_public_api.py::test_api_operations_are_locally_defined tests/test_public_api.py::test_verification_namespace_separates_operations_and_models tests/test_api.py::test_validate_stage_returns_typed_success tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_dummy_run_passes_full_verification tests/test_contract_documentation.py::test_module_ownership_pair_blocks_cover_every_moved_definition -q"
 depends_on = ["P0-MOD-03"]
 ```
 

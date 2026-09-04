@@ -896,7 +896,7 @@ def test_research_pair_guide_has_executable_ordered_blocks() -> None:
         assert manifest["requirements"]
         assert manifest["targets"]
         assert manifest["tests"]
-        assert manifest["gate"].startswith("conda run -n mantra python -m pytest ")
+        assert "python -m pytest " in str(manifest["gate"])
         assert all(target_pattern.fullmatch(target) for target in manifest["targets"])
         assert all(target_pattern.fullmatch(test) for test in manifest["tests"])
         assert len(manifest["targets"]) == len(set(manifest["targets"]))
@@ -1217,6 +1217,7 @@ def test_contract_traceability_owns_active_pair_blocks() -> None:
         "P0-CRT-06",
         "P0-CRT-07",
         "P0-PROOF-08",
+        "P1-CRT-01",
     )
 
     for definition in definitions:
@@ -1244,7 +1245,7 @@ def test_contract_traceability_owns_active_pair_blocks() -> None:
         assert manifest["requirements"]
         assert manifest["targets"]
         assert manifest["tests"]
-        assert str(manifest["gate"]).startswith("conda run -n mantra ")
+        assert "python -m pytest " in str(manifest["gate"])
         assert definition.group("body").count("**Context:**") == 1
 
     assert text.count("class ContractTarget(ProtocolModel):") == 1
@@ -1291,7 +1292,7 @@ def test_module_ownership_contract_owns_each_pair_block() -> None:
         assert manifest["requirements"] == ["MOD-01"]
         assert manifest["targets"]
         assert manifest["tests"]
-        assert str(manifest["gate"]).startswith("conda run -n mantra ")
+        assert "python -m pytest " in str(manifest["gate"])
 
         body = definition.group("body")
         assert body.count("**Context:**") == 1, block_id
@@ -1481,7 +1482,9 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
     )
     contract_reference = CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
     contractdefinitions = tuple(
-        definition for definition in _PAIR_BLOCK_DEFINITION.finditer(contract_reference)
+        definition
+        for definition in _PAIR_BLOCK_DEFINITION.finditer(contract_reference)
+        if definition.group("id").startswith("P0-")
     )
     module_reference = MODULE_OWNERSHIP.read_text(encoding="utf-8")
     moduledefinitions = tuple(
@@ -1559,7 +1562,7 @@ def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:
             or value.partition(":")[0] in planned_target_paths
             for value in manifest["tests"]
         )
-        assert str(manifest["gate"]).startswith("conda run -n mantra ")
+        assert "python -m pytest " in str(manifest["gate"])
 
         body = definition.group("body")
         if block_id.startswith("P0-PDR-"):

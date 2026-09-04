@@ -112,5 +112,6 @@
         "sound": "off",
         "announcement": "off"
     },
-    "python.defaultInterpreterPath": "/Users/machina/miniconda3/envs/mantra/bin/python"
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "codeQL.githubDatabase.download": "never"
 }

@@ -758,7 +758,7 @@ build = PairBlock(
         ),
     ),
     gate=(
-        "conda run -n mantra python -m pytest tests/test_public_api.py "
+        "python -m pytest tests/test_public_api.py "
         "-k verification_namespace -q"
     ),
     depends_on=("P0-CRT-06",),
@@ -910,7 +910,7 @@ targets = [
     "src/viper/_contract_traceability.py:_validate_plan",
 ]
 tests = ["tests/test_contract_traceability.py:test_contract_traceability_graph_is_canonical", "tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage", "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks", "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic"]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'canonical or contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies' -q"
+gate = "python -m pytest tests/test_contract_traceability.py -k 'canonical or contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies' -q"
 depends_on = ["P0-CRT-05"]
 ```
 
@@ -1041,7 +1041,7 @@ tests = [
     "tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage",
     "tests/test_contract_traceability.py:test_contract_examples_reject_retired_symbol_inventories",
 ]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py tests/test_contract_documentation.py -k 'contract_target or pair_block' -q"
+gate = "python -m pytest tests/test_contract_traceability.py tests/test_contract_documentation.py -k 'contract_target or pair_block' -q"
 depends_on = ["P0-CRT-06"]
 ```
 
@@ -1340,7 +1340,7 @@ targets = [
     "tests/test_contract_traceability.py:test_contract_traceability_graph_covers_migrated_contracts",
 ]
 tests = ["tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage", "tests/test_contract_traceability.py:test_rule_edges_match_pair_blocks", "tests/test_contract_traceability.py:test_pair_block_dependencies_are_acyclic", "tests/test_contract_traceability.py:test_contract_traceability_graph_covers_migrated_contracts"]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py -k 'contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies or migrated_contracts' -q"
+gate = "python -m pytest tests/test_contract_traceability.py -k 'contract_targets or rule_edges_match_pair_blocks or pair_block_dependencies or migrated_contracts' -q"
 depends_on = ["P0-CRT-07"]
 ```
 
@@ -1802,6 +1802,10 @@ tests = ["tests/test_contract_traceability.py:test_contract_traceability_compile
 gate = "python -m pytest tests/test_contract_traceability.py tests/test_contract_documentation.py tests/test_documentation.py -k 'selected_requirement_slice or dependency_evidence or splits_block or pair_blocks_map_to_contract_sections_and_derived_status or target_contracts_use_env_identifiers' -q"
 depends_on = ["P0-CRT-07"]
 ```
+
+**Context:** The full compiler includes unfinished work from later phases. This
+block lets a caller compile one requirement slice while retaining its direct
+PairBlock dependencies, and rejects a slice that splits one PairBlock.
 
 <!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=update target=tests/test_documentation.py:test_target_contracts_use_env_identifiers -->
 

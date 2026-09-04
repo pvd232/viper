@@ -68,7 +68,7 @@ id = "P0-PDR-01"
 requirements = ["PDR-01"]
 targets = ["src/viper/project.py:Settings", "src/viper/project.py:find_root", "src/viper/project.py:resolve_root"]
 tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
-gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
+gate = "python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
 depends_on = []
 ```
 
@@ -147,7 +147,7 @@ id = "P0-PDR-02"
 requirements = ["PDR-01"]
 targets = ["src/viper/project.py:ROOT_FILES"]
 tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
-gate = "conda run -n mantra python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
+gate = "python -m pytest tests/test_project_init.py -k establishes_discoverable_root -q"
 depends_on = ["P0-PDR-01"]
 ```
 
@@ -171,7 +171,7 @@ id = "P0-PDR-03"
 requirements = ["PDR-02", "PDR-04"]
 targets = ["src/viper/api.py:FreezeRunRequest", "src/viper/api.py:PreflightRequest", "src/viper/api.py:ExecuteStageRequest", "src/viper/api.py:RunRequest", "src/viper/api.py:ExecuteBenchmarkRequest", "src/viper/api.py:PlanDiffRequest", "src/viper/api.py:VerificationRequest", "src/viper/api.py:CompareRunsRequest", "src/viper/_api/handlers.py:_root", "src/viper/_api/handlers.py:freeze_run", "src/viper/_api/handlers.py:preflight", "src/viper/_api/handlers.py:execute_stage", "src/viper/_api/handlers.py:run_request", "src/viper/_api/handlers.py:retry_request", "src/viper/_api/handlers.py:execute_benchmark", "src/viper/_api/handlers.py:plan_diff"]
 tests = ["tests/test_validation_architecture.py:test_operations_resolve_project_root_once"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k operations_resolve_project_root_once -q"
+gate = "python -m pytest tests/test_validation_architecture.py -k operations_resolve_project_root_once -q"
 depends_on = ["P0-PDR-01"]
 ```
 
@@ -518,7 +518,7 @@ id = "P0-PDR-04"
 requirements = ["PDR-04"]
 targets = ["src/viper/cli.py:add_root", "src/viper/cli.py:build_parser", "src/viper/api.py:_stage_parser", "src/viper/api.py:run", "src/viper/api.py:retry"]
 tests = ["tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads"]
-gate = "conda run -n mantra python -m pytest tests/test_generated_project_acceptance.py -k generated_project_uses_runner_owned_downloads -q"
+gate = "python -m pytest tests/test_generated_project_acceptance.py -k generated_project_uses_runner_owned_downloads -q"
 depends_on = ["P0-PDR-03"]
 ```
 
@@ -777,7 +777,7 @@ id = "P0-PDR-06"
 requirements = ["PDR-03"]
 targets = ["src/viper/project.py:PathError", "src/viper/project.py:PathOperation", "src/viper/project.py:resolve_path"]
 tests = ["tests/test_validation_architecture.py:test_project_paths_reject_symlinks"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k project_paths_reject_symlinks -q"
+gate = "python -m pytest tests/test_validation_architecture.py -k project_paths_reject_symlinks -q"
 depends_on = ["P0-PDR-01"]
 ```
 
@@ -832,7 +832,7 @@ id = "P0-PDR-05"
 requirements = ["PDR-02"]
 targets = ["src/viper/storage.py:LocalArtifactStore.__init__", "src/viper/_api/handlers.py:_local_fetcher"]
 tests = ["tests/test_storage.py:test_store_uses_selected_project_root"]
-gate = "conda run -n mantra python -m pytest tests/test_storage.py -k uses_selected_project_root -q"
+gate = "python -m pytest tests/test_storage.py -k uses_selected_project_root -q"
 depends_on = ["P0-PDR-04", "P0-PDR-06"]
 ```
 
@@ -935,7 +935,7 @@ id = "P0-PROOF-05"
 requirements = ["PDR-01", "PDR-04"]
 targets = ["tests/test_project_init.py:test_init_establishes_discoverable_root"]
 tests = ["tests/test_project_init.py:test_init_establishes_discoverable_root", "tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads"]
-gate = "conda run -n mantra python -m pytest tests/test_project_init.py tests/test_generated_project_acceptance.py -k 'establishes_discoverable_root or generated_project_uses_runner_owned_downloads' -q"
+gate = "python -m pytest tests/test_project_init.py tests/test_generated_project_acceptance.py -k 'establishes_discoverable_root or generated_project_uses_runner_owned_downloads' -q"
 depends_on = ["P0-PDR-01", "P0-PDR-02", "P0-PDR-04"]
 ```
 
@@ -964,7 +964,7 @@ id = "P0-PROOF-06"
 requirements = ["PDR-02"]
 targets = ["tests/test_storage.py:test_store_uses_selected_project_root", "tests/test_validation_architecture.py:test_operations_resolve_project_root_once"]
 tests = ["tests/test_storage.py:test_store_uses_selected_project_root", "tests/test_validation_architecture.py:test_operations_resolve_project_root_once"]
-gate = "conda run -n mantra python -m pytest tests/test_storage.py tests/test_validation_architecture.py -k 'uses_selected_project_root or operations_resolve_project_root_once' -q"
+gate = "python -m pytest tests/test_storage.py tests/test_validation_architecture.py -k 'uses_selected_project_root or operations_resolve_project_root_once' -q"
 depends_on = ["P0-PDR-03", "P0-PDR-05"]
 ```
 
@@ -1024,7 +1024,7 @@ id = "P0-PROOF-07"
 requirements = ["PDR-03"]
 targets = ["tests/test_validation_architecture.py:test_project_paths_reject_symlinks"]
 tests = ["tests/test_validation_architecture.py:test_project_paths_reject_symlinks"]
-gate = "conda run -n mantra python -m pytest tests/test_validation_architecture.py -k project_paths_reject_symlinks -q"
+gate = "python -m pytest tests/test_validation_architecture.py -k project_paths_reject_symlinks -q"
 depends_on = ["P0-PDR-06"]
 ```
 
@@ -1049,7 +1049,7 @@ Run the focused test after each block. Run this gate after every foundation
 block has passed:
 
 ```bash
-conda run -n mantra python -m pytest \
+python -m pytest \
   tests/test_project_init.py \
   tests/test_storage.py \
   tests/test_public_api.py \

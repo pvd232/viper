@@ -717,7 +717,7 @@ targets = [
     "tests/test_protocol.py:test_external_inputs_are_local_only",
 ]
 tests = ["tests/test_protocol.py:test_external_inputs_are_local_only"]
-gate = "conda run -n mantra python -m pytest tests/test_protocol.py -q"
+gate = "python -m pytest tests/test_protocol.py -q"
 depends_on = ["P2-DRA-04"]
 ```
 
@@ -751,7 +751,7 @@ tests = [
     "tests/test_run_execution.py:test_local_input_mutation_fails_attempt",
     "tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs",
 ]
-gate = "conda run -n mantra python -m pytest tests/test_run_execution.py -k 'local_input or captured_local_inputs' -q"
+gate = "python -m pytest tests/test_run_execution.py -k 'local_input or captured_local_inputs' -q"
 depends_on = ["P3-EIR-01"]
 ```
 
@@ -776,7 +776,7 @@ tests = [
     "tests/test_verification_acceptance.py:test_external_input_identity_rejects_tampering",
     "tests/test_verification_acceptance.py:test_worker_startup_derives_attempt_owned_external_input_path",
 ]
-gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -k external_input -q"
+gate = "python -m pytest tests/test_verification_acceptance.py -k external_input -q"
 depends_on = ["P3-EIR-02"]
 ```
 
