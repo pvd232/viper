@@ -144,8 +144,8 @@ flowchart TD
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-The diagrams use the semantic palette defined by the
-[contract-gap method](contract-traceability.md#diagram-color-contract).
+The diagrams use the semantic palette enforced by the contract documentation
+tests.
 
 ## 4. Contract models
 
@@ -352,8 +352,8 @@ These four blocks are the executable source for MOD-01. Each target marker binds
 id = "P0-MOD-01"
 requirements = ["MOD-01"]
 targets = ["src/viper/verification/models.py:VerificationPolicy", "src/viper/verification/models.py:VerifiedRunResult", "src/viper/verification/models.py:__all__"]
-tests = ["tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
-gate = "conda run -n mantra python -m pytest tests/test_documentation.py -k module_ownership_pair_blocks_cover_every_moved_definition -q"
+tests = ["tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
+gate = "conda run -n mantra python -m pytest tests/test_contract_documentation.py -k module_ownership_pair_blocks_cover_every_moved_definition -q"
 depends_on = ["P0-CRT-06"]
 ```
 
@@ -1028,7 +1028,7 @@ def verify_attempt_future_inputs(
                     "producer stage"
                 )
 
-            artifact_name = spec_input.producer_artifact
+            artifact_name = spec_input.name
             artifact = resolved_producer_spec.artifacts.get(artifact_name)
             if artifact is None:
                 raise VerificationError(
@@ -2385,9 +2385,9 @@ stale private callable fails the block.
 ```toml pair-block
 id = "P0-MOD-04"
 requirements = ["MOD-01"]
-targets = ["tests/test_public_api.py:test_api_operations_are_locally_defined", "tests/test_public_api.py:test_verification_namespace_separates_operations_and_models", "tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
-tests = ["tests/test_public_api.py:test_api_operations_are_locally_defined", "tests/test_public_api.py:test_verification_namespace_separates_operations_and_models", "tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
-gate = "conda run -n mantra python -m pytest tests/test_public_api.py::test_api_operations_are_locally_defined tests/test_public_api.py::test_verification_namespace_separates_operations_and_models tests/test_api.py::test_validate_stage_returns_typed_success tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_dummy_run_passes_full_verification tests/test_documentation.py::test_module_ownership_pair_blocks_cover_every_moved_definition -q"
+targets = ["tests/test_public_api.py:test_api_operations_are_locally_defined", "tests/test_public_api.py:test_verification_namespace_separates_operations_and_models", "tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
+tests = ["tests/test_public_api.py:test_api_operations_are_locally_defined", "tests/test_public_api.py:test_verification_namespace_separates_operations_and_models", "tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition"]
+gate = "conda run -n mantra python -m pytest tests/test_public_api.py::test_api_operations_are_locally_defined tests/test_public_api.py::test_verification_namespace_separates_operations_and_models tests/test_api.py::test_validate_stage_returns_typed_success tests/test_verification_acceptance.py::CompleteProvenanceAcceptanceTests::test_complete_dummy_run_passes_full_verification tests/test_contract_documentation.py::test_module_ownership_pair_blocks_cover_every_moved_definition -q"
 depends_on = ["P0-MOD-03"]
 ```
 
@@ -2460,9 +2460,9 @@ def test_verification_namespace_separates_operations_and_models() -> None:
 
 ```
 
-`tests/test_documentation.py`
+`tests/test_contract_documentation.py`
 
-<!-- contract-target: requirements=MOD-01 block=P0-MOD-04 action=update target=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
+<!-- contract-target: requirements=MOD-01 block=P0-MOD-04 action=update target=tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
 
 ```python contract-target
 def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:

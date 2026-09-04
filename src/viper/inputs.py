@@ -6,8 +6,6 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from viper.http import HttpImplementationSpec, HttpRequestSpec, HttpRetrievalPolicy
-
 from ._schema import (
     ArtifactName,
     DataRole,
@@ -19,47 +17,34 @@ from .ids import StageId
 from .references import (
     ArtifactPointerRef,
     ResolvedArtifactPointerRef,
-    ResolvedFileRef,
     ResolvedStageRef,
+    SnapshotFileRef,
 )
 
 # ----- Provenance graph boundary ----- #
 
 
 class LocalSource(ProtocolModel):
-    """Just a local file ."""
+    """Identify one repository-local file selected by the user."""
 
     kind: Literal["local"] = "local"
     path: RepoRelPath
 
 
-class HttpSource(ProtocolModel):
-    """A network requested file ."""
-
-    kind: Literal["http"] = "http"
-    request: HttpRequestSpec
-    policy: HttpRetrievalPolicy
-    http: HttpImplementationSpec
-
-
-ExternalInputSource = Annotated[LocalSource | HttpSource, Field(discriminator="kind")]
-
-
 class ExternalInputRef(ProtocolModel):
-    """Declare one external value supplied to a stage ."""
+    """Declare one repository-local value supplied to a stage."""
 
     kind: Literal["external"] = "external"
-    source: ExternalInputSource
-    path: RepoRelPath
+    source: LocalSource
     data_role: DataRole
 
 
 class ResolvedExternalInputRef(ProtocolModel):
-    """Entrypoint for the provenance graph ."""
+    """Record one local input captured in its consuming stage snapshot."""
 
     kind: Literal["external"] = "external"
-    source: ExternalInputSource
-    file: ResolvedFileRef
+    source: LocalSource
+    file: SnapshotFileRef
     data_role: DataRole
 
 
@@ -97,7 +82,7 @@ class FutureInputRef(ProtocolModel):
 
     kind: Literal["future"] = "future"
     producer_stage_id: StageId
-    producer_artifact: ArtifactName
+    name: ArtifactName
 
 
 InputRef = Annotated[

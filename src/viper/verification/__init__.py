@@ -506,7 +506,7 @@ def verify_attempt_future_inputs(
                     "producer stage"
                 )
 
-            artifact_name = spec_input.producer_artifact
+            artifact_name = spec_input.name
             artifact = resolved_producer_spec.artifacts.get(artifact_name)
             if artifact is None:
                 raise VerificationError(

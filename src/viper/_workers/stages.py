@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
 
+from viper.workspace import captured_input_path
+
 from .._parameter.validation import instantiate_parameters
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
@@ -57,6 +59,7 @@ def _planned_stage_context(
     root: Path,
     run: RunSpec,
     stage_id: str,
+    attempt_id: int,
 ) -> tuple[ParameterizedSpec, dict[str, str]]:
     """Load the selected stage and derive its plan-owned logical input paths."""
     loaded: dict[str, BaseSpec] = {}
@@ -79,11 +82,19 @@ def _planned_stage_context(
                     if isinstance(input_reference, StoredInputRef):
                         expected_inputs[name] = str(input_reference.path)
                     elif isinstance(input_reference, ExternalInputRef):
-                        expected_inputs[name] = str(input_reference.path)
+                        expected_inputs[name] = str(
+                            captured_input_path(
+                                run_id=run.run_id,
+                                attempt_id=attempt_id,
+                                stage_id=reference.stage_id,
+                                input_name=name,
+                                source_path=input_reference.source.path,
+                            )
+                        )
                     elif isinstance(input_reference, FutureInputRef):
                         producer = loaded[input_reference.producer_stage_id]
                         expected_inputs[name] = str(
-                            producer.artifacts[input_reference.producer_artifact].path
+                            producer.artifacts[input_reference.name].path
                         )
             break
         loaded[reference.stage_id] = candidate
@@ -161,9 +172,10 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("stage worker requires a parameterized stage")
     try:
         planned_stage, expected_inputs = _planned_stage_context(
-            root,
-            run,
-            binding.stage_id,
+            root=root,
+            run=run,
+            stage_id=binding.stage_id,
+            attempt_id=binding.attempt_id,
         )
         if stage != planned_stage:
             raise ValueError("startup.plan: selected stage differs from RunSpec")

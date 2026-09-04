@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 import yaml
 from pydantic import ValidationError
 
@@ -24,13 +25,19 @@ from viper._schema import (
 )
 from viper.artifacts import ResolvedBundleArtifact
 from viper.experiments import VariantSpec
-from viper.inputs import ExternalInputRef, FutureInputRef, LocalSource
+from viper.inputs import (
+    ExternalInputRef,
+    FutureInputRef,
+    LocalSource,
+    ResolvedExternalInputRef,
+)
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
     MetricImplementationRef,
     MetricSpec,
 )
+from viper.references import SnapshotFileRef
 from viper.runs import (
     RunAttempt,
     RunSpec,
@@ -528,12 +535,12 @@ class TrainingCheckpointTests(unittest.TestCase):
                 "parameters": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
-                    "producer_artifact": PARAMETERS,
+                    "name": PARAMETERS,
                 },
                 "resume_state": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
-                    "producer_artifact": RESUME_STATE,
+                    "name": RESUME_STATE,
                 },
             }
         )
@@ -552,7 +559,7 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload["inputs"]["parameters"] = {
             "kind": "future",
             "producer_stage_id": "train_01",
-            "producer_artifact": PARAMETERS,
+            "name": PARAMETERS,
         }
 
         with self.assertRaisesRegex(ValidationError, "declared together"):
@@ -566,12 +573,12 @@ class TrainingCheckpointTests(unittest.TestCase):
                 "parameters": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
-                    "producer_artifact": PARAMETERS,
+                    "name": PARAMETERS,
                 },
                 "resume_state": {
                     "kind": "future",
                     "producer_stage_id": "train_02",
-                    "producer_artifact": RESUME_STATE,
+                    "name": RESUME_STATE,
                 },
             }
         )
@@ -620,7 +627,7 @@ class EvaluationTests(unittest.TestCase):
                     "parameters": {
                         "kind": "future",
                         "producer_stage_id": "train",
-                        "producer_artifact": PARAMETERS,
+                        "name": PARAMETERS,
                     },
                     "evaluation_dataset": stored_input(
                         "inputs/datasets/replogle_test/dataset.h5ad",
@@ -661,7 +668,7 @@ class EvaluationTests(unittest.TestCase):
                 "parameters": {
                     "kind": "future",
                     "producer_stage_id": "train",
-                    "producer_artifact": PARAMETERS,
+                    "name": PARAMETERS,
                 },
                 "evaluation_dataset": stored_input(
                     "inputs/datasets/test/data.bin",
@@ -765,7 +772,6 @@ class EvaluationTests(unittest.TestCase):
         )
         payload["inputs"]["parameters"] = ExternalInputRef(
             source=LocalSource(path="inputs/raw/parameters.safetensors"),
-            path="inputs/models/strand/parameters.safetensors",
             data_role="training",
         ).model_dump(mode="json")
         EvaluateSpec.model_validate(payload)
@@ -975,19 +981,37 @@ def test_download_models_use_runner_owned_hierarchy() -> None:
     assert stage.http.kind == "builtin"
 
 
-class ExternalInputRootTests(unittest.TestCase):
-    """Test provenance boundary class ."""
+def test_external_inputs_are_local_only() -> None:
+    """Keep external roots local and same-run selection artifact-named."""
+    declared = ExternalInputRef(
+        source=LocalSource(path="inputs/raw/dataset.bin"),
+        data_role="training",
+    )
+    resolved = ResolvedExternalInputRef(
+        source=declared.source,
+        file=SnapshotFileRef(
+            path=(f".viper/workspaces/{RUN_ID}/attempt-1/inputs/train/dataset.bin"),
+            sha256=SHA_A,
+            bytes=7,
+        ),
+        data_role=declared.data_role,
+    )
+    future = FutureInputRef(producer_stage_id="download", name="dataset")
 
-    def test_external_input_spec_core(self) -> None:
-        """Verify class construction works ."""
-        input_spec = ExternalInputRef(
-            source=LocalSource(path="inputs/raw/training.h5ad"),
-            path="inputs/datasets/training.h5ad",
-            data_role="training",
+    assert "path" not in ExternalInputRef.model_fields
+    assert resolved.source == declared.source
+    assert resolved.file.path.endswith("/inputs/train/dataset.bin")
+    assert future.name == "dataset"
+    assert "producer_artifact" not in FutureInputRef.model_fields
+
+    with pytest.raises(ValidationError, match="local"):
+        ExternalInputRef.model_validate(
+            {
+                "kind": "external",
+                "source": {"kind": "http", "url": "https://example.com/data"},
+                "data_role": "training",
+            }
         )
-        assert input_spec.kind == "external"
-        assert input_spec.source.kind == "local"
-        assert input_spec.path == "inputs/datasets/training.h5ad"
 
 
 if __name__ == "__main__":

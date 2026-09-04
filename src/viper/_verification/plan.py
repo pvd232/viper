@@ -135,7 +135,7 @@ def _stage_input_roles(
                 f"future input {input_name!r} of stage {stage_id!r} must select "
                 "an earlier stage"
             )
-        declaration = producer.artifacts.get(input_ref.producer_artifact)
+        declaration = producer.artifacts.get(input_ref.name)
         if declaration is None:
             raise VerificationError(
                 f"future input {input_name!r} of stage {stage_id!r} selects an "
@@ -440,7 +440,7 @@ def verify_run_plan_relationships(
         )
     if (
         model_input.producer_stage_id != run.estimator.stage_id
-        or model_input.producer_artifact != run.estimator.artifact_name
+        or model_input.name != run.estimator.artifact_name
     ):
         raise VerificationError(
             "benchmark evaluation model must select the run estimator"
@@ -624,14 +624,12 @@ def verify_stage_plan(
                     )
 
                 producer_spec = loaded_stages[producer_stage_id]
-                producer_artifact = producer_spec.artifacts.get(
-                    input_ref.producer_artifact
-                )
+                producer_artifact = producer_spec.artifacts.get(input_ref.name)
                 if producer_artifact is None:
                     raise VerificationError(
                         f"future input {input_name!r} of stage {stage.stage_id!r} "
                         f"selects undeclared artifact "
-                        f"{input_ref.producer_artifact!r}"
+                        f"{input_ref.name!r}"
                     )
 
                 producer_path = producer_artifact.path

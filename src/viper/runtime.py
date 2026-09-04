@@ -20,7 +20,8 @@ import numpy as np
 import torch
 from pydantic import Field, model_validator
 
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from ._schema import (
     SHA256,
     NonEmptyStr,

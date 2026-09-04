@@ -2011,7 +2011,7 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
                 if (
                     input_ref.producer_stage_id not in prior
                     or producer is None
-                    or input_ref.producer_artifact not in producer.artifacts
+                    or input_ref.name not in producer.artifacts
                 ):
                     valid_future_inputs = False
         checks.append(
@@ -4275,7 +4275,7 @@ def resolve_inputs(
                 raise RunError("future input producer has not completed")
             resolved[name] = ResolvedFutureInputRef(producer=producer)
             producer_spec = stage_specs[input_ref.producer_stage_id]
-            artifact = producer_spec.artifacts[input_ref.producer_artifact]
+            artifact = producer_spec.artifacts[input_ref.name]
             paths[name] = root / artifact.path
 
         elif input_ref.kind == "external":
@@ -5038,7 +5038,7 @@ def _freeze_signal_plan(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=parameters.Train(),
@@ -5498,7 +5498,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=train_params,
@@ -5940,7 +5940,7 @@ def _logical_input_paths(
     for name, reference in stage.inputs.items():
         if isinstance(reference, FutureInputRef):
             producer = stage_specs[reference.producer_stage_id]
-            paths[name] = producer.artifacts[reference.producer_artifact].path
+            paths[name] = producer.artifacts[reference.name].path
         else:
             paths[name] = reference.path
 
@@ -6647,7 +6647,7 @@ def verify_run_plan_relationships(
         )
     if (
         model_input.producer_stage_id != run.estimator.stage_id
-        or model_input.producer_artifact != run.estimator.artifact_name
+        or model_input.name != run.estimator.artifact_name
     ):
         raise VerificationError(
             "benchmark evaluation model must select the run estimator"
@@ -6799,14 +6799,14 @@ def verify_stage_plan(
                     )
 
                 producer_spec = loaded_stages[producer_stage_id]
-                producer_artifact = producer_spec.artifacts.get(
-                    input_ref.producer_artifact
+                name = producer_spec.artifacts.get(
+                    input_ref.name
                 )
                 if producer_artifact is None:
                     raise VerificationError(
                         f"future input {input_name!r} of stage {stage.stage_id!r} "
                         f"selects undeclared artifact "
-                        f"{input_ref.producer_artifact!r}"
+                        f"{input_ref.name!r}"
                     )
 
                 producer_path = producer_artifact.path
@@ -7045,7 +7045,7 @@ def publish_producer_run(
             "training_dataset": FutureInputRef(
                 kind="future",
                 producer_stage_id="download",
-                producer_artifact="dataset",
+                name="dataset",
             )
         },
         params=parameters.Train.model_validate(
@@ -7320,7 +7320,7 @@ targets = [
     "tests/test_documentation.py:PROTOCOL_ALIASES",
     "tests/test_documentation.py:_CONTRACT_TARGET_MARKER",
     "tests/test_documentation.py:_PAIR_BLOCK_MANIFEST_FENCE",
-    "tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition",
+    "tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition",
     "tests/test_documentation.py:test_public_examples_distinguish_weights_from_the_artifact_key",
     "tests/test_documentation.py:test_target_contracts_use_env_identifiers",
     "tests/test_generated_project_acceptance.py:BuildVariantStageParams",
@@ -7413,7 +7413,7 @@ def _planned_stage_context(
                     elif isinstance(input_reference, FutureInputRef):
                         producer = loaded[input_reference.producer_stage_id]
                         expected_inputs[name] = str(
-                            producer.artifacts[input_reference.producer_artifact].path
+                            producer.artifacts[input_reference.name].path
                         )
             break
         loaded[reference.stage_id] = candidate
@@ -7906,14 +7906,12 @@ def test_target_contracts_use_env_identifiers() -> None:
     target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
 
     assert TARGET_ENV_IDENTIFIERS - target_identifiers == set()
-    assert target_identifiers & RETIRED_TARGET_ENV_IDENTIFIERS == set()
     assert 'kind: Literal["env"] = "env"' in contract_text
     assert 'kind: Literal["environment"] = "environment"' not in contract_text
     assert all(name in checklist for name in TARGET_ENV_IDENTIFIERS)
-    assert all(name in checklist for name in RETIRED_TARGET_ENV_IDENTIFIERS)
 ```
 
-<!-- contract-target: requirements=DRA-05 block=P2-DRA-04 action=update target=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
+<!-- contract-target: requirements=DRA-05 block=P2-DRA-04 action=update target=tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
 ```python contract-target
 def test_module_ownership_pair_blocks_cover_every_moved_definition() -> None:
     """Keep each realized owner equal to its reviewed PairBlock."""
@@ -8129,7 +8127,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="seed_training",
+                name="seed_training",
             )
         },
         params=train_params,
@@ -8309,7 +8307,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="dataset",
+                name="dataset",
             )
         },
         params=build_params,
@@ -8327,7 +8325,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="build",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=embed_params,
@@ -8345,7 +8343,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "embedding": FutureInputRef(
                 producer_stage_id="embed",
-                producer_artifact="embedding",
+                name="embedding",
             )
         },
         params=train_params,
@@ -8372,7 +8370,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             PARAMETERS: FutureInputRef(
                 producer_stage_id="train",
-                producer_artifact=PARAMETERS,
+                name=PARAMETERS,
             ),
             "evaluation_dataset": StoredInputRef(
                 pointer=evaluation_pointer,

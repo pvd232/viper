@@ -8,7 +8,8 @@ import shlex
 import tempfile
 from pathlib import Path
 
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from .._contract_traceability import (
     ContractTarget,
     ContractTraceabilityGraph,

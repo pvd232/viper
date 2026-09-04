@@ -9,7 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from ._parameter.validation import (
     ParameterValidationError,
     validate_stage_parameters,
@@ -458,7 +459,7 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
                 if (
                     input_ref.producer_stage_id not in prior
                     or producer is None
-                    or input_ref.producer_artifact not in producer.artifacts
+                    or input_ref.name not in producer.artifacts
                 ):
                     valid_future_inputs = False
         checks.append(

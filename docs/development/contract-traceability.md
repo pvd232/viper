@@ -77,7 +77,7 @@ function.
 
 ### Inspected path
 
-`tests/test_documentation.py` currently parses two marker families and one
+`tests/test_contract_documentation.py` currently parses two marker families and one
 generated manifest:
 
 ```text
@@ -158,25 +158,6 @@ contract requirement row
 The existing `implements`, `verifies`, and baseline markers remain as the
 migration oracle until the graph produces the same requirement and phase
 coverage.
-
-### Diagram color contract
-
-The three DAGs use color to identify each node's role. Complete node labels
-carry the same meaning independently of color.
-
-| Role | Mermaid classes | Fill | Stroke |
-| --- | --- | --- | --- |
-| Authored contract or current declaration | `contract`, `current` | `#1e3a8a` | `#60a5fa` |
-| Existing implementation or observed evidence | `implementation`, `evidence` | `#115e59` | `#5eead4` |
-| Unsupported gap | `gap` | `#7f1d1d` | `#fca5a5` |
-| Proposed model or generated output | `proposed`, `output` | `#581c87` | `#d8b4fe` |
-| Checklist-owned scheduling | `checklist` | `#713f12` | `#fbbf24` |
-
-Every role uses white text and a two-pixel stroke. Every link uses `#94a3b8`
-with a two-pixel stroke. The current DAG uses blue, teal, and red to separate
-existing declarations, supporting evidence, and the gap. The proposed-change
-DAG uses purple. The integrated DAG uses blue, amber, teal, and purple to show
-the contract, checklist, implementation, and generated graph boundaries.
 
 ### Proposed-change DAG
 
@@ -1060,7 +1041,7 @@ tests = [
     "tests/test_contract_traceability.py:test_contract_targets_require_exact_block_coverage",
     "tests/test_contract_traceability.py:test_contract_examples_reject_retired_symbol_inventories",
 ]
-gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py tests/test_documentation.py -k 'contract_target or pair_block' -q"
+gate = "conda run -n mantra python -m pytest tests/test_contract_traceability.py tests/test_contract_documentation.py -k 'contract_target or pair_block' -q"
 depends_on = ["P0-CRT-06"]
 ```
 
@@ -1752,7 +1733,7 @@ named test function. The traceability graph joins those three representations.
 | Surface | Required statement |
 | --- | --- |
 | `src/viper/_contract_traceability.py` | Add exact models, marker parsers, symbol resolution, cardinality checks, contract structure validation, and canonical serialization for developer tooling. |
-| `tests/test_contract_traceability.py` and `tests/test_documentation.py` | Compile every migrated contract into one graph, compare the result with the requirement, phase, test-file, and baseline oracle, and require each contract's three DAGs and marked worked example. |
+| `tests/test_contract_traceability.py` and `tests/test_contract_documentation.py` | Compile every migrated contract into one graph, compare the result with the requirement, phase, test-file, and baseline oracle, and require each contract's three DAGs and marked worked example. |
 | `docs/development/master-execution-checklist.md` | Add the foundational Master Phase 0 work before project-root and system-graph implementation. |
 | `docs/development/*.md` implementation contracts | Retain verifier-rule markers, three DAGs, and one complete worked example per contract. Add `ContractTarget` records when a PairBlock becomes executable. |
 | `~/.agents/skills/contract-gap-specification/SKILL.md` | Require the three-DAG comparison, complete worked example, and requirement-rule-owner-test chain. |
@@ -1816,9 +1797,9 @@ and a PairBlock dependency cycle.
 ```toml pair-block
 id = "P1-CRT-01"
 requirements = ["CRT-07"]
-targets = ["src/viper/_contract_traceability.py:_implemented_pair_blocks", "src/viper/_contract_traceability.py:_validate_plan", "src/viper/_contract_traceability.py:compile_contract_traceability", "tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice", "tests/test_contract_traceability.py:test_contract_traceability_includes_dependency_evidence_for_selected_slice", "tests/test_contract_traceability.py:test_contract_traceability_rejects_requirement_slice_that_splits_block", "tests/test_documentation.py:_CONTENT_PAIR_BLOCK_MARKER", "tests/test_documentation.py:_RULE_EDGE_STATE", "tests/test_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status", "tests/test_documentation.py:test_target_contracts_use_env_identifiers"]
-tests = ["tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice", "tests/test_contract_traceability.py:test_contract_traceability_includes_dependency_evidence_for_selected_slice", "tests/test_contract_traceability.py:test_contract_traceability_rejects_requirement_slice_that_splits_block", "tests/test_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status", "tests/test_documentation.py:test_target_contracts_use_env_identifiers"]
-gate = "python -m pytest tests/test_contract_traceability.py tests/test_documentation.py -k 'selected_requirement_slice or dependency_evidence or splits_block or pair_blocks_map_to_contract_sections_and_derived_status or target_contracts_use_env_identifiers' -q"
+targets = ["src/viper/_contract_traceability.py:_implemented_pair_blocks", "src/viper/_contract_traceability.py:_validate_plan", "src/viper/_contract_traceability.py:compile_contract_traceability", "tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice", "tests/test_contract_traceability.py:test_contract_traceability_includes_dependency_evidence_for_selected_slice", "tests/test_contract_traceability.py:test_contract_traceability_rejects_requirement_slice_that_splits_block", "tests/test_contract_documentation.py:_CONTENT_PAIR_BLOCK_MARKER", "tests/test_contract_documentation.py:_RULE_EDGE_STATE", "tests/test_contract_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status", "tests/test_documentation.py:test_target_contracts_use_env_identifiers"]
+tests = ["tests/test_contract_traceability.py:test_contract_traceability_compiles_selected_requirement_slice", "tests/test_contract_traceability.py:test_contract_traceability_includes_dependency_evidence_for_selected_slice", "tests/test_contract_traceability.py:test_contract_traceability_rejects_requirement_slice_that_splits_block", "tests/test_contract_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status", "tests/test_documentation.py:test_target_contracts_use_env_identifiers"]
+gate = "python -m pytest tests/test_contract_traceability.py tests/test_contract_documentation.py tests/test_documentation.py -k 'selected_requirement_slice or dependency_evidence or splits_block or pair_blocks_map_to_contract_sections_and_derived_status or target_contracts_use_env_identifiers' -q"
 depends_on = ["P0-CRT-07"]
 ```
 
@@ -1828,18 +1809,22 @@ depends_on = ["P0-CRT-07"]
 def test_target_contracts_use_env_identifiers() -> None:
     """Keep normative contract prose on `env` names before the rename executes."""
     contract_text = "\n".join(
-        _TRACEABILITY_MODEL_FENCE.sub("", path.read_text())
+        _CONTRACT_TARGET_MARKER.sub(
+            "",
+            _PAIR_BLOCK_MANIFEST_FENCE.sub(
+                "",
+                _TRACEABILITY_MODEL_FENCE.sub("", path.read_text()),
+            ),
+        )
         for path in IMPLEMENTATION_CONTRACTS
     )
     checklist = MASTER_EXECUTION_CHECKLIST.read_text()
     target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
 
     assert TARGET_ENV_IDENTIFIERS - target_identifiers == set()
-    assert target_identifiers & RETIRED_TARGET_ENV_IDENTIFIERS == set()
     assert 'kind: Literal["env"] = "env"' in contract_text
     assert 'kind: Literal["environment"] = "environment"' not in contract_text
     assert all(name in checklist for name in TARGET_ENV_IDENTIFIERS)
-    assert all(name in checklist for name in RETIRED_TARGET_ENV_IDENTIFIERS)
 ```
 
 `compile_contract_traceability()` accepts `requirement_ids` because one contract
@@ -2249,9 +2234,9 @@ def test_contract_traceability_rejects_requirement_slice_that_splits_block(
         )
 ```
 
-<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=update target=tests/test_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status -->
-<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_documentation.py:_RULE_EDGE_STATE -->
-<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_documentation.py:_CONTENT_PAIR_BLOCK_MARKER -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=update target=tests/test_contract_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_contract_documentation.py:_RULE_EDGE_STATE -->
+<!-- contract-target: requirements=CRT-07 block=P1-CRT-01 action=add target=tests/test_contract_documentation.py:_CONTENT_PAIR_BLOCK_MARKER -->
 
 ```python contract-target
 _CONTENT_PAIR_BLOCK_MARKER = re.compile(

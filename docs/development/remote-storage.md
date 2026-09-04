@@ -3121,7 +3121,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=train_params,

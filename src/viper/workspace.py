@@ -7,7 +7,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from .ids import RunId
+from ._schema import RepoRelPath
+from .ids import InputName, RunId, StageId
 
 
 class WorkspaceError(RuntimeError):
@@ -156,3 +157,19 @@ def next_attempt_id(workspace_root: Path, run_id: RunId) -> int:
             if suffix.isdecimal() and int(suffix) >= 1:
                 attempt_ids.append(int(suffix))
     return max(attempt_ids, default=0) + 1
+
+
+def captured_input_path(
+    *,
+    run_id: RunId,
+    attempt_id: int,
+    stage_id: StageId,
+    input_name: InputName,
+    source_path: RepoRelPath,
+) -> RepoRelPath:
+    """Return the canonical attempt-owned path for one local input."""
+    suffix = Path(source_path).suffix
+    return (
+        f".viper/workspaces/{run_id}/attempt-{attempt_id}/"
+        f"inputs/{stage_id}/{input_name}{suffix}"
+    )

@@ -13,7 +13,8 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from .._schema import ArtifactName
 from ..experiments import ExperimentSpec
 from ..ids import InputName, StageId

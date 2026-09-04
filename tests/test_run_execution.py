@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
+import inspect
 import os
 import threading
 from collections.abc import Iterator
@@ -38,6 +40,11 @@ from viper.artifacts import (
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
+from viper.execution._attempt import execute_attempt
+from viper.execution._materialization import (
+    capture_external_input,
+    verify_captured_inputs,
+)
 from viper.execution._metric import MetricWorkerResult
 from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._source import RunFetcher
@@ -90,7 +97,7 @@ from viper.stages import (
 from viper.storage import LocalArtifactStore
 from viper.verification import verify_run_result
 from viper.verification.models import VerificationError, VerificationPolicy
-from viper.workspace import AttemptWorkspace
+from viper.workspace import AttemptWorkspace, captured_input_path
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
@@ -357,7 +364,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=train_params,
@@ -789,7 +796,6 @@ def test_train_stage_captures_local_external_input(
         inputs={
             "prior": ExternalInputRef(
                 source=LocalSource(path="inputs/raw/prior.bin"),
-                path="inputs/datasets/tiny/prior.bin",
                 data_role="training",
             )
         },
@@ -849,8 +855,6 @@ def test_train_stage_captures_local_external_input(
     result = execute_run(root, frozen.files[-1])
 
     assert result.resolved_run.status == "succeeded"
-    assert (root / "inputs/datasets/tiny/prior.bin").read_bytes() == b"prior"
-
     store = LocalArtifactStore(root)
     verified = verify_run_result(
         result.resolved_run,
@@ -863,4 +867,144 @@ def test_train_stage_captures_local_external_input(
     resolved_input = resolved_train.inputs["prior"]
 
     assert isinstance(resolved_input, ResolvedExternalInputRef)
-    assert store.fetch(resolved_input.file.stored_at) == b"prior"
+    expected_path = captured_input_path(
+        run_id=RUN_ID,
+        attempt_id=verified.attempts[-1].attempt_id,
+        stage_id="train",
+        input_name="prior",
+        source_path="inputs/raw/prior.bin",
+    )
+    assert resolved_input.file.path == expected_path
+    assert (root / expected_path).read_bytes() == b"prior"
+
+
+def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
+    """Copy one declared source to its canonical attempt-owned path."""
+    root = tmp_path / "project"
+    source = root / "inputs/raw/dataset.bin"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"dataset")
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 1)
+    declared = ExternalInputRef(
+        source=LocalSource(path="inputs/raw/dataset.bin"),
+        data_role="training",
+    )
+
+    resolved, captured = capture_external_input(
+        root,
+        workspace,
+        run_id=RUN_ID,
+        attempt_id=1,
+        stage_id="train",
+        input_name="dataset",
+        input_ref=declared,
+    )
+
+    expected = captured_input_path(
+        run_id=RUN_ID,
+        attempt_id=1,
+        stage_id="train",
+        input_name="dataset",
+        source_path=declared.source.path,
+    )
+    assert captured == root / expected
+    assert captured.read_bytes() == b"dataset"
+    assert resolved.source == declared.source
+    assert resolved.file.path == expected
+    assert resolved.file.sha256 == hashlib.sha256(b"dataset").hexdigest()
+    assert resolved.file.bytes == len(b"dataset")
+
+
+def test_local_input_rejects_symlink_escape(tmp_path: Path) -> None:
+    """Reject a declared source link before VIPER reads outside bytes."""
+    root = tmp_path / "project"
+    source = root / "inputs/raw/dataset.bin"
+    source.parent.mkdir(parents=True)
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(b"outside")
+    source.symlink_to(outside)
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 1)
+
+    with pytest.raises(RunError, match="input.local.capture"):
+        capture_external_input(
+            root,
+            workspace,
+            run_id=RUN_ID,
+            attempt_id=1,
+            stage_id="train",
+            input_name="dataset",
+            input_ref=ExternalInputRef(
+                source=LocalSource(path="inputs/raw/dataset.bin"),
+                data_role="training",
+            ),
+        )
+
+
+def test_local_input_mutation_fails_attempt(tmp_path: Path) -> None:
+    """Reject a captured input whose bytes change during stage execution."""
+    root = tmp_path / "project"
+    source = root / "inputs/raw/dataset.bin"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"dataset")
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 1)
+    resolved, captured = capture_external_input(
+        root,
+        workspace,
+        run_id=RUN_ID,
+        attempt_id=1,
+        stage_id="train",
+        input_name="dataset",
+        input_ref=ExternalInputRef(
+            source=LocalSource(path="inputs/raw/dataset.bin"),
+            data_role="training",
+        ),
+    )
+    captured.write_bytes(b"changed")
+
+    with pytest.raises(RunError, match="input.local.identity"):
+        verify_captured_inputs(root, {"dataset": resolved.file})
+
+
+def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
+    """Keep the post-process identity check before snapshot publication."""
+    source = inspect.getsource(execute_attempt)
+    tree = ast.parse(source)
+    call_lines: dict[str, list[int]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            name = node.func.attr
+        else:
+            continue
+        call_lines.setdefault(name, []).append(node.lineno)
+
+    stage_exit = min(call_lines["execute_stage_process"])
+    custody_check = min(call_lines["verify_captured_inputs"])
+    resolution = min(call_lines["resolve_stage"])
+    publication = min(call_lines["publish"])
+
+    assert stage_exit < custody_check < resolution < publication
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "verify_captured_inputs"
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for node in ast.walk(handler)
+    )
+    exception_lines = {
+        node.lineno
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for node in ast.walk(handler)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "verify_captured_inputs"
+    }
+    assert any(
+        line not in exception_lines for line in call_lines["verify_captured_inputs"]
+    )
+    assert "for reference in captured_inputs.values()" in source

@@ -1057,7 +1057,9 @@ conda run -n mantra python -m pytest \
   tests/test_verification.py \
   tests/test_validation_architecture.py \
   tests/test_inspection.py \
-  tests/test_documentation.py -q
+  tests/test_documentation.py \
+  tests/test_contract_documentation.py \
+  tests/test_workflow_documentation.py -q
 ```
 
 Close each review cycle only after the focused gate passes, the diff contains

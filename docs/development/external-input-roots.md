@@ -22,7 +22,7 @@ attempt-owned input file, supplies that file to the stage, and records it in
 
 ## 1. Status
 
-**Contract status:** Planned; Phase 3 PairBlocks in guided execution.
+**Contract status:** In progress; Phase 3 implemented; EIR-04 and EIR-05 scheduled.
 
 These requirements bind the contract to the master checklist:
 
@@ -42,19 +42,12 @@ recorded for the selected input. The invocation receipt records the same path.
 
 The runner-owned download path is complete: `DownloadSpec` performs each HTTP
 request and publishes the response directly as the same-named artifact. Phase
-3 closes the remaining local-input gaps:
-
-- `HttpSource` still duplicates HTTP acquisition inside `resolve_inputs()`.
-- `ExternalInputRef.path` lets the contract author choose a worker path instead
-  of deriving one attempt-owned custody path.
-- `ResolvedExternalInputRef.file` still points to separate immutable storage;
-  it does not identify the captured file in the consuming stage snapshot.
-- worker startup and post-run verification do not reconstruct and verify the
-  captured local-input identity.
-
-Phase 3 removes `HttpSource` and its `resolve_inputs()` branch. Phase 7 owns
-automatic selection and pointer generation for local, same-run, and prior-run
-inputs.
+3 removed `HttpSource` and the duplicate HTTP branch from `resolve_inputs()`.
+Local inputs now use one attempt-owned custody path,
+`ResolvedExternalInputRef.file` identifies the captured snapshot member, and
+the runner, worker startup check, and verifier reconstruct and check that same
+identity. Phase 7 still owns automatic selection and pointer generation for
+local, same-run, and prior-run inputs.
 
 ## 3. Current gap
 
@@ -81,51 +74,6 @@ On the HTTP route, the shared file reference joins the root receipt to the
 artifact. On the local route, `ResolvedExternalInputRef.file` identifies the
 attempt-owned input in the consuming-stage snapshot.
 
-```mermaid
-flowchart LR
-    Local["Local file"]
-    Service[/"HTTP service"/]
-    LocalRoot["Local external root<br/>ResolvedExternalInputRef"]
-    Retrieval["HTTP external root<br/>ResolvedHttpRetrieval"]
-    LocalFile[("Captured input snapshot file<br/>path · SHA-256 · bytes")]
-    File[("HTTP artifact snapshot file<br/>path · SHA-256 · bytes")]
-    Artifact["Download-stage output<br/>ResolvedSingleFileArtifact"]
-    SameRun["Same-run selection<br/>FutureInputRef"]
-    PriorRun["Prior-run selection<br/>StoredInputRef"]
-    Train["Training stage<br/>context.inputs"]
-
-    Local -->|"ExternalInputRef selects"| LocalRoot
-    LocalRoot -->|"file"| LocalFile
-    LocalFile -->|"attempt-owned input path"| Train
-    Service -->|"DownloadSpec request"| Retrieval
-    Retrieval -->|"body"| File
-    Artifact -->|"file: same SnapshotFileRef"| File
-    Artifact -->|"selected by"| SameRun
-    Artifact -->|"promoted and selected by"| PriorRun
-    SameRun -->|"artifact path"| Train
-    PriorRun -->|"verified artifact path"| Train
-
-    class Local,Service external
-    class LocalRoot,Retrieval root
-    class LocalFile,File evidence
-    class Artifact artifact
-    class SameRun,PriorRun reference
-    class Train consumer
-
-    classDef external fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
-    classDef root fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
-    classDef evidence fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
-    classDef artifact fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
-    classDef reference fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
-    classDef consumer fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
-    linkStyle default stroke:#94a3b8,stroke-width:2px
-```
-
-### Missing connector
-
-The local route does not validate the selected source, derive one
-attempt-owned path, or verify the captured bytes after the stage exits.
-
 ### Current DAG
 
 ```mermaid
@@ -140,6 +88,11 @@ flowchart LR
     classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
+
+### Missing connector
+
+The local route does not validate the selected source, derive one
+attempt-owned path, or verify the captured bytes after the stage exits.
 
 ### Proposed-change DAG
 
@@ -292,6 +245,7 @@ The active-to-target field changes are exact:
 | `ExternalInputRef.path` | Delete | The runner chooses one attempt-owned input path and supplies it to the worker. |
 | `ResolvedExternalInputRef.source: ExternalInputSource` | Replace | `ResolvedExternalInputRef.source: LocalSource` |
 | `ResolvedExternalInputRef.file: ResolvedFileRef` | Replace | `ResolvedExternalInputRef.file: SnapshotFileRef` identifies the attempt-owned input inside the completed consuming-stage snapshot. |
+| `FutureInputRef.producer_artifact` | Rename | `FutureInputRef.name` identifies the selected artifact within `producer_stage_id`. |
 | Both `data_role` fields | Retain | The resolved record copies the frozen declaration. |
 | Public `ExternalInputRef` construction | Replace | `viper.authoring.input()` returns `ExternalInputDraft`; freezing writes the protocol record. |
 | `StoredInputRef.pointer: ArtifactPointerRef` | Replace | The compiler stores its generated pointer and writes `ResolvedArtifactPointerRef`. |
@@ -319,7 +273,7 @@ class ResolvedSingleFileArtifact(ProtocolModel):
 class FutureInputRef(ProtocolModel):
     kind: Literal["future"] = "future"
     producer_stage_id: StageId
-    producer_artifact: ArtifactName
+    name: ArtifactName
 ```
 
 The two routes place their declaration and resolved records in different
@@ -445,7 +399,7 @@ Consider one run with a `download` stage followed by a `train` stage.
 ```python
 FutureInputRef(
     producer_stage_id="download",
-    producer_artifact="dataset",
+    name="dataset",
 )
 ```
 
@@ -645,7 +599,7 @@ A repository file containing `b"prior"` enters through `ExternalInputRef`.
 VIPER copies it to an attempt-owned input path, gives that path to the train
 stage, and stores the captured file in the completed train-stage snapshot.
 `verify_run_result()` accepts the run. Changed snapshot bytes or a different
-stage-invocation path trigger `input.local_root_identity`.
+stage-invocation path trigger `input.local.identity`.
 
 A companion case makes `inputs/raw/prior.bin` a symbolic link to a file outside
 the repository. Capture fails under `input.local.capture` before the
@@ -743,11 +697,6 @@ status, and semantic suitability remain outside this verifier.
 
 ## 11. Contract-owned PairBlocks
 
-These blocks start from the accepted runner-owned download implementation.
-Their `ContractTarget` sets are the initial Phase 3 plan. Guided execution may
-add a directly changed caller or test before the final freeze; the final System
-Impact check uses the reconciled target set.
-
 <!-- pair-block-definition: P3-EIR-01 -->
 ```toml pair-block
 id = "P3-EIR-01"
@@ -759,18 +708,24 @@ targets = [
     "src/viper/inputs.py:HttpSource",
     "src/viper/inputs.py:ExternalInputSource",
     "src/viper/inputs.py:ExternalInputRef",
+    "src/viper/inputs.py:FutureInputRef",
     "src/viper/inputs.py:ResolvedExternalInputRef",
     "src/viper/inputs.py:ResolvedFileRef",
     "src/viper/inputs.py:SnapshotFileRef",
+    "src/viper/stages.py:TrainSpec",
+    "src/viper/stages.py:EvaluateSpec",
+    "tests/test_protocol.py:test_external_inputs_are_local_only",
 ]
 tests = ["tests/test_protocol.py:test_external_inputs_are_local_only"]
-gate = "python -m pytest tests/test_protocol.py -q"
+gate = "conda run -n mantra python -m pytest tests/test_protocol.py -q"
 depends_on = ["P2-DRA-04"]
 ```
 
 **Context:** `ExternalInputRef` still contains the retired HTTP branch. This
 block makes `ExternalInputRef` and `ResolvedExternalInputRef` local-only and
-uses `SnapshotFileRef` for the captured copy.
+uses `SnapshotFileRef` for the captured copy. It also adopts `name` as the
+artifact selector on `FutureInputRef` and updates the stage validators that
+read that field.
 
 <!-- pair-block-definition: P3-EIR-02 -->
 ```toml pair-block
@@ -785,20 +740,24 @@ targets = [
     "src/viper/execution/_materialization.py:capture_external_input",
     "src/viper/execution/_materialization.py:resolve_inputs",
     "src/viper/execution/_materialization.py:verify_captured_inputs",
+    "tests/test_run_execution.py:test_local_input_is_captured_by_attempt",
+    "tests/test_run_execution.py:test_local_input_rejects_symlink_escape",
+    "tests/test_run_execution.py:test_local_input_mutation_fails_attempt",
+    "tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs",
 ]
 tests = [
     "tests/test_run_execution.py:test_local_input_is_captured_by_attempt",
     "tests/test_run_execution.py:test_local_input_rejects_symlink_escape",
     "tests/test_run_execution.py:test_local_input_mutation_fails_attempt",
+    "tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs",
 ]
-gate = "python -m pytest tests/test_run_execution.py -k local_input -q"
+gate = "conda run -n mantra python -m pytest tests/test_run_execution.py -k 'local_input or captured_local_inputs' -q"
 depends_on = ["P3-EIR-01"]
 ```
 
-**Context:** Local input materialization still follows source symlinks and
-uses a path selected by the contract author. This block validates the source,
-derives one attempt-owned path, copies the bytes there, and checks them again
-after the stage runs.
+**Context:** This block validates the source, derives one attempt-owned path,
+copies the bytes there, checks them after the stage process exits, and includes
+the captured file in snapshot publication.
 
 <!-- pair-block-definition: P3-EIR-03 -->
 ```toml pair-block
@@ -807,13 +766,17 @@ requirements = ["EIR-03"]
 targets = [
     "src/viper/_workers/stages.py:_planned_stage_context",
     "src/viper/_verification/attempt.py:_logical_input_paths",
-    "src/viper/_verification/attempt.py:_verify_external_inputs",
+    "src/viper/_verification/attempt.py:verify_external_inputs",
+    "tests/test_verification_acceptance.py:test_external_input_identity_survives_execution",
+    "tests/test_verification_acceptance.py:test_external_input_identity_rejects_tampering",
+    "tests/test_verification_acceptance.py:test_worker_startup_derives_attempt_owned_external_input_path",
 ]
 tests = [
     "tests/test_verification_acceptance.py:test_external_input_identity_survives_execution",
     "tests/test_verification_acceptance.py:test_external_input_identity_rejects_tampering",
+    "tests/test_verification_acceptance.py:test_worker_startup_derives_attempt_owned_external_input_path",
 ]
-gate = "python -m pytest tests/test_verification_acceptance.py -k external_input -q"
+gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -k external_input -q"
 depends_on = ["P3-EIR-02"]
 ```
 
@@ -822,12 +785,6 @@ attempt-owned local-input path. This block makes both consumers derive that
 path and verify the captured file recorded by `ResolvedExternalInputRef`.
 
 ## 12. Accepted `ContractTarget` declarations
-
-Each marker identifies one planned Python declaration as `path:symbol`. The
-following fence contains that declaration's accepted Phase 3 bytes. A fence
-may contain several declarations from one file; System Impact resolves and
-hashes each named declaration separately. The target set is reconciled after
-guided execution and frozen before `check_plan()`.
 
 **File: `src/viper/inputs.py`**
 
@@ -872,6 +829,212 @@ class ResolvedExternalInputRef(ProtocolModel):
     source: LocalSource
     file: SnapshotFileRef
     data_role: DataRole
+```
+
+<!-- contract-target: requirements=EIR-01 block=P3-EIR-01 action=update target=src/viper/inputs.py:FutureInputRef -->
+```python contract-target
+class FutureInputRef(ProtocolModel):
+    """One named artifact produced by an earlier stage in the same run."""
+
+    kind: Literal["future"] = "future"
+    producer_stage_id: StageId
+    name: ArtifactName
+```
+
+**File: `tests/test_protocol.py`**
+
+<!-- contract-target: requirements=EIR-01 block=P3-EIR-01 action=add target=tests/test_protocol.py:test_external_inputs_are_local_only -->
+```python contract-target
+def test_external_inputs_are_local_only() -> None:
+    """Keep external roots local and same-run selection artifact-named."""
+    declared = ExternalInputRef(
+        source=LocalSource(path="inputs/raw/dataset.bin"),
+        data_role="training",
+    )
+    resolved = ResolvedExternalInputRef(
+        source=declared.source,
+        file=SnapshotFileRef(
+            path=(
+                f".viper/workspaces/{RUN_ID}/attempt-1/"
+                "inputs/train/dataset.bin"
+            ),
+            sha256=SHA_A,
+            bytes=7,
+        ),
+        data_role=declared.data_role,
+    )
+    future = FutureInputRef(producer_stage_id="download", name="dataset")
+
+    assert "path" not in ExternalInputRef.model_fields
+    assert resolved.source == declared.source
+    assert resolved.file.path.endswith("/inputs/train/dataset.bin")
+    assert future.name == "dataset"
+    assert "producer_artifact" not in FutureInputRef.model_fields
+
+    with pytest.raises(ValidationError, match="local"):
+        ExternalInputRef.model_validate(
+            {
+                "kind": "external",
+                "source": {"kind": "http", "url": "https://example.com/data"},
+                "data_role": "training",
+            }
+        )
+```
+
+**File: `src/viper/stages.py`**
+
+<!-- contract-target: requirements=EIR-01 block=P3-EIR-01 action=update target=src/viper/stages.py:TrainSpec -->
+```python contract-target
+class TrainSpec(InternalSpec):
+    """Request training and one terminal replay checkpoint."""
+
+    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
+    params: parameters.Train
+
+    @model_validator(mode="after")
+    def validate_terminal_checkpoint(self) -> TrainSpec:
+        """Enforce the canonical terminal checkpoint and resume inputs."""
+        required_artifacts = {PARAMETERS, RESUME_STATE}
+        missing_artifacts = required_artifacts - set(self.artifacts)
+        if missing_artifacts:
+            missing = ", ".join(sorted(missing_artifacts))
+            raise ValueError(
+                f"training stages must declare terminal checkpoint artifacts: {missing}"
+            )
+
+        model_input = self.inputs.get(PARAMETERS_INPUT)
+        state_input = self.inputs.get(RESUME_STATE_INPUT)
+
+        if (model_input is None) != (state_input is None):
+            raise ValueError("checkpoint inputs must be declared together")
+
+        if model_input is None or state_input is None:
+            return self
+
+        if model_input.kind != state_input.kind:
+            raise ValueError("checkpoint inputs must use the same input kind")
+
+        if model_input.kind == "stored" and state_input.kind == "stored":
+            if any(
+                input_ref.pointer.path.split("/")[1] != "models"
+                for input_ref in (model_input, state_input)
+            ):
+                raise ValueError("stored checkpoint inputs must use inputs/models")
+
+        if model_input.kind == "future" and state_input.kind == "future":
+            if model_input.producer_stage_id != state_input.producer_stage_id:
+                raise ValueError(
+                    "checkpoint inputs must select one checkpoint-producing stage"
+                )
+            if model_input.name != PARAMETERS:
+                raise ValueError("parameters input must select parameters")
+            if state_input.name != RESUME_STATE:
+                raise ValueError("resume_state input must select resume_state")
+
+        return self
+```
+
+<!-- contract-target: requirements=EIR-01 block=P3-EIR-01 action=update target=src/viper/stages.py:EvaluateSpec -->
+```python contract-target
+class EvaluateSpec(InternalSpec):
+    """Request prediction and metrics for one fixed model, dataset, and split."""
+
+    kind: Literal["evaluate"] = "evaluate"  # pyright: ignore[reportIncompatibleVariableOverride]
+    evaluation_id: EvaluationId
+    metric_ids: tuple[MetricId, ...] = Field(  # pyright: ignore[reportGeneralTypeIssues]
+        min_length=1
+    )
+    split_inputs: tuple[InputName, ...] = Field(min_length=1)
+    params: parameters.Evaluate
+
+    @model_validator(mode="after")
+    def validate_evaluation_contract(self) -> EvaluateSpec:
+        """Require fixed evaluation inputs and one canonical prediction artifact."""
+        if len(set(self.metric_ids)) != len(self.metric_ids):
+            raise ValueError("evaluation metric IDs must be unique")
+        if len(set(self.split_inputs)) != len(self.split_inputs):
+            raise ValueError("evaluation split input names must be unique")
+
+        model_input = self.inputs.get(PARAMETERS_INPUT)
+        if model_input is None:
+            raise ValueError("evaluation requires a parameters input")
+
+        dataset_input = self.inputs.get(EVALUATION_DATASET_INPUT)
+        if dataset_input is None:
+            raise ValueError("evaluation requires an evaluation_dataset input")
+        if dataset_input.kind != "stored":
+            raise ValueError("evaluation_dataset must be a stored input")
+        if dataset_input.pointer.path.split("/")[1] != "datasets":
+            raise ValueError("evaluation_dataset must use inputs/datasets")
+        if dataset_input.data_role not in {"evaluation", "benchmark"}:
+            raise ValueError(
+                "evaluation_dataset data_role must be evaluation or benchmark"
+            )
+
+        reserved_inputs = {PARAMETERS_INPUT, EVALUATION_DATASET_INPUT}
+        if reserved_inputs & set(self.split_inputs):
+            raise ValueError(
+                "evaluation split inputs must differ from reserved input names"
+            )
+
+        missing_splits = set(self.split_inputs) - set(self.inputs)
+        if missing_splits:
+            missing = ", ".join(sorted(missing_splits))
+            raise ValueError(f"evaluation split inputs are undeclared: {missing}")
+
+        for split_name in self.split_inputs:
+            split_input = self.inputs[split_name]
+            if split_input.kind != "stored":
+                raise ValueError(
+                    f"evaluation split input {split_name!r} must be stored"
+                )
+            if split_input.pointer.path.split("/")[1] != "benchmarks":
+                raise ValueError(
+                    f"evaluation split input {split_name!r} must use inputs/benchmarks"
+                )
+            if split_input.data_role != dataset_input.data_role:
+                raise ValueError(
+                    f"evaluation split input {split_name!r} data_role must match "
+                    "evaluation_dataset"
+                )
+
+        if model_input.kind == "future":
+            if model_input.name != PARAMETERS:
+                raise ValueError("same-run evaluation must consume parameters")
+        elif model_input.kind == "external":
+            if model_input.data_role not in {"training", "validation"}:
+                raise ValueError(
+                    "external evaluation parameters data_role must be training or "
+                    "validation"
+                )
+        else:
+            if model_input.pointer.path.split("/")[1] != "models":
+                raise ValueError("stored evaluation model must use inputs/models")
+            if model_input.data_role not in {"training", "validation"}:
+                raise ValueError(
+                    "stored evaluation parameters data_role must be training or "
+                    "validation"
+                )
+
+        prediction = self.artifacts.get(PREDICTIONS)
+        if prediction is None:
+            raise ValueError("evaluation must declare a predictions artifact")
+
+        if any(
+            artifact.data_role != dataset_input.data_role
+            for artifact in self.artifacts.values()
+        ):
+            raise ValueError(
+                "evaluation artifact data_role must match evaluation_dataset"
+            )
+
+        if any(
+            artifact.path.split("/")[7] != self.evaluation_id
+            for artifact in self.artifacts.values()
+        ):
+            raise ValueError("evaluation artifact entity IDs must match evaluation_id")
+
+        return self
 ```
 
 **File: `src/viper/workspace.py`**
@@ -923,13 +1086,17 @@ def capture_external_input(
     """Copy one validated local source into attempt-owned custody."""
     declared_source = root / input_ref.source.path
     if declared_source.is_symlink():
-        raise RunError("external local input source must not be a symbolic link")
+        raise RunError(
+            "input.local.capture: source must not be a symbolic link"
+        )
     try:
         source = declared_source.resolve(strict=True)
     except OSError as exc:
-        raise RunError("external local input source is unavailable") from exc
+        raise RunError("input.local.capture: source is unavailable") from exc
     if not source.is_relative_to(root) or not source.is_file():
-        raise RunError("external local input source must be a repository file")
+        raise RunError(
+            "input.local.capture: source must be a repository file"
+        )
     raw = source.read_bytes()
     relative_path = captured_input_path(
         run_id=run_id,
@@ -940,7 +1107,9 @@ def capture_external_input(
     )
     target = root / relative_path
     if not target.resolve().is_relative_to(workspace.inputs.resolve()):
-        raise RunError("captured input path escapes the attempt workspace")
+        raise RunError(
+            "input.local.capture: captured path escapes the attempt workspace"
+        )
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
     try:
@@ -997,7 +1166,7 @@ def resolve_inputs(
                 raise RunError("future input producer has not completed")
             resolved[name] = ResolvedFutureInputRef(producer=producer)
             producer_spec = stage_specs[input_ref.producer_stage_id]
-            artifact = producer_spec.artifacts[input_ref.producer_artifact]
+            artifact = producer_spec.artifacts[input_ref.name]
             paths[name] = root / artifact.path
         elif input_ref.kind == "external":
             resolved_input, captured_path = capture_external_input(
@@ -1045,10 +1214,154 @@ def verify_captured_inputs(
             raw = (root / reference.path).read_bytes()
         except OSError as exc:
             raise RunError(
-                f"captured local input {input_name!r} is unavailable"
+                f"input.local.identity: captured input {input_name!r} is unavailable"
             ) from exc
         if snapshot_file(reference.path, raw) != reference:
-            raise RunError(f"captured local input {input_name!r} changed")
+            raise RunError(
+                f"input.local.identity: captured input {input_name!r} changed"
+            )
+```
+
+**File: `tests/test_run_execution.py`**
+
+<!-- contract-target: requirements=EIR-02 block=P3-EIR-02 action=add target=tests/test_run_execution.py:test_local_input_is_captured_by_attempt -->
+```python contract-target
+def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
+    """Copy one declared source to its canonical attempt-owned path."""
+    root = tmp_path / "project"
+    source = root / "inputs/raw/dataset.bin"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"dataset")
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 1)
+    declared = ExternalInputRef(
+        source=LocalSource(path="inputs/raw/dataset.bin"),
+        data_role="training",
+    )
+
+    resolved, captured = capture_external_input(
+        root,
+        workspace,
+        run_id=RUN_ID,
+        attempt_id=1,
+        stage_id="train",
+        input_name="dataset",
+        input_ref=declared,
+    )
+
+    expected = captured_input_path(
+        run_id=RUN_ID,
+        attempt_id=1,
+        stage_id="train",
+        input_name="dataset",
+        source_path=declared.source.path,
+    )
+    assert captured == root / expected
+    assert captured.read_bytes() == b"dataset"
+    assert resolved.source == declared.source
+    assert resolved.file.path == expected
+    assert resolved.file.sha256 == hashlib.sha256(b"dataset").hexdigest()
+    assert resolved.file.bytes == len(b"dataset")
+```
+
+<!-- contract-target: requirements=EIR-02 block=P3-EIR-02 action=add target=tests/test_run_execution.py:test_local_input_rejects_symlink_escape -->
+```python contract-target
+def test_local_input_rejects_symlink_escape(tmp_path: Path) -> None:
+    """Reject a declared source link before VIPER reads outside bytes."""
+    root = tmp_path / "project"
+    source = root / "inputs/raw/dataset.bin"
+    source.parent.mkdir(parents=True)
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(b"outside")
+    source.symlink_to(outside)
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 1)
+
+    with pytest.raises(RunError, match="input.local.capture"):
+        capture_external_input(
+            root,
+            workspace,
+            run_id=RUN_ID,
+            attempt_id=1,
+            stage_id="train",
+            input_name="dataset",
+            input_ref=ExternalInputRef(
+                source=LocalSource(path="inputs/raw/dataset.bin"),
+                data_role="training",
+            ),
+        )
+```
+
+<!-- contract-target: requirements=EIR-02 block=P3-EIR-02 action=add target=tests/test_run_execution.py:test_local_input_mutation_fails_attempt -->
+```python contract-target
+def test_local_input_mutation_fails_attempt(tmp_path: Path) -> None:
+    """Reject a captured input whose bytes change during stage execution."""
+    root = tmp_path / "project"
+    source = root / "inputs/raw/dataset.bin"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"dataset")
+    workspace = AttemptWorkspace.create(root / ".viper/workspaces", RUN_ID, 1)
+    resolved, captured = capture_external_input(
+        root,
+        workspace,
+        run_id=RUN_ID,
+        attempt_id=1,
+        stage_id="train",
+        input_name="dataset",
+        input_ref=ExternalInputRef(
+            source=LocalSource(path="inputs/raw/dataset.bin"),
+            data_role="training",
+        ),
+    )
+    captured.write_bytes(b"changed")
+
+    with pytest.raises(RunError, match="input.local.identity"):
+        verify_captured_inputs(root, {"dataset": resolved.file})
+```
+
+<!-- contract-target: requirements=EIR-02 block=P3-EIR-02 action=add target=tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs -->
+```python contract-target
+def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
+    """Keep the post-process identity check before snapshot publication."""
+    source = inspect.getsource(execute_attempt)
+    tree = ast.parse(source)
+    call_lines: dict[str, list[int]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            name = node.func.attr
+        else:
+            continue
+        call_lines.setdefault(name, []).append(node.lineno)
+
+    stage_exit = min(call_lines["execute_stage_process"])
+    custody_check = min(call_lines["verify_captured_inputs"])
+    resolution = min(call_lines["resolve_stage"])
+    publication = min(call_lines["publish"])
+
+    assert stage_exit < custody_check < resolution < publication
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "verify_captured_inputs"
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for node in ast.walk(handler)
+    )
+    exception_lines = {
+        node.lineno
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for node in ast.walk(handler)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "verify_captured_inputs"
+    }
+    assert any(
+        line not in exception_lines for line in call_lines["verify_captured_inputs"]
+    )
+    assert "for reference in captured_inputs.values()" in source
 ```
 
 **File: `src/viper/_workers/stages.py`**
@@ -1068,9 +1381,7 @@ def _planned_stage_context(
     for reference in run.stages:
         path = root / reference.spec
         raw = path.read_bytes()
-        if len(raw) != reference.bytes or hashlib.sha256(raw).hexdigest() != (
-            reference.sha256
-        ):
+        if len(raw) != reference.bytes or hashlib.sha256(raw).hexdigest() != reference.sha256:
             raise ValueError("startup.plan: stage spec identity differs")
         candidate = load_stage_spec(path)
         if reference.stage_id == stage_id:
@@ -1094,7 +1405,7 @@ def _planned_stage_context(
                     elif isinstance(input_reference, FutureInputRef):
                         producer = loaded[input_reference.producer_stage_id]
                         expected_inputs[name] = str(
-                            producer.artifacts[input_reference.producer_artifact].path
+                            producer.artifacts[input_reference.name].path
                         )
             break
         loaded[reference.stage_id] = candidate
@@ -1121,7 +1432,7 @@ def _logical_input_paths(
     for name, reference in stage.inputs.items():
         if isinstance(reference, FutureInputRef):
             producer = stage_specs[reference.producer_stage_id]
-            paths[name] = producer.artifacts[reference.producer_artifact].path
+            paths[name] = producer.artifacts[reference.name].path
         elif isinstance(reference, ExternalInputRef):
             paths[name] = captured_input_path(
                 run_id=run.run_id,
@@ -1135,13 +1446,13 @@ def _logical_input_paths(
     return paths
 ```
 
-<!-- contract-target: requirements=EIR-03 block=P3-EIR-03 action=add target=src/viper/_verification/attempt.py:_verify_external_inputs -->
+<!-- contract-target: requirements=EIR-03 block=P3-EIR-03 action=add target=src/viper/_verification/attempt.py:verify_external_inputs -->
 ```python contract-target
-def _verify_external_inputs(
+def verify_external_inputs(
     attempt: RunAttempt,
     run: RunSpec,
     stage_id: StageId,
-    resolved: ResolvedParameterizedSpec,
+    resolved: ResolvedInternalSpec,
     snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
     *,
     fetcher: StorageFetcher | None,
@@ -1152,12 +1463,16 @@ def _verify_external_inputs(
             continue
         planned_input = resolved.spec.inputs[input_name]
         if not isinstance(planned_input, ExternalInputRef):
-            raise VerificationError("resolved local input differs from its plan")
+            raise VerificationError(
+                "input.local.identity: resolved input differs from its plan"
+            )
         if (
             resolved_input.source != planned_input.source
             or resolved_input.data_role != planned_input.data_role
         ):
-            raise VerificationError("resolved local input provenance differs")
+            raise VerificationError(
+                "input.local.identity: resolved input provenance differs"
+            )
         expected_path = captured_input_path(
             run_id=run.run_id,
             attempt_id=attempt.attempt_id,
@@ -1166,6 +1481,177 @@ def _verify_external_inputs(
             source_path=planned_input.source.path,
         )
         if resolved_input.file.path != expected_path:
-            raise VerificationError("input.local_root_identity: path differs")
-        read_snapshot_file(snapshot, resolved_input.file, fetcher=fetcher)
+            raise VerificationError("input.local.identity: path differs")
+        try:
+            read_snapshot_file(snapshot, resolved_input.file, fetcher=fetcher)
+        except VerificationError as exc:
+            raise VerificationError(
+                f"input.local.identity: captured input {input_name!r} differs"
+            ) from exc
+```
+
+**File: `tests/test_verification_acceptance.py`**
+
+<!-- contract-target: requirements=EIR-03 block=P3-EIR-03 action=add target=tests/test_verification_acceptance.py:test_external_input_identity_survives_execution -->
+```python contract-target
+def test_external_input_identity_survives_execution() -> None:
+    """Accept captured bytes when plan, receipt path, and snapshot agree."""
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    attempt_id = 1
+    stage_id = "train"
+    source = LocalSource(path="inputs/raw/dataset.bin")
+    declared = ExternalInputRef(source=source, data_role="training")
+    captured_path = captured_input_path(
+        run_id=run_id,
+        attempt_id=attempt_id,
+        stage_id=stage_id,
+        input_name="dataset",
+        source_path=source.path,
+    )
+    raw = b"dataset"
+    captured = SnapshotFileRef(
+        path=captured_path,
+        sha256=sha256(raw),
+        bytes=len(raw),
+    )
+    resolved = ResolvedTrainSpec.model_construct(
+        spec=TrainSpec.model_construct(inputs={"dataset": declared}),
+        inputs={
+            "dataset": ResolvedExternalInputRef(
+                source=source,
+                file=captured,
+                data_role="training",
+            )
+        },
+    )
+    store = DocumentStore()
+    snapshot_commit = "7" * 40
+    store.put(hf_file(snapshot_commit, captured_path), raw)
+
+    assert (
+        verify_external_inputs(
+            RunAttempt.model_construct(attempt_id=attempt_id),
+            RunSpec.model_construct(run_id=run_id),
+            stage_id,
+            resolved,
+            snapshot(snapshot_commit),
+            fetcher=store.fetch,
+        )
+        is None
+    )
+    assert store.fetch(hf_file(snapshot_commit, captured_path)) == raw
+```
+
+<!-- contract-target: requirements=EIR-03 block=P3-EIR-03 action=add target=tests/test_verification_acceptance.py:test_external_input_identity_rejects_tampering -->
+```python contract-target
+def test_external_input_identity_rejects_tampering() -> None:
+    """Reject snapshot bytes that differ from the captured input identity."""
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    attempt_id = 1
+    stage_id = "train"
+    source = LocalSource(path="inputs/raw/dataset.bin")
+    declared = ExternalInputRef(source=source, data_role="training")
+    captured_path = captured_input_path(
+        run_id=run_id,
+        attempt_id=attempt_id,
+        stage_id=stage_id,
+        input_name="dataset",
+        source_path=source.path,
+    )
+    captured = SnapshotFileRef(
+        path=captured_path,
+        sha256=sha256(b"dataset"),
+        bytes=len(b"dataset"),
+    )
+    resolved = ResolvedTrainSpec.model_construct(
+        spec=TrainSpec.model_construct(inputs={"dataset": declared}),
+        inputs={
+            "dataset": ResolvedExternalInputRef(
+                source=source,
+                file=captured,
+                data_role="training",
+            )
+        },
+    )
+    store = DocumentStore()
+    snapshot_commit = "7" * 40
+    store.put(hf_file(snapshot_commit, captured_path), b"tampered")
+
+    with pytest.raises(VerificationError, match="input.local.identity"):
+        verify_external_inputs(
+            RunAttempt.model_construct(attempt_id=attempt_id),
+            RunSpec.model_construct(run_id=run_id),
+            stage_id,
+            resolved,
+            snapshot(snapshot_commit),
+            fetcher=store.fetch,
+        )
+```
+
+<!-- contract-target: requirements=EIR-03 block=P3-EIR-03 action=add target=tests/test_verification_acceptance.py:test_worker_startup_derives_attempt_owned_external_input_path -->
+```python contract-target
+def test_worker_startup_derives_attempt_owned_external_input_path(
+    tmp_path: Path,
+) -> None:
+    """Derive the worker binding path from plan-owned local input identity."""
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    run_root = f"experiments/external_input/runs/baseline/{run_id}"
+    stage = TrainSpec(
+        implementation=stage_implementation_ref(
+            "training/fit.py",
+            TRAIN_SOURCE,
+            symbol="fit",
+        ),
+        parameter_model=parameter_model_ref("train"),
+        inputs={
+            "dataset": ExternalInputRef(
+                source=LocalSource(path="inputs/raw/dataset.bin"),
+                data_role="training",
+            )
+        },
+        params=parameters.Train.model_validate(
+            {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
+        ),
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                path=f"{run_root}/artifacts/models/model/parameters.bin",
+                loader=loader_ref("bytes_file"),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                path=f"{run_root}/artifacts/models/model/resume_state.bin",
+                loader=loader_ref("resume_state"),
+                data_role="training",
+            ),
+        },
+    )
+    run = make_run(
+        experiment_id="external_input",
+        run_id=run_id,
+        source_commit=MAIN_SOURCE_COMMIT,
+        plan_commit=MAIN_PLAN_COMMIT,
+        stage_specs=[("train", stage)],
+        estimator_stage_id="train",
+    )
+    stage_path = tmp_path / run.stages[0].spec
+    stage_path.parent.mkdir(parents=True)
+    stage_path.write_bytes(yaml_bytes(stage))
+
+    planned, expected_inputs = _planned_stage_context(
+        tmp_path,
+        run,
+        "train",
+        attempt_id=3,
+    )
+
+    assert planned == stage
+    assert expected_inputs == {
+        "dataset": captured_input_path(
+            run_id=run_id,
+            attempt_id=3,
+            stage_id="train",
+            input_name="dataset",
+            source_path="inputs/raw/dataset.bin",
+        )
+    }
 ```

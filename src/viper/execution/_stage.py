@@ -14,7 +14,8 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from .._parameter.validation import (
     ParameterValidationError,
     validate_stage_parameters,
