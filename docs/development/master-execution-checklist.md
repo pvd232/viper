@@ -282,7 +282,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
-| [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks ready | Local root capture, HTTP root evidence, and input-edge meaning |
+| [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks drafted | Local input capture and identity verification |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
@@ -305,10 +305,10 @@ The contracts share models. One contract owns each shared decision:
 | Pinned CodeQL observations report policy-selected direct baseline dependents and prove whether realized source changes match that closed plan | System Impact Check |
 | Repository-owned child processes use the spawn-safe facade on macOS | Child-process launching |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
-| HTTP root is `ResolvedHttpRetrieval` | External input roots |
+| HTTP root is `ResolvedHttpRetrieval` | Download retrieval artifacts |
 | Custom HTTP execution uses `@http(id=...)` from `viper.http` and `DownloadSpec.http` | Automatic input resolution |
 | Local root is `ResolvedExternalInputRef` | External input roots |
-| Stage input edge is `ExternalInputRef`, `FutureInputRef`, or `StoredInputRef` | External input roots |
+| Stage input edge is `ExternalInputRef`, `FutureInputRef`, or `StoredInputRef` | Automatic input resolution |
 | Draft input compiles to one of those three edges | Automatic input resolution |
 | Metric role comes from `objective=` or `metrics=` | Unified metric drafting |
 | Artifact draft paths are relative to the selected run root | Automatic input resolution |
@@ -458,8 +458,8 @@ Every new claim has a named rejection or acceptance boundary:
 | Every contract requirement reaches code and a test | `system.requirement.coverage` and graph parity with the existing documentation oracle |
 | HTTP receipt and artifact identify the same bytes | `download.receipt_artifact_identity` |
 | The digest covers the HTTP bytes written at the artifact path | `download.runner_custody` |
-| VIPER supplied the canonical captured local path and stable bytes | `input.local_root_identity` |
-| A local declaration stays within the repository boundary | `input.local_source_boundary` |
+| VIPER supplied the canonical captured local path and stable bytes | `input.local.identity` |
+| A local declaration stays within the repository boundary | `input.local.capture` |
 | Same-run producer precedes consumer | `input.source.order` |
 | Prior-run pointer names verified provenance | `input.pointer.identity` and `input.pointer.provenance` |
 | Objective was measured | `metric.objective.evidence` |
@@ -1299,7 +1299,7 @@ through stage consumption. A change fails the stage.
 - [ ] Build `SnapshotFileRef` from the attempt-owned path.
 - [ ] Give that path to the worker.
 - [ ] After the worker exits, hash the path again.
-- [ ] Fail `input.local_root_identity` if path, digest, or byte count changed.
+- [ ] Fail `input.local.identity` if path, digest, or byte count changed.
 - [ ] Add the captured path to `snapshot_paths` before publication.
 - [ ] Verify `ResolvedExternalInputRef.file` through its enclosing
       `ResolvedStageRef.snapshot`.
@@ -1313,9 +1313,9 @@ through stage consumption. A change fails the stage.
 `execute_attempt()` to add captured files to the snapshot and check them after
 the worker exits.
 
-**Hint 3:** A small `ResolvedInputMaterialization` result can carry the resolved
-input map, worker path map, and captured-file map. Keep the protocol record
-free of runtime-only `Path` objects.
+**Hint 3:** Return the resolved-input map, worker-path map, and captured-file
+map from `resolve_inputs()`. Keep runtime-only `Path` objects out of protocol
+records.
 
 **Hint 4:** `ExternalInputRef.source.path` locates the user file. The worker
 receives the canonical capture path. The worker startup check and invocation
@@ -1330,8 +1330,7 @@ verifier reconstruct that path with the shared helper.
 - [ ] Add worker-startup and failed-stage receipt cases that reject a different
       local capture path.
 - [ ] Add verifier acceptance and tamper cases.
-- [ ] Add an outside-repository symlink case for
-      `input.local_source_boundary`.
+- [ ] Add an outside-repository symlink case for `input.local.capture`.
 - [ ] Run: <!-- verifies: EIR-01, EIR-02, EIR-03 -->
 
 ```bash

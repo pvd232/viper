@@ -45,7 +45,7 @@ These storage-related contracts divide ownership as follows:
 | Contract | Owned decision |
 | --- | --- |
 | [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md) | One successful HTTP body becomes the same-named single-file artifact through one shared `SnapshotFileRef`. |
-| [`external-input-roots.md`](external-input-roots.md) | Local files and HTTP responses use source-specific root records; later stages select artifacts through `FutureInputRef` or `StoredInputRef`. |
+| [`external-input-roots.md`](external-input-roots.md) | A repository-local file is copied into attempt custody and verified through `ResolvedExternalInputRef`. |
 | [`automatic-input-resolution.md`](automatic-input-resolution.md) | Python authoring compiles local files, same-run handles, and prior-run selections into frozen input references. |
 | [`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) | Generated plan documents use a Git plan commit; project definitions use the earlier source commit. |
 | [`project-data-root.md`](project-data-root.md) | `viper init ROOT` selects the root that contains the protocol tree and the separate local `.viper/store` subtree. |

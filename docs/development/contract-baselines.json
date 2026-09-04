@@ -71,7 +71,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "27d9aadd413e7d5d273e006a62d4244310b1d7f6bb16b9e6d9c6ca47213e3a03"
+      "sha256": "733d8b71eb61c914909f71a4f73ec65889874fb9939c5af22c98bb97c0289bf1"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",
@@ -95,7 +95,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "fde97fbf294f74170bac1e64bc2557ec0e97ef5db6d219c4eb30eef76a3f9184"
+      "sha256": "ee78e8346371871fcea668879d5751bf309c4c5bf0cc9ef5a340e7c1daeccff7"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -121,7 +121,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "a7a23950508c2e7a3e29e4511c36b7e2bcca9096338d42a634016c9cc98be1ef"
+      "sha256": "edc426fb9f097da9991051030c921140797e8f468f76703a55a01eabd1bdb6f7"
     },
     {
       "path": "docs/development/experiment-expansion.md",

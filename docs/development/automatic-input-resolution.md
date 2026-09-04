@@ -65,10 +65,10 @@ They also keep the same artifact and input paths. The download contract makes
 
 [`download-retrieval-artifacts.md`](download-retrieval-artifacts.md) owns that
 receipt-to-artifact identity rule.
-[`external-input-roots.md`](external-input-roots.md) owns the distinct root,
-artifact, and consumer-edge roles of the resulting records. This contract owns
-the Python expression that selects the artifact and compiles the internal
-input reference.
+[`external-input-roots.md`](external-input-roots.md) owns repository-local
+capture and `ResolvedExternalInputRef` verification. This contract owns the
+Python expression that selects a local file or artifact and compiles the
+internal input reference.
 [`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) owns the Git step
 between generated plan files and execution.
 [`experiment-expansion.md`](experiment-expansion.md) owns deterministic
