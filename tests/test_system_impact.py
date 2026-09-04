@@ -263,6 +263,63 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
     assert (baseline_root / "module.py").read_bytes() == source
 
 
+def test_materialize_plan_coalesces_one_shared_declaration_removal(
+    tmp_path: Path,
+) -> None:
+    """Remove one import declaration named by several ContractTargets once."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"from package import First, Second\n"
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    remove_ref = DeclarationRef(
+        path="contract.md",
+        start_line=1,
+        end_line=1,
+        sha256=hashlib.sha256(b"<!-- contract-remove -->").hexdigest(),
+    )
+    declaration_end = len(source.rstrip(b"\n"))
+    graph = _source_graph(
+        nodes=tuple(
+            SourceNode(
+                node_id=f"module.py:{symbol}",
+                path="module.py",
+                symbol=symbol,
+                kind="import",
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=declaration_end,
+                sha256=hashlib.sha256(source.rstrip(b"\n")).hexdigest(),
+            )
+            for symbol in ("First", "Second")
+        ),
+    )
+    traceability = _traceability(
+        targets=tuple(
+            _target(
+                action="remove",
+                path="module.py",
+                symbol=symbol,
+                declaration=remove_ref,
+            )
+            for symbol in ("First", "Second")
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == b"\n"
+
+
 def _traceability(
     *,
     targets: tuple[ContractTarget, ...],

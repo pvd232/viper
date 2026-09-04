@@ -192,7 +192,7 @@ def materialize_plan(
         starts = [0]
         for line in lines:
             starts.append(starts[-1] + len(line))
-        replacements: list[tuple[int, int, bytes]] = []
+        replacements: dict[tuple[int, int], bytes] = {}
         additions: list[bytes] = []
         for target in file_targets:
             node = nodes.get((target.target.path, target.target.symbol))
@@ -216,9 +216,16 @@ def materialize_plan(
                 else _declaration_payload(plan_root, target)
             )
             assert payload is not None or target.action == "remove"
-            replacements.append((start, end, b"" if payload is None else payload))
+            span = (start, end)
+            replacement = b"" if payload is None else payload
+            if span in replacements and replacements[span] != replacement:
+                raise ScheduleError("one declaration has conflicting replacements")
+            replacements[span] = replacement
 
-        ordered_replacements = sorted(replacements)
+        ordered_replacements = sorted(
+            (start, end, payload)
+            for (start, end), payload in replacements.items()
+        )
         if any(
             current[0] < previous[1]
             for previous, current in zip(

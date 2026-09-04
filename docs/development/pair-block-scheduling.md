@@ -261,6 +261,7 @@ targets = [
     "tests/test_system_impact.py:scheduling",
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
+    "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
     "tools/check_plan.py:annotations",
     "tools/check_plan.py:argparse",
     "tools/check_plan.py:hashlib",
@@ -302,6 +303,7 @@ targets = [
 tests = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
+    "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
 ]
 gate = "python -m pytest tests/test_system_impact.py -k materialize_plan -q"
 depends_on = ["P0-SIG-06"]
@@ -578,7 +580,7 @@ def materialize_plan(
         starts = [0]
         for line in lines:
             starts.append(starts[-1] + len(line))
-        replacements: list[tuple[int, int, bytes]] = []
+        replacements: dict[tuple[int, int], bytes] = {}
         additions: list[bytes] = []
         for target in file_targets:
             node = nodes.get((target.target.path, target.target.symbol))
@@ -602,9 +604,16 @@ def materialize_plan(
                 else _declaration_payload(plan_root, target)
             )
             assert payload is not None or target.action == "remove"
-            replacements.append((start, end, b"" if payload is None else payload))
+            span = (start, end)
+            replacement = b"" if payload is None else payload
+            if span in replacements and replacements[span] != replacement:
+                raise ScheduleError("one declaration has conflicting replacements")
+            replacements[span] = replacement
 
-        ordered_replacements = sorted(replacements)
+        ordered_replacements = sorted(
+            (start, end, payload)
+            for (start, end), payload in replacements.items()
+        )
         if any(
             current[0] < previous[1]
             for previous, current in zip(
@@ -802,6 +811,65 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
         "def old():\n    return 3\n\n\n\ndef added():\n    return old()\n"
     )
     assert (baseline_root / "module.py").read_bytes() == source
+```
+
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal -->
+```python contract-target
+def test_materialize_plan_coalesces_one_shared_declaration_removal(
+    tmp_path: Path,
+) -> None:
+    """Remove one import declaration named by several ContractTargets once."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"from package import First, Second\n"
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    remove_ref = DeclarationRef(
+        path="contract.md",
+        start_line=1,
+        end_line=1,
+        sha256=hashlib.sha256(b"<!-- contract-remove -->").hexdigest(),
+    )
+    declaration_end = len(source.rstrip(b"\n"))
+    graph = _source_graph(
+        nodes=tuple(
+            SourceNode(
+                node_id=f"module.py:{symbol}",
+                path="module.py",
+                symbol=symbol,
+                kind="import",
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=declaration_end,
+                sha256=hashlib.sha256(source.rstrip(b"\n")).hexdigest(),
+            )
+            for symbol in ("First", "Second")
+        ),
+    )
+    traceability = _traceability(
+        targets=tuple(
+            _target(
+                action="remove",
+                path="module.py",
+                symbol=symbol,
+                declaration=remove_ref,
+            )
+            for symbol in ("First", "Second")
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == b"\n"
 ```
 
 **File: `tools/check_plan.py`**
