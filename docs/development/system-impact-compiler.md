@@ -224,7 +224,7 @@ The four checks are complementary:
 | --- | --- |
 | AST declaration extraction | Exact target identity and declaration bytes |
 | CodeQL | Represented dependency structure and the direct neighborhood |
-| Pyright | Static compatibility of the fully materialized candidate |
+| Pyright | Static compatibility of the fully materialized production source |
 | PairBlock gates | Runtime behavior selected by the contract |
 
 CodeQL establishes represented source dependencies. Pyright runs over the
@@ -1268,7 +1268,7 @@ the Phase 0 checker returns the complete records to its caller.
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 | `system.source.writes` <!-- verifier-rule: system.source.writes requirement=SIG-06 --> | The checked-in CodeQL pack emits `writes` edges for a function writing a declared module variable and a method writing a declared class attribute; every emitted edge retains the assignment location. |
 | `system.one_hop.recorded` <!-- verifier-rule: system.one_hop.recorded requirement=SIG-07 --> | `check_plan()` derives the exact added and removed policy-selected one-hop edges from the valid baseline and materialized source graphs; the realized-delta check rejects changed declarations outside the selected PairBlocks. |
-| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/check_plan.py:validate` runs Pyright against the fully materialized candidate and stops before candidate CodeQL analysis or PairBlock gates when static interfaces are incompatible. |
+| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/check_plan.py:validate` runs Pyright against the fully materialized production source and stops before candidate CodeQL analysis or PairBlock gates when static interfaces are incompatible. PairBlock gates own test behavior. |
 
 ## 8. Propagation
 

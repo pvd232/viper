@@ -2611,6 +2611,7 @@ targets = [
     "src/viper/_parameter/validation.py:TypeVar",
     "src/viper/_parameter/validation.py:cast",
     "src/viper/_parameter/validation.py:ParameterModelRef",
+    "src/viper/_parameter/validation.py:ParameterizedSpec",
     "src/viper/_parameter/validation.py:ParameterSetT",
     "src/viper/experiments.py:parameters",
     "src/viper/experiments.py:params",
@@ -2622,8 +2623,12 @@ targets = [
     "src/viper/metrics.py:ParameterModelRef",
     "src/viper/metrics.py:MetricParamsT",
     "src/viper/_verification/metrics.py:MetricId",
+    "src/viper/_verification/plan.py:EvaluateSpec",
     "src/viper/_verification/plan.py:EvalSpec",
     "src/viper/_verification/plan.py:ResolvedFileRef",
+    "src/viper/_verification/plan.py:_DATA_ROLE_RANK",
+    "src/viper/_verification/plan.py:_verify_stage_data_roles",
+    "src/viper/_verification/plan.py:verify_stage_objectives",
     "src/viper/execution/_benchmark.py:EvaluateSpec",
     "src/viper/execution/_benchmark.py:EvalSpec",
     "src/viper/verification/__init__.py:EvaluateSpec",
@@ -2667,6 +2672,8 @@ targets = [
     "src/viper/metrics.py:MetricSpec",
     "src/viper/metrics.py:MetricContext",
     "src/viper/metrics.py:measure",
+    "src/viper/benchmark.py:EvaluationId",
+    "src/viper/benchmark.py:EvalId",
     "src/viper/benchmark.py:BenchmarkSpec",
     "src/viper/execution/_benchmark.py:_metric_receipts",
     "src/viper/execution/_benchmark.py:benchmark",
@@ -2694,6 +2701,8 @@ id = "P5-AIR-02"
 requirements = ["AIR-01"]
 targets = [
     "src/viper/_verification/attempt.py:ExecutionContext",
+    "src/viper/_verification/attempt.py:EvaluateSpec",
+    "src/viper/_verification/attempt.py:EvalSpec",
     "src/viper/_verification/attempt.py:EnvSpec",
     "src/viper/_verification/attempt.py:GCEEnvSpec",
     "src/viper/_verification/attempt.py:ResolvedEnv",
@@ -2767,6 +2776,8 @@ targets = [
     "src/viper/runtime.py:observe_execution",
     "src/viper/runs.py:RunSpec",
     "src/viper/metrics.py:MetricExecutionReceipt",
+    "src/viper/metrics.py:PythonEnvironmentSpec",
+    "src/viper/metrics.py:PythonEnvSpec",
     "src/viper/execution/_resolution.py:resolve_environment",
     "src/viper/execution/_resolution.py:resolve_runner_environment",
     "src/viper/execution/_resolution.py:resolve_env",
@@ -2786,6 +2797,7 @@ targets = [
     "src/viper/_verification/attempt.py:_verify_effective_env",
     "src/viper/_verification/attempt.py:_verify_stage_invocation",
     "src/viper/_verification/attempt.py:verify_attempt_stages",
+    "src/viper/_verification/attempt.py:verify_attempt_files",
     "src/viper/_verification/metrics.py:_verify_metric_worker_runtime",
     "src/viper/_verification/metrics.py:verify_recomputed_metrics",
     "src/viper/_verification/plan.py:verify_run_plan_relationships",
@@ -2983,6 +2995,8 @@ targets = [
     "src/viper/authoring.py:stage",
     "src/viper/authoring.py:freeze_run_plan",
     "src/viper/project.py:_project_files",
+    "src/viper/execution/_materialization.py:resolve_inputs",
+    "src/viper/execution/_metric.py:_resolve_metric_dependencies",
     "tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring",
     "tests/test_protocol.py:test_python_stage_drafts_freeze_to_protocol_specs",
 ]
@@ -3063,6 +3077,9 @@ from typing import TypeVar, cast
 from ..params import ParameterModelRef
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_parameter/validation.py:ParameterizedSpec -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:ParameterSetT -->
 ```python contract-target
 ParameterSetT = TypeVar("ParameterSetT", bound=params.ParameterSet)
@@ -3114,6 +3131,9 @@ from ..ids import MetricId
 ```python contract-target
 from ..stages import EvalSpec
 ```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_verification/plan.py:EvaluateSpec -->
+<!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_verification/plan.py:ResolvedFileRef -->
 ```python contract-target
@@ -3921,7 +3941,7 @@ def instantiate_parameters(
 def validate_stage_parameters(
     repository_root: Path,
     stage_spec_path: Path,
-    stage: ParameterizedSpec,
+    stage: object,
     *,
     timeout_seconds: float | None = None,
 ) -> dict[str, JsonValue]:
@@ -4123,6 +4143,14 @@ def measure(
 
 **File: `src/viper/benchmark.py`**
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/benchmark.py:EvaluationId -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/benchmark.py:EvalId -->
+```python contract-target
+from .ids import EvalId, InputName, MetricId
+```
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/benchmark.py:BenchmarkSpec -->
 ```python contract-target
 class BenchmarkSpec(ProtocolModel):
@@ -4130,7 +4158,7 @@ class BenchmarkSpec(ProtocolModel):
 
     schema_version: Literal[1] = 1
     benchmark_id: BenchmarkId
-    eval_id: EvaluationId
+    eval_id: EvalId
     eval_dataset: ArtifactPointerRef
     splits: dict[InputName, ArtifactPointerRef] = Field(min_length=1)
     metrics: tuple[MetricCriterion, ...] = Field(min_length=1)
@@ -5091,6 +5119,14 @@ class RunSpec(ProtocolModel):
 
 **File: `src/viper/metrics.py`**
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/metrics.py:PythonEnvironmentSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/metrics.py:PythonEnvSpec -->
+```python contract-target
+from .runtime import PythonEnvSpec
+```
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
 ```python contract-target
 class MetricExecutionReceipt(ProtocolModel):
@@ -5108,7 +5144,7 @@ class MetricExecutionReceipt(ProtocolModel):
     dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
     startup: ProcessStartupReceipt
     execution_context: ExecutionContext
-    python_environment: PythonEnvironmentSpec
+    python_env: PythonEnvSpec
     value: float = Field(allow_inf_nan=False)
     started_at: AwareDatetime
     completed_at: AwareDatetime
@@ -5334,6 +5370,7 @@ def execute_attempt(
     resolved_stage_refs: list[ResolvedStageRef] = []
     invocation_refs: list[ResolvedStageInvocationRef] = []
     completed: dict[StageId, ResolvedStageRef] = {}
+    completed_results: dict[StageId, ResolvedBaseSpec] = {}
     loaded_stages: dict[StageId, BaseSpec] = {}
     measurement_paths: list[Path] = []
     metric_verification_paths: list[Path] = []
@@ -5383,6 +5420,10 @@ def execute_attempt(
             effective_environment = stage.env or run.env
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
+            captured_inputs: dict[InputName, SnapshotFileRef] = {}
+            stored_input_references: dict[
+                InputName, tuple[ResolvedFileRef, ...]
+            ] = {}
             input_paths: dict[str, Path] = {}
             process = None
             journal.append(
@@ -5430,16 +5471,22 @@ def execute_attempt(
                 ):
                     raise RunError("stage source differs from the frozen source")
                 if isinstance(stage, InternalSpec):
-                    resolved_inputs, input_paths = resolve_inputs(
+                    (
+                        resolved_inputs,
+                        input_paths,
+                        captured_inputs,
+                        stored_input_references,
+                    ) = resolve_inputs(
                         root,
                         workspace,
+                        run.run_id,
+                        attempt_id,
                         stage_reference.stage_id,
                         stage,
                         completed,
                         loaded_stages,
                         fetcher,
                         policy,
-                        store,
                     )
                 try:
                     process = execute_stage_process(
@@ -5521,7 +5568,11 @@ def execute_attempt(
                 f"/stages/{stage_reference.stage_id}/resolved.yaml"
             )
             resolved_raw = serialize_document(resolved)
-            snapshot_paths: dict[str, Path] = {}
+            verify_captured_inputs(root, captured_inputs)
+            snapshot_paths: dict[str, Path] = {
+                reference.path: root / reference.path
+                for reference in captured_inputs.values()
+            }
             if resolved_retrievals is not None:
                 for retrieval in resolved_retrievals.values():
                     retrieval_path = retrieval.body.path
@@ -5554,19 +5605,25 @@ def execute_attempt(
             )
             resolved_stage_refs.append(resolved_stage_ref)
             completed[stage_reference.stage_id] = resolved_stage_ref
-            run_after_stage_metrics(
-                root,
-                run,
-                stage_reference.stage_id,
-                stage,
-                experiment,
-                input_paths,
-                measurement_paths,
-                metric_verification_paths,
-                store,
-                timeout_seconds,
-                attempt_id,
-            )
+            completed_results[stage_reference.stage_id] = resolved
+            if isinstance(stage, InternalSpec):
+                resolved_internal = ResolvedInternalSpec.model_validate(resolved)
+                run_after_stage_metrics(
+                    root,
+                    run,
+                    stage_reference.stage_id,
+                    stage,
+                    resolved_internal,
+                    resolved_stage_ref,
+                    completed_results,
+                    stored_input_references,
+                    experiment,
+                    input_paths,
+                    measurement_paths,
+                    metric_verification_paths,
+                    timeout_seconds,
+                    attempt_id,
+                )
             if process is not None:
                 log_files[
                     f"{run_root}/attempts/{attempt_id}/logs/"
@@ -6219,6 +6276,7 @@ def main(argv: list[str] | None = None) -> int:
             root,
             run,
             binding.stage_id,
+            binding.attempt_id,
         )
         if stage != planned_stage:
             raise ValueError("startup.plan: selected stage differs from RunSpec")
@@ -6422,6 +6480,7 @@ def main(argv: list[str] | None = None) -> int:
             stage_id=context.stage_id,
             purpose=context.purpose,
             implementation=context.metric.implementation,
+            parameter_model=context.metric.parameter_model,
             params=context.metric.params,
             dependencies=context.dependencies,
             startup=initialization.receipt,
@@ -6801,7 +6860,7 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
                 if (
                     input_ref.producer_stage_id not in prior
                     or producer is None
-                    or input_ref.producer_artifact not in producer.artifacts
+                    or input_ref.name not in producer.artifacts
                 ):
                     valid_future_inputs = False
         checks.append(
@@ -6899,6 +6958,14 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
 
 **File: `src/viper/_verification/attempt.py`**
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:EvaluateSpec -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:EvalSpec -->
+```python contract-target
+from ..stages import EvalSpec
+```
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:_verify_effective_environment -->
 <!-- contract-remove -->
 
@@ -6992,7 +7059,13 @@ def _verify_stage_invocation(
         stage_id=stage_id,
         parameter_model=stage.parameter_model,
         parameter_digest=document_digest(stage.params),
-        inputs=_logical_input_paths(run, stage_id, stage, stage_specs),
+        inputs=_logical_input_paths(
+            run,
+            attempt.attempt_id,
+            stage_id,
+            stage,
+            stage_specs,
+        ),
         artifacts={name: value.path for name, value in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
@@ -7322,6 +7395,145 @@ def verify_attempt_stages(
     return verified_stages
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:verify_attempt_files -->
+```python contract-target
+def verify_attempt_files(
+    attempt: RunAttempt,
+    run: RunSpec,
+    experiment: ExperimentSpec,
+    stage_specs: Mapping[StageId, BaseSpec],
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> tuple[Measurement, ...]:
+    """Verify an attempt's measurements and logs against their file identities."""
+    attempt_file_snapshots = {
+        identity
+        for reference in (
+            *attempt.measurement_files,
+            *attempt.metric_verification_files,
+            *attempt.log_files,
+        )
+        if (identity := artifact_revision_identity(reference.stored_at)) is not None
+    }
+    if len(attempt_file_snapshots) > 1:
+        raise VerificationError(
+            "attempt measurement and log files must use one immutable snapshot"
+        )
+
+    completed_stage_ids = {stage.stage_id for stage in attempt.resolved_stages}
+    planned_stage_ids = tuple(stage.stage_id for stage in run.stages)
+    permitted_log_stage_ids = set(completed_stage_ids)
+    if attempt.status != "succeeded" and len(completed_stage_ids) < len(
+        planned_stage_ids
+    ):
+        permitted_log_stage_ids.add(planned_stage_ids[len(completed_stage_ids)])
+    permitted_metrics = {metric.metric_id for metric in experiment.metrics}
+    measurements: list[Measurement] = []
+    root = run_root(run)
+    for reference in attempt.measurement_files:
+        if not isinstance(reference.stored_at, (HuggingFaceFileRef, LocalFileRef)):
+            raise VerificationError(
+                "measurement files must use immutable artifact storage"
+            )
+        measurement_root = f"{root}/attempts/{attempt.attempt_id}/measurements"
+        if not str(reference.stored_at.path).startswith(f"{measurement_root}/"):
+            raise VerificationError(
+                "measurement file is outside the canonical run path"
+            )
+
+        raw = read_resolved_file(reference, fetcher=fetcher)
+        try:
+            lines = raw.decode("utf-8").splitlines()
+        except UnicodeDecodeError as exc:
+            raise VerificationError("measurement file is not valid UTF-8") from exc
+
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                measurement = Measurement.model_validate(
+                    json.loads(line, object_pairs_hook=unique_json_object)
+                )
+            except ValueError as exc:
+                raise VerificationError(
+                    "measurement file contains an invalid Measurement row"
+                ) from exc
+
+            if measurement.run_id != run.run_id:
+                raise VerificationError("measurement run ID does not match the run")
+            if measurement.attempt_id != attempt.attempt_id:
+                raise VerificationError(
+                    "measurement attempt ID does not match its containing attempt"
+                )
+            if measurement.stage_id not in completed_stage_ids:
+                raise VerificationError(
+                    "measurement stage is absent from its containing attempt"
+                )
+            if measurement.metric_id not in permitted_metrics:
+                raise VerificationError(
+                    "measurement metric is absent from the experiment"
+                )
+            stage_spec = stage_specs.get(measurement.stage_id)
+            if stage_spec is None:
+                raise VerificationError(
+                    "measurement stage has no loaded stage specification"
+                )
+            if measurement.metric_id not in stage_spec.metric_ids:
+                raise VerificationError(
+                    "measurement metric is absent from its stage spec"
+                )
+            expected_path = (
+                f"{measurement_root}/{measurement.stage_id}."
+                f"{measurement.metric_id}.jsonl"
+            )
+            if reference.stored_at.path != expected_path:
+                raise VerificationError(
+                    "measurement file path does not match its stage and metric"
+                )
+            if not (
+                attempt.started_at <= measurement.measured_at <= attempt.completed_at
+            ):
+                raise VerificationError(
+                    "measurement timestamp falls outside its containing attempt"
+                )
+            measurements.append(measurement)
+
+    if attempt.status == "succeeded":
+        for stage_id in completed_stage_ids:
+            stage_spec = stage_specs[stage_id]
+            if not isinstance(stage_spec, EvalSpec):
+                continue
+            for metric_id in stage_spec.metric_ids:
+                matches = [
+                    measurement
+                    for measurement in measurements
+                    if measurement.stage_id == stage_id
+                    and measurement.metric_id == metric_id
+                ]
+                if len(matches) != 1:
+                    raise VerificationError(
+                        f"successful evaluation stage {stage_id!r} must record "
+                        f"exactly one measurement for metric {metric_id!r}"
+                    )
+
+    for reference in attempt.log_files:
+        if not isinstance(reference.stored_at, (HuggingFaceFileRef, LocalFileRef)):
+            raise VerificationError("log files must use immutable artifact storage")
+        log_pattern = re.compile(
+            rf"^{re.escape(root)}/attempts/{attempt.attempt_id}/logs/"
+            r"([a-z][a-z0-9_]*)\.(stdout|stderr)\.log$"
+        )
+        match = log_pattern.fullmatch(str(reference.stored_at.path))
+        if match is None or match.group(1) not in permitted_log_stage_ids:
+            raise VerificationError(
+                "log file path does not match its attempt and stage"
+            )
+        read_resolved_file(reference, fetcher=fetcher)
+
+    return tuple(measurements)
+```
+
+
 **File: `src/viper/_verification/metrics.py`**
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/metrics.py:_verify_metric_worker_runtime -->
@@ -7584,6 +7796,109 @@ def verify_recomputed_metrics(
                 )
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_verification/plan.py:_verify_stage_data_roles -->
+```python contract-target
+def _verify_stage_data_roles(
+    stage_id: StageId,
+    stage: BaseSpec,
+    prior_stages: Mapping[StageId, BaseSpec],
+) -> None:
+    """Reject restricted inputs and artifact-role downgrades within a run plan."""
+    if not isinstance(stage, InternalSpec):
+        return
+
+    input_roles = _stage_input_roles(stage_id, stage, prior_stages)
+
+    if isinstance(stage, TrainSpec):
+        restricted = {
+            name: role
+            for name, role in input_roles.items()
+            if _DATA_ROLE_RANK[role] > _DATA_ROLE_RANK["validation"]
+        }
+        if restricted:
+            names = ", ".join(sorted(restricted))
+            raise VerificationError(
+                f"training stage {stage_id!r} cannot consume evaluation or "
+                f"benchmark inputs: {names}"
+            )
+
+    if isinstance(stage, EvalSpec):
+        model_role = input_roles[PARAMETERS_INPUT]
+        if _DATA_ROLE_RANK[model_role] > _DATA_ROLE_RANK["validation"]:
+            raise VerificationError(
+                f"evaluation stage {stage_id!r} parameters must have training "
+                "or validation data_role"
+            )
+
+        dataset_input = stage.inputs["evaluation_dataset"]
+        assert isinstance(dataset_input, StoredInputRef)
+        evaluation_role = dataset_input.data_role
+        incompatible = {
+            name: role
+            for name, role in input_roles.items()
+            if _DATA_ROLE_RANK[role] > _DATA_ROLE_RANK[evaluation_role]
+        }
+        if incompatible:
+            names = ", ".join(sorted(incompatible))
+            raise VerificationError(
+                f"evaluation stage {stage_id!r} consumes inputs more restricted "
+                f"than its {evaluation_role!r} evaluation: {names}"
+            )
+
+    highest_input_rank = max(_DATA_ROLE_RANK[role] for role in input_roles.values())
+    downgraded_outputs = {
+        name
+        for name, artifact in stage.artifacts.items()
+        if _DATA_ROLE_RANK[artifact.data_role] < highest_input_rank
+    }
+    if downgraded_outputs:
+        names = ", ".join(sorted(downgraded_outputs))
+        raise VerificationError(
+            f"stage {stage_id!r} artifacts cannot have a less restricted "
+            f"data_role than their inputs: {names}"
+        )
+```
+
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_verification/plan.py:verify_stage_objectives -->
+```python contract-target
+def verify_stage_objectives(
+    stages: Mapping[StageId, BaseSpec],
+    experiment: ExperimentSpec,
+) -> None:
+    """Match every stage objective with one selected metric of an allowed mode."""
+    metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    for stage_id, stage in stages.items():
+        objective = getattr(stage, "objective", None)
+        if objective is None:
+            continue
+        if objective.metric_id not in stage.metric_ids:
+            raise VerificationError(
+                f"objective of stage {stage_id!r} is absent from metric IDs"
+            )
+        metric = metrics.get(objective.metric_id)
+        if metric is None:
+            raise VerificationError(
+                f"objective of stage {stage_id!r} is absent from the experiment"
+            )
+        if isinstance(stage, TrainSpec) and metric.mode != "live":
+            raise VerificationError("training objectives require live metrics")
+        if isinstance(stage, EvalSpec) and metric.mode != "recompute":
+            raise VerificationError("evaluation objectives require recomputed metrics")
+```
+
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_verification/plan.py:_DATA_ROLE_RANK -->
+```python contract-target
+_DATA_ROLE_RANK: dict[DataRole, int] = {
+    "training": 0,
+    "validation": 1,
+    "eval": 2,
+    "benchmark": 3,
+}
+```
+
+
 **File: `src/viper/_verification/plan.py`**
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/plan.py:verify_run_plan_relationships -->
@@ -7653,24 +7968,6 @@ def verify_run_plan_relationships(
         if undeclared_metrics:
             raise VerificationError(f"stage {stage_id!r} selects undeclared metrics")
 
-        selected_kinds = {
-            experiment_metrics[metric_id].kind for metric_id in stage.metric_ids
-        }
-        if isinstance(stage, EvalSpec):
-            if selected_kinds - {"eval"}:
-                raise VerificationError(
-                    f"eval stage {stage_id!r} must select eval metrics"
-                )
-        elif isinstance(stage, TrainSpec):
-            if selected_kinds - {"training", "diagnostic"}:
-                raise VerificationError(
-                    f"training stage {stage_id!r} selects an incompatible metric"
-                )
-        elif selected_kinds - {"diagnostic"}:
-            raise VerificationError(
-                f"stage {stage_id!r} must select diagnostic metrics"
-            )
-
     eval_stages = [stage for stage in stages.values() if isinstance(stage, EvalSpec)]
     expected_eval_role: DataRole = "benchmark" if benchmark is not None else "eval"
     for eval in eval_stages:
@@ -7718,7 +8015,7 @@ def verify_run_plan_relationships(
         raise VerificationError("benchmark eval model must select the run estimator")
     if (
         model_input.producer_stage_id != run.estimator.stage_id
-        or model_input.producer_artifact != run.estimator.artifact_name
+        or model_input.name != run.estimator.artifact_name
     ):
         raise VerificationError("benchmark eval model must select the run estimator")
 
@@ -7751,7 +8048,7 @@ def verify_run_plan_relationships(
         raise VerificationError("eval metrics do not match the benchmark specification")
     for criterion in benchmark.metrics:
         metric = experiment_metrics[criterion.metric_id]
-        if metric.kind != "eval" or metric.mode != "recompute":
+        if metric.mode != "recompute":
             raise VerificationError(
                 f"benchmark criterion {criterion.metric_id!r} must select a "
                 "recomputed eval metric"
@@ -8941,7 +9238,6 @@ def _freeze_input(
         path = resolve_path(root, draft.path, operation="read")
         return ExternalInputRef(
             source=LocalSource(path=path.relative_to(root).as_posix()),
-            path=draft.path,
             data_role=draft.data_role,
         )
     if isinstance(draft, StageDraftArtifactRef):
@@ -8950,7 +9246,7 @@ def _freeze_input(
             raise ValueError("stage artifact must have one producer in this plan")
         return FutureInputRef(
             producer_stage_id=owners[0],
-            producer_artifact=draft.artifact_name,
+            name=draft.artifact_name,
         )
     raise ValueError("prior-run inputs are compiled in Master Phase 7")
 ```
@@ -8964,7 +9260,7 @@ def _freeze_stage(
     draft: StageSpecDraft,
 ) -> Spec:
     """Freeze one Python stage draft into its protocol declaration."""
-    artifacts = {
+    artifacts: dict[ArtifactName, ArtifactSpec] = {
         name: _freeze_artifact(root, run_root, artifact)
         for name, artifact in draft.artifacts.items()
     }
@@ -9025,6 +9321,8 @@ def _freeze_stage(
     )
     if isinstance(draft, EmbedSpecDraft):
         return EmbedSpec(**common, objective=objective)
+    if objective is None:
+        raise ValueError("train and eval stages require an objective")
     if isinstance(draft, TrainSpecDraft):
         return TrainSpec(**common, objective=objective)
     return EvalSpec(
@@ -9060,7 +9358,7 @@ def run_artifact(
 def download(
     *,
     inputs: dict[InputName, HttpRequestSpec],
-    artifacts: dict[ArtifactName, SingleFileArtifactDraft],
+    artifacts: Mapping[ArtifactName, SingleFileArtifactDraft],
     policy: HttpRetrievalPolicy,
     http: HttpDraft | None = None,
     env: EnvSpec | None = None,
@@ -9070,7 +9368,7 @@ def download(
     return StageDraft(
         spec=DownloadSpecDraft(
             inputs=inputs,
-            artifacts=artifacts,
+            artifacts=dict(artifacts),
             policy=policy,
             http=selected_http,
             env=env,
@@ -9464,6 +9762,132 @@ def test_python_stage_drafts_freeze_to_protocol_specs(tmp_path: Path) -> None:
 ```
 
 <!-- phase-5-contract-targets -->
+
+**File: `src/viper/execution/_materialization.py`**
+
+<!-- contract-target: requirements=AIR-03 block=P5-AIR-04 action=update target=src/viper/execution/_materialization.py:resolve_inputs -->
+```python contract-target
+def resolve_inputs(
+    root: Path,
+    workspace: AttemptWorkspace,
+    run_id: RunId,
+    attempt_id: int,
+    stage_id: StageId,
+    stage: InternalSpec,
+    completed: Mapping[StageId, ResolvedStageRef],
+    stage_specs: Mapping[StageId, BaseSpec],
+    fetcher: RunFetcher,
+    policy: VerificationPolicy,
+) -> tuple[
+    dict[InputName, ResolvedInputRef],
+    dict[str, Path],
+    dict[InputName, SnapshotFileRef],
+    dict[InputName, tuple[ResolvedFileRef, ...]],
+]:
+    """Materialize inputs and retain their existing immutable references."""
+    resolved: dict[InputName, ResolvedInputRef] = {}
+    paths: dict[str, Path] = {}
+    captured: dict[InputName, SnapshotFileRef] = {}
+    stored: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
+    for name, input_ref in stage.inputs.items():
+        if input_ref.kind == "future":
+            producer = completed.get(input_ref.producer_stage_id)
+            if producer is None:
+                raise RunError("future input producer has not completed")
+            resolved[name] = ResolvedFutureInputRef(producer=producer)
+            producer_spec = stage_specs[input_ref.producer_stage_id]
+            artifact = producer_spec.artifacts[input_ref.name]
+            paths[name] = root / artifact.path
+        elif input_ref.kind == "external":
+            resolved_input, captured_path = capture_external_input(
+                root,
+                workspace,
+                run_id=run_id,
+                attempt_id=attempt_id,
+                stage_id=stage_id,
+                input_name=name,
+                input_ref=input_ref,
+            )
+            resolved[name] = resolved_input
+            paths[name] = captured_path
+            captured[name] = resolved_input.file
+        elif input_ref.kind == "stored":
+            pointer_raw = fetcher(input_ref.pointer)
+            pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
+            verified = verify_promoted_artifact(
+                pointer,
+                policy=policy,
+                expected_data_role=input_ref.data_role,
+                fetcher=fetcher,
+            )
+            _materialize_verified_artifact(root, input_ref.path, verified)
+            resolved[name] = ResolvedStoredInputRef(
+                pointer=ResolvedArtifactPointerRef(
+                    sha256=hashlib.sha256(pointer_raw).hexdigest(),
+                    bytes=len(pointer_raw),
+                    stored_at=input_ref.pointer,
+                )
+            )
+            paths[name] = root / input_ref.path
+            stored[name] = verified.references
+    return resolved, paths, captured, stored
+```
+
+
+**File: `src/viper/execution/_metric.py`**
+
+<!-- contract-target: requirements=AIR-03 block=P5-AIR-04 action=update target=src/viper/execution/_metric.py:_resolve_metric_dependencies -->
+```python contract-target
+def _resolve_metric_dependencies(
+    stage: InternalSpec,
+    resolved_stage: ResolvedInternalSpec,
+    current_stage: ResolvedStageRef,
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
+    metric: MetricSpec,
+    stored_inputs: Mapping[InputName, tuple[ResolvedFileRef, ...]],
+) -> tuple[ResolvedMetricDependency, ...]:
+    """Reuse the immutable snapshot references selected by each dependency."""
+    resolved: list[ResolvedMetricDependency] = []
+    for dependency in metric.dependencies:
+        if dependency.source == "artifact":
+            files = tuple(
+                resolve_snapshot_file_ref(current_stage.snapshot, file)
+                for file in _artifact_files(resolved_stage.artifacts[dependency.name])
+            )
+        else:
+            declared = stage.inputs[dependency.name]
+            realized = resolved_stage.inputs[dependency.name]
+            if isinstance(realized, ResolvedExternalInputRef):
+                files = (
+                    resolve_snapshot_file_ref(
+                        current_stage.snapshot,
+                        realized.file,
+                    ),
+                )
+            elif isinstance(realized, ResolvedFutureInputRef):
+                assert isinstance(declared, FutureInputRef)
+                producer = completed_results[declared.producer_stage_id]
+                files = tuple(
+                    resolve_snapshot_file_ref(realized.producer.snapshot, file)
+                    for file in _artifact_files(
+                        producer.artifacts[declared.name]
+                    )
+                )
+            elif isinstance(realized, ResolvedStoredInputRef):
+                files = stored_inputs[dependency.name]
+            else:
+                raise TypeError(
+                    f"unsupported resolved input: {type(realized).__name__}"
+                )
+        resolved.append(
+            ResolvedMetricDependency(
+                dependency=dependency,
+                files=files,
+            )
+        )
+    return tuple(resolved)
+```
+
 
 ## 14. Verdict
 

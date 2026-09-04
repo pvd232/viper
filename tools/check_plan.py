@@ -303,6 +303,7 @@ def validate(
             str(python),
             "-m",
             "pyright",
+            str(candidate / "src"),
             "--project",
             str(candidate / "pyrightconfig.json"),
             "--pythonpath",
