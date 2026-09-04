@@ -3181,11 +3181,19 @@ import viper.params as params
 from viper.stages import eval
 ```
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:ExecutionContext -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:EnvironmentSpec -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:GCEEnvironmentSpec -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:ResolvedEnvironment -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:ResolvedGCEEnvironment -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:ExecutionContext -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:EnvSpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:GCEEnvSpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:ResolvedEnv -->
@@ -6962,6 +6970,8 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
 **File: `src/viper/_verification/attempt.py`**
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:EvaluateSpec -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:BaseSpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:EvalSpec -->
 ```python contract-target
