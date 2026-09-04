@@ -637,15 +637,11 @@ def _guard_imports(
     before: bytes,
     after: bytes,
     targets: list[ContractTarget],
-) -> None:
-    """Reject imported names removed without a matching target."""
+) -> tuple[str, ...]:
+    """Return imported names removed without a matching target."""
     removed = _imports(before) - _imports(after)
     allowed = {target.target.symbol for target in targets if target.action == "remove"}
-    unowned = sorted(removed - allowed)
-    if unowned:
-        raise ScheduleError(
-            f"materialization removed unowned imports from {path}: {unowned}"
-        )
+    return tuple(sorted(removed - allowed))
 
 
 def materialize_plan(
@@ -676,6 +672,7 @@ def materialize_plan(
     for target in targets:
         by_path[target.target.path].append(target)
 
+    import_errors: list[str] = []
     for relative_path, file_targets in sorted(by_path.items()):
         output = destination / relative_path
         source = output.read_bytes() if output.exists() else b""
@@ -851,9 +848,16 @@ def materialize_plan(
                     inserted += b"\n"
             source = source[:start] + inserted + replacement + source[end:]
         if relative_path.endswith(".py"):
-            _guard_imports(relative_path, before, source, file_targets)
+            unowned = _guard_imports(relative_path, before, source, file_targets)
+            if unowned:
+                import_errors.append(
+                    f"materialization removed unowned imports from "
+                    f"{relative_path}: {list(unowned)}"
+                )
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(source)
+    if import_errors:
+        raise ScheduleError("\n".join(import_errors))
 
 ```
 
