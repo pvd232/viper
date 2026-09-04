@@ -7,6 +7,7 @@ import hashlib
 import json
 import shutil
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -42,6 +43,20 @@ _EDGE_KINDS = frozenset(
 
 class CodeQLAnalysisError(RuntimeError):
     """Report a failed or internally inconsistent CodeQL analysis."""
+
+
+@dataclass(frozen=True)
+class _Declaration:
+    """Keep one symbol's AST binding and full statement together."""
+
+    symbol: str
+    kind: SourceNodeKind
+    declaration: ast.stmt
+    binding: ast.AST
+
+
+# CodeQL and AST use this key to identify the same declaration within one file.
+_Anchor = tuple[str, SourceNodeKind, int, int]
 
 
 def _hash_parts(parts: Iterable[bytes]) -> str:
@@ -127,34 +142,36 @@ def _run(command: Sequence[str], *, cwd: Path) -> tuple[bytes, bytes]:
 
 def _qualified_declarations(
     tree: ast.Module,
-) -> tuple[tuple[str, ast.stmt, SourceNodeKind], ...]:
-    declarations: list[tuple[str, ast.stmt, SourceNodeKind]] = []
+) -> tuple[_Declaration, ...]:
+    """Collect the declarations represented in the source graph."""
+    declarations: list[_Declaration] = []
 
     def visit(body: Sequence[ast.stmt], prefix: str = "") -> None:
+        """Collect declarations from one module or class body."""
         for node in body:
-            names: tuple[str, ...] = ()
+            bindings: tuple[tuple[str, ast.AST], ...] = ()
             kind: SourceNodeKind | None = None
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                names = (node.name,)
+                bindings = ((node.name, node),)
                 kind = "method" if prefix else "function"
             elif isinstance(node, ast.ClassDef):
-                names = (node.name,)
+                bindings = ((node.name, node),)
                 kind = "class"
             elif isinstance(node, ast.Assign):
-                names = tuple(
-                    target.id for target in node.targets if isinstance(target, ast.Name)
+                bindings = tuple(
+                    (target.id, target)
+                    for target in node.targets
+                    if isinstance(target, ast.Name)
                 )
                 kind = "assignment"
             elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                names = (node.target.id,)
+                bindings = ((node.target.id, node.target),)
                 kind = "assignment"
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                names = tuple(
-                    alias.asname
-                    or (
-                        alias.name.split(".", maxsplit=1)[0]
-                        if isinstance(node, ast.Import)
-                        else alias.name
+                bindings = tuple(
+                    (
+                        alias.asname or alias.name,
+                        alias,
                     )
                     for alias in node.names
                     if alias.name != "*"
@@ -163,8 +180,19 @@ def _qualified_declarations(
 
             if kind is None:
                 continue
-            for name in names:
-                declarations.append((f"{prefix}{name}", node, kind))
+
+            # One statement can bind several names, so keep each binding separate.
+            for name, binding in bindings:
+                declarations.append(
+                    _Declaration(
+                        symbol=f"{prefix}{name}",
+                        kind=kind,
+                        declaration=node,
+                        binding=binding,
+                    )
+                )
+
+            # Class members need the class prefix; function locals are not graph nodes.
             if isinstance(node, ast.ClassDef):
                 visit(node.body, f"{prefix}{node.name}.")
 
@@ -173,6 +201,7 @@ def _qualified_declarations(
 
 
 def _byte_offsets(source: bytes) -> tuple[tuple[bytes, ...], tuple[int, ...]]:
+    """Map each source line to its starting byte."""
     lines = tuple(source.splitlines(keepends=True))
     offsets: list[int] = []
     position = 0
@@ -183,11 +212,14 @@ def _byte_offsets(source: bytes) -> tuple[tuple[bytes, ...], tuple[int, ...]]:
 
 
 def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes]:
+    """Slice the complete statement from the original source bytes."""
     if node.end_lineno is None or node.end_col_offset is None:
         raise CodeQLAnalysisError("Python declaration has no complete source span")
     lines, offsets = _byte_offsets(source)
     start_line = node.lineno
     start_col = node.col_offset
+
+    # Decorators belong to the declaration even though AST starts at def or class.
     if (
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
         and node.decorator_list
@@ -201,6 +233,8 @@ def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes
     end_line = lines[node.end_lineno - 1]
     end_col = node.end_col_offset
     suffix = end_line[end_col:]
+
+    # Keep a line-end directive with the statement it controls.
     if suffix.lstrip().startswith(b"#"):
         end_col = len(end_line.rstrip(b"\r\n"))
     end = offsets[node.end_lineno - 1] + end_col
@@ -213,6 +247,56 @@ def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes
     )
 
 
+def _binding_span(node: ast.AST, source: bytes) -> tuple[int, int, int, int]:
+    """Read the AST coordinates used to match a CodeQL anchor."""
+    start_line = getattr(node, "lineno", None)
+    start_col = getattr(node, "col_offset", None)
+    end_line = getattr(node, "end_lineno", None)
+    end_col = getattr(node, "end_col_offset", None)
+    if (
+        not isinstance(start_line, int)
+        or not isinstance(start_col, int)
+        or not isinstance(end_line, int)
+        or not isinstance(end_col, int)
+    ):
+        raise CodeQLAnalysisError("Python binding has no complete source span")
+    lines, offsets = _byte_offsets(source)
+
+    # AST columns count UTF-8 bytes, so validate them against the original source.
+    try:
+        start = offsets[start_line - 1] + start_col
+        end = offsets[end_line - 1] + end_col
+    except (IndexError, TypeError) as error:
+        raise CodeQLAnalysisError(
+            "Python binding has an invalid source span"
+        ) from error
+    if start < 0 or end < start or end > len(source):
+        raise CodeQLAnalysisError("Python binding has an invalid source span")
+    return start_line, start_col, end_line, end_col
+
+
+def _codeql_byte_col(source: bytes, line: int, column: int) -> int:
+    """Convert CodeQL's character column to the byte column used by AST."""
+    lines = source.splitlines(keepends=True)
+    if line < 1 or line > len(lines) or column < 1:
+        raise CodeQLAnalysisError("CodeQL emitted an invalid binding location")
+    try:
+        text = lines[line - 1].decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise CodeQLAnalysisError("Python source is not valid UTF-8") from error
+    prefix = text[: column - 1]
+    if len(prefix) != column - 1:
+        raise CodeQLAnalysisError("CodeQL emitted an invalid binding column")
+
+    # A non-ASCII character can occupy more than one UTF-8 byte.
+    return len(prefix.encode("utf-8"))
+
+
+def _source_node_id(path: str, symbol: str) -> str:
+    """Return the stable target key after uniqueness has been proved."""
+    return f"{path}:{symbol}"
+
+
 def _table_rows(payload: Any) -> list[list[Any]]:
     if not isinstance(payload, dict) or len(payload) != 1:
         raise CodeQLAnalysisError("decoded BQRS result has no unique result set")
@@ -223,91 +307,184 @@ def _table_rows(payload: Any) -> list[list[Any]]:
 
 
 def _load_nodes(root: Path, rows: list[list[Any]]) -> tuple[SourceNode, ...]:
-    observed_lines: set[tuple[str, int]] = set()
+    """Join every CodeQL anchor to one AST declaration or reject the graph."""
+    nodes: dict[str, SourceNode] = {}
+    files: dict[str, tuple[bytes, dict[_Anchor, _Declaration]]] = {}
+
     for row in rows:
+        if len(row) != 5:
+            raise CodeQLAnalysisError("CodeQL emitted a malformed declaration row")
+
         path = str(row[0])
         if any(part in IGNORED_PARTS for part in Path(path).parts):
             continue
-        observed_lines.add((path, int(row[3])))
-    nodes: dict[str, SourceNode] = {}
-    for path in sorted({path for path, _ in observed_lines}):
-        source_path = root / path
-        if not source_path.is_file() or source_path.suffix != ".py":
-            continue
-        source = source_path.read_bytes()
-        try:
-            tree = ast.parse(source.decode("utf-8"), type_comments=True)
-        except (SyntaxError, UnicodeDecodeError) as error:
-            raise CodeQLAnalysisError(
-                f"cannot normalize CodeQL declarations in {path}"
-            ) from error
-        for symbol, declaration, kind in _qualified_declarations(tree):
-            codeql_lines = {declaration.lineno}
-            if isinstance(
-                declaration, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
-                codeql_lines.add(
-                    declaration.decorator_list[0].lineno
-                    if declaration.decorator_list
-                    else declaration.lineno
+
+        # CodeQL emits one row per declaration, so parse each file only once.
+        if path not in files:
+            source_path = root / path
+            if not source_path.is_file() or source_path.suffix != ".py":
+                raise CodeQLAnalysisError(f"CodeQL declaration path is absent: {path}")
+
+            source = source_path.read_bytes()
+            try:
+                tree = ast.parse(
+                    source.decode("utf-8"),
+                    type_comments=True,
                 )
-            if not any((path, line) in observed_lines for line in codeql_lines):
-                continue
-            start_line, start_col, end_line, end_col, exact = _node_span(
-                declaration, source
+            except (SyntaxError, UnicodeDecodeError) as error:
+                raise CodeQLAnalysisError(
+                    f"cannot resolve CodeQL declarations in {path}"
+                ) from error
+
+            # Map each CodeQL location to the AST declaration at that location.
+            index: dict[_Anchor, _Declaration] = {}
+
+            for declaration in _qualified_declarations(tree):
+                line, column, _, _ = _binding_span(
+                    declaration.binding,
+                    source,
+                )
+                key = (
+                    declaration.symbol,
+                    declaration.kind,
+                    line,
+                    column,
+                )
+
+                if key in index:
+                    raise CodeQLAnalysisError(
+                        f"duplicate AST declaration anchor in {path}: {key}"
+                    )
+
+                index[key] = declaration
+
+            files[path] = source, index
+
+        source, index = files[path]
+        symbol = str(row[1])
+        kind = cast(SourceNodeKind, str(row[2]))
+        line = int(row[3])
+        column = _codeql_byte_col(source, line, int(row[4]))
+        key = symbol, kind, line, column
+
+        try:
+            declaration = index[key]
+        except KeyError as error:
+            raise CodeQLAnalysisError(
+                "CodeQL anchor has no matching AST declaration: "
+                f"{path}:{symbol} at {line}:{column}"
+            ) from error
+
+        (
+            binding_start_line,
+            binding_start_col,
+            binding_end_line,
+            binding_end_col,
+        ) = _binding_span(declaration.binding, source)
+
+        start_line, start_col, end_line, end_col, exact = _node_span(
+            declaration.declaration,
+            source,
+        )
+
+        node_id = _source_node_id(path, symbol)
+
+        # Contract targets omit location, so a second occurrence is ambiguous.
+        if node_id in nodes:
+            raise CodeQLAnalysisError(
+                f"source target does not identify one declaration: {path}:{symbol}"
             )
-            node_id = f"{path}:{symbol}"
-            nodes[node_id] = SourceNode(
-                node_id=node_id,
-                path=path,
-                symbol=symbol,
-                kind=kind,
-                start_line=start_line,
-                start_col=start_col,
-                end_line=end_line,
-                end_col=end_col,
-                sha256=hashlib.sha256(exact).hexdigest(),
-            )
+
+        nodes[node_id] = SourceNode(
+            node_id=node_id,
+            path=path,
+            symbol=symbol,
+            kind=kind,
+            binding_start_line=binding_start_line,
+            binding_start_col=binding_start_col,
+            binding_end_line=binding_end_line,
+            binding_end_col=binding_end_col,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=end_line,
+            end_col=end_col,
+            sha256=hashlib.sha256(exact).hexdigest(),
+        )
+
     return tuple(sorted(nodes.values(), key=lambda node: node.node_id))
 
 
-def _node_at(
-    by_line: dict[tuple[str, int], tuple[SourceNode, ...]],
-    by_path: dict[str, tuple[SourceNode, ...]],
+def _edge_node(
+    root: Path,
+    nodes: dict[tuple[str, int, int], SourceNode],
+    sources: dict[str, bytes],
     path: str,
     line: int,
-) -> SourceNode | None:
-    exact = by_line.get((path, line), ())
-    if len(exact) == 1:
-        return exact[0]
-    candidates = tuple(
-        node
-        for node in by_path.get(path, ())
-        if node.start_line <= line <= node.end_line
-    )
-    if not candidates:
-        return None
-    return min(
-        candidates, key=lambda node: (node.end_line - node.start_line, node.node_id)
-    )
+    column: int,
+) -> SourceNode:
+    """Resolve one CodeQL edge endpoint by its exact binding location."""
+    if path not in sources:
+        source_path = root / path
+        if not source_path.is_file() or source_path.suffix != ".py":
+            raise CodeQLAnalysisError(f"CodeQL edge path is absent: {path}")
+        sources[path] = source_path.read_bytes()
+
+    byte_column = _codeql_byte_col(sources[path], line, column)
+    try:
+        return nodes[path, line, byte_column]
+    except KeyError as error:
+        raise CodeQLAnalysisError(
+            f"CodeQL edge endpoint has no source node: {path} at {line}:{byte_column}"
+        ) from error
 
 
 def _load_edges(
-    rows: list[list[Any]], nodes: tuple[SourceNode, ...]
+    root: Path,
+    rows: list[list[Any]],
+    nodes: tuple[SourceNode, ...],
 ) -> tuple[SourceEdge, ...]:
-    by_line: dict[tuple[str, int], list[SourceNode]] = {}
-    nodes_by_path: dict[str, list[SourceNode]] = {}
+    """Join each CodeQL dependency to two exact source nodes."""
+    index: dict[tuple[str, int, int], SourceNode] = {}
     for node in nodes:
-        by_line.setdefault((node.path, node.start_line), []).append(node)
-        nodes_by_path.setdefault(node.path, []).append(node)
-    line_index = {key: tuple(value) for key, value in by_line.items()}
-    path_index = {key: tuple(value) for key, value in nodes_by_path.items()}
+        key = (node.path, node.binding_start_line, node.binding_start_col)
+        if key in index:
+            raise CodeQLAnalysisError(f"duplicate source-node anchor: {key}")
+        index[key] = node
+
+    sources: dict[str, bytes] = {}
     edges: dict[str, SourceEdge] = {}
     for row in rows:
-        source = _node_at(line_index, path_index, str(row[0]), int(row[1]))
-        target = _node_at(line_index, path_index, str(row[3]), int(row[4]))
-        if source is None or target is None or source.node_id == target.node_id:
+        if len(row) != 9:
+            raise CodeQLAnalysisError("CodeQL emitted a malformed dependency row")
+
+        source_path = str(row[0])
+        target_path = str(row[3])
+        if any(
+            part in IGNORED_PARTS
+            for path in (source_path, target_path)
+            for part in Path(path).parts
+        ):
             continue
+
+        source = _edge_node(
+            root,
+            index,
+            sources,
+            source_path,
+            int(row[1]),
+            int(row[2]),
+        )
+        target = _edge_node(
+            root,
+            index,
+            sources,
+            target_path,
+            int(row[4]),
+            int(row[5]),
+        )
+        if source.node_id == target.node_id:
+            continue
+
         kind = str(row[6])
         if kind not in _EDGE_KINDS:
             raise CodeQLAnalysisError(f"CodeQL emitted an unknown edge kind: {kind}")
@@ -434,7 +611,7 @@ def analyze_source(
         decoded[query.stem] = rows
 
     nodes = _load_nodes(root, decoded["Declarations"])
-    edges = _load_edges(decoded["Dependencies"], nodes)
+    edges = _load_edges(root, decoded["Dependencies"], nodes)
     result_payload = json.dumps(
         {
             "nodes": [node.model_dump(mode="json") for node in nodes],

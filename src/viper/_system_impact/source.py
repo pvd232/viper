@@ -43,8 +43,8 @@ def import_binding(source: bytes, symbol: str) -> ImportBinding:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                local = alias.asname or alias.name.split(".")[0]
-                if local == symbol:
+                target = alias.asname or alias.name
+                if target == symbol:
                     matches.append(("import", 0, None, alias.name, alias.asname))
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
@@ -124,12 +124,7 @@ def _import_names(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
     for alias in node.names:
         if alias.name == "*":
             continue
-        if alias.asname is not None:
-            names.append(alias.asname)
-        elif isinstance(node, ast.Import):
-            names.append(alias.name.split(".", maxsplit=1)[0])
-        else:
-            names.append(alias.name)
+        names.append(alias.asname or alias.name)
     return tuple(names)
 
 
@@ -148,6 +143,16 @@ def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
     if not parts or any(not part.isidentifier() for part in parts):
         raise SourceDeclarationError(
             f"invalid qualified Python symbol: {qualified_symbol!r}"
+        )
+
+    direct = [
+        node for node in tree.body if qualified_symbol in _declaration_names(node)
+    ]
+    if len(direct) == 1:
+        return direct[0]
+    if len(direct) > 1:
+        raise SourceDeclarationError(
+            f"Python declaration is ambiguous: {qualified_symbol}"
         )
 
     body: Sequence[ast.stmt] = tree.body

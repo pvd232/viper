@@ -7,8 +7,8 @@
 
 import python
 import LegacyPointsTo
+import Nodes
 import semmle.python.objects.ObjectAPI
-import semmle.python.dependencies.DependencyKind
 
 /**
  * Select an assignment that defines a module or class variable represented by
@@ -79,6 +79,20 @@ private predicate directNameWrite(
   )
 }
 
+/** Match a direct read of a declared module or class variable. */
+private predicate directNameRead(
+  AstNode source,
+  AstNode target,
+  AstNode evidence
+) {
+  exists(Name load, Variable variable |
+    load = variable.getALoad() and
+    source = load.getScope() and
+    canonicalAssignment(variable, target) and
+    evidence = load
+  )
+}
+
 /**
  * Resolve a direct attribute store to its declaring class when CodeQL knows
  * the receiver class.
@@ -94,6 +108,12 @@ private predicate attributeOwner(
     name = selfStore.getName()
   )
   or
+  exists(SelfAttributeRead selfRead |
+    store = selfRead and
+    owner = selfRead.getClass() and
+    name = selfRead.getName()
+  )
+  or
   exists(AttrNode cfg, ClassObject classObject |
     cfg.getNode() = store and
     cfg.isStore() and
@@ -102,6 +122,47 @@ private predicate attributeOwner(
       .(ControlFlowNodeWithPointsTo)
       .refersTo(_, classObject, _) and
     owner = classObject.getPyClass()
+  )
+}
+
+/** Match a direct read of a declared class attribute. */
+private predicate directAttributeRead(
+  AstNode source,
+  AstNode target,
+  AstNode evidence
+) {
+  exists(Attribute load, Class owner, string name, Variable variable |
+    attributeOwner(load, owner, name) and
+    variable.getScope() = owner and
+    variable.getId() = name and
+    canonicalAssignment(variable, target) and
+    source = load.getScope() and
+    evidence = load
+  )
+}
+
+/** Match one `from module import name` with that module's named declaration. */
+private predicate directImport(
+  AstNode source,
+  AstNode sourceBinding,
+  AstNode target,
+  AstNode targetBinding,
+  AstNode evidence
+) {
+  exists(
+    Import statement, Alias imported, ImportMember member,
+    string sourceKind, string sourceName, string targetKind, string targetName
+  |
+    source = statement and
+    imported = statement.getAName() and
+    member = imported.getValue() and
+    sourceBinding = member and
+    declaration(source, sourceBinding, sourceKind, sourceName) and
+    declaration(target, targetBinding, targetKind, targetName) and
+    targetName = member.getName() and
+    target.getScope().getEnclosingModule().getName() =
+      member.getModule().(ImportExpr).getImportedModuleName() and
+    evidence = member
   )
 }
 
@@ -155,23 +216,12 @@ predicate dependency(
     kind = "inherits"
   )
   or
-  exists(DependencyKind dependencyKind, AstNode use, Object object |
-    evidence = use and
-    dependencyKind.isADependency(use, object) and
-    target = object.getOrigin() and
-    (
-      use instanceof ImportingStmt and source = use
-      or
-      not use instanceof ImportingStmt and source = use.getScope()
-    ) and
-    (
-      dependencyKind = "import" and kind = "imports"
-      or
-      dependencyKind = "inheritance" and kind = "inherits"
-      or
-      dependencyKind in ["use", "attribute"] and kind = "reads"
-    )
-  )
+  (
+    directNameRead(source, target, evidence)
+    or
+    directAttributeRead(source, target, evidence)
+  ) and
+  kind = "reads"
   or
   (
     directNameWrite(source, target, evidence)
@@ -181,14 +231,25 @@ predicate dependency(
   kind = "writes"
 }
 
-from AstNode source, AstNode target, string kind, AstNode evidence
+from AstNode source, AstNode sourceBinding, AstNode target, AstNode targetBinding,
+  string sourceKind, string sourceName, string targetKind, string targetName,
+  string kind, AstNode evidence
 where
-  dependency(source, target, kind, evidence) and
+  (
+    dependency(source, target, kind, evidence) and
+    declaration(source, sourceBinding, sourceKind, sourceName) and
+    declaration(target, targetBinding, targetKind, targetName)
+    or
+    directImport(source, sourceBinding, target, targetBinding, evidence) and
+    kind = "imports" and
+    declaration(source, sourceBinding, sourceKind, sourceName) and
+    declaration(target, targetBinding, targetKind, targetName)
+  ) and
   source.getLocation().getFile() = evidence.getLocation().getFile() and
   not target.getLocation().getFile().getRelativePath() = ""
 select source.getLocation().getFile().getRelativePath(),
-  source.getLocation().getStartLine(), source.getLocation().getStartColumn(),
+  sourceBinding.getLocation().getStartLine(), sourceBinding.getLocation().getStartColumn(),
   target.getLocation().getFile().getRelativePath(),
-  target.getLocation().getStartLine(), target.getLocation().getStartColumn(),
+  targetBinding.getLocation().getStartLine(), targetBinding.getLocation().getStartColumn(),
   kind, evidence.getLocation().getFile().getRelativePath(),
   evidence.getLocation().getStartLine()

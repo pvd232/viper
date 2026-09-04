@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+
 from tools.plan import check as preflight
 from viper import scheduling
 from viper._contract_traceability import (
@@ -29,6 +30,9 @@ from viper._contract_traceability import (
 from viper._subprocess import run as run_subprocess
 from viper._system_impact.codeql import (
     CodeQLAnalysisError,
+    _binding_span,
+    _load_edges,
+    _load_nodes,
     _node_span,
     _qualified_declarations,
     _tree_digest,
@@ -219,6 +223,10 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
                 path="module.py",
                 symbol="old",
                 kind="function",
+                binding_start_line=1,
+                binding_start_col=0,
+                binding_end_line=2,
+                binding_end_col=12,
                 start_line=1,
                 start_col=0,
                 end_line=2,
@@ -230,6 +238,10 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
                 path="module.py",
                 symbol="removed",
                 kind="function",
+                binding_start_line=4,
+                binding_start_col=0,
+                binding_end_line=5,
+                binding_end_col=12,
                 start_line=4,
                 start_col=0,
                 end_line=5,
@@ -300,6 +312,10 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
                 path="module.py",
                 symbol=symbol,
                 kind="import",
+                binding_start_line=1,
+                binding_start_col=20 if symbol == "First" else 27,
+                binding_end_line=1,
+                binding_end_col=25 if symbol == "First" else 33,
                 start_line=1,
                 start_col=0,
                 end_line=1,
@@ -355,6 +371,10 @@ def test_materialize_plan_preserves_untargeted_imports(
                 path="module.py",
                 symbol=symbol,
                 kind="import",
+                binding_start_line=1,
+                binding_start_col=20 if symbol == "First" else 27,
+                binding_end_line=1,
+                binding_end_col=25 if symbol == "First" else 33,
                 start_line=1,
                 start_col=0,
                 end_line=1,
@@ -456,6 +476,10 @@ def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> 
                 path="module.py",
                 symbol="First",
                 kind="import",
+                binding_start_line=1,
+                binding_start_col=20,
+                binding_end_line=1,
+                binding_end_col=25,
                 start_line=1,
                 start_col=0,
                 end_line=1,
@@ -710,6 +734,7 @@ def _traceability(
     *,
     targets: tuple[ContractTarget, ...],
 ) -> ContractTraceabilityGraph:
+    """Build the traceability graph used by scheduler tests."""
     target_refs = tuple(target.target for target in targets)
     declaration = _declaration_ref()
     return ContractTraceabilityGraph(
@@ -784,15 +809,20 @@ def _node(
     kind: SourceNodeKind,
     declaration: bytes | None = None,
 ) -> SourceNode:
+    col = int(_sha256(f"{path}:{symbol}".encode())[:8], 16)
     return SourceNode(
         node_id=f"{path}:{symbol}",
         path=path,
         symbol=symbol,
         kind=kind,
+        binding_start_line=1,
+        binding_start_col=col,
+        binding_end_line=1,
+        binding_end_col=col + 1,
         start_line=1,
-        start_col=0,
+        start_col=col,
         end_line=1,
-        end_col=1,
+        end_col=col + 1,
         sha256=_sha256(declaration) if declaration is not None else "f" * 64,
     )
 
@@ -845,7 +875,7 @@ def _source_graph(
             version="2.26.4",
             platform="osx64",
             executable_sha256="3" * 64,
-            pack="viper/python-impact@1.0.0",
+            pack="viper/python-impact@1.1.0",
             pack_sha256="4" * 64,
         )
     receipt = CodeQLReceipt(
@@ -879,17 +909,28 @@ def _observed_graph(
         relative = path.relative_to(root).as_posix()
         source = path.read_bytes()
         tree = ast.parse(source.decode("utf-8"), type_comments=True)
-        for symbol, declaration, kind in _qualified_declarations(tree):
+        for declaration in _qualified_declarations(tree):
+            symbol = declaration.symbol
             start_line, start_col, end_line, end_col, exact = _node_span(
-                declaration,
+                declaration.declaration,
                 source,
             )
+            (
+                binding_start_line,
+                binding_start_col,
+                binding_end_line,
+                binding_end_col,
+            ) = _binding_span(declaration.binding, source)
             nodes.append(
                 SourceNode(
                     node_id=f"{relative}:{symbol}",
                     path=relative,
                     symbol=symbol,
-                    kind=cast(SourceNodeKind, kind),
+                    kind=cast(SourceNodeKind, declaration.kind),
+                    binding_start_line=binding_start_line,
+                    binding_start_col=binding_start_col,
+                    binding_end_line=binding_end_line,
+                    binding_end_col=binding_end_col,
                     start_line=start_line,
                     start_col=start_col,
                     end_line=end_line,
@@ -1123,7 +1164,7 @@ def test_declaration_extraction_resolves_shared_import_fence(
 
     assert extract_declaration_bytes(after, "Alpha") == after.rstrip(b"\n")
     assert extract_declaration_bytes(after, "B") == after.rstrip(b"\n")
-    assert extract_declaration_bytes(b"import package.module\n", "package") == (
+    assert extract_declaration_bytes(b"import package.module\n", "package.module") == (
         b"import package.module"
     )
     assert tuple(target.change_kind for target in result.targets) == (
@@ -1378,10 +1419,16 @@ def test_source_graph_rejects_receipt_drift_duplicates_and_dangling_edges() -> N
         symbol="dependent",
         kind="function",
     )
+    invalid_span = dependency.model_dump()
+    invalid_span["binding_end_col"] = invalid_span["binding_start_col"]
+
     edge = _edge(index=40, source=dependent, target=dependency, kind="calls")
     graph = _source_graph(nodes=(dependency, dependent), edges=(edge,))
     changed_snapshot = graph.snapshot.model_copy(update={"source_sha256": "a" * 64})
     changed_identity = graph.identity.model_copy(update={"version": "2.27.0"})
+
+    with pytest.raises(ValueError, match="binding must lie inside its declaration"):
+        SourceNode.model_validate(invalid_span)
 
     with pytest.raises(ValueError, match="snapshot differs"):
         SourceGraph(
@@ -1404,6 +1451,25 @@ def test_source_graph_rejects_receipt_drift_duplicates_and_dangling_edges() -> N
             snapshot=graph.snapshot,
             identity=graph.identity,
             nodes=(dependency, dependency),
+            edges=(),
+            receipt=graph.receipt,
+        )
+    with pytest.raises(ValueError, match="ambiguous source target"):
+        SourceGraph(
+            snapshot=graph.snapshot,
+            identity=graph.identity,
+            nodes=(
+                dependency,
+                dependency.model_copy(
+                    update={
+                        "node_id": "different-id",
+                        "binding_start_col": dependency.binding_start_col + 2,
+                        "binding_end_col": dependency.binding_end_col + 2,
+                        "start_col": dependency.start_col + 2,
+                        "end_col": dependency.end_col + 2,
+                    }
+                ),
+            ),
             edges=(),
             receipt=graph.receipt,
         )
@@ -1447,8 +1513,8 @@ elif args[:2] == ["bqrs", "decode"]:
     query = Path(args[2]).read_text(encoding="utf-8")
     if query == "Declarations":
         rows = [
-            ["src/example.py", "dependency", "function", 1, 1, 2, 12],
-            ["src/example.py", "dependent", "function", 4, 1, 5, 23],
+            ["src/example.py", "dependency", "function", 1, 1],
+            ["src/example.py", "dependent", "function", 4, 1],
         ]
     else:
         rows = [["src/example.py", 4, 1, "src/example.py", 1, 1,
@@ -1479,13 +1545,74 @@ def _sig02_source_fixture(root: Path) -> None:
     )
 
 
+def test_load_nodes_uses_binding_occurrences_and_rejects_ambiguous_targets(
+    tmp_path: Path,
+) -> None:
+    """Resolve each CodeQL location once and reject repeated target names."""
+    source = tmp_path / "imports.py"
+    source.write_text("from x import A, B as C\n", encoding="utf-8")
+    rows = [
+        ["imports.py", "A", "import", 1, 15],
+        ["imports.py", "C", "import", 1, 18],
+    ]
+
+    nodes = _load_nodes(tmp_path, rows)
+
+    assert tuple(node.node_id for node in nodes) == (
+        "imports.py:A",
+        "imports.py:C",
+    )
+    assert tuple(
+        (
+            node.binding_start_line,
+            node.binding_start_col,
+            node.binding_end_line,
+            node.binding_end_col,
+        )
+        for node in nodes
+    ) == ((1, 14, 1, 15), (1, 17, 1, 23))
+    assert nodes[0].sha256 == nodes[1].sha256
+
+    source.write_text("VALUE = 1\nVALUE = 2\n", encoding="utf-8")
+    duplicate_rows = [
+        ["imports.py", "VALUE", "assignment", 1, 1],
+        ["imports.py", "VALUE", "assignment", 2, 1],
+    ]
+    with pytest.raises(CodeQLAnalysisError, match="does not identify one declaration"):
+        _load_nodes(tmp_path, duplicate_rows)
+
+
+def test_load_edges_uses_exact_binding_locations(tmp_path: Path) -> None:
+    """Attach a same-line dependency to the binding named by CodeQL."""
+    source = tmp_path / "imports.py"
+    source.write_text("from x import A, B as C\n", encoding="utf-8")
+    nodes = _load_nodes(
+        tmp_path,
+        [
+            ["imports.py", "A", "import", 1, 15],
+            ["imports.py", "C", "import", 1, 18],
+        ],
+    )
+    rows = [["imports.py", 1, 15, "imports.py", 1, 18, "reads", "use.py", 4]]
+
+    edges = _load_edges(tmp_path, rows, nodes)
+
+    assert len(edges) == 1
+    assert edges[0].source == "imports.py:A"
+    assert edges[0].target == "imports.py:C"
+
+    rows[0][5] = 16
+    with pytest.raises(CodeQLAnalysisError, match="has no source node"):
+        _load_edges(tmp_path, rows, nodes)
+
+
 def _sig02_identity(query_pack: Path, executable: Path) -> CodeQLIdentity:
     """Bind the fake analyzer and exact checked-in query-pack tree."""
     return CodeQLIdentity(
         version="2.26.4",
         platform="osx64",
         executable_sha256=_sha256(executable.read_bytes()),
-        pack="viper/python-impact@1.0.0",
+        pack="viper/python-impact@1.1.0",
         pack_sha256=_tree_digest(query_pack),
     )
 
@@ -1657,7 +1784,7 @@ def test_analyze_source_rejects_source_pack_and_cli_identity_drift(
 
 @pytest.mark.integration
 def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None:
-    """Compile the checked-in QL pack and verify call and write dependencies."""
+    """Compile the checked-in QL pack and verify exact dependency edges."""
     if os.environ.get("VIPER_RUN_CODEQL_TESTS") != "1":
         pytest.skip("set VIPER_RUN_CODEQL_TESTS=1 to run the real CodeQL check")
 
@@ -1690,6 +1817,9 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
     (root / "src/writes.py").write_text(
         "state = 0\n"
         "\n"
+        "def read_state() -> int:\n"
+        "    return state\n"
+        "\n"
         "def update_state(value: int) -> None:\n"
         "    global state\n"
         "    state = value\n"
@@ -1699,6 +1829,10 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
         "\n"
         "    def update(self, value: int) -> None:\n"
         "        self.value = value\n",
+        encoding="utf-8",
+    )
+    (root / "src/consumer.py").write_text(
+        "from writes import state\n",
         encoding="utf-8",
     )
 
@@ -1711,7 +1845,7 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
         version=json.loads(version.stdout)["version"],
         platform=sys.platform,
         executable_sha256=_sha256(executable.read_bytes()),
-        pack="viper/python-impact@1.0.0",
+        pack="viper/python-impact@1.1.0",
         pack_sha256=_tree_digest(query_pack),
     )
 
@@ -1748,11 +1882,24 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
     }
     assert write_edges[("src/writes.py:update_state", "src/writes.py:state")] == (
         "src/writes.py",
-        5,
+        8,
     )
     assert write_edges[
         ("src/writes.py:Counter.update", "src/writes.py:Counter.value")
-    ] == ("src/writes.py", 11)
+    ] == ("src/writes.py", 14)
+
+    assert any(
+        edge.source == "src/writes.py:read_state"
+        and edge.target == "src/writes.py:state"
+        and edge.kind == "reads"
+        for edge in graph.edges
+    )
+    assert any(
+        edge.source == "src/consumer.py:state"
+        and edge.target == "src/writes.py:state"
+        and edge.kind == "imports"
+        for edge in graph.edges
+    )
 
 
 # SIG-04 strict closure and commit acceptance
@@ -1883,6 +2030,13 @@ def test_import_target_owns_names_in_the_same_statement(tmp_path: Path) -> None:
     assert import_binding(b"from .models import New\n", "New") == import_binding(
         b"from .models import Existing, New\n",
         "New",
+    )
+    assert (
+        extract_declaration_bytes(
+            b"import urllib.parse\n",
+            "urllib.parse",
+        )
+        == b"import urllib.parse"
     )
     assert unexpected == ()
 
@@ -2123,8 +2277,8 @@ def _fixture_declarations(source: bytes) -> dict[str, str]:
     """Return exact declaration digests from one historical Python file."""
     tree = ast.parse(source.decode("utf-8"), type_comments=True)
     return {
-        symbol: _sha256(_node_span(declaration, source)[-1])
-        for symbol, declaration, _ in _qualified_declarations(tree)
+        declaration.symbol: _sha256(_node_span(declaration.declaration, source)[-1])
+        for declaration in _qualified_declarations(tree)
     }
 
 

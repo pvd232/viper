@@ -6,44 +6,9 @@
  */
 
 import python
+import Nodes
 
-predicate declaration(AstNode node, string kind, string name) {
-  exists(Function function |
-    node = function and
-    name = function.getName() and
-    (
-      function.getScope() instanceof Class and kind = "method"
-      or
-      not function.getScope() instanceof Class and kind = "function"
-    )
-  )
-  or
-  exists(Class cls | node = cls and name = cls.getName() and kind = "class")
-  or
-  exists(Assign assignment, Name target |
-    node = assignment and
-    target = assignment.getATarget() and
-    name = target.getId() and
-    kind = "assignment"
-  )
-  or
-  exists(AnnAssign assignment, Name target |
-    node = assignment and
-    target = assignment.getTarget() and
-    name = target.getId() and
-    kind = "assignment"
-  )
-  or
-  exists(Import statement, Alias imported |
-    node = statement and
-    imported = statement.getAName() and
-    name = imported.toString() and
-    kind = "import"
-  )
-}
-
-from AstNode node, string kind, string name
-where declaration(node, kind, name)
+from AstNode node, AstNode binding, string kind, string name
+where declaration(node, binding, kind, name)
 select node.getLocation().getFile().getRelativePath(), name, kind,
-  node.getLocation().getStartLine(), node.getLocation().getStartColumn(),
-  node.getLocation().getEndLine(), node.getLocation().getEndColumn()
+  binding.getLocation().getStartLine(), binding.getLocation().getStartColumn()

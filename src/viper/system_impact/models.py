@@ -85,10 +85,28 @@ class CodeQLReceipt(ProtocolModel):
 class SourceNode(ProtocolModel):
     """Identify one Python declaration observed in one source snapshot."""
 
-    node_id: NodeId = Field(description="Stable path-and-symbol node identifier.")
+    node_id: NodeId = Field(
+        description="Stable path-and-symbol key assigned after uniqueness is proved."
+    )
     path: RepoRelPath = Field(description="Repository-relative Python source path.")
     symbol: NonEmptyStr = Field(description="Qualified Python symbol name.")
     kind: SourceNodeKind = Field(description="Observed Python declaration kind.")
+    binding_start_line: int = Field(
+        ge=1,
+        description="First line of the AST occurrence located by CodeQL.",
+    )
+    binding_start_col: int = Field(
+        ge=0,
+        description="UTF-8 byte offset of that occurrence on its first line.",
+    )
+    binding_end_line: int = Field(
+        ge=1,
+        description="Final line of the located AST occurrence.",
+    )
+    binding_end_col: int = Field(
+        ge=0,
+        description="UTF-8 byte offset after the located AST occurrence.",
+    )
     start_line: int = Field(
         ge=1,
         description="First source line of the declaration.",
@@ -106,6 +124,19 @@ class SourceNode(ProtocolModel):
         description="UTF-8 byte offset after the declaration.",
     )
     sha256: SHA256 = Field(description="Digest of the exact declaration bytes.")
+
+    @model_validator(mode="after")
+    def validate_spans(self) -> SourceNode:
+        """Require a nonempty binding inside its declaration."""
+        binding_start = (self.binding_start_line, self.binding_start_col)
+        binding_end = (self.binding_end_line, self.binding_end_col)
+        declaration_start = (self.start_line, self.start_col)
+        declaration_end = (self.end_line, self.end_col)
+
+        if not (declaration_start <= binding_start < binding_end <= declaration_end):
+            raise ValueError("SourceNode binding must lie inside its declaration")
+
+        return self
 
 
 class SourceEdge(ProtocolModel):
@@ -128,8 +159,8 @@ class SourceEdge(ProtocolModel):
 class SourceGraph(ProtocolModel):
     """Store one canonical CodeQL observation of a source snapshot."""
 
-    schema_version: Literal[1] = Field(
-        default=1,
+    schema_version: Literal[2] = Field(
+        default=2,
         description="Source-graph format version.",
     )
     snapshot: SourceSnapshot = Field(
@@ -164,9 +195,24 @@ class SourceGraph(ProtocolModel):
     def validate_graph(self) -> SourceGraph:
         """Reject duplicate identities, dangling edges, and receipt drift."""
         node_ids = tuple(node.node_id for node in self.nodes)
+        target_keys = tuple((node.path, node.symbol) for node in self.nodes)
+        occurrences = tuple(
+            (
+                node.path,
+                node.binding_start_line,
+                node.binding_start_col,
+                node.binding_end_line,
+                node.binding_end_col,
+            )
+            for node in self.nodes
+        )
         edge_ids = tuple(edge.edge_id for edge in self.edges)
         if len(node_ids) != len(set(node_ids)):
             raise ValueError("SourceGraph contains duplicate node IDs")
+        if len(target_keys) != len(set(target_keys)):
+            raise ValueError("SourceGraph contains an ambiguous source target")
+        if len(occurrences) != len(set(occurrences)):
+            raise ValueError("SourceGraph contains a duplicate binding occurrence")
         if len(edge_ids) != len(set(edge_ids)):
             raise ValueError("SourceGraph contains duplicate edge IDs")
         known = set(node_ids)

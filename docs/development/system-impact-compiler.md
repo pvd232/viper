@@ -500,10 +500,28 @@ class CodeQLReceipt(ProtocolModel):
 class SourceNode(ProtocolModel):
     """Identify one Python declaration observed in one source snapshot."""
 
-    node_id: NodeId = Field(description="Stable path-and-symbol node identifier.")
+    node_id: NodeId = Field(
+        description="Stable path-and-symbol key assigned after uniqueness is proved."
+    )
     path: RepoRelPath = Field(description="Repository-relative Python source path.")
     symbol: NonEmptyStr = Field(description="Qualified Python symbol name.")
     kind: SourceNodeKind = Field(description="Observed Python declaration kind.")
+    binding_start_line: int = Field(
+        ge=1,
+        description="First line of the AST occurrence located by CodeQL.",
+    )
+    binding_start_col: int = Field(
+        ge=0,
+        description="UTF-8 byte offset of that occurrence on its first line.",
+    )
+    binding_end_line: int = Field(
+        ge=1,
+        description="Final line of the located AST occurrence.",
+    )
+    binding_end_col: int = Field(
+        ge=0,
+        description="UTF-8 byte offset after the located AST occurrence.",
+    )
     start_line: int = Field(
         ge=1,
         description="First source line of the declaration.",
@@ -521,6 +539,19 @@ class SourceNode(ProtocolModel):
         description="UTF-8 byte offset after the declaration.",
     )
     sha256: SHA256 = Field(description="Digest of the exact declaration bytes.")
+
+    @model_validator(mode="after")
+    def validate_spans(self) -> SourceNode:
+        """Require a nonempty binding inside its declaration."""
+        binding_start = (self.binding_start_line, self.binding_start_col)
+        binding_end = (self.binding_end_line, self.binding_end_col)
+        declaration_start = (self.start_line, self.start_col)
+        declaration_end = (self.end_line, self.end_col)
+
+        if not (declaration_start <= binding_start < binding_end <= declaration_end):
+            raise ValueError("SourceNode binding must lie inside its declaration")
+
+        return self
 
 
 class SourceEdge(ProtocolModel):
@@ -543,8 +574,8 @@ class SourceEdge(ProtocolModel):
 class SourceGraph(ProtocolModel):
     """Store one canonical CodeQL observation of a source snapshot."""
 
-    schema_version: Literal[1] = Field(
-        default=1,
+    schema_version: Literal[2] = Field(
+        default=2,
         description="Source-graph format version.",
     )
     snapshot: SourceSnapshot = Field(
@@ -579,9 +610,24 @@ class SourceGraph(ProtocolModel):
     def validate_graph(self) -> SourceGraph:
         """Reject duplicate identities, dangling edges, and receipt drift."""
         node_ids = tuple(node.node_id for node in self.nodes)
+        target_keys = tuple((node.path, node.symbol) for node in self.nodes)
+        occurrences = tuple(
+            (
+                node.path,
+                node.binding_start_line,
+                node.binding_start_col,
+                node.binding_end_line,
+                node.binding_end_col,
+            )
+            for node in self.nodes
+        )
         edge_ids = tuple(edge.edge_id for edge in self.edges)
         if len(node_ids) != len(set(node_ids)):
             raise ValueError("SourceGraph contains duplicate node IDs")
+        if len(target_keys) != len(set(target_keys)):
+            raise ValueError("SourceGraph contains an ambiguous source target")
+        if len(occurrences) != len(set(occurrences)):
+            raise ValueError("SourceGraph contains a duplicate binding occurrence")
         if len(edge_ids) != len(set(edge_ids)):
             raise ValueError("SourceGraph contains duplicate edge IDs")
         known = set(node_ids)
@@ -819,7 +865,7 @@ identity = CodeQLIdentity(
     version="2.26.4",
     platform="osx64",
     executable_sha256="1" * 64,
-    pack="viper/python-impact@1.0.0",
+    pack="viper/python-impact@1.1.0",
     pack_sha256="2" * 64,
 )
 baseline_snapshot = SourceSnapshot(
@@ -966,7 +1012,7 @@ database digest, and the canonical result digest.
 Phase 0 binds the reported CLI version, launcher bytes, and query-pack bytes,
 and trusts the verified distribution installed behind that identity.
 
-Query-pack version `1.0.0` emits `calls`, `constructs`, `inherits`, `imports`,
+Query-pack version `1.1.0` emits `calls`, `constructs`, `inherits`, `imports`,
 `reads`, and `writes`. A `writes` edge is emitted only when the writing scope
 and the canonical module or class assignment both resolve to `SourceNode`
 records. Local variables and attributes without an existing assignment node
@@ -976,6 +1022,66 @@ CodeQL identifies repository declarations and dependency evidence. Python's
 AST selects the exact original byte span for each CodeQL declaration row and
 each declaration inside a Markdown `contract-target` fence. This local AST pass
 does not resolve repository dependencies or replace CodeQL identity.
+
+### Node and edge identity
+
+CodeQL locates a binding by file, line, and column. Python's AST verifies that
+location and supplies the complete declaration span and exact bytes. CodeQL
+locations count lines and columns from one; Python AST lines count from one and
+its columns are UTF-8 byte offsets. The adapter converts the CodeQL column before
+joining the two records. These coordinate rules come from the
+[CodeQL location contract](https://codeql.github.com/docs/writing-codeql-queries/providing-locations-in-codeql-queries/)
+and [Python AST contract](https://docs.python.org/3/library/ast.html#ast.AST).
+
+Let $V$ be the source nodes and let a contract target $t$ contain `path` and
+`symbol`. The target must identify one node:
+
+$$
+\forall t,\quad
+\left|\left\{v\in V : v.path=t.path \land v.symbol=t.symbol\right\}\right|=1.
+$$
+
+For one node, let $B$ be its binding span and $D$ its complete declaration
+span. Both spans are half-open after conversion to AST coordinates:
+
+$$
+D_{\mathrm{start}} \le B_{\mathrm{start}}
+< B_{\mathrm{end}} \le D_{\mathrm{end}}.
+$$
+
+Every dependency edge must resolve both endpoints exactly:
+
+$$
+\forall e\in E,\quad
+|\operatorname{Source}(e)|=1
+\land |\operatorname{Target}(e)|=1.
+$$
+
+The query pack and AST loader enforce these as joins, not guesses. Zero or
+multiple matches reject the graph. There is no line-range fallback.
+
+For example:
+
+```python
+from x import A, B as C
+```
+
+The statement creates two nodes. Both nodes hash the same declaration bytes,
+but their binding spans differ:
+
+```text
+SourceNode A
+├── binding:    [14, 15)
+└── declaration:[0, 23)
+
+SourceNode C
+├── binding:    [17, 23)
+└── declaration:[0, 23)
+```
+
+An edge row at the second binding resolves to `C`. A row that supplies only the
+line, or a column that matches neither binding, fails. The path-and-symbol node
+ID is assigned only after the uniqueness rule above passes.
 
 `check_plan()` recomputes `plan_sha256`, verifies omitted dependencies against
 their declared baseline target states, and runs every frozen selected
@@ -1299,10 +1405,10 @@ depends_on = ["P0-CRT-07"]
 ```toml pair-block
 id = "P0-SIG-02"
 requirements = ["SIG-01", "SIG-05"]
-targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:_node_span", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact/models.py:CodeQLReceipt", "src/viper/system_impact/models.py:SourceNodeKind", "src/viper/system_impact/models.py:SourceNode", "src/viper/system_impact/models.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
-assets = ["tools/codeql/viper-python-impact/qlpack.yml", "tools/codeql/viper-python-impact/codeql-pack.lock.yml", "tools/codeql/viper-python-impact/source-facts.qls", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
-tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
-gate = "python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack or node_span' -q"
+targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:_Declaration", "src/viper/_system_impact/codeql.py:_Anchor", "src/viper/_system_impact/codeql.py:_qualified_declarations", "src/viper/_system_impact/codeql.py:_node_span", "src/viper/_system_impact/codeql.py:_binding_span", "src/viper/_system_impact/codeql.py:_codeql_byte_col", "src/viper/_system_impact/codeql.py:_source_node_id", "src/viper/_system_impact/codeql.py:_load_nodes", "src/viper/_system_impact/codeql.py:_edge_node", "src/viper/_system_impact/codeql.py:_load_edges", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact/models.py:CodeQLReceipt", "src/viper/system_impact/models.py:SourceNodeKind", "src/viper/system_impact/models.py:SourceNode", "src/viper/system_impact/models.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive", "tests/test_system_impact.py:test_load_nodes_uses_binding_occurrences_and_rejects_ambiguous_targets", "tests/test_system_impact.py:test_load_edges_uses_exact_binding_locations"]
+assets = ["tools/codeql/viper-python-impact/qlpack.yml", "tools/codeql/viper-python-impact/codeql-pack.lock.yml", "tools/codeql/viper-python-impact/source-facts.qls", "tools/codeql/viper-python-impact/Nodes.qll", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
+tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive", "tests/test_system_impact.py:test_load_nodes_uses_binding_occurrences_and_rejects_ambiguous_targets", "tests/test_system_impact.py:test_load_edges_uses_exact_binding_locations"]
+gate = "python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack or node_span or load_nodes or load_edges' -q"
 depends_on = ["P0-SIG-01"]
 ```
 
@@ -1343,7 +1449,7 @@ depends_on = ["P0-SIG-04"]
 id = "P0-SIG-06"
 requirements = ["SIG-06"]
 targets = ["tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
-assets = ["tools/codeql/viper-python-impact/Dependencies.ql"]
+assets = ["tools/codeql/viper-python-impact/Nodes.qll", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
 tests = ["tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
 gate = "VIPER_RUN_CODEQL_TESTS=1 python -m pytest tests/test_system_impact.py::test_checked_in_codeql_pack_analyzes_tiny_repository -q"
 depends_on = ["P0-SIG-05"]
@@ -1353,7 +1459,7 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact/models.py:OneHop", "src/viper/system_impact/models.py:PlanCheck", "src/viper/system_impact/models.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/system_impact/check.py:ast", "src/viper/system_impact/check.py:Acceptance", "src/viper/system_impact/check.py:CommitId", "src/viper/system_impact/check.py:GateCheck", "src/viper/system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/system_impact/check.py:OneHop", "src/viper/system_impact/check.py:PlanCheck", "src/viper/system_impact/check.py:ResolvedContractTarget", "src/viper/system_impact/check.py:SourceGraph", "src/viper/system_impact/check.py:SourceNode", "src/viper/system_impact/check.py:TargetCheck", "src/viper/system_impact/check.py:inspect_plan", "src/viper/system_impact/check.py:extract_declaration_bytes", "src/viper/system_impact/check.py:import_binding", "src/viper/system_impact/check.py:_target_is_satisfied", "src/viper/system_impact/check.py:_target_checks", "src/viper/system_impact/check.py:_unexpected_changes", "src/viper/system_impact/check.py:_one_hop", "src/viper/system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+targets = ["src/viper/system_impact/models.py:OneHop", "src/viper/system_impact/models.py:PlanCheck", "src/viper/system_impact/models.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/_system_impact/source.py:_import_names", "src/viper/_system_impact/source.py:_resolve_declaration", "src/viper/system_impact/check.py:ast", "src/viper/system_impact/check.py:Acceptance", "src/viper/system_impact/check.py:CommitId", "src/viper/system_impact/check.py:GateCheck", "src/viper/system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/system_impact/check.py:OneHop", "src/viper/system_impact/check.py:PlanCheck", "src/viper/system_impact/check.py:ResolvedContractTarget", "src/viper/system_impact/check.py:SourceGraph", "src/viper/system_impact/check.py:SourceNode", "src/viper/system_impact/check.py:TargetCheck", "src/viper/system_impact/check.py:inspect_plan", "src/viper/system_impact/check.py:extract_declaration_bytes", "src/viper/system_impact/check.py:import_binding", "src/viper/system_impact/check.py:_target_is_satisfied", "src/viper/system_impact/check.py:_target_checks", "src/viper/system_impact/check.py:_unexpected_changes", "src/viper/system_impact/check.py:_one_hop", "src/viper/system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 tests = ["tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_formatting_only_change_is_not_unexpected", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 gate = "python -m pytest tests/test_system_impact.py -k 'class_target_owns or import_target_owns or formatting_only or one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
@@ -1371,7 +1477,16 @@ Later update targets supersede the earlier declaration for the same symbol.
 
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:IGNORED_PARTS -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:CodeQLAnalysisError -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:_Declaration -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:_Anchor -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/_system_impact/codeql.py:_qualified_declarations -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=update target=src/viper/_system_impact/codeql.py:_node_span -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:_binding_span -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:_codeql_byte_col -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:_source_node_id -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/_system_impact/codeql.py:_load_nodes -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:_edge_node -->
+<!-- contract-target: requirements=SIG-01 block=P0-SIG-02 action=update target=src/viper/_system_impact/codeql.py:_load_edges -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:source_digest -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:analyze_source -->
 
@@ -1390,6 +1505,76 @@ IGNORED_PARTS = frozenset(
 
 class CodeQLAnalysisError(RuntimeError):
     """Report a failed or internally inconsistent CodeQL analysis."""
+
+@dataclass(frozen=True)
+class _Declaration:
+    """Keep one symbol's AST binding and full statement together."""
+
+    symbol: str
+    kind: SourceNodeKind
+    declaration: ast.stmt
+    binding: ast.AST
+
+_Anchor = tuple[str, SourceNodeKind, int, int]
+
+def _qualified_declarations(
+    tree: ast.Module,
+) -> tuple[_Declaration, ...]:
+    """Collect the declarations represented in the source graph."""
+    declarations: list[_Declaration] = []
+
+    def visit(body: Sequence[ast.stmt], prefix: str = "") -> None:
+        """Collect declarations from one module or class body."""
+        for node in body:
+            bindings: tuple[tuple[str, ast.AST], ...] = ()
+            kind: SourceNodeKind | None = None
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                bindings = ((node.name, node),)
+                kind = "method" if prefix else "function"
+            elif isinstance(node, ast.ClassDef):
+                bindings = ((node.name, node),)
+                kind = "class"
+            elif isinstance(node, ast.Assign):
+                bindings = tuple(
+                    (target.id, target)
+                    for target in node.targets
+                    if isinstance(target, ast.Name)
+                )
+                kind = "assignment"
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                bindings = ((node.target.id, node.target),)
+                kind = "assignment"
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                bindings = tuple(
+                    (
+                        alias.asname or alias.name,
+                        alias,
+                    )
+                    for alias in node.names
+                    if alias.name != "*"
+                )
+                kind = "import"
+
+            if kind is None:
+                continue
+
+            # One statement can bind several names, so keep each binding separate.
+            for name, binding in bindings:
+                declarations.append(
+                    _Declaration(
+                        symbol=f"{prefix}{name}",
+                        kind=kind,
+                        declaration=node,
+                        binding=binding,
+                    )
+                )
+
+            # Class members need the class prefix; function locals are not graph nodes.
+            if isinstance(node, ast.ClassDef):
+                visit(node.body, f"{prefix}{node.name}.")
+
+    visit(tree.body)
+    return tuple(declarations)
 
 def source_digest(root: Path) -> str:
     rows = [
@@ -1509,7 +1694,7 @@ def analyze_source(
         decoded[query.stem] = rows
 
     nodes = _load_nodes(root, decoded["Declarations"])
-    edges = _load_edges(decoded["Dependencies"], nodes)
+    edges = _load_edges(root, decoded["Dependencies"], nodes)
     result_payload = json.dumps(
         {
             "nodes": [node.model_dump(mode="json") for node in nodes],
@@ -1548,11 +1733,14 @@ def analyze_source(
     )
 
 def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes]:
+    """Slice the complete statement from the original source bytes."""
     if node.end_lineno is None or node.end_col_offset is None:
         raise CodeQLAnalysisError("Python declaration has no complete source span")
     lines, offsets = _byte_offsets(source)
     start_line = node.lineno
     start_col = node.col_offset
+
+    # Decorators belong to the declaration even though AST starts at def or class.
     if (
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
         and node.decorator_list
@@ -1566,6 +1754,8 @@ def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes
     end_line = lines[node.end_lineno - 1]
     end_col = node.end_col_offset
     suffix = end_line[end_col:]
+
+    # Keep a line-end directive with the statement it controls.
     if suffix.lstrip().startswith(b"#"):
         end_col = len(end_line.rstrip(b"\r\n"))
     end = offsets[node.end_lineno - 1] + end_col
@@ -1576,6 +1766,313 @@ def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes
         end_col,
         source[start:end],
     )
+
+def _binding_span(node: ast.AST, source: bytes) -> tuple[int, int, int, int]:
+    """Read the AST coordinates used to match a CodeQL anchor."""
+    start_line = getattr(node, "lineno", None)
+    start_col = getattr(node, "col_offset", None)
+    end_line = getattr(node, "end_lineno", None)
+    end_col = getattr(node, "end_col_offset", None)
+    if (
+        not isinstance(start_line, int)
+        or not isinstance(start_col, int)
+        or not isinstance(end_line, int)
+        or not isinstance(end_col, int)
+    ):
+        raise CodeQLAnalysisError("Python binding has no complete source span")
+    lines, offsets = _byte_offsets(source)
+
+    # AST columns count UTF-8 bytes, so validate them against the original source.
+    try:
+        start = offsets[start_line - 1] + start_col
+        end = offsets[end_line - 1] + end_col
+    except (IndexError, TypeError) as error:
+        raise CodeQLAnalysisError(
+            "Python binding has an invalid source span"
+        ) from error
+    if start < 0 or end < start or end > len(source):
+        raise CodeQLAnalysisError("Python binding has an invalid source span")
+    return start_line, start_col, end_line, end_col
+
+def _codeql_byte_col(source: bytes, line: int, column: int) -> int:
+    """Convert CodeQL's character column to the byte column used by AST."""
+    lines = source.splitlines(keepends=True)
+    if line < 1 or line > len(lines) or column < 1:
+        raise CodeQLAnalysisError("CodeQL emitted an invalid binding location")
+    try:
+        text = lines[line - 1].decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise CodeQLAnalysisError("Python source is not valid UTF-8") from error
+    prefix = text[: column - 1]
+    if len(prefix) != column - 1:
+        raise CodeQLAnalysisError("CodeQL emitted an invalid binding column")
+
+    # A non-ASCII character can occupy more than one UTF-8 byte.
+    return len(prefix.encode("utf-8"))
+
+def _source_node_id(path: str, symbol: str) -> str:
+    """Return the stable target key after uniqueness has been proved."""
+    return f"{path}:{symbol}"
+
+def _load_nodes(root: Path, rows: list[list[Any]]) -> tuple[SourceNode, ...]:
+    """Join every CodeQL anchor to one AST declaration or reject the graph."""
+    nodes: dict[str, SourceNode] = {}
+    files: dict[str, tuple[bytes, dict[_Anchor, _Declaration]]] = {}
+
+    for row in rows:
+        if len(row) != 5:
+            raise CodeQLAnalysisError("CodeQL emitted a malformed declaration row")
+
+        path = str(row[0])
+        if any(part in IGNORED_PARTS for part in Path(path).parts):
+            continue
+
+        # CodeQL emits one row per declaration, so parse each file only once.
+        if path not in files:
+            source_path = root / path
+            if not source_path.is_file() or source_path.suffix != ".py":
+                raise CodeQLAnalysisError(f"CodeQL declaration path is absent: {path}")
+
+            source = source_path.read_bytes()
+            try:
+                tree = ast.parse(
+                    source.decode("utf-8"),
+                    type_comments=True,
+                )
+            except (SyntaxError, UnicodeDecodeError) as error:
+                raise CodeQLAnalysisError(
+                    f"cannot resolve CodeQL declarations in {path}"
+                ) from error
+
+            index: dict[_Anchor, _Declaration] = {}
+
+            for declaration in _qualified_declarations(tree):
+                line, column, _, _ = _binding_span(
+                    declaration.binding,
+                    source,
+                )
+                key = (
+                    declaration.symbol,
+                    declaration.kind,
+                    line,
+                    column,
+                )
+
+                if key in index:
+                    raise CodeQLAnalysisError(
+                        f"duplicate AST declaration anchor in {path}: {key}"
+                    )
+
+                index[key] = declaration
+
+            files[path] = source, index
+
+        source, index = files[path]
+        symbol = str(row[1])
+        kind = cast(SourceNodeKind, str(row[2]))
+        line = int(row[3])
+        column = _codeql_byte_col(source, line, int(row[4]))
+        key = symbol, kind, line, column
+
+        try:
+            declaration = index[key]
+        except KeyError as error:
+            raise CodeQLAnalysisError(
+                "CodeQL anchor has no matching AST declaration: "
+                f"{path}:{symbol} at {line}:{column}"
+            ) from error
+
+        (
+            binding_start_line,
+            binding_start_col,
+            binding_end_line,
+            binding_end_col,
+        ) = _binding_span(declaration.binding, source)
+
+        start_line, start_col, end_line, end_col, exact = _node_span(
+            declaration.declaration,
+            source,
+        )
+
+        node_id = _source_node_id(path, symbol)
+
+        # Contract targets omit location, so a second occurrence is ambiguous.
+        if node_id in nodes:
+            raise CodeQLAnalysisError(
+                f"source target does not identify one declaration: {path}:{symbol}"
+            )
+
+        nodes[node_id] = SourceNode(
+            node_id=node_id,
+            path=path,
+            symbol=symbol,
+            kind=kind,
+            binding_start_line=binding_start_line,
+            binding_start_col=binding_start_col,
+            binding_end_line=binding_end_line,
+            binding_end_col=binding_end_col,
+            start_line=start_line,
+            start_col=start_col,
+            end_line=end_line,
+            end_col=end_col,
+            sha256=hashlib.sha256(exact).hexdigest(),
+        )
+
+    return tuple(sorted(nodes.values(), key=lambda node: node.node_id))
+
+def _edge_node(
+    root: Path,
+    nodes: dict[tuple[str, int, int], SourceNode],
+    sources: dict[str, bytes],
+    path: str,
+    line: int,
+    column: int,
+) -> SourceNode:
+    """Resolve one CodeQL edge endpoint by its exact binding location."""
+    if path not in sources:
+        source_path = root / path
+        if not source_path.is_file() or source_path.suffix != ".py":
+            raise CodeQLAnalysisError(f"CodeQL edge path is absent: {path}")
+        sources[path] = source_path.read_bytes()
+
+    byte_column = _codeql_byte_col(sources[path], line, column)
+    try:
+        return nodes[path, line, byte_column]
+    except KeyError as error:
+        raise CodeQLAnalysisError(
+            f"CodeQL edge endpoint has no source node: {path} at {line}:{byte_column}"
+        ) from error
+
+def _load_edges(
+    root: Path,
+    rows: list[list[Any]],
+    nodes: tuple[SourceNode, ...],
+) -> tuple[SourceEdge, ...]:
+    """Join each CodeQL dependency to two exact source nodes."""
+    index: dict[tuple[str, int, int], SourceNode] = {}
+    for node in nodes:
+        key = (node.path, node.binding_start_line, node.binding_start_col)
+        if key in index:
+            raise CodeQLAnalysisError(f"duplicate source-node anchor: {key}")
+        index[key] = node
+
+    sources: dict[str, bytes] = {}
+    edges: dict[str, SourceEdge] = {}
+    for row in rows:
+        if len(row) != 9:
+            raise CodeQLAnalysisError("CodeQL emitted a malformed dependency row")
+
+        source_path = str(row[0])
+        target_path = str(row[3])
+        if any(
+            part in IGNORED_PARTS
+            for path in (source_path, target_path)
+            for part in Path(path).parts
+        ):
+            continue
+
+        source = _edge_node(
+            root,
+            index,
+            sources,
+            source_path,
+            int(row[1]),
+            int(row[2]),
+        )
+        target = _edge_node(
+            root,
+            index,
+            sources,
+            target_path,
+            int(row[4]),
+            int(row[5]),
+        )
+        if source.node_id == target.node_id:
+            continue
+
+        kind = str(row[6])
+        if kind not in _EDGE_KINDS:
+            raise CodeQLAnalysisError(f"CodeQL emitted an unknown edge kind: {kind}")
+        payload = json.dumps(
+            [source.node_id, kind, target.node_id, str(row[7]), int(row[8])],
+            separators=(",", ":"),
+        ).encode()
+        edge_id = hashlib.sha256(payload).hexdigest()
+        edges[edge_id] = SourceEdge(
+            edge_id=edge_id,
+            source=source.node_id,
+            target=target.node_id,
+            kind=cast(EdgeKind, kind),
+            query="viper/python-impact/dependencies",
+            path=str(row[7]),
+            line=int(row[8]),
+        )
+    return tuple(sorted(edges.values(), key=lambda edge: edge.edge_id))
+```
+
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=tests/test_system_impact.py:test_load_nodes_uses_binding_occurrences_and_rejects_ambiguous_targets -->
+```python contract-target
+def test_load_nodes_uses_binding_occurrences_and_rejects_ambiguous_targets(
+    tmp_path: Path,
+) -> None:
+    """Resolve each CodeQL location once and reject repeated target names."""
+    source = tmp_path / "imports.py"
+    source.write_text("from x import A, B as C\n", encoding="utf-8")
+    rows = [
+        ["imports.py", "A", "import", 1, 15],
+        ["imports.py", "C", "import", 1, 18],
+    ]
+
+    nodes = _load_nodes(tmp_path, rows)
+
+    assert tuple(node.node_id for node in nodes) == (
+        "imports.py:A",
+        "imports.py:C",
+    )
+    assert tuple(
+        (
+            node.binding_start_line,
+            node.binding_start_col,
+            node.binding_end_line,
+            node.binding_end_col,
+        )
+        for node in nodes
+    ) == ((1, 14, 1, 15), (1, 17, 1, 23))
+    assert nodes[0].sha256 == nodes[1].sha256
+
+    source.write_text("VALUE = 1\nVALUE = 2\n", encoding="utf-8")
+    duplicate_rows = [
+        ["imports.py", "VALUE", "assignment", 1, 1],
+        ["imports.py", "VALUE", "assignment", 2, 1],
+    ]
+    with pytest.raises(CodeQLAnalysisError, match="does not identify one declaration"):
+        _load_nodes(tmp_path, duplicate_rows)
+```
+
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=tests/test_system_impact.py:test_load_edges_uses_exact_binding_locations -->
+```python contract-target
+def test_load_edges_uses_exact_binding_locations(tmp_path: Path) -> None:
+    """Attach a same-line dependency to the binding named by CodeQL."""
+    source = tmp_path / "imports.py"
+    source.write_text("from x import A, B as C\n", encoding="utf-8")
+    nodes = _load_nodes(
+        tmp_path,
+        [
+            ["imports.py", "A", "import", 1, 15],
+            ["imports.py", "C", "import", 1, 18],
+        ],
+    )
+    rows = [["imports.py", 1, 15, "imports.py", 1, 18, "reads", "use.py", 4]]
+
+    edges = _load_edges(tmp_path, rows, nodes)
+
+    assert len(edges) == 1
+    assert edges[0].source == "imports.py:A"
+    assert edges[0].target == "imports.py:C"
+
+    rows[0][5] = 16
+    with pytest.raises(CodeQLAnalysisError, match="has no source node"):
+        _load_edges(tmp_path, rows, nodes)
 ```
 
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive -->
@@ -1606,7 +2103,7 @@ def import_binding(source: bytes, symbol: str) -> ImportBinding:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                local = alias.asname or alias.name.split(".")[0]
+                local = alias.asname or alias.name
                 if local == symbol:
                     matches.append(("import", 0, None, alias.name, alias.asname))
         elif isinstance(node, ast.ImportFrom):
@@ -1621,6 +2118,60 @@ def import_binding(source: bytes, symbol: str) -> ImportBinding:
             f"expected one import binding for {symbol!r}; found {len(matches)}"
         )
     return matches[0]
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/source.py:_import_names -->
+```python contract-target
+def _import_names(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
+    names: list[str] = []
+    for alias in node.names:
+        if alias.name == "*":
+            continue
+        names.append(alias.asname or alias.name)
+    return tuple(names)
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/source.py:_resolve_declaration -->
+```python contract-target
+def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
+    parts = qualified_symbol.split(".")
+    if not parts or any(not part.isidentifier() for part in parts):
+        raise SourceDeclarationError(
+            f"invalid qualified Python symbol: {qualified_symbol!r}"
+        )
+
+    direct = [
+        node for node in tree.body if qualified_symbol in _declaration_names(node)
+    ]
+    if len(direct) == 1:
+        return direct[0]
+    if len(direct) > 1:
+        raise SourceDeclarationError(
+            f"Python declaration is ambiguous: {qualified_symbol}"
+        )
+
+    body: Sequence[ast.stmt] = tree.body
+    for index, part in enumerate(parts):
+        matches = [node for node in body if part in _declaration_names(node)]
+        if not matches:
+            raise SourceDeclarationError(
+                f"Python declaration is absent: {qualified_symbol}"
+            )
+        if len(matches) > 1:
+            raise SourceDeclarationError(
+                f"Python declaration is ambiguous: {qualified_symbol}"
+            )
+
+        match = matches[0]
+        if index == len(parts) - 1:
+            return match
+        if not isinstance(match, ast.ClassDef):
+            raise SourceDeclarationError(
+                f"qualified symbol parent is not a class: {qualified_symbol}"
+            )
+        body = match.body
+
+    raise AssertionError("qualified symbol resolution exhausted without a result")
 ```
 
 <!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/source.py:SourceDeclarationError -->
@@ -2095,7 +2646,7 @@ def test_completed_viper_pair_block(tmp_path: Path) -> None:
 ```python contract-target
 @pytest.mark.integration
 def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None:
-    """Compile the checked-in QL pack and verify call and write dependencies."""
+    """Compile the checked-in QL pack and verify exact dependency edges."""
     if os.environ.get("VIPER_RUN_CODEQL_TESTS") != "1":
         pytest.skip("set VIPER_RUN_CODEQL_TESTS=1 to run the real CodeQL check")
 
@@ -2128,6 +2679,9 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
     (root / "src/writes.py").write_text(
         "state = 0\n"
         "\n"
+        "def read_state() -> int:\n"
+        "    return state\n"
+        "\n"
         "def update_state(value: int) -> None:\n"
         "    global state\n"
         "    state = value\n"
@@ -2137,6 +2691,10 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
         "\n"
         "    def update(self, value: int) -> None:\n"
         "        self.value = value\n",
+        encoding="utf-8",
+    )
+    (root / "src/consumer.py").write_text(
+        "from writes import state\n",
         encoding="utf-8",
     )
 
@@ -2149,7 +2707,7 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
         version=json.loads(version.stdout)["version"],
         platform=sys.platform,
         executable_sha256=_sha256(executable.read_bytes()),
-        pack="viper/python-impact@1.0.0",
+        pack="viper/python-impact@1.1.0",
         pack_sha256=_tree_digest(query_pack),
     )
 
@@ -2186,11 +2744,24 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
     }
     assert write_edges[("src/writes.py:update_state", "src/writes.py:state")] == (
         "src/writes.py",
-        5,
+        8,
     )
     assert write_edges[
         ("src/writes.py:Counter.update", "src/writes.py:Counter.value")
-    ] == ("src/writes.py", 11)
+    ] == ("src/writes.py", 14)
+
+    assert any(
+        edge.source == "src/writes.py:read_state"
+        and edge.target == "src/writes.py:state"
+        and edge.kind == "reads"
+        for edge in graph.edges
+    )
+    assert any(
+        edge.source == "src/consumer.py:state"
+        and edge.target == "src/writes.py:state"
+        and edge.kind == "imports"
+        for edge in graph.edges
+    )
 ```
 
 ### One-hop pre-pairing check
@@ -2827,6 +3398,13 @@ def test_import_target_owns_names_in_the_same_statement(tmp_path: Path) -> None:
     assert import_binding(b"from .models import New\n", "New") == import_binding(
         b"from .models import Existing, New\n",
         "New",
+    )
+    assert (
+        extract_declaration_bytes(
+            b"import urllib.parse\n",
+            "urllib.parse",
+        )
+        == b"import urllib.parse"
     )
     assert unexpected == ()
 ```
