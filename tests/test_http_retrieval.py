@@ -187,6 +187,7 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
                     bytes=len(implementation_raw),
                 ),
                 parameter_model=ParameterModelRef(
+                    owner="project",
                     path="project/transport_params.py",
                     symbol="ConformingTransportParameters",
                     sha256=hashlib.sha256(parameter_raw).hexdigest(),
@@ -499,6 +500,7 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
             bytes=len(implementation_raw),
         ),
         parameter_model=ParameterModelRef(
+            owner="project",
             path="project/transport_params.py",
             symbol="ProjectTransportParameters",
             sha256=hashlib.sha256(parameter_raw).hexdigest(),
@@ -705,6 +707,7 @@ def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
             bytes=len(implementation_raw),
         ),
         parameter_model=ParameterModelRef(
+            owner="project",
             path="project/params.py",
             symbol="EscapeParameters",
             sha256=hashlib.sha256(parameter_raw).hexdigest(),

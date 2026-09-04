@@ -109,6 +109,7 @@ def _parameter_model(root: Path, symbol: str) -> ParameterModelRef:
     path = "src/sample_project/parameters.py"
     raw = (root / path).read_bytes()
     return ParameterModelRef(
+        owner="project",
         path=path,
         symbol=symbol,
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -406,8 +407,8 @@ def test_generated_project_uses_runner_owned_downloads(
     metric_path = "src/sample_project/metrics/evaluation.py"
     metric_raw = (root / metric_path).read_bytes()
     metric = MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
         metric_id="prediction_bytes",
-        kind="evaluation",
         implementation=MetricImplementationRef(
             path=metric_path,
             symbol="prediction_bytes",

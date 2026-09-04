@@ -48,7 +48,7 @@ from .http import (
 )
 from .ids import HumanId, InputName, MetricId, RunId, StageId
 from .inputs import InputRef, ResolvedInputRef
-from .metrics import MetricHandle
+from .metrics import MetricHandle, MetricObjectiveSpec
 from .parameters import ParameterModelRef
 from .references import (
     ResolvedGitFileRef,
@@ -276,156 +276,109 @@ class EmbedSpec(InternalSpec):
     """Request construction of a project-defined embedding artifact."""
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
+    objective: MetricObjectiveSpec | None = None
     params: parameters.Embed
+
+    @model_validator(mode="after")
+    def validate_objective(self) -> EmbedSpec:
+        """Require a selected embedding objective to occur in metric_ids."""
+        if (
+            self.objective is not None
+            and self.objective.metric_id not in self.metric_ids
+        ):
+            raise ValueError("embedding objective must occur in stage metric IDs")
+        return self
 
 
 class TrainSpec(InternalSpec):
-    """Request training and one terminal replay checkpoint."""
+    """Request training with an optional measured objective."""
 
     kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
+    objective: MetricObjectiveSpec | None = None
     params: parameters.Train
 
     @model_validator(mode="after")
-    def validate_terminal_checkpoint(self) -> TrainSpec:
-        """Enforce the canonical terminal checkpoint and resume inputs."""
+    def validate_training_contract(self) -> TrainSpec:
+        """Validate any objective and the terminal checkpoint contract."""
+        if (
+            self.objective is not None
+            and self.objective.metric_id not in self.metric_ids
+        ):
+            raise ValueError("training objective must occur in stage metric IDs")
         required_artifacts = {PARAMETERS, RESUME_STATE}
-        missing_artifacts = required_artifacts - set(self.artifacts)
-        if missing_artifacts:
-            missing = ", ".join(sorted(missing_artifacts))
+        missing = required_artifacts - set(self.artifacts)
+        if missing:
             raise ValueError(
-                f"training stages must declare terminal checkpoint artifacts: {missing}"
+                "training stages must declare terminal checkpoint artifacts: "
+                + ", ".join(sorted(missing))
             )
-
         model_input = self.inputs.get(PARAMETERS_INPUT)
         state_input = self.inputs.get(RESUME_STATE_INPUT)
-
         if (model_input is None) != (state_input is None):
             raise ValueError("checkpoint inputs must be declared together")
-
         if model_input is None or state_input is None:
             return self
-
         if model_input.kind != state_input.kind:
             raise ValueError("checkpoint inputs must use the same input kind")
-
         if model_input.kind == "stored" and state_input.kind == "stored":
             if any(
-                input_ref.pointer.path.split("/")[1] != "models"
-                for input_ref in (model_input, state_input)
+                value.pointer.path.split("/")[1] != "models"
+                for value in (model_input, state_input)
             ):
                 raise ValueError("stored checkpoint inputs must use inputs/models")
-
         if model_input.kind == "future" and state_input.kind == "future":
             if model_input.producer_stage_id != state_input.producer_stage_id:
-                raise ValueError(
-                    "checkpoint inputs must select one checkpoint-producing stage"
-                )
+                raise ValueError("checkpoint inputs must select one producer stage")
             if model_input.name != PARAMETERS:
                 raise ValueError("parameters input must select parameters")
             if state_input.name != RESUME_STATE:
                 raise ValueError("resume_state input must select resume_state")
-
         return self
 
 
 class EvaluateSpec(InternalSpec):
-    """Request prediction and metrics for one fixed model, dataset, and split."""
+    """Request prediction and recomputed metrics for one fixed evaluation."""
 
     kind: Literal["evaluate"] = "evaluate"  # pyright: ignore[reportIncompatibleVariableOverride]
     evaluation_id: EvaluationId
     metric_ids: tuple[MetricId, ...] = Field(  # pyright: ignore[reportGeneralTypeIssues]
         min_length=1
     )
+    objective: MetricObjectiveSpec | None = None
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
     params: parameters.Evaluate
 
     @model_validator(mode="after")
     def validate_evaluation_contract(self) -> EvaluateSpec:
-        """Require fixed evaluation inputs and one canonical prediction artifact."""
+        """Require the objective, fixed inputs, splits, and prediction artifact."""
+        if (
+            self.objective is not None
+            and self.objective.metric_id not in self.metric_ids
+        ):
+            raise ValueError("evaluation objective must occur in stage metric IDs")
         if len(set(self.metric_ids)) != len(self.metric_ids):
             raise ValueError("evaluation metric IDs must be unique")
         if len(set(self.split_inputs)) != len(self.split_inputs):
             raise ValueError("evaluation split input names must be unique")
-
-        model_input = self.inputs.get(PARAMETERS_INPUT)
-        if model_input is None:
+        if PARAMETERS_INPUT not in self.inputs:
             raise ValueError("evaluation requires a parameters input")
-
-        dataset_input = self.inputs.get(EVALUATION_DATASET_INPUT)
-        if dataset_input is None:
+        dataset = self.inputs.get(EVALUATION_DATASET_INPUT)
+        if dataset is None:
             raise ValueError("evaluation requires an evaluation_dataset input")
-        if dataset_input.kind != "stored":
+        if dataset.kind != "stored":
             raise ValueError("evaluation_dataset must be a stored input")
-        if dataset_input.pointer.path.split("/")[1] != "datasets":
+        if dataset.pointer.path.split("/")[1] != "datasets":
             raise ValueError("evaluation_dataset must use inputs/datasets")
-        if dataset_input.data_role not in {"evaluation", "benchmark"}:
-            raise ValueError(
-                "evaluation_dataset data_role must be evaluation or benchmark"
-            )
-
-        reserved_inputs = {PARAMETERS_INPUT, EVALUATION_DATASET_INPUT}
-        if reserved_inputs & set(self.split_inputs):
-            raise ValueError(
-                "evaluation split inputs must differ from reserved input names"
-            )
-
-        missing_splits = set(self.split_inputs) - set(self.inputs)
-        if missing_splits:
-            missing = ", ".join(sorted(missing_splits))
-            raise ValueError(f"evaluation split inputs are undeclared: {missing}")
-
-        for split_name in self.split_inputs:
-            split_input = self.inputs[split_name]
-            if split_input.kind != "stored":
-                raise ValueError(
-                    f"evaluation split input {split_name!r} must be stored"
-                )
-            if split_input.pointer.path.split("/")[1] != "benchmarks":
-                raise ValueError(
-                    f"evaluation split input {split_name!r} must use inputs/benchmarks"
-                )
-            if split_input.data_role != dataset_input.data_role:
-                raise ValueError(
-                    f"evaluation split input {split_name!r} data_role must match "
-                    "evaluation_dataset"
-                )
-
-        if model_input.kind == "future":
-            if model_input.name != PARAMETERS:
-                raise ValueError("same-run evaluation must consume parameters")
-        elif model_input.kind == "external":
-            if model_input.data_role not in {"training", "validation"}:
-                raise ValueError(
-                    "external evaluation parameters data_role must be training or "
-                    "validation"
-                )
-        else:
-            if model_input.pointer.path.split("/")[1] != "models":
-                raise ValueError("stored evaluation model must use inputs/models")
-            if model_input.data_role not in {"training", "validation"}:
-                raise ValueError(
-                    "stored evaluation parameters data_role must be training or "
-                    "validation"
-                )
-
-        prediction = self.artifacts.get(PREDICTIONS)
-        if prediction is None:
-            raise ValueError("evaluation must declare a predictions artifact")
-
-        if any(
-            artifact.data_role != dataset_input.data_role
-            for artifact in self.artifacts.values()
-        ):
-            raise ValueError(
-                "evaluation artifact data_role must match evaluation_dataset"
-            )
-
-        if any(
-            artifact.path.split("/")[7] != self.evaluation_id
-            for artifact in self.artifacts.values()
-        ):
-            raise ValueError("evaluation artifact entity IDs must match evaluation_id")
-
+        if dataset.data_role not in {"evaluation", "benchmark"}:
+            raise ValueError("evaluation_dataset has an invalid data role")
+        reserved = {PARAMETERS_INPUT, EVALUATION_DATASET_INPUT}
+        if reserved & set(self.split_inputs):
+            raise ValueError("evaluation splits must differ from reserved inputs")
+        if any(name not in self.inputs for name in self.split_inputs):
+            raise ValueError("evaluation split input is absent")
+        predictions = self.artifacts.get(PREDICTIONS)
+        if predictions is None:
+            raise ValueError("evaluation requires a predictions artifact")
         return self
 
 

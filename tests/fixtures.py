@@ -52,7 +52,7 @@ def metric_source(metric_id: str, kind: MetricKind) -> bytes:
     mode = "recompute" if kind == "evaluation" else "live"
     return (
         "from viper.metrics import metric\n\n"
-        f'@metric(metric_id="{metric_id}", kind="{kind}", mode="{mode}")\n'
+        f'@metric(metric_id="{metric_id}", mode="{mode}")\n'
         "def compute(context):\n"
         "    return 0.91\n"
     ).encode()
@@ -63,6 +63,7 @@ def parameter_model_ref(kind: str) -> ParameterModelRef:
     raw = parameter_model_source(kind)
     class_name = f"{kind.title()}Parameters"
     return ParameterModelRef(
+        owner="project",
         path=f"project/parameters/{kind}.py",
         symbol=class_name,
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -207,8 +208,8 @@ def metric_spec(
     )
     if kind == "evaluation":
         return MetricSpec(
+            parameter_model=parameters.model_ref(parameters.Metric),
             metric_id=metric_id,
-            kind=kind,
             implementation=implementation,
             params=parameters.Metric(),
             mode="recompute",
@@ -222,8 +223,8 @@ def metric_spec(
             comparator=FloatComparator(),
         )
     return MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
         metric_id=metric_id,
-        kind=kind,
         implementation=implementation,
         params=parameters.Metric(),
         mode="live",

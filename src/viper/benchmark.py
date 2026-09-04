@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AwareDatetime, Field, model_validator
 
 from ._schema import SHA256, BenchmarkId, EvaluationId, ProtocolModel
 from .artifacts import StageArtifactRef
 from .ids import InputName, MetricId
+from .metrics import MetricCriterionDraft, MetricDraft
 from .references import (
     ArtifactPointerRef,
     ResolvedBenchmarkSpecRef,
@@ -101,3 +102,13 @@ class BenchmarkResult(ProtocolModel):
         if len(set(metrics)) != len(metrics):
             raise ValueError("benchmark metric criteria must be unique")
         return self
+
+
+def at_least(metric: MetricDraft[Any], threshold: float) -> MetricCriterionDraft:
+    """Require a benchmark metric value at or above one threshold."""
+    return MetricCriterionDraft(metric=metric, comparison="ge", threshold=threshold)
+
+
+def at_most(metric: MetricDraft[Any], threshold: float) -> MetricCriterionDraft:
+    """Require a benchmark metric value at or below one threshold."""
+    return MetricCriterionDraft(metric=metric, comparison="le", threshold=threshold)

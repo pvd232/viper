@@ -472,6 +472,7 @@ def publish_metric_verification(
         stage_id=stage_id,
         purpose="measurement",
         implementation=metric.implementation,
+        parameter_model=metric.parameter_model,
         params=metric.params,
         dependencies=dependencies,
         startup=startup_receipt(run),
@@ -740,7 +741,10 @@ def add_plan_records(
     for metric in experiment.metrics:
         store.put(
             git_file(source_commit, metric.implementation.path),
-            metric_source(metric.metric_id, metric.kind),
+            metric_source(
+                metric.metric_id,
+                "training" if metric.mode == "live" else "evaluation",
+            ),
         )
 
     for run_stage, (_, spec) in zip(run.stages, stage_specs, strict=True):

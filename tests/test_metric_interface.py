@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from viper import parameters
+from viper.benchmark import at_least
 from viper.metrics import (
     FloatComparator,
     MeasurementSink,
@@ -18,18 +19,45 @@ from viper.metrics import (
     StatefulMetric,
     compare_metric_values,
     load_metric,
+    max,
+    measure,
     metric,
     validate_metric_definition,
 )
 
 
-@metric(metric_id="mean_value", kind="evaluation", mode="recompute")
+def test_metric_drafts_freeze_through_public_constructors() -> None:
+    """Build metric, objective, and criterion drafts from one decorated callable."""
+
+    @metric(metric_id="accuracy", mode="recompute")
+    def accuracy(context: MetricContext[parameters.Metric]) -> float:
+        return float(context.params.model_dump()["value"])
+
+    draft = measure(
+        accuracy,
+        params=parameters.Metric.model_validate({"value": 0.9}),
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name="predictions",
+                required_data_role="evaluation",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+
+    assert max(draft).metric == draft
+    assert at_least(draft, 0.8).threshold == 0.8
+    assert draft.implementation is accuracy
+
+
+@metric(metric_id="mean_value", mode="recompute")
 def mean_value(context: MetricContext) -> float:
     """Return the frozen scalar supplied through metric parameters."""
     return float(context.params.model_dump()["value"])
 
 
-@metric(metric_id="running_mean", kind="training", mode="live")
+@metric(metric_id="running_mean", mode="live")
 class RunningMean(StatefulMetric):
     """Accumulate a scalar mean across training updates."""
 
@@ -74,18 +102,18 @@ def test_metric_loader_invokes_top_level_symbol(tmp_path: Path) -> None:
 
 
 def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
-    """Match the metric ID, kind, and mode declared in source and MetricSpec."""
+    """Match the metric ID and mode declared in source and MetricSpec."""
     source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="accuracy", kind="evaluation", mode="recompute")\n'
+        b'@metric(metric_id="accuracy", mode="recompute")\n'
         b"def compute(context):\n"
         b"    return 1.0\n"
     )
     path = tmp_path / "accuracy.py"
     path.write_bytes(source)
     spec = MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
         metric_id="accuracy",
-        kind="evaluation",
         implementation=MetricImplementationRef(
             path="accuracy.py",
             symbol="compute",

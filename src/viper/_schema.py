@@ -73,3 +73,10 @@ class ProtocolModel(BaseModel):
     """Closed, frozen protocol object."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+PythonSourceRelPath = Annotated[
+    str,
+    AfterValidator(validate_repo_rel_path),
+    AfterValidator(validate_python_file_path),
+]

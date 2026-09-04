@@ -286,6 +286,7 @@ def _freeze_signal_plan(
             bytes=len(source_files["jobs/train.py"]),
         ),
         parameter_model=ParameterModelRef(
+            owner="project",
             path="project/parameters/train.py",
             symbol="SignalTrainParameters",
             sha256=hashlib.sha256(

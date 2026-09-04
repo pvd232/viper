@@ -1,10 +1,12 @@
 """Define the public parameter categories that projects may specialize."""
 
+import hashlib
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
-from ._schema import SHA256, ProtocolModel, PythonRepoRelPath, PythonSymbol
+from ._schema import SHA256, ProtocolModel, PythonSourceRelPath, PythonSymbol
 
 
 class ParameterSet(BaseModel):
@@ -52,10 +54,14 @@ class Http(ParameterSet):
     """Parameters consumed by one project-defined HTTP implementation."""
 
 
-class ParameterModelRef(ProtocolModel):
-    """Identify one project-owned Pydantic parameter class by exact file bytes."""
+ParameterModelOwner = Literal["project", "viper"]
 
-    path: PythonRepoRelPath
+
+class ParameterModelRef(ProtocolModel):
+    """Identify one parameter class by owner, source bytes, and symbol."""
+
+    owner: ParameterModelOwner
+    path: PythonSourceRelPath
     symbol: PythonSymbol
     sha256: SHA256
     bytes: int = Field(gt=0)
@@ -70,3 +76,16 @@ __all__ = [
     "ParameterModelRef",
     "Train",
 ]
+
+
+def model_ref(model: type[ParameterSet]) -> ParameterModelRef:
+    """Identify one built-in parameter class by its installed source bytes."""
+    path = Path(__file__).resolve()
+    raw = path.read_bytes()
+    return ParameterModelRef(
+        owner="viper",
+        path=path.name,
+        symbol=model.__name__,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )

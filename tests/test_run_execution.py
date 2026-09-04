@@ -200,8 +200,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         b"        return sum(self.values) / len(self.values)\n"
     )
     parameter_bytes = MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
         metric_id="parameter_bytes",
-        kind="diagnostic",
         implementation=MetricImplementationRef(
             path="project/metrics/parameter_bytes.py",
             symbol="compute",
@@ -220,8 +220,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         comparator=FloatComparator(),
     )
     epoch_mean = MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
         metric_id="epoch_mean",
-        kind="training",
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
@@ -353,6 +353,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(source_files["jobs/train.py"]),
         ),
         parameter_model=ParameterModelRef(
+            owner="project",
             path="project/parameters/train.py",
             symbol="TinyTrainParameters",
             sha256=hashlib.sha256(
@@ -658,8 +659,8 @@ def test_train_stage_captures_local_external_input(
         b"        return sum(self.values) / len(self.values)\n"
     )
     parameter_bytes = MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
         metric_id="parameter_bytes",
-        kind="diagnostic",
         implementation=MetricImplementationRef(
             path="project/metrics/parameter_bytes.py",
             symbol="compute",
@@ -678,8 +679,8 @@ def test_train_stage_captures_local_external_input(
         comparator=FloatComparator(),
     )
     epoch_mean = MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
         metric_id="epoch_mean",
-        kind="training",
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
@@ -785,6 +786,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(source_files["jobs/train.py"]),
         ),
         parameter_model=ParameterModelRef(
+            owner="project",
             path="project/parameters/train.py",
             symbol="TinyTrainParameters",
             sha256=hashlib.sha256(

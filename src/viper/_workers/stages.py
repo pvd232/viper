@@ -11,11 +11,12 @@ from types import MappingProxyType
 
 from viper.workspace import captured_input_path
 
-from .._parameter.validation import instantiate_parameters
+from .. import parameters
+from .._parameter.validation import instantiate_parameters, parameter_model_path
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
-from ..metrics import MeasurementSink, MetricHandle, bind_live_metric
+from ..metrics import MeasurementSink, MetricContext, MetricHandle, bind_live_metric
 from ..runs import RunSpec
 from ..runtime import (
     apply_reproducibility,
@@ -109,7 +110,7 @@ def _live_metric_handles(
     stage: ParameterizedSpec,
     binding: StageContextBinding,
 ) -> dict[str, MetricHandle]:
-    """Bind every selected live metric to the active attempt's measurement file."""
+    """Bind every selected live metric to frozen parameters and stage paths."""
     if not stage.metric_ids:
         return {}
 
@@ -120,6 +121,8 @@ def _live_metric_handles(
     if experiment.experiment_id != run.experiment_id:
         raise ValueError("startup.plan: experiment ID differs from RunSpec")
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    inputs = MappingProxyType(_workspace_paths(root, binding.inputs))
+    artifacts = MappingProxyType(_workspace_paths(root, binding.artifacts))
     handles: dict[str, MetricHandle] = {}
     for metric_id in stage.metric_ids:
         spec = metrics.get(metric_id)
@@ -127,6 +130,12 @@ def _live_metric_handles(
             raise ValueError("startup.plan: stage selects an undeclared metric")
         if spec.mode != "live":
             continue
+        params = instantiate_parameters(
+            parameter_model_path(root, spec.parameter_model),
+            spec.parameter_model,
+            spec.params,
+            parameters.Metric,
+        )
         path = (
             root
             / f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
@@ -143,6 +152,7 @@ def _live_metric_handles(
                 stage_id=binding.stage_id,
                 metric_id=metric_id,
             ),
+            MetricContext(inputs=inputs, artifacts=artifacts, params=params),
         )
     return handles
 

@@ -357,8 +357,8 @@ class ParameterContractTests(unittest.TestCase):
         """Bind a metric to any exact Python file in the user repository."""
         source = b"def compute(context):\n    return 0.0\n"
         metric = MetricSpec(
+            parameter_model=parameters.model_ref(parameters.Metric),
             metric_id="pearson_correlation",
-            kind="evaluation",
             implementation=MetricImplementationRef(
                 path="analysis/quality/correlation.py",
                 symbol="compute",
@@ -383,8 +383,8 @@ class ParameterContractTests(unittest.TestCase):
         """Reject a metric path that does not identify a Python file."""
         with self.assertRaisesRegex(ValidationError, "Python file"):
             MetricSpec(
+                parameter_model=parameters.model_ref(parameters.Metric),
                 metric_id="pearson_correlation",
-                kind="evaluation",
                 implementation=MetricImplementationRef(
                     path="analysis/quality/correlation.yaml",
                     symbol="compute",
