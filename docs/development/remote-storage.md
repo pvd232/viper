@@ -3517,7 +3517,7 @@ def resolve_inputs(
                 raise RunError("future input producer has not completed")
             resolved[name] = ResolvedFutureInputRef(producer=producer)
             producer_spec = stage_specs[input_ref.producer_stage_id]
-            artifact = producer_spec.artifacts[input_ref.producer_artifact]
+            artifact = producer_spec.artifacts[input_ref.name]
             paths[name] = root / artifact.path
         elif input_ref.kind == "external":
             resolved_input, captured_path = capture_external_input(
@@ -4253,7 +4253,7 @@ def _resolve_metric_dependencies(
                 files = tuple(
                     resolve_snapshot_file_ref(realized.producer.snapshot, file)
                     for file in _artifact_files(
-                        producer.artifacts[declared.producer_artifact]
+                        producer.artifacts[declared.name]
                     )
                 )
             elif isinstance(realized, ResolvedStoredInputRef):
