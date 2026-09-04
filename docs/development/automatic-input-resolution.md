@@ -2988,7 +2988,7 @@ DataRole = Literal["training", "validation", "eval", "benchmark"]
 
 **File: `src/viper/_parameter/validation.py`**
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/_parameter/validation.py:parameter_model_path -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:parameter_model_path -->
 ```python contract-target
 def parameter_model_path(
     project_root: Path,
