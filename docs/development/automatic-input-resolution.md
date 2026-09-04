@@ -2606,7 +2606,6 @@ targets = [
     "src/viper/params.py:ProtocolModel",
     "src/viper/params.py:PythonSourceRelPath",
     "src/viper/params.py:PythonSymbol",
-    "src/viper/_schema.py:HumanId",
     "src/viper/_parameter/validation.py:parameters",
     "src/viper/_parameter/validation.py:params",
     "src/viper/_parameter/validation.py:TypeVar",
@@ -2900,7 +2899,6 @@ targets = [
     "src/viper/authoring.py:dataclass",
     "src/viper/authoring.py:subprocess",
     "src/viper/authoring.py:ParameterValidationError",
-    "src/viper/authoring.py:serialize_document",
     "src/viper/authoring.py:Mapping",
     "src/viper/authoring.py:Callable",
     "src/viper/authoring.py:Annotated",
@@ -3044,11 +3042,6 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:PythonSymbol -->
 ```python contract-target
 from ._schema import SHA256, ProtocolModel, PythonSourceRelPath, PythonSymbol
-```
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_schema.py:HumanId -->
-```python contract-target
-from .ids import HumanId
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=remove target=src/viper/_parameter/validation.py:parameters -->
@@ -3553,11 +3546,6 @@ from dataclasses import dataclass
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/authoring.py:ParameterValidationError -->
 <!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=src/viper/authoring.py:serialize_document -->
-```python contract-target
-from .serialization import serialize_document
-```
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=src/viper/authoring.py:SingleFileArtifactDraft -->
 ```python contract-target
