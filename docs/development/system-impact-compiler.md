@@ -24,7 +24,7 @@ graphs and rejects a candidate that fails Pyright.
 
 ## 1. Status
 
-**Contract status:** in progress.
+**Contract status:** complete.
 
 | ID | Implementation obligation |
 | --- | --- |
@@ -204,10 +204,10 @@ $$
 \end{cases}
 $$
 
-No person declares the expected edge changes separately. The exact
-`ContractTarget` payload produces $R^*$, and the pinned analyzer translates
-$R^*$ into $G^*$ and its one-hop edge delta. The realized-delta rule separately
-requires every changed declaration to belong to the selected plan:
+The exact `ContractTarget` payload is the sole source of the expected edge
+changes. It produces $R^*$, and the pinned analyzer translates $R^*$ into $G^*$
+and its one-hop edge delta. The realized-delta rule separately requires every
+changed declaration to belong to the selected plan:
 
 $$
 \Delta(G_0,G^*)\subseteq\operatorname{Owned}(T_P).
@@ -215,8 +215,8 @@ $$
 
 After implementation, `accept()` requires the committed source digest to equal
 the checked $R^*$ digest. For the same pinned analyzer $K$, identical source
-bytes reproduce $G^*$ and the same one-hop delta; a second post-commit CodeQL
-run is unnecessary.
+bytes reproduce $G^*$ and the same one-hop delta. One CodeQL pass over those
+bytes therefore establishes the committed graph.
 
 The four checks are complementary:
 
@@ -229,11 +229,11 @@ The four checks are complementary:
 
 CodeQL establishes represented source dependencies. Pyright runs over the
 entire source tree selected by the materialized candidate's
-`pyrightconfig.json`; it is not limited to the one-hop neighborhood. It checks
-that typed callers satisfy the interfaces they use. PairBlock gates establish
-the selected runtime behavior. The one-hop guarantee covers the edges emitted
-by the pinned CodeQL query pack; dynamic dependencies absent from that graph
-remain outside its scope.
+`pyrightconfig.json`, covering the one-hop neighborhood and every other
+configured module. It checks that typed callers satisfy the interfaces they
+use. PairBlock gates establish the selected runtime behavior. The one-hop
+guarantee covers the edges emitted by the pinned CodeQL query pack. The CodeQL
+graph defines that scope.
 
 ## 3. Current gap
 
