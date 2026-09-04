@@ -278,7 +278,7 @@ gate = "python -m pytest tests/test_process_startup.py tests/test_preflight.py t
 depends_on = ["P2-CPL-01"]
 ```
 
-## 7. Accepted `ContractTarget` declarations
+## 7. ContractTarget
 
 Each `contract-target` marker identifies one repository declaration as
 `path:symbol`. The Python fence beneath the marker contains the accepted

@@ -1085,7 +1085,7 @@ def test_contract_traceability_dags_use_semantic_palette() -> None:
     """Keep each traceability DAG role bound to its declared color."""
     text = CONTRACT_TRACEABILITY.read_text()
     section = text.split("## 3. Current gap", maxsplit=1)[1].split(
-        "## 4. Contract models", maxsplit=1
+        "## 4. Models", maxsplit=1
     )[0]
     diagrams = tuple(match.group("body") for match in _MERMAID_FENCE.finditer(section))
 
@@ -1879,7 +1879,7 @@ def test_system_impact_codeql_backend_is_end_to_end() -> None:
 def test_contract_traceability_model_block_matches_runtime() -> None:
     """Keep every documented traceability class and field aligned with Python."""
     text = CONTRACT_TRACEABILITY.read_text()
-    section = text.split("## 4. Contract models", maxsplit=1)[1].split(
+    section = text.split("## 4. Models", maxsplit=1)[1].split(
         "## 5. Execution", maxsplit=1
     )[0]
     block = _TRACEABILITY_MODEL_FENCE.search(section)

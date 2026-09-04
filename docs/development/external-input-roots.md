@@ -126,7 +126,7 @@ flowchart LR
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 4. Contract models
+## 4. Models
 
 ### 4.1 Local declaration and resolved record
 
@@ -784,7 +784,7 @@ depends_on = ["P3-EIR-02"]
 attempt-owned local-input path. This block makes both consumers derive that
 path and verify the captured file recorded by `ResolvedExternalInputRef`.
 
-## 12. Accepted `ContractTarget` declarations
+## 12. ContractTarget
 
 **File: `src/viper/inputs.py`**
 

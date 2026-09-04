@@ -352,7 +352,7 @@ The diagrams use the contract-wide semantic palette: blue for authored
 contract data, amber for checklist scheduling, teal for observed evidence,
 purple for proposed or generated records, and red for an unsupported gap.
 
-## 4. Contract models
+## 4. Models
 
 These records belong to developer tooling, not the experiment protocol.
 
@@ -1366,7 +1366,7 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+targets = ["src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 tests = ["tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
@@ -1375,7 +1375,7 @@ depends_on = ["P0-SIG-06"]
 The implementation closes after all seven focused gates pass, the complete test
 module passes, and the review-cycle commit is synchronized with its upstream.
 
-## 11. Accepted `ContractTarget` declarations
+## 11. ContractTarget
 
 These declarations are the exact implementation values owned by the PairBlocks.
 Later update targets supersede the earlier declaration for the same symbol.
@@ -2262,7 +2262,16 @@ __all__ = [
 
 **File: `src/viper/_system_impact/check.py`**
 
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:Acceptance -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:CommitId -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:GateCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:OneHop -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:PlanCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:ResolvedContractTarget -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:SourceGraph -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:SourceNode -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:TargetCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:inspect_plan -->
 
 ```python contract-target
 from ..system_impact import (

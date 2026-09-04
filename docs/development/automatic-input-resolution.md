@@ -203,7 +203,7 @@ flowchart LR
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 4. Contract models
+## 4. Models
 
 ### Protocol-owned stage keys
 
@@ -2827,7 +2827,7 @@ This block stores typed Python stage drafts, derives frozen stage identities
 and references from those objects, and leaves Phase 6 to assemble the complete
 experiment graph.
 
-## 13. Accepted `ContractTarget` declarations
+## 13. ContractTarget
 
 Each payload below is the reviewed Phase 5 declaration for one PairBlock
 target. A guided edit may add a directly changed caller before the final plan

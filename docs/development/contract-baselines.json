@@ -11,7 +11,7 @@
         "CRT-06",
         "CRT-07"
       ],
-      "sha256": "5412f455c3b49f0cb8e6596419d4c2d28377e78e8e67b90e3492f06b658c0f65"
+      "sha256": "a47a7c168f4a0657c8bb5bd2a392cd4e433b7d509612025f1623bd4dff08230e"
     },
     {
       "path": "docs/development/project-data-root.md",
@@ -21,14 +21,14 @@
         "PDR-03",
         "PDR-04"
       ],
-      "sha256": "9ffe9cd8953339fa2d5227c1499d2fd2b47aabcb76764954011ba69cc7c12631"
+      "sha256": "a2e74aedc9f27be2260da66ba7b721ead2dfebf0e7cb670b2ac2873d0aeb7ac3"
     },
     {
       "path": "docs/development/module-ownership.md",
       "requirement_ids": [
         "MOD-01"
       ],
-      "sha256": "8e073fba2d7f847d428999caa6ae82f2060ec4b6300970b33b1b5347cd7a4558"
+      "sha256": "2b7b64ca1f8309b83174b21f60e8caf4b1faf3220bad0156eafa2545ab8d8607"
     },
     {
       "path": "docs/development/system-impact-compiler.md",
@@ -41,7 +41,7 @@
         "SIG-06",
         "SIG-07"
       ],
-      "sha256": "6372bd780e6ed8d3ec78dbae0bd05775e770f5053ffb59f513f41c6685f727ce"
+      "sha256": "9512fd18630bed3e66cfe381586af2092eeb3d86525b1f52cb730485a0e1e0e7"
     },
     {
       "path": "docs/development/pair-block-scheduling.md",
@@ -50,7 +50,7 @@
         "SCH-02",
         "SCH-03"
       ],
-      "sha256": "653258360579b961983d1faa37776ae94d3a65ac7156b991d6a18810b9d78194"
+      "sha256": "d68a9c5f08eaa3a950c47e47c3cea4b458a9701bf71c0ec00ca5f115a9662a2a"
     },
     {
       "path": "docs/development/child-process-launching.md",
@@ -58,7 +58,7 @@
         "CPL-01",
         "CPL-02"
       ],
-      "sha256": "2f36ff1b8f9c84cac86d418f4542aaf885a83d8b18a57fc103840d3f8fdd064d"
+      "sha256": "2b0966e7c7bf82f6bf6a0b94cb60dcb8799bc8cbbcc85cd283458f64ec4596ca"
     },
     {
       "path": "docs/development/download-retrieval-artifacts.md",
@@ -70,7 +70,7 @@
         "DRA-05",
         "DRA-06"
       ],
-      "sha256": "e9ecd98fbc5ef009c27bcaaad60287d9b232de3ac02cd173f20b5cab0e6dea66"
+      "sha256": "b63cc2e823e34a42e7ee06bd6ded44ee7737f461282306f38a2de94b3c23c2ca"
     },
     {
       "path": "docs/development/external-input-roots.md",
@@ -81,7 +81,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "e5e14fbb01c946224ef1a3d86f4148ba920556ea9f90c34ed2d24c6b28b962fb"
+      "sha256": "d4bfef88ce7ad6601a9977d541be058e4cd419e024a32560ddfcf5fd954593f4"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",
@@ -93,7 +93,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "6683f94b340c0db7c9b0f9bfca0de6e48ef9018116ba019e7decb50da5f77830"
+      "sha256": "3ad642bf1471f7975805cf721affdaeba4244022b496ea3fc6a3f8ad530cfcfd"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -105,7 +105,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "8697374c7faaea948b93a7af3a1d68c54e62f067dc612d6d7423a99c8c10f790"
+      "sha256": "64e0e57a3fd6eaed15e5f402e1beb2995109ef08a8052ac560333f6ec3e0e301"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -116,7 +116,7 @@
         "FPG-04",
         "FPG-05"
       ],
-      "sha256": "53b4af9b238a2083e24f0c77a7601da81045eed1ff2ccfc3f1639fd57bdca56e"
+      "sha256": "c0b3f7bbfce9c4d914f439e8eb0e5cc10286f1a0bf479ccd7d3887488d0911c2"
     },
     {
       "path": "docs/development/remote-storage.md",
@@ -140,7 +140,7 @@
         "EXP-02",
         "EXP-03"
       ],
-      "sha256": "27f3bf85e1a701108b7a08dfd46b3b5ef35bc2a42b2ecd57d0336e58d7c96349"
+      "sha256": "8c6ce44a86f724d5fbadf16930d9507ffa871fce2cb0bddfb549162e505d9b62"
     },
     {
       "path": "docs/development/provenance-catalog-mcp.md",

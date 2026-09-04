@@ -119,7 +119,7 @@ flowchart LR
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 4. Contract models
+## 4. Models
 
 ### Run-ID assignment
 

@@ -108,7 +108,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 C --> D
             [END]
 
-            ## 4. Contract models
+            ## 4. Models
 
             [PYTHON]
             class ExampleRecord:

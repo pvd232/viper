@@ -127,7 +127,7 @@ flowchart TB
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 4. Contract models
+## 4. Models
 
 | Object | Role |
 | --- | --- |
@@ -366,7 +366,7 @@ depends_on = ["P4-SCH-02"]
 assign executable work. This block condenses cycles and returns the maximal
 deterministic frontier available at each step.
 
-## 12. Accepted `ContractTarget` declarations
+## 12. ContractTarget
 
 ### P4-SCH-01 — planned source
 

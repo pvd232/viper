@@ -125,7 +125,7 @@ flowchart LR
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 4. Contract models
+## 4. Models
 
 `RunSpec.source` keeps its existing meaning. It identifies project source.
 The later plan commit identifies generated plan documents.

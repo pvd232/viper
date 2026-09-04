@@ -147,7 +147,7 @@ flowchart TD
 The diagrams use the semantic palette enforced by the contract documentation
 tests.
 
-## 4. Contract models
+## 4. Models
 
 Protocol schemas and serialized fields stay unchanged. This refactor moves
 existing Python declarations while preserving their shapes.

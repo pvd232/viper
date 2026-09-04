@@ -189,7 +189,7 @@ flowchart LR
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 4. Contract models
+## 4. Models
 
 ### Metric definition and configuration
 
@@ -1904,7 +1904,7 @@ block stores the primary metric and direction together, requires that metric
 to be selected by the stage, and checks the stage-specific live or recompute
 mode against the frozen experiment registry.
 
-## 12. Accepted `ContractTarget` declarations
+## 12. ContractTarget
 
 Each payload below is the reviewed Phase 4 declaration for one PairBlock
 target. A later guided edit may add a directly changed caller before the final

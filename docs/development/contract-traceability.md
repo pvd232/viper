@@ -242,7 +242,7 @@ flowchart TD
     linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
-## 4. Contract models
+## 4. Models
 
 These development-tool records remain outside the experiment protocol and run
 identity.
@@ -1446,7 +1446,7 @@ def _write_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 C --> D
             [END]
 
-            ## 4. Contract models
+            ## 4. Models
 
             [PYTHON]
             class ExampleRecord:
