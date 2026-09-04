@@ -187,12 +187,24 @@ def _changed_modules(root: Path, candidate: Path) -> tuple[str, ...]:
 
 
 def _import_failure(
+    root: Path,
     candidate: Path,
     python: Path,
     modules: tuple[str, ...],
 ) -> dict[str, Any] | None:
-    """Import changed modules alone and return the first failure."""
+    """Return the first import failure introduced by the candidate."""
     for module in modules:
+        baseline = _run(
+            (
+                str(python),
+                "-I",
+                "-c",
+                _IMPORT_SCRIPT,
+                str(root / "src"),
+                module,
+            ),
+            cwd=root,
+        )
         completed = _run(
             (
                 str(python),
@@ -204,7 +216,7 @@ def _import_failure(
             ),
             cwd=candidate,
         )
-        if completed.returncode == 0:
+        if completed.returncode == 0 or baseline.returncode != 0:
             continue
         return {
             "stage": "imports",
@@ -352,7 +364,7 @@ def validate(
             return result
 
     modules = _changed_modules(root, candidate)
-    import_failure = _import_failure(candidate, python, modules)
+    import_failure = _import_failure(root, candidate, python, modules)
     if import_failure is not None:
         result = {
             "passed": False,

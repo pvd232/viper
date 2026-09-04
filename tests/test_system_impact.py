@@ -390,7 +390,12 @@ def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None
     )
 
     modules = preflight._changed_modules(baseline, candidate)
-    failure = preflight._import_failure(candidate, Path(sys.executable), modules)
+    failure = preflight._import_failure(
+        baseline,
+        candidate,
+        Path(sys.executable),
+        modules,
+    )
 
     assert modules == ("viper.broken",)
     assert failure is not None
