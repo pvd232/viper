@@ -279,7 +279,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Contract Traceability](contract-traceability.md) | Complete | Requirements, rules, exact source targets, PairBlocks, tests, gates, and dependency order |
 | [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
-| [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
+| [System Impact Check](system-impact-compiler.md) | In progress | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, a two-graph one-hop preflight, and rejection of unplanned source changes |
 | [PairBlock scheduling](pair-block-scheduling.md) | In progress | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
@@ -303,7 +303,7 @@ The contracts share models. One contract owns each shared decision:
 | `.viper/store` remains a separate immutable subtree beneath the selected root | Project data root |
 | Public API and verification symbols are implemented in the modules callers import | Public module ownership |
 | Requirements, targets, rule edges, tests, gates, and dependency order form one closed implementation plan | Contract Traceability |
-| Pinned CodeQL observations report policy-selected direct baseline dependents and prove whether realized source changes match that closed plan | System Impact Check |
+| Pinned CodeQL observations report policy-selected direct dependents before and after a planned change; Pyright checks the materialized interfaces; and realized source changes must match the closed plan | System Impact Check |
 | Explicit dependencies, planned source edges, and shared-file writes determine safe PairBlock execution waves | PairBlock scheduling |
 | Repository-owned child processes use the spawn-safe facade on macOS | Child-process launching |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
@@ -880,9 +880,20 @@ The public records and checks live in `src/viper/system_impact.py`.
       <!-- verifies: SIG-06 -->
       <!-- contract-implementation: requirement=SIG-06 rule=system.source.writes state=implemented owner=src/viper/_system_impact/codeql.py:analyze_source -->
       <!-- contract-verification: requirement=SIG-06 rule=system.source.writes state=implemented test=tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository -->
+- [ ] Record the policy-selected direct neighborhood in both source graphs,
+      retain changed direct dependents, and reject a materialized candidate
+      whose callers fail Pyright.
+      <!-- pair-block: P0-SIG-07 -->
+      <!-- pair-block-contract: P0-SIG-07 contract=system-impact-compiler.md -->
+      <!-- implements: SIG-07 -->
+      <!-- verifies: SIG-07 -->
+      <!-- contract-implementation: requirement=SIG-07 rule=system.one_hop.recorded state=planned owner=src/viper/_system_impact/check.py:check_plan -->
+      <!-- contract-verification: requirement=SIG-07 rule=system.one_hop.recorded state=planned test=tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors -->
+      <!-- contract-implementation: requirement=SIG-07 rule=system.candidate.typed state=implemented owner=tools/check_plan.py:validate -->
+      <!-- contract-verification: requirement=SIG-07 rule=system.candidate.typed state=planned test=tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller -->
 
 The [System Impact Check](system-impact-compiler.md#10-implementation-order)
-defines the exact six blocks. It consumes the closed CTG produced by
+defines the exact seven blocks. It consumes the closed CTG produced by
 `P0-CRT-07`; it does not own plan construction.
 
 ### 7.5 Focused proof

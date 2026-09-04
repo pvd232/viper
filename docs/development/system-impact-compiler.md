@@ -16,13 +16,15 @@ validated ContractTraceabilityGraph
 -> reject unplanned source changes
 ```
 
-The check does not generate a plan. `ContractTraceabilityGraph` supplies the
-selected PairBlocks, and each PairBlock gate remains the behavioral acceptance
-boundary.
+The check does not generate a plan. <!-- direct-prose: allow -->
+`ContractTraceabilityGraph` supplies the plan and selected PairBlocks. Each
+PairBlock gate remains the behavioral acceptance boundary. The pre-pairing
+command also records the policy-selected direct neighborhood in both source
+graphs and rejects a candidate that fails Pyright.
 
 ## 1. Status
 
-**Contract status:** complete.
+**Contract status:** in progress.
 
 | ID | Implementation obligation |
 | --- | --- |
@@ -32,6 +34,7 @@ boundary.
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_system_impact.py --> | Replay the check over the committed `model_support` to `models` migration and one completed VIPER PairBlock, then compare its result with the exact Git diff. |
 | SIG-05 <!-- contract-requirement: SIG-05 phase=0 test=tests/test_system_impact.py --> | Persist the CodeQL command, version, query-pack digest, source-snapshot digest, optional commit, exit status, and decoded-result digest for both source graphs; reject identity or receipt drift. |
 | SIG-06 <!-- contract-requirement: SIG-06 phase=0 test=tests/test_system_impact.py --> | Emit `writes` edges for direct name and attribute assignments whose writing declaration and assignment target both resolve to `SourceNode` records, retaining the assignment location as edge evidence. |
+| SIG-07 <!-- contract-requirement: SIG-07 phase=0 test=tests/test_system_impact.py --> | Record the complete policy-selected direct neighborhood of every selected target in both source graphs, reject every changed declaration absent from the selected PairBlocks, and reject the materialized candidate when Pyright finds a static interface error. |
 
 ## 2. Required claim
 
@@ -43,7 +46,7 @@ answer:
 Did every planned add, update, or removal occur?
 Did the realized declaration equal the declaration required by the plan?
 Did implementation change any source declaration absent from the plan?
-Which direct baseline source declarations may be affected by each planned target change?
+Which direct source declarations depend on each planned target before or after the change?
 Did both observations use the same CodeQL identity?
 ```
 
@@ -132,8 +135,8 @@ The check applies only to the selected PairBlocks. A selected block may omit a
 dependency when every `ContractTarget` owned by that dependency already matches
 the baseline graph. `PlanCheck.baseline_dependencies` records those satisfied
 dependencies. `PlanCheck.unsatisfied_dependencies` records the rest and makes
-the check fail. The source graph, not checklist status, decides whether an
-omitted dependency is satisfied.
+the check fail. The source graph decides whether an omitted dependency is
+satisfied; checklist status supplies no evidence for this decision.
 
 `PlanCheck` evaluates the frozen candidate before commit. After commit,
 `accept()` recomputes the source digest and selected-plan digest from the
@@ -152,6 +155,48 @@ dependency coverage remains outside this guarantee. A `ContractTarget`
 identifies each dependent declaration that must change.
 The realized-delta check supplies the enforceable boundary: if implementation
 does change a dependent, that declaration must already be a `ContractTarget`.
+
+Let $S_\Delta$ contain the selected target nodes present in either source
+graph. For the edge-kind policy $K_1$ already defined by
+`IMPACT_EDGE_KINDS_V1`, the checked direct edges are:
+
+$$
+E_0^{(1)}=\{(u,v,k)\in E_0\mid v\in S_\Delta\land k\in K_1(v)\},
+$$
+
+$$
+E_*^{(1)}=\{(u,v,k)\in E_*\mid v\in S_\Delta\land k\in K_1(v)\}.
+$$
+
+The direct neighborhood is:
+
+$$
+B^{(1)}=S_\Delta\cup
+\{u\mid\exists v\in S_\Delta:(u,v,k)\in E_0^{(1)}\cup E_*^{(1)}\}.
+$$
+
+`OneHop` stores $S_\Delta$, the direct dependents in $B^{(1)}$, and the exact
+edge IDs in $E_0^{(1)}$ and $E_*^{(1)}$. The existing realized-delta rule is
+stronger than a neighborhood-only authorization rule because it requires:
+
+$$
+\Delta(G_0,G^*)\subseteq\operatorname{Owned}(T_P).
+$$
+
+The four checks are complementary:
+
+| Check | Establishes |
+| --- | --- |
+| AST declaration extraction | Exact target identity and declaration bytes |
+| CodeQL | Represented dependency structure and the direct neighborhood |
+| Pyright | Static compatibility of the fully materialized candidate |
+| PairBlock gates | Runtime behavior selected by the contract |
+
+CodeQL establishes represented source dependencies. Pyright establishes that a
+caller satisfies a callee's Python interface. PairBlock gates establish the
+selected runtime behavior. The one-hop guarantee covers the edges emitted by
+the pinned CodeQL query pack; dynamic dependencies absent from that graph
+remain outside its scope.
 
 ## 3. Current gap
 
@@ -1187,6 +1232,8 @@ the Phase 0 checker returns the complete records to its caller.
 | `system.fixture.replayed` <!-- verifier-rule: system.fixture.replayed requirement=SIG-04 --> | Both committed fixtures reproduce their reviewed changed-path sets and target results. |
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 | `system.source.writes` <!-- verifier-rule: system.source.writes requirement=SIG-06 --> | The checked-in CodeQL pack emits `writes` edges for a function writing a declared module variable and a method writing a declared class attribute; every emitted edge retains the assignment location. |
+| `system.one_hop.recorded` <!-- verifier-rule: system.one_hop.recorded requirement=SIG-07 --> | `check_plan()` records every policy-selected direct incoming edge around the selected targets in both graphs, while the global realized-delta check rejects changed declarations outside the selected PairBlocks. |
+| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/check_plan.py:validate` runs Pyright against the fully materialized candidate and stops before candidate CodeQL analysis or PairBlock gates when static interfaces are incompatible. |
 
 ## 8. Propagation
 
@@ -1195,6 +1242,7 @@ the Phase 0 checker returns the complete records to its caller.
 | `src/viper/system_impact.py` | Add the public records, baseline inspection, realized-plan checking, and post-commit `accept()` operation. |
 | `src/viper/_system_impact/codeql.py` | Create and query CodeQL databases and return validated canonical rows. |
 | `src/viper/_system_impact/source.py` | Resolve qualified Python symbols, extract exact UTF-8 declaration bytes including decorators, and implement `classify_target_change()`. |
+| `tools/check_plan.py` | Run Pyright against the materialized candidate before candidate CodeQL analysis and restore the caller's `PYTHONPATH` after the check. |
 | `tests/test_system_impact.py` | Cover exact declaration extraction, change classification, typed one-hop impact selection, action transitions, unexpected changes, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
 | `docs/development/contract-traceability.md` | Make `CRT-06` the sole owner of targets, PairBlocks, rule-block joins, and plan closure. |
 | `docs/development/master-execution-checklist.md` | Replace the old graph-transformation blocks with the six bounded blocks below. |
@@ -1240,6 +1288,13 @@ Policy-selected direct impact contains `B` and excludes `A`. Separate fixtures
 require a callable-interface update to select `calls`, a removal to select all
 six represented edge kinds, and an `unclassified` update to use the same
 conservative direct-edge fallback.
+
+The one-hop fixture adds a baseline caller and a candidate adapter around one
+selected function. `OneHop.before` and `OneHop.after` retain the exact incoming
+edge IDs, and `OneHop.neighbors` contains both direct dependents. A separate
+fixture changes a function parameter but leaves its caller unchanged. Pyright
+rejects that materialized candidate before candidate CodeQL analysis or any
+PairBlock gate runs.
 
 ## 10. Implementation order
 
@@ -1307,13 +1362,23 @@ gate = "conda run -n mantra env VIPER_RUN_CODEQL_TESTS=1 python -m pytest tests/
 depends_on = ["P0-SIG-05"]
 ```
 
-The implementation closes after all six focused gates pass, the complete test
+<!-- pair-block-definition: P0-SIG-07 -->
+```toml pair-block
+id = "P0-SIG-07"
+requirements = ["SIG-07"]
+targets = ["src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+tests = ["tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'one_hop_records or pre_pairing_pyright' -q"
+depends_on = ["P0-SIG-06"]
+```
+
+The implementation closes after all seven focused gates pass, the complete test
 module passes, and the review-cycle commit is synchronized with its upstream.
 
-## 11. Contract-owned internal declarations
+## 11. Accepted `ContractTarget` declarations
 
-These declarations are the exact implementation values owned by the internal
-PairBlocks. The public records and wrappers remain in Section 4.
+These declarations are the exact implementation values owned by the PairBlocks.
+Later update targets supersede the earlier declaration for the same symbol.
 
 ### CodeQL adapter
 
@@ -2060,6 +2125,422 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
     ] == ("src/writes.py", 11)
 ```
 
+### One-hop pre-pairing check
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:OneHop -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:PlanCheck -->
+
+**File: `src/viper/system_impact.py`**
+
+```python contract-target
+class OneHop(ProtocolModel):
+    """Record direct dependents around the selected targets in both graphs."""
+
+    targets: tuple[NodeId, ...] = Field(
+        description="Selected target nodes present in either graph."
+    )
+    neighbors: tuple[NodeId, ...] = Field(
+        description="Direct dependents found before or after the planned change."
+    )
+    changed: tuple[NodeId, ...] = Field(
+        description="Direct dependents whose declaration state changed."
+    )
+    before: tuple[SHA256, ...] = Field(
+        description="Policy-selected incoming edge IDs in the baseline graph."
+    )
+    after: tuple[SHA256, ...] = Field(
+        description="Policy-selected incoming edge IDs in the candidate graph."
+    )
+
+
+class PlanCheck(ProtocolModel):
+    """Record the complete result of checking selected PairBlocks."""
+
+    schema_version: Literal[2] = Field(
+        default=2,
+        description="Plan-check record format version.",
+    )
+    baseline: SourceSnapshot = Field(
+        description="Source state inspected before the selected PairBlocks ran."
+    )
+    realized: SourceSnapshot = Field(
+        description=(
+            "Candidate source state inspected after the selected PairBlocks ran."
+        )
+    )
+    blocks: tuple[PairBlockId, ...] = Field(
+        min_length=1,
+        description="Selected PairBlocks covered by this check.",
+    )
+    contracts: tuple[RepoRelPath, ...] = Field(
+        min_length=1,
+        description="Contract files needed to reconstruct the selected plan.",
+    )
+    baseline_dependencies: tuple[PairBlockId, ...] = Field(
+        default=(),
+        description=(
+            "Omitted dependencies whose target state already exists in the baseline."
+        ),
+    )
+    unsatisfied_dependencies: tuple[PairBlockId, ...] = Field(
+        default=(),
+        description=(
+            "Omitted dependencies whose target state is absent from the baseline."
+        ),
+    )
+    plan_sha256: SHA256 = Field(
+        description=(
+            "Digest of the selected PairBlock and ContractTarget records plus "
+            "the selected asset paths and bytes."
+        )
+    )
+    impact: Impact = Field(
+        description="Direct advisory dependency report for the selected targets."
+    )
+    one_hop: OneHop = Field(
+        description="Direct target neighborhood observed in both source graphs."
+    )
+    targets: tuple[TargetCheck, ...] = Field(
+        description="One realized result for every selected ContractTarget."
+    )
+    unexpected: tuple[RepoSymbolRef, ...] = Field(
+        description="Changed declarations that no selected ContractTarget owns."
+    )
+    gates: tuple[GateCheck, ...] = Field(
+        description="One gate result for every selected PairBlock."
+    )
+    receipts_valid: bool = Field(
+        description=(
+            "Whether both graphs have successful receipts with one analyzer identity."
+        )
+    )
+    plan_valid: bool = Field(
+        description=(
+            "Whether the post-gate contract files retain the checked plan digest."
+        )
+    )
+    source_valid: bool = Field(
+        description="Whether both source roots retain their checked source digests."
+    )
+    passed: bool = Field(
+        description=(
+            "Whether every target, dependency, gate, source, plan, and receipt check "
+            "passed."
+        )
+    )
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:__all__ -->
+
+```python contract-target
+__all__ = [
+    "Acceptance",
+    "CodeQLIdentity",
+    "CodeQLReceipt",
+    "ChangeKind",
+    "CheckState",
+    "CommitId",
+    "EdgeKind",
+    "GateCheck",
+    "Impact",
+    "NodeId",
+    "OneHop",
+    "PlanCheck",
+    "PlanInspection",
+    "ResolvedContractTarget",
+    "SourceEdge",
+    "SourceGraph",
+    "SourceNode",
+    "SourceNodeKind",
+    "SourceSnapshot",
+    "TargetCheck",
+    "accept",
+    "check_plan",
+    "inspect_plan",
+]
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:PlanCheck -->
+
+**File: `src/viper/_system_impact/check.py`**
+
+```python contract-target
+from ..system_impact import (
+    Acceptance,
+    CommitId,
+    GateCheck,
+    OneHop,
+    PlanCheck,
+    ResolvedContractTarget,
+    SourceGraph,
+    SourceNode,
+    TargetCheck,
+    inspect_plan,
+)
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:_one_hop -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:check_plan -->
+
+```python contract-target
+def _one_hop(
+    *,
+    targets: tuple[ResolvedContractTarget, ...],
+    baseline: SourceGraph,
+    realized: SourceGraph,
+) -> OneHop:
+    """Record direct dependents selected by the existing impact policy."""
+    from .plan import IMPACT_EDGE_KINDS_V1
+
+    baseline_nodes = {node.node_id: node for node in baseline.nodes}
+    realized_nodes = {node.node_id: node for node in realized.nodes}
+    allowed: dict[str, set[str]] = {}
+    for resolved in targets:
+        key = _target_key(resolved.target)
+        kinds = IMPACT_EDGE_KINDS_V1[resolved.change_kind]
+        for nodes in (_node_index(baseline), _node_index(realized)):
+            node = nodes.get(key)
+            if node is not None:
+                allowed.setdefault(node.node_id, set()).update(kinds)
+
+    before = tuple(
+        sorted(
+            edge.edge_id
+            for edge in baseline.edges
+            if edge.target in allowed and edge.kind in allowed[edge.target]
+        )
+    )
+    after = tuple(
+        sorted(
+            edge.edge_id
+            for edge in realized.edges
+            if edge.target in allowed and edge.kind in allowed[edge.target]
+        )
+    )
+    selected_edges = tuple(
+        edge
+        for edge in (*baseline.edges, *realized.edges)
+        if edge.edge_id in set(before) | set(after)
+    )
+    neighbors = tuple(sorted({edge.source for edge in selected_edges}))
+    changed = tuple(
+        node_id
+        for node_id in neighbors
+        if baseline_nodes.get(node_id) is None
+        or realized_nodes.get(node_id) is None
+        or baseline_nodes[node_id].sha256 != realized_nodes[node_id].sha256
+    )
+    return OneHop(
+        targets=tuple(sorted(allowed)),
+        neighbors=neighbors,
+        changed=changed,
+        before=before,
+        after=after,
+    )
+
+
+def check_plan(
+    *,
+    root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+    realized: SourceGraph,
+    gate_timeout_seconds: float = 900.0,
+) -> PlanCheck:
+    """Check selected PairBlocks against independently observed source graphs."""
+    root = root.resolve()
+    baseline_root = baseline_root.resolve()
+    if gate_timeout_seconds <= 0:
+        raise SystemImpactCheckError("gate timeout must be greater than zero")
+
+    blocks, targets = _selected_records(traceability, block_ids)
+    baseline_nodes = _node_index(baseline)
+    realized_nodes = _node_index(realized)
+    inspection = inspect_plan(
+        plan_root=root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=tuple(block.block_id for block in blocks),
+        baseline=baseline,
+    )
+    target_checks = _target_checks(
+        resolved_targets=inspection.targets,
+        realized_nodes=realized_nodes,
+    )
+    one_hop = _one_hop(
+        targets=inspection.targets,
+        baseline=baseline,
+        realized=realized,
+    )
+    unexpected = _unexpected_changes(
+        baseline_nodes=baseline_nodes,
+        realized_nodes=realized_nodes,
+        targets=targets,
+    )
+    baseline_dependencies, unsatisfied_dependencies = _dependency_results(
+        root=root,
+        traceability=traceability,
+        blocks=blocks,
+        selected={block.block_id for block in blocks},
+        baseline_nodes=baseline_nodes,
+    )
+    plan_sha256 = _plan_sha256(
+        blocks,
+        targets,
+        _asset_manifest_sha256(root=root, blocks=blocks),
+    )
+    contracts = tuple(sorted({item.declaration.path for item in (*blocks, *targets)}))
+    gates = tuple(
+        _run_gate(
+            root=root,
+            block=block,
+            timeout_seconds=gate_timeout_seconds,
+        )
+        for block in blocks
+    )
+    receipt_valid = _receipt_pair_is_valid(baseline, realized)
+    try:
+        plan_valid = (
+            _current_plan_sha256(
+                root=root,
+                contracts=contracts,
+                block_ids=tuple(block.block_id for block in blocks),
+            )
+            == plan_sha256
+        )
+    except SystemImpactCheckError:
+        plan_valid = False
+    source_valid = (
+        source_digest(baseline_root) == baseline.snapshot.source_sha256
+        and source_digest(root) == realized.snapshot.source_sha256
+    )
+    passed = (
+        receipt_valid
+        and plan_valid
+        and source_valid
+        and all(target.state == "passed" for target in target_checks)
+        and not unexpected
+        and not unsatisfied_dependencies
+        and all(gate.exit_code == 0 for gate in gates)
+    )
+    return PlanCheck(
+        baseline=baseline.snapshot,
+        realized=realized.snapshot,
+        blocks=tuple(block.block_id for block in blocks),
+        contracts=contracts,
+        baseline_dependencies=baseline_dependencies,
+        unsatisfied_dependencies=unsatisfied_dependencies,
+        plan_sha256=plan_sha256,
+        impact=inspection.impact,
+        one_hop=one_hop,
+        targets=target_checks,
+        unexpected=unexpected,
+        gates=gates,
+        receipts_valid=receipt_valid,
+        plan_valid=plan_valid,
+        source_valid=source_valid,
+        passed=passed,
+    )
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller -->
+
+**File: `tests/test_system_impact.py`**
+
+```python contract-target
+def test_one_hop_records_baseline_and_candidate_neighbors(tmp_path: Path) -> None:
+    """Record direct dependents found before and after a selected update."""
+    baseline_root = tmp_path / "baseline"
+    realized_root = tmp_path / "realized"
+    _write_check_source(baseline_root, target_increment=0)
+    _write_check_source(realized_root, target_increment=1)
+    traceability = _write_check_contract(
+        realized_root,
+        gate=f"{sys.executable} -c pass",
+    )
+    baseline_target = _node(
+        path="src/example.py",
+        symbol="target",
+        kind="function",
+        declaration=b"def target(value: int) -> int:\n    return value + 0",
+    )
+    realized_target = _node(
+        path="src/example.py",
+        symbol="target",
+        kind="function",
+        declaration=b"def target(value: int) -> int:\n    return value + 1",
+    )
+    caller = _node(path="src/caller.py", symbol="caller", kind="function")
+    adapter = _node(path="src/adapter.py", symbol="adapter", kind="function")
+    before = _edge(index=21, source=caller, target=baseline_target, kind="calls")
+    after = _edge(index=22, source=adapter, target=realized_target, kind="calls")
+
+    result = check_plan(
+        root=realized_root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=("P0-SIG-04",),
+        baseline=_source_graph(
+            nodes=(baseline_target, caller),
+            edges=(before,),
+            source_sha256=source_digest(baseline_root),
+        ),
+        realized=_source_graph(
+            nodes=(realized_target, adapter),
+            edges=(after,),
+            source_sha256=source_digest(realized_root),
+            revision=None,
+        ),
+    )
+
+    assert result.one_hop.targets == (baseline_target.node_id,)
+    assert result.one_hop.neighbors == (adapter.node_id, caller.node_id)
+    assert result.one_hop.changed == (adapter.node_id, caller.node_id)
+    assert result.one_hop.before == (before.edge_id,)
+    assert result.one_hop.after == (after.edge_id,)
+
+
+def test_pre_pairing_pyright_rejects_stale_caller(tmp_path: Path) -> None:
+    """Reject a caller that omits a new required parameter."""
+    root = tmp_path / "candidate"
+    source = root / "src/example.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def save(path: str, overwrite: bool) -> None:\n"
+        "    pass\n"
+        "\n"
+        "def publish() -> None:\n"
+        "    save('artifact')\n",
+        encoding="utf-8",
+    )
+    (root / "pyrightconfig.json").write_text(
+        json.dumps({"include": ["src"], "typeCheckingMode": "standard"}),
+        encoding="utf-8",
+    )
+
+    checked = run_subprocess(
+        (
+            sys.executable,
+            "-m",
+            "pyright",
+            "--project",
+            str(root / "pyrightconfig.json"),
+            "--pythonpath",
+            sys.executable,
+        ),
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert checked.returncode != 0
+    assert "overwrite" in checked.stdout
+```
+
 
 ## Appendix A. PairBlock scheduling
 
@@ -2068,6 +2549,35 @@ Cross-contract scheduling now has its own governing contract:
 source materialization, dependency projection, write-conflict ordering, SCC
 condensation, deterministic execution waves, and their focused acceptance
 tests.
+
+## Appendix B. Deferred plan resolution
+
+This non-normative extension may be reconsidered after the one-hop preflight
+has been used on real contracts. `add`, `update`, and `remove` bound the action
+type; a finite rewrite library or bounded LLM proposal step must supply the
+candidate payloads. Intersecting dependency paths are candidate resolution
+points, not automatically safe stopping points.
+
+```text
+resolve(seed, baseline, budget):
+    frontier = obligations(seed, Analyze(baseline))
+    candidates = deterministic_rewrites(frontier)
+    if candidates is empty:
+        candidates = bounded_llm_proposals(frontier, budget)
+
+    valid = []
+    for candidate in deduplicate(candidates):
+        source = materialize(baseline, candidate)
+        graph = Analyze(source)
+        if pyright(source) == 0 and gates(source) == 0:
+            valid.append((candidate, outward_obligations(graph)))
+
+    return min(valid, key=(unresolved_obligations, changed_nodes, changed_edges))
+```
+
+An implementation must define the finite candidate source, budget, cost order,
+and failure result before this procedure can become a verifier rule or
+PairBlock.
 
 ## Sources
 
@@ -2089,6 +2599,17 @@ tests.
   provides the change-classification and dependency-relation selection pattern.
   VIPER uses a deterministic one-hop advisory policy. Adaptive plan generation
   remains outside Master Phase 0.
+- Sergey Mechtaev, Jooyong Yi, and Abhik Roychoudhury,
+  [DirectFix: Looking for Simple Program Repairs](https://mechtaev.com/files/icse15.pdf),
+  supports choosing a valid repair that preserves as much of the original
+  program as possible.
+- Yuan Yuan and Wolfgang Banzhaf,
+  [ARJA: Automated Repair of Java Programs via Multi-Objective Genetic Programming](https://arxiv.org/abs/1712.07804),
+  separates edit locations, operation types, and candidate code while reducing
+  the search space and preferring smaller test-adequate patches.
+- Susmit Jha and Sanjit Seshia,
+  [Are There Good Mistakes? A Theoretical Analysis of CEGIS](https://doi.org/10.4204/EPTCS.157.10),
+  establishes why a finite candidate space matters for termination.
 - Gregg Rothermel and Mary Jean Harrold,
   [A Safe, Efficient Regression Test Selection Technique](https://doi.org/10.1145/248233.248262),
   provides the dependency-based regression-selection framing. VIPER uses the
