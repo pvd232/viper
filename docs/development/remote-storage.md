@@ -1515,9 +1515,6 @@ targets = [
     "src/viper/execution/_materialization.py:ResolvedStageRef",
     "src/viper/execution/_materialization.py:SnapshotFileRef",
     "src/viper/execution/_materialization.py:resolve_inputs",
-    "src/viper/execution/_attempt.py:resolve_inputs",
-    "src/viper/execution/_attempt.py:retrieve_download_inputs",
-    "src/viper/execution/_attempt.py:verify_captured_inputs",
     "src/viper/execution/_attempt.py:ResolvedFileRef",
     "src/viper/execution/_attempt.py:ResolvedBaseSpec",
     "src/viper/execution/_attempt.py:ResolvedInternalSpec",
@@ -3555,17 +3552,6 @@ def resolve_inputs(
 ```
 
 **File: `src/viper/execution/_attempt.py`**
-
-<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:resolve_inputs -->
-<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:retrieve_download_inputs -->
-<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:verify_captured_inputs -->
-```python contract-target
-from ._materialization import (
-    resolve_inputs,
-    retrieve_download_inputs,
-    verify_captured_inputs,
-)
-```
 
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedFileRef -->
 ```python contract-target
