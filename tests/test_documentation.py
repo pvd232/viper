@@ -33,6 +33,7 @@ ROOT = Path(__file__).parents[1]
 PROTOCOL = ROOT / "docs/reference/protocol.md"
 API_REFERENCE = ROOT / "docs/reference/api.md"
 AUTOMATIC_INPUT_RESOLUTION = ROOT / "docs/development/automatic-input-resolution.md"
+EXTERNAL_INPUT_ROOTS = ROOT / "docs/development/external-input-roots.md"
 TRAINING_GUIDES = (
     ROOT / "README.md",
     API_REFERENCE,
@@ -2023,6 +2024,61 @@ def test_contract_target_declaration_has_one_meaning() -> None:
 
     assert description in CONTRACT_TRACEABILITY.read_text(encoding="utf-8")
     assert CONTRACT_TRACEABILITY.read_text(encoding="utf-8").count(description) == 1
+
+
+def test_external_input_contract_tests_have_owned_asserting_payloads() -> None:
+    """Require each declared test to have one owned body and explicit oracle."""
+    blocks, targets = traceability.compile_contract_plan(
+        ROOT,
+        (EXTERNAL_INPUT_ROOTS,),
+    )
+    lines = EXTERNAL_INPUT_ROOTS.read_text(encoding="utf-8").splitlines()
+    for block in blocks:
+        for test in block.tests:
+            assert test in block.targets, (block.block_id, test)
+            matching_targets = [
+                target
+                for target in targets
+                if target.block_id == block.block_id and target.target == test
+            ]
+            assert len(matching_targets) == 1, (block.block_id, test)
+            declaration = matching_targets[0].declaration
+            fence = "\n".join(
+                lines[declaration.start_line - 1 : declaration.end_line]
+            )
+            payload_match = _TRACEABILITY_MODEL_FENCE.search(fence)
+            assert payload_match is not None, (block.block_id, test)
+            tree = ast.parse(payload_match.group("body"))
+            function = next(
+                (
+                    node
+                    for node in ast.walk(tree)
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == test.symbol.rpartition(".")[2]
+                ),
+                None,
+            )
+            assert function is not None, (block.block_id, test)
+            explicit_assertion = any(
+                isinstance(node, ast.Assert) for node in ast.walk(function)
+            )
+            exception_assertion = any(
+                isinstance(node, ast.With)
+                and any(
+                    isinstance(item.context_expr, ast.Call)
+                    and isinstance(item.context_expr.func, ast.Attribute)
+                    and (
+                        item.context_expr.func.attr == "raises"
+                        or item.context_expr.func.attr.startswith("assertRaises")
+                    )
+                    for item in node.items
+                )
+                for node in ast.walk(function)
+            )
+            assert explicit_assertion or exception_assertion, (
+                block.block_id,
+                test,
+            )
 
 
 def test_system_impact_check_has_one_bounded_proof_obligation() -> None:

@@ -1496,7 +1496,7 @@ A same-run input selects one artifact from an earlier stage:
 class FutureInputRef(ProtocolModel):
     kind: Literal["future"] = "future"
     producer_stage_id: StageId
-    producer_artifact: ArtifactName
+    name: ArtifactName
 
 
 class ResolvedFutureInputRef(ProtocolModel):
@@ -1512,7 +1512,7 @@ ResolvedFutureInputRef.producer.stage_id
 ==
 FutureInputRef.producer_stage_id
 
-FutureInputRef.producer_artifact
+FutureInputRef.name
 in
 keys(producer ResolvedBaseSpec.artifacts)
 ```
@@ -2881,11 +2881,11 @@ same-run resumption, they satisfy:
 ```text
 TrainSpec.inputs[parameters]
 ├── producer_stage_id = producer stage ID
-└── producer_artifact = parameters
+└── name = parameters
 
 TrainSpec.inputs[resume_state]
 ├── producer_stage_id = producer stage ID
-└── producer_artifact = resume_state
+└── name = resume_state
 ```
 
 Their common `producer_stage_id` identifies the single checkpoint-producing
@@ -3081,7 +3081,7 @@ The `parameters` input is a `FutureInputRef` or `StoredInputRef`. A
 same-run model input selects:
 
 ```text
-FutureInputRef.producer_artifact
+FutureInputRef.name
 == parameters
 ```
 
@@ -3200,7 +3200,7 @@ EvaluateSpec.inputs[evaluation_dataset].pointer
 EvaluateSpec.inputs[parameters].producer_stage_id
 == RunSpec.estimator.stage_id
 
-EvaluateSpec.inputs[parameters].producer_artifact
+EvaluateSpec.inputs[parameters].name
 == RunSpec.estimator.artifact_name
 
 set(EvaluateSpec.split_inputs)
@@ -3518,7 +3518,7 @@ For a same-run input, the verifier:
 
 1. Selects the earlier `ResolvedStageRef` named by `producer_stage_id`.
 2. Loads its resolved stage spec.
-3. Selects `producer_artifact` from its artifact mapping.
+3. Selects `name` from its artifact mapping.
 4. Inherits the selected artifact's declared data-use role.
 5. Verifies and materializes the complete artifact.
 

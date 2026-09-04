@@ -81,46 +81,6 @@ On the HTTP route, the shared file reference joins the root receipt to the
 artifact. On the local route, `ResolvedExternalInputRef.file` identifies the
 attempt-owned input in the consuming-stage snapshot.
 
-```mermaid
-flowchart LR
-    Local["Local file"]
-    Service[/"HTTP service"/]
-    LocalRoot["Local external root<br/>ResolvedExternalInputRef"]
-    Retrieval["HTTP external root<br/>ResolvedHttpRetrieval"]
-    LocalFile[("Captured input snapshot file<br/>path · SHA-256 · bytes")]
-    File[("HTTP artifact snapshot file<br/>path · SHA-256 · bytes")]
-    Artifact["Download-stage output<br/>ResolvedSingleFileArtifact"]
-    SameRun["Same-run selection<br/>FutureInputRef"]
-    PriorRun["Prior-run selection<br/>StoredInputRef"]
-    Train["Training stage<br/>context.inputs"]
-
-    Local -->|"ExternalInputRef selects"| LocalRoot
-    LocalRoot -->|"file"| LocalFile
-    LocalFile -->|"attempt-owned input path"| Train
-    Service -->|"DownloadSpec request"| Retrieval
-    Retrieval -->|"body"| File
-    Artifact -->|"file: same SnapshotFileRef"| File
-    Artifact -->|"selected by"| SameRun
-    Artifact -->|"promoted and selected by"| PriorRun
-    SameRun -->|"artifact path"| Train
-    PriorRun -->|"verified artifact path"| Train
-
-    class Local,Service external
-    class LocalRoot,Retrieval root
-    class LocalFile,File evidence
-    class Artifact artifact
-    class SameRun,PriorRun reference
-    class Train consumer
-
-    classDef external fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
-    classDef root fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
-    classDef evidence fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
-    classDef artifact fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
-    classDef reference fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
-    classDef consumer fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
-    linkStyle default stroke:#94a3b8,stroke-width:2px
-```
-
 ### Current DAG
 
 ```mermaid
