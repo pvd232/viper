@@ -380,6 +380,48 @@ def _verify_implementation_bytes(
         raise HttpRetrievalError("HTTP implementation SHA-256 differs")
 
 
+def _verify_parameter_model_bytes(
+    reference: ParameterModelRef,
+    raw: bytes,
+) -> None:
+    """Compare one HTTP parameter model with its frozen identity."""
+    if len(raw) != reference.bytes:
+        raise HttpRetrievalError(
+            "parameter model byte count differs from its reference"
+        )
+    if hashlib.sha256(raw).hexdigest() != reference.sha256:
+        raise HttpRetrievalError("parameter model SHA-256 differs from its reference")
+
+
+def _load_http_parameters(
+    path: Path,
+    reference: ParameterModelRef,
+    params: parameters.Http,
+) -> parameters.Http:
+    """Construct one project HTTP parameter class from its frozen values."""
+    raw = path.read_bytes()
+    _verify_parameter_model_bytes(reference, raw)
+    module_name = f"_viper_http_parameters_{path.stem}_{abs(hash(path.resolve()))}"
+    module_spec = importlib.util.spec_from_file_location(module_name, path)
+    if module_spec is None or module_spec.loader is None:
+        raise HttpRetrievalError("parameter model module could not be loaded")
+    module = importlib.util.module_from_spec(module_spec)
+    try:
+        module_spec.loader.exec_module(module)
+    except Exception as exc:
+        raise HttpRetrievalError("parameter model module raised during import") from exc
+    model = getattr(module, reference.symbol, None)
+    if not isinstance(model, type) or not issubclass(model, parameters.Http):
+        raise HttpRetrievalError("parameter model must subclass Http")
+    frozen = params.model_dump(mode="json")
+    validated = model.model_validate(frozen, strict=True)
+    if validated.model_dump(mode="json") != frozen:
+        raise HttpRetrievalError(
+            "frozen parameters must contain every effective project-model value"
+        )
+    return cast(parameters.Http, validated)
+
+
 def _load_project_http(
     repository_root: Path,
     spec: ProjectHttpImplementationSpec,
@@ -502,24 +544,18 @@ def resolve_http(
     spec: HttpImplementationSpec,
 ) -> ResolvedHttpImplementation:
     """Validate source and executable identities before one HTTP call."""
-    from ._parameter.validation import (  # Avoid an HTTP-validation cycle.
-        instantiate_parameters,
-        verify_parameter_model_bytes,
-    )
-
     if isinstance(spec, BuiltinHttpImplementationSpec):
         return ResolvedHttpImplementation(spec=spec)
     root = repository_root.resolve()
     implementation_path = root / spec.implementation.path
     _verify_implementation_bytes(spec.implementation, implementation_path.read_bytes())
     parameter_path = root / spec.parameter_model.path
-    verify_parameter_model_bytes(spec.parameter_model, parameter_path.read_bytes())
+    _verify_parameter_model_bytes(spec.parameter_model, parameter_path.read_bytes())
     _load_project_http(root, spec)
-    instantiate_parameters(
+    _load_http_parameters(
         parameter_path,
         spec.parameter_model,
         spec.params,
-        parameters.Http,
     )
     executables = tuple(_resolve_executable(value) for value in spec.executables)
     return ResolvedHttpImplementation(spec=spec, external_executables=executables)
@@ -654,10 +690,6 @@ def invoke_http(
     environment: Mapping[str, str] | None = None,
 ) -> HttpResult:
     """Invoke the selected HTTP implementation and verify its result."""
-    from ._parameter.validation import (  # Avoid an HTTP-validation cycle.
-        instantiate_parameters,
-    )
-
     root = repository_root.resolve()
     validate_request_policy(request, policy)
     credential = _resolve_credential(
@@ -675,14 +707,10 @@ def invoke_http(
         function: HttpCallable[Any] = _httpx_request
     else:
         project = implementation.spec
-        params = cast(
-            parameters.Http,
-            instantiate_parameters(
-                root / project.parameter_model.path,
-                project.parameter_model,
-                project.params,
-                parameters.Http,
-            ),
+        params = _load_http_parameters(
+            root / project.parameter_model.path,
+            project.parameter_model,
+            project.params,
         )
         function = _load_project_http(root, project)
     context = HttpContext(
