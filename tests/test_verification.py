@@ -103,6 +103,7 @@ from viper.runtime import (
     GCEBootImageRef,
     GCEEnvironmentSpec,
     GCEHostContext,
+    GeneratorInitializationReceipt,
     NativeLibraryContext,
     NativeThreadPoolContext,
     NumericalRuntimeContext,
@@ -479,8 +480,6 @@ def resolved_environment(lock_raw: bytes) -> ResolvedGCEEnvironment:
 
 def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
     """Build the minimum valid CPU startup evidence for one test run."""
-    from viper.runtime import GeneratorInitializationReceipt
-
     generators = [
         GeneratorInitializationReceipt(
             family="python",
