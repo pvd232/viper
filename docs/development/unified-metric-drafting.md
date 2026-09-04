@@ -1787,7 +1787,6 @@ documentation surfaces describe one implemented contract.
 id = "P4-UMD-01"
 requirements = ["UMD-01"]
 targets = [
-    "src/viper/metrics.py:MetricParamsT",
     "src/viper/metrics.py:DecoratedMetricT",
     "src/viper/metrics.py:ObjectiveDirection",
     "src/viper/metrics.py:MetricDefinition",
@@ -1802,6 +1801,9 @@ targets = [
     "src/viper/metrics.py:max",
     "src/viper/benchmark.py:at_least",
     "src/viper/benchmark.py:at_most",
+    "src/viper/benchmark.py:Any",
+    "src/viper/benchmark.py:MetricDraft",
+    "src/viper/benchmark.py:MetricCriterionDraft",
     "tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors",
 ]
 tests = ["tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors"]
@@ -1820,7 +1822,9 @@ requirements = ["UMD-02"]
 targets = [
     "src/viper/_schema.py:PythonSourceRelPath",
     "src/viper/parameters.py:ParameterModelOwner",
+    "src/viper/parameters.py:PythonSourceRelPath",
     "src/viper/parameters.py:ParameterModelRef",
+    "src/viper/parameters.py:model_ref",
     "src/viper/_parameter/validation.py:parameter_model_path",
     "src/viper/metrics.py:MetricSpec",
     "src/viper/metrics.py:MetricExecutionReceipt",
@@ -1831,7 +1835,15 @@ targets = [
     "src/viper/metrics.py:MetricHandle",
     "src/viper/metrics.py:bind_live_metric",
     "src/viper/_workers/stages.py:_live_metric_handles",
+    "src/viper/_workers/stages.py:parameters",
+    "src/viper/_workers/stages.py:parameter_model_path",
+    "src/viper/_workers/stages.py:MetricContext",
     "src/viper/_workers/metrics.py:main",
+    "src/viper/_workers/metrics.py:parameters",
+    "src/viper/_workers/metrics.py:instantiate_parameters",
+    "src/viper/_workers/metrics.py:parameter_model_path",
+    "src/viper/_workers/metrics.py:invoke_metric",
+    "tests/test_metric_provenance.py:Path",
     "tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution",
 ]
 tests = ["tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution"]
@@ -1853,6 +1865,7 @@ targets = [
     "src/viper/stages.py:EmbedSpec",
     "src/viper/stages.py:TrainSpec",
     "src/viper/stages.py:EvaluateSpec",
+    "src/viper/stages.py:MetricObjectiveSpec",
     "src/viper/_verification/plan.py:verify_stage_objectives",
     "src/viper/_verification/plan.py:verify_run_plan_relationships",
     "tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction",
@@ -1877,7 +1890,6 @@ plan freeze; it may not weaken the requirement or omit a changed declaration.
 
 **File: `src/viper/metrics.py`**
 
-<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:MetricParamsT -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:DecoratedMetricT -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:ObjectiveDirection -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=src/viper/metrics.py:MetricDefinition -->
@@ -1886,7 +1898,6 @@ plan freeze; it may not weaken the requirement or omit a changed declaration.
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:MetricObjectiveDraft -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/metrics.py:MetricCriterionDraft -->
 ```python contract-target
-MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
 DecoratedMetricT = TypeVar(
     "DecoratedMetricT",
     bound=Callable[..., Any] | type[Any],
@@ -1905,7 +1916,7 @@ class MetricDefinition:
 DecoratedMetric = Callable[..., Any] | type[Any]
 
 
-class MetricDraft(BaseModel, Generic[MetricParamsT]):
+class MetricDraft[MetricParamsT: parameters.Metric](BaseModel):
     """Hold one configured metric before protocol freezing."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
@@ -1965,7 +1976,7 @@ def metric_definition(implementation: DecoratedMetric) -> MetricDefinition:
     return definition
 
 
-def measure(
+def measure[MetricParamsT: parameters.Metric](
     implementation: DecoratedMetric,
     *,
     params: MetricParamsT | None = None,
@@ -2004,6 +2015,15 @@ def max(metric: MetricDraft[Any]) -> MetricObjectiveDraft:
 ```
 
 **File: `src/viper/benchmark.py`**
+
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:Any -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:MetricDraft -->
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:MetricCriterionDraft -->
+```python contract-target
+from typing import Any
+
+from .metrics import MetricCriterionDraft, MetricDraft
+```
 
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:at_least -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:at_most -->
@@ -2064,6 +2084,11 @@ PythonSourceRelPath = Annotated[
 
 **File: `src/viper/parameters.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:PythonSourceRelPath -->
+```python contract-target
+from ._schema import PythonSourceRelPath
+```
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:ParameterModelOwner -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/parameters.py:ParameterModelRef -->
 ```python contract-target
@@ -2078,6 +2103,24 @@ class ParameterModelRef(ProtocolModel):
     symbol: PythonSymbol
     sha256: SHA256
     bytes: int = Field(gt=0)
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:model_ref -->
+```python contract-target
+def model_ref(model: type[ParameterSet]) -> ParameterModelRef:
+    """Identify one built-in parameter class by its installed source bytes."""
+    import hashlib
+    from pathlib import Path
+
+    path = Path(__file__).resolve()
+    raw = path.read_bytes()
+    return ParameterModelRef(
+        owner="viper",
+        path=path.name,
+        symbol=model.__name__,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
 ```
 
 **File: `src/viper/_parameter/validation.py`**
@@ -2111,7 +2154,7 @@ class MetricSpec(ProtocolModel):
     schema_version: Literal[1] = 1
     metric_id: MetricId
     implementation: MetricImplementationRef
-    parameter_model: ParameterModelRef
+    parameter_model: parameters.ParameterModelRef
     params: parameters.Metric
     mode: MetricMode
     dependencies: tuple[MetricDependency, ...] = ()
@@ -2143,7 +2186,7 @@ class MetricExecutionReceipt(ProtocolModel):
     stage_id: StageId
     purpose: Literal["measurement", "verification"]
     implementation: MetricImplementationRef
-    parameter_model: ParameterModelRef
+    parameter_model: parameters.ParameterModelRef
     params: parameters.Metric
     dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
     startup: ProcessStartupReceipt
@@ -2209,10 +2252,10 @@ class MetricVerificationReceipt(ProtocolModel):
             raise ValueError("metric worker invocation bindings differ")
         if self.production.value != self.measurement.value:
             raise ValueError("production value differs from its measurement")
-        if self.completed_at < max(
-            self.production.completed_at,
-            self.recomputation.completed_at,
-        ):
+        latest = self.production.completed_at
+        if self.recomputation.completed_at > latest:
+            latest = self.recomputation.completed_at
+        if self.completed_at < latest:
             raise ValueError("verification completion precedes a worker receipt")
         return self
 ```
@@ -2223,7 +2266,7 @@ class MetricVerificationReceipt(ProtocolModel):
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricHandle -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:bind_live_metric -->
 ```python contract-target
-class MetricContext(BaseModel, Generic[MetricParamsT]):
+class MetricContext[MetricParamsT: parameters.Metric](BaseModel):
     """Supply verified paths and frozen parameters to one metric invocation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -2233,7 +2276,7 @@ class MetricContext(BaseModel, Generic[MetricParamsT]):
     params: MetricParamsT
 
 
-class StatefulMetric(ABC, Generic[MetricParamsT]):
+class StatefulMetric[MetricParamsT: parameters.Metric](ABC):
     """Accumulate metric state under one frozen invocation context."""
 
     @abstractmethod
@@ -2323,6 +2366,15 @@ def bind_live_metric(
 
 **File: `src/viper/_workers/stages.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/stages.py:parameters -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/stages.py:parameter_model_path -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/stages.py:MetricContext -->
+```python contract-target
+from .. import parameters
+from .._parameter.validation import parameter_model_path
+from ..metrics import MetricContext
+```
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/stages.py:_live_metric_handles -->
 ```python contract-target
 def _live_metric_handles(
@@ -2379,6 +2431,16 @@ def _live_metric_handles(
 ```
 
 **File: `src/viper/_workers/metrics.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/metrics.py:parameters -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/metrics.py:instantiate_parameters -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/metrics.py:parameter_model_path -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/metrics.py:invoke_metric -->
+```python contract-target
+from .. import parameters
+from .._parameter.validation import instantiate_parameters, parameter_model_path
+from ..metrics import invoke_metric
+```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/metrics.py:main -->
 ```python contract-target
@@ -2475,6 +2537,11 @@ def main(argv: list[str] | None = None) -> int:
 
 **File: `tests/test_metric_provenance.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
 ```python contract-target
 def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> None:
@@ -2528,6 +2595,11 @@ class MetricObjectiveSpec(ProtocolModel):
 
 **File: `src/viper/stages.py`**
 
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=src/viper/stages.py:MetricObjectiveSpec -->
+```python contract-target
+from .metrics import MetricObjectiveSpec
+```
+
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:EmbedSpec -->
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:TrainSpec -->
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:EvaluateSpec -->
@@ -2535,7 +2607,7 @@ class MetricObjectiveSpec(ProtocolModel):
 class EmbedSpec(InternalSpec):
     """Request construction of a project-defined embedding artifact."""
 
-    kind: Literal["embed"] = "embed"
+    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveSpec | None = None
     params: parameters.Embed
 
@@ -2550,8 +2622,10 @@ class EmbedSpec(InternalSpec):
 class TrainSpec(InternalSpec):
     """Request training with a measured minimization or maximization objective."""
 
-    kind: Literal["train"] = "train"
-    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
+    metric_ids: tuple[MetricId, ...] = Field(  # pyright: ignore[reportGeneralTypeIssues]
+        min_length=1
+    )
     objective: MetricObjectiveSpec
     params: parameters.Train
 
@@ -2594,9 +2668,11 @@ class TrainSpec(InternalSpec):
 class EvaluateSpec(InternalSpec):
     """Request prediction and recomputed metrics for one fixed evaluation."""
 
-    kind: Literal["evaluate"] = "evaluate"
+    kind: Literal["evaluate"] = "evaluate"  # pyright: ignore[reportIncompatibleVariableOverride]
     evaluation_id: EvaluationId
-    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    metric_ids: tuple[MetricId, ...] = Field(  # pyright: ignore[reportGeneralTypeIssues]
+        min_length=1
+    )
     objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
     params: parameters.Evaluate
