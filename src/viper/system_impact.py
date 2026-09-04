@@ -22,6 +22,7 @@ NodeId = NonEmptyStr
 EdgeKind = Literal["imports", "calls", "constructs", "inherits", "reads", "writes"]
 SourceNodeKind = Literal["function", "method", "class", "assignment", "import"]
 ChangeKind = Literal[
+    "satisfied",
     "added",
     "removed",
     "callable_interface_changed",

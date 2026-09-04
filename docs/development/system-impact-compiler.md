@@ -440,6 +440,7 @@ NodeId = NonEmptyStr
 EdgeKind = Literal["imports", "calls", "constructs", "inherits", "reads", "writes"]
 SourceNodeKind = Literal["function", "method", "class", "assignment", "import"]
 ChangeKind = Literal[
+    "satisfied",
     "added",
     "removed",
     "callable_interface_changed",
@@ -1089,9 +1090,9 @@ def classify_target_change(
     """Classify one planned declaration transition."""
 ```
 
-`add` returns `added`, and `remove` returns `removed`. For `update`, the
-operation parses the baseline and expected declarations and applies these
-rules in order:
+`add` returns `added`, and `remove` returns `removed`. An `update` already
+present in the baseline returns `satisfied`. Otherwise, the operation parses
+the baseline and expected declarations and applies these rules in order:
 
 1. A function or method whose synchronous or asynchronous form, decorators,
    type parameters, parameters, or return annotation changed returns
@@ -1112,6 +1113,7 @@ body. Impact-policy version 1 maps each `ChangeKind` to the existing
 
 ```python
 IMPACT_EDGE_KINDS_V1: dict[ChangeKind, frozenset[EdgeKind]] = {
+    "satisfied": frozenset(),
     "added": frozenset(),
     "removed": frozenset(
         {"imports", "calls", "constructs", "inherits", "reads", "writes"}
@@ -1667,7 +1669,7 @@ def classify_target_change(
     """Classify one valid planned declaration transition.
 
     The operation raises ``SourceDeclarationError`` when the declared action
-    contradicts declaration presence or an update repeats the baseline bytes.
+    contradicts declaration presence.
     """
     if action == "add":
         if baseline is not None or expected is None:
@@ -1692,9 +1694,7 @@ def classify_target_change(
             "update requires baseline and expected declarations"
         )
     if baseline == expected:
-        raise SourceDeclarationError(
-            "update requires different baseline and expected declaration bytes"
-        )
+        return "satisfied"
 
     before = _parse_single_declaration(baseline, "baseline")
     after = _parse_single_declaration(expected, "expected")
@@ -1733,6 +1733,7 @@ def classify_target_change(
 
 ```python contract-target
 IMPACT_EDGE_KINDS_V1: dict[str, frozenset[EdgeKind]] = {
+    "satisfied": frozenset(),
     "added": frozenset(),
     "removed": frozenset(
         {"imports", "calls", "constructs", "inherits", "reads", "writes"}

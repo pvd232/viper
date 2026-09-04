@@ -21,6 +21,7 @@ from ..system_impact import (
 from .source import classify_target_change, extract_declaration_bytes
 
 IMPACT_EDGE_KINDS_V1: dict[str, frozenset[EdgeKind]] = {
+    "satisfied": frozenset(),
     "added": frozenset(),
     "removed": frozenset(
         {"imports", "calls", "constructs", "inherits", "reads", "writes"}

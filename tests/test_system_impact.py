@@ -1080,6 +1080,11 @@ def test_declaration_extraction_resolves_shared_import_fence(
     (
         (
             b"def run(value: int) -> int:\n    return value",
+            b"def run(value: int) -> int:\n    return value",
+            "satisfied",
+        ),
+        (
+            b"def run(value: int) -> int:\n    return value",
             b"def run(value: str) -> int:\n    return len(value)",
             "callable_interface_changed",
         ),
@@ -1123,7 +1128,6 @@ def test_change_classifier_distinguishes_interface_and_body_updates(
         ("remove", b"value = 1", b"value = 2"),
         ("update", None, b"value = 2"),
         ("update", b"value = 1", None),
-        ("update", b"value = 1", b"value = 1"),
     ),
 )
 def test_change_classifier_rejects_impossible_actions(
@@ -1131,7 +1135,7 @@ def test_change_classifier_rejects_impossible_actions(
     baseline: bytes | None,
     expected: bytes | None,
 ) -> None:
-    """Reject action declarations that contradict source presence or bytes."""
+    """Reject action declarations that contradict source presence."""
     with pytest.raises(SourceDeclarationError):
         classify_target_change(
             action=action,

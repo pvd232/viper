@@ -11,6 +11,7 @@ from typing import Literal, TypeAlias, cast
 from .._contract_traceability import ContractTarget, TargetAction
 
 ChangeKind: TypeAlias = Literal[
+    "satisfied",
     "added",
     "removed",
     "callable_interface_changed",
@@ -329,7 +330,7 @@ def classify_target_change(
     """Classify one valid planned declaration transition.
 
     The operation raises ``SourceDeclarationError`` when the declared action
-    contradicts declaration presence or an update repeats the baseline bytes.
+    contradicts declaration presence.
     """
     if action == "add":
         if baseline is not None or expected is None:
@@ -354,9 +355,7 @@ def classify_target_change(
             "update requires baseline and expected declarations"
         )
     if baseline == expected:
-        raise SourceDeclarationError(
-            "update requires different baseline and expected declaration bytes"
-        )
+        return "satisfied"
 
     before = _parse_single_declaration(baseline, "baseline")
     after = _parse_single_declaration(expected, "expected")
