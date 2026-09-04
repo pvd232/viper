@@ -1364,7 +1364,7 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+targets = ["src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 tests = ["tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
@@ -2263,6 +2263,7 @@ __all__ = [
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:Acceptance -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:CommitId -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:GateCheck -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1 -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:OneHop -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:PlanCheck -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:ResolvedContractTarget -->
@@ -2284,6 +2285,7 @@ from ..system_impact import (
     TargetCheck,
     inspect_plan,
 )
+from .plan import IMPACT_EDGE_KINDS_V1
 ```
 
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:_one_hop -->
@@ -2297,8 +2299,6 @@ def _one_hop(
     realized: SourceGraph,
 ) -> OneHop:
     """Record direct dependents selected by the existing impact policy."""
-    from .plan import IMPACT_EDGE_KINDS_V1
-
     baseline_nodes = {node.node_id: node for node in baseline.nodes}
     realized_nodes = {node.node_id: node for node in realized.nodes}
     indexes = (_node_index(baseline), _node_index(realized))
