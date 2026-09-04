@@ -281,6 +281,7 @@ targets = [
     "tools/check_plan.py:_tree_digest",
     "tools/check_plan.py:analyze_source",
     "tools/check_plan.py:source_digest",
+    "tools/check_plan.py:ScheduleError",
     "tools/check_plan.py:materialize_plan",
     "tools/check_plan.py:select_blocks",
     "tools/check_plan.py:CodeQLIdentity",
@@ -824,6 +825,7 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_tree_digest -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:analyze_source -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:source_digest -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ScheduleError -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:materialize_plan -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:select_blocks -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:CodeQLIdentity -->
@@ -870,7 +872,11 @@ from viper._system_impact.codeql import (  # noqa: E402
     analyze_source,
     source_digest,
 )
-from viper.scheduling import materialize_plan, select_blocks  # noqa: E402
+from viper.scheduling import (  # noqa: E402
+    ScheduleError,
+    materialize_plan,
+    select_blocks,
+)
 from viper.system_impact import (  # noqa: E402
     CodeQLIdentity,
     SourceGraph,
@@ -1055,15 +1061,31 @@ def validate(
     )
 
     candidate = results / "candidate"
-    materialize_plan(
-        root,
-        root,
-        traceability,
-        selected,
-        baseline,
-        candidate,
-        completed=completed,
-    )
+    try:
+        materialize_plan(
+            root,
+            root,
+            traceability,
+            selected,
+            baseline,
+            candidate,
+            completed=completed,
+        )
+    except ScheduleError as error:
+        result = {
+            "passed": False,
+            "stage": "materialize",
+            "revision": revision,
+            "blocks": selected,
+            "error": str(error),
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
+    original_pythonpath = os.environ.get("PYTHONPATH")
+    os.environ["PYTHONPATH"] = str(candidate / "src")
     pyright = _run(
         (
             str(python),
@@ -1089,6 +1111,10 @@ def validate(
         (results / "result.json").write_text(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
         )
+        if original_pythonpath is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = original_pythonpath
         return result
 
     planned = _analyze(
@@ -1130,6 +1156,10 @@ def validate(
     (results / "result.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
+    if original_pythonpath is None:
+        os.environ.pop("PYTHONPATH", None)
+    else:
+        os.environ["PYTHONPATH"] = original_pythonpath
     return result
 
 
