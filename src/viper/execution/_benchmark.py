@@ -7,9 +7,9 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from .._schema import PREDICTIONS
+from .._verification.attempt import verify_attempt_stages
 from ..artifacts import StageArtifactRef
 from ..benchmark import (
     ArtifactComparisonReceipt,
@@ -25,12 +25,15 @@ from ..references import (
     ResolvedRunRef,
 )
 from ..runs import ResolvedRun, RunAttempt
+from ..serialization import document_digest, parse_yaml_bytes, serialize_document
 from ..stages import EvaluateSpec
+from ..storage import LocalArtifactStore
+from ..verification import verify_benchmark_result, verify_run_result
+from ..verification.models import VerificationPolicy
+from ._run import execute_benchmark_confirmation
+from ._source import RunFetcher
 from .errors import BenchmarkExecutionError
 from .results import BenchmarkExecutionResult
-
-if TYPE_CHECKING:
-    from ..storage import LocalArtifactStore
 
 
 def _write_new(path: Path, raw: bytes) -> None:
@@ -60,8 +63,6 @@ def _metric_receipts(
     evaluation_stage_id: str,
 ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
     """Load the recomputation receipt for each evaluation metric."""
-    from ..serialization import parse_yaml_bytes
-
     receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
     for reference in attempt.metric_verification_files:
         receipt = MetricVerificationReceipt.model_validate(
@@ -80,14 +81,6 @@ def benchmark(
     timeout_seconds: float | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute, assemble, verify, and publish one benchmark confirmation."""
-    from .._verification.attempt import verify_attempt_stages
-    from ..serialization import document_digest, parse_yaml_bytes, serialize_document
-    from ..storage import LocalArtifactStore
-    from ..verification import verify_benchmark_result, verify_run_result
-    from ..verification.models import VerificationPolicy
-    from ._run import execute_benchmark_confirmation
-    from ._source import RunFetcher
-
     root = repository_root.resolve()
     candidate_path = resolved_run_path.resolve()
     candidate_raw = candidate_path.read_bytes()

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .results import BenchmarkExecutionResult, RunResult
+from .results import BenchmarkExecutionResult, RunResult
+
+# Parameter validation imports execution._process while viper is starting. Loading
+# the run modules here would send that import back through parameter validation.
 
 
 def run(
@@ -16,9 +18,7 @@ def run(
     timeout_seconds: float | None = None,
 ) -> RunResult:
     """Execute one frozen run plan and verify its terminal result."""
-    from ._run import run as execute
-
-    return execute(
+    return importlib.import_module("._run", __name__).run(
         repository_root,
         run_spec_path,
         timeout_seconds=timeout_seconds,
@@ -32,9 +32,7 @@ def retry(
     timeout_seconds: float | None = None,
 ) -> RunResult:
     """Append one attempt to a failed frozen run and verify its result."""
-    from ._run import retry as execute
-
-    return execute(
+    return importlib.import_module("._run", __name__).retry(
         repository_root,
         run_spec_path,
         timeout_seconds=timeout_seconds,
@@ -49,9 +47,7 @@ def benchmark(
     timeout_seconds: float | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute and verify one independent benchmark confirmation."""
-    from ._benchmark import benchmark as execute
-
-    return execute(
+    return importlib.import_module("._benchmark", __name__).benchmark(
         repository_root,
         resolved_run_path,
         benchmark_spec_path,
