@@ -16,7 +16,7 @@ validated ContractTraceabilityGraph
 -> reject unplanned source changes
 ```
 
-The check does not generate a plan. <!-- direct-prose: allow -->
+
 `ContractTraceabilityGraph` supplies the plan and selected PairBlocks. Each
 PairBlock gate remains the behavioral acceptance boundary. The pre-pairing
 command also records the policy-selected direct neighborhood in both source
