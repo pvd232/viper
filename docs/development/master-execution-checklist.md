@@ -1694,10 +1694,16 @@ python -m pytest \
 
 **Commit boundary:** `Add Python stage and artifact drafting`
 
-## 13. Master Phase 6 — experiments, variants, replicates, and freezing
+## 13. Master Phase 6 — experiments, immutable plans, and internal compilation
 
 <!-- contract-implementation: requirement=UMD-04 rule=experiment.authoring.complete state=planned owner=src/viper/experiments.py:ExperimentDraft -->
 <!-- contract-verification: requirement=UMD-04 rule=experiment.authoring.complete state=planned test=tests/test_authoring.py:test_experiment_draft_derives_metric_registry -->
+<!-- contract-implementation: requirement=UMD-04 rule=plan.identity.generated state=planned owner=src/viper/authoring.py:plan -->
+<!-- contract-verification: requirement=UMD-04 rule=plan.identity.generated state=planned test=tests/test_authoring.py:test_plan_generates_read_only_run_id -->
+<!-- contract-implementation: requirement=UMD-04 rule=plan.graph.immutable state=planned owner=src/viper/authoring.py:_deep_freeze -->
+<!-- contract-verification: requirement=UMD-04 rule=plan.graph.immutable state=planned test=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
+<!-- contract-implementation: requirement=UMD-04 rule=plan.compilation.internal state=planned owner=src/viper/execution/__init__.py:run -->
+<!-- contract-verification: requirement=UMD-04 rule=plan.compilation.internal state=planned test=tests/test_run_execution.py:test_run_compiles_plan_before_first_attempt -->
 <!-- contract-implementation: requirement=AIR-04 rule=plan.freeze.complete state=planned owner=src/viper/authoring.py:freeze -->
 <!-- contract-verification: requirement=AIR-04 rule=plan.freeze.complete state=planned test=tests/test_authoring.py:test_plan_freezes_complete_protocol_graph -->
 <!-- contract-implementation: requirement=FPG-01 rule=plan.files.complete state=planned owner=src/viper/authoring.py:FrozenPlanFiles -->
@@ -1718,7 +1724,14 @@ python -m pytest \
 [frozen plan Git identity](frozen-plan-git-identity.md)
 
 **Outcome:** One experiment owns reusable variant graphs and replicate seeds.
-The plan mapping supplies stage IDs.
+`plan()` supplies the immutable run ID and recursively frozen graph. `run(plan)`
+compiles and persists that graph internally before execution.
+
+**Contract-alignment gate:** Revise `automatic-input-resolution.md`,
+`frozen-plan-git-identity.md`, and `experiment-expansion.md` before executing
+this phase. The current FPG-01 through FPG-05 rows still describe an
+intervening user Git commit and cannot be implemented together with the
+accepted `run(plan)` workflow.
 
 ### 13.1 Draft graph
 
@@ -1731,12 +1744,24 @@ The plan mapping supplies stage IDs.
 - [ ] Put seeds on `ReplicateDraft`.
 - [ ] Change `RunPlanDraft` to hold one experiment and selected variant and
       replicate IDs.
-- [ ] Add `plan()` to `viper.authoring`.
+- [ ] Add `plan()` to `viper.authoring`; generate one `run_id`, deep-copy the
+      authored graph, and recursively freeze it before returning.
+- [ ] Add internal `FrozenDict`, `FrozenList`, `_deep_freeze()`, and
+      `_new_run_id()` support. Preserve shared-object identity and ordinary
+      canonical serialization while rejecting every nested mutator.
 
-### 13.2 Compiler
+### 13.2 Internal compiler
 
-- [ ] Replace YAML-backed `freeze_run_plan()` input with `RunPlanDraft`.
+- [ ] Replace YAML-backed `freeze_run_plan()` with internal `_compile_plan()`
+      over `RunPlanDraft`.
       <!-- implements: AIR-04 -->
+- [ ] Change `viper.execution.run()` to accept `RunPlanDraft`, atomically
+      persist the complete compiled set, and call the internal path-based
+      executor only after publication succeeds.
+- [ ] Remove public `freeze()`, typed `freeze_run()`, public
+      `FrozenPlanFiles`, and the `freeze-run` CLI command.
+- [ ] Preserve `RunPlanDraft.run_id` through compilation, execution, retry,
+      benchmark, restore, and verification. Only `plan()` generates it.
 - [ ] Keep canonical serialization and exact-file writes.
 - [ ] Derive `RunSpec.experiment_id`, `variant_id`, `replicate_id`, and seed.
 - [ ] Derive stage IDs from `VariantDraft.stages` keys.
@@ -1781,6 +1806,9 @@ IDs. The two concrete artifact paths must differ.
       `tests/test_authoring.py`.
 - [ ] Add cross-variant metric collision and estimator rejection cases.
 - [ ] Add two-replicate path isolation.
+- [ ] Add automatic run-ID, caller-alias isolation, nested-mutator rejection,
+      canonical serialization, private-compilation surface, compile-before-run,
+      and partial-publication rejection cases.
 - [ ] Add committed-plan success, uncommitted-plan rejection, changed-source
       rejection, and wrong-commit benchmark rejection.
 - [ ] Run: <!-- verifies: UMD-04, AIR-04, FPG-01, FPG-02, FPG-03, FPG-04, FPG-05 -->
@@ -1795,7 +1823,7 @@ python -m pytest \
   tests/test_benchmark_execution.py -q
 ```
 
-**Commit boundary:** `Compile experiments and reusable variants`
+**Commit boundary:** `Compile immutable experiment plans internally`
 
 ## 14. Master Phase 7 — automatic input compilation
 
