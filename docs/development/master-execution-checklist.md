@@ -1272,6 +1272,8 @@ through stage consumption. A change fails the stage.
 - [ ] Set both local `source` fields to `LocalSource`.
 - [ ] Delete `ExternalInputRef.path`.
 - [ ] Change `ResolvedExternalInputRef.file` to `SnapshotFileRef`.
+- [ ] Rename `FutureInputRef.producer_artifact` to `FutureInputRef.name` and
+      update the Phase 3 consumers owned by the external-input contract.
 - [ ] Remove the HTTP branch and HTTP helper from
       `execution/_materialization.py:resolve_inputs()`.
 
@@ -1291,7 +1293,7 @@ through stage consumption. A change fails the stage.
       <!-- pair-block: P3-EIR-03 -->
       <!-- pair-block-contract: P3-EIR-03 contract=external-input-roots.md -->
       <!-- implements: EIR-03 -->
-      <!-- contract-implementation: requirement=EIR-03 rule=input.local.identity state=planned owner=src/viper/_verification/attempt.py:_verify_external_inputs -->
+      <!-- contract-implementation: requirement=EIR-03 rule=input.local.identity state=planned owner=src/viper/_verification/attempt.py:verify_external_inputs -->
       <!-- contract-verification: requirement=EIR-03 rule=input.local.identity state=planned test=tests/test_verification_acceptance.py:test_external_input_identity_survives_execution -->
 - [ ] Read the local source once.
 - [ ] Write a temporary sibling file, flush it, and atomically replace the

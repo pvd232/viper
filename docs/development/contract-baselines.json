@@ -11,7 +11,7 @@
         "CRT-06",
         "CRT-07"
       ],
-      "sha256": "d8e508e34f70911e4c1d8a669bf6249dd8896e295d4e66102787b2fc3f1d5643"
+      "sha256": "8404d726d1cd613d9a3cb07081ebb1177bf50156bdab80cfc7b23b9965c65bc6"
     },
     {
       "path": "docs/development/project-data-root.md",
@@ -71,7 +71,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "dcc4ecf075025b8c496fc57a70088a35e902356f4ee2d8ab5bd14d2252e87d66"
+      "sha256": "848057b246b33a679db118a6ae6c03a8908192144f0a95e268e31d44b1098873"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",
