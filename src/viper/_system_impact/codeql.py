@@ -198,12 +198,17 @@ def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes
         if start_col < 0:
             raise CodeQLAnalysisError("decorated declaration has no leading at-sign")
     start = offsets[start_line - 1] + start_col
-    end = offsets[node.end_lineno - 1] + node.end_col_offset
+    end_line = lines[node.end_lineno - 1]
+    end_col = node.end_col_offset
+    suffix = end_line[end_col:]
+    if suffix.lstrip().startswith(b"#"):
+        end_col = len(end_line.rstrip(b"\r\n"))
+    end = offsets[node.end_lineno - 1] + end_col
     return (
         start_line,
         start_col,
         node.end_lineno,
-        node.end_col_offset,
+        end_col,
         source[start:end],
     )
 

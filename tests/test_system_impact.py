@@ -79,6 +79,16 @@ def test_source_digest_ignores_viper_worktrees(tmp_path: Path) -> None:
     assert source_digest(tmp_path) == expected
 
 
+def test_node_span_keeps_trailing_inline_directive() -> None:
+    """Keep a line-end type directive with the declaration it qualifies."""
+    source = (
+        b"class Item:\n    value: int  # pyright: ignore[reportGeneralTypeIssues]\n"
+    )
+    declaration = ast.parse(source).body[0]
+
+    assert _node_span(declaration, source)[-1] == source.rstrip(b"\n")
+
+
 def _declaration_ref(
     *,
     path: str = "docs/plan.md",

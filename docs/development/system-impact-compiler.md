@@ -1349,10 +1349,10 @@ depends_on = ["P0-CRT-07"]
 ```toml pair-block
 id = "P0-SIG-02"
 requirements = ["SIG-01", "SIG-05"]
-targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNodeKind", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees"]
+targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:_node_span", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNodeKind", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
 assets = ["tools/codeql/viper-python-impact/qlpack.yml", "tools/codeql/viper-python-impact/codeql-pack.lock.yml", "tools/codeql/viper-python-impact/source-facts.qls", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
-tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack' -q"
+tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees", "tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive"]
+gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack or node_span' -q"
 depends_on = ["P0-SIG-01"]
 ```
 
@@ -1421,6 +1421,7 @@ Later update targets supersede the earlier declaration for the same symbol.
 
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:IGNORED_PARTS -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:CodeQLAnalysisError -->
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=update target=src/viper/_system_impact/codeql.py:_node_span -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:source_digest -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=src/viper/_system_impact/codeql.py:analyze_source -->
 
@@ -1595,6 +1596,48 @@ def analyze_source(
         edges=edges,
         receipt=receipt,
     )
+
+def _node_span(node: ast.stmt, source: bytes) -> tuple[int, int, int, int, bytes]:
+    if node.end_lineno is None or node.end_col_offset is None:
+        raise CodeQLAnalysisError("Python declaration has no complete source span")
+    lines, offsets = _byte_offsets(source)
+    start_line = node.lineno
+    start_col = node.col_offset
+    if (
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        and node.decorator_list
+    ):
+        decorator = node.decorator_list[0]
+        start_line = decorator.lineno
+        start_col = lines[start_line - 1].rfind(b"@", 0, decorator.col_offset + 1)
+        if start_col < 0:
+            raise CodeQLAnalysisError("decorated declaration has no leading at-sign")
+    start = offsets[start_line - 1] + start_col
+    end_line = lines[node.end_lineno - 1]
+    end_col = node.end_col_offset
+    suffix = end_line[end_col:]
+    if suffix.lstrip().startswith(b"#"):
+        end_col = len(end_line.rstrip(b"\r\n"))
+    end = offsets[node.end_lineno - 1] + end_col
+    return (
+        start_line,
+        start_col,
+        node.end_lineno,
+        end_col,
+        source[start:end],
+    )
+```
+
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=tests/test_system_impact.py:test_node_span_keeps_trailing_inline_directive -->
+```python contract-target
+def test_node_span_keeps_trailing_inline_directive() -> None:
+    """Keep a line-end type directive with the declaration it qualifies."""
+    source = (
+        b"class Item:\n    value: int  # pyright: ignore[reportGeneralTypeIssues]\n"
+    )
+    declaration = ast.parse(source).body[0]
+
+    assert _node_span(declaration, source)[-1] == source.rstrip(b"\n")
 ```
 
 ### Declaration resolution and impact
