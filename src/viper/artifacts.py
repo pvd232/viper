@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from collections.abc import Callable
+from pathlib import Path
+from typing import Annotated, Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
 from ._schema import (
     SHA256,
@@ -15,6 +23,7 @@ from ._schema import (
     PythonSymbol,
     RepoRelPath,
     repo_file_paths_overlap,
+    validate_repo_rel_path,
 )
 from .ids import StageId
 from .references import (
@@ -116,15 +125,78 @@ ResolvedArtifact = Annotated[
 ]
 
 
+def validate_run_artifact_path(value: str) -> str:
+    """Require a run-relative path beneath the artifact directory."""
+    path = validate_repo_rel_path(value)
+    if not path.startswith("artifacts/"):
+        raise ValueError("run artifact path must start with artifacts/")
+    return path
+
+
+RunArtifactPath = Annotated[str, AfterValidator(validate_run_artifact_path)]
+
+
+class SingleFileArtifactDraft(BaseModel):
+    """Hold one callable-backed file artifact before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    kind: Literal["file"] = "file"
+    path: RunArtifactPath
+    loader: Callable[[Path], Any]
+    data_role: DataRole
+
+
+class BundleArtifactDraft(BaseModel):
+    """Hold one callable-backed artifact directory before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    kind: Literal["bundle"] = "bundle"
+    path: RunArtifactPath
+    loader: Callable[[Path], Any]
+    data_role: DataRole
+
+
+ArtifactDraft = Annotated[
+    SingleFileArtifactDraft | BundleArtifactDraft,
+    Field(discriminator="kind"),
+]
+
+
+def artifact(
+    *,
+    path: RunArtifactPath,
+    loader: Callable[[Path], Any],
+    data_role: DataRole,
+    kind: Literal["file", "bundle"] = "file",
+) -> ArtifactDraft:
+    """Declare one callable-backed run artifact."""
+    draft = {
+        "kind": kind,
+        "path": path,
+        "loader": loader,
+        "data_role": data_role,
+    }
+    if kind == "bundle":
+        return BundleArtifactDraft.model_validate(draft)
+    return SingleFileArtifactDraft.model_validate(draft)
+
+
 __all__ = [
+    "ArtifactDraft",
     "ArtifactLoaderRef",
     "ArtifactPointer",
     "ArtifactSpec",
+    "BundleArtifactDraft",
     "BundleArtifactSpec",
     "ResolvedArtifact",
     "ResolvedBundleArtifact",
     "ResolvedBundleMember",
     "ResolvedSingleFileArtifact",
+    "RunArtifactPath",
+    "SingleFileArtifactDraft",
     "SingleFileArtifactSpec",
     "StageArtifactRef",
+    "artifact",
 ]

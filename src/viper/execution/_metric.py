@@ -115,11 +115,11 @@ def execute_metric_process(
             "resolved metric dependencies differ from MetricSpec"
         )
 
-    effective_environment = stage.environment or run.environment
+    effective_environment = stage.env or run.env
     compute = effective_environment.compute
     cuda_ordinal = select_cuda_device(compute.model) if compute.kind == "cuda" else None
-    environment = os.environ.copy()
-    environment.update(
+    env = os.environ.copy()
+    env.update(
         {
             str(key): value
             for key, value in process_environment(
@@ -131,8 +131,8 @@ def execute_metric_process(
         }
     )
     package_root = str(Path(__file__).resolve().parents[2])
-    existing_python_path = environment.get("PYTHONPATH")
-    environment["PYTHONPATH"] = (
+    existing_python_path = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
         package_root
         if existing_python_path is None
         else f"{package_root}{os.pathsep}{existing_python_path}"
@@ -158,12 +158,12 @@ def execute_metric_process(
         result_path=result_path,
     )
     context_path.write_text(context.model_dump_json(), encoding="utf-8")
-    environment["VIPER_METRIC_CONTEXT_PATH"] = str(context_path)
+    env["VIPER_METRIC_CONTEXT_PATH"] = str(context_path)
 
     completed = subprocess.run(
         (sys.executable, "-m", "viper._workers.metrics"),
         cwd=root,
-        env=environment,
+        env=env,
         capture_output=True,
         check=False,
         timeout=timeout_seconds,

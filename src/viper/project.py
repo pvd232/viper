@@ -126,7 +126,7 @@ def _project_files(package: str) -> dict[str, str]:
         "build": ("BuildParameters", "build", "prior"),
         "embed": ("EmbedParameters", "embed", "embedding"),
         "train": ("TrainParameters", "train", "parameters"),
-        "evaluate": ("EvaluateParameters", "eval", "predictions"),
+        "eval": ("EvalParameters", "eval", "predictions"),
     }
     files: dict[str, str] = {
         **ROOT_FILES,
@@ -167,32 +167,32 @@ pythonpath = ["src"]
         f"src/{package}/__init__.py": (
             f'"""Project-owned stages and provenance extensions for {package}."""\n'
         ),
-        f"src/{package}/parameters.py": (
+        f"src/{package}/params.py": (
             '''"""Define project-owned stage parameter models."""
 
 from pydantic import Field
 from viper import parameters
 
 
-class BuildParameters(parameters.Build):
+class BuildParameters(params.Build):
     """Select the delimiter consumed by the prior builder."""
 
     delimiter: str = ","
 
 
-class EmbedParameters(parameters.Embed):
+class EmbedParameters(params.Embed):
     """Select the dimension of the example embedding."""
 
     dimensions: int = Field(default=2, gt=0)
 
 
-class TrainParameters(parameters.Train):
+class TrainParameters(params.Train):
     """Select the number of example training passes."""
 
     epochs: int = Field(default=1, gt=0)
 
 
-class EvaluateParameters(parameters.Evaluate):
+class EvalParameters(params.Eval):
     """Select the label written beside the example predictions."""
 
     label: str = "baseline"
@@ -271,13 +271,13 @@ def load(path: Path) -> ResumeState:
         f"src/{package}/metrics/__init__.py": (
             '"""Project-owned metric implementations."""\n'
         ),
-        f"src/{package}/metrics/evaluation.py": (
-            '''"""Define one recomputed evaluation metric."""
+        f"src/{package}/metrics/eval.py": (
+            '''"""Define one recomputed eval metric."""
 
 from viper.metrics import metric
 
 
-@metric(metric_id="prediction_bytes", kind="evaluation", mode="recompute")
+@metric(metric_id="prediction_bytes", kind="eval", mode="recompute")
 def prediction_bytes(context) -> float:
     """Return the byte count of the verified prediction artifact."""
     return float(len(context.artifacts["predictions"].read_bytes()))
@@ -291,7 +291,7 @@ source identity.
 """,
         "benchmarks/README.md": """# Benchmarks
 
-A benchmark governs one evaluation contract across candidate run plans and
+A benchmark governs one eval contract across candidate run plans and
 requires an independently executed confirmation.
 """,
         "train.py": f'''"""Run one frozen project plan."""
@@ -313,7 +313,7 @@ if __name__ == "__main__":
 
 from {package}.stages.build import build
 from {package}.stages.embed import embed
-from {package}.stages.evaluate import evaluate
+from {package}.stages.eval import eval
 from {package}.stages.train import train
 
 from viper.stages import stage_definition
@@ -321,19 +321,19 @@ from viper.stages import stage_definition
 
 def test_stage_kinds() -> None:
     """Match each callable with the stage kind fixed by its decorator."""
-    stages = (build, embed, train, evaluate)
+    stages = (build, embed, train, eval)
 
     assert tuple(stage_definition(stage).kind for stage in stages) == (
         "build",
         "embed",
         "train",
-        "evaluate",
+        "eval",
     )
 '''
         ),
     }
     for stage, (parameter_class, decorator, artifact) in stage_definitions.items():
-        if stage == "evaluate":
+        if stage == "eval":
             input_read = "    payload = context.inputs['parameters'].read_bytes()\n"
         else:
             input_read = (

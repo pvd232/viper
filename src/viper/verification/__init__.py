@@ -34,7 +34,7 @@ from ..references import GitFileRef, ResolvedFileRef
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
-    EvaluateSpec,
+    EvalSpec,
     InternalSpec,
     ResolvedBaseSpec,
     ResolvedInternalSpec,
@@ -58,6 +58,7 @@ __all__ = [
     "verify_stored_input_selections",
     "verify_stored_inputs",
 ]
+
 
 def verify_run_result(
     resolved_run: ResolvedRun,
@@ -96,9 +97,7 @@ def verify_run_result(
                 *attempt.metric_verification_files,
                 *attempt.log_files,
             )
-            if (
-                identity := _storage.artifact_revision_identity(reference.stored_at)
-            )
+            if (identity := _storage.artifact_revision_identity(reference.stored_at))
             is not None
         }
         if attempt_file_snapshots & current_attempt_file_snapshots:
@@ -328,13 +327,13 @@ def verify_stored_input_selections(
                     "select resume_state"
                 )
 
-    if isinstance(stage_spec, EvaluateSpec):
+    if isinstance(stage_spec, EvalSpec):
         model_input = stage_spec.inputs[PARAMETERS_INPUT]
         if isinstance(model_input, StoredInputRef):
             model_pointer = pointers[PARAMETERS_INPUT]
             if model_pointer.artifact.artifact_name != PARAMETERS:
                 raise VerificationError(
-                    f"stored evaluation model input of stage {stage_id!r} must "
+                    f"stored eval model input of stage {stage_id!r} must "
                     "select parameters"
                 )
 
@@ -622,9 +621,7 @@ def verify_benchmark_result(
             *attempt.metric_verification_files,
             *attempt.log_files,
         )
-        if (
-            identity := _storage.artifact_revision_identity(reference.stored_at)
-        )
+        if (identity := _storage.artifact_revision_identity(reference.stored_at))
         is not None
     }
     confirmation_attempt_file_snapshots = {
@@ -635,9 +632,7 @@ def verify_benchmark_result(
             *confirmation.metric_verification_files,
             *confirmation.log_files,
         )
-        if (
-            identity := _storage.artifact_revision_identity(reference.stored_at)
-        )
+        if (identity := _storage.artifact_revision_identity(reference.stored_at))
         is not None
     }
     if original_attempt_file_snapshots & confirmation_attempt_file_snapshots:
@@ -701,20 +696,18 @@ def verify_benchmark_result(
     ]
     estimator_parity = selected_estimator == confirmation_estimator
 
-    evaluation_stage_ids = [
+    eval_stage_ids = [
         stage_id
         for stage_id, stage in verified_run.plan.stages.items()
-        if isinstance(stage, EvaluateSpec)
+        if isinstance(stage, EvalSpec)
     ]
-    if len(evaluation_stage_ids) != 1:
-        raise VerificationError("benchmark verification requires one evaluation stage")
-    evaluation_stage_id = evaluation_stage_ids[0]
-    selected_predictions = verified_run.resolved_stages[evaluation_stage_id].artifacts[
+    if len(eval_stage_ids) != 1:
+        raise VerificationError("benchmark verification requires one eval stage")
+    eval_stage_id = eval_stage_ids[0]
+    selected_predictions = verified_run.resolved_stages[eval_stage_id].artifacts[
         PREDICTIONS
     ]
-    confirmation_predictions = confirmation_stages[evaluation_stage_id].artifacts[
-        PREDICTIONS
-    ]
+    confirmation_predictions = confirmation_stages[eval_stage_id].artifacts[PREDICTIONS]
     prediction_parity = selected_predictions == confirmation_predictions
 
     expected_artifacts = {
@@ -733,20 +726,20 @@ def verify_benchmark_result(
             selected_estimator,
             confirmation_estimator,
         ),
-        (evaluation_stage_id, PREDICTIONS): (
+        (eval_stage_id, PREDICTIONS): (
             StageArtifactRef(
-                stage_id=evaluation_stage_id,
+                stage_id=eval_stage_id,
                 artifact_name=PREDICTIONS,
             ),
             next(
                 stage
                 for stage in selected_attempt.resolved_stages
-                if stage.stage_id == evaluation_stage_id
+                if stage.stage_id == eval_stage_id
             ),
             next(
                 stage
                 for stage in confirmation.resolved_stages
-                if stage.stage_id == evaluation_stage_id
+                if stage.stage_id == eval_stage_id
             ),
             selected_predictions,
             confirmation_predictions,
@@ -786,7 +779,7 @@ def verify_benchmark_result(
     def metric_receipts(
         attempt: RunAttempt,
     ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
-        """Load the evaluation metric receipts owned by one attempt."""
+        """Load the eval metric receipts owned by one attempt."""
         receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
         for reference in attempt.metric_verification_files:
             raw = _storage.read_resolved_file(reference, fetcher=fetcher)
@@ -798,7 +791,7 @@ def verify_benchmark_result(
                 raise VerificationError(
                     "benchmark.metrics: metric verification receipt is invalid"
                 ) from exc
-            if receipt.stage_id != evaluation_stage_id:
+            if receipt.stage_id != eval_stage_id:
                 continue
             receipts[receipt.metric_id] = (reference, receipt)
         return receipts

@@ -21,7 +21,7 @@ from ..references import HuggingFaceFileRef, LocalFileRef
 from ..runs import RunAttempt, RunSpec
 from ..runtime import (
     CUDABackendContext,
-    GCEEnvironmentSpec,
+    GCEEnvSpec,
     GCEHostContext,
     process_environment,
 )
@@ -47,8 +47,8 @@ def _verify_metric_worker_runtime(
     startup = receipt.startup
     if startup.reproducibility != run.reproducibility:
         raise VerificationError("metric worker reproducibility controls differ")
-    compute = (stage.environment or run.environment).compute
-    recorded_cuda = startup.environment.get("CUDA_VISIBLE_DEVICES")
+    compute = (stage.env or run.env).compute
+    recorded_cuda = startup.env.get("CUDA_VISIBLE_DEVICES")
     if compute.kind == "cuda":
         if recorded_cuda is None or not recorded_cuda.isdigit():
             raise VerificationError("metric worker omitted its selected CUDA device")
@@ -64,8 +64,8 @@ def _verify_metric_worker_runtime(
             run.reproducibility,
             compute,
         )
-    if startup.environment != expected_environment:
-        raise VerificationError("metric worker startup environment differs")
+    if startup.env != expected_environment:
+        raise VerificationError("metric worker startup env differs")
     if any(generator.seed != run.seed for generator in startup.generators):
         raise VerificationError("metric worker generator seed differs")
     family_counts = Counter(generator.family for generator in startup.generators)
@@ -80,12 +80,12 @@ def _verify_metric_worker_runtime(
     if received_numpy_names != expected_numpy_names:
         raise VerificationError("metric worker NumPy generators differ")
     context = receipt.execution_context
-    effective_environment = stage.environment or run.environment
-    if receipt.python_environment != effective_environment.python_environment:
-        raise VerificationError("metric worker Python environment differs")
+    effective_environment = stage.env or run.env
+    if receipt.python_env != effective_environment.python_env:
+        raise VerificationError("metric worker Python env differs")
     if context.host.provider != effective_environment.kind:
         raise VerificationError("metric worker host provider differs")
-    if isinstance(effective_environment, GCEEnvironmentSpec):
+    if isinstance(effective_environment, GCEEnvSpec):
         if not isinstance(context.host, GCEHostContext):
             raise VerificationError("metric worker omitted its GCE host context")
         if context.host.machine_type != effective_environment.machine_type:
@@ -263,7 +263,16 @@ def verify_recomputed_metrics(
                 expected_dependencies,
                 strict=True,
             ):
-                verify_metric_dependency_references(received, expected, metric_id)
+                received_identities = tuple(
+                    (reference.sha256, reference.bytes) for reference in received.files
+                )
+                expected_identities = tuple(
+                    (reference.sha256, reference.bytes) for reference in expected.files
+                )
+                if received_identities != expected_identities:
+                    raise VerificationError(
+                        f"metric {metric_id!r} dependency file identities differ"
+                    )
                 for reference in received.files:
                     read_resolved_file(reference, fetcher=fetcher)
             for worker in (receipt.production, receipt.recomputation):

@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from . import parameters
+from . import params
 from ._schema import ProtocolModel, RNGSeed
 from .ids import ExperimentId, FactorId, LevelId, ReplicateId, StageId, VariantId
 from .metrics import MetricSpec
@@ -70,42 +70,42 @@ class ExperimentSpec(ProtocolModel):
 
 
 class BuildVariantStageParams(ProtocolModel):
-    """Bind one build stage to its selected variant parameters."""
+    """Bind one build stage to its selected variant params."""
 
     kind: Literal["build"] = "build"
     stage_id: StageId
-    params: parameters.Build
+    params: params.Build
 
 
 class EmbedVariantStageParams(ProtocolModel):
-    """Bind one embedding stage to its selected variant parameters."""
+    """Bind one embedding stage to its selected variant params."""
 
-    kind: Literal["embed"] = "embed"
+    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     stage_id: StageId
-    params: parameters.Embed
+    params: params.Embed
 
 
 class TrainVariantStageParams(ProtocolModel):
-    """Bind one training stage to its selected variant parameters."""
+    """Bind one training stage to its selected variant params."""
 
     kind: Literal["train"] = "train"
     stage_id: StageId
-    params: parameters.Train
+    params: params.Train
 
 
-class EvaluateVariantStageParams(ProtocolModel):
-    """Bind one evaluation stage to its selected variant parameters."""
+class EvalVariantStageParams(ProtocolModel):
+    """Bind one eval stage to its selected variant params."""
 
-    kind: Literal["evaluate"] = "evaluate"
+    kind: Literal["eval"] = "eval"
     stage_id: StageId
-    params: parameters.Evaluate
+    params: params.Eval
 
 
 VariantStageParams = Annotated[
     BuildVariantStageParams
     | EmbedVariantStageParams
     | TrainVariantStageParams
-    | EvaluateVariantStageParams,
+    | EvalVariantStageParams,
     Field(discriminator="kind"),
 ]
 

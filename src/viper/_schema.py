@@ -56,16 +56,16 @@ GitCommit = Annotated[
 ]
 ArtifactName = HumanId
 BenchmarkId = HumanId
-EvaluationId = HumanId
+
 SelectionName = HumanId
 RNGSeed = Annotated[int, Field(ge=0, le=2**32 - 1)]
-DataRole = Literal["training", "validation", "evaluation", "benchmark"]
+DataRole = Literal["training", "validation", "eval", "benchmark"]
 
 PARAMETERS: ArtifactName = "parameters"
 RESUME_STATE: ArtifactName = "resume_state"
 PARAMETERS_INPUT: InputName = "parameters"
 RESUME_STATE_INPUT: InputName = "resume_state"
-EVALUATION_DATASET_INPUT: InputName = "evaluation_dataset"
+
 PREDICTIONS: ArtifactName = "predictions"
 
 

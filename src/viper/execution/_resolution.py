@@ -10,14 +10,14 @@ from ..ids import InputName
 from ..inputs import ResolvedInputRef
 from ..references import ResolvedGitFileRef, ResolvedStageInvocationRef
 from ..runtime import (
-    EnvironmentSpec,
+    EnvSpec,
     ExecutionContext,
-    GCEEnvironmentSpec,
+    GCEEnvSpec,
     GCEHostContext,
-    ResolvedGCEEnvironment,
-    ResolvedLocalEnvironment,
+    ResolvedGCEEnv,
+    ResolvedLocalEnv,
     observe_execution,
-    observe_python_environment,
+    observe_python_env,
 )
 from ..stages import (
     DownloadSpec,
@@ -25,7 +25,7 @@ from ..stages import (
     ResolvedBuildSpec,
     ResolvedDownloadSpec,
     ResolvedEmbedSpec,
-    ResolvedEvaluateSpec,
+    ResolvedEvalSpec,
     ResolvedSpec,
     ResolvedTrainSpec,
 )
@@ -34,57 +34,55 @@ from ._stage import StageProcessResult
 from .errors import RunError
 
 
-def resolve_environment(
+def resolve_env(
     fetcher: RunFetcher,
-    environment: EnvironmentSpec,
+    env: EnvSpec,
     process: StageProcessResult,
-) -> ResolvedLocalEnvironment | ResolvedGCEEnvironment:
-    """Resolve one requested environment from child-observed runtime evidence."""
-    if isinstance(environment, GCEEnvironmentSpec):
+) -> ResolvedLocalEnv | ResolvedGCEEnv:
+    """Resolve one requested env from child-observed runtime evidence."""
+    if isinstance(env, GCEEnvSpec):
         host = process.execution_context.host
         if not isinstance(host, GCEHostContext):
             raise RunError("GCE execution omitted its observed GCE host")
-        return ResolvedGCEEnvironment(
+        return ResolvedGCEEnv(
             provisioning=host.provisioning,
             machine_type=host.machine_type,
-            compute=environment.compute,
-            lockfile=resolve_git_file(fetcher, environment.lockfile),
-            python_environment=process.python_environment,
+            compute=env.compute,
+            lockfile=resolve_git_file(fetcher, env.lockfile),
+            python_env=process.python_env,
         )
-    return ResolvedLocalEnvironment(
-        compute=environment.compute,
-        lockfile=resolve_git_file(fetcher, environment.lockfile),
-        python_environment=process.python_environment,
+    return ResolvedLocalEnv(
+        compute=env.compute,
+        lockfile=resolve_git_file(fetcher, env.lockfile),
+        python_env=process.python_env,
     )
 
 
-def resolve_runner_environment(
+def resolve_runner_env(
     fetcher: RunFetcher,
-    environment: EnvironmentSpec,
-) -> tuple[ResolvedLocalEnvironment | ResolvedGCEEnvironment, ExecutionContext]:
-    """Resolve the environment observed by a runner-owned stage."""
-    python_environment = observe_python_environment()
-    if python_environment != environment.python_environment:
-        raise RunError("runner Python environment differs from the stage request")
-    execution_context = observe_execution(environment)
-    if isinstance(environment, GCEEnvironmentSpec):
+    env: EnvSpec,
+) -> tuple[ResolvedLocalEnv | ResolvedGCEEnv, ExecutionContext]:
+    """Resolve the env observed by a runner-owned stage."""
+    python_env = observe_python_env()
+    if python_env != env.python_env:
+        raise RunError("runner Python env differs from the stage request")
+    execution_context = observe_execution(env)
+    if isinstance(env, GCEEnvSpec):
         host = execution_context.host
         if not isinstance(host, GCEHostContext):
             raise RunError("GCE download omitted its observed GCE host")
-        resolved: ResolvedLocalEnvironment | ResolvedGCEEnvironment = (
-            ResolvedGCEEnvironment(
-                provisioning=host.provisioning,
-                machine_type=host.machine_type,
-                compute=environment.compute,
-                lockfile=resolve_git_file(fetcher, environment.lockfile),
-                python_environment=python_environment,
-            )
+        resolved: ResolvedLocalEnv | ResolvedGCEEnv = ResolvedGCEEnv(
+            provisioning=host.provisioning,
+            machine_type=host.machine_type,
+            compute=env.compute,
+            lockfile=resolve_git_file(fetcher, env.lockfile),
+            python_env=python_env,
         )
     else:
-        resolved = ResolvedLocalEnvironment(
-            compute=environment.compute,
-            lockfile=resolve_git_file(fetcher, environment.lockfile),
-            python_environment=python_environment,
+        resolved = ResolvedLocalEnv(
+            compute=env.compute,
+            lockfile=resolve_git_file(fetcher, env.lockfile),
+            python_env=python_env,
         )
     return resolved, execution_context
 
@@ -93,7 +91,7 @@ def resolve_stage(
     stage: ParameterizedSpec,
     *,
     source: ResolvedGitFileRef,
-    environment: ResolvedLocalEnvironment | ResolvedGCEEnvironment,
+    env: ResolvedLocalEnv | ResolvedGCEEnv,
     process: StageProcessResult,
     invocation: ResolvedStageInvocationRef,
     inputs: dict[InputName, ResolvedInputRef] | None,
@@ -104,7 +102,7 @@ def resolve_stage(
     common = {
         "spec": stage,
         "source": source,
-        "environment": environment,
+        "env": env,
         "execution_context": result.execution_context,
         "startup": result.startup,
         "invocation": invocation,
@@ -119,13 +117,13 @@ def resolve_stage(
         return ResolvedEmbedSpec(**common, inputs=inputs)
     if stage.kind == "train":
         return ResolvedTrainSpec(**common, inputs=inputs)
-    return ResolvedEvaluateSpec(**common, inputs=inputs)
+    return ResolvedEvalSpec(**common, inputs=inputs)
 
 
 def resolve_download_stage(
     stage: DownloadSpec,
     *,
-    environment: ResolvedLocalEnvironment | ResolvedGCEEnvironment,
+    env: ResolvedLocalEnv | ResolvedGCEEnv,
     execution_context: ExecutionContext,
     artifacts: dict[str, ResolvedArtifact],
     retrievals: dict[InputName, ResolvedHttpRetrieval],
@@ -134,7 +132,7 @@ def resolve_download_stage(
     """Construct one runner-owned resolved download record."""
     return ResolvedDownloadSpec(
         spec=stage,
-        environment=environment,
+        env=env,
         execution_context=execution_context,
         artifacts=artifacts,
         retrievals=retrievals,

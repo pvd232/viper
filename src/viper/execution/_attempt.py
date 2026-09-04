@@ -65,8 +65,8 @@ from ._publication import (
 from ._recovery import reconcile_abandoned_attempts
 from ._resolution import (
     resolve_download_stage,
-    resolve_environment,
-    resolve_runner_environment,
+    resolve_env,
+    resolve_runner_env,
     resolve_stage,
 )
 from ._source import RunFetcher, resolve_git_file, run_git
@@ -219,7 +219,7 @@ def execute_attempt(
             active_stage_id = stage_reference.stage_id
             stage = load_stage_spec(root / stage_reference.spec)
             loaded_stages[stage_reference.stage_id] = stage
-            effective_environment = stage.environment or run.environment
+            effective_environment = stage.env or run.env
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             captured_inputs: dict[InputName, SnapshotFileRef] = {}
@@ -234,7 +234,7 @@ def execute_attempt(
             )
 
             if isinstance(stage, DownloadSpec):
-                runner_environment, execution_context = resolve_runner_environment(
+                runner_environment, execution_context = resolve_runner_env(
                     fetcher,
                     effective_environment,
                 )
@@ -251,7 +251,7 @@ def execute_attempt(
                 stage_completed = datetime.now(UTC)
                 resolved = resolve_download_stage(
                     stage,
-                    environment=runner_environment,
+                    env=runner_environment,
                     execution_context=execution_context,
                     artifacts=resolved_artifacts,
                     retrievals=resolved_retrievals,
@@ -335,7 +335,7 @@ def execute_attempt(
                 resolved = resolve_stage(
                     stage,
                     source=source,
-                    environment=resolve_environment(
+                    env=resolve_env(
                         fetcher,
                         effective_environment,
                         process,
@@ -407,13 +407,13 @@ def execute_attempt(
             completed[stage_reference.stage_id] = resolved_stage_ref
             completed_results[stage_reference.stage_id] = resolved
             if isinstance(stage, InternalSpec):
-                assert isinstance(resolved, ResolvedInternalSpec)
+                resolved_internal = ResolvedInternalSpec.model_validate(resolved)
                 run_after_stage_metrics(
                     root,
                     run,
                     stage_reference.stage_id,
                     stage,
-                    resolved,
+                    resolved_internal,
                     resolved_stage_ref,
                     completed_results,
                     stored_input_references,

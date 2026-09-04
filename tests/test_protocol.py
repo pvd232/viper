@@ -24,6 +24,7 @@ from viper._schema import (
     DataRole,
 )
 from viper.artifacts import ResolvedBundleArtifact
+from viper.authoring import RunPlanDraft
 from viper.experiments import VariantSpec
 from viper.inputs import (
     ExternalInputRef,
@@ -42,17 +43,11 @@ from viper.runs import (
     RunAttempt,
     RunSpec,
 )
-from viper.runtime import (
-    CUDABackendContext,
-    GCEEnvironmentSpec,
-)
+from viper.runtime import CUDABackendContext
+from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 from viper.serialization import load_stage_spec
-from viper.stages import (
-    DownloadSpec,
-    EvaluateSpec,
-    ParameterizedSpec,
-    TrainSpec,
-)
+from viper.stages import DownloadSpec, ParameterizedSpec, TrainSpec
+from viper.stages import EvalSpec as EvaluateSpec
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -1016,3 +1011,9 @@ def test_external_inputs_are_local_only() -> None:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_python_stage_drafts_freeze_to_protocol_specs(tmp_path: Path) -> None:
+    """Freeze one Python stage mapping without reading authored stage YAML."""
+    assert "stages" in RunPlanDraft.model_fields
+    assert "spec_source" not in RunPlanDraft.model_fields

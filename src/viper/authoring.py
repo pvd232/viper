@@ -3,72 +3,274 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import os
 import re
 import string
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
 
-import viper._subprocess as subprocess
-
-from ._parameter.validation import (
-    ParameterValidationError,
-    validate_stage_parameters,
-    verify_parameter_model_bytes,
+from . import params
+from ._schema import ArtifactName, BenchmarkId, DataRole, RepoRelPath, RNGSeed
+from .artifacts import (
+    ArtifactDraft,
+    ArtifactLoaderRef,
+    ArtifactSpec,
+    BundleArtifactDraft,
+    BundleArtifactSpec,
+    SingleFileArtifactDraft,
+    SingleFileArtifactSpec,
+    StageArtifactRef,
 )
-from ._schema import (
-    BenchmarkId,
-    RNGSeed,
-)
-from .artifacts import StageArtifactRef
 from .benchmark import BenchmarkSpec
 from .experiments import (
     ExperimentSpec,
     VariantSpec,
 )
-from .http import ProjectHttpImplementationSpec, resolve_http, validate_request_policy
-from .ids import ExperimentId, ReplicateId, RunId, StageId, VariantId
-from .references import GitSource
+from .http import (
+    BuiltinHttpImplementationSpec,
+    HttpDefinition,
+    HttpDraft,
+    HttpImplementationRef,
+    HttpImplementationSpec,
+    HttpRequestSpec,
+    HttpRetrievalPolicy,
+    ProjectHttpImplementationSpec,
+)
+from .ids import EvalId, ExperimentId, InputName, ReplicateId, RunId, StageId, VariantId
+from .inputs import ExternalInputRef, FutureInputRef, InputRef, LocalSource
+from .metrics import (
+    MetricDraft,
+    MetricObjectiveDraft,
+    MetricObjectiveSpec,
+    metric_definition,
+)
+from .params import ParameterModelRef
+from .project import resolve_path, resolve_root
+from .references import GitSource, ResolvedRunRef
 from .runs import (
     RunSpec,
     RunStageRef,
 )
-from .runtime import (
-    EnvironmentSpec,
-    ReproducibilitySpec,
-)
+from .runtime import EnvSpec, ReproducibilitySpec
 from .serialization import parse_yaml_bytes, serialize_document
 from .stages import (
+    BuildSpec,
+    Context,
     DownloadSpec,
-    ParameterizedSpec,
+    EmbedSpec,
+    EvalSpec,
     Spec,
-    StageDefinitionError,
-    validate_stage_definition,
+    StageImplementationRef,
+    TrainSpec,
+    stage_definition,
 )
 
-SPEC_ADAPTER = TypeAdapter(Spec)
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 UrlValue = str | int | float | bool
 
 
-class StageDraft(BaseModel):
-    """Select one authored stage-spec file and its run-stage identity."""
+def _freeze_artifact(
+    root: Path,
+    run_root: str,
+    draft: ArtifactDraft,
+) -> ArtifactSpec:
+    """Freeze one artifact loader and prefix its run-relative path."""
+    source = inspect.getsourcefile(draft.loader)
+    if source is None:
+        raise ValueError("artifact loader has no Python source")
+    path = Path(source).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("artifact loader is outside the project root")
+    raw = path.read_bytes()
+    loader = ArtifactLoaderRef(
+        path=path.relative_to(root).as_posix(),
+        symbol=draft.loader.__name__,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+    fields = {
+        "path": f"{run_root}/{draft.path}",
+        "loader": loader,
+        "data_role": draft.data_role,
+    }
+    if isinstance(draft, BundleArtifactDraft):
+        return BundleArtifactSpec(**fields)
+    return SingleFileArtifactSpec(**fields)
+
+
+def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
+    """Freeze one built-in selection or decorated project HTTP callable."""
+    if isinstance(draft, BuiltinHttpImplementationSpec):
+        return draft
+    definition = getattr(draft.implementation, "__viper_http__", None)
+    if not isinstance(definition, HttpDefinition):
+        raise ValueError("HTTP callable lacks a VIPER decorator")
+    source = inspect.getsourcefile(draft.implementation)
+    parameter_source = inspect.getsourcefile(definition.parameter_model)
+    if source is None or parameter_source is None:
+        raise ValueError("HTTP callable or parameter model has no Python source")
+    implementation_path = Path(source).resolve()
+    parameter_path = Path(parameter_source).resolve()
+    if not implementation_path.is_relative_to(root):
+        raise ValueError("HTTP callable is outside the project root")
+    if not parameter_path.is_relative_to(root):
+        raise ValueError("HTTP parameter model is outside the project root")
+    implementation_raw = implementation_path.read_bytes()
+    parameter_raw = parameter_path.read_bytes()
+    return ProjectHttpImplementationSpec(
+        id=definition.id,
+        implementation=HttpImplementationRef(
+            path=implementation_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(implementation_raw).hexdigest(),
+            bytes=len(implementation_raw),
+        ),
+        parameter_model=ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        ),
+        params=draft.params,
+        executables=definition.executables,
+    )
+
+
+@dataclass(frozen=True)
+class StageDraftArtifactRef:
+    """Select one artifact produced by an in-memory stage draft."""
+
+    producer: StageDraft
+    artifact_name: ArtifactName
+
+
+class ExternalInputDraft(BaseModel):
+    """Select one repository file as a future stage input."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    stage_id: StageId
-    spec_source: Path
+    path: RepoRelPath
+    data_role: DataRole
+
+
+class RunArtifactDraft(BaseModel):
+    """Select one artifact from a completed run for later pointer freezing."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: ResolvedRunRef
+    artifact: StageArtifactRef
+    path: RepoRelPath
+    data_role: DataRole
+
+
+StageInputDraft = ExternalInputDraft | RunArtifactDraft | StageDraftArtifactRef
+
+
+class BaseSpecDraft(BaseModel):
+    """Hold fields shared by every Python-authored stage."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    kind: str
+    artifacts: dict[ArtifactName, ArtifactDraft] = Field(min_length=1)
+    env: EnvSpec | None = None
+
+
+class ParameterizedSpecDraft(BaseSpecDraft):
+    """Hold one decorated project stage and its parameter values."""
+
+    implementation: Callable[[Context[Any]], None]
+    params: params.ParameterSet
+    metrics: tuple[MetricDraft[Any], ...] = ()
+
+
+class DownloadSpecDraft(BaseSpecDraft):
+    """Hold runner-owned HTTP requests and their output artifacts."""
+
+    kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
+    inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
+    http: HttpDraft = Field(default_factory=BuiltinHttpImplementationSpec)
+    policy: HttpRetrievalPolicy
+
+
+class InternalSpecDraft(ParameterizedSpecDraft):
+    """Hold a project stage that consumes authored inputs."""
+
+    inputs: dict[InputName, StageInputDraft] = Field(min_length=1)
+
+
+class BuildSpecDraft(InternalSpecDraft):
+    """Hold one project-defined prior builder."""
+
+    kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
+    params: params.Build  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class EmbedSpecDraft(InternalSpecDraft):
+    """Hold one configured embedding stage."""
+
+    kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
+    params: params.Embed  # pyright: ignore[reportIncompatibleVariableOverride]
+    objective: MetricObjectiveDraft | None = None
+
+
+class TrainSpecDraft(InternalSpecDraft):
+    """Hold one configured training stage and required objective."""
+
+    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
+    params: params.Train  # pyright: ignore[reportIncompatibleVariableOverride]
+    objective: MetricObjectiveDraft
+
+
+class EvalSpecDraft(InternalSpecDraft):
+    """Hold one configured evaluation stage and required objective."""
+
+    kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
+    eval_id: EvalId
+    params: params.Eval  # pyright: ignore[reportIncompatibleVariableOverride]
+    objective: MetricObjectiveDraft
+    split_inputs: tuple[InputName, ...] = Field(min_length=1)
+
+
+StageSpecDraft = Annotated[
+    DownloadSpecDraft
+    | BuildSpecDraft
+    | EmbedSpecDraft
+    | TrainSpecDraft
+    | EvalSpecDraft,
+    Field(discriminator="kind"),
+]
+
+
+class StageDraft(BaseModel):
+    """Hold one validated Python stage declaration before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    spec: StageSpecDraft
+
+    @property
+    def artifacts(self) -> dict[ArtifactName, StageDraftArtifactRef]:
+        """Return opaque handles for every artifact produced by this stage."""
+        return {
+            name: StageDraftArtifactRef(producer=self, artifact_name=name)
+            for name in self.spec.artifacts
+        }
 
 
 class RunPlanDraft(BaseModel):
-    """Collect run-level selections before exact stage bytes are frozen."""
+    """Collect run-level and Python stage selections before freezing."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
     schema_version: Literal[1] = 1
     run_id: RunId
@@ -78,10 +280,10 @@ class RunPlanDraft(BaseModel):
     benchmark_id: BenchmarkId | None = None
     seed: RNGSeed
     source: GitSource
-    environment: EnvironmentSpec
+    env: EnvSpec
     reproducibility: ReproducibilitySpec
-    stages: tuple[StageDraft, ...] = Field(min_length=1)
-    estimator: StageArtifactRef
+    stages: dict[StageId, StageDraft] = Field(min_length=1)
+    estimator: StageDraftArtifactRef
 
 
 class FrozenPlanFiles(BaseModel):
@@ -223,139 +425,218 @@ def load_run_plan_draft(path: Path) -> RunPlanDraft:
     return RunPlanDraft.model_validate(parse_yaml_bytes(path.read_bytes()))
 
 
-def freeze_run_plan(
-    repository_root: Path,
-    draft: RunPlanDraft,
-) -> FrozenPlanFiles:
-    """Validate stage drafts, hash their bytes, and write one frozen run plan."""
-    root = repository_root.resolve()
+def _freeze_input(
+    root: Path,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageInputDraft,
+) -> InputRef:
+    """Compile one local or same-run draft into a frozen input reference."""
+    if isinstance(draft, ExternalInputDraft):
+        path = resolve_path(root, draft.path, operation="read")
+        return ExternalInputRef(
+            source=LocalSource(path=path.relative_to(root).as_posix()),
+            data_role=draft.data_role,
+        )
+    if isinstance(draft, StageDraftArtifactRef):
+        owners = [name for name, stage in stages.items() if stage is draft.producer]
+        if len(owners) != 1:
+            raise ValueError("stage artifact must have one producer in this plan")
+        return FutureInputRef(
+            producer_stage_id=owners[0],
+            name=draft.artifact_name,
+        )
+    raise ValueError("prior-run inputs are compiled in Master Phase 7")
+
+
+def _freeze_stage(
+    root: Path,
+    run_root: str,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageSpecDraft,
+) -> Spec:
+    """Freeze one Python stage draft into its protocol declaration."""
+    artifacts: dict[ArtifactName, ArtifactSpec] = {
+        name: _freeze_artifact(root, run_root, artifact)
+        for name, artifact in draft.artifacts.items()
+    }
+    if isinstance(draft, DownloadSpecDraft):
+        return DownloadSpec(
+            artifacts=artifacts,
+            env=draft.env,
+            inputs=draft.inputs,
+            http=_freeze_http(root, draft.http),
+            policy=draft.policy,
+        )
+    definition = stage_definition(draft.implementation)
+    source = inspect.getsourcefile(draft.implementation)
+    parameter_source = inspect.getsourcefile(definition.parameter_model)
+    if source is None or parameter_source is None:
+        raise ValueError("stage callable or parameter model has no Python source")
+    source_path = Path(source).resolve()
+    parameter_path = Path(parameter_source).resolve()
+    source_raw = source_path.read_bytes()
+    parameter_raw = parameter_path.read_bytes()
+    common = {
+        "artifacts": artifacts,
+        "env": draft.env,
+        "implementation": StageImplementationRef(
+            path=source_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(source_raw).hexdigest(),
+            bytes=len(source_raw),
+        ),
+        "parameter_model": ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        ),
+        "params": draft.params,
+        "inputs": {
+            name: _freeze_input(root, stages, value)
+            for name, value in draft.inputs.items()
+        },
+        "metric_ids": tuple(
+            metric_definition(metric.implementation).metric_id
+            for metric in draft.metrics
+        ),
+    }
+    if isinstance(draft, BuildSpecDraft):
+        return BuildSpec(**common)
+    objective = (
+        None
+        if draft.objective is None
+        else MetricObjectiveSpec(
+            metric_id=metric_definition(
+                draft.objective.metric.implementation
+            ).metric_id,
+            direction=draft.objective.direction,
+        )
+    )
+    if isinstance(draft, EmbedSpecDraft):
+        return EmbedSpec(**common, objective=objective)
+    if objective is None:
+        raise ValueError("train and eval stages require an objective")
+    if isinstance(draft, TrainSpecDraft):
+        return TrainSpec(**common, objective=objective)
+    return EvalSpec(
+        **common,
+        objective=objective,
+        eval_id=draft.eval_id,
+        split_inputs=draft.split_inputs,
+    )
+
+
+def input(path: RepoRelPath, *, data_role: DataRole) -> ExternalInputDraft:
+    """Select one repository file as a stage input."""
+    return ExternalInputDraft(path=path, data_role=data_role)
+
+
+def run_artifact(
+    run: ResolvedRunRef,
+    artifact: StageArtifactRef,
+    *,
+    path: RepoRelPath,
+    data_role: DataRole,
+) -> RunArtifactDraft:
+    """Select one completed-run artifact for pointer compilation in Phase 7."""
+    return RunArtifactDraft(run=run, artifact=artifact, path=path, data_role=data_role)
+
+
+def download(
+    *,
+    inputs: dict[InputName, HttpRequestSpec],
+    artifacts: Mapping[ArtifactName, SingleFileArtifactDraft],
+    policy: HttpRetrievalPolicy,
+    http: HttpDraft | None = None,
+    env: EnvSpec | None = None,
+) -> StageDraft:
+    """Declare one runner-owned HTTP download stage."""
+    selected_http = BuiltinHttpImplementationSpec() if http is None else http
+    return StageDraft(
+        spec=DownloadSpecDraft(
+            inputs=inputs,
+            artifacts=dict(artifacts),
+            policy=policy,
+            http=selected_http,
+            env=env,
+        )
+    )
+
+
+def stage(
+    implementation: Callable[[Context[Any]], None],
+    *,
+    params: params.ParameterSet,
+    inputs: dict[InputName, StageInputDraft],
+    artifacts: dict[ArtifactName, ArtifactDraft],
+    metrics: tuple[MetricDraft[Any], ...] = (),
+    objective: MetricObjectiveDraft | None = None,
+    env: EnvSpec | None = None,
+    eval_id: EvalId | None = None,
+    split_inputs: tuple[InputName, ...] = (),
+) -> StageDraft:
+    """Build the draft class selected by one decorated project callable."""
+    definition = stage_definition(implementation)
+    values = {
+        "implementation": implementation,
+        "params": params,
+        "inputs": inputs,
+        "artifacts": artifacts,
+        "metrics": metrics,
+        "env": env,
+    }
+    if definition.kind == "build":
+        spec: StageSpecDraft = BuildSpecDraft(**values)
+    elif definition.kind == "embed":
+        spec = EmbedSpecDraft(**values, objective=objective)
+    elif definition.kind == "train":
+        if objective is None:
+            raise ValueError("training stages require an objective")
+        spec = TrainSpecDraft(**values, objective=objective)
+    elif definition.kind == "eval":
+        if objective is None or eval_id is None:
+            raise ValueError("evaluation stages require an ID and objective")
+        spec = EvalSpecDraft(
+            **values, objective=objective, eval_id=eval_id, split_inputs=split_inputs
+        )
+    else:
+        raise ValueError(f"unsupported stage kind: {definition.kind}")
+    return StageDraft(spec=spec)
+
+
+def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
+    """Freeze Python stage drafts and write one exact run plan."""
+    project_root = resolve_root(root)
     run_root = (
         f"experiments/{draft.experiment_id}/runs/{draft.variant_id}/{draft.run_id}"
     )
-    staged_files: list[tuple[Path, bytes]] = []
-    references: list[RunStageRef] = []
-
-    for stage in draft.stages:
-        source = stage.spec_source
-        if not source.is_absolute():
-            source = root / source
-        raw_source = source.read_bytes()
-        spec = SPEC_ADAPTER.validate_python(parse_yaml_bytes(raw_source))
-        if isinstance(spec, ParameterizedSpec):
-            reference = spec.parameter_model
-            model_path = root / reference.path
-            model_raw = model_path.read_bytes()
-            verify_parameter_model_bytes(reference, model_raw)
-            try:
-                committed_model_raw = subprocess.run(
-                    (
-                        "git",
-                        "-C",
-                        str(root),
-                        "show",
-                        f"{draft.source.commit}:{reference.path}",
-                    ),
-                    check=True,
-                    capture_output=True,
-                ).stdout
-            except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-                raise ParameterValidationError(
-                    "parameter model is absent from the frozen source commit"
-                ) from exc
-            if model_raw != committed_model_raw:
-                raise ParameterValidationError(
-                    "parameter model differs from the frozen source commit"
-                )
-            validate_stage_parameters(root, source, spec)
-            implementation = spec.implementation
-            implementation_path = root / implementation.path
-            implementation_raw = implementation_path.read_bytes()
-            try:
-                committed_implementation_raw = subprocess.run(
-                    (
-                        "git",
-                        "-C",
-                        str(root),
-                        "show",
-                        f"{draft.source.commit}:{implementation.path}",
-                    ),
-                    check=True,
-                    capture_output=True,
-                ).stdout
-            except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-                raise StageDefinitionError(
-                    "stage implementation is absent from the frozen source commit"
-                ) from exc
-            if implementation_raw != committed_implementation_raw:
-                raise StageDefinitionError(
-                    "stage implementation differs from the frozen source commit"
-                )
-            validate_stage_definition(root, spec)
-        if isinstance(spec, DownloadSpec):
-            for request in spec.inputs.values():
-                validate_request_policy(request, spec.policy)
-            resolve_http(root, spec.http)
-            if isinstance(spec.http, ProjectHttpImplementationSpec):
-                for reference in (
-                    spec.http.implementation,
-                    spec.http.parameter_model,
-                ):
-                    local_raw = (root / reference.path).read_bytes()
-                    committed_raw = subprocess.run(
-                        (
-                            "git",
-                            "-C",
-                            str(root),
-                            "show",
-                            f"{draft.source.commit}:{reference.path}",
-                        ),
-                        check=True,
-                        capture_output=True,
-                    ).stdout
-                    if local_raw != committed_raw:
-                        raise ValueError(
-                            "HTTP implementation source differs from the frozen commit"
-                        )
-        for artifact in spec.artifacts.values():
-            loader = artifact.loader
-            try:
-                local_loader_raw = (root / loader.path).read_bytes()
-                committed_loader_raw = subprocess.run(
-                    (
-                        "git",
-                        "-C",
-                        str(root),
-                        "show",
-                        f"{draft.source.commit}:{loader.path}",
-                    ),
-                    check=True,
-                    capture_output=True,
-                ).stdout
-            except (OSError, subprocess.CalledProcessError) as exc:
-                raise ValueError(
-                    "artifact loader is absent from the frozen source commit"
-                ) from exc
-            if len(local_loader_raw) != loader.bytes:
-                raise ValueError("artifact loader byte count differs")
-            if hashlib.sha256(local_loader_raw).hexdigest() != loader.sha256:
-                raise ValueError("artifact loader SHA-256 differs")
-            if local_loader_raw != committed_loader_raw:
-                raise ValueError(
-                    "artifact loader differs from the frozen source commit"
-                )
+    files: list[tuple[Path, bytes]] = []
+    stage_refs: list[RunStageRef] = []
+    for stage_id, stage in draft.stages.items():
+        spec = _freeze_stage(project_root, run_root, draft.stages, stage.spec)
         raw = serialize_document(spec)
-        relative_path = f"{run_root}/stages/{stage.stage_id}/spec.yaml"
-        target = _target_path(root, relative_path)
-        staged_files.append((target, raw))
-        references.append(
+        relative = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files.append((_target_path(project_root, relative), raw))
+        stage_refs.append(
             RunStageRef(
-                stage_id=stage.stage_id,
-                spec=relative_path,
+                stage_id=stage_id,
+                spec=relative,
                 sha256=hashlib.sha256(raw).hexdigest(),
                 bytes=len(raw),
             )
         )
-
+    estimator_stage = next(
+        (
+            name
+            for name, stage in draft.stages.items()
+            if stage is draft.estimator.producer
+        ),
+        None,
+    )
+    if estimator_stage is None:
+        raise ValueError("estimator producer is absent from the plan")
     run = RunSpec(
         run_id=draft.run_id,
         experiment_id=draft.experiment_id,
@@ -364,19 +645,17 @@ def freeze_run_plan(
         benchmark_id=draft.benchmark_id,
         seed=draft.seed,
         source=draft.source,
-        environment=draft.environment,
+        env=draft.env,
         reproducibility=draft.reproducibility,
-        stages=tuple(references),
-        estimator=draft.estimator,
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id=estimator_stage,
+            artifact_name=draft.estimator.artifact_name,
+        ),
     )
-    run_target = _target_path(root, f"{run_root}/spec.yaml")
-    files = (*staged_files, (run_target, serialize_document(run)))
-
-    # Validate every destination before writing any member of the frozen group.
-    for target, raw in files:
-        if target.exists() and target.read_bytes() != raw:
-            raise FileExistsError(f"refusing to replace a different file: {target}")
-    for target, raw in files:
-        _write_exact_file(target, raw)
-
-    return FrozenPlanFiles(run=run, files=tuple(target for target, _ in files))
+    files.append(
+        (_target_path(project_root, f"{run_root}/spec.yaml"), serialize_document(run))
+    )
+    for path, raw in files:
+        _write_exact_file(path, raw)
+    return FrozenPlanFiles(run=run, files=tuple(path for path, _ in files))

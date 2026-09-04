@@ -7,20 +7,28 @@ from tempfile import TemporaryDirectory
 
 import yaml
 
+import viper.params as params
 from viper import _subprocess as subprocess
 from viper import parameters
 from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
 )
-from viper.artifacts import ArtifactLoaderRef
+from viper.artifacts import (
+    ArtifactLoaderRef,
+    BundleArtifactDraft,
+    SingleFileArtifactDraft,
+    artifact,
+)
 from viper.authoring import (
     RunPlanDraft,
     expand_http_url,
     freeze_run_plan,
+    stage,
     write_experiment_spec,
     write_variant_spec,
 )
+from viper.authoring import input as external_input
 from viper.experiments import (
     ExperimentSpec,
     FactorSpec,
@@ -28,16 +36,22 @@ from viper.experiments import (
     TrainVariantStageParams,
     VariantSpec,
 )
+from viper.http import CustomHttpDraft, HttpContext, HttpResult, http
 from viper.metrics import (
     MetricImplementationRef,
     MetricSpec,
+    measure,
+    metric,
+    min,
 )
 from viper.parameters import ParameterModelRef
 from viper.runs import RunSpec
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
+    Context,
     StageImplementationRef,
     TrainSpec,
+    train,
 )
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -355,3 +369,75 @@ class RunPlanAuthoringTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "no value"):
             expand_http_url("https://example.test/{missing}")
+
+
+def test_artifact_and_http_drafts_preserve_callable_identity() -> None:
+    """Keep selected Python callables attached to their authoring drafts."""
+
+    def load(path: Path) -> bytes:
+        return path.read_bytes()
+
+    @http(id="dataset")
+    def fetch(context: HttpContext[params.Http]) -> HttpResult:
+        return HttpResult(body=context.destination, response=context.request)
+
+    artifact_draft = artifact(
+        path="artifacts/data.csv", loader=load, data_role="training"
+    )
+    http_draft = CustomHttpDraft(implementation=fetch, params=params.Http())
+
+    assert artifact_draft.loader is load
+    assert http_draft.implementation is fetch
+
+
+def test_artifact_constructor_selects_file_or_bundle() -> None:
+    """Select the artifact draft type from the explicit kind."""
+
+    def load(path: Path) -> bytes:
+        return path.read_bytes()
+
+    file = artifact(path="artifacts/model.bin", loader=load, data_role="training")
+    bundle = artifact(
+        path="artifacts/tokenizer",
+        loader=load,
+        data_role="training",
+        kind="bundle",
+    )
+
+    assert isinstance(file, SingleFileArtifactDraft)
+    assert isinstance(bundle, BundleArtifactDraft)
+
+
+def test_python_stage_drafts_replace_yaml_authoring() -> None:
+    """Keep a decorated callable and artifact handle in one Python stage draft."""
+
+    @metric(metric_id="training_loss", mode="live")
+    def training_loss(context) -> float:
+        """Return one stable loss for the authoring boundary."""
+        return 1.0
+
+    @train(params=params.Train)
+    def fit(context: Context[params.Train]) -> None:
+        context.artifacts["model"].write_bytes(b"model")
+
+    model = artifact(
+        path="artifacts/model.bin",
+        loader=lambda path: path.read_bytes(),
+        data_role="training",
+    )
+    dataset = external_input(
+        path="inputs/raw/dataset.csv",
+        data_role="training",
+    )
+    loss = measure(training_loss, params=params.Metric())
+    draft = stage(
+        fit,
+        params=params.Train(),
+        inputs={"dataset": dataset},
+        artifacts={"model": model},
+        metrics=(loss,),
+        objective=min(loss),
+    )
+
+    assert draft.spec.implementation is fit
+    assert draft.artifacts["model"].producer is draft

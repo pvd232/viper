@@ -16,7 +16,7 @@ from typing import Any, Generic, Literal, TypeVar, cast
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from . import parameters
+from . import params
 from ._schema import (
     SHA256,
     DataRole,
@@ -25,18 +25,16 @@ from ._schema import (
     PythonSymbol,
 )
 from .ids import HumanId, MetricId, RunId, StageId
+from .params import Metric as MetricParams
+from .params import ParameterModelRef
 from .references import ResolvedFileRef
-from .runtime import (
-    ExecutionContext,
-    ProcessStartupReceipt,
-    PythonEnvironmentSpec,
-)
+from .runtime import ExecutionContext, ProcessStartupReceipt, PythonEnvSpec
 
 MetricKind = Literal["training", "evaluation", "diagnostic"]
 
 
 MetricMode = Literal["recompute", "live"]
-MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
+MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
 
 
 class FloatComparator(ProtocolModel):
@@ -73,13 +71,13 @@ class MetricDependency(ProtocolModel):
 
 
 class MetricSpec(ProtocolModel):
-    """Bind one metric identity to its implementation and frozen parameters."""
+    """Bind one metric identity to its implementation and frozen params."""
 
     schema_version: Literal[1] = 1
     metric_id: MetricId
     implementation: MetricImplementationRef
-    parameter_model: parameters.ParameterModelRef
-    params: parameters.Metric
+    parameter_model: ParameterModelRef
+    params: params.Metric
     mode: MetricMode
     dependencies: tuple[MetricDependency, ...] = ()
     comparator: FloatComparator | None = None
@@ -117,12 +115,12 @@ class MetricExecutionReceipt(ProtocolModel):
     stage_id: StageId
     purpose: Literal["measurement", "verification"]
     implementation: MetricImplementationRef
-    parameter_model: parameters.ParameterModelRef
-    params: parameters.Metric
+    parameter_model: ParameterModelRef
+    params: params.Metric
     dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
     startup: ProcessStartupReceipt
     execution_context: ExecutionContext
-    python_environment: PythonEnvironmentSpec
+    python_env: PythonEnvSpec
     value: float = Field(allow_inf_nan=False)
     started_at: AwareDatetime
     completed_at: AwareDatetime
@@ -476,10 +474,10 @@ def measure(
     params: MetricParamsT | None = None,
     dependencies: tuple[MetricDependency, ...] = (),
     comparator: FloatComparator | None = None,
-) -> MetricDraft[MetricParamsT | parameters.Metric]:
+) -> MetricDraft[MetricParamsT | MetricParams]:
     """Configure one decorated metric for later freezing."""
     definition = metric_definition(implementation)
-    selected_params = parameters.Metric() if params is None else params
+    selected_params = MetricParams() if params is None else params
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")

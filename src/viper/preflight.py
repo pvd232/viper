@@ -37,10 +37,10 @@ from .references import (
 )
 from .runs import RunSpec
 from .runtime import (
-    GCEEnvironmentSpec,
+    GCEEnvSpec,
     GCEHostContext,
     observe_gce_execution,
-    observe_python_environment,
+    observe_python_env,
     select_cuda_device,
 )
 from .serialization import load_stage_spec, parse_yaml_bytes
@@ -58,8 +58,8 @@ from .verification.models import VerificationError
 PreflightStatus = Literal["pass", "warning", "failure"]
 PreflightCheckCode = Literal[
     "artifact.loader",
-    "environment.gce",
-    "environment.python",
+    "env.gce",
+    "env.python",
     "http.credentials",
     "http.request",
     "http.implementation",
@@ -193,7 +193,7 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
         )
     )
 
-    active_python_environment = observe_python_environment()
+    active_python_env = observe_python_env()
 
     loaded: dict[StageId, BaseSpec] = {}
     prior: set[StageId] = set()
@@ -268,16 +268,16 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
                     "stage callable decorator differs from the frozen stage contract",
                 )
             )
-        effective_environment = stage.environment or run.environment
+        effective_environment = stage.env or run.env
         checks.append(
             _check(
-                "environment.python",
+                "env.python",
                 reference.stage_id,
-                active_python_environment == effective_environment.python_environment,
-                "installed Python environment differs from the frozen plan",
+                active_python_env == effective_environment.python_env,
+                "installed Python env differs from the frozen plan",
             )
         )
-        if isinstance(effective_environment, GCEEnvironmentSpec):
+        if isinstance(effective_environment, GCEEnvSpec):
             try:
                 observed_gce = observe_gce_execution(effective_environment.compute)
                 observed_host = observed_gce.host
@@ -290,10 +290,10 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
                 gce_matches = False
             checks.append(
                 _check(
-                    "environment.gce",
+                    "env.gce",
                     reference.stage_id,
                     gce_matches,
-                    "active GCE host differs from the frozen environment",
+                    "active GCE host differs from the frozen env",
                 )
             )
         checks.append(

@@ -12,10 +12,9 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
-from viper import parameters
+from viper import params as parameters
 from viper.http import (
     BuiltinHttpImplementationSpec,
-    EnvironmentSecretRef,
     ExternalExecutableSpec,
     HttpImplementationRef,
     HttpRequestSpec,
@@ -28,7 +27,8 @@ from viper.http import (
     invoke_http,
     resolve_http,
 )
-from viper.parameters import ParameterModelRef
+from viper.http import EnvSecretRef as EnvironmentSecretRef
+from viper.params import ParameterModelRef
 from viper.references import SnapshotFileRef
 
 
@@ -455,7 +455,7 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
     body = b"verified response"
     parameter_raw = (
         b"from pydantic import Field\n"
-        b"from viper import parameters\n\n"
+        b"from viper import params as parameters\n\n"
         b"class ProjectTransportParameters(parameters.Http):\n"
         b"    chunk_size: int = Field(gt=0)\n"
     )
@@ -468,7 +468,7 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
         b"    http,\n"
         b")\n\n"
         b"@http(id='project_http', "
-        b"parameter_model=ProjectTransportParameters)\n"
+        b"params=ProjectTransportParameters)\n"
         b"def transfer(context):\n"
         b"    assert context.params.chunk_size == 4\n"
         b"    response = httpx.get(str(context.request.url), "
@@ -529,6 +529,7 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
         workspace / "body",
     )
 
+    assert result.body == workspace / "body"
     assert result.body.read_bytes() == body
     assert result.response.status == 206
 

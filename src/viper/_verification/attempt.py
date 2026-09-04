@@ -43,19 +43,19 @@ from ..runtime import (
     ComputeSpec,
     CPUBackendContext,
     CUDABackendContext,
-    EnvironmentSpec,
+    EnvSpec,
     ExecutionContext,
-    GCEEnvironmentSpec,
+    GCEEnvSpec,
     GCEHostContext,
     LocalHostContext,
-    ResolvedEnvironment,
-    ResolvedGCEEnvironment,
+    ResolvedEnv,
+    ResolvedGCEEnv,
     process_environment,
 )
 from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
     BaseSpec,
-    EvaluateSpec,
+    EvalSpec,
     InternalSpec,
     ParameterizedSpec,
     ParameterizedStageSpec,
@@ -125,6 +125,61 @@ def _logical_input_paths(
     return paths
 
 
+def _verify_effective_env(
+    stage_id: StageId,
+    requested: EnvSpec,
+    resolved: ResolvedEnv,
+    context: ExecutionContext,
+) -> None:
+    """Join the frozen env to its resolved and observed evidence."""
+    if resolved.kind != requested.kind:
+        raise VerificationError(
+            f"env.kind: stage {stage_id!r} realized another host kind"
+        )
+    if resolved.compute != requested.compute:
+        raise VerificationError(
+            f"env.compute: stage {stage_id!r} realized another compute request"
+        )
+    if resolved.lockfile.stored_at != requested.lockfile:
+        raise VerificationError(
+            f"env.lockfile: stage {stage_id!r} resolved another lockfile"
+        )
+    if resolved.python_env != requested.python_env:
+        raise VerificationError(
+            f"env.python: stage {stage_id!r} observed another Python env"
+        )
+    if context.host.provider != requested.kind:
+        raise VerificationError(
+            f"env.host: stage {stage_id!r} ran on another host kind"
+        )
+    if isinstance(requested, GCEEnvSpec):
+        if not isinstance(resolved, ResolvedGCEEnv):
+            raise VerificationError(f"gce.env: stage {stage_id!r} omitted its GCE env")
+        if not isinstance(context.host, GCEHostContext):
+            raise VerificationError(
+                f"gce.host: stage {stage_id!r} omitted its GCE host evidence"
+            )
+        if (
+            resolved.provisioning != requested.provisioning
+            or context.host.provisioning != requested.provisioning
+        ):
+            raise VerificationError(
+                f"gce.provisioning: stage {stage_id!r} used another provisioning source"
+            )
+        if (
+            resolved.machine_type != requested.machine_type
+            or context.host.machine_type != requested.machine_type
+        ):
+            raise VerificationError(
+                f"gce.machine_type: stage {stage_id!r} used another machine type"
+            )
+    elif not isinstance(context.host, LocalHostContext):
+        raise VerificationError(
+            f"env.host: stage {stage_id!r} omitted its local host evidence"
+        )
+    _verify_startup_backend(stage_id, requested.compute, context.backend)
+
+
 def _verify_stage_invocation(
     reference: ResolvedStageInvocationRef,
     *,
@@ -157,7 +212,11 @@ def _verify_stage_invocation(
         parameter_model=stage.parameter_model,
         parameter_digest=document_digest(stage.params),
         inputs=_logical_input_paths(
-            run, attempt.attempt_id, stage_id, stage, stage_specs
+            run,
+            attempt.attempt_id,
+            stage_id,
+            stage,
+            stage_specs,
         ),
         artifacts={name: value.path for name, value in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
@@ -195,8 +254,8 @@ def _verify_stage_invocation(
         raise VerificationError(
             f"stage {stage_id!r} startup controls differ from the run plan"
         )
-    compute = (stage.environment or run.environment).compute
-    recorded_cuda = startup.environment.get("CUDA_VISIBLE_DEVICES")
+    compute = (stage.env or run.env).compute
+    recorded_cuda = startup.env.get("CUDA_VISIBLE_DEVICES")
     if compute.kind == "cuda":
         if recorded_cuda is None or not recorded_cuda.isdigit():
             raise VerificationError(
@@ -214,10 +273,8 @@ def _verify_stage_invocation(
             run.reproducibility,
             compute,
         )
-    if startup.environment != expected_environment:
-        raise VerificationError(
-            f"stage {stage_id!r} startup environment differs from the plan"
-        )
+    if startup.env != expected_environment:
+        raise VerificationError(f"stage {stage_id!r} startup env differs from the plan")
     _verify_startup_backend(
         stage_id,
         compute,
@@ -298,64 +355,6 @@ def _verify_startup_backend(
         raise VerificationError(
             f"startup.backend: stage {stage_id!r} observed another CUDA model"
         )
-
-
-def _verify_effective_environment(
-    stage_id: StageId,
-    requested: EnvironmentSpec,
-    resolved: ResolvedEnvironment,
-    context: ExecutionContext,
-) -> None:
-    """Join the frozen environment to its resolved and observed evidence."""
-    if resolved.kind != requested.kind:
-        raise VerificationError(
-            f"environment.kind: stage {stage_id!r} realized another host kind"
-        )
-    if resolved.compute != requested.compute:
-        raise VerificationError(
-            f"environment.compute: stage {stage_id!r} realized another compute request"
-        )
-    if resolved.lockfile.stored_at != requested.lockfile:
-        raise VerificationError(
-            f"environment.lockfile: stage {stage_id!r} resolved another lockfile"
-        )
-    if resolved.python_environment != requested.python_environment:
-        raise VerificationError(
-            f"environment.python: stage {stage_id!r} observed another Python "
-            "environment"
-        )
-    if context.host.provider != requested.kind:
-        raise VerificationError(
-            f"environment.host: stage {stage_id!r} ran on another host kind"
-        )
-    if isinstance(requested, GCEEnvironmentSpec):
-        if not isinstance(resolved, ResolvedGCEEnvironment):
-            raise VerificationError(
-                f"gce.environment: stage {stage_id!r} omitted its GCE environment"
-            )
-        if not isinstance(context.host, GCEHostContext):
-            raise VerificationError(
-                f"gce.host: stage {stage_id!r} omitted its GCE host evidence"
-            )
-        if (
-            resolved.provisioning != requested.provisioning
-            or context.host.provisioning != requested.provisioning
-        ):
-            raise VerificationError(
-                f"gce.provisioning: stage {stage_id!r} used another provisioning source"
-            )
-        if (
-            resolved.machine_type != requested.machine_type
-            or context.host.machine_type != requested.machine_type
-        ):
-            raise VerificationError(
-                f"gce.machine_type: stage {stage_id!r} used another machine type"
-            )
-    elif not isinstance(context.host, LocalHostContext):
-        raise VerificationError(
-            f"environment.host: stage {stage_id!r} omitted its local host evidence"
-        )
-    _verify_startup_backend(stage_id, requested.compute, context.backend)
 
 
 def _verify_unresolved_stage_invocation(
@@ -672,15 +671,6 @@ def verify_attempt_stages(
                 stage_reference.snapshot,
                 fetcher=fetcher,
             )
-        elif isinstance(resolved_spec, ResolvedInternalSpec):
-            verify_external_inputs(
-                attempt,
-                run,
-                stage_reference.stage_id,
-                resolved_spec,
-                stage_reference.snapshot,
-                fetcher=fetcher,
-            )
 
         if verified_stages:
             previous_completed_at = next(
@@ -694,11 +684,11 @@ def verify_attempt_stages(
 
         if isinstance(resolved_spec, ResolvedParameterizedSpec):
             read_resolved_file(resolved_spec.source, fetcher=fetcher)
-        read_resolved_file(resolved_spec.environment.lockfile, fetcher=fetcher)
+        read_resolved_file(resolved_spec.env.lockfile, fetcher=fetcher)
 
-        requested_environment = stage_spec.environment or run.environment
-        resolved_environment = resolved_spec.environment
-        _verify_effective_environment(
+        requested_environment = stage_spec.env or run.env
+        resolved_environment = resolved_spec.env
+        _verify_effective_env(
             stage_reference.stage_id,
             requested_environment,
             resolved_environment,
@@ -878,7 +868,7 @@ def verify_attempt_files(
     if attempt.status == "succeeded":
         for stage_id in completed_stage_ids:
             stage_spec = stage_specs[stage_id]
-            if not isinstance(stage_spec, EvaluateSpec):
+            if not isinstance(stage_spec, EvalSpec):
                 continue
             for metric_id in stage_spec.metric_ids:
                 matches = [

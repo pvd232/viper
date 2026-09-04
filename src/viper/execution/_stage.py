@@ -37,7 +37,7 @@ from ..runs import (
 from ..runtime import (
     ExecutionContext,
     ProcessStartupReceipt,
-    PythonEnvironmentSpec,
+    PythonEnvSpec,
     process_environment,
     select_cuda_device,
 )
@@ -99,7 +99,7 @@ class StageWorkerResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     execution_context: ExecutionContext | None
-    python_environment: PythonEnvironmentSpec | None
+    python_env: PythonEnvSpec | None
     startup: ProcessStartupReceipt | None
     invocation: StageInvocationReceipt
     error: str | None = None
@@ -114,7 +114,7 @@ class StageProcessResult:
     completed_at: datetime
     artifacts: dict[ArtifactName, ResolvedArtifact]
     execution_context: ExecutionContext
-    python_environment: PythonEnvironmentSpec
+    python_env: PythonEnvSpec
     startup: ProcessStartupReceipt
     invocation: StageInvocationReceipt
     stdout: bytes
@@ -272,8 +272,8 @@ def execute_stage_process(
         ),
     )
     command = ("python", "-m", "viper._workers.stages")
-    environment = os.environ.copy()
-    effective_environment = stage_spec.environment or run.environment
+    env = os.environ.copy()
+    effective_environment = stage_spec.env or run.env
     compute = effective_environment.compute
     cuda_ordinal = select_cuda_device(compute.model) if compute.kind == "cuda" else None
     startup_environment = process_environment(
@@ -282,10 +282,10 @@ def execute_stage_process(
         compute,
         cuda_ordinal=cuda_ordinal,
     )
-    environment.update({str(key): value for key, value in startup_environment.items()})
+    env.update({str(key): value for key, value in startup_environment.items()})
     package_root = str(Path(__file__).resolve().parents[2])
-    existing_python_path = environment.get("PYTHONPATH")
-    environment["PYTHONPATH"] = (
+    existing_python_path = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
         package_root
         if existing_python_path is None
         else f"{package_root}{os.pathsep}{existing_python_path}"
@@ -309,12 +309,12 @@ def execute_stage_process(
         ).model_dump_json(),
         encoding="utf-8",
     )
-    environment["VIPER_CONTEXT_PATH"] = str(context_path)
+    env["VIPER_CONTEXT_PATH"] = str(context_path)
     started_at = datetime.now(UTC)
     process = subprocess.Popen(
         (sys.executable, *command[1:]),
         cwd=root,
-        env=environment,
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         start_new_session=True,
@@ -383,7 +383,7 @@ def execute_stage_process(
         )
     if (
         worker_result.execution_context is None
-        or worker_result.python_environment is None
+        or worker_result.python_env is None
         or worker_result.startup is None
     ):
         raise StageExecutionError("successful stage omitted runtime evidence")
@@ -398,7 +398,7 @@ def execute_stage_process(
         completed_at=completed_at,
         artifacts=artifacts,
         execution_context=worker_result.execution_context,
-        python_environment=worker_result.python_environment,
+        python_env=worker_result.python_env,
         startup=worker_result.startup,
         invocation=worker_result.invocation,
         stdout=stdout,

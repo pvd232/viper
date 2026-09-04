@@ -11,7 +11,7 @@ from types import MappingProxyType
 
 from viper.workspace import captured_input_path
 
-from .. import parameters
+from .. import params
 from .._parameter.validation import instantiate_parameters, parameter_model_path
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
@@ -22,7 +22,7 @@ from ..runtime import (
     apply_reproducibility,
     autocast_context,
     observe_execution,
-    observe_python_environment,
+    observe_python_env,
 )
 from ..serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from ..stages import (
@@ -130,11 +130,11 @@ def _live_metric_handles(
             raise ValueError("startup.plan: stage selects an undeclared metric")
         if spec.mode != "live":
             continue
-        params = instantiate_parameters(
+        values = instantiate_parameters(
             parameter_model_path(root, spec.parameter_model),
             spec.parameter_model,
             spec.params,
-            parameters.Metric,
+            params.Metric,
         )
         path = (
             root
@@ -152,7 +152,7 @@ def _live_metric_handles(
                 stage_id=binding.stage_id,
                 metric_id=metric_id,
             ),
-            MetricContext(inputs=inputs, artifacts=artifacts, params=params),
+            MetricContext(inputs=inputs, artifacts=artifacts, params=values),
         )
     return handles
 
@@ -177,15 +177,15 @@ def main(argv: list[str] | None = None) -> int:
     started_at = datetime.now(UTC)
     initialization = None
     execution_context = None
-    python_environment = None
+    python_env = None
     if not isinstance(stage, ParameterizedSpec):
         raise ValueError("stage worker requires a parameterized stage")
     try:
         planned_stage, expected_inputs = _planned_stage_context(
-            root=root,
-            run=run,
-            stage_id=binding.stage_id,
-            attempt_id=binding.attempt_id,
+            root,
+            run,
+            binding.stage_id,
+            binding.attempt_id,
         )
         if stage != planned_stage:
             raise ValueError("startup.plan: selected stage differs from RunSpec")
@@ -217,14 +217,14 @@ def main(argv: list[str] | None = None) -> int:
         if binding.metric_ids != stage.metric_ids:
             raise ValueError("startup.context: metric IDs differ")
 
-        effective_environment = stage.environment or run.environment
+        effective_environment = stage.env or run.env
         initialization = apply_reproducibility(run.seed, run.reproducibility)
         generator_names = tuple(sorted(initialization.numpy_generators))
         if generator_names != binding.numpy_generator_names:
             raise ValueError("startup.context: NumPy generator names differ")
-        python_environment = observe_python_environment()
-        if python_environment != effective_environment.python_environment:
-            raise ValueError("startup.python: installed Python environment differs")
+        python_env = observe_python_env()
+        if python_env != effective_environment.python_env:
+            raise ValueError("startup.python: installed Python env differs")
         execution_context = observe_execution(effective_environment)
 
         params = instantiate_parameters(
@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
             worker_context.result_path,
             StageWorkerResult(
                 execution_context=execution_context,
-                python_environment=python_environment,
+                python_env=python_env,
                 startup=None if initialization is None else initialization.receipt,
                 invocation=invocation,
                 error=f"{type(exc).__name__}: {exc}",
@@ -296,12 +296,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     assert initialization is not None
     assert execution_context is not None
-    assert python_environment is not None
+    assert python_env is not None
     _write_result(
         worker_context.result_path,
         StageWorkerResult(
             execution_context=execution_context,
-            python_environment=python_environment,
+            python_env=python_env,
             startup=initialization.receipt,
             invocation=invocation,
         ),

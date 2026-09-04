@@ -22,3 +22,4 @@ ReplicateId = HumanId
 StageId = HumanId
 InputName = HumanId
 MetricId = HumanId
+EvalId = HumanId

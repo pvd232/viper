@@ -16,17 +16,10 @@ from typing import Annotated, Any, Generic, Literal, TypeVar, cast
 import numpy as np
 from pydantic import AwareDatetime, Field, model_validator
 
-from . import parameters
+from . import keys, params
 from ._schema import (
-    EVALUATION_DATASET_INPUT,
-    PARAMETERS,
-    PARAMETERS_INPUT,
-    PREDICTIONS,
-    RESUME_STATE,
-    RESUME_STATE_INPUT,
     SHA256,
     ArtifactName,
-    EvaluationId,
     ProtocolModel,
     PythonRepoRelPath,
     PythonSymbol,
@@ -46,25 +39,25 @@ from .http import (
     HttpRetrievalPolicy,
     ResolvedHttpRetrieval,
 )
-from .ids import HumanId, InputName, MetricId, RunId, StageId
+from .ids import EvalId, HumanId, InputName, MetricId, RunId, StageId
 from .inputs import InputRef, ResolvedInputRef
 from .metrics import MetricHandle, MetricObjectiveSpec
-from .parameters import ParameterModelRef
+from .params import ParameterModelRef
 from .references import (
     ResolvedGitFileRef,
     ResolvedStageInvocationRef,
 )
 from .runtime import (
-    EnvironmentSpec,
+    EnvSpec,
     ExecutionContext,
-    GCEEnvironmentSpec,
+    GCEEnvSpec,
     GCEHostContext,
     ProcessStartupReceipt,
-    ResolvedEnvironment,
-    ResolvedGCEEnvironment,
+    ResolvedEnv,
+    ResolvedGCEEnv,
 )
 
-ParamsT = TypeVar("ParamsT", bound=parameters.ParameterSet)
+ParamsT = TypeVar("ParamsT", bound=params.ParameterSet)
 
 
 @dataclass(frozen=True)
@@ -129,7 +122,7 @@ class BaseSpec(ProtocolModel):
     kind: str
     schema_version: Literal[1] = 1
 
-    environment: EnvironmentSpec | None = None
+    env: EnvSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
 
     artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
@@ -145,19 +138,19 @@ class BaseSpec(ProtocolModel):
             "build": "priors",
             "embed": "models",
             "train": "models",
-            "evaluate": "evaluations",
+            "eval": "evals",
         }
         artifact_category = artifact_categories.get(self.kind)
         if artifact_category is None:
             raise ValueError("stage kind has no artifact category contract")
 
-        checkpoint_artifacts = {PARAMETERS, RESUME_STATE}
+        checkpoint_artifacts = {keys.Train.MODEL, keys.Train.STATE}
         if self.kind != "train" and checkpoint_artifacts & set(self.artifacts):
             raise ValueError(
                 "parameters and resume_state are reserved for training stages"
             )
-        if self.kind != "evaluate" and PREDICTIONS in self.artifacts:
-            raise ValueError("predictions is reserved for evaluation stages")
+        if self.kind != "eval" and keys.Eval.PREDS in self.artifacts:
+            raise ValueError("predictions is reserved for eval stages")
 
         artifact_roots: dict[RepoRelPath, ArtifactName] = {}
 
@@ -269,7 +262,7 @@ class BuildSpec(InternalSpec):
     """Request construction of a project-defined prior artifact."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: parameters.Build
+    params: params.Build
 
 
 class EmbedSpec(InternalSpec):
@@ -277,7 +270,7 @@ class EmbedSpec(InternalSpec):
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveSpec | None = None
-    params: parameters.Embed
+    params: params.Embed
 
     @model_validator(mode="after")
     def validate_objective(self) -> EmbedSpec:
@@ -291,29 +284,27 @@ class EmbedSpec(InternalSpec):
 
 
 class TrainSpec(InternalSpec):
-    """Request training with an optional measured objective."""
+    """Request training with a measured minimization or maximization objective."""
 
     kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
-    objective: MetricObjectiveSpec | None = None
-    params: parameters.Train
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
+    objective: MetricObjectiveSpec
+    params: params.Train
 
     @model_validator(mode="after")
     def validate_training_contract(self) -> TrainSpec:
-        """Validate any objective and the terminal checkpoint contract."""
-        if (
-            self.objective is not None
-            and self.objective.metric_id not in self.metric_ids
-        ):
+        """Require the objective and canonical terminal checkpoint contract."""
+        if self.objective.metric_id not in self.metric_ids:
             raise ValueError("training objective must occur in stage metric IDs")
-        required_artifacts = {PARAMETERS, RESUME_STATE}
+        required_artifacts = {keys.Train.MODEL, keys.Train.STATE}
         missing = required_artifacts - set(self.artifacts)
         if missing:
             raise ValueError(
                 "training stages must declare terminal checkpoint artifacts: "
                 + ", ".join(sorted(missing))
             )
-        model_input = self.inputs.get(PARAMETERS_INPUT)
-        state_input = self.inputs.get(RESUME_STATE_INPUT)
+        model_input = self.inputs.get(keys.Train.MODEL)
+        state_input = self.inputs.get(keys.Train.STATE)
         if (model_input is None) != (state_input is None):
             raise ValueError("checkpoint inputs must be declared together")
         if model_input is None or state_input is None:
@@ -329,60 +320,55 @@ class TrainSpec(InternalSpec):
         if model_input.kind == "future" and state_input.kind == "future":
             if model_input.producer_stage_id != state_input.producer_stage_id:
                 raise ValueError("checkpoint inputs must select one producer stage")
-            if model_input.name != PARAMETERS:
+            if model_input.name != keys.Train.MODEL:
                 raise ValueError("parameters input must select parameters")
-            if state_input.name != RESUME_STATE:
+            if state_input.name != keys.Train.STATE:
                 raise ValueError("resume_state input must select resume_state")
         return self
 
 
-class EvaluateSpec(InternalSpec):
-    """Request prediction and recomputed metrics for one fixed evaluation."""
+class EvalSpec(InternalSpec):
+    """Request prediction and recomputed metrics for one fixed eval."""
 
-    kind: Literal["evaluate"] = "evaluate"  # pyright: ignore[reportIncompatibleVariableOverride]
-    evaluation_id: EvaluationId
-    metric_ids: tuple[MetricId, ...] = Field(  # pyright: ignore[reportGeneralTypeIssues]
-        min_length=1
-    )
-    objective: MetricObjectiveSpec | None = None
+    kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
+    eval_id: EvalId
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
+    objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: parameters.Evaluate
+    params: params.Eval
 
     @model_validator(mode="after")
-    def validate_evaluation_contract(self) -> EvaluateSpec:
+    def validate_eval_contract(self) -> EvalSpec:
         """Require the objective, fixed inputs, splits, and prediction artifact."""
-        if (
-            self.objective is not None
-            and self.objective.metric_id not in self.metric_ids
-        ):
-            raise ValueError("evaluation objective must occur in stage metric IDs")
+        if self.objective.metric_id not in self.metric_ids:
+            raise ValueError("eval objective must occur in stage metric IDs")
         if len(set(self.metric_ids)) != len(self.metric_ids):
-            raise ValueError("evaluation metric IDs must be unique")
+            raise ValueError("eval metric IDs must be unique")
         if len(set(self.split_inputs)) != len(self.split_inputs):
-            raise ValueError("evaluation split input names must be unique")
-        if PARAMETERS_INPUT not in self.inputs:
-            raise ValueError("evaluation requires a parameters input")
-        dataset = self.inputs.get(EVALUATION_DATASET_INPUT)
+            raise ValueError("eval split input names must be unique")
+        if keys.Train.MODEL not in self.inputs:
+            raise ValueError("eval requires a parameters input")
+        dataset = self.inputs.get(keys.Eval.TEST)
         if dataset is None:
-            raise ValueError("evaluation requires an evaluation_dataset input")
+            raise ValueError("eval requires an eval_dataset input")
         if dataset.kind != "stored":
-            raise ValueError("evaluation_dataset must be a stored input")
+            raise ValueError("eval_dataset must be a stored input")
         if dataset.pointer.path.split("/")[1] != "datasets":
-            raise ValueError("evaluation_dataset must use inputs/datasets")
-        if dataset.data_role not in {"evaluation", "benchmark"}:
-            raise ValueError("evaluation_dataset has an invalid data role")
-        reserved = {PARAMETERS_INPUT, EVALUATION_DATASET_INPUT}
+            raise ValueError("eval_dataset must use inputs/datasets")
+        if dataset.data_role not in {"eval", "benchmark"}:
+            raise ValueError("eval_dataset has an invalid data role")
+        reserved = {keys.Train.MODEL, keys.Eval.TEST}
         if reserved & set(self.split_inputs):
-            raise ValueError("evaluation splits must differ from reserved inputs")
+            raise ValueError("eval splits must differ from reserved inputs")
         if any(name not in self.inputs for name in self.split_inputs):
-            raise ValueError("evaluation split input is absent")
-        predictions = self.artifacts.get(PREDICTIONS)
+            raise ValueError("eval split input is absent")
+        predictions = self.artifacts.get(keys.Eval.PREDS)
         if predictions is None:
-            raise ValueError("evaluation requires a predictions artifact")
+            raise ValueError("eval requires a predictions artifact")
         return self
 
 
-ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvaluateSpec
+ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvalSpec
 
 
 Spec = Annotated[
@@ -398,14 +384,14 @@ class ResolvedBaseSpec(ProtocolModel):
     kind: str
 
     spec: BaseSpec
-    environment: ResolvedEnvironment
+    env: ResolvedEnv
     execution_context: ExecutionContext
     artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
     completed_at: AwareDatetime
 
     @model_validator(mode="after")
     def validate_common_invariants(self) -> ResolvedBaseSpec:
-        """Match realized source, artifacts, environment, and context to the request."""
+        """Match realized source, artifacts, env, and context to the request."""
         if set(self.artifacts) != set(self.spec.artifacts):
             raise ValueError(
                 "resolved artifact names must match declared artifact names"
@@ -438,41 +424,34 @@ class ResolvedBaseSpec(ProtocolModel):
                             "its declared bundle root plus relative path"
                         )
 
-        requested_environment = self.spec.environment
+        requested_environment = self.spec.env
         if requested_environment is not None:
-            if self.environment.kind != requested_environment.kind:
-                raise ValueError("resolved environment kind must match its request")
+            if self.env.kind != requested_environment.kind:
+                raise ValueError("resolved env kind must match its request")
 
-            if isinstance(self.environment, ResolvedGCEEnvironment) and isinstance(
+            if isinstance(self.env, ResolvedGCEEnv) and isinstance(
                 requested_environment,
-                GCEEnvironmentSpec,
+                GCEEnvSpec,
             ):
-                if self.environment.provisioning != requested_environment.provisioning:
+                if self.env.provisioning != requested_environment.provisioning:
                     raise ValueError(
                         "resolved GCE provisioning source must match the stage "
-                        "environment override"
+                        "env override"
                     )
-                if self.environment.machine_type != requested_environment.machine_type:
+                if self.env.machine_type != requested_environment.machine_type:
                     raise ValueError(
-                        "resolved machine type must match the stage "
-                        "environment override"
+                        "resolved machine type must match the stage env override"
                     )
 
-            if self.environment.compute != requested_environment.compute:
+            if self.env.compute != requested_environment.compute:
+                raise ValueError("resolved compute must match the stage env override")
+
+            if self.env.python_env != requested_environment.python_env:
                 raise ValueError(
-                    "resolved compute must match the stage environment override"
+                    "resolved Python env must match the stage env override"
                 )
 
-            if (
-                self.environment.python_environment
-                != requested_environment.python_environment
-            ):
-                raise ValueError(
-                    "resolved Python environment must match the stage "
-                    "environment override"
-                )
-
-            resolved_lockfile = self.environment.lockfile
+            resolved_lockfile = self.env.lockfile
             requested_lockfile = requested_environment.lockfile
 
             if (
@@ -480,27 +459,25 @@ class ResolvedBaseSpec(ProtocolModel):
                 or resolved_lockfile.stored_at.commit != requested_lockfile.commit
                 or resolved_lockfile.stored_at.path != requested_lockfile.path
             ):
-                raise ValueError(
-                    "resolved lockfile must match the stage environment override"
-                )
+                raise ValueError("resolved lockfile must match the stage env override")
 
         host = self.execution_context.host
-        if self.environment.kind != host.provider:
-            raise ValueError("resolved environment kind must match the observed host")
-        if isinstance(self.environment, ResolvedGCEEnvironment) and isinstance(
+        if self.env.kind != host.provider:
+            raise ValueError("resolved env kind must match the observed host")
+        if isinstance(self.env, ResolvedGCEEnv) and isinstance(
             host,
             GCEHostContext,
         ):
-            if self.environment.provisioning != host.provisioning:
+            if self.env.provisioning != host.provisioning:
                 raise ValueError(
                     "resolved GCE provisioning source must match the observed host"
                 )
-            if self.environment.machine_type != host.machine_type:
+            if self.env.machine_type != host.machine_type:
                 raise ValueError(
                     "resolved machine type must match the observed host machine type"
                 )
 
-        compute = self.environment.compute
+        compute = self.env.compute
         backend = self.execution_context.backend
 
         if compute.kind != backend.kind:
@@ -628,11 +605,11 @@ class ResolvedTrainSpec(ResolvedInternalSpec):
     spec: TrainSpec  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
-class ResolvedEvaluateSpec(ResolvedInternalSpec):
-    """Record the realized execution of one evaluation stage."""
+class ResolvedEvalSpec(ResolvedInternalSpec):
+    """Record the realized execution of one eval stage."""
 
-    kind: Literal["evaluate"] = "evaluate"  # pyright: ignore[reportIncompatibleVariableOverride]
-    spec: EvaluateSpec  # pyright: ignore[reportIncompatibleVariableOverride]
+    kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
+    spec: EvalSpec  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 ResolvedSpec = Annotated[
@@ -640,7 +617,7 @@ ResolvedSpec = Annotated[
     | ResolvedBuildSpec
     | ResolvedEmbedSpec
     | ResolvedTrainSpec
-    | ResolvedEvaluateSpec,
+    | ResolvedEvalSpec,
     Field(discriminator="kind"),
 ]
 
@@ -665,7 +642,7 @@ def _stage_decorator(
     parameter_model: type[ParamsT],
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Create one stage decorator with fixed authoring metadata."""
-    if not issubclass(parameter_model, parameters.ParameterSet):
+    if not issubclass(parameter_model, params.ParameterSet):
         raise TypeError("stage parameter model must subclass ParameterSet")
 
     definition = StageDefinition(kind=kind, parameter_model=parameter_model)
@@ -681,32 +658,24 @@ def _stage_decorator(
     return decorate
 
 
-def build(
-    *, params: type[parameters.Build]
-) -> Callable[[DecoratedStage], DecoratedStage]:
+def build(*, params: type[params.Build]) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one build-stage callable."""
     return _stage_decorator("build", params)
 
 
-def embed(
-    *, params: type[parameters.Embed]
-) -> Callable[[DecoratedStage], DecoratedStage]:
+def embed(*, params: type[params.Embed]) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one embedding-stage callable."""
     return _stage_decorator("embed", params)
 
 
-def train(
-    *, params: type[parameters.Train]
-) -> Callable[[DecoratedStage], DecoratedStage]:
+def train(*, params: type[params.Train]) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one training-stage callable."""
     return _stage_decorator("train", params)
 
 
-def eval(
-    *, params: type[parameters.Evaluate]
-) -> Callable[[DecoratedStage], DecoratedStage]:
-    """Declare one evaluation-stage callable."""
-    return _stage_decorator("evaluate", params)
+def eval(*, params: type[params.Eval]) -> Callable[[DecoratedStage], DecoratedStage]:
+    """Declare one eval-stage callable."""
+    return _stage_decorator("eval", params)
 
 
 def verify_stage_implementation_bytes(

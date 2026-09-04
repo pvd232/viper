@@ -21,6 +21,8 @@ from urllib.parse import urljoin
 import httpx
 from pydantic import (
     AwareDatetime,
+    BaseModel,
+    ConfigDict,
     Field,
     HttpUrl,
     TypeAdapter,
@@ -28,7 +30,11 @@ from pydantic import (
     model_validator,
 )
 
-from . import parameters
+from . import params
+from ._parameter.validation import (
+    instantiate_parameters,
+    verify_parameter_model_bytes,
+)
 from ._schema import (
     SHA256,
     NonEmptyStr,
@@ -37,7 +43,7 @@ from ._schema import (
     PythonSymbol,
 )
 from .ids import HumanId, InputName
-from .parameters import ParameterModelRef
+from .params import ParameterModelRef, ParameterSet
 from .references import SnapshotFileRef
 
 HttpHeaderName = Annotated[
@@ -62,10 +68,10 @@ class HttpOrigin(ProtocolModel):
         return value
 
 
-class EnvironmentSecretRef(ProtocolModel):
+class EnvSecretRef(ProtocolModel):
     """Select one runtime secret and the HTTP origins authorized to receive it."""
 
-    kind: Literal["environment"] = "environment"
+    kind: Literal["env"] = "env"
     variable: NonEmptyStr
     header: HttpHeaderName
     prefix: str = ""
@@ -74,9 +80,9 @@ class EnvironmentSecretRef(ProtocolModel):
     @field_validator("variable")
     @classmethod
     def validate_variable_name(cls, value: str) -> str:
-        """Require a portable environment-variable name."""
+        """Require a portable env-variable name."""
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value) is None:
-            raise ValueError("secret variable must be an environment-variable name")
+            raise ValueError("secret variable must be an env-variable name")
         return value
 
 
@@ -90,7 +96,7 @@ class HttpRequestSpec(ProtocolModel):
     version: NonEmptyStr
     expected_body_sha256: SHA256
     expected_body_bytes: int = Field(gt=0)
-    credentials: EnvironmentSecretRef | None = None
+    credentials: EnvSecretRef | None = None
 
     @model_validator(mode="after")
     def validate_public_headers_and_credential_origin(self) -> HttpRequestSpec:
@@ -181,7 +187,7 @@ class ProjectHttpImplementationSpec(ProtocolModel):
     id: HumanId
     implementation: HttpImplementationRef
     parameter_model: ParameterModelRef
-    params: parameters.Http
+    params: params.Http
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
     @model_validator(mode="after")
@@ -275,7 +281,7 @@ class ResolvedHttpRetrieval(ProtocolModel):
         return self
 
 
-HttpParamsT = TypeVar("HttpParamsT", bound=parameters.Http)
+HttpParamsT = TypeVar("HttpParamsT", bound=params.Http)
 DecoratedHttp = TypeVar("DecoratedHttp", bound=Callable[..., object])
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -326,12 +332,26 @@ class HttpResult:
     response: ObservedHttpResponse
 
 
+class CustomHttpDraft(BaseModel, Generic[HttpParamsT]):
+    """Hold one configured project HTTP callable before freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    implementation: Callable[[HttpContext[HttpParamsT]], HttpResult]
+    params: HttpParamsT
+    executables: tuple[ExternalExecutableSpec, ...] = ()
+
+
+HttpDraft = BuiltinHttpImplementationSpec | CustomHttpDraft[Any]
+
+
 @dataclass(frozen=True)
 class HttpDefinition(Generic[HttpParamsT]):
     """Store authoring metadata attached to one project HTTP callable."""
 
     id: HumanId
     parameter_model: type[HttpParamsT]
+    executables: tuple[ExternalExecutableSpec, ...]
 
 
 class HttpCallable(Protocol[HttpParamsT]):
@@ -348,14 +368,16 @@ class HttpCallable(Protocol[HttpParamsT]):
 def http(
     *,
     id: HumanId,
-    parameter_model: type[HttpParamsT],
+    params: type[HttpParamsT] = params.Http,
+    executables: tuple[ExternalExecutableSpec, ...] = (),
 ) -> Callable[[DecoratedHttp], DecoratedHttp]:
     """Declare one project-owned HTTP callable."""
-    if not issubclass(parameter_model, parameters.Http):
-        raise TypeError("HTTP parameter model must subclass viper.parameters.Http")
+    if not issubclass(params, ParameterSet):
+        raise TypeError("HTTP parameter model must subclass viper.params.ParameterSet")
     definition = HttpDefinition(
         id=id,
-        parameter_model=parameter_model,
+        parameter_model=params,
+        executables=executables,
     )
 
     def decorate(function: DecoratedHttp) -> DecoratedHttp:
@@ -378,48 +400,6 @@ def _verify_implementation_bytes(
         raise HttpRetrievalError("HTTP implementation byte count differs")
     if hashlib.sha256(raw).hexdigest() != reference.sha256:
         raise HttpRetrievalError("HTTP implementation SHA-256 differs")
-
-
-def _verify_parameter_model_bytes(
-    reference: ParameterModelRef,
-    raw: bytes,
-) -> None:
-    """Compare one HTTP parameter model with its frozen identity."""
-    if len(raw) != reference.bytes:
-        raise HttpRetrievalError(
-            "parameter model byte count differs from its reference"
-        )
-    if hashlib.sha256(raw).hexdigest() != reference.sha256:
-        raise HttpRetrievalError("parameter model SHA-256 differs from its reference")
-
-
-def _load_http_parameters(
-    path: Path,
-    reference: ParameterModelRef,
-    params: parameters.Http,
-) -> parameters.Http:
-    """Construct one project HTTP parameter class from its frozen values."""
-    raw = path.read_bytes()
-    _verify_parameter_model_bytes(reference, raw)
-    module_name = f"_viper_http_parameters_{path.stem}_{abs(hash(path.resolve()))}"
-    module_spec = importlib.util.spec_from_file_location(module_name, path)
-    if module_spec is None or module_spec.loader is None:
-        raise HttpRetrievalError("parameter model module could not be loaded")
-    module = importlib.util.module_from_spec(module_spec)
-    try:
-        module_spec.loader.exec_module(module)
-    except Exception as exc:
-        raise HttpRetrievalError("parameter model module raised during import") from exc
-    model = getattr(module, reference.symbol, None)
-    if not isinstance(model, type) or not issubclass(model, parameters.Http):
-        raise HttpRetrievalError("parameter model must subclass Http")
-    frozen = params.model_dump(mode="json")
-    validated = model.model_validate(frozen, strict=True)
-    if validated.model_dump(mode="json") != frozen:
-        raise HttpRetrievalError(
-            "frozen parameters must contain every effective project-model value"
-        )
-    return cast(parameters.Http, validated)
 
 
 def _load_project_http(
@@ -507,7 +487,7 @@ def validate_request_policy(
 
 
 def _resolve_credential(
-    reference: EnvironmentSecretRef | None,
+    reference: EnvSecretRef | None,
     environment: Mapping[str, str],
 ) -> RuntimeHttpCredential | None:
     """Resolve one required environment secret without persisting its value."""
@@ -550,12 +530,13 @@ def resolve_http(
     implementation_path = root / spec.implementation.path
     _verify_implementation_bytes(spec.implementation, implementation_path.read_bytes())
     parameter_path = root / spec.parameter_model.path
-    _verify_parameter_model_bytes(spec.parameter_model, parameter_path.read_bytes())
+    verify_parameter_model_bytes(spec.parameter_model, parameter_path.read_bytes())
     _load_project_http(root, spec)
-    _load_http_parameters(
+    instantiate_parameters(
         parameter_path,
         spec.parameter_model,
         spec.params,
+        params.Http,
     )
     executables = tuple(_resolve_executable(value) for value in spec.executables)
     return ResolvedHttpImplementation(spec=spec, external_executables=executables)
@@ -585,7 +566,7 @@ def _persisted_headers(response: httpx.Response) -> dict[str, str]:
 
 
 def _httpx_request(
-    context: HttpContext[parameters.Http],
+    context: HttpContext[params.Http],
 ) -> HttpResult:
     """Retrieve one exact response body through a bounded HTTPX client."""
     started = time.monotonic()
@@ -687,14 +668,14 @@ def invoke_http(
     workspace: Path,
     destination: Path,
     *,
-    environment: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> HttpResult:
     """Invoke the selected HTTP implementation and verify its result."""
     root = repository_root.resolve()
     validate_request_policy(request, policy)
     credential = _resolve_credential(
         request.credentials,
-        os.environ if environment is None else environment,
+        os.environ if env is None else env,
     )
     resolved_workspace = workspace.resolve()
     resolved_destination = destination.resolve()
@@ -703,14 +684,18 @@ def invoke_http(
     if destination.is_symlink():
         raise HttpRetrievalError("HTTP destination must not be a symlink")
     if isinstance(implementation.spec, BuiltinHttpImplementationSpec):
-        params = parameters.Http()
+        values = params.Http()
         function: HttpCallable[Any] = _httpx_request
     else:
         project = implementation.spec
-        params = _load_http_parameters(
-            root / project.parameter_model.path,
-            project.parameter_model,
-            project.params,
+        values = cast(
+            params.Http,
+            instantiate_parameters(
+                root / project.parameter_model.path,
+                project.parameter_model,
+                project.params,
+                params.Http,
+            ),
         )
         function = _load_project_http(root, project)
     context = HttpContext(
@@ -719,7 +704,7 @@ def invoke_http(
         workspace=resolved_workspace,
         destination=resolved_destination,
         policy=policy,
-        params=params,
+        params=values,
         executables={
             value.spec.executable_id: value.path
             for value in implementation.external_executables

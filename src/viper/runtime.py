@@ -65,23 +65,6 @@ class PythonDistributionSpec(ProtocolModel):
     version: NonEmptyStr
 
 
-class PythonEnvironmentSpec(ProtocolModel):
-    """Fix the interpreter and installed distributions used by a stage."""
-
-    python_version: NonEmptyStr
-    distributions: tuple[PythonDistributionSpec, ...] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def validate_distribution_order(self) -> PythonEnvironmentSpec:
-        """Require one canonically ordered entry for each distribution name."""
-        names = tuple(distribution.name for distribution in self.distributions)
-        if names != tuple(sorted(names)):
-            raise ValueError("Python distributions must be sorted by name")
-        if len(set(names)) != len(names):
-            raise ValueError("Python distribution names must be unique")
-        return self
-
-
 class CPUComputeSpec(ProtocolModel):
     """Request CPU execution for a stage."""
 
@@ -98,58 +81,6 @@ class CUDAComputeSpec(ProtocolModel):
 
 ComputeSpec = Annotated[
     CPUComputeSpec | CUDAComputeSpec,
-    Field(discriminator="kind"),
-]
-
-
-class GCEEnvironmentSpec(ProtocolModel):
-    """Declare the requested Google Compute Engine environment."""
-
-    kind: Literal["gce"] = "gce"
-    provisioning: GCEProvisioningRef
-    machine_type: NonEmptyStr
-    compute: ComputeSpec
-    lockfile: GitFileRef
-    python_environment: PythonEnvironmentSpec
-
-
-class ResolvedGCEEnvironment(ProtocolModel):
-    """Record the environment realized for one stage execution."""
-
-    kind: Literal["gce"] = "gce"
-    provisioning: GCEProvisioningRef
-    machine_type: NonEmptyStr
-    compute: ComputeSpec
-    lockfile: ResolvedGitFileRef
-    python_environment: PythonEnvironmentSpec
-
-
-class LocalEnvironmentSpec(ProtocolModel):
-    """Declare a local development environment fixed by one lockfile."""
-
-    kind: Literal["local"] = "local"
-    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
-    lockfile: GitFileRef
-    python_environment: PythonEnvironmentSpec
-
-
-class ResolvedLocalEnvironment(ProtocolModel):
-    """Record the local development environment used by one stage."""
-
-    kind: Literal["local"] = "local"
-    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
-    lockfile: ResolvedGitFileRef
-    python_environment: PythonEnvironmentSpec
-
-
-EnvironmentSpec = Annotated[
-    GCEEnvironmentSpec | LocalEnvironmentSpec,
-    Field(discriminator="kind"),
-]
-
-
-ResolvedEnvironment = Annotated[
-    ResolvedGCEEnvironment | ResolvedLocalEnvironment,
     Field(discriminator="kind"),
 ]
 
@@ -250,10 +181,78 @@ StartupVariable = Literal[
 ]
 
 
-class ProcessStartupReceipt(ProtocolModel):
-    """Record the startup environment, applied controls, and seeded generators."""
+class PythonEnvSpec(ProtocolModel):
+    """Fix the interpreter and installed distributions used by a stage."""
 
-    environment: dict[StartupVariable, str]
+    python_version: NonEmptyStr
+    distributions: tuple[PythonDistributionSpec, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_distribution_order(self) -> PythonEnvSpec:
+        """Require one canonically ordered entry for each distribution name."""
+        names = tuple(distribution.name for distribution in self.distributions)
+        if names != tuple(sorted(names)):
+            raise ValueError("Python distributions must be sorted by name")
+        if len(set(names)) != len(names):
+            raise ValueError("Python distribution names must be unique")
+        return self
+
+
+class GCEEnvSpec(ProtocolModel):
+    """Declare the requested Google Compute Engine env."""
+
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: GitFileRef
+    python_env: PythonEnvSpec
+
+
+class ResolvedGCEEnv(ProtocolModel):
+    """Record the env realized for one stage execution."""
+
+    kind: Literal["gce"] = "gce"
+    provisioning: GCEProvisioningRef
+    machine_type: NonEmptyStr
+    compute: ComputeSpec
+    lockfile: ResolvedGitFileRef
+    python_env: PythonEnvSpec
+
+
+class LocalEnvSpec(ProtocolModel):
+    """Declare a local development env fixed by one lockfile."""
+
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: GitFileRef
+    python_env: PythonEnvSpec
+
+
+class ResolvedLocalEnv(ProtocolModel):
+    """Record the local development env used by one stage."""
+
+    kind: Literal["local"] = "local"
+    compute: ComputeSpec = Field(default_factory=CPUComputeSpec)
+    lockfile: ResolvedGitFileRef
+    python_env: PythonEnvSpec
+
+
+EnvSpec = Annotated[
+    GCEEnvSpec | LocalEnvSpec,
+    Field(discriminator="kind"),
+]
+
+ResolvedEnv = Annotated[
+    ResolvedGCEEnv | ResolvedLocalEnv,
+    Field(discriminator="kind"),
+]
+
+
+class ProcessStartupReceipt(ProtocolModel):
+    """Record the startup env, applied controls, and seeded generators."""
+
+    env: dict[StartupVariable, str]
     reproducibility: ReproducibilitySpec
     generators: tuple[GeneratorInitializationReceipt, ...]
 
@@ -397,31 +396,6 @@ class RuntimeInitialization:
     receipt: ProcessStartupReceipt
 
 
-def observe_python_environment() -> PythonEnvironmentSpec:
-    """Record the interpreter and every installed Python distribution."""
-    versions: dict[str, str] = {}
-    for distribution in importlib.metadata.distributions():
-        try:
-            raw_name = distribution.metadata["Name"]
-        except KeyError:
-            continue
-        name = re.sub(r"[-_.]+", "-", raw_name).lower()
-        version = distribution.version
-        previous = versions.get(name)
-        if previous is not None and previous != version:
-            raise RuntimeError(f"installed distribution {name!r} has multiple versions")
-        versions[name] = version
-    if not versions:
-        raise RuntimeError("the active Python environment has no distributions")
-    return PythonEnvironmentSpec(
-        python_version=platform.python_version(),
-        distributions=tuple(
-            PythonDistributionSpec(name=name, version=versions[name])
-            for name in sorted(versions)
-        ),
-    )
-
-
 def _gce_metadata(path: str) -> str:
     """Read one predefined value from the GCE metadata server."""
     request = urllib.request.Request(
@@ -552,6 +526,31 @@ def _startup_environment() -> dict[StartupVariable, str]:
     }
 
 
+def observe_python_env() -> PythonEnvSpec:
+    """Record the interpreter and every installed Python distribution."""
+    versions: dict[str, str] = {}
+    for distribution in importlib.metadata.distributions():
+        try:
+            raw_name = distribution.metadata["Name"]
+        except KeyError:
+            continue
+        name = re.sub(r"[-_.]+", "-", raw_name).lower()
+        version = distribution.version
+        previous = versions.get(name)
+        if previous is not None and previous != version:
+            raise RuntimeError(f"installed distribution {name!r} has multiple versions")
+        versions[name] = version
+    if not versions:
+        raise RuntimeError("the active Python env has no distributions")
+    return PythonEnvSpec(
+        python_version=platform.python_version(),
+        distributions=tuple(
+            PythonDistributionSpec(name=name, version=versions[name])
+            for name in sorted(versions)
+        ),
+    )
+
+
 def apply_reproducibility(
     seed: RNGSeed,
     reproducibility: ReproducibilitySpec,
@@ -628,7 +627,7 @@ def apply_reproducibility(
     return RuntimeInitialization(
         numpy_generators=named_generators,
         receipt=ProcessStartupReceipt(
-            environment=_startup_environment(),
+            env=_startup_environment(),
             reproducibility=reproducibility,
             generators=tuple(receipts),
         ),
@@ -805,11 +804,11 @@ def observe_gce_execution(
     )
 
 
-def observe_execution(environment: EnvironmentSpec) -> ExecutionContext:
-    """Observe the host and backend selected by one effective environment."""
-    if isinstance(environment, GCEEnvironmentSpec):
-        return observe_gce_execution(environment.compute)
-    return observe_local_execution(environment.compute)
+def observe_execution(env: EnvSpec) -> ExecutionContext:
+    """Observe the host and backend selected by one effective env."""
+    if isinstance(env, GCEEnvSpec):
+        return observe_gce_execution(env.compute)
+    return observe_local_execution(env.compute)
 
 
 def autocast_context(reproducibility: ReproducibilitySpec) -> Any:

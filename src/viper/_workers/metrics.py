@@ -9,13 +9,10 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .. import parameters
-from .._parameter.validation import instantiate_parameters, parameter_model_path
 from ..execution._metric import MetricWorkerContext, MetricWorkerResult
 from ..metrics import (
     MetricContext,
     MetricExecutionReceipt,
-    invoke_metric,
     load_metric,
     metric_definition,
     validate_metric_definition,
@@ -24,7 +21,7 @@ from ..runtime import (
     apply_reproducibility,
     autocast_context,
     observe_execution,
-    observe_python_environment,
+    observe_python_env,
 )
 
 
@@ -90,22 +87,28 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("metric dependency bindings differ from MetricSpec")
         validate_metric_definition(root, context.metric)
-        implementation = load_metric(
-            root / context.metric.implementation.path,
-            context.metric.implementation.symbol,
+        definition = metric_definition(
+            load_metric(
+                root / context.metric.implementation.path,
+                context.metric.implementation.symbol,
+            )
         )
-        if metric_definition(implementation).mode != "recompute":
+        if definition.mode != "recompute":
             raise ValueError("dedicated metric worker requires recompute mode")
 
         initialization = apply_reproducibility(
             context.run.seed,
             context.run.reproducibility,
         )
-        effective_environment = context.stage.environment or context.run.environment
-        python_environment = observe_python_environment()
-        if python_environment != effective_environment.python_environment:
-            raise ValueError("startup.python: installed Python environment differs")
+        effective_environment = context.stage.env or context.run.env
+        python_env = observe_python_env()
+        if python_env != effective_environment.python_env:
+            raise ValueError("startup.python: installed Python env differs")
         execution_context = observe_execution(effective_environment)
+        callable_metric = load_metric(
+            root / context.metric.implementation.path,
+            context.metric.implementation.symbol,
+        )
         input_paths = _validated_paths(root, context.input_paths)
         artifact_paths = _validated_paths(root, context.artifact_paths)
         for binding in context.dependencies:
@@ -114,22 +117,21 @@ def main(argv: list[str] | None = None) -> int:
                 if binding.dependency.source == "input"
                 else artifact_paths[binding.dependency.name]
             )
-            recorded = tuple((file.sha256, file.bytes) for file in binding.files)
-            if _path_identities(path) != recorded:
+            recorded_identities = tuple(
+                (file.sha256, file.bytes) for file in binding.files
+            )
+            if _path_identities(path) != recorded_identities:
                 raise ValueError("metric dependency bytes differ from their receipt")
-        params = instantiate_parameters(
-            parameter_model_path(root, context.metric.parameter_model),
-            context.metric.parameter_model,
-            context.metric.params,
-            parameters.Metric,
-        )
-        metric_context = MetricContext(
-            inputs=input_paths,
-            artifacts=artifact_paths,
-            params=params,
-        )
         with autocast_context(context.run.reproducibility):
-            value = invoke_metric(implementation, metric_context)
+            value = float(
+                callable_metric(
+                    MetricContext(
+                        inputs=input_paths,
+                        artifacts=artifact_paths,
+                        params=context.metric.params,
+                    )
+                )
+            )
         completed_at = datetime.now(UTC)
         receipt = MetricExecutionReceipt(
             run_id=context.run.run_id,
@@ -143,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             dependencies=context.dependencies,
             startup=initialization.receipt,
             execution_context=execution_context,
-            python_environment=python_environment,
+            python_env=python_env,
             value=value,
             started_at=started_at,
             completed_at=completed_at,

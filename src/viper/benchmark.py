@@ -6,9 +6,9 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from ._schema import SHA256, BenchmarkId, EvaluationId, ProtocolModel
+from ._schema import SHA256, BenchmarkId, ProtocolModel
 from .artifacts import StageArtifactRef
-from .ids import InputName, MetricId
+from .ids import EvalId, InputName, MetricId
 from .metrics import MetricCriterionDraft, MetricDraft
 from .references import (
     ArtifactPointerRef,
@@ -29,12 +29,12 @@ class MetricCriterion(ProtocolModel):
 
 
 class BenchmarkSpec(ProtocolModel):
-    """Define the fixed evaluation and criteria for a strict benchmark."""
+    """Define the fixed eval and criteria for a strict benchmark."""
 
     schema_version: Literal[1] = 1
     benchmark_id: BenchmarkId
-    evaluation_id: EvaluationId
-    evaluation_dataset: ArtifactPointerRef
+    eval_id: EvalId
+    eval_dataset: ArtifactPointerRef
     splits: dict[InputName, ArtifactPointerRef] = Field(min_length=1)
     metrics: tuple[MetricCriterion, ...] = Field(min_length=1)
     execution_count: Literal[2] = 2

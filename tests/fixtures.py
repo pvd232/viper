@@ -32,9 +32,11 @@ from viper.resume import (
     ResumeState,
 )
 from viper.runtime import (
-    PythonEnvironmentSpec,
-    ReproducibilitySpec,
-    observe_python_environment,
+    PythonEnvSpec as PythonEnvironmentSpec,
+)
+from viper.runtime import ReproducibilitySpec
+from viper.runtime import (
+    observe_python_env as observe_python_environment,
 )
 from viper.stages import StageImplementationRef
 from viper.verification.models import VerificationPolicy

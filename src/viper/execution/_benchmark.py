@@ -26,7 +26,7 @@ from ..references import (
 )
 from ..runs import ResolvedRun, RunAttempt
 from ..serialization import document_digest, parse_yaml_bytes, serialize_document
-from ..stages import EvaluateSpec
+from ..stages import EvalSpec
 from ..storage import LocalArtifactStore
 from ..verification import verify_benchmark_result, verify_run_result
 from ..verification.models import VerificationPolicy
@@ -60,15 +60,15 @@ def _write_new(path: Path, raw: bytes) -> None:
 def _metric_receipts(
     attempt: RunAttempt,
     store: LocalArtifactStore,
-    evaluation_stage_id: str,
+    eval_stage_id: str,
 ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
-    """Load the recomputation receipt for each evaluation metric."""
+    """Load the recomputation receipt for each eval metric."""
     receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
     for reference in attempt.metric_verification_files:
         receipt = MetricVerificationReceipt.model_validate(
             parse_yaml_bytes(store.fetch(reference.stored_at))
         )
-        if receipt.stage_id == evaluation_stage_id:
+        if receipt.stage_id == eval_stage_id:
             receipts[receipt.metric_id] = (reference, receipt)
     return receipts
 
@@ -149,18 +149,18 @@ def benchmark(
         stage.stage_id: stage for stage in confirmation.resolved_stages
     }
 
-    evaluation_stage_ids = tuple(
+    eval_stage_ids = tuple(
         stage_id
         for stage_id, stage in plan.stages.items()
-        if isinstance(stage, EvaluateSpec)
+        if isinstance(stage, EvalSpec)
     )
-    if len(evaluation_stage_ids) != 1:
-        raise BenchmarkExecutionError("benchmark requires one evaluation stage")
-    evaluation_stage_id = evaluation_stage_ids[0]
+    if len(eval_stage_ids) != 1:
+        raise BenchmarkExecutionError("benchmark requires one eval stage")
+    eval_stage_id = eval_stage_ids[0]
     artifact_selectors = (
         plan.run.estimator,
         StageArtifactRef(
-            stage_id=evaluation_stage_id,
+            stage_id=eval_stage_id,
             artifact_name=PREDICTIONS,
         ),
     )
@@ -185,11 +185,11 @@ def benchmark(
             )
         )
 
-    candidate_metrics = _metric_receipts(selected_attempt, store, evaluation_stage_id)
+    candidate_metrics = _metric_receipts(selected_attempt, store, eval_stage_id)
     confirmation_metrics = _metric_receipts(
         confirmation,
         store,
-        evaluation_stage_id,
+        eval_stage_id,
     )
     metric_receipts: list[MetricCriterionReceipt] = []
     for criterion in benchmark.metrics:

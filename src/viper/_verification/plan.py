@@ -18,14 +18,18 @@ from ..benchmark import BenchmarkSpec
 from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import InputName, StageId
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
-from ..references import GitFileRef, ResolvedFileRef, ResolvedRunSpecRef
+from ..references import (
+    GitFileRef,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+)
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import parse_yaml_bytes
 from ..stages import (
     BaseSpec,
     BuildSpec,
     EmbedSpec,
-    EvaluateSpec,
+    EvalSpec,
     InternalSpec,
     ParameterizedSpec,
     Spec,
@@ -48,7 +52,7 @@ SPEC_ADAPTER = TypeAdapter(Spec)
 _DATA_ROLE_RANK: dict[DataRole, int] = {
     "training": 0,
     "validation": 1,
-    "evaluation": 2,
+    "eval": 2,
     "benchmark": 3,
 }
 
@@ -77,7 +81,7 @@ def _verify_stage_data_roles(
                 f"benchmark inputs: {names}"
             )
 
-    if isinstance(stage, EvaluateSpec):
+    if isinstance(stage, EvalSpec):
         model_role = input_roles[PARAMETERS_INPUT]
         if _DATA_ROLE_RANK[model_role] > _DATA_ROLE_RANK["validation"]:
             raise VerificationError(
@@ -319,13 +323,13 @@ def verify_run_plan_relationships(
         ):
             raise VerificationError(f"{label} must belong to the run source snapshot")
 
-    require_source_snapshot(run.environment.lockfile, "shared lockfile")
+    require_source_snapshot(run.env.lockfile, "shared lockfile")
 
     for stage_id, stage in stages.items():
-        if stage.environment is not None:
+        if stage.env is not None:
             require_source_snapshot(
-                stage.environment.lockfile,
-                f"environment lockfile of stage {stage_id!r}",
+                stage.env.lockfile,
+                f"env lockfile of stage {stage_id!r}",
             )
 
     prior_stages: dict[StageId, BaseSpec] = {}
@@ -339,7 +343,10 @@ def verify_run_plan_relationships(
     parameterized_stages = {
         stage_id: stage
         for stage_id, stage in stages.items()
-        if isinstance(stage, (BuildSpec, EmbedSpec, TrainSpec, EvaluateSpec))
+        if isinstance(
+            stage,
+            (BuildSpec, EmbedSpec, TrainSpec, EvalSpec),
+        )
     }
     variant_params = {stage.stage_id: stage for stage in variant.stage_params}
 
@@ -365,21 +372,14 @@ def verify_run_plan_relationships(
         if undeclared_metrics:
             raise VerificationError(f"stage {stage_id!r} selects undeclared metrics")
 
-    verify_stage_objectives(stages, experiment)
-
-    evaluation_stages = [
-        stage for stage in stages.values() if isinstance(stage, EvaluateSpec)
-    ]
-    expected_evaluation_role: DataRole = (
-        "benchmark" if benchmark is not None else "evaluation"
-    )
-    for evaluation in evaluation_stages:
-        dataset_input = evaluation.inputs["evaluation_dataset"]
+    eval_stages = [stage for stage in stages.values() if isinstance(stage, EvalSpec)]
+    expected_eval_role: DataRole = "benchmark" if benchmark is not None else "eval"
+    for eval in eval_stages:
+        dataset_input = eval.inputs["eval_dataset"]
         assert isinstance(dataset_input, StoredInputRef)
-        if dataset_input.data_role != expected_evaluation_role:
+        if dataset_input.data_role != expected_eval_role:
             raise VerificationError(
-                f"evaluation {evaluation.evaluation_id!r} must use "
-                f"{expected_evaluation_role!r} data_role"
+                f"eval {eval.eval_id!r} must use {expected_eval_role!r} data_role"
             )
 
     for stage_id, stage in stages.items():
@@ -410,60 +410,52 @@ def verify_run_plan_relationships(
     if benchmark is None:
         return
 
-    if len(evaluation_stages) != 1:
-        raise VerificationError("benchmark runs require exactly one evaluation stage")
+    if len(eval_stages) != 1:
+        raise VerificationError("benchmark runs require exactly one eval stage")
 
-    evaluation = evaluation_stages[0]
-    model_input = evaluation.inputs[PARAMETERS_INPUT]
+    eval = eval_stages[0]
+    model_input = eval.inputs[PARAMETERS_INPUT]
     if not isinstance(model_input, FutureInputRef):
-        raise VerificationError(
-            "benchmark evaluation model must select the run estimator"
-        )
+        raise VerificationError("benchmark eval model must select the run estimator")
     if (
         model_input.producer_stage_id != run.estimator.stage_id
         or model_input.name != run.estimator.artifact_name
     ):
-        raise VerificationError(
-            "benchmark evaluation model must select the run estimator"
-        )
+        raise VerificationError("benchmark eval model must select the run estimator")
 
-    if evaluation.evaluation_id != benchmark.evaluation_id:
-        raise VerificationError(
-            "evaluation stage ID does not match the benchmark evaluation ID"
-        )
+    if eval.eval_id != benchmark.eval_id:
+        raise VerificationError("eval stage ID does not match the benchmark eval ID")
 
-    dataset_input = evaluation.inputs["evaluation_dataset"]
+    dataset_input = eval.inputs["eval_dataset"]
     if not isinstance(dataset_input, StoredInputRef):
-        raise VerificationError("benchmark evaluation dataset must be stored")
-    if dataset_input.pointer != benchmark.evaluation_dataset:
+        raise VerificationError("benchmark eval dataset must be stored")
+    if dataset_input.pointer != benchmark.eval_dataset:
         raise VerificationError(
-            "evaluation dataset does not match the benchmark specification"
+            "eval dataset does not match the benchmark specification"
         )
 
-    if set(evaluation.split_inputs) != set(benchmark.splits):
+    if set(eval.split_inputs) != set(benchmark.splits):
         raise VerificationError(
-            "evaluation split names do not match the benchmark specification"
+            "eval split names do not match the benchmark specification"
         )
     for split_name, pointer in benchmark.splits.items():
-        split_input = evaluation.inputs[split_name]
+        split_input = eval.inputs[split_name]
         if not isinstance(split_input, StoredInputRef):
             raise VerificationError(f"benchmark split {split_name!r} must be stored")
         if split_input.pointer != pointer:
             raise VerificationError(
-                f"evaluation split {split_name!r} does not match the benchmark"
+                f"eval split {split_name!r} does not match the benchmark"
             )
 
     benchmark_metric_ids = {criterion.metric_id for criterion in benchmark.metrics}
-    if set(evaluation.metric_ids) != benchmark_metric_ids:
-        raise VerificationError(
-            "evaluation metrics do not match the benchmark specification"
-        )
+    if set(eval.metric_ids) != benchmark_metric_ids:
+        raise VerificationError("eval metrics do not match the benchmark specification")
     for criterion in benchmark.metrics:
         metric = experiment_metrics[criterion.metric_id]
         if metric.mode != "recompute":
             raise VerificationError(
                 f"benchmark criterion {criterion.metric_id!r} must select a "
-                "recomputed metric"
+                "recomputed eval metric"
             )
 
 
@@ -702,5 +694,5 @@ def verify_stage_objectives(
             )
         if isinstance(stage, TrainSpec) and metric.mode != "live":
             raise VerificationError("training objectives require live metrics")
-        if isinstance(stage, EvaluateSpec) and metric.mode != "recompute":
+        if isinstance(stage, EvalSpec) and metric.mode != "recompute":
             raise VerificationError("evaluation objectives require recomputed metrics")

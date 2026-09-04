@@ -10,10 +10,14 @@ from pathlib import Path
 import viper
 import viper.api as api
 import viper.execution as execution
+import viper.keys as keys
+import viper.params as params
+import viper.runtime as runtime
 import viper.stages as stages
 import viper.verification as verification
 from viper.execution.errors import BenchmarkExecutionError, RunError
 from viper.execution.results import BenchmarkExecutionResult, RunResult
+from viper.stages import eval
 from viper.verification import models as verification_models
 
 PUBLIC_MODULES = (
@@ -209,3 +213,24 @@ def test_parameter_categories_form_the_public_extension_namespace() -> None:
 def test_installed_package_declares_inline_type_information() -> None:
     """Ship the PEP 561 marker beside VIPER's inline type annotations."""
     assert resources.files(viper).joinpath("py.typed").is_file()
+
+
+def test_stage_api_uses_target_decorators_params_and_keys() -> None:
+    """Expose the concise parameter, key, and evaluation vocabulary."""
+    assert keys.Train.MODEL == "model"
+    assert keys.Train.STATE == "state"
+    assert keys.Eval.MODEL == "model"
+    assert keys.Eval.TEST == "test"
+    assert keys.Eval.PREDS == "preds"
+    assert issubclass(params.Eval, params.ParameterSet)
+    assert callable(eval)
+
+
+def test_env_vocabulary_is_complete() -> None:
+    """Expose only the concise environment protocol vocabulary."""
+    assert runtime.PythonEnvSpec.__name__ == "PythonEnvSpec"
+    assert runtime.EnvSpec is not None
+    assert runtime.ResolvedEnv is not None
+    assert callable(runtime.observe_python_env)
+    assert not hasattr(runtime, "PythonEnvironmentSpec")
+    assert not hasattr(runtime, "EnvironmentSpec")

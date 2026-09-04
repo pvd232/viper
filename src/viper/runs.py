@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, Field, model_validator
 
+from . import keys
 from ._schema import (
-    PARAMETERS,
     SHA256,
     BenchmarkId,
     NonEmptyStr,
@@ -26,7 +26,7 @@ from .references import (
     ResolvedStageRef,
     StageResultSnapshotRef,
 )
-from .runtime import EnvironmentSpec, ReproducibilitySpec
+from .runtime import EnvSpec, ReproducibilitySpec
 
 AttemptStatus = Literal[
     "succeeded",
@@ -202,7 +202,7 @@ class RunSpec(ProtocolModel):
 
     seed: RNGSeed
     source: GitSource
-    environment: EnvironmentSpec
+    env: EnvSpec
     reproducibility: ReproducibilitySpec
 
     stages: tuple[RunStageRef, ...] = Field(min_length=1)
@@ -232,8 +232,8 @@ class RunSpec(ProtocolModel):
         if self.estimator.stage_id not in set(stage_ids):
             raise ValueError("estimator must select a declared run stage")
 
-        if self.estimator.artifact_name != PARAMETERS:
-            raise ValueError("estimator must select the parameters artifact")
+        if self.estimator.artifact_name != keys.Train.MODEL:
+            raise ValueError("estimator must select the model artifact")
 
         return self
 

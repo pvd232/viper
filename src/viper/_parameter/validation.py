@@ -13,12 +13,11 @@ from typing import TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from .. import parameters
+from .. import params
 from ..execution._process import ExecutionPolicy, WorkerRequest, execute_worker
-from ..parameters import ParameterModelRef
-from ..stages import ParameterizedSpec
+from ..params import ParameterModelRef
 
-ParameterSetT = TypeVar("ParameterSetT", bound=parameters.ParameterSet)
+ParameterSetT = TypeVar("ParameterSetT", bound=params.ParameterSet)
 
 
 class ParameterValidationError(RuntimeError):
@@ -52,8 +51,8 @@ def verify_parameter_model_bytes(
 def load_parameter_model(
     path: Path,
     symbol: str,
-    expected_base: type[parameters.ParameterSet],
-) -> type[parameters.ParameterSet]:
+    expected_base: type[params.ParameterSet],
+) -> type[params.ParameterSet]:
     """Load one top-level Pydantic class and enforce its stage-specific base."""
     module_name = f"_viper_parameter_model_{path.stem}_{abs(hash(path.resolve()))}"
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -71,14 +70,14 @@ def load_parameter_model(
         raise ParameterValidationError(
             f"parameter model must subclass {expected_base.__name__}"
         )
-    return cast(type[parameters.ParameterSet], value)
+    return cast(type[params.ParameterSet], value)
 
 
 def validate_parameters(
     path: Path,
     reference: ParameterModelRef,
-    params: parameters.ParameterSet,
-    expected_base: type[parameters.ParameterSet],
+    params: params.ParameterSet,
+    expected_base: type[params.ParameterSet],
 ) -> dict[str, JsonValue]:
     """Validate one frozen parameter mapping with its selected project class."""
     raw = path.read_bytes()
@@ -97,9 +96,9 @@ def validate_parameters(
 def instantiate_parameters(
     path: Path,
     reference: ParameterModelRef,
-    params: parameters.ParameterSet,
-    expected_base: type[ParameterSetT],
-) -> ParameterSetT:
+    params: params.ParameterSet,
+    expected_base: type[params.ParameterSet],
+) -> params.ParameterSet:
     """Construct the exact project parameter class from one frozen mapping."""
     raw = path.read_bytes()
     verify_parameter_model_bytes(reference, raw)
@@ -111,13 +110,13 @@ def instantiate_parameters(
         raise ParameterValidationError(
             "frozen parameters must contain every effective project-model value"
         )
-    return cast(ParameterSetT, validated)
+    return validated
 
 
 def validate_stage_parameters(
     repository_root: Path,
     stage_spec_path: Path,
-    stage: ParameterizedSpec,
+    stage: object,
     *,
     timeout_seconds: float | None = None,
 ) -> dict[str, JsonValue]:
@@ -182,7 +181,7 @@ def parameter_model_path(
     base = (
         project_root.resolve()
         if reference.owner == "project"
-        else Path(parameters.__file__).resolve().parent
+        else Path(params.__file__).resolve().parent
     )
     path = (base / reference.path).resolve()
     if not path.is_relative_to(base):
