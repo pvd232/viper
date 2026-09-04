@@ -263,6 +263,7 @@ targets = [
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
+    "tests/test_system_impact.py:test_pre_pairing_command_loads",
     "tools/check_plan.py:annotations",
     "tools/check_plan.py:argparse",
     "tools/check_plan.py:hashlib",
@@ -275,6 +276,7 @@ targets = [
     "tools/check_plan.py:Path",
     "tools/check_plan.py:Any",
     "tools/check_plan.py:ROOT",
+    "tools/check_plan.py:impact",
     "tools/check_plan.py:subprocess",
     "tools/check_plan.py:ContractTraceabilityGraph",
     "tools/check_plan.py:PairBlockId",
@@ -287,10 +289,6 @@ targets = [
     "tools/check_plan.py:ScheduleError",
     "tools/check_plan.py:materialize_plan",
     "tools/check_plan.py:select_blocks",
-    "tools/check_plan.py:CodeQLIdentity",
-    "tools/check_plan.py:SourceGraph",
-    "tools/check_plan.py:SourceSnapshot",
-    "tools/check_plan.py:check_plan",
     "tools/check_plan.py:PlanValidationError",
     "tools/check_plan.py:_run",
     "tools/check_plan.py:_git_revision",
@@ -306,6 +304,7 @@ tests = [
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
+    "tests/test_system_impact.py:test_pre_pairing_command_loads",
 ]
 gate = "python -m pytest tests/test_system_impact.py -k 'materialize_plan or pre_pairing_modules' -q"
 depends_on = ["P0-SIG-06"]
@@ -407,7 +406,7 @@ from ._contract_traceability import (
     PairBlockId,
     TargetAction,
 )
-from ._system_impact.check import _declaration_payload
+from ._system_impact.source import declaration_payload as _declaration_payload
 from .system_impact import SourceGraph
 ```
 
@@ -907,6 +906,21 @@ def test_pre_pairing_modules_document_every_operation() -> None:
     assert missing == []
 ```
 
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_pre_pairing_command_loads -->
+```python contract-target
+def test_pre_pairing_command_loads() -> None:
+    """Load the pre-pairing command without relying on prior package imports."""
+    checked = run_subprocess(
+        (sys.executable, "tools/check_plan.py", "--help"),
+        cwd=Path(__file__).parents[1],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert checked.returncode == 0, checked.stderr
+```
+
 **File: `tools/check_plan.py`**
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:annotations -->
@@ -921,6 +935,7 @@ def test_pre_pairing_modules_document_every_operation() -> None:
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Path -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Any -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ROOT -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:impact -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:subprocess -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ContractTraceabilityGraph -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:PairBlockId -->
@@ -933,10 +948,6 @@ def test_pre_pairing_modules_document_every_operation() -> None:
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ScheduleError -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:materialize_plan -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:select_blocks -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:CodeQLIdentity -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:SourceGraph -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:SourceSnapshot -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:check_plan -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:PlanValidationError -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_run -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_git_revision -->
@@ -965,6 +976,9 @@ from typing import Any
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+# The private CodeQL adapter imports the public models while loading.
+import viper.system_impact as impact  # noqa: E402
+
 from viper import _subprocess as subprocess  # noqa: E402
 from viper._contract_traceability import (  # noqa: E402
     ContractTraceabilityGraph,
@@ -982,12 +996,6 @@ from viper.scheduling import (  # noqa: E402
     ScheduleError,
     materialize_plan,
     select_blocks,
-)
-from viper.system_impact import (  # noqa: E402
-    CodeQLIdentity,
-    SourceGraph,
-    SourceSnapshot,
-    check_plan,
 )
 
 
@@ -1028,7 +1036,7 @@ def _contracts(root: Path) -> tuple[Path, ...]:
     return tuple(root / record["path"] for record in manifest["contracts"])
 
 
-def _identity(executable: Path, query_pack: Path) -> CodeQLIdentity:
+def _identity(executable: Path, query_pack: Path) -> impact.CodeQLIdentity:
     """Identify the CodeQL executable and query pack."""
     version = _run((str(executable), "version", "--format=json"), cwd=ROOT)
     if version.returncode != 0:
@@ -1051,7 +1059,7 @@ def _identity(executable: Path, query_pack: Path) -> CodeQLIdentity:
             pack_result.stderr.strip() or "CodeQL pack inspection failed"
         )
     pack = json.loads(pack_result.stdout)
-    return CodeQLIdentity(
+    return impact.CodeQLIdentity(
         version=payload["version"],
         platform=f"{platform.system().lower()}-{platform.machine()}",
         executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
@@ -1065,14 +1073,14 @@ def _analyze(
     *,
     revision: str,
     committed: bool,
-    identity: CodeQLIdentity,
+    identity: impact.CodeQLIdentity,
     executable: Path,
     query_pack: Path,
     cache: Path,
     artifacts: Path,
-) -> SourceGraph:
+) -> impact.SourceGraph:
     """Build a source graph and its receipt."""
-    snapshot = SourceSnapshot(
+    snapshot = impact.SourceSnapshot(
         base_revision=revision,
         source_sha256=source_digest(root),
         revision=revision if committed else None,
@@ -1091,7 +1099,7 @@ def _analyze(
 def _unconsumed_private_owners(
     traceability: ContractTraceabilityGraph,
     selected: frozenset[PairBlockId],
-    graph: SourceGraph,
+    graph: impact.SourceGraph,
 ) -> tuple[str, ...]:
     """Find new private owners that nothing uses."""
     targets = {
@@ -1248,7 +1256,7 @@ def validate(
         frozenset(selected),
         planned,
     )
-    checked = check_plan(
+    checked = impact.check_plan(
         root=candidate,
         baseline_root=root,
         traceability=traceability,

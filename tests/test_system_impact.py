@@ -333,6 +333,19 @@ def test_pre_pairing_modules_document_every_operation() -> None:
     assert missing == []
 
 
+def test_pre_pairing_command_loads() -> None:
+    """Load the pre-pairing command without relying on prior package imports."""
+    checked = run_subprocess(
+        (sys.executable, "tools/check_plan.py", "--help"),
+        cwd=Path(__file__).parents[1],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert checked.returncode == 0, checked.stderr
+
+
 def _schedule_fixture() -> tuple[ContractTraceabilityGraph, SourceGraph, SourceGraph]:
     """Build four blocks with one dependency and one shared-file conflict."""
     declaration = _declaration_ref()

@@ -16,6 +16,8 @@ from typing import Any
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+# The private CodeQL adapter imports the public models while loading.
+import viper.system_impact as impact  # noqa: E402
 from viper import _subprocess as subprocess  # noqa: E402
 from viper._contract_traceability import (  # noqa: E402
     ContractTraceabilityGraph,
@@ -33,12 +35,6 @@ from viper.scheduling import (  # noqa: E402
     ScheduleError,
     materialize_plan,
     select_blocks,
-)
-from viper.system_impact import (  # noqa: E402
-    CodeQLIdentity,
-    SourceGraph,
-    SourceSnapshot,
-    check_plan,
 )
 
 
@@ -79,7 +75,7 @@ def _contracts(root: Path) -> tuple[Path, ...]:
     return tuple(root / record["path"] for record in manifest["contracts"])
 
 
-def _identity(executable: Path, query_pack: Path) -> CodeQLIdentity:
+def _identity(executable: Path, query_pack: Path) -> impact.CodeQLIdentity:
     """Identify the CodeQL executable and query pack."""
     version = _run((str(executable), "version", "--format=json"), cwd=ROOT)
     if version.returncode != 0:
@@ -102,7 +98,7 @@ def _identity(executable: Path, query_pack: Path) -> CodeQLIdentity:
             pack_result.stderr.strip() or "CodeQL pack inspection failed"
         )
     pack = json.loads(pack_result.stdout)
-    return CodeQLIdentity(
+    return impact.CodeQLIdentity(
         version=payload["version"],
         platform=f"{platform.system().lower()}-{platform.machine()}",
         executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
@@ -116,14 +112,14 @@ def _analyze(
     *,
     revision: str,
     committed: bool,
-    identity: CodeQLIdentity,
+    identity: impact.CodeQLIdentity,
     executable: Path,
     query_pack: Path,
     cache: Path,
     artifacts: Path,
-) -> SourceGraph:
+) -> impact.SourceGraph:
     """Build a source graph and its receipt."""
-    snapshot = SourceSnapshot(
+    snapshot = impact.SourceSnapshot(
         base_revision=revision,
         source_sha256=source_digest(root),
         revision=revision if committed else None,
@@ -142,7 +138,7 @@ def _analyze(
 def _unconsumed_private_owners(
     traceability: ContractTraceabilityGraph,
     selected: frozenset[PairBlockId],
-    graph: SourceGraph,
+    graph: impact.SourceGraph,
 ) -> tuple[str, ...]:
     """Find new private owners that nothing uses."""
     targets = {
@@ -299,7 +295,7 @@ def validate(
         frozenset(selected),
         planned,
     )
-    checked = check_plan(
+    checked = impact.check_plan(
         root=candidate,
         baseline_root=root,
         traceability=traceability,
