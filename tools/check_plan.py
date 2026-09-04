@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import platform
+import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -323,12 +324,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the pre-pairing plan gate from explicit repository inputs."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--block", action="append", required=True)
-    parser.add_argument("--codeql", type=Path, required=True)
-    parser.add_argument("--python", type=Path, required=True)
+    codeql = shutil.which("codeql")
+    parser.add_argument(
+        "--codeql",
+        type=Path,
+        default=None if codeql is None else Path(codeql),
+    )
+    parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--cache", type=Path, default=ROOT / ".viper/codeql-cache")
     parser.add_argument("--results", type=Path, required=True)
     args = parser.parse_args(argv)
+    if args.codeql is None:
+        parser.error("codeql is unavailable on PATH; install or expose CodeQL first")
     if args.java_home is not None:
         os.environ["CODEQL_JAVA_HOME"] = str(args.java_home.resolve())
     result = validate(
