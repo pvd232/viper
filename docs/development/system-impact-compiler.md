@@ -1014,7 +1014,7 @@ compares both digests with
 `PlanCheck.realized.source_sha256` and `PlanCheck.plan_sha256` before returning
 `Acceptance`.
 
-### Exact declaration extraction
+### Declaration
 
 One operation computes both planned and observed declaration digests:
 
@@ -2127,10 +2127,10 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
 
 ### One-hop pre-pairing check
 
+**File: `src/viper/system_impact.py`**
+
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:OneHop -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:PlanCheck -->
-
-**File: `src/viper/system_impact.py`**
 
 ```python contract-target
 class OneHop(ProtocolModel):
@@ -2260,9 +2260,9 @@ __all__ = [
 ]
 ```
 
-<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:PlanCheck -->
-
 **File: `src/viper/_system_impact/check.py`**
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:PlanCheck -->
 
 ```python contract-target
 from ..system_impact import (
@@ -2445,10 +2445,10 @@ def check_plan(
     )
 ```
 
+**File: `tests/test_system_impact.py`**
+
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller -->
-
-**File: `tests/test_system_impact.py`**
 
 ```python contract-target
 def test_one_hop_records_baseline_and_candidate_neighbors(tmp_path: Path) -> None:
