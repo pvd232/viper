@@ -2622,7 +2622,6 @@ targets = [
     "src/viper/metrics.py:MetricParams",
     "src/viper/metrics.py:ParameterModelRef",
     "src/viper/metrics.py:MetricParamsT",
-    "src/viper/_verification/metrics.py:MetricId",
     "src/viper/_verification/plan.py:EvaluateSpec",
     "src/viper/_verification/plan.py:EvalSpec",
     "src/viper/_verification/plan.py:ResolvedFileRef",
@@ -3120,11 +3119,6 @@ from .params import ParameterModelRef
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricParamsT -->
 ```python contract-target
 MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
-```
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/_verification/metrics.py:MetricId -->
-```python contract-target
-from ..ids import MetricId
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/_verification/plan.py:EvalSpec -->
