@@ -365,6 +365,11 @@ def materialize_plan(
             # Convert CodeQL positions to byte offsets in the baseline file.
             start = starts[node.start_line - 1] + node.start_col
             end = starts[node.end_line - 1] + node.end_col
+            # Replace the old inline directive with its declaration.
+            end_line = lines[node.end_line - 1]
+            suffix = end_line[node.end_col :]
+            if suffix.lstrip().startswith(b"#"):
+                end = starts[node.end_line - 1] + len(end_line.rstrip(b"\r\n"))
             payload = (
                 b""
                 if target.action == "remove"

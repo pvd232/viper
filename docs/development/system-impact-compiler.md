@@ -1642,6 +1642,11 @@ def extract_declaration_bytes(
         start_line, start_column = _declaration_start(node, lines)
         start = offsets[start_line - 1] + start_column
         end = offsets[node.end_lineno - 1] + node.end_col_offset
+        # Keep an inline directive with the declaration it qualifies.
+        end_line = lines[node.end_lineno - 1]
+        suffix = end_line[node.end_col_offset :]
+        if suffix.lstrip().startswith(b"#"):
+            end = offsets[node.end_lineno - 1] + len(end_line.rstrip(b"\r\n"))
     except (IndexError, ValueError) as error:
         raise SourceDeclarationError(
             f"Python declaration has an invalid source span: {qualified_symbol}"
