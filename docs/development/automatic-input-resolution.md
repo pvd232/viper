@@ -8944,7 +8944,7 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
         b"    http,\n"
         b")\n\n"
         b"@http(id='project_http', "
-        b"parameter_model=ProjectTransportParameters)\n"
+        b"params=ProjectTransportParameters)\n"
         b"def transfer(context):\n"
         b"    assert context.params.chunk_size == 4\n"
         b"    response = httpx.get(str(context.request.url), "
