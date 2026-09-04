@@ -40,27 +40,52 @@ HTTP downloads.
 
 ```mermaid
 flowchart TB
-    Plan["InternalSpec.inputs"] --> Ref["ExternalInputRef<br/>source + worker path"]
-    Ref --> Resolve["resolve_inputs()"]
-    Resolve --> Store["LocalArtifactStore.resolved_files()"]
-    Store --> Evidence["ResolvedExternalInputRef<br/>ResolvedFileRef"]
-    Resolve --> Binding["StageContextBinding.inputs<br/>author-selected path"]
-    Binding --> Worker["Stage worker"]
+    Local["LocalSource"] -->|"source"| Ref["ExternalInputRef"]
+    Http["HttpSource"] -->|"source"| Ref
+    Ref -->|"source + author path"| Resolve["resolve_inputs()"]
+    Resolve -->|"stored copy"| Store[("LocalArtifactStore")]
+    Store -->|"ResolvedFileRef"| Evidence["ResolvedExternalInputRef"]
+    Resolve -->|"author-selected path"| Binding["StageContextBinding.inputs"]
+    Binding -->|"input path"| Worker["Stage worker"]
+
+    class Local,Http declaration
+    class Ref,Evidence record
+    class Resolve,Worker execution
+    class Store storage
+    class Binding boundary
+    classDef declaration fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
+    classDef record fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    classDef execution fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef storage fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
+    classDef boundary fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
 ### Phase 3 local-input DAG
 
 ```mermaid
 flowchart TB
-    Plan["InternalSpec.inputs"] --> Ref["ExternalInputRef<br/>LocalSource"]
-    Ref --> Capture["capture_external_input()"]
-    Capture --> File["Attempt-owned copy<br/>SnapshotFileRef"]
-    Capture --> Evidence["ResolvedExternalInputRef"]
-    File --> Binding["StageContextBinding.inputs"]
-    Binding --> Worker["Stage worker"]
-    Worker --> Recheck["verify_captured_inputs()"]
-    Recheck --> Snapshot["Completed stage snapshot"]
-    Evidence --> Snapshot
+    Source["LocalSource"] -->|"selected source"| Ref["ExternalInputRef"]
+    Ref -->|"validated source"| Capture["capture_external_input()"]
+    Capture -->|"path · SHA-256 · bytes"| File[("Attempt-owned copy<br/>SnapshotFileRef")]
+    Capture -->|"source + file identity"| Evidence["ResolvedExternalInputRef"]
+    File -->|"canonical path"| Binding["StageContextBinding.inputs"]
+    Binding -->|"input path"| Worker["Stage worker"]
+    Worker -->|"completed path"| Recheck["verify_captured_inputs()"]
+    Recheck -->|"verified bytes"| Snapshot[("Completed stage snapshot")]
+    Evidence -->|"resolved input record"| Snapshot
+
+    class Source declaration
+    class Ref,Evidence record
+    class Capture,Worker,Recheck execution
+    class File,Snapshot storage
+    class Binding boundary
+    classDef declaration fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
+    classDef record fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    classDef execution fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef storage fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
+    classDef boundary fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
 ## 3. Phase 3 models
@@ -115,19 +140,37 @@ file beside the target, flushes it, and atomically replaces the target.
 
 ```mermaid
 flowchart TB
-    Local["Repository file"] --> LocalRef["ExternalInputRef"]
-    LocalRef --> Capture["capture_external_input()"]
-    Capture --> LocalEvidence["ResolvedExternalInputRef"]
-    Capture --> Consumer["Stage input"]
+    Local["Repository file"] -->|"ExternalInputRef"| Capture["Local capture"]
+    Capture -->|"file"| LocalEvidence["ResolvedExternalInputRef"]
+    Capture -->|"attempt-owned path"| Consumer["Stage input<br/>context.inputs"]
 
-    Request["HttpRequestSpec"] --> Download["DownloadSpec"]
-    Download --> Retrieval["ResolvedHttpRetrieval"]
-    Retrieval --> Artifact["ResolvedSingleFileArtifact"]
-    Artifact --> Selection["FutureInputRef or StoredInputRef"]
-    Selection --> Consumer
+    Service[/"HTTP service"/] -->|"HttpRequestSpec"| Download["DownloadSpec"]
+    Download -->|"request receipt"| Retrieval["ResolvedHttpRetrieval"]
+    Retrieval -->|"body"| HttpFile[("SnapshotFileRef")]
+    Artifact["ResolvedSingleFileArtifact"] -->|"same file"| HttpFile
+    Artifact -->|"same run"| Future["FutureInputRef"]
+    Artifact -->|"promoted run"| Stored["StoredInputRef"]
+    Future -->|"artifact path"| Consumer
+    Stored -->|"verified artifact path"| Consumer
 
-    LocalEvidence --> Snapshot
-    Consumer --> Snapshot["Completed stage snapshot"]
+    LocalEvidence -->|"resolved input"| Snapshot[("Completed stage snapshot")]
+    Consumer -->|"stage result"| Snapshot
+
+    class Local,Service external
+    class Capture,Download execution
+    class LocalEvidence,Retrieval record
+    class HttpFile,Snapshot storage
+    class Artifact artifact
+    class Future,Stored reference
+    class Consumer boundary
+    classDef external fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
+    classDef execution fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+    classDef record fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+    classDef storage fill:#312e81,stroke:#a5b4fc,color:#ffffff,stroke-width:2px
+    classDef artifact fill:#4338ca,stroke:#c7d2fe,color:#ffffff,stroke-width:2px
+    classDef reference fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+    classDef boundary fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+    linkStyle default stroke:#94a3b8,stroke-width:2px
 ```
 
 Before capture, the runner requires all three conditions:
