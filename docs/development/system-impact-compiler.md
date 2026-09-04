@@ -1144,6 +1144,7 @@ fix baseline R0
 -> check_plan()
 -> commit the exact checked candidate bytes
 -> accept() the commit only when its source and selected-plan digests match the check
+-> publish the acceptance, contracts, and CodeQL outputs
 ```
 
 Changing a selected PairBlock, target declaration, dependency, gate, test, or
@@ -1161,14 +1162,14 @@ block needs independent acceptance before the rest of the contract continues.
 Autonomous work freezes the selected PairBlocks before implementation. The
 agent stays within those targets, tests, dependencies, and gates. A necessary
 plan change starts a new freeze against the same baseline $R_0$ before work
-continues. The final `check_plan()`, commit, and `accept()` operations are
-identical to guided work.
+continues. The final `check_plan()`, commit, `accept()`, and publication
+operations are identical to guided work.
 
 Guided and autonomous work therefore differ only during implementation:
 
 ```text
-guided: start check -> flexible pair coding -> final check -> commit -> accept
-autonomous: freeze plan -> constrained execution -> final check -> commit -> accept
+guided: start check -> flexible pair coding -> final check -> commit -> accept -> publish
+autonomous: freeze plan -> constrained execution -> final check -> commit -> accept -> publish
 ```
 
 ## 6. Serializable evidence
@@ -1191,8 +1192,17 @@ Each model uses sorted, compact JSON and repository-relative paths.
 `plan_sha256` binds the selected `PairBlock` and `ContractTarget` records plus
 the exact bytes of every selected `PairBlock.assets` path. `accept()` returns
 `Acceptance` only after it reconstructs those values from the committed tree.
-Writing this logical bundle to `.viper/system` belongs to a later storage API;
-the Phase 0 checker returns the complete records to its caller.
+`python -m tools.plan.publish` uploads the compact bundle to a private Hugging
+Face dataset repository after `accept()` succeeds. It stores `result.json`,
+`acceptance.json`, the raw and decoded CodeQL query outputs, and the selected
+contracts read from the accepted commit. It excludes the generated candidate
+tree and reusable CodeQL database cache.
+
+The upload contains one `manifest.json` whose rows name every uploaded path,
+SHA-256 digest, and byte count. The command writes `publication.json` locally
+as a `ResolvedFileRef`. Its `HuggingFaceFileRef` identifies the manifest at the
+exact dataset commit returned by Hugging Face. A mismatched `Acceptance.check`
+is rejected before any upload begins.
 
 ## 7. Verification
 
@@ -1218,6 +1228,8 @@ the Phase 0 checker returns the complete records to its caller.
 | `src/viper/_system_impact/codeql.py` | Create and query CodeQL databases and return validated canonical rows. |
 | `src/viper/_system_impact/source.py` | Resolve qualified Python symbols, extract exact UTF-8 declaration bytes including decorators, and implement `classify_target_change()`. |
 | `tools/plan/check.py` | Run Pyright against the materialized candidate before candidate CodeQL analysis and restore the caller's `PYTHONPATH` after the check. |
+| `tools/plan/publish.py` | Upload one accepted compact evidence bundle and return an immutable `ResolvedFileRef` for its manifest. |
+| `tests/test_release_tools.py` | Prove publication uses a private dataset repository, exact check-owned paths, and one immutable Hugging Face commit. |
 | `tests/test_system_impact.py` | Cover exact declaration extraction, change classification, typed one-hop impact selection, action transitions, unexpected changes, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
 | `docs/development/contract-traceability.md` | Make `CRT-06` the sole owner of targets, PairBlocks, rule-block joins, and plan closure. |
 | `docs/development/master-execution-checklist.md` | Replace the old graph-transformation blocks with the six bounded blocks below. |

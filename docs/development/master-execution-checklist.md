@@ -599,15 +599,18 @@ One contract session is the default guided boundary:
    `ContractTarget`.
 9. Update the plan for an intentional discovery only after user approval;
    remove accidental changes or move them to a separately approved plan.
-10. Freeze the reconciled plan and candidate source, run one strict System
-   Impact check, and accept only the blocks whose gates pass.
+10. Freeze the reconciled plan and candidate source, then run one strict System
+    Impact check.
 11. Record the report's novel dependents, resulting actions, review-only cases,
     and dependencies discovered outside the report in the observation ledger.
-12. Update each accepted block's checklist checkbox, preserve its governing
+12. Commit the exact checked source and plan. Run `accept()`, then publish the
+    acceptance, selected contracts, and CodeQL outputs to the configured
+    evidence repository.
+13. Update each accepted block's checklist checkbox, preserve its governing
    contract in the adjacent `pair-block-contract` marker, refresh the contract
    status in Section 3.1, and update the contract digest in Section 3.2.
-13. Run the checklist mapping and documentation checks, then commit and push the
-   exact accepted implementation and checklist state together.
+14. Run the checklist mapping and documentation checks, then commit and push the
+    accepted checklist state.
 
 The user writes the code during guided PairBlocks. Codex inspects each bounded
 edit, explains the next change, and performs the final reconciliation. A user
@@ -617,7 +620,8 @@ acceptance.
 Autonomous work freezes the selected PairBlocks before implementation. The
 agent stays within that plan. A necessary plan change starts a new freeze
 against the same baseline before work continues. Guided and autonomous work
-use the same final System Impact check, commit, and acceptance operation.
+use the same final System Impact check, commit, acceptance, and publication
+operations.
 
 ## 7. Master Phase 0 — project root, traceability, module ownership, and system impact
 

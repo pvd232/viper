@@ -504,6 +504,7 @@ def test_pre_pairing_modules_document_every_operation() -> None:
         "src/viper/scheduling.py",
         "tools/plan/check.py",
         "tools/plan/accept.py",
+        "tools/plan/publish.py",
     ):
         tree = ast.parse(Path(relative_path).read_text(), filename=relative_path)
         for node in ast.walk(tree):
@@ -516,7 +517,7 @@ def test_pre_pairing_modules_document_every_operation() -> None:
 
 def test_pre_pairing_command_loads() -> None:
     """Load the pre-pairing command without relying on prior package imports."""
-    for module in ("tools.plan.check", "tools.plan.accept"):
+    for module in ("tools.plan.check", "tools.plan.accept", "tools.plan.publish"):
         checked = run_subprocess(
             (sys.executable, "-m", module, "--help"),
             cwd=Path(__file__).parents[1],
