@@ -1887,6 +1887,8 @@ def test_one_hop_records_baseline_and_candidate_neighbors(tmp_path: Path) -> Non
     assert result.one_hop.changed == (adapter.node_id, caller.node_id)
     assert result.one_hop.before == (before.edge_id,)
     assert result.one_hop.after == (after.edge_id,)
+    assert result.one_hop.removed == (before.edge_id,)
+    assert result.one_hop.added == (after.edge_id,)
 
 
 def test_pre_pairing_pyright_rejects_stale_caller(tmp_path: Path) -> None:

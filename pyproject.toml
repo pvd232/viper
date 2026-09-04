@@ -61,7 +61,7 @@ exclude = ["archive"]
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["D", "E", "F", "I", "PLC0414", "UP"]
+select = ["D", "E", "F", "I", "PLC0414", "PLC0415", "UP"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

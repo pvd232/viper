@@ -34,7 +34,7 @@ graphs and rejects a candidate that fails Pyright.
 | SIG-04 <!-- contract-requirement: SIG-04 phase=0 test=tests/test_system_impact.py --> | Replay the check over the committed `model_support` to `models` migration and one completed VIPER PairBlock, then compare its result with the exact Git diff. |
 | SIG-05 <!-- contract-requirement: SIG-05 phase=0 test=tests/test_system_impact.py --> | Persist the CodeQL command, version, query-pack digest, source-snapshot digest, optional commit, exit status, and decoded-result digest for both source graphs; reject identity or receipt drift. |
 | SIG-06 <!-- contract-requirement: SIG-06 phase=0 test=tests/test_system_impact.py --> | Emit `writes` edges for direct name and attribute assignments whose writing declaration and assignment target both resolve to `SourceNode` records, retaining the assignment location as edge evidence. |
-| SIG-07 <!-- contract-requirement: SIG-07 phase=0 test=tests/test_system_impact.py --> | Record the complete policy-selected direct neighborhood of every selected target in both source graphs, reject every changed declaration absent from the selected PairBlocks, and reject the materialized candidate when Pyright finds a static interface error. |
+| SIG-07 <!-- contract-requirement: SIG-07 phase=0 test=tests/test_system_impact.py --> | Derive the policy-selected one-hop node and edge delta from the baseline graph and the CodeQL translation of the materialized PairBlocks, reject every changed declaration absent from those blocks, and reject the materialized candidate when Pyright finds a static interface error. |
 
 ## 2. Required claim
 
@@ -95,7 +95,8 @@ C.\mathrm{passed}\iff{}&
 \land \operatorname{GatesPass}(B_P) \\
 &\land \operatorname{PlanDigestValid}(P)
 \land \operatorname{SourceDigestsValid}(R_0,R^*) \\
-&\land \operatorname{ReceiptsValid}_{K}(G_0,G^*).
+&\land \operatorname{ReceiptsValid}_{K}(G_0,G^*)
+\land \operatorname{OneHopValid}(P,G_0,G^*).
 \end{aligned}
 $$
 
@@ -175,13 +176,47 @@ B^{(1)}=S_\Delta\cup
 \{u\mid\exists v\in S_\Delta:(u,v,k)\in E_0^{(1)}\cup E_*^{(1)}\}.
 $$
 
-`OneHop` stores $S_\Delta$, the direct dependents in $B^{(1)}$, and the exact
-edge IDs in $E_0^{(1)}$ and $E_*^{(1)}$. The existing realized-delta rule is
-stronger than a neighborhood-only authorization rule because it requires:
+`OneHop` is the exact CodeQL edge delta induced by the materialized contract
+source:
+
+$$
+\begin{aligned}
+\mathrm{before} &= \operatorname{ids}(E_0^{(1)}), \\
+\mathrm{after} &= \operatorname{ids}(E_*^{(1)}), \\
+\mathrm{removed} &= \mathrm{before}\setminus\mathrm{after}, \\
+\mathrm{added} &= \mathrm{after}\setminus\mathrm{before}.
+\end{aligned}
+$$
+
+`SourceGraph` construction rejects duplicate nodes, duplicate edges, unknown
+edge endpoints, and invalid CodeQL receipts. `OneHop` construction rejects any
+`removed` or `added` value that differs from those set differences. Therefore:
+
+$$
+\operatorname{OneHopValid}(P,G_0,G^*)\iff
+\begin{cases}
+\operatorname{ValidGraph}(G_0),\\
+\operatorname{ValidGraph}(G^*),\\
+\mathrm{before}=\operatorname{ids}(E_0^{(1)}),\\
+\mathrm{after}=\operatorname{ids}(E_*^{(1)}),\\
+\mathrm{removed}=\mathrm{before}\setminus\mathrm{after},\\
+\mathrm{added}=\mathrm{after}\setminus\mathrm{before}.
+\end{cases}
+$$
+
+No person declares the expected edge changes separately. The exact
+`ContractTarget` payload produces $R^*$, and the pinned analyzer translates
+$R^*$ into $G^*$ and its one-hop edge delta. The realized-delta rule separately
+requires every changed declaration to belong to the selected plan:
 
 $$
 \Delta(G_0,G^*)\subseteq\operatorname{Owned}(T_P).
 $$
+
+After implementation, `accept()` requires the committed source digest to equal
+the checked $R^*$ digest. For the same pinned analyzer $K$, identical source
+bytes reproduce $G^*$ and the same one-hop delta; a second post-commit CodeQL
+run is unnecessary.
 
 The four checks are complementary:
 
@@ -192,10 +227,12 @@ The four checks are complementary:
 | Pyright | Static compatibility of the fully materialized candidate |
 | PairBlock gates | Runtime behavior selected by the contract |
 
-CodeQL establishes represented source dependencies. Pyright establishes that a
-caller satisfies a callee's Python interface. PairBlock gates establish the
-selected runtime behavior. The one-hop guarantee covers the edges emitted by
-the pinned CodeQL query pack; dynamic dependencies absent from that graph
+CodeQL establishes represented source dependencies. Pyright runs over the
+entire source tree selected by the materialized candidate's
+`pyrightconfig.json`; it is not limited to the one-hop neighborhood. It checks
+that typed callers satisfy the interfaces they use. PairBlock gates establish
+the selected runtime behavior. The one-hop guarantee covers the edges emitted
+by the pinned CodeQL query pack; dynamic dependencies absent from that graph
 remain outside its scope.
 
 ## 3. Current gap
@@ -1230,7 +1267,7 @@ the Phase 0 checker returns the complete records to its caller.
 | `system.fixture.replayed` <!-- verifier-rule: system.fixture.replayed requirement=SIG-04 --> | Both committed fixtures reproduce their reviewed changed-path sets and target results. |
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 | `system.source.writes` <!-- verifier-rule: system.source.writes requirement=SIG-06 --> | The checked-in CodeQL pack emits `writes` edges for a function writing a declared module variable and a method writing a declared class attribute; every emitted edge retains the assignment location. |
-| `system.one_hop.recorded` <!-- verifier-rule: system.one_hop.recorded requirement=SIG-07 --> | `check_plan()` records every policy-selected direct incoming edge around the selected targets in both graphs, while the global realized-delta check rejects changed declarations outside the selected PairBlocks. |
+| `system.one_hop.recorded` <!-- verifier-rule: system.one_hop.recorded requirement=SIG-07 --> | `check_plan()` derives the exact added and removed policy-selected one-hop edges from the valid baseline and materialized source graphs; the realized-delta check rejects changed declarations outside the selected PairBlocks. |
 | `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/check_plan.py:validate` runs Pyright against the fully materialized candidate and stops before candidate CodeQL analysis or PairBlock gates when static interfaces are incompatible. |
 
 ## 8. Propagation
@@ -1364,7 +1401,7 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 tests = ["tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
@@ -2132,7 +2169,7 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
 
 ```python contract-target
 class OneHop(ProtocolModel):
-    """Record direct dependents around the selected targets in both graphs."""
+    """Store the CodeQL edge delta around the selected targets."""
 
     targets: tuple[NodeId, ...] = Field(
         description="Selected target nodes present in either graph."
@@ -2147,15 +2184,32 @@ class OneHop(ProtocolModel):
         description="Policy-selected incoming edge IDs in the baseline graph."
     )
     after: tuple[SHA256, ...] = Field(
-        description="Policy-selected incoming edge IDs in the candidate graph."
+        description="Incoming edge IDs derived from the materialized PairBlocks."
     )
+    removed: tuple[SHA256, ...] = Field(
+        description="Baseline edge IDs absent after materialization."
+    )
+    added: tuple[SHA256, ...] = Field(
+        description="Materialized edge IDs absent from the baseline."
+    )
+
+    @model_validator(mode="after")
+    def validate_delta(self) -> OneHop:
+        """Require added and removed edges to equal the graph difference."""
+        before = set(self.before)
+        after = set(self.after)
+        if self.removed != tuple(sorted(before - after)):
+            raise ValueError("OneHop.removed differs from before - after")
+        if self.added != tuple(sorted(after - before)):
+            raise ValueError("OneHop.added differs from after - before")
+        return self
 
 
 class PlanCheck(ProtocolModel):
     """Record the complete result of checking selected PairBlocks."""
 
-    schema_version: Literal[2] = Field(
-        default=2,
+    schema_version: Literal[3] = Field(
+        default=3,
         description="Plan-check record format version.",
     )
     baseline: SourceSnapshot = Field(
@@ -2196,7 +2250,7 @@ class PlanCheck(ProtocolModel):
         description="Direct advisory dependency report for the selected targets."
     )
     one_hop: OneHop = Field(
-        description="Direct target neighborhood observed in both source graphs."
+        description="CodeQL edge delta derived from the baseline and planned source."
     )
     targets: tuple[TargetCheck, ...] = Field(
         description="One realized result for every selected ContractTarget."
@@ -2226,6 +2280,79 @@ class PlanCheck(ProtocolModel):
             "passed."
         )
     )
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:_inspect_plan -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:inspect_plan -->
+
+```python contract-target
+# The plan module constructs the models above, so load it after they exist.
+from ._system_impact.plan import inspect_plan as _inspect_plan  # noqa: E402
+
+
+def inspect_plan(
+    *,
+    plan_root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+) -> PlanInspection:
+    """Resolve selected targets and report their policy-selected direct impact."""
+    return _inspect_plan(
+        plan_root=plan_root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=block_ids,
+        baseline=baseline,
+    )
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:_accept -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/system_impact.py:_check_plan -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:check_plan -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:accept -->
+
+```python contract-target
+# The check module imports inspect_plan, so load it after that operation exists.
+from ._system_impact.check import (  # noqa: E402
+    accept as _accept,
+)
+from ._system_impact.check import (  # noqa: E402
+    check_plan as _check_plan,
+)
+
+
+def check_plan(
+    *,
+    root: Path,
+    baseline_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+    realized: SourceGraph,
+    gate_timeout_seconds: float = 900.0,
+) -> PlanCheck:
+    """Check selected PairBlocks against independently observed source graphs."""
+    return _check_plan(
+        root=root,
+        baseline_root=baseline_root,
+        traceability=traceability,
+        block_ids=block_ids,
+        baseline=baseline,
+        realized=realized,
+        gate_timeout_seconds=gate_timeout_seconds,
+    )
+
+
+def accept(
+    *,
+    root: Path,
+    check: PlanCheck,
+    revision: CommitId,
+) -> Acceptance:
+    """Bind a passing plan check to identical committed source and plan bytes."""
+    return _accept(root=root, check=check, revision=revision)
 ```
 
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/system_impact.py:__all__ -->
@@ -2328,7 +2455,9 @@ def _one_hop(
             if edge.target in node_kinds and edge.kind in node_kinds[edge.target]
         )
     )
-    selected_ids = set(before) | set(after)
+    before_ids = set(before)
+    after_ids = set(after)
+    selected_ids = before_ids | after_ids
     selected_edges = tuple(
         edge
         for edge in (*baseline.edges, *realized.edges)
@@ -2348,6 +2477,8 @@ def _one_hop(
         changed=changed,
         before=before,
         after=after,
+        removed=tuple(sorted(before_ids - after_ids)),
+        added=tuple(sorted(after_ids - before_ids)),
     )
 
 
@@ -2513,6 +2644,8 @@ def test_one_hop_records_baseline_and_candidate_neighbors(tmp_path: Path) -> Non
     assert result.one_hop.changed == (adapter.node_id, caller.node_id)
     assert result.one_hop.before == (before.edge_id,)
     assert result.one_hop.after == (after.edge_id,)
+    assert result.one_hop.removed == (before.edge_id,)
+    assert result.one_hop.added == (after.edge_id,)
 
 
 def test_pre_pairing_pyright_rejects_stale_caller(tmp_path: Path) -> None:

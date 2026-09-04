@@ -41,7 +41,7 @@
         "SIG-06",
         "SIG-07"
       ],
-      "sha256": "d90e1cca2fa52311768cb8773eccac27118f439448a1c7b60acd206e4fa5b279"
+      "sha256": "f8b04734cf1097288d9a8d1e09fd3513b0e8fd774886c3df84726e09f11540a6"
     },
     {
       "path": "docs/development/pair-block-scheduling.md",

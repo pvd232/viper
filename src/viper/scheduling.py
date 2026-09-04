@@ -12,7 +12,7 @@ from ._contract_traceability import (
     PairBlockId,
     TargetAction,
 )
-from ._system_impact.check import _declaration_payload
+from ._system_impact.source import declaration_payload as _declaration_payload
 from .system_impact import SourceGraph
 
 

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal, TypeAlias, cast
 
-from .._contract_traceability import TargetAction
+from .._contract_traceability import ContractTarget, TargetAction
 
 ChangeKind: TypeAlias = Literal[
     "added",
@@ -30,6 +32,56 @@ _SupportedDeclaration: TypeAlias = (
 
 class SourceDeclarationError(ValueError):
     """Report an absent, ambiguous, malformed, or impossible declaration change."""
+
+
+def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
+    """Read the exact declaration owned by one ContractTarget."""
+    if target.action == "remove":
+        return None
+
+    path = root / target.declaration.path
+    try:
+        source = path.read_bytes()
+    except OSError as error:
+        raise SourceDeclarationError(
+            f"cannot read ContractTarget declaration: {target.declaration.path}"
+        ) from error
+
+    opening = b"```python contract-target\n"
+    closing = b"\n```"
+    candidates: list[bytes] = []
+    position = 0
+    while True:
+        start = source.find(opening, position)
+        if start < 0:
+            break
+        end = source.find(closing, start + len(opening))
+        if end < 0:
+            break
+        declaration_end = end + len(closing)
+        declaration = source[start:declaration_end]
+        start_line = source.count(b"\n", 0, start) + 1
+        end_line = source.count(b"\n", 0, declaration_end) + 1
+        if (
+            start_line == target.declaration.start_line
+            and end_line == target.declaration.end_line
+            and hashlib.sha256(declaration).hexdigest() == target.declaration.sha256
+        ):
+            candidates.append(source[start + len(opening) : end])
+        position = declaration_end
+
+    if len(candidates) != 1:
+        raise SourceDeclarationError(
+            "ContractTarget declaration cannot be reconstructed exactly: "
+            f"{target.block_id} {target.target.path}:{target.target.symbol}"
+        )
+    try:
+        return extract_declaration_bytes(candidates[0], target.target.symbol)
+    except SourceDeclarationError as error:
+        raise SourceDeclarationError(
+            "ContractTarget payload does not resolve its declared symbol: "
+            f"{target.target.path}:{target.target.symbol}"
+        ) from error
 
 
 def _assignment_names(node: ast.Assign | ast.AnnAssign) -> tuple[str, ...]:

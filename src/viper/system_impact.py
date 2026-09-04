@@ -270,7 +270,7 @@ class GateCheck(ProtocolModel):
 
 
 class OneHop(ProtocolModel):
-    """Record direct dependents around the selected targets in both graphs."""
+    """Store the CodeQL edge delta around the selected targets."""
 
     targets: tuple[NodeId, ...] = Field(
         description="Selected target nodes present in either graph."
@@ -285,15 +285,32 @@ class OneHop(ProtocolModel):
         description="Policy-selected incoming edge IDs in the baseline graph."
     )
     after: tuple[SHA256, ...] = Field(
-        description="Policy-selected incoming edge IDs in the candidate graph."
+        description="Incoming edge IDs derived from the materialized PairBlocks."
     )
+    removed: tuple[SHA256, ...] = Field(
+        description="Baseline edge IDs absent after materialization."
+    )
+    added: tuple[SHA256, ...] = Field(
+        description="Materialized edge IDs absent from the baseline."
+    )
+
+    @model_validator(mode="after")
+    def validate_delta(self) -> OneHop:
+        """Require added and removed edges to equal the graph difference."""
+        before = set(self.before)
+        after = set(self.after)
+        if self.removed != tuple(sorted(before - after)):
+            raise ValueError("OneHop.removed differs from before - after")
+        if self.added != tuple(sorted(after - before)):
+            raise ValueError("OneHop.added differs from after - before")
+        return self
 
 
 class PlanCheck(ProtocolModel):
     """Record the complete result of checking selected PairBlocks."""
 
-    schema_version: Literal[2] = Field(
-        default=2,
+    schema_version: Literal[3] = Field(
+        default=3,
         description="Plan-check record format version.",
     )
     baseline: SourceSnapshot = Field(
@@ -334,7 +351,7 @@ class PlanCheck(ProtocolModel):
         description="Direct advisory dependency report for the selected targets."
     )
     one_hop: OneHop = Field(
-        description="Direct target neighborhood observed in both source graphs."
+        description="CodeQL edge delta derived from the baseline and planned source."
     )
     targets: tuple[TargetCheck, ...] = Field(
         description="One realized result for every selected ContractTarget."
@@ -388,6 +405,10 @@ class PlanInspection(ProtocolModel):
     )
 
 
+# The plan module constructs the models above, so load it after they exist.
+from ._system_impact.plan import inspect_plan as _inspect_plan  # noqa: E402
+
+
 def inspect_plan(
     *,
     plan_root: Path,
@@ -397,8 +418,6 @@ def inspect_plan(
     baseline: SourceGraph,
 ) -> PlanInspection:
     """Resolve selected targets and report their policy-selected direct impact."""
-    from ._system_impact.plan import inspect_plan as _inspect_plan
-
     return _inspect_plan(
         plan_root=plan_root,
         baseline_root=baseline_root,
@@ -406,6 +425,15 @@ def inspect_plan(
         block_ids=block_ids,
         baseline=baseline,
     )
+
+
+# The check module imports inspect_plan, so load it after that operation exists.
+from ._system_impact.check import (  # noqa: E402
+    accept as _accept,
+)
+from ._system_impact.check import (  # noqa: E402
+    check_plan as _check_plan,
+)
 
 
 def check_plan(
@@ -419,8 +447,6 @@ def check_plan(
     gate_timeout_seconds: float = 900.0,
 ) -> PlanCheck:
     """Check selected PairBlocks against independently observed source graphs."""
-    from ._system_impact.check import check_plan as _check_plan
-
     return _check_plan(
         root=root,
         baseline_root=baseline_root,
@@ -439,8 +465,6 @@ def accept(
     revision: CommitId,
 ) -> Acceptance:
     """Bind a passing plan check to identical committed source and plan bytes."""
-    from ._system_impact.check import accept as _accept
-
     return _accept(root=root, check=check, revision=revision)
 
 

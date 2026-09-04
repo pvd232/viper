@@ -32,7 +32,10 @@ from ..system_impact import (
 )
 from .codeql import IGNORED_PARTS, source_digest
 from .plan import IMPACT_EDGE_KINDS_V1
-from .source import SourceDeclarationError, extract_declaration_bytes
+from .source import (
+    SourceDeclarationError,
+    declaration_payload,
+)
 
 
 class SystemImpactCheckError(ValueError):
@@ -183,7 +186,9 @@ def _one_hop(
             if edge.target in node_kinds and edge.kind in node_kinds[edge.target]
         )
     )
-    selected_ids = set(before) | set(after)
+    before_ids = set(before)
+    after_ids = set(after)
+    selected_ids = before_ids | after_ids
     selected_edges = tuple(
         edge
         for edge in (*baseline.edges, *realized.edges)
@@ -203,56 +208,16 @@ def _one_hop(
         changed=changed,
         before=before,
         after=after,
+        removed=tuple(sorted(before_ids - after_ids)),
+        added=tuple(sorted(after_ids - before_ids)),
     )
 
 
 def _declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
-    if target.action == "remove":
-        return None
-
-    path = root / target.declaration.path
     try:
-        source = path.read_bytes()
-    except OSError as error:
-        raise SystemImpactCheckError(
-            f"cannot read ContractTarget declaration: {target.declaration.path}"
-        ) from error
-
-    opening = b"```python contract-target\n"
-    closing = b"\n```"
-    candidates: list[bytes] = []
-    position = 0
-    while True:
-        start = source.find(opening, position)
-        if start < 0:
-            break
-        end = source.find(closing, start + len(opening))
-        if end < 0:
-            break
-        declaration_end = end + len(closing)
-        declaration = source[start:declaration_end]
-        start_line = source.count(b"\n", 0, start) + 1
-        end_line = source.count(b"\n", 0, declaration_end) + 1
-        if (
-            start_line == target.declaration.start_line
-            and end_line == target.declaration.end_line
-            and _sha256(declaration) == target.declaration.sha256
-        ):
-            candidates.append(source[start + len(opening) : end])
-        position = declaration_end
-
-    if len(candidates) != 1:
-        raise SystemImpactCheckError(
-            "ContractTarget declaration cannot be reconstructed exactly: "
-            f"{target.block_id} {target.target.path}:{target.target.symbol}"
-        )
-    try:
-        return extract_declaration_bytes(candidates[0], target.target.symbol)
+        return declaration_payload(root, target)
     except SourceDeclarationError as error:
-        raise SystemImpactCheckError(
-            "ContractTarget payload does not resolve its declared symbol: "
-            f"{target.target.path}:{target.target.symbol}"
-        ) from error
+        raise SystemImpactCheckError(str(error)) from error
 
 
 def _target_is_satisfied(
