@@ -40,7 +40,7 @@
         "SIG-05",
         "SIG-06"
       ],
-      "sha256": "8088868a4556d2496fd824972f48068c6debb8aa1d3e2180281100d9f179e5fb"
+      "sha256": "c163a77a15735d35d055d9548e6a45d40f73071920492d4f49e951c53387f4c5"
     },
     {
       "path": "docs/development/pair-block-scheduling.md",
@@ -49,7 +49,7 @@
         "SCH-02",
         "SCH-03"
       ],
-      "sha256": "5a09c7448805a0bf497f4442e4ba531a3b873554268d79630e2fb132be4d42b9"
+      "sha256": "653258360579b961983d1faa37776ae94d3a65ac7156b991d6a18810b9d78194"
     },
     {
       "path": "docs/development/child-process-launching.md",

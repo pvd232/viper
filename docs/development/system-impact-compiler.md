@@ -36,7 +36,7 @@ boundary.
 ## 2. Required claim
 
 Given a validated `ContractTraceabilityGraph` $Q$, baseline snapshot $R_0$,
-frozen candidate snapshot $R_1$, and one pinned CodeQL identity $K$, VIPER can
+frozen candidate snapshot $R^*$, and one pinned CodeQL identity $K$, VIPER can
 answer:
 
 ```text
@@ -47,33 +47,77 @@ Which direct baseline source declarations may be affected by each planned target
 Did both observations use the same CodeQL identity?
 ```
 
-CodeQL produces one graph for each immutable source snapshot:
+CodeQL produces the baseline graph:
 
 $$
-G_0=\operatorname{Analyze}_{K}(R_0),
+G_0=\operatorname{Analyze}_{K}(R_0).
+$$
+
+For selected PairBlocks $B_P$, the CTG supplies plan $P$, target set $T_P$,
+dependency order $\prec_P$, and the authored source delta $\Delta_P$:
+
+$$
+P=(B_P,T_P,\prec_P),
 \qquad
-G_1=\operatorname{Analyze}_{K}(R_1).
+\Delta_P(t)\in\{\operatorname{add}(h),\operatorname{update}(h),
+\operatorname{remove}\},
 $$
 
-The CTG supplies the plan:
+where $t$ is one repository declaration and $h$ is the SHA-256 digest of its
+authored declaration bytes. The scheduler constructs candidate source $R^*$,
+and CodeQL observes candidate graph $G^*$:
 
 $$
-P=(Q.\mathrm{targets},Q.\mathrm{blocks},Q.\mathrm{edges}).
+R^*=\operatorname{Materialize}(R_0,\Delta_P,\prec_P),
+\qquad
+G^*=\operatorname{Analyze}_{K}(R^*).
 $$
 
-The check derives the observed source delta and evaluates it against $P$:
+Let $\eta_G(t)$ be declaration $t$'s digest in graph $G$, or $\bot$ when the
+declaration is absent. The observed declaration delta is:
 
 $$
-C=\operatorname{CheckPlan}(P,G_0,G_1).
+\Delta(G_0,G^*)=
+\{t\mid\eta_{G_0}(t)\ne\eta_{G^*}(t)\}.
 $$
 
-For the `ContractTarget` records owned by `PlanCheck.blocks`,
+System Impact computes $C=\operatorname{CheckPlan}(P,G_0,G^*)$:
+
+$$
+\begin{aligned}
+C.\mathrm{passed}\iff{}&
+\operatorname{TargetsMatch}(\Delta_P,G_0,G^*)
+\land \Delta(G_0,G^*)\subseteq\operatorname{Owned}(T_P) \\
+&\land \operatorname{DependenciesSatisfied}(P,G_0)
+\land \operatorname{GatesPass}(B_P) \\
+&\land \operatorname{PlanDigestValid}(P)
+\land \operatorname{SourceDigestsValid}(R_0,R^*) \\
+&\land \operatorname{ReceiptsValid}_{K}(G_0,G^*).
+\end{aligned}
+$$
+
+The pre-pairing command returns result $V$ after constructing $R^*$ and calling
+System Impact:
+
+$$
+\begin{aligned}
+V.\mathrm{passed}\iff{}&
+\operatorname{Clean}(R_0)
+\land \operatorname{Defined}(R^*)
+\land \operatorname{Pyright}(R^*)=0 \\
+&\land C.\mathrm{passed}
+\land \operatorname{PrivateOwnersConsumed}(G^*).
+\end{aligned}
+$$
+
+The following rules expand $C.\mathrm{passed}$. For the `ContractTarget`
+records owned by `PlanCheck.blocks`,
 `PlanCheck.passed` is true exactly when:
 
-1. every `add` target is absent from $G_0$ and present in $G_1$;
+1. every `add` target is absent from $G_0$ and present in $G^*$;
 2. every `update` target is present in both graphs and its realized declaration
    equals the declared target value;
-3. every `remove` target is present in $G_0$ and absent from $G_1$;
+3. every `remove` target is present in $G_0$ and absent from $G^*$;
 4. every changed source declaration belongs to a `ContractTarget` whose
    `block_id` appears in `PlanCheck.blocks`;
 5. VIPER runs every frozen selected `PairBlock.gate` once and every command
@@ -151,7 +195,7 @@ flowchart TB
     Identity["CodeQLIdentity"]
     Baseline["SourceGraph G0"]
     Impact["Impact"]
-    Realized["SourceGraph G1"]
+    Realized["SourceGraph G*"]
     Resolved["ResolvedContractTarget"]
     Target["TargetCheck"]
     Gates["Run frozen PairBlock gates"]
@@ -205,7 +249,7 @@ flowchart TB
     Impact["Impact<br/>typed direct dependents"]
     Execute["Execute existing PairBlocks"]
     Freeze["Freeze selected plan<br/>and candidate source"]
-    G1["SourceGraph G1"]
+    Gs["SourceGraph G*"]
     Resolved["ResolvedContractTarget<br/>digest and ChangeKind"]
     Check["PlanCheck"]
     Gates["Run frozen PairBlock gates"]
@@ -227,14 +271,14 @@ flowchart TB
     Block -->|"ordered work"| Execute
     Execute -->|"candidate edits"| Freeze
     CTG -->|"selected blocks"| Freeze
-    Freeze -->|"immutable source snapshot"| G1
+    Freeze -->|"immutable source snapshot"| Gs
     Freeze -->|"resolve authored declarations"| Resolved
-    CodeQL -->|"analyze candidate"| G1
+    CodeQL -->|"analyze candidate"| Gs
     Resolved -->|"ChangeKind"| Impact
     CTG -->|"expected actions"| Check
     Resolved -->|"expected digests"| Check
     G0 -->|"before facts"| Check
-    G1 -->|"after facts"| Check
+    Gs -->|"after facts"| Check
     Impact -->|"review evidence"| Check
     Block -->|"gate command"| Gates
     Gates -->|"exit code 0"| Check
@@ -248,7 +292,7 @@ flowchart TB
 
     class Requirement,Target,Rule,CTG contract
     class Block checklist
-    class CodeQL,G0,G1,Impact evidence
+    class CodeQL,G0,Gs,Impact evidence
     class Execute,Freeze,Gates,Commit implementation
     class Resolved,Dependencies,Check,Acceptance output
     classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
@@ -880,10 +924,10 @@ compile_contract_traceability() -> closed CTG plan
 analyze_source(R0, K) -> G0 + receipt
 inspect_plan(CTG, G0) -> action checks + typed one-hop impact report
 execute the selected PairBlocks and their focused tests -> candidate source
-freeze selected plan + candidate source -> plan_sha256 + R1
-analyze_source(R1, K) -> G1 + receipt
-check_plan(selected CTG, G0, G1) -> PlanCheck
-commit the exact frozen R1 source -> revision
+freeze selected plan + candidate source -> plan_sha256 + R*
+analyze_source(R*, K) -> G* + receipt
+check_plan(selected CTG, G0, G*) -> PlanCheck
+commit the exact frozen R* source -> revision
 accept(repository root, PlanCheck, revision) -> Acceptance
 ```
 
@@ -1078,7 +1122,7 @@ fix baseline R0
 -> freeze selected PairBlock bytes and candidate source bytes
 -> compute plan_sha256
 -> extract exact planned and candidate declarations
--> analyze R0 and frozen R1 with one CodeQLIdentity
+-> analyze R0 and frozen R* with one CodeQLIdentity
 -> check_plan()
 -> commit the exact checked candidate bytes
 -> accept() the commit only when its source and selected-plan digests match the check

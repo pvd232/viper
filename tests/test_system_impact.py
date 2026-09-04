@@ -320,6 +320,19 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     assert (destination / "module.py").read_bytes() == b"\n"
 
 
+def test_pre_pairing_modules_document_every_operation() -> None:
+    """Require docstrings on public, private, and nested pre-pairing operations."""
+    missing: list[str] = []
+    for relative_path in ("src/viper/scheduling.py", "tools/check_plan.py"):
+        tree = ast.parse(Path(relative_path).read_text(), filename=relative_path)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if ast.get_docstring(node) is None:
+                    missing.append(f"{relative_path}:{node.name}")
+
+    assert missing == []
+
+
 def _traceability(
     *,
     targets: tuple[ContractTarget, ...],

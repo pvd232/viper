@@ -262,6 +262,7 @@ targets = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
+    "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tools/check_plan.py:annotations",
     "tools/check_plan.py:argparse",
     "tools/check_plan.py:hashlib",
@@ -304,8 +305,9 @@ tests = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
+    "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
 ]
-gate = "python -m pytest tests/test_system_impact.py -k materialize_plan -q"
+gate = "python -m pytest tests/test_system_impact.py -k 'materialize_plan or pre_pairing_modules' -q"
 depends_on = ["P0-SIG-06"]
 ```
 
@@ -414,11 +416,12 @@ def select_blocks(
     *,
     completed: frozenset[PairBlockId] = frozenset(),
 ) -> tuple[PairBlockId, ...]:
-    """Return the incomplete transitive dependency closure of requested blocks."""
+    """Select requested blocks and their unfinished dependencies."""
     blocks = {block.block_id: block for block in traceability.blocks}
     selected: set[PairBlockId] = set()
 
     def include(block_id: PairBlockId) -> None:
+        """Add this block and its unfinished dependencies."""
         if block_id in completed or block_id in selected:
             return
         block = blocks.get(block_id)
@@ -437,7 +440,7 @@ def order_blocks(
     traceability: ContractTraceabilityGraph,
     selected: tuple[PairBlockId, ...],
 ) -> tuple[PairBlockId, ...]:
-    """Return one canonical order that respects declared dependencies."""
+    """Order blocks by dependency, then by ID."""
     blocks = {block.block_id: block for block in traceability.blocks}
     known = set(selected)
     if len(known) != len(selected) or any(block not in blocks for block in known):
@@ -468,7 +471,7 @@ def _precedes(
     prerequisite: PairBlockId,
     consumer: PairBlockId,
 ) -> bool:
-    """Return whether a declared dependency path orders two PairBlocks."""
+    """Return whether the consumer depends on the prerequisite."""
     blocks = {block.block_id: block for block in traceability.blocks}
     pending = list(blocks[consumer].depends_on)
     visited: set[PairBlockId] = set()
@@ -488,13 +491,14 @@ def final_targets(
     ordered: tuple[PairBlockId, ...],
     baseline: SourceGraph,
 ) -> tuple[ContractTarget, ...]:
-    """Compose each ordered target chain into one baseline-relative change."""
+    """Reduce ordered edits for each target to one change from the baseline."""
     positions = {block: index for index, block in enumerate(ordered)}
     target_positions = {
         block.block_id: {target: index for index, target in enumerate(block.targets)}
         for block in traceability.blocks
         if block.block_id in positions
     }
+    # Group every edit to the same target.
     chains: dict[tuple[str, str], list[ContractTarget]] = defaultdict(list)
     for target in traceability.targets:
         if target.block_id in positions:
@@ -503,6 +507,7 @@ def final_targets(
     resolved: list[ContractTarget] = []
     for identity, chain in sorted(chains.items()):
         chain.sort(key=lambda target: positions[target.block_id])
+        # Several blocks may edit one target only when depends_on orders them.
         for earlier, later in zip(chain, chain[1:], strict=False):
             if not _precedes(traceability, earlier.block_id, later.block_id):
                 raise ScheduleError(
@@ -525,6 +530,7 @@ def final_targets(
                     raise ScheduleError(f"removed target is absent: {target.target}")
                 present = False
 
+        # Reduce the chain to one change from the baseline to the final state.
         if not initially_present and not present:
             continue
         last = chain[-1]
@@ -555,7 +561,7 @@ def materialize_plan(
     *,
     completed: frozenset[PairBlockId] = frozenset(),
 ) -> None:
-    """Write selected target declarations over an isolated baseline tree."""
+    """Copy the baseline and apply selected edits to a new tree."""
     if destination.exists():
         raise ScheduleError("planned source destination already exists")
     shutil.copytree(
@@ -596,6 +602,7 @@ def materialize_plan(
                 continue
             if node is None:
                 raise ScheduleError(f"baseline target is absent: {target.target}")
+            # Convert CodeQL positions to byte offsets in the baseline file.
             start = starts[node.start_line - 1] + node.start_col
             end = starts[node.end_line - 1] + node.end_col
             payload = (
@@ -606,13 +613,13 @@ def materialize_plan(
             assert payload is not None or target.action == "remove"
             span = (start, end)
             replacement = b"" if payload is None else payload
+            # Several names can share one statement. Apply one shared edit.
             if span in replacements and replacements[span] != replacement:
                 raise ScheduleError("one declaration has conflicting replacements")
             replacements[span] = replacement
 
         ordered_replacements = sorted(
-            (start, end, payload)
-            for (start, end), payload in replacements.items()
+            (start, end, payload) for (start, end), payload in replacements.items()
         )
         if any(
             current[0] < previous[1]
@@ -623,6 +630,7 @@ def materialize_plan(
             )
         ):
             raise ScheduleError("planned declaration replacements overlap")
+        # Work upward so later edits do not move earlier offsets.
         for start, end, payload in reversed(ordered_replacements):
             source = source[:start] + payload + source[end:]
         if additions:
@@ -872,6 +880,21 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     assert (destination / "module.py").read_bytes() == b"\n"
 ```
 
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation -->
+```python contract-target
+def test_pre_pairing_modules_document_every_operation() -> None:
+    """Require docstrings on public, private, and nested pre-pairing operations."""
+    missing: list[str] = []
+    for relative_path in ("src/viper/scheduling.py", "tools/check_plan.py"):
+        tree = ast.parse(Path(relative_path).read_text(), filename=relative_path)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if ast.get_docstring(node) is None:
+                    missing.append(f"{relative_path}:{node.name}")
+
+    assert missing == []
+```
+
 **File: `tools/check_plan.py`**
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:annotations -->
@@ -912,7 +935,7 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:validate -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:main -->
 ```python contract-target
-"""Validate complete ContractTarget payloads before source editing begins."""
+"""Check selected PairBlocks before editing source."""
 
 from __future__ import annotations
 
@@ -961,6 +984,7 @@ class PlanValidationError(RuntimeError):
 
 
 def _run(command: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run one command without a shell."""
     completed = subprocess.run(
         tuple(command),
         cwd=cwd,
@@ -972,6 +996,7 @@ def _run(command: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[st
 
 
 def _git_revision(root: Path) -> str:
+    """Return the current commit after requiring a clean checkout."""
     status = _run(("git", "status", "--porcelain"), cwd=root)
     if status.returncode != 0:
         raise PlanValidationError(status.stderr.strip() or "git status failed")
@@ -984,6 +1009,7 @@ def _git_revision(root: Path) -> str:
 
 
 def _contracts(root: Path) -> tuple[Path, ...]:
+    """Return the contracts in the baseline manifest."""
     manifest = json.loads(
         (root / "docs/development/contract-baselines.json").read_text()
     )
@@ -991,6 +1017,7 @@ def _contracts(root: Path) -> tuple[Path, ...]:
 
 
 def _identity(executable: Path, query_pack: Path) -> CodeQLIdentity:
+    """Identify the CodeQL executable and query pack."""
     version = _run((str(executable), "version", "--format=json"), cwd=ROOT)
     if version.returncode != 0:
         raise PlanValidationError(version.stderr.strip() or "CodeQL version failed")
@@ -1032,6 +1059,7 @@ def _analyze(
     cache: Path,
     artifacts: Path,
 ) -> SourceGraph:
+    """Build a source graph and its receipt."""
     snapshot = SourceSnapshot(
         base_revision=revision,
         source_sha256=source_digest(root),
@@ -1053,6 +1081,7 @@ def _unconsumed_private_owners(
     selected: frozenset[PairBlockId],
     graph: SourceGraph,
 ) -> tuple[str, ...]:
+    """Find new private owners that nothing uses."""
     targets = {
         (target.block_id, target.target): target
         for target in traceability.targets
@@ -1084,9 +1113,10 @@ def validate(
     cache: Path,
     results: Path,
 ) -> dict[str, Any]:
-    """Materialize and validate one complete PairBlock selection."""
+    """Build the selected plan, check it, and save the result."""
     revision = _git_revision(root)
     contracts = _contracts(root)
+    # Select blocks first; their requirements determine the full CTG.
     raw_blocks, raw_targets = compile_contract_plan(root, contracts)
     completed = _implemented_pair_blocks(
         root / "docs/development/master-execution-checklist.md"
@@ -1120,6 +1150,7 @@ def validate(
     )
     identity = _identity(codeql, root / "tools/codeql/viper-python-impact")
     results.mkdir(parents=True, exist_ok=False)
+    # Every planned edit starts from the clean commit.
     baseline = _analyze(
         root,
         revision=revision,
@@ -1155,6 +1186,7 @@ def validate(
         )
         return result
 
+    # Make Pyright import the candidate instead of the baseline.
     original_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = str(candidate / "src")
     pyright = _run(
@@ -1188,6 +1220,7 @@ def validate(
             os.environ["PYTHONPATH"] = original_pythonpath
         return result
 
+    # Pyright checks types first; CodeQL then observes G*.
     planned = _analyze(
         candidate,
         revision=revision,
@@ -1235,7 +1268,7 @@ def validate(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the pre-pairing plan gate from explicit repository inputs."""
+    """Run the pre-pairing check."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--block", action="append", required=True)
     codeql = shutil.which("codeql")

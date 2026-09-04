@@ -1,4 +1,4 @@
-"""Validate complete ContractTarget payloads before source editing begins."""
+"""Check selected PairBlocks before editing source."""
 
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ class PlanValidationError(RuntimeError):
 
 
 def _run(command: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run one command without a shell."""
     completed = subprocess.run(
         tuple(command),
         cwd=cwd,
@@ -58,6 +59,7 @@ def _run(command: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[st
 
 
 def _git_revision(root: Path) -> str:
+    """Return the current commit after requiring a clean checkout."""
     status = _run(("git", "status", "--porcelain"), cwd=root)
     if status.returncode != 0:
         raise PlanValidationError(status.stderr.strip() or "git status failed")
@@ -70,6 +72,7 @@ def _git_revision(root: Path) -> str:
 
 
 def _contracts(root: Path) -> tuple[Path, ...]:
+    """Return the contracts in the baseline manifest."""
     manifest = json.loads(
         (root / "docs/development/contract-baselines.json").read_text()
     )
@@ -77,6 +80,7 @@ def _contracts(root: Path) -> tuple[Path, ...]:
 
 
 def _identity(executable: Path, query_pack: Path) -> CodeQLIdentity:
+    """Identify the CodeQL executable and query pack."""
     version = _run((str(executable), "version", "--format=json"), cwd=ROOT)
     if version.returncode != 0:
         raise PlanValidationError(version.stderr.strip() or "CodeQL version failed")
@@ -118,6 +122,7 @@ def _analyze(
     cache: Path,
     artifacts: Path,
 ) -> SourceGraph:
+    """Build a source graph and its receipt."""
     snapshot = SourceSnapshot(
         base_revision=revision,
         source_sha256=source_digest(root),
@@ -139,6 +144,7 @@ def _unconsumed_private_owners(
     selected: frozenset[PairBlockId],
     graph: SourceGraph,
 ) -> tuple[str, ...]:
+    """Find new private owners that nothing uses."""
     targets = {
         (target.block_id, target.target): target
         for target in traceability.targets
@@ -170,9 +176,10 @@ def validate(
     cache: Path,
     results: Path,
 ) -> dict[str, Any]:
-    """Materialize and validate one complete PairBlock selection."""
+    """Build the selected plan, check it, and save the result."""
     revision = _git_revision(root)
     contracts = _contracts(root)
+    # Select blocks first; their requirements determine the full CTG.
     raw_blocks, raw_targets = compile_contract_plan(root, contracts)
     completed = _implemented_pair_blocks(
         root / "docs/development/master-execution-checklist.md"
@@ -206,6 +213,7 @@ def validate(
     )
     identity = _identity(codeql, root / "tools/codeql/viper-python-impact")
     results.mkdir(parents=True, exist_ok=False)
+    # Every planned edit starts from the clean commit.
     baseline = _analyze(
         root,
         revision=revision,
@@ -241,6 +249,7 @@ def validate(
         )
         return result
 
+    # Make Pyright import the candidate instead of the baseline.
     original_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = str(candidate / "src")
     pyright = _run(
@@ -274,6 +283,7 @@ def validate(
             os.environ["PYTHONPATH"] = original_pythonpath
         return result
 
+    # Pyright checks types first; CodeQL then observes G*.
     planned = _analyze(
         candidate,
         revision=revision,
@@ -321,7 +331,7 @@ def validate(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the pre-pairing plan gate from explicit repository inputs."""
+    """Run the pre-pairing check."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--block", action="append", required=True)
     codeql = shutil.which("codeql")

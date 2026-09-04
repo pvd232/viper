@@ -26,11 +26,12 @@ def select_blocks(
     *,
     completed: frozenset[PairBlockId] = frozenset(),
 ) -> tuple[PairBlockId, ...]:
-    """Return the incomplete transitive dependency closure of requested blocks."""
+    """Select requested blocks and their unfinished dependencies."""
     blocks = {block.block_id: block for block in traceability.blocks}
     selected: set[PairBlockId] = set()
 
     def include(block_id: PairBlockId) -> None:
+        """Add this block and its unfinished dependencies."""
         if block_id in completed or block_id in selected:
             return
         block = blocks.get(block_id)
@@ -49,7 +50,7 @@ def order_blocks(
     traceability: ContractTraceabilityGraph,
     selected: tuple[PairBlockId, ...],
 ) -> tuple[PairBlockId, ...]:
-    """Return one canonical order that respects declared dependencies."""
+    """Order blocks by dependency, then by ID."""
     blocks = {block.block_id: block for block in traceability.blocks}
     known = set(selected)
     if len(known) != len(selected) or any(block not in blocks for block in known):
@@ -80,7 +81,7 @@ def _precedes(
     prerequisite: PairBlockId,
     consumer: PairBlockId,
 ) -> bool:
-    """Return whether a declared dependency path orders two PairBlocks."""
+    """Return whether the consumer depends on the prerequisite."""
     blocks = {block.block_id: block for block in traceability.blocks}
     pending = list(blocks[consumer].depends_on)
     visited: set[PairBlockId] = set()
@@ -100,13 +101,14 @@ def final_targets(
     ordered: tuple[PairBlockId, ...],
     baseline: SourceGraph,
 ) -> tuple[ContractTarget, ...]:
-    """Compose each ordered target chain into one baseline-relative change."""
+    """Reduce ordered edits for each target to one change from the baseline."""
     positions = {block: index for index, block in enumerate(ordered)}
     target_positions = {
         block.block_id: {target: index for index, target in enumerate(block.targets)}
         for block in traceability.blocks
         if block.block_id in positions
     }
+    # Group every edit to the same target.
     chains: dict[tuple[str, str], list[ContractTarget]] = defaultdict(list)
     for target in traceability.targets:
         if target.block_id in positions:
@@ -115,6 +117,7 @@ def final_targets(
     resolved: list[ContractTarget] = []
     for identity, chain in sorted(chains.items()):
         chain.sort(key=lambda target: positions[target.block_id])
+        # Several blocks may edit one target only when depends_on orders them.
         for earlier, later in zip(chain, chain[1:], strict=False):
             if not _precedes(traceability, earlier.block_id, later.block_id):
                 raise ScheduleError(
@@ -137,6 +140,7 @@ def final_targets(
                     raise ScheduleError(f"removed target is absent: {target.target}")
                 present = False
 
+        # Reduce the chain to one change from the baseline to the final state.
         if not initially_present and not present:
             continue
         last = chain[-1]
@@ -167,7 +171,7 @@ def materialize_plan(
     *,
     completed: frozenset[PairBlockId] = frozenset(),
 ) -> None:
-    """Write selected target declarations over an isolated baseline tree."""
+    """Copy the baseline and apply selected edits to a new tree."""
     if destination.exists():
         raise ScheduleError("planned source destination already exists")
     shutil.copytree(
@@ -208,6 +212,7 @@ def materialize_plan(
                 continue
             if node is None:
                 raise ScheduleError(f"baseline target is absent: {target.target}")
+            # Convert CodeQL positions to byte offsets in the baseline file.
             start = starts[node.start_line - 1] + node.start_col
             end = starts[node.end_line - 1] + node.end_col
             payload = (
@@ -218,13 +223,13 @@ def materialize_plan(
             assert payload is not None or target.action == "remove"
             span = (start, end)
             replacement = b"" if payload is None else payload
+            # Several names can share one statement. Apply one shared edit.
             if span in replacements and replacements[span] != replacement:
                 raise ScheduleError("one declaration has conflicting replacements")
             replacements[span] = replacement
 
         ordered_replacements = sorted(
-            (start, end, payload)
-            for (start, end), payload in replacements.items()
+            (start, end, payload) for (start, end), payload in replacements.items()
         )
         if any(
             current[0] < previous[1]
@@ -235,6 +240,7 @@ def materialize_plan(
             )
         ):
             raise ScheduleError("planned declaration replacements overlap")
+        # Work upward so later edits do not move earlier offsets.
         for start, end, payload in reversed(ordered_replacements):
             source = source[:start] + payload + source[end:]
         if additions:
