@@ -1510,15 +1510,54 @@ id = "P4-RSP-01"
 requirements = ["RSP-03"]
 targets = [
     "src/viper/references.py:resolve_snapshot_file_ref",
+    "src/viper/execution/_materialization.py:ResolvedArtifactPointerRef",
+    "src/viper/execution/_materialization.py:ResolvedFileRef",
+    "src/viper/execution/_materialization.py:ResolvedStageRef",
+    "src/viper/execution/_materialization.py:SnapshotFileRef",
     "src/viper/execution/_materialization.py:resolve_inputs",
+    "src/viper/execution/_attempt.py:ResolvedFileRef",
+    "src/viper/execution/_attempt.py:ResolvedBaseSpec",
+    "src/viper/execution/_attempt.py:ResolvedInternalSpec",
     "src/viper/execution/_attempt.py:execute_attempt",
+    "src/viper/execution/_metric.py:ResolvedArtifact",
+    "src/viper/execution/_metric.py:ResolvedSingleFileArtifact",
+    "src/viper/execution/_metric.py:FutureInputRef",
+    "src/viper/execution/_metric.py:ResolvedExternalInputRef",
+    "src/viper/execution/_metric.py:ResolvedFutureInputRef",
+    "src/viper/execution/_metric.py:ResolvedStoredInputRef",
+    "src/viper/execution/_metric.py:ResolvedFileRef",
+    "src/viper/execution/_metric.py:ResolvedStageRef",
+    "src/viper/execution/_metric.py:SnapshotFileRef",
+    "src/viper/execution/_metric.py:resolve_snapshot_file_ref",
+    "src/viper/execution/_metric.py:BaseSpec",
+    "src/viper/execution/_metric.py:InternalSpec",
+    "src/viper/execution/_metric.py:ResolvedBaseSpec",
+    "src/viper/execution/_metric.py:ResolvedInternalSpec",
+    "src/viper/execution/_metric.py:LocalArtifactStore",
     "src/viper/execution/_metric.py:_publish_metric_dependency",
     "src/viper/execution/_metric.py:_artifact_files",
     "src/viper/execution/_metric.py:_resolve_metric_dependencies",
     "src/viper/execution/_metric.py:run_after_stage_metrics",
+    "src/viper/_verification/storage.py:GitFileRef",
+    "src/viper/_verification/storage.py:HuggingFaceFileRef",
+    "src/viper/_verification/storage.py:LocalFileRef",
+    "src/viper/_verification/storage.py:LocalStageResultSnapshotRef",
+    "src/viper/_verification/storage.py:ResolvedFileRef",
+    "src/viper/_verification/storage.py:ResolvedStageRef",
+    "src/viper/_verification/storage.py:SnapshotFileRef",
+    "src/viper/_verification/storage.py:StageResultSnapshotRef",
+    "src/viper/_verification/storage.py:StorageModel",
+    "src/viper/_verification/storage.py:resolve_snapshot_file_ref",
     "src/viper/_verification/storage.py:verify_snapshot_artifact",
+    "src/viper/_verification/metrics.py:MetricId",
     "src/viper/_verification/metrics.py:verify_metric_dependency_references",
     "src/viper/_verification/metrics.py:verify_recomputed_metrics",
+    "tests/test_metric_provenance.py:SimpleNamespace",
+    "tests/test_metric_provenance.py:artifacts",
+    "tests/test_metric_provenance.py:metric_execution",
+    "tests/test_metric_provenance.py:metrics",
+    "tests/test_metric_provenance.py:references",
+    "tests/test_metric_provenance.py:metric_verification",
     "tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references",
     "tests/test_metric_provenance.py:test_metric_dependency_rejects_republished_payload",
 ]
@@ -3431,6 +3470,19 @@ def resolve_snapshot_file_ref(
 
 **File: `src/viper/execution/_materialization.py`**
 
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_materialization.py:ResolvedArtifactPointerRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_materialization.py:ResolvedFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_materialization.py:ResolvedStageRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_materialization.py:SnapshotFileRef -->
+```python contract-target
+from ..references import (
+    ResolvedArtifactPointerRef,
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+)
+```
+
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_materialization.py:resolve_inputs -->
 ```python contract-target
 def resolve_inputs(
@@ -3462,7 +3514,7 @@ def resolve_inputs(
                 raise RunError("future input producer has not completed")
             resolved[name] = ResolvedFutureInputRef(producer=producer)
             producer_spec = stage_specs[input_ref.producer_stage_id]
-            artifact = producer_spec.artifacts[input_ref.producer_artifact]
+            artifact = producer_spec.artifacts[input_ref.name]
             paths[name] = root / artifact.path
         elif input_ref.kind == "external":
             resolved_input, captured_path = capture_external_input(
@@ -3500,6 +3552,31 @@ def resolve_inputs(
 ```
 
 **File: `src/viper/execution/_attempt.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedFileRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedBaseSpec -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedInternalSpec -->
+```python contract-target
+from ..stages import (
+    BaseSpec,
+    DownloadSpec,
+    InternalSpec,
+    ParameterizedSpec,
+    ResolvedBaseSpec,
+    ResolvedInternalSpec,
+)
+```
 
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:execute_attempt -->
 ```python contract-target
@@ -3647,9 +3724,7 @@ def execute_attempt(
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             captured_inputs: dict[InputName, SnapshotFileRef] = {}
-            stored_input_references: dict[
-                InputName, tuple[ResolvedFileRef, ...]
-            ] = {}
+            stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
             input_paths: dict[str, Path] = {}
             process = None
             journal.append(
@@ -4071,6 +4146,49 @@ def execute_attempt(
 
 **File: `src/viper/execution/_metric.py`**
 
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedArtifact -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedSingleFileArtifact -->
+```python contract-target
+from ..artifacts import ResolvedArtifact, ResolvedSingleFileArtifact
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:FutureInputRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedExternalInputRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedFutureInputRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedStoredInputRef -->
+```python contract-target
+from ..inputs import (
+    FutureInputRef,
+    ResolvedExternalInputRef,
+    ResolvedFutureInputRef,
+    ResolvedStoredInputRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_metric.py:ResolvedFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedStageRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:SnapshotFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:resolve_snapshot_file_ref -->
+```python contract-target
+from ..references import (
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    resolve_snapshot_file_ref,
+)
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_metric.py:BaseSpec -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:InternalSpec -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedBaseSpec -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_metric.py:ResolvedInternalSpec -->
+```python contract-target
+from ..stages import BaseSpec, InternalSpec, ResolvedBaseSpec, ResolvedInternalSpec
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=remove target=src/viper/execution/_metric.py:LocalArtifactStore -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=remove target=src/viper/execution/_metric.py:_publish_metric_dependency -->
 <!-- contract-remove -->
 
@@ -4099,9 +4217,7 @@ def _resolve_metric_dependencies(
         if dependency.source == "artifact":
             files = tuple(
                 resolve_snapshot_file_ref(current_stage.snapshot, file)
-                for file in _artifact_files(
-                    resolved_stage.artifacts[dependency.name]
-                )
+                for file in _artifact_files(resolved_stage.artifacts[dependency.name])
             )
         else:
             declared = stage.inputs[dependency.name]
@@ -4118,9 +4234,7 @@ def _resolve_metric_dependencies(
                 producer = completed_results[declared.producer_stage_id]
                 files = tuple(
                     resolve_snapshot_file_ref(realized.producer.snapshot, file)
-                    for file in _artifact_files(
-                        producer.artifacts[declared.producer_artifact]
-                    )
+                    for file in _artifact_files(producer.artifacts[declared.name])
                 )
             elif isinstance(realized, ResolvedStoredInputRef):
                 files = stored_inputs[dependency.name]
@@ -4254,6 +4368,31 @@ def run_after_stage_metrics(
 
 **File: `src/viper/_verification/storage.py`**
 
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:GitFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:HuggingFaceFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:LocalFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:LocalStageResultSnapshotRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:ResolvedFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:ResolvedStageRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:SnapshotFileRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:StageResultSnapshotRef -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:StorageModel -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/_verification/storage.py:resolve_snapshot_file_ref -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    StageResultSnapshotRef,
+    StorageModel,
+    resolve_snapshot_file_ref,
+)
+```
+
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/storage.py:verify_snapshot_artifact -->
 ```python contract-target
 def verify_snapshot_artifact(
@@ -4308,8 +4447,7 @@ def verify_snapshot_artifact(
         for reference in references
     )
     resolved_references = tuple(
-        resolve_snapshot_file_ref(stage.snapshot, reference)
-        for reference in references
+        resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references
     )
     return VerifiedArtifact(
         artifact=artifact,
@@ -4321,6 +4459,11 @@ def verify_snapshot_artifact(
 
 **File: `src/viper/_verification/metrics.py`**
 
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/_verification/metrics.py:MetricId -->
+```python contract-target
+from ..ids import InputName, MetricId, StageId
+```
+
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/_verification/metrics.py:verify_metric_dependency_references -->
 ```python contract-target
 def verify_metric_dependency_references(
@@ -4330,9 +4473,7 @@ def verify_metric_dependency_references(
 ) -> None:
     """Require one metric dependency to retain its exact storage references."""
     if received.files != expected.files:
-        raise VerificationError(
-            f"metric {metric_id!r} dependency references differ"
-        )
+        raise VerificationError(f"metric {metric_id!r} dependency references differ")
 ```
 
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/metrics.py:verify_recomputed_metrics -->
@@ -4523,43 +4664,63 @@ def verify_recomputed_metrics(
 
 **File: `tests/test_metric_provenance.py`**
 
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:SimpleNamespace -->
+```python contract-target
+from types import SimpleNamespace
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:artifacts -->
+```python contract-target
+import viper.artifacts as artifacts
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:metric_execution -->
+```python contract-target
+import viper.execution._metric as metric_execution
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:metrics -->
+```python contract-target
+import viper.metrics as metrics
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:references -->
+```python contract-target
+import viper.references as references
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:metric_verification -->
+```python contract-target
+import viper._verification.metrics as metric_verification
+```
+
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=tests/test_metric_provenance.py:test_metric_dependency_rejects_republished_payload -->
 ```python contract-target
 def test_metric_dependencies_reuse_snapshot_references() -> None:
     """Derive a metric artifact reference from its enclosing stage snapshot."""
-    from types import SimpleNamespace
-
-    from viper.artifacts import ResolvedSingleFileArtifact
-    from viper.execution._metric import _resolve_metric_dependencies
-    from viper.metrics import MetricDependency
-    from viper.references import (
-        LocalFileRef,
-        LocalStageResultSnapshotRef,
-        ResolvedStageRef,
-        SnapshotFileRef,
+    file = references.SnapshotFileRef(
+        path="artifacts/predictions.bin", sha256="a" * 64, bytes=4
     )
-
-    file = SnapshotFileRef(path="artifacts/predictions.bin", sha256="a" * 64, bytes=4)
-    stage_ref = ResolvedStageRef(
+    stage_ref = references.ResolvedStageRef(
         stage_id="eval",
-        snapshot=LocalStageResultSnapshotRef(commit="b" * 64),
-        resolved_spec=SnapshotFileRef(
+        snapshot=references.LocalStageResultSnapshotRef(commit="b" * 64),
+        resolved_spec=references.SnapshotFileRef(
             path="stages/eval/resolved.yaml",
             sha256="c" * 64,
             bytes=10,
         ),
     )
-    dependency = MetricDependency(
+    dependency = metrics.MetricDependency(
         source="artifact",
         name="predictions",
         required_data_role="evaluation",
     )
-    resolved = _resolve_metric_dependencies(
+    resolved = metric_execution._resolve_metric_dependencies(
         SimpleNamespace(inputs={}),
         SimpleNamespace(
             inputs={},
-            artifacts={"predictions": ResolvedSingleFileArtifact(file=file)},
+            artifacts={"predictions": artifacts.ResolvedSingleFileArtifact(file=file)},
         ),
         stage_ref,
         {},
@@ -4567,7 +4728,7 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
         {},
     )
 
-    assert resolved[0].files[0].stored_at == LocalFileRef(
+    assert resolved[0].files[0].stored_at == references.LocalFileRef(
         commit="b" * 64,
         path=file.path,
     )
@@ -4575,39 +4736,32 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
 
 def test_metric_dependency_rejects_republished_payload() -> None:
     """Treat equal bytes at another immutable revision as a different reference."""
-    import pytest
-
-    from viper._verification.metrics import verify_metric_dependency_references
-    from viper.metrics import MetricDependency, ResolvedMetricDependency
-    from viper.references import LocalFileRef, ResolvedFileRef
-    from viper.verification.models import VerificationError
-
-    expected = ResolvedFileRef(
+    expected = references.ResolvedFileRef(
         sha256="a" * 64,
         bytes=4,
-        stored_at=LocalFileRef(commit="b" * 64, path="predictions.bin"),
+        stored_at=references.LocalFileRef(commit="b" * 64, path="predictions.bin"),
     )
     republished = expected.model_copy(
         update={
-            "stored_at": LocalFileRef(
+            "stored_at": references.LocalFileRef(
                 commit="c" * 64,
                 path="predictions.bin",
             )
         }
     )
 
-    dependency = MetricDependency(
+    dependency = metrics.MetricDependency(
         source="artifact",
         name="predictions",
         required_data_role="evaluation",
     )
     with pytest.raises(VerificationError, match="dependency references differ"):
-        verify_metric_dependency_references(
-            ResolvedMetricDependency(
+        metric_verification.verify_metric_dependency_references(
+            metrics.ResolvedMetricDependency(
                 dependency=dependency,
                 files=(republished,),
             ),
-            ResolvedMetricDependency(
+            metrics.ResolvedMetricDependency(
                 dependency=dependency,
                 files=(expected,),
             ),
