@@ -19,6 +19,7 @@ ChangeKind: TypeAlias = Literal[
     "implementation_changed",
     "unclassified",
 ]
+ImportBinding: TypeAlias = tuple[str, int, str | None, str, str | None]
 
 _CallableDeclaration: TypeAlias = ast.FunctionDef | ast.AsyncFunctionDef
 _SupportedDeclaration: TypeAlias = (
@@ -33,6 +34,30 @@ _SupportedDeclaration: TypeAlias = (
 
 class SourceDeclarationError(ValueError):
     """Report an absent, ambiguous, malformed, or impossible declaration change."""
+
+
+def import_binding(source: bytes, symbol: str) -> ImportBinding:
+    """Return the import that creates one local name."""
+    matches: list[ImportBinding] = []
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".")[0]
+                if local == symbol:
+                    matches.append(("import", 0, None, alias.name, alias.asname))
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                local = alias.asname or alias.name
+                if local == symbol:
+                    matches.append(
+                        ("from", node.level, node.module, alias.name, alias.asname)
+                    )
+    if len(matches) != 1:
+        raise SourceDeclarationError(
+            f"expected one import binding for {symbol!r}; found {len(matches)}"
+        )
+    return matches[0]
 
 
 def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:

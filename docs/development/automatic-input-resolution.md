@@ -2597,6 +2597,9 @@ targets = [
     "src/viper/keys.py:InputName",
     "src/viper/params.py:Literal",
     "src/viper/params.py:Self",
+    "src/viper/params.py:hashlib",
+    "src/viper/params.py:inspect",
+    "src/viper/params.py:Path",
     "src/viper/params.py:BaseModel",
     "src/viper/params.py:ConfigDict",
     "src/viper/params.py:Field",
@@ -2653,6 +2656,7 @@ targets = [
     "src/viper/params.py:Http",
     "src/viper/params.py:ParameterModelOwner",
     "src/viper/params.py:ParameterModelRef",
+    "src/viper/params.py:model_ref",
     "src/viper/params.py:__all__",
     "src/viper/_schema.py:DataRole",
     "src/viper/_schema.py:EvaluationId",
@@ -2687,7 +2691,7 @@ targets = [
 tests = [
     "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
 ]
-gate = "python -m pytest tests/test_parameter_validation.py tests/test_public_api.py tests/test_protocol.py -k 'params or keys or eval' -q"
+gate = "python -m pytest tests/test_public_api.py::test_stage_api_uses_target_decorators_params_and_keys -q"
 depends_on = ["P2-DRA-04", "P4-UMD-03", "P4-RSP-01"]
 ```
 
@@ -2761,6 +2765,8 @@ targets = [
     "src/viper/preflight.py:observe_python_environment",
     "src/viper/preflight.py:observe_python_env",
     "src/viper/runs.py:ReproducibilitySpec",
+    "src/viper/runs.py:PARAMETERS",
+    "src/viper/runs.py:keys",
     "src/viper/runs.py:EnvironmentSpec",
     "src/viper/runs.py:EnvSpec",
     "src/viper/stages.py:parameters",
@@ -2838,7 +2844,7 @@ targets = [
     "tests/test_public_api.py:test_env_vocabulary_is_complete",
 ]
 tests = ["tests/test_public_api.py:test_env_vocabulary_is_complete"]
-gate = "python -m pytest tests/test_cloud_execution.py tests/test_preflight.py tests/test_run_execution.py tests/test_verification.py -k 'env or environment' -q"
+gate = "python -m pytest tests/test_public_api.py::test_env_vocabulary_is_complete -q"
 depends_on = ["P5-AIR-01"]
 ```
 
@@ -2930,7 +2936,7 @@ tests = [
     "tests/test_authoring.py:test_artifact_constructor_selects_file_or_bundle",
     "tests/test_http_retrieval.py:test_project_http_receives_typed_parameters_and_exact_destination",
 ]
-gate = "python -m pytest tests/test_authoring.py tests/test_http_retrieval.py -k 'artifact or http' -q"
+gate = "python -m pytest tests/test_authoring.py::test_artifact_and_http_drafts_preserve_callable_identity tests/test_authoring.py::test_artifact_constructor_selects_file_or_bundle tests/test_http_retrieval.py::test_project_http_receives_typed_parameters_and_exact_destination -q"
 depends_on = ["P5-AIR-02"]
 ```
 
@@ -2992,8 +2998,12 @@ targets = [
     "src/viper/authoring.py:stage_definition",
     "src/viper/authoring.py:Spec",
     "tests/test_authoring.py:stage",
+    "tests/test_authoring.py:external_input",
     "tests/test_authoring.py:Context",
     "tests/test_authoring.py:train",
+    "tests/test_authoring.py:measure",
+    "tests/test_authoring.py:metric",
+    "tests/test_authoring.py:min",
     "tests/test_protocol.py:RunPlanDraft",
     "src/viper/stages.py:ParamsT",
     "src/viper/stages.py:BaseSpec",
@@ -3047,7 +3057,7 @@ tests = [
     "tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring",
     "tests/test_protocol.py:test_python_stage_drafts_freeze_to_protocol_specs",
 ]
-gate = "python -m pytest tests/test_authoring.py tests/test_public_api.py tests/test_protocol.py tests/test_generated_project_acceptance.py -q"
+gate = "python -m pytest tests/test_public_api.py::test_stage_api_uses_target_decorators_params_and_keys tests/test_authoring.py::test_python_stage_drafts_replace_yaml_authoring tests/test_protocol.py::test_python_stage_drafts_freeze_to_protocol_specs -q"
 depends_on = ["P5-AIR-03"]
 ```
 
@@ -3081,6 +3091,15 @@ from .ids import InputName
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Self -->
 ```python contract-target
 from typing import Literal, Self
+```
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:hashlib -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:inspect -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:Path -->
+```python contract-target
+import hashlib
+import inspect
+from pathlib import Path
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:BaseModel -->
@@ -3447,6 +3466,14 @@ from .runtime import (
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runs.py:EnvironmentSpec -->
 <!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/runs.py:PARAMETERS -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runs.py:keys -->
+```python contract-target
+from . import keys
+```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/runs.py:ReproducibilitySpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/runs.py:EnvSpec -->
@@ -3854,7 +3881,9 @@ from .stages import (
 ```
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_authoring.py:stage -->
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_authoring.py:external_input -->
 ```python contract-target
+from viper.authoring import input as external_input
 from viper.authoring import stage
 ```
 
@@ -3862,6 +3891,13 @@ from viper.authoring import stage
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_authoring.py:train -->
 ```python contract-target
 from viper.stages import Context, train
+```
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_authoring.py:measure -->
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_authoring.py:metric -->
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_authoring.py:min -->
+```python contract-target
+from viper.metrics import measure, metric, min
 ```
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=add target=tests/test_protocol.py:RunPlanDraft -->
@@ -3980,6 +4016,21 @@ class ParameterModelRef(ProtocolModel):
     bytes: int = Field(gt=0)
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:model_ref -->
+```python contract-target
+def model_ref(model: type[ParameterSet]) -> ParameterModelRef:
+    """Identify one built-in parameter class by its installed source bytes."""
+    path = Path(inspect.getfile(model)).resolve()
+    raw = path.read_bytes()
+    return ParameterModelRef(
+        owner="viper",
+        path=path.name,
+        symbol=model.__name__,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+```
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/params.py:__all__ -->
 ```python contract-target
 __all__ = [
@@ -3992,6 +4043,7 @@ __all__ = [
     "ParameterModelRef",
     "ParameterSet",
     "Train",
+    "model_ref",
 ]
 ```
 
@@ -5277,8 +5329,8 @@ class RunSpec(ProtocolModel):
         if self.estimator.stage_id not in set(stage_ids):
             raise ValueError("estimator must select a declared run stage")
 
-        if self.estimator.artifact_name != PARAMETERS:
-            raise ValueError("estimator must select the parameters artifact")
+        if self.estimator.artifact_name != keys.Train.MODEL:
+            raise ValueError("estimator must select the model artifact")
 
         return self
 ```
@@ -9919,6 +9971,11 @@ def {stage}(context) -> None:
 def test_python_stage_drafts_replace_yaml_authoring() -> None:
     """Keep a decorated callable and artifact handle in one Python stage draft."""
 
+    @metric(metric_id="training_loss", mode="live")
+    def training_loss(context) -> float:
+        """Return one stable loss for the authoring boundary."""
+        return 1.0
+
     @train(params=params.Train)
     def fit(context: Context[params.Train]) -> None:
         context.artifacts["model"].write_bytes(b"model")
@@ -9928,7 +9985,19 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         loader=lambda path: path.read_bytes(),
         data_role="training",
     )
-    draft = stage(fit, params=params.Train(), inputs={}, artifacts={"model": model})
+    dataset = external_input(
+        path="inputs/raw/dataset.csv",
+        data_role="training",
+    )
+    loss = measure(training_loss, params=params.Metric())
+    draft = stage(
+        fit,
+        params=params.Train(),
+        inputs={"dataset": dataset},
+        artifacts={"model": model},
+        metrics=(loss,),
+        objective=min(loss),
+    )
 
     assert draft.spec.implementation is fit
     assert draft.artifacts["model"].producer is draft

@@ -35,6 +35,7 @@ from .plan import IMPACT_EDGE_KINDS_V1
 from .source import (
     SourceDeclarationError,
     declaration_payload,
+    import_binding,
 )
 
 
@@ -231,6 +232,12 @@ def _target_is_satisfied(
         return node is None
     expected = _declaration_payload(root, target)
     assert expected is not None
+    if node is not None and node.kind == "import":
+        realized = (root / target.target.path).read_bytes()
+        return import_binding(expected, target.target.symbol) == import_binding(
+            realized,
+            target.target.symbol,
+        )
     return node is not None and node.sha256 == _sha256(expected)
 
 
@@ -361,6 +368,7 @@ def _receipt_pair_is_valid(baseline: SourceGraph, realized: SourceGraph) -> bool
 
 def _target_checks(
     *,
+    root: Path,
     resolved_targets: tuple[ResolvedContractTarget, ...],
     realized_nodes: dict[tuple[str, str], SourceNode],
 ) -> tuple[TargetCheck, ...]:
@@ -376,11 +384,23 @@ def _target_checks(
                 else "removed target declaration remains present"
             )
         else:
-            passed = after is not None and after.sha256 == resolved.expected_sha256
+            expected = _declaration_payload(root, target)
+            if after is not None and after.kind == "import" and expected is not None:
+                realized = (root / target.target.path).read_bytes()
+                passed = import_binding(
+                    expected,
+                    target.target.symbol,
+                ) == import_binding(realized, target.target.symbol)
+            else:
+                passed = after is not None and after.sha256 == resolved.expected_sha256
             if after is None:
                 message = "required target declaration is absent"
             elif passed:
-                message = "target declaration matches the authored bytes"
+                message = (
+                    "target import matches the authored binding"
+                    if after.kind == "import"
+                    else "target declaration matches the authored bytes"
+                )
             else:
                 message = "target declaration differs from the authored bytes"
         checks.append(
@@ -484,6 +504,7 @@ def check_plan(
         baseline=baseline,
     )
     target_checks = _target_checks(
+        root=root,
         resolved_targets=inspection.targets,
         realized_nodes=realized_nodes,
     )

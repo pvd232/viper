@@ -41,7 +41,7 @@
         "SIG-06",
         "SIG-07"
       ],
-      "sha256": "8f1b5ffee6cc007b5c211e27d1e1b2aaa050369e76ac876eace6274db7a4ec01"
+      "sha256": "ade7260c3db8b55f5ed39c3ead9867047eaf486780aaada366d3f7745f9c6de9"
     },
     {
       "path": "docs/development/pair-block-scheduling.md",
@@ -105,7 +105,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "cf5ff87409ad0c9715661525582760ab34d6b87513d9da8f69b9895dd50833ca"
+      "sha256": "15b0e0897903d73b3269f71b0c480695f462648079460cf238f17542c1356dd3"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",

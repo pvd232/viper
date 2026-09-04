@@ -1403,7 +1403,7 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_unexpected_changes", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:import_binding", "src/viper/_system_impact/check.py:_target_is_satisfied", "src/viper/_system_impact/check.py:_target_checks", "src/viper/_system_impact/check.py:_unexpected_changes", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 tests = ["tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'import_target_owns or one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
@@ -1641,6 +1641,37 @@ def test_node_span_keeps_trailing_inline_directive() -> None:
 ```
 
 ### Declaration resolution and impact
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/source.py:ImportBinding -->
+```python contract-target
+ImportBinding: TypeAlias = tuple[str, int, str | None, str, str | None]
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/source.py:import_binding -->
+```python contract-target
+def import_binding(source: bytes, symbol: str) -> ImportBinding:
+    """Return the import that creates one local name."""
+    matches: list[ImportBinding] = []
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".")[0]
+                if local == symbol:
+                    matches.append(("import", 0, None, alias.name, alias.asname))
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                local = alias.asname or alias.name
+                if local == symbol:
+                    matches.append(
+                        ("from", node.level, node.module, alias.name, alias.asname)
+                    )
+    if len(matches) != 1:
+        raise SourceDeclarationError(
+            f"expected one import binding for {symbol!r}; found {len(matches)}"
+        )
+    return matches[0]
+```
 
 <!-- contract-target: requirements=SIG-02 block=P0-SIG-03 action=add target=src/viper/_system_impact/source.py:SourceDeclarationError -->
 <!-- contract-target: requirements=SIG-01 block=P0-SIG-03 action=add target=src/viper/_system_impact/source.py:extract_declaration_bytes -->
@@ -1914,6 +1945,7 @@ def check_plan(
         baseline=baseline,
     )
     target_checks = _target_checks(
+        root=root,
         resolved_targets=inspection.targets,
         realized_nodes=realized_nodes,
     )
@@ -2447,6 +2479,7 @@ __all__ = [
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:SourceNode -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:TargetCheck -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:inspect_plan -->
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:import_binding -->
 
 ```python contract-target
 from ..system_impact import (
@@ -2462,6 +2495,79 @@ from ..system_impact import (
     inspect_plan,
 )
 from .plan import IMPACT_EDGE_KINDS_V1
+from .source import import_binding
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:_target_is_satisfied -->
+```python contract-target
+def _target_is_satisfied(
+    *,
+    root: Path,
+    target: ContractTarget,
+    nodes: dict[tuple[str, str], SourceNode],
+) -> bool:
+    node = nodes.get(_target_key(target))
+    if target.action == "remove":
+        return node is None
+    expected = _declaration_payload(root, target)
+    assert expected is not None
+    if node is not None and node.kind == "import":
+        realized = (root / target.target.path).read_bytes()
+        return import_binding(expected, target.target.symbol) == import_binding(
+            realized,
+            target.target.symbol,
+        )
+    return node is not None and node.sha256 == _sha256(expected)
+```
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:_target_checks -->
+```python contract-target
+def _target_checks(
+    *,
+    root: Path,
+    resolved_targets: tuple[ResolvedContractTarget, ...],
+    realized_nodes: dict[tuple[str, str], SourceNode],
+) -> tuple[TargetCheck, ...]:
+    checks: list[TargetCheck] = []
+    for resolved in resolved_targets:
+        target = resolved.target
+        after = realized_nodes.get(_target_key(target))
+        if target.action == "remove":
+            passed = after is None
+            message = (
+                "target declaration is absent"
+                if passed
+                else "removed target declaration remains present"
+            )
+        else:
+            expected = _declaration_payload(root, target)
+            if after is not None and after.kind == "import" and expected is not None:
+                realized = (root / target.target.path).read_bytes()
+                passed = import_binding(
+                    expected,
+                    target.target.symbol,
+                ) == import_binding(realized, target.target.symbol)
+            else:
+                passed = after is not None and after.sha256 == resolved.expected_sha256
+            if after is None:
+                message = "required target declaration is absent"
+            elif passed:
+                message = (
+                    "target import matches the authored binding"
+                    if after.kind == "import"
+                    else "target declaration matches the authored bytes"
+                )
+            else:
+                message = "target declaration differs from the authored bytes"
+        checks.append(
+            TargetCheck(
+                resolved=resolved,
+                after_sha256=None if after is None else after.sha256,
+                state="passed" if passed else "failed",
+                message=message,
+            )
+        )
+    return tuple(checks)
 ```
 
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:_unexpected_changes -->
@@ -2623,6 +2729,7 @@ def check_plan(
         baseline=baseline,
     )
     target_checks = _target_checks(
+        root=root,
         resolved_targets=inspection.targets,
         realized_nodes=realized_nodes,
     )
@@ -2704,10 +2811,15 @@ def check_plan(
 
 **File: `tests/test_system_impact.py`**
 
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:import_binding -->
+```python contract-target
+from viper._system_impact.source import import_binding
+```
+
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement -->
 ```python contract-target
 def test_import_target_owns_names_in_the_same_statement() -> None:
-    """Do not report sibling names changed by one planned import edit."""
+    """Compare one import by binding when Ruff regroups its statement."""
     path = "src/example.py"
     baseline_name = _node(
         path=path,
@@ -2744,6 +2856,10 @@ def test_import_target_owns_names_in_the_same_statement() -> None:
         targets=(target,),
     )
 
+    assert import_binding(b"from .models import New\n", "New") == import_binding(
+        b"from .models import Existing, New\n",
+        "New",
+    )
     assert unexpected == ()
 ```
 

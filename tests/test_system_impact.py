@@ -41,6 +41,7 @@ from viper._system_impact.source import (
     SourceDeclarationError,
     classify_target_change,
     extract_declaration_bytes,
+    import_binding,
 )
 from viper.system_impact import (
     CodeQLIdentity,
@@ -1783,7 +1784,7 @@ def test_class_target_owns_nested_declaration_changes() -> None:
 
 
 def test_import_target_owns_names_in_the_same_statement() -> None:
-    """Do not report sibling names changed by one planned import edit."""
+    """Compare one import by binding when Ruff regroups its statement."""
     path = "src/example.py"
     baseline_name = _node(
         path=path,
@@ -1820,6 +1821,10 @@ def test_import_target_owns_names_in_the_same_statement() -> None:
         targets=(target,),
     )
 
+    assert import_binding(b"from .models import New\n", "New") == import_binding(
+        b"from .models import Existing, New\n",
+        "New",
+    )
     assert unexpected == ()
 
 
