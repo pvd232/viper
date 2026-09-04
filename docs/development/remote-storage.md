@@ -1518,6 +1518,9 @@ targets = [
     "src/viper/execution/_attempt.py:resolve_inputs",
     "src/viper/execution/_attempt.py:retrieve_download_inputs",
     "src/viper/execution/_attempt.py:verify_captured_inputs",
+    "src/viper/execution/_attempt.py:ResolvedFileRef",
+    "src/viper/execution/_attempt.py:ResolvedBaseSpec",
+    "src/viper/execution/_attempt.py:ResolvedInternalSpec",
     "src/viper/execution/_attempt.py:execute_attempt",
     "src/viper/execution/_metric.py:ResolvedArtifact",
     "src/viper/execution/_metric.py:ResolvedSingleFileArtifact",
@@ -1549,6 +1552,7 @@ targets = [
     "src/viper/_verification/storage.py:StorageModel",
     "src/viper/_verification/storage.py:resolve_snapshot_file_ref",
     "src/viper/_verification/storage.py:verify_snapshot_artifact",
+    "src/viper/_verification/metrics.py:MetricId",
     "src/viper/_verification/metrics.py:verify_metric_dependency_references",
     "src/viper/_verification/metrics.py:verify_recomputed_metrics",
     "tests/test_metric_provenance.py:SimpleNamespace",
@@ -3554,12 +3558,39 @@ def resolve_inputs(
 
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:resolve_inputs -->
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:retrieve_download_inputs -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:verify_captured_inputs -->
 ```python contract-target
-from ._materialization import resolve_inputs, retrieve_download_inputs
+from ._materialization import (
+    resolve_inputs,
+    retrieve_download_inputs,
+    verify_captured_inputs,
+)
 ```
 
-<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=remove target=src/viper/execution/_attempt.py:verify_captured_inputs -->
-<!-- contract-remove -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedFileRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedBaseSpec -->
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedInternalSpec -->
+```python contract-target
+from ..stages import (
+    BaseSpec,
+    DownloadSpec,
+    InternalSpec,
+    ParameterizedSpec,
+    ResolvedBaseSpec,
+    ResolvedInternalSpec,
+)
+```
 
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/execution/_attempt.py:execute_attempt -->
 ```python contract-target
@@ -4448,6 +4479,11 @@ def verify_snapshot_artifact(
 ```
 
 **File: `src/viper/_verification/metrics.py`**
+
+<!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/_verification/metrics.py:MetricId -->
+```python contract-target
+from ..ids import InputName, MetricId, StageId
+```
 
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=add target=src/viper/_verification/metrics.py:verify_metric_dependency_references -->
 ```python contract-target
