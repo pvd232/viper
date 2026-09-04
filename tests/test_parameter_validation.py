@@ -46,6 +46,7 @@ def _model_file(tmp_path: Path) -> tuple[Path, bytes]:
 def _reference(raw: bytes) -> ParameterModelRef:
     """Identify the exact parameter-model bytes written by the test."""
     return ParameterModelRef(
+        owner="project",
         path="project/parameters/tiny_train.py",
         symbol="TinyTrainParameters",
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -92,6 +93,7 @@ def test_parameter_model_rejects_implicit_defaults(tmp_path: Path) -> None:
     path = tmp_path / "defaulted.py"
     path.write_bytes(raw)
     reference = ParameterModelRef(
+        owner="project",
         path="project/parameters/defaulted.py",
         symbol="DefaultedTrainParameters",
         sha256=hashlib.sha256(raw).hexdigest(),

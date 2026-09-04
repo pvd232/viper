@@ -227,6 +227,12 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
     traceability = _traceability(
         targets=(
             _target(
+                action="add",
+                path="module.py",
+                symbol="added",
+                declaration=update_ref,
+            ),
+            _target(
                 action="update",
                 path="module.py",
                 symbol="old",
@@ -237,12 +243,6 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
                 path="module.py",
                 symbol="removed",
                 declaration=remove_ref,
-            ),
-            _target(
-                action="add",
-                path="module.py",
-                symbol="added",
-                declaration=update_ref,
             ),
         ),
     )
@@ -258,7 +258,7 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
     )
 
     assert (destination / "module.py").read_text() == (
-        "def old():\n    return 3\n\n\n\ndef added():\n    return old()\n"
+        "def added():\n    return old()\n\ndef old():\n    return 3\n\n\n"
     )
     assert (baseline_root / "module.py").read_bytes() == source
 
@@ -318,6 +318,84 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     )
 
     assert (destination / "module.py").read_bytes() == b"\n"
+
+
+def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> None:
+    """Let a later import payload replace the earlier form of that import."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"from package import First\n\nVALUE = First\n"
+    (baseline_root / "module.py").write_bytes(source)
+
+    plan_root = tmp_path / "plan"
+    fence = b"`" * 3
+    old_payload = fence + b"python contract-target\nfrom package import First\n" + fence
+    new_payload = (
+        fence + b"python contract-target\nfrom package import First, Second\n" + fence
+    )
+    old_path = plan_root / "docs/old.md"
+    new_path = plan_root / "docs/new.md"
+    old_path.parent.mkdir(parents=True)
+    old_path.write_bytes(old_payload + b"\n")
+    new_path.write_bytes(new_payload + b"\n")
+    old_ref = _declaration_ref(
+        path="docs/old.md",
+        start_line=1,
+        end_line=3,
+        sha256=_sha256(old_payload),
+    )
+    new_ref = _declaration_ref(
+        path="docs/new.md",
+        start_line=1,
+        end_line=3,
+        sha256=_sha256(new_payload),
+    )
+    declaration_end = len(b"from package import First")
+    graph = _source_graph(
+        nodes=(
+            SourceNode(
+                node_id="module.py:First",
+                path="module.py",
+                symbol="First",
+                kind="import",
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=declaration_end,
+                sha256=_sha256(b"from package import First"),
+            ),
+        ),
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="update",
+                path="module.py",
+                symbol="First",
+                declaration=old_ref,
+            ),
+            _target(
+                action="add",
+                path="module.py",
+                symbol="Second",
+                declaration=new_ref,
+            ),
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from package import First, Second\n\nVALUE = First\n"
+    )
 
 
 def test_pre_pairing_modules_document_every_operation() -> None:

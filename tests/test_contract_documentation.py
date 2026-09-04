@@ -1448,7 +1448,6 @@ def test_system_impact_check_has_one_bounded_proof_obligation() -> None:
     assert "G_0=\\operatorname{Analyze}_{K}(R_0)" in contract
     assert "G^*=\\operatorname{Analyze}_{K}(R^*)" in contract
     assert "C=\\operatorname{CheckPlan}(P,G_0,G^*)" in contract
-    assert "The check does not generate a plan" in contract
 
 
 def test_phase_zero_checkboxes_have_complete_ordered_pair_blocks() -> None:

@@ -9,10 +9,13 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .. import parameters
+from .._parameter.validation import instantiate_parameters, parameter_model_path
 from ..execution._metric import MetricWorkerContext, MetricWorkerResult
 from ..metrics import (
     MetricContext,
     MetricExecutionReceipt,
+    invoke_metric,
     load_metric,
     metric_definition,
     validate_metric_definition,
@@ -87,13 +90,11 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("metric dependency bindings differ from MetricSpec")
         validate_metric_definition(root, context.metric)
-        definition = metric_definition(
-            load_metric(
-                root / context.metric.implementation.path,
-                context.metric.implementation.symbol,
-            )
+        implementation = load_metric(
+            root / context.metric.implementation.path,
+            context.metric.implementation.symbol,
         )
-        if definition.mode != "recompute":
+        if metric_definition(implementation).mode != "recompute":
             raise ValueError("dedicated metric worker requires recompute mode")
 
         initialization = apply_reproducibility(
@@ -105,10 +106,6 @@ def main(argv: list[str] | None = None) -> int:
         if python_environment != effective_environment.python_environment:
             raise ValueError("startup.python: installed Python environment differs")
         execution_context = observe_execution(effective_environment)
-        callable_metric = load_metric(
-            root / context.metric.implementation.path,
-            context.metric.implementation.symbol,
-        )
         input_paths = _validated_paths(root, context.input_paths)
         artifact_paths = _validated_paths(root, context.artifact_paths)
         for binding in context.dependencies:
@@ -117,21 +114,22 @@ def main(argv: list[str] | None = None) -> int:
                 if binding.dependency.source == "input"
                 else artifact_paths[binding.dependency.name]
             )
-            recorded_identities = tuple(
-                (file.sha256, file.bytes) for file in binding.files
-            )
-            if _path_identities(path) != recorded_identities:
+            recorded = tuple((file.sha256, file.bytes) for file in binding.files)
+            if _path_identities(path) != recorded:
                 raise ValueError("metric dependency bytes differ from their receipt")
+        params = instantiate_parameters(
+            parameter_model_path(root, context.metric.parameter_model),
+            context.metric.parameter_model,
+            context.metric.params,
+            parameters.Metric,
+        )
+        metric_context = MetricContext(
+            inputs=input_paths,
+            artifacts=artifact_paths,
+            params=params,
+        )
         with autocast_context(context.run.reproducibility):
-            value = float(
-                callable_metric(
-                    MetricContext(
-                        inputs=input_paths,
-                        artifacts=artifact_paths,
-                        params=context.metric.params,
-                    )
-                )
-            )
+            value = invoke_metric(implementation, metric_context)
         completed_at = datetime.now(UTC)
         receipt = MetricExecutionReceipt(
             run_id=context.run.run_id,
@@ -140,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
             stage_id=context.stage_id,
             purpose=context.purpose,
             implementation=context.metric.implementation,
+            parameter_model=context.metric.parameter_model,
             params=context.metric.params,
             dependencies=context.dependencies,
             startup=initialization.receipt,

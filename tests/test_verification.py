@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from pydantic import HttpUrl, TypeAdapter
 
@@ -35,6 +36,7 @@ from viper._verification.plan import (
     verify_parameter_model_references,
     verify_run_plan_relationships,
     verify_run_spec,
+    verify_stage_objectives,
     verify_stage_plan,
 )
 from viper._verification.storage import (
@@ -70,6 +72,7 @@ from viper.inputs import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
+from viper.metrics import MetricObjectiveSpec, MetricSpec
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -2162,3 +2165,35 @@ class FutureInputVerificationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_stage_objectives_preserve_identity_and_direction() -> None:
+    """Accept matching objective modes and reject a mismatched training metric."""
+    stage = TrainSpec.model_construct(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
+    )
+    live = MetricSpec.model_construct(
+        metric_id="training_loss",
+        mode="live",
+    )
+    experiment = ExperimentSpec.model_construct(
+        metrics=(live,),
+    )
+
+    verify_stage_objectives({"train": stage}, experiment)
+    assert stage.objective is not None
+    assert stage.objective.direction == "min"
+
+    recomputed = MetricSpec.model_construct(
+        metric_id="training_loss",
+        mode="recompute",
+    )
+    invalid = ExperimentSpec.model_construct(
+        metrics=(recomputed,),
+    )
+    with pytest.raises(VerificationError, match="training objectives require live"):
+        verify_stage_objectives({"train": stage}, invalid)

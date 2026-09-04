@@ -245,6 +245,56 @@ def validate(
         )
         return result
 
+    python_targets = tuple(
+        sorted(
+            {
+                str(target.target.path)
+                for target in traceability.targets
+                if target.block_id in selected_ids
+                and Path(target.target.path).suffix in {".py", ".pyi"}
+            }
+        )
+    )
+    checks = (
+        (
+            "ruff-format",
+            (str(python), "-m", "ruff", "format", *python_targets),
+        ),
+        (
+            "ruff-imports",
+            (
+                str(python),
+                "-m",
+                "ruff",
+                "check",
+                "--fix",
+                "--select",
+                "I001",
+                *python_targets,
+            ),
+        ),
+        (
+            "ruff",
+            (str(python), "-m", "ruff", "check", "--ignore", "D100", *python_targets),
+        ),
+    )
+    for stage, command in checks:
+        completed = _run(command, cwd=candidate)
+        if completed.returncode != 0:
+            result = {
+                "passed": False,
+                "stage": stage,
+                "revision": revision,
+                "blocks": selected,
+                "command": tuple(completed.args),
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
+            }
+            (results / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
+            return result
+
     # Make Pyright import the candidate instead of the baseline.
     original_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = str(candidate / "src")

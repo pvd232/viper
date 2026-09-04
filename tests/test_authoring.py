@@ -227,6 +227,7 @@ class RunPlanAuthoringTests(unittest.TestCase):
             _git(root, "commit", "--quiet", "-m", "source")
             source_commit = _git(root, "rev-parse", "HEAD")
             parameter_model = ParameterModelRef(
+                owner="project",
                 path="project/parameters/train.py",
                 symbol="StrandTrainParameters",
                 sha256=hashlib.sha256(parameter_raw).hexdigest(),
@@ -292,8 +293,8 @@ class RunPlanAuthoringTests(unittest.TestCase):
     def test_experiment_and_variant_writers_use_identity_paths(self) -> None:
         """Write experiment and variant records under one experiment identity."""
         metric = MetricSpec(
+            parameter_model=parameters.model_ref(parameters.Metric),
             metric_id="training_loss",
-            kind="training",
             implementation=MetricImplementationRef(
                 path="project_code/metrics/training_loss.py",
                 symbol="compute",

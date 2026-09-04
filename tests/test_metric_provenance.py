@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import yaml
+from pydantic import Field
 
 from tests.test_verification_acceptance import (
     POLICY,
@@ -13,7 +16,14 @@ from tests.test_verification_acceptance import (
     sha256,
     yaml_bytes,
 )
-from viper.metrics import MetricVerificationReceipt
+from viper import parameters
+from viper.metrics import (
+    MeasurementSink,
+    MetricContext,
+    MetricHandle,
+    MetricVerificationReceipt,
+    invoke_metric,
+)
 from viper.verification import verify_run_result
 from viper.verification.models import VerificationError
 
@@ -82,3 +92,30 @@ def test_metric_receipt_rejects_worker_ownership_tampering() -> None:
 
     with pytest.raises(VerificationError, match="receipt is invalid"):
         verify_run_result(invalid_run, policy=POLICY, fetcher=store.fetch)
+
+
+def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> None:
+    """Pass one custom parameter instance through both metric invocation paths."""
+
+    class Scale(parameters.Metric):
+        factor: float = Field(gt=0)
+
+    received: list[Scale] = []
+
+    def scaled(context: MetricContext[Scale], value: float) -> float:
+        received.append(context.params)
+        return value * context.params.factor
+
+    params = Scale(factor=2.0)
+    context = MetricContext(params=params)
+    sink = MeasurementSink(
+        tmp_path / "scaled.jsonl",
+        run_id="01JABCDEFGHJKMNPQRSTVWXYZ0",
+        attempt_id=1,
+        stage_id="train",
+        metric_id="scaled",
+    )
+
+    assert MetricHandle(scaled, sink, context).record(3.0).value == 6.0
+    assert invoke_metric(scaled, context, 4.0) == 8.0
+    assert received == [params, params]

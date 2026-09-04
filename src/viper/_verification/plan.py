@@ -339,10 +339,7 @@ def verify_run_plan_relationships(
     parameterized_stages = {
         stage_id: stage
         for stage_id, stage in stages.items()
-        if isinstance(
-            stage,
-            (BuildSpec, EmbedSpec, TrainSpec, EvaluateSpec),
-        )
+        if isinstance(stage, (BuildSpec, EmbedSpec, TrainSpec, EvaluateSpec))
     }
     variant_params = {stage.stage_id: stage for stage in variant.stage_params}
 
@@ -368,23 +365,7 @@ def verify_run_plan_relationships(
         if undeclared_metrics:
             raise VerificationError(f"stage {stage_id!r} selects undeclared metrics")
 
-        selected_kinds = {
-            experiment_metrics[metric_id].kind for metric_id in stage.metric_ids
-        }
-        if isinstance(stage, EvaluateSpec):
-            if selected_kinds - {"evaluation"}:
-                raise VerificationError(
-                    f"evaluation stage {stage_id!r} must select evaluation metrics"
-                )
-        elif isinstance(stage, TrainSpec):
-            if selected_kinds - {"training", "diagnostic"}:
-                raise VerificationError(
-                    f"training stage {stage_id!r} selects an incompatible metric"
-                )
-        elif selected_kinds - {"diagnostic"}:
-            raise VerificationError(
-                f"stage {stage_id!r} must select diagnostic metrics"
-            )
+    verify_stage_objectives(stages, experiment)
 
     evaluation_stages = [
         stage for stage in stages.values() if isinstance(stage, EvaluateSpec)
@@ -479,10 +460,10 @@ def verify_run_plan_relationships(
         )
     for criterion in benchmark.metrics:
         metric = experiment_metrics[criterion.metric_id]
-        if metric.kind != "evaluation" or metric.mode != "recompute":
+        if metric.mode != "recompute":
             raise VerificationError(
                 f"benchmark criterion {criterion.metric_id!r} must select a "
-                "recomputed evaluation metric"
+                "recomputed metric"
             )
 
 
@@ -698,3 +679,28 @@ def verify_run_plan(
         benchmark=benchmark,
         stages=stages,
     )
+
+
+def verify_stage_objectives(
+    stages: Mapping[StageId, BaseSpec],
+    experiment: ExperimentSpec,
+) -> None:
+    """Match every stage objective with one selected metric of an allowed mode."""
+    metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    for stage_id, stage in stages.items():
+        objective = getattr(stage, "objective", None)
+        if objective is None:
+            continue
+        if objective.metric_id not in stage.metric_ids:
+            raise VerificationError(
+                f"objective of stage {stage_id!r} is absent from metric IDs"
+            )
+        metric = metrics.get(objective.metric_id)
+        if metric is None:
+            raise VerificationError(
+                f"objective of stage {stage_id!r} is absent from the experiment"
+            )
+        if isinstance(stage, TrainSpec) and metric.mode != "live":
+            raise VerificationError("training objectives require live metrics")
+        if isinstance(stage, EvaluateSpec) and metric.mode != "recompute":
+            raise VerificationError("evaluation objectives require recomputed metrics")

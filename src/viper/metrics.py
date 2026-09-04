@@ -12,7 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, Generic, Literal, TypeVar, cast
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
@@ -36,6 +36,7 @@ MetricKind = Literal["training", "evaluation", "diagnostic"]
 
 
 MetricMode = Literal["recompute", "live"]
+MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
 
 
 class FloatComparator(ProtocolModel):
@@ -72,12 +73,12 @@ class MetricDependency(ProtocolModel):
 
 
 class MetricSpec(ProtocolModel):
-    """Bind one metric identity to its role, parameters, and implementation."""
+    """Bind one metric identity to its implementation and frozen parameters."""
 
     schema_version: Literal[1] = 1
     metric_id: MetricId
-    kind: MetricKind
     implementation: MetricImplementationRef
+    parameter_model: parameters.ParameterModelRef
     params: parameters.Metric
     mode: MetricMode
     dependencies: tuple[MetricDependency, ...] = ()
@@ -86,9 +87,7 @@ class MetricSpec(ProtocolModel):
     @model_validator(mode="after")
     def validate_lifecycle(self) -> MetricSpec:
         """Require one complete live or recomputed metric configuration."""
-        identities = tuple(
-            (dependency.source, dependency.name) for dependency in self.dependencies
-        )
+        identities = tuple((item.source, item.name) for item in self.dependencies)
         if len(set(identities)) != len(identities):
             raise ValueError("metric dependencies must be unique")
         if self.mode == "recompute":
@@ -98,8 +97,6 @@ class MetricSpec(ProtocolModel):
                 raise ValueError("recomputed metrics require a comparator")
         elif self.dependencies or self.comparator is not None:
             raise ValueError("live metrics do not declare dependencies or a comparator")
-        if self.kind == "evaluation" and self.mode != "recompute":
-            raise ValueError("evaluation metrics require recomputation")
         return self
 
 
@@ -120,6 +117,7 @@ class MetricExecutionReceipt(ProtocolModel):
     stage_id: StageId
     purpose: Literal["measurement", "verification"]
     implementation: MetricImplementationRef
+    parameter_model: parameters.ParameterModelRef
     params: parameters.Metric
     dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
     startup: ProcessStartupReceipt
@@ -161,42 +159,47 @@ class MetricVerificationReceipt(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_execution_ownership(self) -> MetricVerificationReceipt:
-        """Require both workers to select one measurement and frozen invocation."""
-        if self.metric_id != self.measurement.metric_id:
-            raise ValueError("verification metric ID differs from its measurement")
-        if self.stage_id != self.measurement.stage_id:
-            raise ValueError("verification stage ID differs from its measurement")
-        expected_identity = (
+        """Require both workers to select one frozen metric invocation."""
+        expected = (
             self.measurement.run_id,
             self.measurement.attempt_id,
-            self.measurement.stage_id,
-            self.measurement.metric_id,
+            self.stage_id,
+            self.metric_id,
         )
+        if self.measurement.stage_id != self.stage_id:
+            raise ValueError("verification stage ID differs from its measurement")
+        if self.measurement.metric_id != self.metric_id:
+            raise ValueError("verification metric ID differs from its measurement")
         for receipt in (self.production, self.recomputation):
-            received_identity = (
+            received = (
                 receipt.run_id,
                 receipt.attempt_id,
                 receipt.stage_id,
                 receipt.metric_id,
             )
-            if received_identity != expected_identity:
+            if received != expected:
                 raise ValueError("metric worker identity differs from its measurement")
         if self.production.purpose != "measurement":
             raise ValueError("production receipt must use measurement purpose")
         if self.recomputation.purpose != "verification":
             raise ValueError("recomputation receipt must use verification purpose")
-        if (
-            self.production.implementation != self.recomputation.implementation
-            or self.production.params != self.recomputation.params
-            or self.production.dependencies != self.recomputation.dependencies
+        bindings = (
+            "implementation",
+            "parameter_model",
+            "params",
+            "dependencies",
+        )
+        if any(
+            getattr(self.production, field) != getattr(self.recomputation, field)
+            for field in bindings
         ):
             raise ValueError("metric worker invocation bindings differ")
         if self.production.value != self.measurement.value:
             raise ValueError("production value differs from its measurement")
-        if self.completed_at < max(
-            self.production.completed_at,
-            self.recomputation.completed_at,
-        ):
+        latest = self.production.completed_at
+        if self.recomputation.completed_at > latest:
+            latest = self.recomputation.completed_at
+        if self.completed_at < latest:
             raise ValueError("verification completion precedes a worker receipt")
         return self
 
@@ -205,22 +208,21 @@ class MetricError(RuntimeError):
     """Report an invalid metric definition, invocation, or result."""
 
 
-class MetricContext(BaseModel):
+class MetricContext(BaseModel, Generic[MetricParamsT]):
     """Supply verified paths and frozen parameters to one metric invocation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     inputs: Mapping[str, Path] = Field(default_factory=dict)
     artifacts: Mapping[str, Path] = Field(default_factory=dict)
-    params: parameters.Metric = Field(default_factory=parameters.Metric)
+    params: MetricParamsT
 
 
 @dataclass(frozen=True)
 class MetricDefinition:
-    """Store authoring metadata attached to one project metric callable."""
+    """Store authoring metadata attached to one metric implementation."""
 
     metric_id: MetricId
-    kind: MetricKind
     mode: MetricMode
 
 
@@ -231,17 +233,12 @@ Decorated = TypeVar("Decorated", bound=Callable[..., Any] | type[Any])
 def metric(
     *,
     metric_id: MetricId,
-    kind: MetricKind,
     mode: MetricMode,
-) -> Callable[[Decorated], Decorated]:
-    """Attach VIPER metric metadata to one function or stateful class."""
-    definition = MetricDefinition(
-        metric_id=metric_id,
-        kind=kind,
-        mode=mode,
-    )
+) -> Callable[[DecoratedMetricT], DecoratedMetricT]:
+    """Attach one metric identity and invocation mode to an implementation."""
+    definition = MetricDefinition(metric_id=metric_id, mode=mode)
 
-    def decorate(value: Decorated) -> Decorated:
+    def decorate(value: DecoratedMetricT) -> DecoratedMetricT:
         """Store the immutable definition on the selected Python object."""
         setattr(value, "__viper_metric__", definition)
         return value
@@ -249,16 +246,20 @@ def metric(
     return decorate
 
 
-class StatefulMetric(ABC):
-    """Accumulate changing metric state across training updates."""
+class StatefulMetric(ABC, Generic[MetricParamsT]):
+    """Accumulate metric state under one frozen invocation context."""
+
+    @abstractmethod
+    def __init__(self, context: MetricContext[MetricParamsT]) -> None:
+        """Bind the frozen invocation context once."""
 
     @abstractmethod
     def update(self, *args: Any, **kwargs: Any) -> None:
-        """Consume one training observation and update internal state."""
+        """Consume one stage observation and update internal state."""
 
     @abstractmethod
     def compute(self) -> float:
-        """Return the metric value represented by the accumulated state."""
+        """Return the metric represented by the accumulated state."""
 
 
 def load_metric_object(path: Path, symbol: str) -> Callable[..., Any] | type[Any]:
@@ -283,11 +284,11 @@ def load_metric(path: Path, symbol: str) -> MetricCallable:
     return cast(MetricCallable, value)
 
 
-def metric_definition(function: Callable[..., Any]) -> MetricDefinition:
-    """Return the immutable decorator metadata attached to one metric callable."""
-    definition = getattr(function, "__viper_metric__", None)
+def metric_definition(implementation: DecoratedMetric) -> MetricDefinition:
+    """Return the metric definition attached to one implementation."""
+    definition = getattr(implementation, "__viper_metric__", None)
     if not isinstance(definition, MetricDefinition):
-        raise MetricError("metric callable lacks a VIPER metric decorator")
+        raise MetricError("metric implementation lacks a VIPER metric decorator")
     return definition
 
 
@@ -302,33 +303,33 @@ def validate_metric_definition(repository_root: Path, spec: MetricSpec) -> None:
     definition = metric_definition(load_metric_object(path, spec.implementation.symbol))
     if definition.metric_id != spec.metric_id:
         raise MetricError("metric decorator ID differs from MetricSpec")
-    if definition.kind != spec.kind:
-        raise MetricError("metric decorator kind differs from MetricSpec")
     if definition.mode != spec.mode:
         raise MetricError("metric decorator mode differs from MetricSpec")
 
 
 class MetricHandle:
-    """Bind one live metric implementation to its controlled measurement sink."""
+    """Bind one live metric implementation, context, and measurement sink."""
 
     def __init__(
         self,
         implementation: Callable[..., Any] | type[Any],
         sink: MeasurementSink,
+        context: MetricContext[Any],
     ) -> None:
-        """Instantiate stateful metrics and retain stateless functions."""
+        """Instantiate a stateful metric or retain one stateless function."""
         self._sink = sink
+        self._context = context
         self._function: Callable[..., Any] | None = None
-        self._stateful: StatefulMetric | None = None
+        self._stateful: StatefulMetric[Any] | None = None
         if inspect.isclass(implementation):
             if not issubclass(implementation, StatefulMetric):
                 raise MetricError("live metric class must subclass StatefulMetric")
-            self._stateful = implementation()
+            self._stateful = implementation(context)
         else:
             self._function = implementation
 
     def update(self, *args: Any, **kwargs: Any) -> None:
-        """Advance one stateful metric with a stage-provided observation."""
+        """Advance one stateful metric with a stage observation."""
         if self._stateful is None:
             raise MetricError("stateless metric handles do not support update")
         self._stateful.update(*args, **kwargs)
@@ -340,25 +341,24 @@ class MetricHandle:
         step: int | None = None,
         **kwargs: Any,
     ) -> Measurement:
-        """Compute and persist one live measurement owned by the active stage."""
+        """Compute and persist one live measurement."""
         if self._stateful is not None:
             if args or kwargs:
-                raise MetricError(
-                    "stateful metric record uses the accumulated state only"
-                )
+                raise MetricError("stateful metric record uses accumulated state only")
             value = self._stateful.compute()
         else:
             assert self._function is not None
-            value = self._function(*args, **kwargs)
-        return self._sink.append(float(value), epoch=epoch, step=step)
+            value = invoke_metric(self._function, self._context, *args, **kwargs)
+        return self._sink.append(value, epoch=epoch, step=step)
 
 
 def bind_live_metric(
     repository_root: Path,
     spec: MetricSpec,
     sink: MeasurementSink,
+    context: MetricContext[Any],
 ) -> MetricHandle:
-    """Validate and bind one frozen live metric to a measurement sink."""
+    """Validate and bind one frozen live metric to its context and sink."""
     if spec.mode != "live":
         raise MetricError("metric handle requires live mode")
     validate_metric_definition(repository_root, spec)
@@ -366,7 +366,7 @@ def bind_live_metric(
         repository_root.resolve() / spec.implementation.path,
         spec.implementation.symbol,
     )
-    return MetricHandle(implementation, sink)
+    return MetricHandle(implementation, sink, context)
 
 
 def compare_metric_values(
@@ -428,3 +428,98 @@ class MeasurementSink:
             handle.flush()
             os.fsync(handle.fileno())
         return measurement
+
+
+DecoratedMetricT = TypeVar(
+    "DecoratedMetricT",
+    bound=Callable[..., Any] | type[Any],
+)
+
+ObjectiveDirection = Literal["min", "max"]
+
+DecoratedMetric = Callable[..., Any] | type[Any]
+
+
+class MetricDraft(BaseModel, Generic[MetricParamsT]):
+    """Hold one configured metric before protocol freezing."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    implementation: DecoratedMetric
+    params: MetricParamsT
+    dependencies: tuple[MetricDependency, ...] = ()
+    comparator: FloatComparator | None = None
+
+
+class MetricObjectiveDraft(BaseModel):
+    """Select one metric and its desired direction of improvement."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    metric: MetricDraft[Any]
+    direction: ObjectiveDirection
+
+
+class MetricCriterionDraft(BaseModel):
+    """Apply one optional threshold to a configured metric."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    metric: MetricDraft[Any]
+    comparison: Literal["ge", "le"]
+    threshold: float = Field(allow_inf_nan=False)
+
+
+def measure(
+    implementation: DecoratedMetric,
+    *,
+    params: MetricParamsT | None = None,
+    dependencies: tuple[MetricDependency, ...] = (),
+    comparator: FloatComparator | None = None,
+) -> MetricDraft[MetricParamsT | parameters.Metric]:
+    """Configure one decorated metric for later freezing."""
+    definition = metric_definition(implementation)
+    selected_params = parameters.Metric() if params is None else params
+    identities = tuple((item.source, item.name) for item in dependencies)
+    if len(set(identities)) != len(identities):
+        raise MetricError("metric dependencies must be unique")
+    if definition.mode == "recompute":
+        if not dependencies:
+            raise MetricError("recomputed metrics require dependencies")
+        if comparator is None:
+            raise MetricError("recomputed metrics require a comparator")
+    elif dependencies or comparator is not None:
+        raise MetricError("live metrics do not declare dependencies or a comparator")
+    return MetricDraft(
+        implementation=implementation,
+        params=selected_params,
+        dependencies=dependencies,
+        comparator=comparator,
+    )
+
+
+def min(metric: MetricDraft[Any]) -> MetricObjectiveDraft:
+    """Make one configured metric a minimization objective."""
+    return MetricObjectiveDraft(metric=metric, direction="min")
+
+
+def max(metric: MetricDraft[Any]) -> MetricObjectiveDraft:
+    """Make one configured metric a maximization objective."""
+    return MetricObjectiveDraft(metric=metric, direction="max")
+
+
+def invoke_metric(
+    implementation: Callable[..., Any],
+    context: MetricContext[Any],
+    *args: Any,
+    **kwargs: Any,
+) -> float:
+    """Invoke one stateless metric with its frozen context first."""
+    return float(implementation(context, *args, **kwargs))
+
+
+class MetricObjectiveSpec(ProtocolModel):
+    """Persist one objective metric and its direction of improvement."""
+
+    metric_id: MetricId
+    direction: ObjectiveDirection

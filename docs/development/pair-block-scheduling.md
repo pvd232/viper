@@ -148,10 +148,12 @@ ordered by `PairBlock.depends_on`; otherwise the plan is ambiguous and fails.
 The final target is an `add`, `update`, or `remove` relative to the baseline,
 regardless of how many intermediate declarations the PairBlocks specify.
 
-`materialize_plan()` copies the baseline Python tree, replaces or removes
-existing declarations by the exact byte spans in `SourceGraph`, and appends
-new top-level declarations. Version 1 rejects nested additions because
-`ContractTarget` does not yet carry a class-body insertion point.
+`materialize_plan()` copies the baseline Python tree and applies declarations
+in PairBlock order. It replaces or removes existing declarations by their
+exact `SourceGraph` spans, places a new declaration before the next existing
+target, and keeps new imports in the module import block. Version 1 rejects
+nested additions because `ContractTarget` does not yet carry a class-body
+insertion point.
 
 The existing `analyze_source()` operation analyzes that materialized tree with
 the same pinned `CodeQLIdentity` used for the baseline. `build_block_graph()`
@@ -242,6 +244,7 @@ id = "P4-SCH-01"
 requirements = ["SCH-01"]
 targets = [
     "src/viper/scheduling.py:annotations",
+    "src/viper/scheduling.py:ast",
     "src/viper/scheduling.py:shutil",
     "src/viper/scheduling.py:defaultdict",
     "src/viper/scheduling.py:Path",
@@ -251,6 +254,7 @@ targets = [
     "src/viper/scheduling.py:TargetAction",
     "src/viper/scheduling.py:_declaration_payload",
     "src/viper/scheduling.py:SourceGraph",
+    "src/viper/scheduling.py:_import_parts",
     "src/viper/scheduling.py:ScheduleError",
     "src/viper/scheduling.py:select_blocks",
     "src/viper/scheduling.py:order_blocks",
@@ -262,6 +266,7 @@ targets = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
+    "tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
     "tools/check_plan.py:annotations",
@@ -303,6 +308,7 @@ tests = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
+    "tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
 ]
@@ -384,6 +390,7 @@ deterministic frontier available at each step.
 **File: `src/viper/scheduling.py`**
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:annotations -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:ast -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:shutil -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:defaultdict -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:Path -->
@@ -396,6 +403,7 @@ deterministic frontier available at each step.
 ```python contract-target
 from __future__ import annotations
 
+import ast
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -411,12 +419,34 @@ from .system_impact import SourceGraph
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:ScheduleError -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_import_parts -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:select_blocks -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:order_blocks -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_precedes -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:final_targets -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:materialize_plan -->
 ```python contract-target
+def _import_parts(
+    payload: bytes,
+) -> tuple[tuple[int, str | None], frozenset[str]] | None:
+    """Return the module and imported names for one import statement."""
+    try:
+        tree = ast.parse(payload)
+    except SyntaxError:
+        return None
+    if len(tree.body) != 1:
+        return None
+    statement = tree.body[0]
+    if isinstance(statement, ast.ImportFrom):
+        owner = (statement.level, statement.module)
+    elif isinstance(statement, ast.Import) and len(statement.names) == 1:
+        owner = (0, statement.names[0].name)
+    else:
+        return None
+    names = frozenset(alias.asname or alias.name for alias in statement.names)
+    return owner, names
+
+
 class ScheduleError(ValueError):
     """Report an invalid planned source or block schedule."""
 
@@ -598,8 +628,8 @@ def materialize_plan(
         for line in lines:
             starts.append(starts[-1] + len(line))
         replacements: dict[tuple[int, int], bytes] = {}
-        additions: list[bytes] = []
-        for target in file_targets:
+        additions: list[tuple[int, bytes]] = []
+        for index, target in enumerate(file_targets):
             node = nodes.get((target.target.path, target.target.symbol))
             if target.action == "add":
                 if node is not None:
@@ -608,8 +638,7 @@ def materialize_plan(
                     raise ScheduleError("version 1 cannot place a nested added target")
                 payload = _declaration_payload(plan_root, target)
                 assert payload is not None
-                if payload not in additions:
-                    additions.append(payload)
+                additions.append((index, payload))
                 continue
             if node is None:
                 raise ScheduleError(f"baseline target is absent: {target.target}")
@@ -641,14 +670,124 @@ def materialize_plan(
             )
         ):
             raise ScheduleError("planned declaration replacements overlap")
-        # Work upward so later edits do not move earlier offsets.
-        for start, end, payload in reversed(ordered_replacements):
-            source = source[:start] + payload + source[end:]
-        if additions:
-            separator = (
-                b"" if not source else (b"\n" if source.endswith(b"\n") else b"\n\n")
+
+        replacement_payloads = set(replacements.values())
+        replacement_imports = {
+            span: parts
+            for span, payload in replacements.items()
+            if (parts := _import_parts(payload)) is not None
+        }
+        unique_additions: dict[bytes, tuple[int, bytes]] = {}
+        for index, payload in additions:
+            if payload in replacement_payloads:
+                continue
+            parts = _import_parts(payload)
+            if parts is not None:
+                owner, names = parts
+                replaced = next(
+                    (
+                        span
+                        for span, (
+                            current_owner,
+                            current_names,
+                        ) in replacement_imports.items()
+                        if current_owner == owner and current_names < names
+                    ),
+                    None,
+                )
+                if replaced is not None:
+                    replacements[replaced] = payload
+                    replacement_imports[replaced] = parts
+                    replacement_payloads.add(payload)
+                    continue
+                prior = next(
+                    (
+                        existing
+                        for existing in unique_additions
+                        if (
+                            (existing_parts := _import_parts(existing)) is not None
+                            and existing_parts[0] == owner
+                            and existing_parts[1] <= names
+                        )
+                    ),
+                    None,
+                )
+                if prior is not None:
+                    unique_additions.pop(prior)
+            unique_additions.setdefault(payload, (index, payload))
+        additions = sorted(unique_additions.values(), key=lambda addition: addition[0])
+        insertions: dict[int, list[bytes]] = defaultdict(list)
+        for index, payload in additions:
+            next_node = next(
+                (
+                    nodes.get(
+                        (
+                            later.target.path,
+                            later.target.symbol,
+                        )
+                    )
+                    for later in file_targets[index + 1 :]
+                    if (
+                        nodes.get((later.target.path, later.target.symbol)) is not None
+                        and nodes[(later.target.path, later.target.symbol)].kind
+                        != "import"
+                    )
+                ),
+                None,
             )
-            source += separator + b"\n\n".join(additions) + b"\n"
+            if payload.startswith((b"import ", b"from ")):
+                imports = tuple(
+                    node
+                    for node in nodes.values()
+                    if node.path == relative_path and node.kind == "import"
+                )
+                if imports:
+                    last = max(
+                        imports,
+                        key=lambda node: (node.end_line, node.end_col),
+                    )
+                    offset = starts[last.end_line - 1] + last.end_col
+                    if source[offset : offset + 2] == b"\r\n":
+                        offset += 2
+                    elif source[offset : offset + 1] == b"\n":
+                        offset += 1
+                else:
+                    first = min(
+                        (node for node in nodes.values() if node.path == relative_path),
+                        key=lambda node: (node.start_line, node.start_col),
+                        default=None,
+                    )
+                    offset = (
+                        0
+                        if first is None
+                        else starts[first.start_line - 1] + first.start_col
+                    )
+            elif next_node is not None:
+                offset = starts[next_node.start_line - 1] + next_node.start_col
+            else:
+                offset = len(source)
+            if payload not in insertions[offset]:
+                insertions[offset].append(payload)
+
+        replacements_by_start = {
+            start: (end, payload) for (start, end), payload in replacements.items()
+        }
+        edit_offsets = sorted(
+            replacements_by_start.keys() | insertions.keys(),
+            reverse=True,
+        )
+        # Apply edits from the end so baseline offsets stay valid.
+        for start in edit_offsets:
+            end, replacement = replacements_by_start.get(start, (start, b""))
+            inserted = b"\n\n".join(insertions.get(start, ()))
+            if inserted:
+                if start > 0 and source[start - 1 : start] not in (b"\n", b"\r"):
+                    inserted = b"\n" + inserted
+                if replacement or source[start:]:
+                    inserted += b"\n\n"
+                elif not inserted.endswith(b"\n"):
+                    inserted += b"\n"
+            source = source[:start] + inserted + replacement + source[end:]
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(source)
 
@@ -796,6 +935,12 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
     traceability = _traceability(
         targets=(
             _target(
+                action="add",
+                path="module.py",
+                symbol="added",
+                declaration=update_ref,
+            ),
+            _target(
                 action="update",
                 path="module.py",
                 symbol="old",
@@ -806,12 +951,6 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
                 path="module.py",
                 symbol="removed",
                 declaration=remove_ref,
-            ),
-            _target(
-                action="add",
-                path="module.py",
-                symbol="added",
-                declaration=update_ref,
             ),
         ),
     )
@@ -827,7 +966,7 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
     )
 
     assert (destination / "module.py").read_text() == (
-        "def old():\n    return 3\n\n\n\ndef added():\n    return old()\n"
+        "def added():\n    return old()\n\ndef old():\n    return 3\n\n\n"
     )
     assert (baseline_root / "module.py").read_bytes() == source
 ```
@@ -889,6 +1028,86 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     )
 
     assert (destination / "module.py").read_bytes() == b"\n"
+```
+
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets -->
+```python contract-target
+def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> None:
+    """Let a later import payload replace the earlier form of that import."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"from package import First\n\nVALUE = First\n"
+    (baseline_root / "module.py").write_bytes(source)
+
+    plan_root = tmp_path / "plan"
+    fence = b"`" * 3
+    old_payload = fence + b"python contract-target\nfrom package import First\n" + fence
+    new_payload = (
+        fence + b"python contract-target\nfrom package import First, Second\n" + fence
+    )
+    old_path = plan_root / "docs/old.md"
+    new_path = plan_root / "docs/new.md"
+    old_path.parent.mkdir(parents=True)
+    old_path.write_bytes(old_payload + b"\n")
+    new_path.write_bytes(new_payload + b"\n")
+    old_ref = _declaration_ref(
+        path="docs/old.md",
+        start_line=1,
+        end_line=3,
+        sha256=_sha256(old_payload),
+    )
+    new_ref = _declaration_ref(
+        path="docs/new.md",
+        start_line=1,
+        end_line=3,
+        sha256=_sha256(new_payload),
+    )
+    declaration_end = len(b"from package import First")
+    graph = _source_graph(
+        nodes=(
+            SourceNode(
+                node_id="module.py:First",
+                path="module.py",
+                symbol="First",
+                kind="import",
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=declaration_end,
+                sha256=_sha256(b"from package import First"),
+            ),
+        ),
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="update",
+                path="module.py",
+                symbol="First",
+                declaration=old_ref,
+            ),
+            _target(
+                action="add",
+                path="module.py",
+                symbol="Second",
+                declaration=new_ref,
+            ),
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from package import First, Second\n\nVALUE = First\n"
+    )
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation -->
@@ -1205,6 +1424,56 @@ def validate(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
         )
         return result
+
+    python_targets = tuple(
+        sorted(
+            {
+                str(target.target.path)
+                for target in traceability.targets
+                if target.block_id in selected_ids
+                and Path(target.target.path).suffix in {".py", ".pyi"}
+            }
+        )
+    )
+    checks = (
+        (
+            "ruff-format",
+            (str(python), "-m", "ruff", "format", *python_targets),
+        ),
+        (
+            "ruff-imports",
+            (
+                str(python),
+                "-m",
+                "ruff",
+                "check",
+                "--fix",
+                "--select",
+                "I001",
+                *python_targets,
+            ),
+        ),
+        (
+            "ruff",
+            (str(python), "-m", "ruff", "check", "--ignore", "D100", *python_targets),
+        ),
+    )
+    for stage, command in checks:
+        completed = _run(command, cwd=candidate)
+        if completed.returncode != 0:
+            result = {
+                "passed": False,
+                "stage": stage,
+                "revision": revision,
+                "blocks": selected,
+                "command": tuple(completed.args),
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
+            }
+            (results / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
+            return result
 
     # Make Pyright import the candidate instead of the baseline.
     original_pythonpath = os.environ.get("PYTHONPATH")
@@ -1661,6 +1930,7 @@ def strong_components(graph: BlockGraph) -> tuple[WorkGroup, ...]:
     components: list[tuple[PairBlockId, ...]] = []
 
     def visit(block: PairBlockId) -> None:
+        """Place one block in its strongly connected component."""
         nonlocal index
         indices[block] = index
         lowlinks[block] = index

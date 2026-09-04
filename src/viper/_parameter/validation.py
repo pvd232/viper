@@ -9,7 +9,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import cast
+from typing import TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
@@ -17,6 +17,8 @@ from .. import parameters
 from ..execution._process import ExecutionPolicy, WorkerRequest, execute_worker
 from ..parameters import ParameterModelRef
 from ..stages import ParameterizedSpec
+
+ParameterSetT = TypeVar("ParameterSetT", bound=parameters.ParameterSet)
 
 
 class ParameterValidationError(RuntimeError):
@@ -96,8 +98,8 @@ def instantiate_parameters(
     path: Path,
     reference: ParameterModelRef,
     params: parameters.ParameterSet,
-    expected_base: type[parameters.ParameterSet],
-) -> parameters.ParameterSet:
+    expected_base: type[ParameterSetT],
+) -> ParameterSetT:
     """Construct the exact project parameter class from one frozen mapping."""
     raw = path.read_bytes()
     verify_parameter_model_bytes(reference, raw)
@@ -109,7 +111,7 @@ def instantiate_parameters(
         raise ParameterValidationError(
             "frozen parameters must contain every effective project-model value"
         )
-    return validated
+    return cast(ParameterSetT, validated)
 
 
 def validate_stage_parameters(
@@ -170,3 +172,19 @@ def validate_stage_parameters(
                 "parameter validation worker returned no mapping"
             )
         return cast(dict[str, JsonValue], value)
+
+
+def parameter_model_path(
+    project_root: Path,
+    reference: ParameterModelRef,
+) -> Path:
+    """Resolve a parameter-model path against its declared source owner."""
+    base = (
+        project_root.resolve()
+        if reference.owner == "project"
+        else Path(parameters.__file__).resolve().parent
+    )
+    path = (base / reference.path).resolve()
+    if not path.is_relative_to(base):
+        raise ParameterValidationError("parameter model escapes its source root")
+    return path
