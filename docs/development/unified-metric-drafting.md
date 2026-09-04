@@ -2679,9 +2679,9 @@ class TrainSpec(InternalSpec):
         if model_input.kind == "future" and state_input.kind == "future":
             if model_input.producer_stage_id != state_input.producer_stage_id:
                 raise ValueError("checkpoint inputs must select one producer stage")
-            if model_input.producer_artifact != PARAMETERS:
+            if model_input.name != PARAMETERS:
                 raise ValueError("parameters input must select parameters")
-            if state_input.producer_artifact != RESUME_STATE:
+            if state_input.name != RESUME_STATE:
                 raise ValueError("resume_state input must select resume_state")
         return self
 
@@ -2878,7 +2878,7 @@ def verify_run_plan_relationships(
         )
     if (
         model_input.producer_stage_id != run.estimator.stage_id
-        or model_input.producer_artifact != run.estimator.artifact_name
+        or model_input.name != run.estimator.artifact_name
     ):
         raise VerificationError(
             "benchmark evaluation model must select the run estimator"
@@ -3451,7 +3451,7 @@ def _freeze_signal_plan(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=parameters.Train(),
@@ -3595,7 +3595,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="seed_training",
+                name="seed_training",
             )
         },
         params=train_params,
@@ -3775,7 +3775,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="dataset",
+                name="dataset",
             )
         },
         params=build_params,
@@ -3793,7 +3793,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="build",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=embed_params,
@@ -3811,7 +3811,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "embedding": FutureInputRef(
                 producer_stage_id="embed",
-                producer_artifact="embedding",
+                name="embedding",
             )
         },
         params=train_params,
@@ -3838,7 +3838,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             PARAMETERS: FutureInputRef(
                 producer_stage_id="train",
-                producer_artifact=PARAMETERS,
+                name=PARAMETERS,
             ),
             "evaluation_dataset": StoredInputRef(
                 pointer=evaluation_pointer,
@@ -4510,7 +4510,6 @@ def test_train_stage_captures_local_external_input(
         inputs={
             "prior": ExternalInputRef(
                 source=LocalSource(path="inputs/raw/prior.bin"),
-                path="inputs/datasets/tiny/prior.bin",
                 data_role="training",
             )
         },
@@ -4570,8 +4569,6 @@ def test_train_stage_captures_local_external_input(
     result = execute_run(root, frozen.files[-1])
 
     assert result.resolved_run.status == "succeeded"
-    assert (root / "inputs/datasets/tiny/prior.bin").read_bytes() == b"prior"
-
     store = LocalArtifactStore(root)
     verified = verify_run_result(
         result.resolved_run,
@@ -4584,7 +4581,15 @@ def test_train_stage_captures_local_external_input(
     resolved_input = resolved_train.inputs["prior"]
 
     assert isinstance(resolved_input, ResolvedExternalInputRef)
-    assert store.fetch(resolved_input.file.stored_at) == b"prior"
+    expected_path = captured_input_path(
+        run_id=RUN_ID,
+        attempt_id=verified.attempts[-1].attempt_id,
+        stage_id="train",
+        input_name="prior",
+        source_path="inputs/raw/prior.bin",
+    )
+    assert resolved_input.file.path == expected_path
+    assert (root / expected_path).read_bytes() == b"prior"
 
 def test_two_stage_local_run_writes_and_verifies_terminal_result(
     tmp_path: Path,
@@ -4786,7 +4791,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=train_params,
