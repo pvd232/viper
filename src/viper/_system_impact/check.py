@@ -416,19 +416,30 @@ def _target_checks(
 
 def _unexpected_changes(
     *,
+    baseline_root: Path,
+    realized_root: Path,
     baseline_nodes: dict[tuple[str, str], SourceNode],
     realized_nodes: dict[tuple[str, str], SourceNode],
     targets: tuple[ContractTarget, ...],
 ) -> tuple[RepoSymbolRef, ...]:
-    changed = {
-        key
-        for key in baseline_nodes.keys() | realized_nodes.keys()
-        if (
-            baseline_nodes.get(key) is None
-            or realized_nodes.get(key) is None
-            or baseline_nodes[key].sha256 != realized_nodes[key].sha256
-        )
-    }
+    changed: set[tuple[str, str]] = set()
+    for key in baseline_nodes.keys() | realized_nodes.keys():
+        before = baseline_nodes.get(key)
+        after = realized_nodes.get(key)
+        if before is None or after is None:
+            changed.add(key)
+            continue
+        if before.sha256 == after.sha256:
+            continue
+        if before.kind == after.kind == "import":
+            baseline_source = (baseline_root / before.path).read_bytes()
+            realized_source = (realized_root / after.path).read_bytes()
+            if import_binding(baseline_source, before.symbol) == import_binding(
+                realized_source,
+                after.symbol,
+            ):
+                continue
+        changed.add(key)
     all_nodes = {**baseline_nodes, **realized_nodes}
     planned: set[tuple[str, str]] = set()
     import_spans: set[tuple[str, int, int, int, int]] = set()
@@ -514,6 +525,8 @@ def check_plan(
         realized=realized,
     )
     unexpected = _unexpected_changes(
+        baseline_root=baseline_root,
+        realized_root=root,
         baseline_nodes=baseline_nodes,
         realized_nodes=realized_nodes,
         targets=targets,

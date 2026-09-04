@@ -1403,9 +1403,9 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:import_binding", "src/viper/_system_impact/check.py:_target_is_satisfied", "src/viper/_system_impact/check.py:_target_checks", "src/viper/_system_impact/check.py:_unexpected_changes", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
-tests = ["tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'import_target_owns or one_hop_records or pre_pairing_pyright' -q"
+targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/source.py:ImportBinding", "src/viper/_system_impact/source.py:import_binding", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:import_binding", "src/viper/_system_impact/check.py:_target_is_satisfied", "src/viper/_system_impact/check.py:_target_checks", "src/viper/_system_impact/check.py:_unexpected_changes", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:import_binding", "tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+tests = ["tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'class_target_owns or import_target_owns or one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
 ```
 
@@ -1950,6 +1950,8 @@ def check_plan(
         realized_nodes=realized_nodes,
     )
     unexpected = _unexpected_changes(
+        baseline_root=baseline_root,
+        realized_root=root,
         baseline_nodes=baseline_nodes,
         realized_nodes=realized_nodes,
         targets=targets,
@@ -2574,19 +2576,30 @@ def _target_checks(
 ```python contract-target
 def _unexpected_changes(
     *,
+    baseline_root: Path,
+    realized_root: Path,
     baseline_nodes: dict[tuple[str, str], SourceNode],
     realized_nodes: dict[tuple[str, str], SourceNode],
     targets: tuple[ContractTarget, ...],
 ) -> tuple[RepoSymbolRef, ...]:
-    changed = {
-        key
-        for key in baseline_nodes.keys() | realized_nodes.keys()
-        if (
-            baseline_nodes.get(key) is None
-            or realized_nodes.get(key) is None
-            or baseline_nodes[key].sha256 != realized_nodes[key].sha256
-        )
-    }
+    changed: set[tuple[str, str]] = set()
+    for key in baseline_nodes.keys() | realized_nodes.keys():
+        before = baseline_nodes.get(key)
+        after = realized_nodes.get(key)
+        if before is None or after is None:
+            changed.add(key)
+            continue
+        if before.sha256 == after.sha256:
+            continue
+        if before.kind == after.kind == "import":
+            baseline_source = (baseline_root / before.path).read_bytes()
+            realized_source = (realized_root / after.path).read_bytes()
+            if import_binding(baseline_source, before.symbol) == import_binding(
+                realized_source,
+                after.symbol,
+            ):
+                continue
+        changed.add(key)
     all_nodes = {**baseline_nodes, **realized_nodes}
     planned: set[tuple[str, str]] = set()
     import_spans: set[tuple[str, int, int, int, int]] = set()
@@ -2739,6 +2752,8 @@ def check_plan(
         realized=realized,
     )
     unexpected = _unexpected_changes(
+        baseline_root=baseline_root,
+        realized_root=root,
         baseline_nodes=baseline_nodes,
         realized_nodes=realized_nodes,
         targets=targets,
@@ -2816,9 +2831,55 @@ def check_plan(
 from viper._system_impact.source import import_binding
 ```
 
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=tests/test_system_impact.py:test_class_target_owns_nested_declaration_changes -->
+```python contract-target
+def test_class_target_owns_nested_declaration_changes(tmp_path: Path) -> None:
+    """Treat class-container and nested declaration digests as one planned edit."""
+    path = "src/example.py"
+    baseline_class = _node(
+        path=path,
+        symbol="Example",
+        kind="class",
+        declaration=b"class Example:\n    value = 1",
+    )
+    baseline_field = _node(
+        path=path,
+        symbol="Example.value",
+        kind="assignment",
+        declaration=b"value = 1",
+    )
+    realized_class = baseline_class.model_copy(
+        update={"sha256": _sha256(b"class Example:\n    value = 2")}
+    )
+    realized_field = baseline_field.model_copy(update={"sha256": _sha256(b"value = 2")})
+    target = ContractTarget(
+        requirements=(_REQUIREMENT_ID,),
+        block_id=_BLOCK_ID,
+        action="update",
+        target=RepoSymbolRef(path=path, symbol="Example"),
+        declaration=_declaration_ref(),
+    )
+
+    unexpected = _unexpected_changes(
+        baseline_root=tmp_path,
+        realized_root=tmp_path,
+        baseline_nodes={
+            (path, "Example"): baseline_class,
+            (path, "Example.value"): baseline_field,
+        },
+        realized_nodes={
+            (path, "Example"): realized_class,
+            (path, "Example.value"): realized_field,
+        },
+        targets=(target,),
+    )
+
+    assert unexpected == ()
+```
+
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement -->
 ```python contract-target
-def test_import_target_owns_names_in_the_same_statement() -> None:
+def test_import_target_owns_names_in_the_same_statement(tmp_path: Path) -> None:
     """Compare one import by binding when Ruff regroups its statement."""
     path = "src/example.py"
     baseline_name = _node(
@@ -2846,8 +2907,18 @@ def test_import_target_owns_names_in_the_same_statement() -> None:
         target=RepoSymbolRef(path=path, symbol="New"),
         declaration=_declaration_ref(),
     )
+    baseline_root = tmp_path / "baseline"
+    realized_root = tmp_path / "realized"
+    baseline_path = baseline_root / path
+    realized_path = realized_root / path
+    baseline_path.parent.mkdir(parents=True)
+    realized_path.parent.mkdir(parents=True)
+    baseline_path.write_text("from .models import Existing\n")
+    realized_path.write_text("from .models import Existing, New\n")
 
     unexpected = _unexpected_changes(
+        baseline_root=baseline_root,
+        realized_root=realized_root,
         baseline_nodes={(path, "Existing"): baseline_name},
         realized_nodes={
             (path, "Existing"): realized_name,

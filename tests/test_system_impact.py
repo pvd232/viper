@@ -1742,7 +1742,7 @@ def test_plan_check_rejects_unplanned_source_change(tmp_path: Path) -> None:
     assert not result.passed
 
 
-def test_class_target_owns_nested_declaration_changes() -> None:
+def test_class_target_owns_nested_declaration_changes(tmp_path: Path) -> None:
     """Treat class-container and nested declaration digests as one planned edit."""
     path = "src/example.py"
     baseline_class = _node(
@@ -1770,6 +1770,8 @@ def test_class_target_owns_nested_declaration_changes() -> None:
     )
 
     unexpected = _unexpected_changes(
+        baseline_root=tmp_path,
+        realized_root=tmp_path,
         baseline_nodes={
             (path, "Example"): baseline_class,
             (path, "Example.value"): baseline_field,
@@ -1784,7 +1786,7 @@ def test_class_target_owns_nested_declaration_changes() -> None:
     assert unexpected == ()
 
 
-def test_import_target_owns_names_in_the_same_statement() -> None:
+def test_import_target_owns_names_in_the_same_statement(tmp_path: Path) -> None:
     """Compare one import by binding when Ruff regroups its statement."""
     path = "src/example.py"
     baseline_name = _node(
@@ -1812,8 +1814,18 @@ def test_import_target_owns_names_in_the_same_statement() -> None:
         target=RepoSymbolRef(path=path, symbol="New"),
         declaration=_declaration_ref(),
     )
+    baseline_root = tmp_path / "baseline"
+    realized_root = tmp_path / "realized"
+    baseline_path = baseline_root / path
+    realized_path = realized_root / path
+    baseline_path.parent.mkdir(parents=True)
+    realized_path.parent.mkdir(parents=True)
+    baseline_path.write_text("from .models import Existing\n")
+    realized_path.write_text("from .models import Existing, New\n")
 
     unexpected = _unexpected_changes(
+        baseline_root=baseline_root,
+        realized_root=realized_root,
         baseline_nodes={(path, "Existing"): baseline_name},
         realized_nodes={
             (path, "Existing"): realized_name,
