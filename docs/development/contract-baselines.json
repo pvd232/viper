@@ -49,7 +49,7 @@
         "SCH-02",
         "SCH-03"
       ],
-      "sha256": "8c16124da013130a5431ff4a964ec24f6f31bf34b14367bf3bff2dc03084496e"
+      "sha256": "cb442b2e992471d75013bc8f746ad669b2aed3d6c06da0b131e1a9448bf35ac8"
     },
     {
       "path": "docs/development/child-process-launching.md",

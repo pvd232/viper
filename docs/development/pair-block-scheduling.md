@@ -268,7 +268,6 @@ targets = [
     "tools/check_plan.py:os",
     "tools/check_plan.py:platform",
     "tools/check_plan.py:sys",
-    "tools/check_plan.py:tempfile",
     "tools/check_plan.py:Sequence",
     "tools/check_plan.py:Path",
     "tools/check_plan.py:Any",
@@ -316,6 +315,12 @@ block orders those revisions and creates one isolated planned source tree.
 id = "P4-SCH-02"
 requirements = ["SCH-02"]
 targets = [
+    "src/viper/scheduling.py:Literal",
+    "src/viper/scheduling.py:Self",
+    "src/viper/scheduling.py:Field",
+    "src/viper/scheduling.py:model_validator",
+    "src/viper/scheduling.py:NonEmptyStr",
+    "src/viper/scheduling.py:ProtocolModel",
     "src/viper/scheduling.py:ScheduleEdgeKind",
     "src/viper/scheduling.py:ScheduleEdge",
     "src/viper/scheduling.py:BlockGraph",
@@ -337,6 +342,8 @@ orders blocks that would write the same file.
 id = "P4-SCH-03"
 requirements = ["SCH-03"]
 targets = [
+    "src/viper/scheduling.py:hashlib",
+    "src/viper/scheduling.py:SHA256",
     "src/viper/scheduling.py:WorkGroup",
     "src/viper/scheduling.py:WorkWave",
     "src/viper/scheduling.py:BlockSchedule",
@@ -479,6 +486,11 @@ def final_targets(
 ) -> tuple[ContractTarget, ...]:
     """Compose each ordered target chain into one baseline-relative change."""
     positions = {block: index for index, block in enumerate(ordered)}
+    target_positions = {
+        block.block_id: {target: index for index, target in enumerate(block.targets)}
+        for block in traceability.blocks
+        if block.block_id in positions
+    }
     chains: dict[tuple[str, str], list[ContractTarget]] = defaultdict(list)
     for target in traceability.targets:
         if target.block_id in positions:
@@ -518,7 +530,15 @@ def final_targets(
         else:
             action = "remove"
         resolved.append(last.model_copy(update={"action": action}))
-    return tuple(resolved)
+    return tuple(
+        sorted(
+            resolved,
+            key=lambda target: (
+                positions[target.block_id],
+                target_positions[target.block_id][target.target],
+            ),
+        )
+    )
 
 
 def materialize_plan(
@@ -558,7 +578,7 @@ def materialize_plan(
             starts.append(starts[-1] + len(line))
         replacements: list[tuple[int, int, bytes]] = []
         additions: list[bytes] = []
-        for target in sorted(file_targets, key=lambda item: item.target.symbol):
+        for target in file_targets:
             node = nodes.get((target.target.path, target.target.symbol))
             if target.action == "add":
                 if node is not None:
@@ -601,6 +621,7 @@ def materialize_plan(
             source += separator + b"\n\n".join(additions) + b"\n"
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(source)
+
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:__all__ -->
@@ -790,7 +811,6 @@ def test_materialize_plan_applies_exact_declarations(tmp_path: Path) -> None:
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:os -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:platform -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:sys -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:tempfile -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Sequence -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Path -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Any -->
@@ -830,7 +850,6 @@ import json
 import os
 import platform
 import sys
-import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -1035,84 +1054,83 @@ def validate(
         artifacts=results / "baseline-codeql",
     )
 
-    with tempfile.TemporaryDirectory(prefix="viper-plan-") as temporary:
-        candidate = Path(temporary) / "candidate"
-        materialize_plan(
-            root,
-            root,
-            traceability,
-            selected,
-            baseline,
-            candidate,
-            completed=completed,
-        )
-        pyright = _run(
-            (
-                str(python),
-                "-m",
-                "pyright",
-                "--project",
-                str(candidate / "pyrightconfig.json"),
-                "--pythonpath",
-                str(python),
-            ),
-            cwd=candidate,
-        )
-        if pyright.returncode != 0:
-            result = {
-                "passed": False,
-                "stage": "pyright",
-                "revision": revision,
-                "blocks": selected,
-                "command": tuple(pyright.args),
-                "stdout": pyright.stdout,
-                "stderr": pyright.stderr,
-            }
-            (results / "result.json").write_text(
-                json.dumps(result, indent=2, sort_keys=True) + "\n"
-            )
-            return result
-
-        planned = _analyze(
-            candidate,
-            revision=revision,
-            committed=False,
-            identity=identity,
-            executable=codeql,
-            query_pack=root / "tools/codeql/viper-python-impact",
-            cache=cache,
-            artifacts=results / "planned-codeql",
-        )
-        unconsumed = _unconsumed_private_owners(
-            traceability,
-            frozenset(selected),
-            planned,
-        )
-        checked = check_plan(
-            root=candidate,
-            baseline_root=root,
-            traceability=traceability,
-            block_ids=selected,
-            baseline=baseline,
-            realized=planned,
-        )
+    candidate = results / "candidate"
+    materialize_plan(
+        root,
+        root,
+        traceability,
+        selected,
+        baseline,
+        candidate,
+        completed=completed,
+    )
+    pyright = _run(
+        (
+            str(python),
+            "-m",
+            "pyright",
+            "--project",
+            str(candidate / "pyrightconfig.json"),
+            "--pythonpath",
+            str(python),
+        ),
+        cwd=candidate,
+    )
+    if pyright.returncode != 0:
         result = {
-            "passed": checked.passed and not unconsumed,
-            "stage": "complete",
+            "passed": False,
+            "stage": "pyright",
             "revision": revision,
             "blocks": selected,
-            "pyright": {
-                "command": tuple(pyright.args),
-                "stdout": pyright.stdout,
-                "stderr": pyright.stderr,
-            },
-            "unconsumed_private_owners": unconsumed,
-            "check": checked.model_dump(mode="json"),
+            "command": tuple(pyright.args),
+            "stdout": pyright.stdout,
+            "stderr": pyright.stderr,
         }
         (results / "result.json").write_text(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
         )
         return result
+
+    planned = _analyze(
+        candidate,
+        revision=revision,
+        committed=False,
+        identity=identity,
+        executable=codeql,
+        query_pack=root / "tools/codeql/viper-python-impact",
+        cache=cache,
+        artifacts=results / "planned-codeql",
+    )
+    unconsumed = _unconsumed_private_owners(
+        traceability,
+        frozenset(selected),
+        planned,
+    )
+    checked = check_plan(
+        root=candidate,
+        baseline_root=root,
+        traceability=traceability,
+        block_ids=selected,
+        baseline=baseline,
+        realized=planned,
+    )
+    result = {
+        "passed": checked.passed and not unconsumed,
+        "stage": "complete",
+        "revision": revision,
+        "blocks": selected,
+        "pyright": {
+            "command": tuple(pyright.args),
+            "stdout": pyright.stdout,
+            "stderr": pyright.stderr,
+        },
+        "unconsumed_private_owners": unconsumed,
+        "check": checked.model_dump(mode="json"),
+    }
+    (results / "result.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n"
+    )
+    return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1149,6 +1167,20 @@ if __name__ == "__main__":
 ### P4-SCH-02 — block graph
 
 **File: `src/viper/scheduling.py`**
+
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:Literal -->
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:Self -->
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:Field -->
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:model_validator -->
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:NonEmptyStr -->
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:ProtocolModel -->
+```python contract-target
+from typing import Literal, Self
+
+from pydantic import Field, model_validator
+
+from ._schema import NonEmptyStr, ProtocolModel
+```
 
 <!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:ScheduleEdgeKind -->
 <!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=src/viper/scheduling.py:ScheduleEdge -->
@@ -1344,7 +1376,7 @@ def test_block_graph_combines_dependencies_and_write_conflicts() -> None:
     """Project explicit, source, and same-file relations onto PairBlocks."""
     traceability, baseline, planned = _schedule_fixture()
 
-    graph = build_block_graph(
+    graph = scheduling.build_block_graph(
         traceability,
         ("P0-TST-02", "P0-TST-03", "P0-TST-04"),
         baseline,
@@ -1363,6 +1395,14 @@ def test_block_graph_combines_dependencies_and_write_conflicts() -> None:
 ### P4-SCH-03 — execution waves
 
 **File: `src/viper/scheduling.py`**
+
+<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:hashlib -->
+<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:SHA256 -->
+```python contract-target
+import hashlib
+
+from ._schema import SHA256
+```
 
 <!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:WorkGroup -->
 <!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:WorkWave -->
@@ -1479,14 +1519,14 @@ def schedule_blocks(graph: BlockGraph) -> BlockSchedule:
 def test_schedule_blocks_returns_dependency_safe_waves() -> None:
     """Place independent groups together and their consumer in the next wave."""
     traceability, baseline, planned = _schedule_fixture()
-    graph = build_block_graph(
+    graph = scheduling.build_block_graph(
         traceability,
         ("P0-TST-02", "P0-TST-03", "P0-TST-04"),
         baseline,
         planned,
     )
 
-    schedule = schedule_blocks(graph)
+    schedule = scheduling.schedule_blocks(graph)
     groups = {group.group_id: group.blocks for group in schedule.groups}
     waves = tuple(
         tuple(groups[group_id] for group_id in wave.groups)

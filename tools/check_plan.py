@@ -8,7 +8,6 @@ import json
 import os
 import platform
 import sys
-import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -213,84 +212,83 @@ def validate(
         artifacts=results / "baseline-codeql",
     )
 
-    with tempfile.TemporaryDirectory(prefix="viper-plan-") as temporary:
-        candidate = Path(temporary) / "candidate"
-        materialize_plan(
-            root,
-            root,
-            traceability,
-            selected,
-            baseline,
-            candidate,
-            completed=completed,
-        )
-        pyright = _run(
-            (
-                str(python),
-                "-m",
-                "pyright",
-                "--project",
-                str(candidate / "pyrightconfig.json"),
-                "--pythonpath",
-                str(python),
-            ),
-            cwd=candidate,
-        )
-        if pyright.returncode != 0:
-            result = {
-                "passed": False,
-                "stage": "pyright",
-                "revision": revision,
-                "blocks": selected,
-                "command": tuple(pyright.args),
-                "stdout": pyright.stdout,
-                "stderr": pyright.stderr,
-            }
-            (results / "result.json").write_text(
-                json.dumps(result, indent=2, sort_keys=True) + "\n"
-            )
-            return result
-
-        planned = _analyze(
-            candidate,
-            revision=revision,
-            committed=False,
-            identity=identity,
-            executable=codeql,
-            query_pack=root / "tools/codeql/viper-python-impact",
-            cache=cache,
-            artifacts=results / "planned-codeql",
-        )
-        unconsumed = _unconsumed_private_owners(
-            traceability,
-            frozenset(selected),
-            planned,
-        )
-        checked = check_plan(
-            root=candidate,
-            baseline_root=root,
-            traceability=traceability,
-            block_ids=selected,
-            baseline=baseline,
-            realized=planned,
-        )
+    candidate = results / "candidate"
+    materialize_plan(
+        root,
+        root,
+        traceability,
+        selected,
+        baseline,
+        candidate,
+        completed=completed,
+    )
+    pyright = _run(
+        (
+            str(python),
+            "-m",
+            "pyright",
+            "--project",
+            str(candidate / "pyrightconfig.json"),
+            "--pythonpath",
+            str(python),
+        ),
+        cwd=candidate,
+    )
+    if pyright.returncode != 0:
         result = {
-            "passed": checked.passed and not unconsumed,
-            "stage": "complete",
+            "passed": False,
+            "stage": "pyright",
             "revision": revision,
             "blocks": selected,
-            "pyright": {
-                "command": tuple(pyright.args),
-                "stdout": pyright.stdout,
-                "stderr": pyright.stderr,
-            },
-            "unconsumed_private_owners": unconsumed,
-            "check": checked.model_dump(mode="json"),
+            "command": tuple(pyright.args),
+            "stdout": pyright.stdout,
+            "stderr": pyright.stderr,
         }
         (results / "result.json").write_text(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
         )
         return result
+
+    planned = _analyze(
+        candidate,
+        revision=revision,
+        committed=False,
+        identity=identity,
+        executable=codeql,
+        query_pack=root / "tools/codeql/viper-python-impact",
+        cache=cache,
+        artifacts=results / "planned-codeql",
+    )
+    unconsumed = _unconsumed_private_owners(
+        traceability,
+        frozenset(selected),
+        planned,
+    )
+    checked = check_plan(
+        root=candidate,
+        baseline_root=root,
+        traceability=traceability,
+        block_ids=selected,
+        baseline=baseline,
+        realized=planned,
+    )
+    result = {
+        "passed": checked.passed and not unconsumed,
+        "stage": "complete",
+        "revision": revision,
+        "blocks": selected,
+        "pyright": {
+            "command": tuple(pyright.args),
+            "stdout": pyright.stdout,
+            "stderr": pyright.stderr,
+        },
+        "unconsumed_private_owners": unconsumed,
+        "check": checked.model_dump(mode="json"),
+    }
+    (results / "result.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n"
+    )
+    return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:

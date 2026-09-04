@@ -102,6 +102,11 @@ def final_targets(
 ) -> tuple[ContractTarget, ...]:
     """Compose each ordered target chain into one baseline-relative change."""
     positions = {block: index for index, block in enumerate(ordered)}
+    target_positions = {
+        block.block_id: {target: index for index, target in enumerate(block.targets)}
+        for block in traceability.blocks
+        if block.block_id in positions
+    }
     chains: dict[tuple[str, str], list[ContractTarget]] = defaultdict(list)
     for target in traceability.targets:
         if target.block_id in positions:
@@ -141,7 +146,15 @@ def final_targets(
         else:
             action = "remove"
         resolved.append(last.model_copy(update={"action": action}))
-    return tuple(resolved)
+    return tuple(
+        sorted(
+            resolved,
+            key=lambda target: (
+                positions[target.block_id],
+                target_positions[target.block_id][target.target],
+            ),
+        )
+    )
 
 
 def materialize_plan(
@@ -181,7 +194,7 @@ def materialize_plan(
             starts.append(starts[-1] + len(line))
         replacements: list[tuple[int, int, bytes]] = []
         additions: list[bytes] = []
-        for target in sorted(file_targets, key=lambda item: item.target.symbol):
+        for target in file_targets:
             node = nodes.get((target.target.path, target.target.symbol))
             if target.action == "add":
                 if node is not None:
