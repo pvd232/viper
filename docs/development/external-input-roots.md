@@ -1381,7 +1381,9 @@ def _planned_stage_context(
     for reference in run.stages:
         path = root / reference.spec
         raw = path.read_bytes()
-        if len(raw) != reference.bytes or hashlib.sha256(raw).hexdigest() != reference.sha256:
+        if len(raw) != reference.bytes or hashlib.sha256(raw).hexdigest() != (
+            reference.sha256
+        ):
             raise ValueError("startup.plan: stage spec identity differs")
         candidate = load_stage_spec(path)
         if reference.stage_id == stage_id:
@@ -1443,6 +1445,7 @@ def _logical_input_paths(
             )
         else:
             paths[name] = reference.path
+
     return paths
 ```
 

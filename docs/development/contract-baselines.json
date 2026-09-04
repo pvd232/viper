@@ -81,7 +81,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "d4bfef88ce7ad6601a9977d541be058e4cd419e024a32560ddfcf5fd954593f4"
+      "sha256": "43ba2a1141e37e2432f01ccc9bbc943cbc35d8f345531d077b1a849a7beaf481"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",
