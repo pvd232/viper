@@ -151,9 +151,14 @@ regardless of how many intermediate declarations the PairBlocks specify.
 `materialize_plan()` copies the baseline Python tree and applies declarations
 in PairBlock order. It replaces or removes existing declarations by their
 exact `SourceGraph` spans, places a new declaration before the next existing
-target, and keeps new imports in the module import block. Version 1 rejects
-nested additions because `ContractTarget` does not yet carry a class-body
-insertion point.
+target, and keeps new imports in the module import block. It rejects an
+imported name that disappears without its own removal target. Version 1
+rejects nested additions because `ContractTarget` does not yet carry a
+class-body insertion point.
+
+Before Pyright, `tools/check_plan.py` runs Ruff and imports every added or
+changed `viper` module in its own isolated process. An import failure records
+the module and traceback under `stage="imports"`.
 
 The existing `analyze_source()` operation analyzes that materialized tree with
 the same pinned `CodeQLIdentity` used for the baseline. `build_block_graph()`
@@ -179,7 +184,7 @@ evidence used to update it, not an automatic checklist mutation.
 
 | Rule | Executable condition |
 | --- | --- |
-| `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into the exact terminal planned source without changing the baseline tree; unordered repeat writers fail. |
+| `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into the exact terminal planned source without changing the baseline tree; unordered repeat writers and unowned import removals fail; Ruff and isolated imports pass before Pyright. |
 | `schedule.graph.closed` <!-- verifier-rule: schedule.graph.closed requirement=SCH-02 --> | Every graph endpoint is selected; explicit and planned source dependencies point prerequisite-first; blocks writing one file receive one deterministic serial order. |
 | `schedule.waves.complete` <!-- verifier-rule: schedule.waves.complete requirement=SCH-03 --> | Every selected block occurs in exactly one SCC group and one wave; every predecessor group occurs in an earlier wave. |
 
@@ -260,13 +265,18 @@ targets = [
     "src/viper/scheduling.py:order_blocks",
     "src/viper/scheduling.py:_precedes",
     "src/viper/scheduling.py:final_targets",
+    "src/viper/scheduling.py:_imports",
+    "src/viper/scheduling.py:_guard_imports",
     "src/viper/scheduling.py:materialize_plan",
     "src/viper/scheduling.py:__all__",
     "tests/test_system_impact.py:scheduling",
+    "tests/test_system_impact.py:preflight",
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
+    "tests/test_system_impact.py:test_materialize_plan_rejects_unowned_sibling_import_removal",
     "tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets",
+    "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
     "tools/check_plan.py:annotations",
@@ -281,6 +291,7 @@ targets = [
     "tools/check_plan.py:Path",
     "tools/check_plan.py:Any",
     "tools/check_plan.py:ROOT",
+    "tools/check_plan.py:_IMPORT_SCRIPT",
     "tools/check_plan.py:impact",
     "tools/check_plan.py:subprocess",
     "tools/check_plan.py:ContractTraceabilityGraph",
@@ -301,6 +312,8 @@ targets = [
     "tools/check_plan.py:_identity",
     "tools/check_plan.py:_analyze",
     "tools/check_plan.py:_unconsumed_private_owners",
+    "tools/check_plan.py:_changed_modules",
+    "tools/check_plan.py:_import_failure",
     "tools/check_plan.py:validate",
     "tools/check_plan.py:main",
 ]
@@ -308,7 +321,9 @@ tests = [
     "tests/test_system_impact.py:test_final_targets_compose_ordered_revisions",
     "tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations",
     "tests/test_system_impact.py:test_materialize_plan_coalesces_one_shared_declaration_removal",
+    "tests/test_system_impact.py:test_materialize_plan_rejects_unowned_sibling_import_removal",
     "tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets",
+    "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
 ]
@@ -424,6 +439,8 @@ from .system_impact import SourceGraph
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:order_blocks -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_precedes -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:final_targets -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_imports -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:_guard_imports -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:materialize_plan -->
 ```python contract-target
 def _import_parts(
@@ -592,6 +609,45 @@ def final_targets(
     )
 
 
+def _imports(source: bytes) -> frozenset[str]:
+    """Return the names bound by top-level imports."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as error:
+        raise ScheduleError("materialized Python cannot be parsed") from error
+
+    names: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        for alias in node.names:
+            if alias.name == "*":
+                continue
+            if alias.asname is not None:
+                names.add(alias.asname)
+            elif isinstance(node, ast.Import):
+                names.add(alias.name.split(".", maxsplit=1)[0])
+            else:
+                names.add(alias.name)
+    return frozenset(names)
+
+
+def _guard_imports(
+    path: str,
+    before: bytes,
+    after: bytes,
+    targets: list[ContractTarget],
+) -> None:
+    """Reject imported names removed without a matching target."""
+    removed = _imports(before) - _imports(after)
+    allowed = {target.target.symbol for target in targets if target.action == "remove"}
+    unowned = sorted(removed - allowed)
+    if unowned:
+        raise ScheduleError(
+            f"materialization removed unowned imports from {path}: {unowned}"
+        )
+
+
 def materialize_plan(
     baseline_root: Path,
     plan_root: Path,
@@ -623,6 +679,7 @@ def materialize_plan(
     for relative_path, file_targets in sorted(by_path.items()):
         output = destination / relative_path
         source = output.read_bytes() if output.exists() else b""
+        before = source
         lines = source.splitlines(keepends=True)
         starts = [0]
         for line in lines:
@@ -793,6 +850,8 @@ def materialize_plan(
                 elif not inserted.endswith(b"\n"):
                     inserted += b"\n"
             source = source[:start] + inserted + replacement + source[end:]
+        if relative_path.endswith(".py"):
+            _guard_imports(relative_path, before, source, file_targets)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(source)
 
@@ -812,8 +871,10 @@ __all__ = [
 **File: `tests/test_system_impact.py`**
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:scheduling -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:preflight -->
 ```python contract-target
 import viper.scheduling as scheduling
+from tools import check_plan as preflight
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
@@ -1035,6 +1096,63 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     assert (destination / "module.py").read_bytes() == b"\n"
 ```
 
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_rejects_unowned_sibling_import_removal -->
+```python contract-target
+def test_materialize_plan_rejects_unowned_sibling_import_removal(
+    tmp_path: Path,
+) -> None:
+    """Keep an untargeted name when one shared import is updated."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"from package import First, Second\n"
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    declaration = _write_target_fence(
+        plan_root,
+        b"from replacement import First",
+    )
+    declaration_end = len(source.rstrip(b"\n"))
+    graph = _source_graph(
+        nodes=tuple(
+            SourceNode(
+                node_id=f"module.py:{symbol}",
+                path="module.py",
+                symbol=symbol,
+                kind="import",
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=declaration_end,
+                sha256=hashlib.sha256(source.rstrip(b"\n")).hexdigest(),
+            )
+            for symbol in ("First", "Second")
+        ),
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="update",
+                path="module.py",
+                symbol="First",
+                declaration=declaration,
+            ),
+        )
+    )
+
+    with pytest.raises(
+        scheduling.ScheduleError,
+        match=r"removed unowned imports from module.py: \['Second'\]",
+    ):
+        scheduling.materialize_plan(
+            baseline_root,
+            plan_root,
+            traceability,
+            (_BLOCK_ID,),
+            graph,
+            tmp_path / "planned",
+        )
+```
+
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_materialize_plan_composes_one_import_across_targets -->
 ```python contract-target
 def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> None:
@@ -1145,6 +1263,31 @@ def test_pre_pairing_command_loads() -> None:
     assert checked.returncode == 0, checked.stderr
 ```
 
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure -->
+```python contract-target
+def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None:
+    """Name the candidate module and error that block preflight."""
+    baseline = tmp_path / "baseline"
+    candidate = tmp_path / "candidate"
+    for root in (baseline, candidate):
+        package = root / "src/viper"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text('"""Fixture package."""\n')
+    (baseline / "src/viper/broken.py").write_text("VALUE = 1\n")
+    (candidate / "src/viper/broken.py").write_text(
+        'raise RuntimeError("broken candidate")\n'
+    )
+
+    modules = preflight._changed_modules(baseline, candidate)
+    failure = preflight._import_failure(candidate, Path(sys.executable), modules)
+
+    assert modules == ("viper.broken",)
+    assert failure is not None
+    assert failure["stage"] == "imports"
+    assert failure["module"] == "viper.broken"
+    assert "RuntimeError: broken candidate" in failure["error"]
+```
+
 **File: `tools/check_plan.py`**
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:annotations -->
@@ -1159,6 +1302,7 @@ def test_pre_pairing_command_loads() -> None:
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Path -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:Any -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ROOT -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_IMPORT_SCRIPT -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:impact -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:subprocess -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:ContractTraceabilityGraph -->
@@ -1179,6 +1323,8 @@ def test_pre_pairing_command_loads() -> None:
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_identity -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_analyze -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_unconsumed_private_owners -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_changed_modules -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:_import_failure -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:validate -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/check_plan.py:main -->
 ```python contract-target
@@ -1199,6 +1345,13 @@ from typing import Any
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+_IMPORT_SCRIPT = (
+    "import importlib\n"
+    "import sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "importlib.import_module(sys.argv[2])\n"
+)
 
 # The private CodeQL adapter imports the public models while loading.
 import viper.system_impact as impact  # noqa: E402
@@ -1348,6 +1501,55 @@ def _unconsumed_private_owners(
     return tuple(sorted(missing))
 
 
+def _changed_modules(root: Path, candidate: Path) -> tuple[str, ...]:
+    """Return added or changed modules under the candidate package."""
+    source_root = candidate / "src"
+    modules: list[str] = []
+    for path in sorted((source_root / "viper").rglob("*.py")):
+        relative = path.relative_to(source_root)
+        baseline = root / "src" / relative
+        if baseline.is_file() and baseline.read_bytes() == path.read_bytes():
+            continue
+        parts = relative.with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        modules.append(".".join(parts))
+    return tuple(modules)
+
+
+def _import_failure(
+    candidate: Path,
+    python: Path,
+    modules: tuple[str, ...],
+) -> dict[str, Any] | None:
+    """Import changed modules alone and return the first failure."""
+    for module in modules:
+        completed = _run(
+            (
+                str(python),
+                "-I",
+                "-c",
+                _IMPORT_SCRIPT,
+                str(candidate / "src"),
+                module,
+            ),
+            cwd=candidate,
+        )
+        if completed.returncode == 0:
+            continue
+        return {
+            "stage": "imports",
+            "module": module,
+            "error": completed.stderr.strip()
+            or completed.stdout.strip()
+            or f"failed to import {module}",
+            "command": tuple(completed.args),
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+        }
+    return None
+
+
 def validate(
     *,
     root: Path,
@@ -1480,6 +1682,20 @@ def validate(
             )
             return result
 
+    modules = _changed_modules(root, candidate)
+    import_failure = _import_failure(candidate, python, modules)
+    if import_failure is not None:
+        result = {
+            "passed": False,
+            "revision": revision,
+            "blocks": selected,
+            **import_failure,
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
     # Make Pyright import the candidate instead of the baseline.
     original_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = str(candidate / "src")
@@ -1544,6 +1760,7 @@ def validate(
         "stage": "complete",
         "revision": revision,
         "blocks": selected,
+        "imports": modules,
         "pyright": {
             "command": tuple(pyright.args),
             "stdout": pyright.stdout,

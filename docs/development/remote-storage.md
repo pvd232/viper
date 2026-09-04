@@ -3724,9 +3724,7 @@ def execute_attempt(
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             captured_inputs: dict[InputName, SnapshotFileRef] = {}
-            stored_input_references: dict[
-                InputName, tuple[ResolvedFileRef, ...]
-            ] = {}
+            stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
             input_paths: dict[str, Path] = {}
             process = None
             journal.append(
@@ -4219,9 +4217,7 @@ def _resolve_metric_dependencies(
         if dependency.source == "artifact":
             files = tuple(
                 resolve_snapshot_file_ref(current_stage.snapshot, file)
-                for file in _artifact_files(
-                    resolved_stage.artifacts[dependency.name]
-                )
+                for file in _artifact_files(resolved_stage.artifacts[dependency.name])
             )
         else:
             declared = stage.inputs[dependency.name]
@@ -4238,9 +4234,7 @@ def _resolve_metric_dependencies(
                 producer = completed_results[declared.producer_stage_id]
                 files = tuple(
                     resolve_snapshot_file_ref(realized.producer.snapshot, file)
-                    for file in _artifact_files(
-                        producer.artifacts[declared.name]
-                    )
+                    for file in _artifact_files(producer.artifacts[declared.name])
                 )
             elif isinstance(realized, ResolvedStoredInputRef):
                 files = stored_inputs[dependency.name]
@@ -4453,8 +4447,7 @@ def verify_snapshot_artifact(
         for reference in references
     )
     resolved_references = tuple(
-        resolve_snapshot_file_ref(stage.snapshot, reference)
-        for reference in references
+        resolve_snapshot_file_ref(stage.snapshot, reference) for reference in references
     )
     return VerifiedArtifact(
         artifact=artifact,
@@ -4480,9 +4473,7 @@ def verify_metric_dependency_references(
 ) -> None:
     """Require one metric dependency to retain its exact storage references."""
     if received.files != expected.files:
-        raise VerificationError(
-            f"metric {metric_id!r} dependency references differ"
-        )
+        raise VerificationError(f"metric {metric_id!r} dependency references differ")
 ```
 
 <!-- contract-target: requirements=RSP-03 block=P4-RSP-01 action=update target=src/viper/_verification/metrics.py:verify_recomputed_metrics -->

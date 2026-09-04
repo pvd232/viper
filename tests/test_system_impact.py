@@ -14,6 +14,7 @@ from typing import cast
 import pytest
 
 import viper.scheduling as scheduling
+from tools import check_plan as preflight
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
@@ -318,6 +319,84 @@ def test_materialize_plan_coalesces_one_shared_declaration_removal(
     )
 
     assert (destination / "module.py").read_bytes() == b"\n"
+
+
+def test_materialize_plan_rejects_unowned_sibling_import_removal(
+    tmp_path: Path,
+) -> None:
+    """Keep an untargeted name when one shared import is updated."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"from package import First, Second\n"
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    declaration = _write_target_fence(
+        plan_root,
+        b"from replacement import First",
+    )
+    declaration_end = len(source.rstrip(b"\n"))
+    graph = _source_graph(
+        nodes=tuple(
+            SourceNode(
+                node_id=f"module.py:{symbol}",
+                path="module.py",
+                symbol=symbol,
+                kind="import",
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=declaration_end,
+                sha256=hashlib.sha256(source.rstrip(b"\n")).hexdigest(),
+            )
+            for symbol in ("First", "Second")
+        ),
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="update",
+                path="module.py",
+                symbol="First",
+                declaration=declaration,
+            ),
+        )
+    )
+
+    with pytest.raises(
+        scheduling.ScheduleError,
+        match=r"removed unowned imports from module.py: \['Second'\]",
+    ):
+        scheduling.materialize_plan(
+            baseline_root,
+            plan_root,
+            traceability,
+            (_BLOCK_ID,),
+            graph,
+            tmp_path / "planned",
+        )
+
+
+def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None:
+    """Name the candidate module and error that block preflight."""
+    baseline = tmp_path / "baseline"
+    candidate = tmp_path / "candidate"
+    for root in (baseline, candidate):
+        package = root / "src/viper"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text('"""Fixture package."""\n')
+    (baseline / "src/viper/broken.py").write_text("VALUE = 1\n")
+    (candidate / "src/viper/broken.py").write_text(
+        'raise RuntimeError("broken candidate")\n'
+    )
+
+    modules = preflight._changed_modules(baseline, candidate)
+    failure = preflight._import_failure(candidate, Path(sys.executable), modules)
+
+    assert modules == ("viper.broken",)
+    assert failure is not None
+    assert failure["stage"] == "imports"
+    assert failure["module"] == "viper.broken"
+    assert "RuntimeError: broken candidate" in failure["error"]
 
 
 def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> None:
@@ -1677,6 +1756,47 @@ def test_class_target_owns_nested_declaration_changes() -> None:
         realized_nodes={
             (path, "Example"): realized_class,
             (path, "Example.value"): realized_field,
+        },
+        targets=(target,),
+    )
+
+    assert unexpected == ()
+
+
+def test_import_target_owns_names_in_the_same_statement() -> None:
+    """Do not report sibling names changed by one planned import edit."""
+    path = "src/example.py"
+    baseline_name = _node(
+        path=path,
+        symbol="Existing",
+        kind="import",
+        declaration=b"from .models import Existing",
+    )
+    realized_name = _node(
+        path=path,
+        symbol="Existing",
+        kind="import",
+        declaration=b"from .models import Existing, New",
+    )
+    realized_new = _node(
+        path=path,
+        symbol="New",
+        kind="import",
+        declaration=b"from .models import Existing, New",
+    )
+    target = ContractTarget(
+        requirements=(_REQUIREMENT_ID,),
+        block_id=_BLOCK_ID,
+        action="add",
+        target=RepoSymbolRef(path=path, symbol="New"),
+        declaration=_declaration_ref(),
+    )
+
+    unexpected = _unexpected_changes(
+        baseline_nodes={(path, "Existing"): baseline_name},
+        realized_nodes={
+            (path, "Existing"): realized_name,
+            (path, "New"): realized_new,
         },
         targets=(target,),
     )

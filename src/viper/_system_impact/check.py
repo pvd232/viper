@@ -411,10 +411,22 @@ def _unexpected_changes(
     }
     all_nodes = {**baseline_nodes, **realized_nodes}
     planned: set[tuple[str, str]] = set()
+    import_spans: set[tuple[str, int, int, int, int]] = set()
     for target in targets:
         target_key = _target_key(target)
         planned.add(target_key)
         target_node = all_nodes.get(target_key)
+        for node in (baseline_nodes.get(target_key), realized_nodes.get(target_key)):
+            if node is not None and node.kind == "import":
+                import_spans.add(
+                    (
+                        node.path,
+                        node.start_line,
+                        node.start_col,
+                        node.end_line,
+                        node.end_col,
+                    )
+                )
         for key, node in all_nodes.items():
             if key[0] != target_key[0]:
                 continue
@@ -428,6 +440,17 @@ def _unexpected_changes(
             )
             if target_contains_node or node_contains_target:
                 planned.add(key)
+    for key, node in all_nodes.items():
+        span = (
+            node.path,
+            node.start_line,
+            node.start_col,
+            node.end_line,
+            node.end_col,
+        )
+        if node.kind == "import" and span in import_spans:
+            # One import target owns the whole statement; Ruff may regroup its names.
+            planned.add(key)
     return tuple(
         RepoSymbolRef(path=path, symbol=symbol)
         for path, symbol in sorted(changed - planned)

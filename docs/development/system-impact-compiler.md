@@ -1401,9 +1401,9 @@ depends_on = ["P0-SIG-05"]
 ```toml pair-block
 id = "P0-SIG-07"
 requirements = ["SIG-07"]
-targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
-tests = ["tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
-gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'one_hop_records or pre_pairing_pyright' -q"
+targets = ["src/viper/system_impact.py:_inspect_plan", "src/viper/system_impact.py:inspect_plan", "src/viper/system_impact.py:_accept", "src/viper/system_impact.py:_check_plan", "src/viper/system_impact.py:check_plan", "src/viper/system_impact.py:accept", "src/viper/system_impact.py:OneHop", "src/viper/system_impact.py:PlanCheck", "src/viper/system_impact.py:__all__", "src/viper/_system_impact/check.py:Acceptance", "src/viper/_system_impact/check.py:CommitId", "src/viper/_system_impact/check.py:GateCheck", "src/viper/_system_impact/check.py:IMPACT_EDGE_KINDS_V1", "src/viper/_system_impact/check.py:OneHop", "src/viper/_system_impact/check.py:PlanCheck", "src/viper/_system_impact/check.py:ResolvedContractTarget", "src/viper/_system_impact/check.py:SourceGraph", "src/viper/_system_impact/check.py:SourceNode", "src/viper/_system_impact/check.py:TargetCheck", "src/viper/_system_impact/check.py:inspect_plan", "src/viper/_system_impact/check.py:_unexpected_changes", "src/viper/_system_impact/check.py:_one_hop", "src/viper/_system_impact/check.py:check_plan", "tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+tests = ["tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement", "tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors", "tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller"]
+gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'import_target_owns or one_hop_records or pre_pairing_pyright' -q"
 depends_on = ["P0-SIG-06"]
 ```
 
@@ -2415,6 +2415,71 @@ from ..system_impact import (
 from .plan import IMPACT_EDGE_KINDS_V1
 ```
 
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:_unexpected_changes -->
+```python contract-target
+def _unexpected_changes(
+    *,
+    baseline_nodes: dict[tuple[str, str], SourceNode],
+    realized_nodes: dict[tuple[str, str], SourceNode],
+    targets: tuple[ContractTarget, ...],
+) -> tuple[RepoSymbolRef, ...]:
+    changed = {
+        key
+        for key in baseline_nodes.keys() | realized_nodes.keys()
+        if (
+            baseline_nodes.get(key) is None
+            or realized_nodes.get(key) is None
+            or baseline_nodes[key].sha256 != realized_nodes[key].sha256
+        )
+    }
+    all_nodes = {**baseline_nodes, **realized_nodes}
+    planned: set[tuple[str, str]] = set()
+    import_spans: set[tuple[str, int, int, int, int]] = set()
+    for target in targets:
+        target_key = _target_key(target)
+        planned.add(target_key)
+        target_node = all_nodes.get(target_key)
+        for node in (baseline_nodes.get(target_key), realized_nodes.get(target_key)):
+            if node is not None and node.kind == "import":
+                import_spans.add(
+                    (
+                        node.path,
+                        node.start_line,
+                        node.start_col,
+                        node.end_line,
+                        node.end_col,
+                    )
+                )
+        for key, node in all_nodes.items():
+            if key[0] != target_key[0]:
+                continue
+            target_contains_node = (
+                target_node is not None
+                and target_node.kind == "class"
+                and node.symbol.startswith(f"{target_key[1]}.")
+            )
+            node_contains_target = node.kind == "class" and target_key[1].startswith(
+                f"{node.symbol}."
+            )
+            if target_contains_node or node_contains_target:
+                planned.add(key)
+    for key, node in all_nodes.items():
+        span = (
+            node.path,
+            node.start_line,
+            node.start_col,
+            node.end_line,
+            node.end_col,
+        )
+        if node.kind == "import" and span in import_spans:
+            # One import target owns the whole statement; Ruff may regroup its names.
+            planned.add(key)
+    return tuple(
+        RepoSymbolRef(path=path, symbol=symbol)
+        for path, symbol in sorted(changed - planned)
+    )
+```
+
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=src/viper/_system_impact/check.py:_one_hop -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/check.py:check_plan -->
 
@@ -2589,6 +2654,49 @@ def check_plan(
 ```
 
 **File: `tests/test_system_impact.py`**
+
+<!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement -->
+```python contract-target
+def test_import_target_owns_names_in_the_same_statement() -> None:
+    """Do not report sibling names changed by one planned import edit."""
+    path = "src/example.py"
+    baseline_name = _node(
+        path=path,
+        symbol="Existing",
+        kind="import",
+        declaration=b"from .models import Existing",
+    )
+    realized_name = _node(
+        path=path,
+        symbol="Existing",
+        kind="import",
+        declaration=b"from .models import Existing, New",
+    )
+    realized_new = _node(
+        path=path,
+        symbol="New",
+        kind="import",
+        declaration=b"from .models import Existing, New",
+    )
+    target = ContractTarget(
+        requirements=(_REQUIREMENT_ID,),
+        block_id=_BLOCK_ID,
+        action="add",
+        target=RepoSymbolRef(path=path, symbol="New"),
+        declaration=_declaration_ref(),
+    )
+
+    unexpected = _unexpected_changes(
+        baseline_nodes={(path, "Existing"): baseline_name},
+        realized_nodes={
+            (path, "Existing"): realized_name,
+            (path, "New"): realized_new,
+        },
+        targets=(target,),
+    )
+
+    assert unexpected == ()
+```
 
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_one_hop_records_baseline_and_candidate_neighbors -->
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_pre_pairing_pyright_rejects_stale_caller -->

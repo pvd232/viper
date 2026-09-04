@@ -275,6 +275,45 @@ def final_targets(
     )
 
 
+def _imports(source: bytes) -> frozenset[str]:
+    """Return the names bound by top-level imports."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as error:
+        raise ScheduleError("materialized Python cannot be parsed") from error
+
+    names: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        for alias in node.names:
+            if alias.name == "*":
+                continue
+            if alias.asname is not None:
+                names.add(alias.asname)
+            elif isinstance(node, ast.Import):
+                names.add(alias.name.split(".", maxsplit=1)[0])
+            else:
+                names.add(alias.name)
+    return frozenset(names)
+
+
+def _guard_imports(
+    path: str,
+    before: bytes,
+    after: bytes,
+    targets: list[ContractTarget],
+) -> None:
+    """Reject imported names removed without a matching target."""
+    removed = _imports(before) - _imports(after)
+    allowed = {target.target.symbol for target in targets if target.action == "remove"}
+    unowned = sorted(removed - allowed)
+    if unowned:
+        raise ScheduleError(
+            f"materialization removed unowned imports from {path}: {unowned}"
+        )
+
+
 def materialize_plan(
     baseline_root: Path,
     plan_root: Path,
@@ -306,6 +345,7 @@ def materialize_plan(
     for relative_path, file_targets in sorted(by_path.items()):
         output = destination / relative_path
         source = output.read_bytes() if output.exists() else b""
+        before = source
         lines = source.splitlines(keepends=True)
         starts = [0]
         for line in lines:
@@ -476,6 +516,8 @@ def materialize_plan(
                 elif not inserted.endswith(b"\n"):
                     inserted += b"\n"
             source = source[:start] + inserted + replacement + source[end:]
+        if relative_path.endswith(".py"):
+            _guard_imports(relative_path, before, source, file_targets)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(source)
 

@@ -16,6 +16,13 @@ from typing import Any
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+_IMPORT_SCRIPT = (
+    "import importlib\n"
+    "import sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "importlib.import_module(sys.argv[2])\n"
+)
+
 # The private CodeQL adapter imports the public models while loading.
 import viper.system_impact as impact  # noqa: E402
 from viper import _subprocess as subprocess  # noqa: E402
@@ -163,6 +170,55 @@ def _unconsumed_private_owners(
     return tuple(sorted(missing))
 
 
+def _changed_modules(root: Path, candidate: Path) -> tuple[str, ...]:
+    """Return added or changed modules under the candidate package."""
+    source_root = candidate / "src"
+    modules: list[str] = []
+    for path in sorted((source_root / "viper").rglob("*.py")):
+        relative = path.relative_to(source_root)
+        baseline = root / "src" / relative
+        if baseline.is_file() and baseline.read_bytes() == path.read_bytes():
+            continue
+        parts = relative.with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        modules.append(".".join(parts))
+    return tuple(modules)
+
+
+def _import_failure(
+    candidate: Path,
+    python: Path,
+    modules: tuple[str, ...],
+) -> dict[str, Any] | None:
+    """Import changed modules alone and return the first failure."""
+    for module in modules:
+        completed = _run(
+            (
+                str(python),
+                "-I",
+                "-c",
+                _IMPORT_SCRIPT,
+                str(candidate / "src"),
+                module,
+            ),
+            cwd=candidate,
+        )
+        if completed.returncode == 0:
+            continue
+        return {
+            "stage": "imports",
+            "module": module,
+            "error": completed.stderr.strip()
+            or completed.stdout.strip()
+            or f"failed to import {module}",
+            "command": tuple(completed.args),
+            "stdout": completed.stdout,
+            "stderr": completed.stderr,
+        }
+    return None
+
+
 def validate(
     *,
     root: Path,
@@ -295,6 +351,20 @@ def validate(
             )
             return result
 
+    modules = _changed_modules(root, candidate)
+    import_failure = _import_failure(candidate, python, modules)
+    if import_failure is not None:
+        result = {
+            "passed": False,
+            "revision": revision,
+            "blocks": selected,
+            **import_failure,
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
     # Make Pyright import the candidate instead of the baseline.
     original_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["PYTHONPATH"] = str(candidate / "src")
@@ -359,6 +429,7 @@ def validate(
         "stage": "complete",
         "revision": revision,
         "blocks": selected,
+        "imports": modules,
         "pyright": {
             "command": tuple(pyright.args),
             "stdout": pyright.stdout,
