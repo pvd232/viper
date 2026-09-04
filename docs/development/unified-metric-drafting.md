@@ -14,7 +14,7 @@ stage, and run documents without requiring a public freezing step.
 
 ## 1. Status
 
-**Contract status:** in progress; Phase 4 implemented.
+**Contract status:** in progress.
 
 These requirements bind the contract to the master checklist:
 
@@ -1484,7 +1484,7 @@ differentiable objective interface to prove that relationship.
 | Rule | Executable condition |
 | --- | --- |
 | `metric.authoring.complete` <!-- verifier-rule: metric.authoring.complete requirement=UMD-01 --> | Metric, objective, and criterion drafts freeze through their public constructors. |
-| `metric.params.dein_stagered` <!-- verifier-rule: metric.params.dein_stagered requirement=UMD-02 --> | in_stage and recomputed metric execution receives the frozen parameter class, values, and dependency snapshots. |
+| `metric.params.delivered` <!-- verifier-rule: metric.params.delivered requirement=UMD-02 --> | in_stage and recomputed metric execution receives the frozen parameter class, values, and dependency snapshots. |
 | `metric.objective.enforced` <!-- verifier-rule: metric.objective.enforced requirement=UMD-03 --> | Frozen objectives preserve metric identity and direction, and each stage satisfies its objective rule. |
 | `experiment.authoring.complete` <!-- verifier-rule: experiment.authoring.complete requirement=UMD-04 --> | Experiment, factor, variant, and replicate drafts compile with one derived metric registry. |
 | `plan.identity.generated` <!-- verifier-rule: plan.identity.generated requirement=UMD-04 --> | `plan()` generates one valid run ID, exposes it read-only, and every compiled or executed record preserves it. |
@@ -5341,4 +5341,1055 @@ def publish_metric_verification(
         bytes=len(raw),
         stored_at=location,
     )
+```
++
+<!-- pair-block-definition: P6-UMD-01 -->
+```toml pair-block
+id = "P6-UMD-01"
+requirements = ["UMD-04"]
+targets = [
+    "src/viper/authoring.py:secrets",
+    "src/viper/authoring.py:time",
+    "src/viper/authoring.py:Never",
+    "src/viper/authoring.py:model_validator",
+    "src/viper/authoring.py:FactorId",
+    "src/viper/authoring.py:LevelId",
+    "src/viper/authoring.py:FactorDraft",
+    "src/viper/authoring.py:VariantDraft",
+    "src/viper/authoring.py:ReplicateDraft",
+    "src/viper/authoring.py:ExperimentDraft",
+    "src/viper/authoring.py:RunPlanDraft",
+    "src/viper/authoring.py:_FrozenDict",
+    "src/viper/authoring.py:_FrozenList",
+    "src/viper/authoring.py:_ULID_ALPHABET",
+    "src/viper/authoring.py:_new_run_id",
+    "src/viper/authoring.py:_deep_freeze",
+    "src/viper/authoring.py:factor",
+    "src/viper/authoring.py:variant",
+    "src/viper/authoring.py:replicate",
+    "src/viper/authoring.py:experiment",
+    "src/viper/authoring.py:plan",
+    "src/viper/authoring.py:freeze_run_plan",
+    "tests/test_authoring.py:pytest",
+    "tests/test_authoring.py:TypeAdapter",
+    "tests/test_authoring.py:ValidationError",
+    "tests/test_authoring.py:VariantDraft",
+    "tests/test_authoring.py:experiment",
+    "tests/test_authoring.py:factor",
+    "tests/test_authoring.py:plan",
+    "tests/test_authoring.py:replicate",
+    "tests/test_authoring.py:variant",
+    "tests/test_authoring.py:GitSource",
+    "tests/test_authoring.py:EnvSpec",
+    "tests/test_authoring.py:ReproducibilitySpec",
+    "tests/test_authoring.py:_immutable_plan",
+    "tests/test_authoring.py:test_plan_generates_read_only_run_id",
+    "tests/test_authoring.py:test_plan_rejects_every_nested_mutator",
+]
+tests = [
+    "tests/test_authoring.py:test_plan_generates_read_only_run_id",
+    "tests/test_authoring.py:test_plan_rejects_every_nested_mutator",
+]
+gate = "python -m pytest tests/test_authoring.py::test_plan_generates_read_only_run_id tests/test_authoring.py::test_plan_rejects_every_nested_mutator -q"
+depends_on = ["P5-AIR-04"]
+```
+
+**Context:** One variant graph should serve several replicates without letting later caller mutation alter an approved run. This block gives the authored graph one generated run ID and freezes every nested container before returning it.
+
+**File: `src/viper/authoring.py`**
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:secrets -->
+```python contract-target
+import secrets
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:time -->
+```python contract-target
+import time
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:Never -->
+```python contract-target
+from typing import Annotated, Any, Literal, Never
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:model_validator -->
+```python contract-target
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:FactorId -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:LevelId -->
+```python contract-target
+from .ids import (
+    EvalId,
+    ExperimentId,
+    FactorId,
+    InputName,
+    LevelId,
+    ReplicateId,
+    RunId,
+    StageId,
+    VariantId,
+)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:FactorDraft -->
+```python contract-target
+class FactorDraft(BaseModel):
+    """Hold the levels available for one experimental factor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    levels: tuple[LevelId, ...] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_levels(self) -> FactorDraft:
+        """Reject duplicate levels within one factor."""
+        if len(set(self.levels)) != len(self.levels):
+            raise ValueError("factor levels must be unique")
+        return self
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:VariantDraft -->
+```python contract-target
+class VariantDraft(BaseModel):
+    """Hold one variant's factor levels, stages, and estimator."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    levels: dict[FactorId, LevelId]
+    stages: dict[StageId, StageDraft] = Field(min_length=1)
+    estimator: StageDraftArtifactRef
+
+    @model_validator(mode="after")
+    def validate_estimator(self) -> VariantDraft:
+        """Require the estimator to come from this variant's stage graph."""
+        if not any(stage is self.estimator.producer for stage in self.stages.values()):
+            raise ValueError("estimator producer is absent from the variant")
+        return self
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:ReplicateDraft -->
+```python contract-target
+class ReplicateDraft(BaseModel):
+    """Hold the seed assigned to one experiment replicate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    seed: RNGSeed
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:ExperimentDraft -->
+```python contract-target
+class ExperimentDraft(BaseModel):
+    """Hold the reusable variants and replicates in one experiment."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    experiment_id: ExperimentId
+    factors: dict[FactorId, FactorDraft] = Field(default_factory=dict)
+    variants: dict[VariantId, VariantDraft] = Field(min_length=1)
+    replicates: dict[ReplicateId, ReplicateDraft] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_variants(self) -> ExperimentDraft:
+        """Require every variant level to belong to its declared factor."""
+        for variant in self.variants.values():
+            if set(variant.levels) != set(self.factors):
+                raise ValueError("variant factors differ from the experiment")
+            for factor_id, level_id in variant.levels.items():
+                if level_id not in self.factors[factor_id].levels:
+                    raise ValueError("variant level is absent from its factor")
+        return self
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=update target=src/viper/authoring.py:RunPlanDraft -->
+```python contract-target
+class RunPlanDraft(BaseModel):
+    """Select one immutable experiment variant and replicate for execution."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    experiment: ExperimentDraft
+    variant: VariantId
+    replicate: ReplicateId
+    source: GitSource
+    env: EnvSpec
+    reproducibility: ReproducibilitySpec
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_FrozenDict -->
+```python contract-target
+class _FrozenDict(dict[Any, Any]):
+    """Keep mapping behavior while rejecting every mutation."""
+
+    def _reject(self, *args: object, **kwargs: object) -> Never:
+        raise TypeError("frozen plan values cannot be changed")
+
+    __delitem__ = _reject
+    __ior__ = _reject
+    __setitem__ = _reject
+    clear = _reject
+    pop = _reject
+    popitem = _reject
+    setdefault = _reject  # pyright: ignore[reportAssignmentType]
+    update = _reject  # pyright: ignore[reportAssignmentType]
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_FrozenList -->
+```python contract-target
+class _FrozenList(list[Any]):
+    """Keep sequence behavior while rejecting every mutation."""
+
+    def _reject(self, *args: object, **kwargs: object) -> Never:
+        raise TypeError("frozen plan values cannot be changed")
+
+    __delitem__ = _reject
+    __iadd__ = _reject
+    __imul__ = _reject
+    __setitem__ = _reject
+    append = _reject
+    clear = _reject
+    extend = _reject
+    insert = _reject
+    pop = _reject
+    remove = _reject
+    reverse = _reject
+    sort = _reject  # pyright: ignore[reportAssignmentType]
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_ULID_ALPHABET -->
+```python contract-target
+_ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_new_run_id -->
+```python contract-target
+def _new_run_id() -> RunId:
+    """Generate one sortable 128-bit run identity."""
+    value = (time.time_ns() // 1_000_000 << 80) | int.from_bytes(
+        secrets.token_bytes(10), "big"
+    )
+    encoded = "".join(
+        _ULID_ALPHABET[(value >> shift) & 31] for shift in range(125, -1, -5)
+    )
+    return TypeAdapter(RunId).validate_python(encoded)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_deep_freeze -->
+```python contract-target
+def _deep_freeze(
+    value: Any,
+    memo: dict[int, Any] | None = None,
+    active: set[int] | None = None,
+) -> Any:
+    """Replace nested mutable values while preserving shared references."""
+    frozen = {} if memo is None else memo
+    visiting = set() if active is None else active
+    identity = id(value)
+    if identity in frozen:
+        return frozen[identity]
+    if identity in visiting:
+        raise TypeError("recursive plan values are not supported")
+    if isinstance(value, (str, bytes, int, float, bool, type(None))):
+        return value
+
+    visiting.add(identity)
+    try:
+        if isinstance(value, StageDraftArtifactRef):
+            result = StageDraftArtifactRef(
+                producer=_deep_freeze(value.producer, frozen, visiting),
+                artifact_name=value.artifact_name,
+            )
+        elif isinstance(value, BaseModel):
+            updates = {
+                name: _deep_freeze(field, frozen, visiting)
+                for name, field in value.__dict__.items()
+            }
+            result = value.model_copy(update=updates)
+        elif isinstance(value, dict):
+            result = _FrozenDict(
+                (
+                    _deep_freeze(key, frozen, visiting),
+                    _deep_freeze(item, frozen, visiting),
+                )
+                for key, item in value.items()
+            )
+        elif isinstance(value, list):
+            result = _FrozenList(_deep_freeze(item, frozen, visiting) for item in value)
+        elif isinstance(value, tuple):
+            result = tuple(_deep_freeze(item, frozen, visiting) for item in value)
+        elif isinstance(value, (set, frozenset)):
+            result = frozenset(_deep_freeze(item, frozen, visiting) for item in value)
+        else:
+            result = value
+    finally:
+        visiting.remove(identity)
+    frozen[identity] = result
+    return result
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:factor -->
+```python contract-target
+def factor(*, levels: tuple[LevelId, ...]) -> FactorDraft:
+    """Declare one experimental factor."""
+    return FactorDraft(levels=levels)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:variant -->
+```python contract-target
+def variant(
+    *,
+    levels: dict[FactorId, LevelId],
+    stages: dict[StageId, StageDraft],
+    estimator: StageDraftArtifactRef,
+) -> VariantDraft:
+    """Declare one reusable variant graph."""
+    return VariantDraft(levels=levels, stages=stages, estimator=estimator)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:replicate -->
+```python contract-target
+def replicate(*, seed: RNGSeed) -> ReplicateDraft:
+    """Declare one reproducible experiment replicate."""
+    return ReplicateDraft(seed=seed)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:experiment -->
+```python contract-target
+def experiment(
+    *,
+    experiment_id: ExperimentId,
+    variants: dict[VariantId, VariantDraft],
+    replicates: dict[ReplicateId, ReplicateDraft],
+    factors: dict[FactorId, FactorDraft] | None = None,
+) -> ExperimentDraft:
+    """Declare one experiment over reusable variants and replicates."""
+    return ExperimentDraft(
+        experiment_id=experiment_id,
+        factors={} if factors is None else factors,
+        variants=variants,
+        replicates=replicates,
+    )
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:plan -->
+```python contract-target
+def plan(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft:
+    """Create one identified plan detached from mutable caller values."""
+    if variant not in experiment.variants:
+        raise ValueError("variant is absent from the experiment")
+    if replicate not in experiment.replicates:
+        raise ValueError("replicate is absent from the experiment")
+    draft = RunPlanDraft(
+        run_id=_new_run_id(),
+        experiment=experiment,
+        variant=variant,
+        replicate=replicate,
+        source=source,
+        env=env,
+        reproducibility=reproducibility,
+    )
+    return _deep_freeze(draft)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=update target=src/viper/authoring.py:freeze_run_plan -->
+```python contract-target
+def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
+    """Freeze the selected immutable draft through the Phase 5 file adapter."""
+    project_root = resolve_root(root)
+    experiment_draft = draft.experiment
+    variant_draft = experiment_draft.variants[draft.variant]
+    replicate_draft = experiment_draft.replicates[draft.replicate]
+    run_root = (
+        f"experiments/{experiment_draft.experiment_id}/runs/"
+        f"{draft.variant}/{draft.run_id}"
+    )
+    files: list[tuple[Path, bytes]] = []
+    stage_refs: list[RunStageRef] = []
+    for stage_id, stage in variant_draft.stages.items():
+        spec = _freeze_stage(
+            project_root,
+            run_root,
+            variant_draft.stages,
+            stage.spec,
+        )
+        raw = serialize_document(spec)
+        relative = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files.append((_target_path(project_root, relative), raw))
+        stage_refs.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=relative,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    estimator_stage = next(
+        (
+            name
+            for name, stage in variant_draft.stages.items()
+            if stage is variant_draft.estimator.producer
+        ),
+        None,
+    )
+    if estimator_stage is None:
+        raise ValueError("estimator producer is absent from the plan")
+    run = RunSpec(
+        run_id=draft.run_id,
+        experiment_id=experiment_draft.experiment_id,
+        variant_id=draft.variant,
+        replicate_id=draft.replicate,
+        benchmark_id=None,
+        seed=replicate_draft.seed,
+        source=draft.source,
+        env=draft.env,
+        reproducibility=draft.reproducibility,
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id=estimator_stage,
+            artifact_name=variant_draft.estimator.artifact_name,
+        ),
+    )
+    files.append(
+        (_target_path(project_root, f"{run_root}/spec.yaml"), serialize_document(run))
+    )
+    for path, raw in files:
+        _write_exact_file(path, raw)
+    return FrozenPlanFiles(run=run, files=tuple(path for path, _ in files))
+```
+
+**File: `tests/test_authoring.py`**
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:pytest -->
+```python contract-target
+import pytest
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:TypeAdapter -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:ValidationError -->
+```python contract-target
+from pydantic import TypeAdapter, ValidationError
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:VariantDraft -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:experiment -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:factor -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:plan -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:replicate -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:variant -->
+```python contract-target
+from viper.authoring import (
+    RunPlanDraft,
+    VariantDraft,
+    expand_http_url,
+    experiment,
+    factor,
+    freeze_run_plan,
+    plan,
+    replicate,
+    stage,
+    variant,
+    write_experiment_spec,
+    write_variant_spec,
+)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:GitSource -->
+```python contract-target
+from viper.references import GitSource
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:EnvSpec -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:ReproducibilitySpec -->
+```python contract-target
+from viper.runtime import EnvSpec, ReproducibilitySpec
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:_immutable_plan -->
+```python contract-target
+def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
+    """Build one small plan and retain its caller-owned variant mapping."""
+
+    @metric(metric_id="training_loss", mode="live")
+    def training_loss(context) -> float:
+        return 1.0
+
+    @train(params=params.Train)
+    def fit(context: Context[params.Train]) -> None:
+        context.artifacts["model"].write_bytes(b"model")
+
+    loss = measure(training_loss, params=params.Metric())
+    train_stage = stage(
+        fit,
+        params=params.Train(),
+        inputs={
+            "dataset": external_input(
+                path="inputs/raw/dataset.csv",
+                data_role="training",
+            )
+        },
+        artifacts={
+            "model": artifact(
+                path="artifacts/model.bin",
+                loader=lambda path: path.read_bytes(),
+                data_role="training",
+            )
+        },
+        metrics=(loss,),
+        objective=min(loss),
+    )
+    variants = {
+        "baseline": variant(
+            levels={"rank": "full"},
+            stages={"train": train_stage},
+            estimator=train_stage.artifacts["model"],
+        )
+    }
+    authored = experiment(
+        experiment_id="e001_strand",
+        factors={"rank": factor(levels=("full", "low"))},
+        variants=variants,
+        replicates={"replicate_01": replicate(seed=42)},
+    )
+    env_payload = environment_payload()
+    env_payload["python_env"] = env_payload.pop("python_environment")
+    return (
+        plan(
+            experiment=authored,
+            variant="baseline",
+            replicate="replicate_01",
+            source=GitSource(
+                repository="https://github.com/example/viper-project",
+                commit=COMMIT,
+            ),
+            env=TypeAdapter(EnvSpec).validate_python(env_payload),
+            reproducibility=ReproducibilitySpec.model_validate(
+                reproducibility_payload()
+            ),
+        ),
+        variants,
+    )
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:test_plan_generates_read_only_run_id -->
+```python contract-target
+def test_plan_generates_read_only_run_id() -> None:
+    """Generate one valid identity that callers cannot replace afterward."""
+    draft, _ = _immutable_plan()
+
+    assert len(draft.run_id) == 26
+    with pytest.raises(ValidationError):
+        draft.run_id = RUN_ID
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
+```python contract-target
+def test_plan_rejects_every_nested_mutator() -> None:
+    """Detach the plan from caller aliases and reject nested mutation."""
+    draft, variants = _immutable_plan()
+    variants.clear()
+
+    assert tuple(draft.experiment.variants) == ("baseline",)
+    with pytest.raises(TypeError, match="frozen plan"):
+        draft.experiment.variants.clear()
+    with pytest.raises(TypeError, match="frozen plan"):
+        draft.experiment.variants["baseline"].stages.update({})
+```
+<!-- pair-block-definition: P6-UMD-02 -->
+```toml pair-block
+id = "P6-UMD-02"
+requirements = ["UMD-04"]
+targets = [
+    "src/viper/execution/__init__.py:importlib",
+    "src/viper/worker.py:os",
+    "src/viper/worker.py:UTC",
+    "src/viper/worker.py:datetime",
+    "src/viper/worker.py:Path",
+    "src/viper/worker.py:Literal",
+    "src/viper/worker.py:BaseModel",
+    "src/viper/worker.py:ConfigDict",
+    "src/viper/worker.py:Field",
+    "src/viper/worker.py:model_validator",
+    "src/viper/worker.py:subprocess",
+    "src/viper/worker.py:WorkerError",
+    "src/viper/worker.py:ExecutionPolicy",
+    "src/viper/worker.py:WorkerRequest",
+    "src/viper/worker.py:WorkerResult",
+    "src/viper/worker.py:execute_worker",
+    "src/viper/worker.py:__all__",
+    "src/viper/_parameter/validation.py:ExecutionPolicy",
+    "src/viper/_parameter/validation.py:WorkerRequest",
+    "src/viper/_parameter/validation.py:execute_worker",
+    "src/viper/artifact_loaders.py:ExecutionPolicy",
+    "src/viper/artifact_loaders.py:WorkerRequest",
+    "src/viper/artifact_loaders.py:execute_worker",
+    "tests/test_worker.py:ExecutionPolicy",
+    "tests/test_worker.py:WorkerError",
+    "tests/test_worker.py:WorkerRequest",
+    "tests/test_worker.py:execute_worker",
+    "src/viper/execution/__init__.py:RunPlanDraft",
+    "src/viper/execution/__init__.py:freeze_run_plan",
+    "src/viper/execution/__init__.py:_benchmark",
+    "src/viper/execution/__init__.py:_retry",
+    "src/viper/execution/__init__.py:_run",
+    "src/viper/execution/__init__.py:run",
+    "src/viper/execution/__init__.py:retry",
+    "src/viper/execution/__init__.py:benchmark",
+    "src/viper/execution/_run.py:ResolvedRunSpecRef",
+    "src/viper/execution/_run.py:run",
+    "src/viper/execution/_run.py:retry",
+    "tests/conftest.py:TIER_BY_MODULE",
+    "tests/conftest.py:DOMAIN_BY_MODULE",
+    "tests/test_plan_execution.py:Path",
+    "tests/test_plan_execution.py:SimpleNamespace",
+    "tests/test_plan_execution.py:pytest",
+    "tests/test_plan_execution.py:execution",
+    "tests/test_plan_execution.py:RunPlanDraft",
+    "tests/test_plan_execution.py:test_run_compiles_plan_before_first_attempt",
+]
+tests = [
+    "tests/test_worker.py:test_worker_executes_one_bounded_command",
+    "tests/test_plan_execution.py:test_run_compiles_plan_before_first_attempt",
+]
+gate = "python -m pytest tests/test_worker.py tests/test_plan_execution.py::test_run_compiles_plan_before_first_attempt -q"
+depends_on = ["P6-FPG-01"]
+```
+
+**Context:** Execution must import cleanly before it can accept an authored plan. This block moves the worker primitive out of the execution package, removes the import cycle, and makes run() compile the plan before the first attempt.
+
+**File: src/viper/execution/__init__.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=remove target=src/viper/execution/__init__.py:importlib -->
+<!-- contract-remove -->
+
+**File: src/viper/worker.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:os -->
+```python contract-target
+import os
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:UTC -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:datetime -->
+```python contract-target
+from datetime import UTC, datetime
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:Literal -->
+```python contract-target
+from typing import Literal
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:BaseModel -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:ConfigDict -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:Field -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:model_validator -->
+```python contract-target
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:subprocess -->
+```python contract-target
+import viper._subprocess as subprocess
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:WorkerError -->
+```python contract-target
+class WorkerError(RuntimeError):
+    """Report a rejected, timed-out, or failed worker invocation."""
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:ExecutionPolicy -->
+```python contract-target
+class ExecutionPolicy(BaseModel):
+    """Select the worker backend and process timeout."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    backend: Literal["trusted_local"] = "trusted_local"
+    timeout_seconds: float | None = Field(default=None, gt=0)
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:WorkerRequest -->
+```python contract-target
+class WorkerRequest(BaseModel):
+    """Describe one command and its bounded local context."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workspace_root: Path
+    working_directory: Path
+    context_path: Path
+    command: tuple[str, ...] = Field(min_length=1)
+    environment: dict[str, str] = Field(default_factory=dict)
+    policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> WorkerRequest:
+        """Keep the command's files beneath its workspace."""
+        root = self.workspace_root.resolve()
+        for path in (self.working_directory, self.context_path):
+            if not path.resolve().is_relative_to(root):
+                raise ValueError("worker path escapes the workspace root")
+        return self
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:WorkerResult -->
+```python contract-target
+class WorkerResult(BaseModel):
+    """Record the observable result of one worker process."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        ser_json_bytes="base64",
+    )
+
+    backend: Literal["trusted_local"] = "trusted_local"
+    command: tuple[str, ...]
+    started_at: datetime
+    completed_at: datetime
+    returncode: int
+    stdout: bytes
+    stderr: bytes
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:execute_worker -->
+```python contract-target
+def execute_worker(request: WorkerRequest) -> WorkerResult:
+    """Run one command after validating its workspace."""
+    request.working_directory.mkdir(parents=True, exist_ok=True)
+    if not request.context_path.is_file():
+        raise WorkerError("worker context file is missing")
+    environment = os.environ.copy()
+    environment.update(request.environment)
+    environment["VIPER_CONTEXT_PATH"] = str(request.context_path)
+    started_at = datetime.now(UTC)
+    try:
+        process = subprocess.run(
+            request.command,
+            cwd=request.working_directory,
+            env=environment,
+            capture_output=True,
+            timeout=request.policy.timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise WorkerError("worker command exceeded its timeout") from exc
+    completed_at = datetime.now(UTC)
+    result = WorkerResult(
+        command=request.command,
+        started_at=started_at,
+        completed_at=completed_at,
+        returncode=process.returncode,
+        stdout=process.stdout,
+        stderr=process.stderr,
+    )
+    if result.returncode != 0:
+        raise WorkerError(f"worker command exited with status {result.returncode}")
+    return result
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:__all__ -->
+```python contract-target
+__all__ = [
+    "ExecutionPolicy",
+    "WorkerError",
+    "WorkerRequest",
+    "WorkerResult",
+    "execute_worker",
+]
+```
+
+**File: src/viper/_parameter/validation.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/_parameter/validation.py:ExecutionPolicy -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/_parameter/validation.py:WorkerRequest -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/_parameter/validation.py:execute_worker -->
+```python contract-target
+from ..worker import ExecutionPolicy, WorkerRequest, execute_worker
+```
+
+**File: src/viper/artifact_loaders.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/artifact_loaders.py:ExecutionPolicy -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/artifact_loaders.py:WorkerRequest -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/artifact_loaders.py:execute_worker -->
+```python contract-target
+from .worker import ExecutionPolicy, WorkerRequest, execute_worker
+```
+
+**File: tests/test_worker.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:ExecutionPolicy -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:WorkerError -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:WorkerRequest -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:execute_worker -->
+```python contract-target
+from viper.worker import (
+    ExecutionPolicy,
+    WorkerError,
+    WorkerRequest,
+    execute_worker,
+)
+```
+
+**File: src/viper/execution/__init__.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:RunPlanDraft -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:freeze_run_plan -->
+```python contract-target
+from ..authoring import RunPlanDraft, freeze_run_plan
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:_benchmark -->
+```python contract-target
+from ._benchmark import benchmark as _benchmark
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:_retry -->
+```python contract-target
+from ._run import retry as _retry
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:_run -->
+```python contract-target
+from ._run import run as _run
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/__init__.py:run -->
+```python contract-target
+def run(
+    repository_root: Path,
+    plan: RunPlanDraft | Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> RunResult:
+    """Compile one authored plan, then execute its immutable files."""
+    if isinstance(plan, Path):
+        return _run(
+            repository_root,
+            plan,
+            timeout_seconds=timeout_seconds,
+        )
+    frozen = freeze_run_plan(repository_root, plan)
+    run_path = repository_root.resolve() / frozen.reference.stored_at.path
+    return _run(
+        repository_root,
+        run_path,
+        plan=frozen.reference,
+        timeout_seconds=timeout_seconds,
+    )
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/__init__.py:retry -->
+```python contract-target
+def retry(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> RunResult:
+    """Append one attempt to a failed frozen run and verify its result."""
+    return _retry(
+        repository_root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+    )
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/__init__.py:benchmark -->
+```python contract-target
+def benchmark(
+    repository_root: Path,
+    resolved_run_path: Path,
+    benchmark_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> BenchmarkExecutionResult:
+    """Execute and verify one independent benchmark confirmation."""
+    return _benchmark(
+        repository_root,
+        resolved_run_path,
+        benchmark_spec_path,
+        timeout_seconds=timeout_seconds,
+    )
+```
+
+**File: src/viper/execution/_run.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/_run.py:ResolvedRunSpecRef -->
+```python contract-target
+from ..references import ResolvedRunSpecRef
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/_run.py:run -->
+```python contract-target
+def run(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+    timeout_seconds: float | None = None,
+    retry: bool = False,
+) -> RunResult:
+    """Execute one frozen plan and verify its terminal resolved run."""
+    result = execute_attempt(
+        repository_root,
+        run_spec_path,
+        plan=plan,
+        timeout_seconds=timeout_seconds,
+        retry=retry,
+        purpose="run",
+    )
+    assert isinstance(result, RunResult)
+    return result
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/_run.py:retry -->
+```python contract-target
+def retry(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+    timeout_seconds: float | None = None,
+) -> RunResult:
+    """Append one attempt to a failed frozen run and verify its result."""
+    return run(
+        repository_root,
+        run_spec_path,
+        plan=plan,
+        timeout_seconds=timeout_seconds,
+        retry=True,
+    )
+```
+
+**File: tests/conftest.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/conftest.py:TIER_BY_MODULE -->
+```python contract-target
+TIER_BY_MODULE = {
+    "test_api": "contract",
+    "test_api_json": "unit",
+    "test_artifact_validation": "contract",
+    "test_authoring": "contract",
+    "test_benchmark_execution": "contract",
+    "test_cli": "integration",
+    "test_cloud_execution": "contract",
+    "test_contract_documentation": "contract",
+    "test_contract_traceability": "contract",
+    "test_documentation": "contract",
+    "test_execution_acceptance": "integration",
+    "test_generated_project_acceptance": "release",
+    "test_http_retrieval": "contract",
+    "test_inspection": "contract",
+    "test_live_process_startup": "integration",
+    "test_storage": "unit",
+    "test_system_impact": "unit",
+    "test_metric_interface": "contract",
+    "test_metric_provenance": "integration",
+    "test_parameter_validation": "contract",
+    "test_plan_execution": "contract",
+    "test_preflight": "contract",
+    "test_process_startup": "unit",
+    "test_project_init": "contract",
+    "test_protocol": "contract",
+    "test_public_api": "contract",
+    "test_release_tools": "unit",
+    "test_resume": "integration",
+    "test_run_execution": "integration",
+    "test_execution_signals": "integration",
+    "test_stage_invocation": "contract",
+    "test_validation_architecture": "contract",
+    "test_verification": "contract",
+    "test_verification_acceptance": "integration",
+    "test_worker": "integration",
+    "test_workflow_documentation": "contract",
+}
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/conftest.py:DOMAIN_BY_MODULE -->
+```python contract-target
+DOMAIN_BY_MODULE = {
+    "test_api": "domain_application",
+    "test_api_json": "domain_application",
+    "test_artifact_validation": "domain_artifacts",
+    "test_authoring": "domain_authoring",
+    "test_benchmark_execution": "domain_execution",
+    "test_cli": "domain_application",
+    "test_cloud_execution": "domain_execution",
+    "test_contract_documentation": "domain_protocol",
+    "test_contract_traceability": "domain_protocol",
+    "test_documentation": "domain_protocol",
+    "test_execution_acceptance": "domain_execution",
+    "test_generated_project_acceptance": "domain_release",
+    "test_http_retrieval": "domain_http",
+    "test_inspection": "domain_verification",
+    "test_live_process_startup": "domain_execution",
+    "test_storage": "domain_storage",
+    "test_system_impact": "domain_protocol",
+    "test_metric_interface": "domain_metrics",
+    "test_metric_provenance": "domain_metrics",
+    "test_parameter_validation": "domain_parameters",
+    "test_plan_execution": "domain_execution",
+    "test_preflight": "domain_verification",
+    "test_process_startup": "domain_execution",
+    "test_project_init": "domain_application",
+    "test_protocol": "domain_protocol",
+    "test_public_api": "domain_application",
+    "test_release_tools": "domain_release",
+    "test_resume": "domain_execution",
+    "test_run_execution": "domain_execution",
+    "test_execution_signals": "domain_execution",
+    "test_stage_invocation": "domain_execution",
+    "test_validation_architecture": "domain_protocol",
+    "test_verification": "domain_verification",
+    "test_verification_acceptance": "domain_verification",
+    "test_worker": "domain_execution",
+    "test_workflow_documentation": "domain_release",
+}
+```
+
+**File: tests/test_plan_execution.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:SimpleNamespace -->
+```python contract-target
+from types import SimpleNamespace
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:pytest -->
+```python contract-target
+import pytest
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:execution -->
+```python contract-target
+import viper.execution as execution
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:RunPlanDraft -->
+```python contract-target
+from viper.authoring import RunPlanDraft
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:test_run_compiles_plan_before_first_attempt -->
+```python contract-target
+def test_run_compiles_plan_before_first_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Publish the plan before handing its exact reference to the runner."""
+    draft = RunPlanDraft.model_construct()
+    reference = SimpleNamespace(stored_at=SimpleNamespace(path="run.yaml"))
+    frozen = SimpleNamespace(reference=reference)
+    result = object()
+    calls: list[str] = []
+
+    def freeze(root: Path, selected: RunPlanDraft):
+        calls.append("freeze")
+        assert root == tmp_path
+        assert selected is draft
+        return frozen
+
+    def run(root: Path, path: Path, **kwargs: object):
+        calls.append("run")
+        assert root == tmp_path
+        assert path == tmp_path / "run.yaml"
+        assert kwargs["plan"] is reference
+        return result
+
+    monkeypatch.setattr(execution, "freeze_run_plan", freeze)
+    monkeypatch.setattr(execution, "_run", run)
+
+    assert execution.run(tmp_path, draft) is result
+    assert calls == ["freeze", "run"]
 ```

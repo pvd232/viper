@@ -7,7 +7,7 @@ contract will define explicit harness mode.
 
 ## 1. Status
 
-**Contract status:** planned.
+**Contract status:** in progress.
 
 These requirements bind the contract to the master checklist:
 
@@ -637,15 +637,14 @@ class FrozenPlanFiles(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     run: RunSpec
-    files: tuple[Path, ...] = Field(min_length=1)
-    run_spec_path: Path
-    benchmark_spec_path: Path | None = None
+    reference: ResolvedRunSpecRef
+    files: tuple[Path, ...]
 ```
 
-The complete plan-commit contract belongs to
-[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md). The user commits
-every path in `files` before execution. `run_spec_path` and a present
-`benchmark_spec_path` occur in that tuple.
+The immutable plan identity belongs to
+[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md). `reference`
+addresses the generated plan revision; `files` lists its materialized working
+copies.
 
 `viper.authoring.stage()` replaces hand-written stage YAML during authoring. It returns a
 `StageDraft` that describes one future stage: the decorated function, parameter
@@ -10320,3 +10319,529 @@ same Python authoring API works with local storage and Viper Cloud.
 - [Input materialization](../../src/viper/execution/_materialization.py)
 - [Pointer acceptance construction](../../tests/test_generated_project_acceptance.py)
 - [Public stage example](../../README.md#define-a-stage)
+<!-- pair-block-definition: P6-AIR-01 -->
+```toml pair-block
+id = "P6-AIR-01"
+requirements = ["AIR-04"]
+targets = [
+    "src/viper/authoring.py:BuildVariantStageParams",
+    "src/viper/authoring.py:EmbedVariantStageParams",
+    "src/viper/authoring.py:EvalVariantStageParams",
+    "src/viper/authoring.py:FactorSpec",
+    "src/viper/authoring.py:ReplicateSpec",
+    "src/viper/authoring.py:TrainVariantStageParams",
+    "src/viper/authoring.py:MetricImplementationRef",
+    "src/viper/authoring.py:MetricSpec",
+    "src/viper/authoring.py:_CompiledPlan",
+    "src/viper/authoring.py:_freeze_stage",
+    "src/viper/authoring.py:_compile_metric",
+    "src/viper/authoring.py:_compile_metrics",
+    "src/viper/authoring.py:_compile_variant",
+    "src/viper/authoring.py:_compile_plan",
+    "tests/test_authoring.py:importlib.util",
+    "tests/test_authoring.py:_CompiledPlan",
+    "tests/test_authoring.py:_compile_plan",
+    "tests/test_authoring.py:ExperimentSpec",
+    "tests/test_authoring.py:_compiled_plan",
+    "tests/test_authoring.py:test_experiment_draft_derives_metric_registry",
+    "tests/test_authoring.py:test_plan_compiles_complete_protocol_graph",
+]
+tests = [
+    "tests/test_authoring.py:test_experiment_draft_derives_metric_registry",
+    "tests/test_authoring.py:test_plan_compiles_complete_protocol_graph",
+]
+gate = "python -m pytest tests/test_authoring.py::test_experiment_draft_derives_metric_registry tests/test_authoring.py::test_plan_compiles_complete_protocol_graph -q"
+depends_on = ["P6-UMD-01"]
+```
+
+**Context:** The immutable draft is useful only after VIPER can derive every experiment, variant, metric, stage, and run record from it. This block builds that complete file set in memory before publication.
+
+**File: `src/viper/authoring.py`**
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:BuildVariantStageParams -->
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:EmbedVariantStageParams -->
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:EvalVariantStageParams -->
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:FactorSpec -->
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:ReplicateSpec -->
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:TrainVariantStageParams -->
+```python contract-target
+from .experiments import (
+    BuildVariantStageParams,
+    EmbedVariantStageParams,
+    EvalVariantStageParams,
+    ExperimentSpec,
+    FactorSpec,
+    ReplicateSpec,
+    TrainVariantStageParams,
+    VariantSpec,
+)
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:MetricImplementationRef -->
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:MetricSpec -->
+```python contract-target
+from .metrics import (
+    MetricDraft,
+    MetricImplementationRef,
+    MetricObjectiveDraft,
+    MetricObjectiveSpec,
+    MetricSpec,
+    metric_definition,
+)
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:_CompiledPlan -->
+```python contract-target
+class _CompiledPlan(BaseModel):
+    """Hold one complete protocol graph before it is published."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: RunSpec
+    run_path: RepoRelPath
+    files: dict[RepoRelPath, bytes]
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=update target=src/viper/authoring.py:_freeze_stage -->
+```python contract-target
+def _freeze_stage(
+    root: Path,
+    run_root: str,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageSpecDraft,
+) -> Spec:
+    """Freeze one Python stage draft into its protocol declaration."""
+    artifacts: dict[ArtifactName, ArtifactSpec] = {
+        name: _freeze_artifact(root, run_root, artifact)
+        for name, artifact in draft.artifacts.items()
+    }
+    if isinstance(draft, DownloadSpecDraft):
+        return DownloadSpec(
+            artifacts=artifacts,
+            env=draft.env,
+            inputs=draft.inputs,
+            http=_freeze_http(root, draft.http),
+            policy=draft.policy,
+        )
+    definition = stage_definition(draft.implementation)
+    source = inspect.getsourcefile(draft.implementation)
+    parameter_source = inspect.getsourcefile(definition.parameter_model)
+    if source is None or parameter_source is None:
+        raise ValueError("stage callable or parameter model has no Python source")
+    source_path = Path(source).resolve()
+    parameter_path = Path(parameter_source).resolve()
+    source_raw = source_path.read_bytes()
+    parameter_raw = parameter_path.read_bytes()
+    if definition.parameter_model.__module__ == params.__name__:
+        parameter = params.model_ref(definition.parameter_model)
+    else:
+        if not parameter_path.is_relative_to(root):
+            raise ValueError("stage parameter model is outside the project root")
+        parameter = ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        )
+    common = {
+        "artifacts": artifacts,
+        "env": draft.env,
+        "implementation": StageImplementationRef(
+            path=source_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(source_raw).hexdigest(),
+            bytes=len(source_raw),
+        ),
+        "parameter_model": parameter,
+        "params": draft.params,
+        "inputs": {
+            name: _freeze_input(root, stages, value)
+            for name, value in draft.inputs.items()
+        },
+        "metric_ids": tuple(
+            metric_definition(metric.implementation).metric_id
+            for metric in draft.metrics
+        ),
+    }
+    if isinstance(draft, BuildSpecDraft):
+        return BuildSpec(**common)
+    objective = (
+        None
+        if draft.objective is None
+        else MetricObjectiveSpec(
+            metric_id=metric_definition(
+                draft.objective.metric.implementation
+            ).metric_id,
+            direction=draft.objective.direction,
+        )
+    )
+    if isinstance(draft, EmbedSpecDraft):
+        return EmbedSpec(**common, objective=objective)
+    if objective is None:
+        raise ValueError("train and eval stages require an objective")
+    if isinstance(draft, TrainSpecDraft):
+        return TrainSpec(**common, objective=objective)
+    return EvalSpec(
+        **common,
+        objective=objective,
+        eval_id=draft.eval_id,
+        split_inputs=draft.split_inputs,
+    )
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:_compile_metric -->
+```python contract-target
+def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
+    """Compile one configured metric from its exact Python definitions."""
+    definition = metric_definition(draft.implementation)
+    implementation_source = inspect.getsourcefile(draft.implementation)
+    parameter_model = type(draft.params)
+    parameter_source = inspect.getsourcefile(parameter_model)
+    if implementation_source is None or parameter_source is None:
+        raise ValueError("metric callable or parameter model has no Python source")
+
+    implementation_path = Path(implementation_source).resolve()
+    implementation_raw = implementation_path.read_bytes()
+    if not implementation_path.is_relative_to(root):
+        raise ValueError("metric callable is outside the project root")
+    if parameter_model.__module__ == params.__name__:
+        parameter = params.model_ref(parameter_model)
+    else:
+        parameter_path = Path(parameter_source).resolve()
+        parameter_raw = parameter_path.read_bytes()
+        if not parameter_path.is_relative_to(root):
+            raise ValueError("metric parameter model is outside the project root")
+        parameter = ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        )
+    return MetricSpec(
+        metric_id=definition.metric_id,
+        implementation=MetricImplementationRef(
+            path=implementation_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(implementation_raw).hexdigest(),
+            bytes=len(implementation_raw),
+        ),
+        parameter_model=parameter,
+        params=draft.params,
+        mode=definition.mode,
+        dependencies=draft.dependencies,
+        comparator=draft.comparator,
+    )
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:_compile_metrics -->
+```python contract-target
+def _compile_metrics(root: Path, draft: ExperimentDraft) -> tuple[MetricSpec, ...]:
+    """Derive one consistent metric registry from every variant stage."""
+    metrics: dict[str, MetricSpec] = {}
+    for variant_draft in draft.variants.values():
+        for stage_draft in variant_draft.stages.values():
+            spec = stage_draft.spec
+            if not isinstance(spec, ParameterizedSpecDraft):
+                continue
+            configured = list(spec.metrics)
+            objective = getattr(spec, "objective", None)
+            if objective is not None:
+                configured.append(objective.metric)
+            for metric_draft in configured:
+                metric = _compile_metric(root, metric_draft)
+                existing = metrics.get(metric.metric_id)
+                if existing is not None and existing != metric:
+                    raise ValueError("one metric ID has conflicting configurations")
+                metrics[metric.metric_id] = metric
+    return tuple(metrics[metric_id] for metric_id in sorted(metrics))
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:_compile_variant -->
+```python contract-target
+def _compile_variant(
+    experiment_id: ExperimentId,
+    variant_id: VariantId,
+    draft: VariantDraft,
+) -> VariantSpec:
+    """Compile the typed parameter selection for one variant."""
+    stage_params = []
+    for stage_id, stage_draft in draft.stages.items():
+        spec = stage_draft.spec
+        if isinstance(spec, BuildSpecDraft):
+            stage_params.append(
+                BuildVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+        elif isinstance(spec, EmbedSpecDraft):
+            stage_params.append(
+                EmbedVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+        elif isinstance(spec, TrainSpecDraft):
+            stage_params.append(
+                TrainVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+        elif isinstance(spec, EvalSpecDraft):
+            stage_params.append(
+                EvalVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+    if not stage_params:
+        raise ValueError("variant requires one project stage")
+    return VariantSpec(
+        experiment_id=experiment_id,
+        variant_id=variant_id,
+        levels=draft.levels,
+        stage_params=tuple(stage_params),
+    )
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=src/viper/authoring.py:_compile_plan -->
+```python contract-target
+def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
+    """Compile one immutable draft into a complete in-memory protocol graph."""
+    project_root = resolve_root(root)
+    experiment_draft = draft.experiment
+    variant_draft = experiment_draft.variants[draft.variant]
+    replicate_draft = experiment_draft.replicates[draft.replicate]
+    metrics = _compile_metrics(project_root, experiment_draft)
+    experiment_spec = ExperimentSpec(
+        experiment_id=experiment_draft.experiment_id,
+        factors=tuple(
+            FactorSpec(factor_id=factor_id, levels=factor.levels)
+            for factor_id, factor in sorted(experiment_draft.factors.items())
+        ),
+        variant_ids=tuple(sorted(experiment_draft.variants)),
+        replicates=tuple(
+            ReplicateSpec(replicate_id=replicate_id, seed=replicate.seed)
+            for replicate_id, replicate in sorted(experiment_draft.replicates.items())
+        ),
+        metrics=metrics,
+    )
+    variants = tuple(
+        _compile_variant(experiment_draft.experiment_id, variant_id, value)
+        for variant_id, value in sorted(experiment_draft.variants.items())
+    )
+    run_root = (
+        f"experiments/{experiment_draft.experiment_id}/runs/"
+        f"{draft.variant}/{draft.run_id}"
+    )
+    files: dict[RepoRelPath, bytes] = {
+        f"experiments/{experiment_draft.experiment_id}/spec.yaml": serialize_document(
+            experiment_spec
+        )
+    }
+    for variant_spec in variants:
+        path = (
+            f"experiments/{experiment_draft.experiment_id}/variants/"
+            f"{variant_spec.variant_id}.spec.yaml"
+        )
+        files[path] = serialize_document(variant_spec)
+
+    stage_refs: list[RunStageRef] = []
+    for stage_id, stage_draft in variant_draft.stages.items():
+        stage_spec = _freeze_stage(
+            project_root,
+            run_root,
+            variant_draft.stages,
+            stage_draft.spec,
+        )
+        raw = serialize_document(stage_spec)
+        path = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files[path] = raw
+        stage_refs.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=path,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    estimator_stage = next(
+        (
+            stage_id
+            for stage_id, stage_draft in variant_draft.stages.items()
+            if stage_draft is variant_draft.estimator.producer
+        ),
+        None,
+    )
+    if estimator_stage is None:
+        raise ValueError("estimator producer is absent from the plan")
+    run = RunSpec(
+        run_id=draft.run_id,
+        experiment_id=experiment_draft.experiment_id,
+        variant_id=draft.variant,
+        replicate_id=draft.replicate,
+        benchmark_id=None,
+        seed=replicate_draft.seed,
+        source=draft.source,
+        env=draft.env,
+        reproducibility=draft.reproducibility,
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id=estimator_stage,
+            artifact_name=variant_draft.estimator.artifact_name,
+        ),
+    )
+    run_path = f"{run_root}/spec.yaml"
+    files[run_path] = serialize_document(run)
+    return _CompiledPlan(run=run, run_path=run_path, files=files)
+```
+
+**File: `tests/test_authoring.py`**
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=tests/test_authoring.py:importlib.util -->
+```python contract-target
+import importlib.util
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=tests/test_authoring.py:_CompiledPlan -->
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=tests/test_authoring.py:_compile_plan -->
+```python contract-target
+from viper.authoring import (
+    RunPlanDraft,
+    VariantDraft,
+    _compile_plan,
+    _CompiledPlan,
+    expand_http_url,
+    experiment,
+    factor,
+    freeze_run_plan,
+    plan,
+    replicate,
+    stage,
+    variant,
+    write_experiment_spec,
+    write_variant_spec,
+)
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=tests/test_authoring.py:ExperimentSpec -->
+```python contract-target
+from viper.experiments import (
+    ExperimentSpec,
+    FactorSpec,
+    ReplicateSpec,
+    TrainVariantStageParams,
+    VariantSpec,
+)
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=tests/test_authoring.py:_compiled_plan -->
+```python contract-target
+def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
+    """Compile one plan whose callables live inside a temporary project."""
+    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    _git(tmp_path, "init", "--quiet")
+    _git(tmp_path, "config", "user.email", "viper@example.com")
+    _git(tmp_path, "config", "user.name", "VIPER Test")
+    _git(
+        tmp_path,
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/example/viper-project",
+    )
+    dataset = tmp_path / "inputs/raw/dataset.csv"
+    dataset.parent.mkdir(parents=True)
+    dataset.write_text("value\n1\n")
+    (tmp_path / "environment.yml").write_text("name: viper-test\n")
+    source = tmp_path / "project/plan.py"
+    source.parent.mkdir()
+    source.write_text(
+        "from viper import params\n"
+        "from viper.metrics import metric\n"
+        "from viper.stages import Context, train\n\n"
+        "@metric(metric_id='training_loss', mode='live')\n"
+        "def training_loss(context):\n"
+        "    return 1.0\n\n"
+        "@train(params=params.Train)\n"
+        "def fit(context: Context[params.Train]):\n"
+        "    context.artifacts['model'].write_bytes(b'model')\n\n"
+        "def load(path):\n"
+        "    return path.read_bytes()\n"
+    )
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "source")
+    commit = _git(tmp_path, "rev-parse", "HEAD")
+    spec = importlib.util.spec_from_file_location("project.plan", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    loss = measure(module.training_loss, params=params.Metric())
+    train_stage = stage(
+        module.fit,
+        params=params.Train(),
+        inputs={
+            "dataset": external_input(
+                path="inputs/raw/dataset.csv",
+                data_role="training",
+            )
+        },
+        artifacts={
+            "model": artifact(
+                path="artifacts/models/model/model.bin",
+                loader=module.load,
+                data_role="training",
+            ),
+            "state": artifact(
+                path="artifacts/models/state/state.bin",
+                loader=module.load,
+                data_role="training",
+            ),
+        },
+        metrics=(loss,),
+        objective=min(loss),
+    )
+    authored = experiment(
+        experiment_id="e001_strand",
+        factors={"rank": factor(levels=("full", "low"))},
+        variants={
+            "baseline": variant(
+                levels={"rank": "full"},
+                stages={"train": train_stage},
+                estimator=train_stage.artifacts["model"],
+            )
+        },
+        replicates={"replicate_01": replicate(seed=42)},
+    )
+    env_payload = environment_payload(commit)
+    env_payload["python_env"] = env_payload.pop("python_environment")
+    draft = plan(
+        experiment=authored,
+        variant="baseline",
+        replicate="replicate_01",
+        source=GitSource(
+            repository="https://github.com/example/viper-project",
+            commit=commit,
+        ),
+        env=TypeAdapter(EnvSpec).validate_python(env_payload),
+        reproducibility=ReproducibilitySpec.model_validate(reproducibility_payload()),
+    )
+    return _compile_plan(tmp_path, draft), draft
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=tests/test_authoring.py:test_experiment_draft_derives_metric_registry -->
+```python contract-target
+def test_experiment_draft_derives_metric_registry(tmp_path: Path) -> None:
+    """Compile every configured metric into the experiment record once."""
+    compiled, _ = _compiled_plan(tmp_path)
+    experiment_raw = compiled.files["experiments/e001_strand/spec.yaml"]
+    experiment_spec = ExperimentSpec.model_validate(parse_yaml_bytes(experiment_raw))
+
+    assert tuple(metric.metric_id for metric in experiment_spec.metrics) == (
+        "training_loss",
+    )
+```
+
+<!-- contract-target: requirements=AIR-04 block=P6-AIR-01 action=add target=tests/test_authoring.py:test_plan_compiles_complete_protocol_graph -->
+```python contract-target
+def test_plan_compiles_complete_protocol_graph(tmp_path: Path) -> None:
+    """Compile experiment, variant, stage, and run records before publication."""
+    compiled, draft = _compiled_plan(tmp_path)
+
+    assert compiled.run.run_id == draft.run_id
+    assert compiled.run_path in compiled.files
+    assert "experiments/e001_strand/spec.yaml" in compiled.files
+    assert "experiments/e001_strand/variants/baseline.spec.yaml" in compiled.files
+    assert any(path.endswith("/stages/train/spec.yaml") for path in compiled.files)
+```

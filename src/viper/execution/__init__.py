@@ -2,25 +2,34 @@
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
+from ..authoring import RunPlanDraft, freeze_run_plan
+from ._benchmark import benchmark as _benchmark
+from ._run import retry as _retry
+from ._run import run as _run
 from .results import BenchmarkExecutionResult, RunResult
-
-# Parameter validation imports execution._process while viper is starting. Loading
-# the run modules here would send that import back through parameter validation.
 
 
 def run(
     repository_root: Path,
-    run_spec_path: Path,
+    plan: RunPlanDraft | Path,
     *,
     timeout_seconds: float | None = None,
 ) -> RunResult:
-    """Execute one frozen run plan and verify its terminal result."""
-    return importlib.import_module("._run", __name__).run(
+    """Compile one authored plan, then execute its immutable files."""
+    if isinstance(plan, Path):
+        return _run(
+            repository_root,
+            plan,
+            timeout_seconds=timeout_seconds,
+        )
+    frozen = freeze_run_plan(repository_root, plan)
+    run_path = repository_root.resolve() / frozen.reference.stored_at.path
+    return _run(
         repository_root,
-        run_spec_path,
+        run_path,
+        plan=frozen.reference,
         timeout_seconds=timeout_seconds,
     )
 
@@ -32,7 +41,7 @@ def retry(
     timeout_seconds: float | None = None,
 ) -> RunResult:
     """Append one attempt to a failed frozen run and verify its result."""
-    return importlib.import_module("._run", __name__).retry(
+    return _retry(
         repository_root,
         run_spec_path,
         timeout_seconds=timeout_seconds,
@@ -47,7 +56,7 @@ def benchmark(
     timeout_seconds: float | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute and verify one independent benchmark confirmation."""
-    return importlib.import_module("._benchmark", __name__).benchmark(
+    return _benchmark(
         repository_root,
         resolved_run_path,
         benchmark_spec_path,

@@ -14,8 +14,8 @@ from typing import TypeVar, cast
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from .. import params
-from ..execution._process import ExecutionPolicy, WorkerRequest, execute_worker
 from ..params import ParameterModelRef
+from ..worker import ExecutionPolicy, WorkerRequest, execute_worker
 
 ParameterSetT = TypeVar("ParameterSetT", bound=params.ParameterSet)
 

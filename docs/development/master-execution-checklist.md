@@ -284,9 +284,9 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | In progress; Phase 3 implemented; EIR-04 and EIR-05 scheduled | Local input capture and identity verification |
-| [Unified metric drafting](unified-metric-drafting.md) | In progress; phase 4 implemented | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
+| [Unified metric drafting](unified-metric-drafting.md) | In progress | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | In progress | Python stage authoring and compilation of local, same-run, and prior-run inputs |
-| [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
+| [Frozen plan Git identity](frozen-plan-git-identity.md) | Complete | Immutable generated plans with source code kept on its source commit |
 | [Direct Viper Cloud publication](remote-storage.md) | In progress | Destination-neutral publication, cloud references, retrieval, and restore |
 | [Experiment expansion](experiment-expansion.md) | Audited; owner approval pending | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
@@ -1696,27 +1696,6 @@ python -m pytest \
 
 ## 13. Master Phase 6 — experiments, immutable plans, and internal compilation
 
-<!-- contract-implementation: requirement=UMD-04 rule=experiment.authoring.complete state=planned owner=src/viper/experiments.py:ExperimentDraft -->
-<!-- contract-verification: requirement=UMD-04 rule=experiment.authoring.complete state=planned test=tests/test_authoring.py:test_experiment_draft_derives_metric_registry -->
-<!-- contract-implementation: requirement=UMD-04 rule=plan.identity.generated state=planned owner=src/viper/authoring.py:plan -->
-<!-- contract-verification: requirement=UMD-04 rule=plan.identity.generated state=planned test=tests/test_authoring.py:test_plan_generates_read_only_run_id -->
-<!-- contract-implementation: requirement=UMD-04 rule=plan.graph.immutable state=planned owner=src/viper/authoring.py:_deep_freeze -->
-<!-- contract-verification: requirement=UMD-04 rule=plan.graph.immutable state=planned test=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
-<!-- contract-implementation: requirement=UMD-04 rule=plan.compilation.internal state=planned owner=src/viper/execution/__init__.py:run -->
-<!-- contract-verification: requirement=UMD-04 rule=plan.compilation.internal state=planned test=tests/test_run_execution.py:test_run_compiles_plan_before_first_attempt -->
-<!-- contract-implementation: requirement=AIR-04 rule=plan.freeze.complete state=planned owner=src/viper/authoring.py:freeze -->
-<!-- contract-verification: requirement=AIR-04 rule=plan.freeze.complete state=planned test=tests/test_authoring.py:test_plan_freezes_complete_protocol_graph -->
-<!-- contract-implementation: requirement=FPG-01 rule=plan.files.complete state=planned owner=src/viper/authoring.py:FrozenPlanFiles -->
-<!-- contract-verification: requirement=FPG-01 rule=plan.files.complete state=planned test=tests/test_authoring.py:test_freeze_returns_every_generated_path -->
-<!-- contract-implementation: requirement=FPG-02 rule=plan.commit.head state=planned owner=src/viper/preflight.py:preflight -->
-<!-- contract-verification: requirement=FPG-02 rule=plan.commit.head state=planned test=tests/test_preflight.py:test_preflight_loads_plan_documents_from_head -->
-<!-- contract-implementation: requirement=FPG-03 rule=plan.callable.commit state=planned owner=src/viper/loading.py:load_python_symbol -->
-<!-- contract-verification: requirement=FPG-03 rule=plan.callable.commit state=planned test=tests/test_preflight.py:test_project_python_resolves_from_plan_commit -->
-<!-- contract-implementation: requirement=FPG-04 rule=run.plan.commit state=planned owner=src/viper/verification/__init__.py:verify_run_result -->
-<!-- contract-verification: requirement=FPG-04 rule=run.plan.commit state=planned test=tests/test_verification.py:test_terminal_verification_uses_plan_commit -->
-<!-- contract-implementation: requirement=FPG-05 rule=benchmark.plan.commit state=planned owner=src/viper/execution/_benchmark.py:execute_benchmark -->
-<!-- contract-verification: requirement=FPG-05 rule=benchmark.plan.commit state=planned test=tests/test_benchmark_execution.py:test_benchmark_loads_from_candidate_plan_commit -->
-
 **Depends on:** Master Phase 5.
 
 **Contracts:** [Unified metric drafting](unified-metric-drafting.md),
@@ -1727,11 +1706,41 @@ python -m pytest \
 `plan()` supplies the immutable run ID and recursively frozen graph. `run(plan)`
 compiles and persists that graph internally before execution.
 
-**Contract-alignment gate:** Revise `automatic-input-resolution.md`,
-`frozen-plan-git-identity.md`, and `experiment-expansion.md` before executing
-this phase. The current FPG-01 through FPG-05 rows still describe an
-intervening user Git commit and cannot be implemented together with the
-accepted `run(plan)` workflow.
+- [x] Freeze the authored experiment graph and generate its run identity.
+      <!-- pair-block: P6-UMD-01 -->
+      <!-- pair-block-contract: P6-UMD-01 contract=unified-metric-drafting.md -->
+      <!-- contract-implementation: requirement=UMD-04 rule=experiment.authoring.complete state=implemented owner=src/viper/authoring.py:ExperimentDraft -->
+      <!-- contract-verification: requirement=UMD-04 rule=experiment.authoring.complete state=implemented test=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
+      <!-- contract-implementation: requirement=UMD-04 rule=plan.identity.generated state=implemented owner=src/viper/authoring.py:plan -->
+      <!-- contract-verification: requirement=UMD-04 rule=plan.identity.generated state=implemented test=tests/test_authoring.py:test_plan_generates_read_only_run_id -->
+      <!-- contract-implementation: requirement=UMD-04 rule=plan.graph.immutable state=implemented owner=src/viper/authoring.py:_deep_freeze -->
+      <!-- contract-verification: requirement=UMD-04 rule=plan.graph.immutable state=implemented test=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
+- [x] Compile every generated protocol document in memory.
+      <!-- pair-block: P6-AIR-01 -->
+      <!-- pair-block-contract: P6-AIR-01 contract=automatic-input-resolution.md -->
+      <!-- contract-implementation: requirement=AIR-04 rule=plan.freeze.complete state=implemented owner=src/viper/authoring.py:_compile_plan -->
+      <!-- contract-verification: requirement=AIR-04 rule=plan.freeze.complete state=implemented test=tests/test_authoring.py:test_plan_compiles_complete_protocol_graph -->
+- [x] Publish the complete plan under one immutable storage revision.
+      <!-- pair-block: P6-FPG-01 -->
+      <!-- pair-block-contract: P6-FPG-01 contract=frozen-plan-git-identity.md -->
+      <!-- contract-implementation: requirement=FPG-01 rule=plan.files.complete state=implemented owner=src/viper/authoring.py:freeze_run_plan -->
+      <!-- contract-verification: requirement=FPG-01 rule=plan.files.complete state=implemented test=tests/test_authoring.py:test_freeze_publishes_one_immutable_plan -->
+      <!-- contract-implementation: requirement=FPG-02 rule=plan.commit.head state=implemented owner=src/viper/preflight.py:preflight_plan -->
+      <!-- contract-verification: requirement=FPG-02 rule=plan.commit.head state=implemented test=tests/test_authoring.py:test_preflight_reads_the_published_plan -->
+      <!-- contract-implementation: requirement=FPG-03 rule=plan.callable.commit state=implemented owner=src/viper/_verification/plan.py:_source_file -->
+      <!-- contract-verification: requirement=FPG-03 rule=plan.callable.commit state=implemented test=tests/test_plan_execution.py:test_source_and_plan_revisions_are_independent -->
+      <!-- contract-implementation: requirement=FPG-04 rule=run.plan.commit state=implemented owner=src/viper/_verification/plan.py:verify_run_plan -->
+      <!-- contract-verification: requirement=FPG-04 rule=run.plan.commit state=implemented test=tests/test_plan_execution.py:test_plan_documents_share_one_storage_revision -->
+      <!-- contract-implementation: requirement=FPG-05 rule=benchmark.plan.commit state=implemented owner=src/viper/execution/_benchmark.py:benchmark -->
+      <!-- contract-verification: requirement=FPG-05 rule=benchmark.plan.commit state=implemented test=tests/test_plan_execution.py:test_benchmark_spec_accepts_the_plan_revision -->
+- [x] Compile and publish the plan before the first execution attempt.
+      <!-- pair-block: P6-UMD-02 -->
+      <!-- pair-block-contract: P6-UMD-02 contract=unified-metric-drafting.md -->
+      <!-- contract-implementation: requirement=UMD-04 rule=plan.compilation.internal state=implemented owner=src/viper/execution/__init__.py:run -->
+      <!-- contract-verification: requirement=UMD-04 rule=plan.compilation.internal state=implemented test=tests/test_plan_execution.py:test_run_compiles_plan_before_first_attempt -->
+
+**Contract-alignment gate:** The automatic-input and immutable-plan contracts
+now specify the accepted internal compilation and publication workflow.
 
 ### 13.1 Draft graph
 

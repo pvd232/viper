@@ -33,6 +33,8 @@ from .inputs import FutureInputRef
 from .metrics import MetricError, validate_metric_definition
 from .references import (
     GitFileRef,
+    LocalFileRef,
+    ResolvedRunSpecRef,
     StorageModel,
 )
 from .runs import RunSpec
@@ -53,6 +55,7 @@ from .stages import (
     validate_stage_definition,
     verify_stage_implementation_bytes,
 )
+from .storage import LocalArtifactStore
 from .verification.models import VerificationError
 
 PreflightStatus = Literal["pass", "warning", "failure"]
@@ -130,7 +133,12 @@ def _git_bytes(repository_root: Path, commit: str, path: str) -> bytes:
     ).stdout
 
 
-def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightReport:
+def preflight_plan(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+) -> PreflightReport:
     """Validate plan bytes, host requirements, and same-run dependencies."""
     root = repository_root.resolve()
     checks: list[PreflightCheck] = []
@@ -157,11 +165,16 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
             and location.repository == run.source.repository
         ):
             return _git_bytes(root, location.commit, location.path)
+        if isinstance(location, LocalFileRef):
+            return LocalArtifactStore(root, location.store).fetch(location)
         return fetch_storage_bytes(location)
 
     try:
-        relative_run_path = run_spec_path.resolve().relative_to(root).as_posix()
-        plan_raw = _git_bytes(root, "HEAD", relative_run_path)
+        if plan is None:
+            relative_run_path = run_spec_path.resolve().relative_to(root).as_posix()
+            plan_raw = _git_bytes(root, "HEAD", relative_run_path)
+        else:
+            plan_raw = fetch(plan.stored_at)
         plan_is_frozen = plan_raw == run_spec_path.read_bytes()
     except (OSError, ValueError, subprocess.CalledProcessError):
         plan_is_frozen = False
@@ -170,7 +183,7 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
             "plan.git_identity",
             run_spec_path.as_posix(),
             plan_is_frozen,
-            "run specification bytes are absent from the current Git commit",
+            "run specification bytes differ from the immutable plan",
         )
     )
 
@@ -476,8 +489,12 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
     variant = None
     benchmark = None
     try:
-        experiment, variant = verify_experiment_and_variant(run, fetcher=fetch)
-        benchmark = verify_benchmark_spec(run, fetcher=fetch)
+        experiment, variant = verify_experiment_and_variant(
+            run,
+            plan=plan,
+            fetcher=fetch,
+        )
+        benchmark = verify_benchmark_spec(run, plan=plan, fetcher=fetch)
         plan_records_valid = True
     except (VerificationError, OSError, subprocess.CalledProcessError):
         plan_records_valid = False

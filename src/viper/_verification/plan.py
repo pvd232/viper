@@ -22,6 +22,8 @@ from ..references import (
     GitFileRef,
     ResolvedFileRef,
     ResolvedRunSpecRef,
+    StorageModel,
+    storage_file,
 )
 from ..runs import ResolvedRun, RunSpec
 from ..serialization import parse_yaml_bytes
@@ -55,6 +57,15 @@ _DATA_ROLE_RANK: dict[DataRole, int] = {
     "eval": 2,
     "benchmark": 3,
 }
+
+
+def _source_file(run: RunSpec, path: RepoRelPath) -> GitFileRef:
+    """Address one project definition in the run's source commit."""
+    return GitFileRef(
+        repository=run.source.repository,
+        commit=run.source.commit,
+        path=path,
+    )
 
 
 def _verify_stage_data_roles(
@@ -167,7 +178,10 @@ def verify_run_spec(
         raise VerificationError(
             "resolved run spec reference is outside the canonical run path"
         )
-    if resolved_run.spec.stored_at.repository != file_run.source.repository:
+    if (
+        isinstance(resolved_run.spec.stored_at, GitFileRef)
+        and resolved_run.spec.stored_at.repository != file_run.source.repository
+    ):
         raise VerificationError(
             "resolved run spec and source snapshot must use one Git repository"
         )
@@ -178,21 +192,30 @@ def verify_run_spec(
 def verify_experiment_and_variant(
     run: RunSpec,
     *,
+    plan: ResolvedRunSpecRef | None = None,
     fetcher: StorageFetcher | None = None,
 ) -> tuple[ExperimentSpec, VariantSpec]:
     """Load and verify the experiment and variant selected by a run."""
     retrieve = fetch_storage_bytes if fetcher is None else fetcher
 
-    experiment_location = GitFileRef(
-        repository=run.source.repository,
-        commit=run.source.commit,
-        path=f"experiments/{run.experiment_id}/spec.yaml",
+    experiment_path = f"experiments/{run.experiment_id}/spec.yaml"
+    variant_path = (
+        f"experiments/{run.experiment_id}/variants/{run.variant_id}.spec.yaml"
     )
-    variant_location = GitFileRef(
-        repository=run.source.repository,
-        commit=run.source.commit,
-        path=f"experiments/{run.experiment_id}/variants/{run.variant_id}.spec.yaml",
-    )
+    if plan is None:
+        experiment_location: StorageModel = GitFileRef(
+            repository=run.source.repository,
+            commit=run.source.commit,
+            path=experiment_path,
+        )
+        variant_location: StorageModel = GitFileRef(
+            repository=run.source.repository,
+            commit=run.source.commit,
+            path=variant_path,
+        )
+    else:
+        experiment_location = storage_file(plan.stored_at, experiment_path)
+        variant_location = storage_file(plan.stored_at, variant_path)
 
     try:
         experiment = ExperimentSpec.model_validate(
@@ -214,11 +237,7 @@ def verify_experiment_and_variant(
 
     for metric in experiment.metrics:
         implementation = metric.implementation
-        metric_location = GitFileRef(
-            repository=run.source.repository,
-            commit=run.source.commit,
-            path=implementation.path,
-        )
+        metric_location = _source_file(run, implementation.path)
         metric_raw = retrieve(metric_location)
         if len(metric_raw) != implementation.bytes:
             raise VerificationError("metric implementation byte count differs")
@@ -283,6 +302,7 @@ def verify_experiment_and_variant(
 def verify_benchmark_spec(
     run: RunSpec,
     *,
+    plan: ResolvedRunSpecRef | None = None,
     fetcher: StorageFetcher | None = None,
 ) -> BenchmarkSpec | None:
     """Load the benchmark selected by a run, when one is selected."""
@@ -290,11 +310,16 @@ def verify_benchmark_spec(
         return None
 
     retrieve = fetch_storage_bytes if fetcher is None else fetcher
-    location = GitFileRef(
-        repository=run.source.repository,
-        commit=run.source.commit,
-        path=f"benchmarks/{run.benchmark_id}.spec.yaml",
-    )
+    path = f"benchmarks/{run.benchmark_id}.spec.yaml"
+    location: StorageModel
+    if plan is None:
+        location = GitFileRef(
+            repository=run.source.repository,
+            commit=run.source.commit,
+            path=path,
+        )
+    else:
+        location = storage_file(plan.stored_at, path)
     try:
         benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(retrieve(location)))
     except (yaml.YAMLError, ValueError) as exc:
@@ -471,11 +496,7 @@ def verify_parameter_model_references(
         if not isinstance(stage, ParameterizedSpec):
             continue
         reference = stage.parameter_model
-        location = GitFileRef(
-            repository=run.source.repository,
-            commit=run.source.commit,
-            path=reference.path,
-        )
+        location = _source_file(run, reference.path)
         try:
             raw = retrieve(location)
             verify_parameter_model_bytes(reference, raw)
@@ -509,12 +530,7 @@ def verify_stage_plan(
                 f"stage {stage.stage_id!r} spec is outside its canonical run path"
             )
 
-        plan_location = run_spec_reference.stored_at
-        location = GitFileRef(
-            repository=plan_location.repository,
-            commit=plan_location.commit,
-            path=stage.spec,
-        )
+        location = storage_file(run_spec_reference.stored_at, stage.spec)
 
         stage_reference = ResolvedFileRef(
             sha256=stage.sha256,
@@ -532,11 +548,7 @@ def verify_stage_plan(
 
         if isinstance(spec, ParameterizedSpec):
             implementation = spec.implementation
-            implementation_location = GitFileRef(
-                repository=run.source.repository,
-                commit=run.source.commit,
-                path=implementation.path,
-            )
+            implementation_location = _source_file(run, implementation.path)
             try:
                 implementation_raw = retrieve(implementation_location)
                 verify_stage_implementation_bytes(implementation, implementation_raw)
@@ -653,8 +665,16 @@ def verify_run_plan(
 ) -> VerifiedRunPlan:
     """Retrieve and verify every record constituting a frozen run plan."""
     run = verify_run_spec(resolved_run, fetcher=fetcher)
-    experiment, variant = verify_experiment_and_variant(run, fetcher=fetcher)
-    benchmark = verify_benchmark_spec(run, fetcher=fetcher)
+    experiment, variant = verify_experiment_and_variant(
+        run,
+        plan=resolved_run.spec,
+        fetcher=fetcher,
+    )
+    benchmark = verify_benchmark_spec(
+        run,
+        plan=resolved_run.spec,
+        fetcher=fetcher,
+    )
     stages = verify_stage_plan(run, resolved_run.spec, fetcher=fetcher)
     verify_run_plan_relationships(
         run,

@@ -1,11 +1,14 @@
 """Tests for canonical protocol-file authoring and run-plan freezing."""
 
 import hashlib
+import importlib.util
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 import yaml
+from pydantic import TypeAdapter, ValidationError
 
 import viper.params as params
 from viper import _subprocess as subprocess
@@ -22,9 +25,17 @@ from viper.artifacts import (
 )
 from viper.authoring import (
     RunPlanDraft,
+    VariantDraft,
+    _compile_plan,
+    _CompiledPlan,
     expand_http_url,
+    experiment,
+    factor,
     freeze_run_plan,
+    plan,
+    replicate,
     stage,
+    variant,
     write_experiment_spec,
     write_variant_spec,
 )
@@ -45,7 +56,10 @@ from viper.metrics import (
     min,
 )
 from viper.parameters import ParameterModelRef
+from viper.preflight import preflight_plan
+from viper.references import GitSource
 from viper.runs import RunSpec
+from viper.runtime import EnvSpec, ReproducibilitySpec
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     Context,
@@ -53,6 +67,7 @@ from viper.stages import (
     TrainSpec,
     train,
 )
+from viper.storage import LocalArtifactStore
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_strand/runs/baseline/{RUN_ID}"
@@ -441,3 +456,227 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
 
     assert draft.spec.implementation is fit
     assert draft.artifacts["model"].producer is draft
+
+
+def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
+    """Build one small plan and retain its caller-owned variant mapping."""
+
+    @metric(metric_id="training_loss", mode="live")
+    def training_loss(context) -> float:
+        return 1.0
+
+    @train(params=params.Train)
+    def fit(context: Context[params.Train]) -> None:
+        context.artifacts["model"].write_bytes(b"model")
+
+    loss = measure(training_loss, params=params.Metric())
+    train_stage = stage(
+        fit,
+        params=params.Train(),
+        inputs={
+            "dataset": external_input(
+                path="inputs/raw/dataset.csv",
+                data_role="training",
+            )
+        },
+        artifacts={
+            "model": artifact(
+                path="artifacts/model.bin",
+                loader=lambda path: path.read_bytes(),
+                data_role="training",
+            )
+        },
+        metrics=(loss,),
+        objective=min(loss),
+    )
+    variants = {
+        "baseline": variant(
+            levels={"rank": "full"},
+            stages={"train": train_stage},
+            estimator=train_stage.artifacts["model"],
+        )
+    }
+    authored = experiment(
+        experiment_id="e001_strand",
+        factors={"rank": factor(levels=("full", "low"))},
+        variants=variants,
+        replicates={"replicate_01": replicate(seed=42)},
+    )
+    env_payload = environment_payload()
+    env_payload["python_env"] = env_payload.pop("python_environment")
+    return (
+        plan(
+            experiment=authored,
+            variant="baseline",
+            replicate="replicate_01",
+            source=GitSource(
+                repository="https://github.com/example/viper-project",
+                commit=COMMIT,
+            ),
+            env=TypeAdapter(EnvSpec).validate_python(env_payload),
+            reproducibility=ReproducibilitySpec.model_validate(
+                reproducibility_payload()
+            ),
+        ),
+        variants,
+    )
+
+
+def test_plan_generates_read_only_run_id() -> None:
+    """Generate one valid identity that callers cannot replace afterward."""
+    draft, _ = _immutable_plan()
+
+    assert len(draft.run_id) == 26
+    with pytest.raises(ValidationError):
+        draft.run_id = RUN_ID
+
+
+def test_plan_rejects_every_nested_mutator() -> None:
+    """Detach the plan from caller aliases and reject nested mutation."""
+    draft, variants = _immutable_plan()
+    variants.clear()
+
+    assert tuple(draft.experiment.variants) == ("baseline",)
+    with pytest.raises(TypeError, match="frozen plan"):
+        draft.experiment.variants.clear()
+    with pytest.raises(TypeError, match="frozen plan"):
+        draft.experiment.variants["baseline"].stages.update({})
+
+
+def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
+    """Compile one plan whose callables live inside a temporary project."""
+    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    _git(tmp_path, "init", "--quiet")
+    _git(tmp_path, "config", "user.email", "viper@example.com")
+    _git(tmp_path, "config", "user.name", "VIPER Test")
+    _git(
+        tmp_path,
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/example/viper-project",
+    )
+    dataset = tmp_path / "inputs/raw/dataset.csv"
+    dataset.parent.mkdir(parents=True)
+    dataset.write_text("value\n1\n")
+    (tmp_path / "environment.yml").write_text("name: viper-test\n")
+    source = tmp_path / "project/plan.py"
+    source.parent.mkdir()
+    source.write_text(
+        "from viper import params\n"
+        "from viper.metrics import metric\n"
+        "from viper.stages import Context, train\n\n"
+        "@metric(metric_id='training_loss', mode='live')\n"
+        "def training_loss(context):\n"
+        "    return 1.0\n\n"
+        "@train(params=params.Train)\n"
+        "def fit(context: Context[params.Train]):\n"
+        "    context.artifacts['model'].write_bytes(b'model')\n\n"
+        "def load(path):\n"
+        "    return path.read_bytes()\n"
+    )
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "source")
+    commit = _git(tmp_path, "rev-parse", "HEAD")
+    spec = importlib.util.spec_from_file_location("project.plan", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    loss = measure(module.training_loss, params=params.Metric())
+    train_stage = stage(
+        module.fit,
+        params=params.Train(),
+        inputs={
+            "dataset": external_input(
+                path="inputs/raw/dataset.csv",
+                data_role="training",
+            )
+        },
+        artifacts={
+            "model": artifact(
+                path="artifacts/models/model/model.bin",
+                loader=module.load,
+                data_role="training",
+            ),
+            "state": artifact(
+                path="artifacts/models/state/state.bin",
+                loader=module.load,
+                data_role="training",
+            ),
+        },
+        metrics=(loss,),
+        objective=min(loss),
+    )
+    authored = experiment(
+        experiment_id="e001_strand",
+        factors={"rank": factor(levels=("full", "low"))},
+        variants={
+            "baseline": variant(
+                levels={"rank": "full"},
+                stages={"train": train_stage},
+                estimator=train_stage.artifacts["model"],
+            )
+        },
+        replicates={"replicate_01": replicate(seed=42)},
+    )
+    env_payload = environment_payload(commit)
+    env_payload["python_env"] = env_payload.pop("python_environment")
+    draft = plan(
+        experiment=authored,
+        variant="baseline",
+        replicate="replicate_01",
+        source=GitSource(
+            repository="https://github.com/example/viper-project",
+            commit=commit,
+        ),
+        env=TypeAdapter(EnvSpec).validate_python(env_payload),
+        reproducibility=ReproducibilitySpec.model_validate(reproducibility_payload()),
+    )
+    return _compile_plan(tmp_path, draft), draft
+
+
+def test_experiment_draft_derives_metric_registry(tmp_path: Path) -> None:
+    """Compile every configured metric into the experiment record once."""
+    compiled, _ = _compiled_plan(tmp_path)
+    experiment_raw = compiled.files["experiments/e001_strand/spec.yaml"]
+    experiment_spec = ExperimentSpec.model_validate(parse_yaml_bytes(experiment_raw))
+
+    assert tuple(metric.metric_id for metric in experiment_spec.metrics) == (
+        "training_loss",
+    )
+
+
+def test_plan_compiles_complete_protocol_graph(tmp_path: Path) -> None:
+    """Compile experiment, variant, stage, and run records before publication."""
+    compiled, draft = _compiled_plan(tmp_path)
+
+    assert compiled.run.run_id == draft.run_id
+    assert compiled.run_path in compiled.files
+    assert "experiments/e001_strand/spec.yaml" in compiled.files
+    assert "experiments/e001_strand/variants/baseline.spec.yaml" in compiled.files
+    assert any(path.endswith("/stages/train/spec.yaml") for path in compiled.files)
+
+
+def test_freeze_publishes_one_immutable_plan(tmp_path: Path) -> None:
+    """Bind the working plan files to one content-addressed revision."""
+    _, draft = _compiled_plan(tmp_path)
+
+    frozen = freeze_run_plan(tmp_path, draft)
+    run_raw = LocalArtifactStore(tmp_path).fetch(frozen.reference.stored_at)
+
+    assert run_raw == (tmp_path / frozen.reference.stored_at.path).read_bytes()
+    assert frozen.reference.sha256 == hashlib.sha256(run_raw).hexdigest()
+
+
+def test_preflight_reads_the_published_plan(tmp_path: Path) -> None:
+    """Check plan identity against the published revision instead of Git HEAD."""
+    _, draft = _compiled_plan(tmp_path)
+    frozen = freeze_run_plan(tmp_path, draft)
+    run_path = tmp_path / frozen.reference.stored_at.path
+
+    report = preflight_plan(tmp_path, run_path, plan=frozen.reference)
+    identity = next(
+        check for check in report.checks if check.code == "plan.git_identity"
+    )
+
+    assert identity.status == "pass"

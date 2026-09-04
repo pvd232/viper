@@ -146,7 +146,6 @@ class ResolvedRunSpecRef(ResolvedFileRef):
     """Identify the exact run specification governing one run."""
 
     kind: Literal["run_spec"] = "run_spec"
-    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class ResolvedRunRef(ResolvedFileRef):
@@ -159,7 +158,6 @@ class ResolvedBenchmarkSpecRef(ResolvedFileRef):
     """Identify the exact benchmark specification applied to a run."""
 
     kind: Literal["benchmark_spec"] = "benchmark_spec"
-    stored_at: GitFileRef  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class ResolvedBenchmarkResultRef(ResolvedFileRef):
@@ -189,7 +187,15 @@ __all__ = [
     "StageResultSnapshotRef",
     "StorageModel",
     "StorageRef",
+    "storage_file",
 ]
+
+
+def storage_file(location: StorageModel, path: RepoRelPath) -> StorageModel:
+    """Address another file in the same immutable revision."""
+    values = location.model_dump()
+    values["path"] = path
+    return type(location).model_validate(values)
 
 
 def resolve_snapshot_file_ref(

@@ -6,18 +6,20 @@ import hashlib
 import inspect
 import os
 import re
+import secrets
 import string
 import tempfile
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Never
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
 
 from . import params
-from ._schema import ArtifactName, BenchmarkId, DataRole, RepoRelPath, RNGSeed
+from ._schema import ArtifactName, DataRole, RepoRelPath, RNGSeed
 from .artifacts import (
     ArtifactDraft,
     ArtifactLoaderRef,
@@ -30,7 +32,13 @@ from .artifacts import (
 )
 from .benchmark import BenchmarkSpec
 from .experiments import (
+    BuildVariantStageParams,
+    EmbedVariantStageParams,
+    EvalVariantStageParams,
     ExperimentSpec,
+    FactorSpec,
+    ReplicateSpec,
+    TrainVariantStageParams,
     VariantSpec,
 )
 from .http import (
@@ -43,17 +51,29 @@ from .http import (
     HttpRetrievalPolicy,
     ProjectHttpImplementationSpec,
 )
-from .ids import EvalId, ExperimentId, InputName, ReplicateId, RunId, StageId, VariantId
+from .ids import (
+    EvalId,
+    ExperimentId,
+    FactorId,
+    InputName,
+    LevelId,
+    ReplicateId,
+    RunId,
+    StageId,
+    VariantId,
+)
 from .inputs import ExternalInputRef, FutureInputRef, InputRef, LocalSource
 from .metrics import (
     MetricDraft,
+    MetricImplementationRef,
     MetricObjectiveDraft,
     MetricObjectiveSpec,
+    MetricSpec,
     metric_definition,
 )
 from .params import ParameterModelRef
 from .project import resolve_path, resolve_root
-from .references import GitSource, ResolvedRunRef
+from .references import GitSource, LocalFileRef, ResolvedRunRef, ResolvedRunSpecRef
 from .runs import (
     RunSpec,
     RunStageRef,
@@ -71,6 +91,7 @@ from .stages import (
     TrainSpec,
     stage_definition,
 )
+from .storage import LocalArtifactStore
 
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 UrlValue = str | int | float | bool
@@ -267,23 +288,244 @@ class StageDraft(BaseModel):
         }
 
 
+class FactorDraft(BaseModel):
+    """Hold the levels available for one experimental factor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    levels: tuple[LevelId, ...] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_levels(self) -> FactorDraft:
+        """Reject duplicate levels within one factor."""
+        if len(set(self.levels)) != len(self.levels):
+            raise ValueError("factor levels must be unique")
+        return self
+
+
+class VariantDraft(BaseModel):
+    """Hold one variant's factor levels, stages, and estimator."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    levels: dict[FactorId, LevelId]
+    stages: dict[StageId, StageDraft] = Field(min_length=1)
+    estimator: StageDraftArtifactRef
+
+    @model_validator(mode="after")
+    def validate_estimator(self) -> VariantDraft:
+        """Require the estimator to come from this variant's stage graph."""
+        if not any(stage is self.estimator.producer for stage in self.stages.values()):
+            raise ValueError("estimator producer is absent from the variant")
+        return self
+
+
+class ReplicateDraft(BaseModel):
+    """Hold the seed assigned to one experiment replicate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    seed: RNGSeed
+
+
+class ExperimentDraft(BaseModel):
+    """Hold the reusable variants and replicates in one experiment."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    experiment_id: ExperimentId
+    factors: dict[FactorId, FactorDraft] = Field(default_factory=dict)
+    variants: dict[VariantId, VariantDraft] = Field(min_length=1)
+    replicates: dict[ReplicateId, ReplicateDraft] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_variants(self) -> ExperimentDraft:
+        """Require every variant level to belong to its declared factor."""
+        for variant in self.variants.values():
+            if set(variant.levels) != set(self.factors):
+                raise ValueError("variant factors differ from the experiment")
+            for factor_id, level_id in variant.levels.items():
+                if level_id not in self.factors[factor_id].levels:
+                    raise ValueError("variant level is absent from its factor")
+        return self
+
+
 class RunPlanDraft(BaseModel):
-    """Collect run-level and Python stage selections before freezing."""
+    """Select one immutable experiment variant and replicate for execution."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
     schema_version: Literal[1] = 1
     run_id: RunId
-    experiment_id: ExperimentId
-    variant_id: VariantId
-    replicate_id: ReplicateId
-    benchmark_id: BenchmarkId | None = None
-    seed: RNGSeed
+    experiment: ExperimentDraft
+    variant: VariantId
+    replicate: ReplicateId
     source: GitSource
     env: EnvSpec
     reproducibility: ReproducibilitySpec
-    stages: dict[StageId, StageDraft] = Field(min_length=1)
-    estimator: StageDraftArtifactRef
+
+
+class _FrozenDict(dict[Any, Any]):
+    """Keep mapping behavior while rejecting every mutation."""
+
+    def _reject(self, *args: object, **kwargs: object) -> Never:
+        raise TypeError("frozen plan values cannot be changed")
+
+    __delitem__ = _reject
+    __ior__ = _reject
+    __setitem__ = _reject
+    clear = _reject
+    pop = _reject
+    popitem = _reject
+    setdefault = _reject  # pyright: ignore[reportAssignmentType]
+    update = _reject  # pyright: ignore[reportAssignmentType]
+
+
+class _FrozenList(list[Any]):
+    """Keep sequence behavior while rejecting every mutation."""
+
+    def _reject(self, *args: object, **kwargs: object) -> Never:
+        raise TypeError("frozen plan values cannot be changed")
+
+    __delitem__ = _reject
+    __iadd__ = _reject
+    __imul__ = _reject
+    __setitem__ = _reject
+    append = _reject
+    clear = _reject
+    extend = _reject
+    insert = _reject
+    pop = _reject
+    remove = _reject
+    reverse = _reject
+    sort = _reject  # pyright: ignore[reportAssignmentType]
+
+
+_ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+def _new_run_id() -> RunId:
+    """Generate one sortable 128-bit run identity."""
+    value = (time.time_ns() // 1_000_000 << 80) | int.from_bytes(
+        secrets.token_bytes(10), "big"
+    )
+    encoded = "".join(
+        _ULID_ALPHABET[(value >> shift) & 31] for shift in range(125, -1, -5)
+    )
+    return TypeAdapter(RunId).validate_python(encoded)
+
+
+def _deep_freeze(
+    value: Any,
+    memo: dict[int, Any] | None = None,
+    active: set[int] | None = None,
+) -> Any:
+    """Replace nested mutable values while preserving shared references."""
+    frozen = {} if memo is None else memo
+    visiting = set() if active is None else active
+    identity = id(value)
+    if identity in frozen:
+        return frozen[identity]
+    if identity in visiting:
+        raise TypeError("recursive plan values are not supported")
+    if isinstance(value, (str, bytes, int, float, bool, type(None))):
+        return value
+
+    visiting.add(identity)
+    try:
+        if isinstance(value, StageDraftArtifactRef):
+            result = StageDraftArtifactRef(
+                producer=_deep_freeze(value.producer, frozen, visiting),
+                artifact_name=value.artifact_name,
+            )
+        elif isinstance(value, BaseModel):
+            updates = {
+                name: _deep_freeze(field, frozen, visiting)
+                for name, field in value.__dict__.items()
+            }
+            result = value.model_copy(update=updates)
+        elif isinstance(value, dict):
+            result = _FrozenDict(
+                (
+                    _deep_freeze(key, frozen, visiting),
+                    _deep_freeze(item, frozen, visiting),
+                )
+                for key, item in value.items()
+            )
+        elif isinstance(value, list):
+            result = _FrozenList(_deep_freeze(item, frozen, visiting) for item in value)
+        elif isinstance(value, tuple):
+            result = tuple(_deep_freeze(item, frozen, visiting) for item in value)
+        elif isinstance(value, (set, frozenset)):
+            result = frozenset(_deep_freeze(item, frozen, visiting) for item in value)
+        else:
+            result = value
+    finally:
+        visiting.remove(identity)
+    frozen[identity] = result
+    return result
+
+
+def factor(*, levels: tuple[LevelId, ...]) -> FactorDraft:
+    """Declare one experimental factor."""
+    return FactorDraft(levels=levels)
+
+
+def variant(
+    *,
+    levels: dict[FactorId, LevelId],
+    stages: dict[StageId, StageDraft],
+    estimator: StageDraftArtifactRef,
+) -> VariantDraft:
+    """Declare one reusable variant graph."""
+    return VariantDraft(levels=levels, stages=stages, estimator=estimator)
+
+
+def replicate(*, seed: RNGSeed) -> ReplicateDraft:
+    """Declare one reproducible experiment replicate."""
+    return ReplicateDraft(seed=seed)
+
+
+def experiment(
+    *,
+    experiment_id: ExperimentId,
+    variants: dict[VariantId, VariantDraft],
+    replicates: dict[ReplicateId, ReplicateDraft],
+    factors: dict[FactorId, FactorDraft] | None = None,
+) -> ExperimentDraft:
+    """Declare one experiment over reusable variants and replicates."""
+    return ExperimentDraft(
+        experiment_id=experiment_id,
+        factors={} if factors is None else factors,
+        variants=variants,
+        replicates=replicates,
+    )
+
+
+def plan(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft:
+    """Create one identified plan detached from mutable caller values."""
+    if variant not in experiment.variants:
+        raise ValueError("variant is absent from the experiment")
+    if replicate not in experiment.replicates:
+        raise ValueError("replicate is absent from the experiment")
+    draft = RunPlanDraft(
+        run_id=_new_run_id(),
+        experiment=experiment,
+        variant=variant,
+        replicate=replicate,
+        source=source,
+        env=env,
+        reproducibility=reproducibility,
+    )
+    return _deep_freeze(draft)
 
 
 class FrozenPlanFiles(BaseModel):
@@ -292,7 +534,18 @@ class FrozenPlanFiles(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     run: RunSpec
+    reference: ResolvedRunSpecRef
     files: tuple[Path, ...]
+
+
+class _CompiledPlan(BaseModel):
+    """Hold one complete protocol graph before it is published."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: RunSpec
+    run_path: RepoRelPath
+    files: dict[RepoRelPath, bytes]
 
 
 def expand_http_url(
@@ -476,6 +729,18 @@ def _freeze_stage(
     parameter_path = Path(parameter_source).resolve()
     source_raw = source_path.read_bytes()
     parameter_raw = parameter_path.read_bytes()
+    if definition.parameter_model.__module__ == params.__name__:
+        parameter = params.model_ref(definition.parameter_model)
+    else:
+        if not parameter_path.is_relative_to(root):
+            raise ValueError("stage parameter model is outside the project root")
+        parameter = ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        )
     common = {
         "artifacts": artifacts,
         "env": draft.env,
@@ -485,13 +750,7 @@ def _freeze_stage(
             sha256=hashlib.sha256(source_raw).hexdigest(),
             bytes=len(source_raw),
         ),
-        "parameter_model": ParameterModelRef(
-            owner="project",
-            path=parameter_path.relative_to(root).as_posix(),
-            symbol=definition.parameter_model.__name__,
-            sha256=hashlib.sha256(parameter_raw).hexdigest(),
-            bytes=len(parameter_raw),
-        ),
+        "parameter_model": parameter,
         "params": draft.params,
         "inputs": {
             name: _freeze_input(root, stages, value)
@@ -606,32 +865,169 @@ def stage(
     return StageDraft(spec=spec)
 
 
-def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
-    """Freeze Python stage drafts and write one exact run plan."""
-    project_root = resolve_root(root)
-    run_root = (
-        f"experiments/{draft.experiment_id}/runs/{draft.variant_id}/{draft.run_id}"
+def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
+    """Compile one configured metric from its exact Python definitions."""
+    definition = metric_definition(draft.implementation)
+    implementation_source = inspect.getsourcefile(draft.implementation)
+    parameter_model = type(draft.params)
+    parameter_source = inspect.getsourcefile(parameter_model)
+    if implementation_source is None or parameter_source is None:
+        raise ValueError("metric callable or parameter model has no Python source")
+
+    implementation_path = Path(implementation_source).resolve()
+    implementation_raw = implementation_path.read_bytes()
+    if not implementation_path.is_relative_to(root):
+        raise ValueError("metric callable is outside the project root")
+    if parameter_model.__module__ == params.__name__:
+        parameter = params.model_ref(parameter_model)
+    else:
+        parameter_path = Path(parameter_source).resolve()
+        parameter_raw = parameter_path.read_bytes()
+        if not parameter_path.is_relative_to(root):
+            raise ValueError("metric parameter model is outside the project root")
+        parameter = ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        )
+    return MetricSpec(
+        metric_id=definition.metric_id,
+        implementation=MetricImplementationRef(
+            path=implementation_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(implementation_raw).hexdigest(),
+            bytes=len(implementation_raw),
+        ),
+        parameter_model=parameter,
+        params=draft.params,
+        mode=definition.mode,
+        dependencies=draft.dependencies,
+        comparator=draft.comparator,
     )
-    files: list[tuple[Path, bytes]] = []
+
+
+def _compile_metrics(root: Path, draft: ExperimentDraft) -> tuple[MetricSpec, ...]:
+    """Derive one consistent metric registry from every variant stage."""
+    metrics: dict[str, MetricSpec] = {}
+    for variant_draft in draft.variants.values():
+        for stage_draft in variant_draft.stages.values():
+            spec = stage_draft.spec
+            if not isinstance(spec, ParameterizedSpecDraft):
+                continue
+            configured = list(spec.metrics)
+            objective = getattr(spec, "objective", None)
+            if objective is not None:
+                configured.append(objective.metric)
+            for metric_draft in configured:
+                metric = _compile_metric(root, metric_draft)
+                existing = metrics.get(metric.metric_id)
+                if existing is not None and existing != metric:
+                    raise ValueError("one metric ID has conflicting configurations")
+                metrics[metric.metric_id] = metric
+    return tuple(metrics[metric_id] for metric_id in sorted(metrics))
+
+
+def _compile_variant(
+    experiment_id: ExperimentId,
+    variant_id: VariantId,
+    draft: VariantDraft,
+) -> VariantSpec:
+    """Compile the typed parameter selection for one variant."""
+    stage_params = []
+    for stage_id, stage_draft in draft.stages.items():
+        spec = stage_draft.spec
+        if isinstance(spec, BuildSpecDraft):
+            stage_params.append(
+                BuildVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+        elif isinstance(spec, EmbedSpecDraft):
+            stage_params.append(
+                EmbedVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+        elif isinstance(spec, TrainSpecDraft):
+            stage_params.append(
+                TrainVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+        elif isinstance(spec, EvalSpecDraft):
+            stage_params.append(
+                EvalVariantStageParams(stage_id=stage_id, params=spec.params)
+            )
+    if not stage_params:
+        raise ValueError("variant requires one project stage")
+    return VariantSpec(
+        experiment_id=experiment_id,
+        variant_id=variant_id,
+        levels=draft.levels,
+        stage_params=tuple(stage_params),
+    )
+
+
+def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
+    """Compile one immutable draft into a complete in-memory protocol graph."""
+    project_root = resolve_root(root)
+    experiment_draft = draft.experiment
+    variant_draft = experiment_draft.variants[draft.variant]
+    replicate_draft = experiment_draft.replicates[draft.replicate]
+    metrics = _compile_metrics(project_root, experiment_draft)
+    experiment_spec = ExperimentSpec(
+        experiment_id=experiment_draft.experiment_id,
+        factors=tuple(
+            FactorSpec(factor_id=factor_id, levels=factor.levels)
+            for factor_id, factor in sorted(experiment_draft.factors.items())
+        ),
+        variant_ids=tuple(sorted(experiment_draft.variants)),
+        replicates=tuple(
+            ReplicateSpec(replicate_id=replicate_id, seed=replicate.seed)
+            for replicate_id, replicate in sorted(experiment_draft.replicates.items())
+        ),
+        metrics=metrics,
+    )
+    variants = tuple(
+        _compile_variant(experiment_draft.experiment_id, variant_id, value)
+        for variant_id, value in sorted(experiment_draft.variants.items())
+    )
+    run_root = (
+        f"experiments/{experiment_draft.experiment_id}/runs/"
+        f"{draft.variant}/{draft.run_id}"
+    )
+    files: dict[RepoRelPath, bytes] = {
+        f"experiments/{experiment_draft.experiment_id}/spec.yaml": serialize_document(
+            experiment_spec
+        )
+    }
+    for variant_spec in variants:
+        path = (
+            f"experiments/{experiment_draft.experiment_id}/variants/"
+            f"{variant_spec.variant_id}.spec.yaml"
+        )
+        files[path] = serialize_document(variant_spec)
+
     stage_refs: list[RunStageRef] = []
-    for stage_id, stage in draft.stages.items():
-        spec = _freeze_stage(project_root, run_root, draft.stages, stage.spec)
-        raw = serialize_document(spec)
-        relative = f"{run_root}/stages/{stage_id}/spec.yaml"
-        files.append((_target_path(project_root, relative), raw))
+    for stage_id, stage_draft in variant_draft.stages.items():
+        stage_spec = _freeze_stage(
+            project_root,
+            run_root,
+            variant_draft.stages,
+            stage_draft.spec,
+        )
+        raw = serialize_document(stage_spec)
+        path = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files[path] = raw
         stage_refs.append(
             RunStageRef(
                 stage_id=stage_id,
-                spec=relative,
+                spec=path,
                 sha256=hashlib.sha256(raw).hexdigest(),
                 bytes=len(raw),
             )
         )
     estimator_stage = next(
         (
-            name
-            for name, stage in draft.stages.items()
-            if stage is draft.estimator.producer
+            stage_id
+            for stage_id, stage_draft in variant_draft.stages.items()
+            if stage_draft is variant_draft.estimator.producer
         ),
         None,
     )
@@ -639,23 +1035,37 @@ def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
         raise ValueError("estimator producer is absent from the plan")
     run = RunSpec(
         run_id=draft.run_id,
-        experiment_id=draft.experiment_id,
-        variant_id=draft.variant_id,
-        replicate_id=draft.replicate_id,
-        benchmark_id=draft.benchmark_id,
-        seed=draft.seed,
+        experiment_id=experiment_draft.experiment_id,
+        variant_id=draft.variant,
+        replicate_id=draft.replicate,
+        benchmark_id=None,
+        seed=replicate_draft.seed,
         source=draft.source,
         env=draft.env,
         reproducibility=draft.reproducibility,
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id=estimator_stage,
-            artifact_name=draft.estimator.artifact_name,
+            artifact_name=variant_draft.estimator.artifact_name,
         ),
     )
-    files.append(
-        (_target_path(project_root, f"{run_root}/spec.yaml"), serialize_document(run))
-    )
-    for path, raw in files:
+    run_path = f"{run_root}/spec.yaml"
+    files[run_path] = serialize_document(run)
+    return _CompiledPlan(run=run, run_path=run_path, files=files)
+
+
+def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
+    """Publish one compiled plan and materialize its working files."""
+    project_root = resolve_root(root)
+    compiled = _compile_plan(project_root, draft)
+    commit = LocalArtifactStore(project_root).publish(compiled.files)
+    paths = tuple(_target_path(project_root, path) for path in compiled.files)
+    for path, raw in zip(paths, compiled.files.values(), strict=True):
         _write_exact_file(path, raw)
-    return FrozenPlanFiles(run=run, files=tuple(path for path, _ in files))
+    run_raw = compiled.files[compiled.run_path]
+    reference = ResolvedRunSpecRef(
+        sha256=hashlib.sha256(run_raw).hexdigest(),
+        bytes=len(run_raw),
+        stored_at=LocalFileRef(commit=commit, path=compiled.run_path),
+    )
+    return FrozenPlanFiles(run=compiled.run, reference=reference, files=paths)

@@ -93,7 +93,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "115ef0703a05f0f6fc3af3ef2396852f76a3fd271d1a67afb0c28b7ca22e9032"
+      "sha256": "0b98349d97ec6f368cdf3bc26dc870ec11e6aa77e3dc693c684012862fa5ff7b"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -105,7 +105,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "cdbac0870341252b0ebbf1933b27646c080bc2bf4056048fcc9896ba22f4bbf9"
+      "sha256": "e70bd1135d9dfc0bb3caf5b9ff588f4ff5edd7aadf12f2cf9fd0550abf2dd7ec"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -116,7 +116,7 @@
         "FPG-04",
         "FPG-05"
       ],
-      "sha256": "c0b3f7bbfce9c4d914f439e8eb0e5cc10286f1a0bf479ccd7d3887488d0911c2"
+      "sha256": "d553f571b6abe85853e9a42bc1876e20c106c047cca2b73c839cb1ce9d04caae"
     },
     {
       "path": "docs/development/remote-storage.md",

@@ -22,6 +22,7 @@ from ..references import (
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    storage_file,
 )
 from ..runs import (
     AttemptFailure,
@@ -83,6 +84,7 @@ def execute_attempt(
     repository_root: Path,
     run_spec_path: Path,
     *,
+    plan: ResolvedRunSpecRef | None = None,
     timeout_seconds: float | None = None,
     retry: bool = False,
     purpose: AttemptPurpose = "run",
@@ -92,32 +94,43 @@ def execute_attempt(
     run_path = run_spec_path.resolve()
     run_raw = run_path.read_bytes()
     run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
+    store = LocalArtifactStore(root)
+    fetcher = RunFetcher(root, store, str(run.source.repository))
     origin = run_git(root, "remote", "get-url", "origin").decode().strip()
     if origin != str(run.source.repository):
         raise RunError("Git origin differs from RunSpec.source.repository")
-    plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
     relative_run_path = run_path.relative_to(root).as_posix()
-    if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
-        raise RunError("RunSpec bytes are absent from the current Git commit")
+    if plan is None:
+        plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
+        if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
+            raise RunError("RunSpec bytes are absent from the current Git commit")
+        plan_location = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+    else:
+        if plan.stored_at.path != relative_run_path:
+            raise RunError("run path differs from the immutable plan reference")
+        if fetcher(plan.stored_at) != run_raw:
+            raise RunError("RunSpec bytes differ from the immutable plan")
+        plan_location = plan.stored_at
 
-    store = LocalArtifactStore(root)
     destination = bind_run_destination(
         root,
         run.run_id,
         load_storage_settings(root).destination,
     )
     snapshot_publisher = create_snapshot_publisher(root, destination)
-    fetcher = RunFetcher(root, store, str(run.source.repository))
     policy = VerificationPolicy(
         trusted_source_repositories=frozenset({str(run.source.repository)})
     )
     experiment = ExperimentSpec.model_validate(
         parse_yaml_bytes(
             fetcher(
-                GitFileRef(
-                    repository=run.source.repository,
-                    commit=run.source.commit,
-                    path=f"experiments/{run.experiment_id}/spec.yaml",
+                storage_file(
+                    plan_location,
+                    f"experiments/{run.experiment_id}/spec.yaml",
                 )
             )
         )
@@ -195,7 +208,7 @@ def execute_attempt(
     signal.signal(signal.SIGTERM, preempt_attempt)
     try:
         journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
-        preflight = preflight_plan(root, run_path)
+        preflight = preflight_plan(root, run_path, plan=plan)
         preflight_path = workspace.control / "preflight.json"
         write_synchronized(
             preflight_path,
@@ -203,10 +216,10 @@ def execute_attempt(
         )
         journal.append(
             "preflighting",
-            "preflight completed and frozen plan located in Git",
+            "preflight completed and immutable plan located",
             recorded_at=datetime.now(UTC),
             details={
-                "plan_commit": plan_commit,
+                "plan_commit": plan_location.commit,
                 "report": preflight_path.relative_to(workspace.root).as_posix(),
             },
         )
@@ -481,11 +494,6 @@ def execute_attempt(
             log_files=log_references,
             failure=None,
         )
-        run_reference = GitFileRef(
-            repository=run.source.repository,
-            commit=plan_commit,
-            path=relative_run_path,
-        )
         attempt_reference = write_attempt_document(
             root,
             run_root,
@@ -509,7 +517,7 @@ def execute_attempt(
             spec=ResolvedRunSpecRef(
                 sha256=hashlib.sha256(run_raw).hexdigest(),
                 bytes=len(run_raw),
-                stored_at=run_reference,
+                stored_at=plan_location,
             ),
             status="succeeded",
             attempts=attempt_references,
@@ -597,11 +605,6 @@ def execute_attempt(
                 occurred_at=failed_at,
             ),
         )
-        run_reference = GitFileRef(
-            repository=run.source.repository,
-            commit=plan_commit,
-            path=relative_run_path,
-        )
         failed_attempt_reference = write_attempt_document(
             root,
             run_root,
@@ -624,7 +627,7 @@ def execute_attempt(
             spec=ResolvedRunSpecRef(
                 sha256=hashlib.sha256(run_raw).hexdigest(),
                 bytes=len(run_raw),
-                stored_at=run_reference,
+                stored_at=plan_location,
             ),
             status="cancelled" if status == "cancelled" else "failed",
             attempts=attempt_references,

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .._schema import PREDICTIONS
 from .._verification.attempt import verify_attempt_stages
+from .._verification.storage import fetch_storage_bytes
 from ..artifacts import StageArtifactRef
 from ..benchmark import (
     ArtifactComparisonReceipt,
@@ -20,11 +21,12 @@ from ..benchmark import (
 from ..metrics import MetricVerificationReceipt
 from ..references import (
     GitFileRef,
+    LocalFileRef,
     ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
     ResolvedRunRef,
 )
-from ..runs import ResolvedRun, RunAttempt
+from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes, serialize_document
 from ..stages import EvalSpec
 from ..storage import LocalArtifactStore
@@ -89,9 +91,22 @@ def benchmark(
     store = LocalArtifactStore(root)
 
     run = candidate.spec
-    fetcher = RunFetcher(root, store, str(run.stored_at.repository))
+    if isinstance(run.stored_at, GitFileRef):
+        source_repository = str(run.stored_at.repository)
+        run_raw = RunFetcher(root, store, source_repository)(run.stored_at)
+    elif isinstance(run.stored_at, LocalFileRef):
+        run_raw = store.fetch(run.stored_at)
+        source_repository = str(
+            RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
+        )
+    else:
+        run_raw = fetch_storage_bytes(run.stored_at)
+        source_repository = str(
+            RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
+        )
+    fetcher = RunFetcher(root, store, source_repository)
     policy = VerificationPolicy(
-        trusted_source_repositories=frozenset({str(run.stored_at.repository)})
+        trusted_source_repositories=frozenset({source_repository})
     )
     verified_candidate = verify_run_result(
         candidate,
