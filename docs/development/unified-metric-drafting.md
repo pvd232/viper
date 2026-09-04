@@ -6,24 +6,24 @@ the verified result. VIPER writes the exact metric, experiment, stage, and
 benchmark records required by execution and verification.
 
 This contract owns metric drafting, objective direction, experiment assembly,
-and benchmark authoring. The complete model-run example remains in
+immutable run-plan construction, and benchmark authoring. The complete model-run example remains in
 [`automatic-input-resolution.md`](automatic-input-resolution.md#complete-proposed-authoring-example).
-[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) owns the later Git
-commit that identifies the generated experiment, variant, benchmark, stage,
-and run documents.
+[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) must be revised so
+the internal compiler persists generated experiment, variant, benchmark,
+stage, and run documents without requiring a public freezing step.
 
 ## 1. Status
 
-**Contract status:** planned; Phase 4 code specified.
+**Contract status:** in progress.
 
 These requirements bind the contract to the master checklist:
 
 | ID | Implementation obligation |
 | --- | --- |
 | UMD-01 <!-- contract-requirement: UMD-01 phase=4 test=tests/test_metric_interface.py --> | Add metric drafts, objective drafts, criterion drafts, and their public constructors. |
-| UMD-02 <!-- contract-requirement: UMD-02 phase=4 test=tests/test_metric_provenance.py --> | Deliver frozen parameter classes and values to live and recomputed metrics while reusing existing dependency snapshots. |
+| UMD-02 <!-- contract-requirement: UMD-02 phase=4 test=tests/test_metric_provenance.py --> | Dein_stager frozen parameter classes and values to in_stage and recomputed metrics while reusing existing dependency snapshots. |
 | UMD-03 <!-- contract-requirement: UMD-03 phase=4 test=tests/test_verification.py --> | Persist objective identity and direction and enforce stage-specific objective rules. |
-| UMD-04 <!-- contract-requirement: UMD-04 phase=6 test=tests/test_authoring.py --> | Add experiment, factor, variant, and replicate drafting with a derived metric registry. |
+| UMD-04 <!-- contract-requirement: UMD-04 phase=6 test=tests/test_authoring.py --> | Add experiment, factor, variant, and replicate drafting with a derived metric registry; generate an immutable run identity; recursively freeze each returned plan; and compile it internally when execution begins. |
 | UMD-05 <!-- contract-requirement: UMD-05 phase=8 test=tests/test_benchmark_execution.py --> | Record every benchmark metric under fixed inputs and apply optional criteria. |
 | UMD-06 <!-- contract-requirement: UMD-06 phase=11 test=tests/test_documentation.py --> | Remove retired metric shapes and publish the final metric, experiment, and benchmark API. |
 
@@ -44,9 +44,12 @@ records only metrics that have thresholds. See
 **Proposed:** `viper.metrics.measure()` creates one configured `MetricDraft`.
 `viper.metrics.min()` or `viper.metrics.max()` gives that metric an objective
 direction. `viper.authoring.experiment()` defines factors, variants, and
-replicates. `viper.authoring.freeze()` derives the experiment's metric registry
-from the selected stages. `benchmark()` from `viper.benchmark` fixes the
-evaluation data, splits, metrics, and optional criteria.
+replicates. `viper.authoring.plan()` assigns the run identity and returns a
+recursively immutable plan. `viper.execution.run(plan)` internally derives the
+experiment's metric registry from the selected stages and persists the
+compiled protocol records before execution. `benchmark()` from
+`viper.benchmark` fixes the evaluation data, splits, metrics, and optional
+criteria.
 
 The benchmark model follows four observations from primary sources:
 
@@ -71,13 +74,18 @@ metric result.
 ## 2. Required claim
 
 When a user selects a configured metric as a stage objective, diagnostic, or
-benchmark measurement, VIPER freezes one exact `MetricSpec`, delivers its
+benchmark measurement, VIPER freezes one exact `MetricSpec`, dein_stagers its
 validated parameters to the metric implementation, records each produced
 value, and verifies every recomputed value from its declared files.
 
-When a user freezes an experiment, VIPER derives `ExperimentSpec.metrics` from
-the metrics reachable through the experiment's stage drafts.
-`viper.authoring.experiment()` therefore lists factors, variants, and replicates once.
+When a user constructs a run plan, VIPER generates its `run_id`, copies and
+recursively freezes the complete draft graph, and derives
+`ExperimentSpec.metrics` from the metrics reachable through the experiment's
+stage drafts. `viper.authoring.experiment()` therefore lists factors, variants,
+and replicates once. `viper.execution.run(plan)` preserves that identity,
+compiles and persists the protocol records atomically, and only then starts
+execution. Public authoring, typed-API, and CLI surfaces expose no separate
+freezing operation.
 
 When a user runs a benchmark, VIPER records the exact evaluation dataset,
 splits, metric values, candidate evidence, and confirmation evidence. Optional
@@ -123,7 +131,7 @@ Three connectors are missing.
 First, Python authoring lacks an object that carries one decorated metric
 together with its parameter values, dependencies, and recomputation comparator.
 
-Second, a live metric can declare custom parameters in the proposed draft. The
+Second, an `in_stage` metric can declare custom parameters in the proposed draft. The
 current `MetricHandle` calls a function with only the arguments supplied to
 `record()` and constructs a stateful metric with zero arguments. The frozen
 parameter object remains disconnected from both implementations.
@@ -162,7 +170,7 @@ flowchart LR
     Definition["MetricDefinition"] --> Draft["MetricDraft"]
     Params["typed params"] --> Draft
     Dependencies["artifact dependencies"] --> Draft
-    Comparator["recompute comparator"] --> Draft
+    Comparator["post_stage comparator"] --> Draft
     Draft --> Objective["MetricObjectiveDraft"]
     Draft --> Criterion["MetricCriterionDraft"]
     class Definition,Draft,Params,Dependencies,Comparator,Objective,Criterion proposed
@@ -197,7 +205,7 @@ The decorator defines stable metric metadata. `viper.metrics.measure()` supplies
 values that can change between experiments.
 
 ```python
-MetricMode = Literal["recompute", "live"]
+MetricMode = Literal["post_stage", "in_stage"]
 ObjectiveDirection = Literal["min", "max"]
 
 MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
@@ -298,7 +306,7 @@ viper.metrics.measure(implementation, ...)
 -> validate mode, dependencies, and comparator
 -> return MetricDraft containing the implementation and configured values
 
-viper.authoring.freeze(plan)
+internal plan compiler invoked by viper.execution.run(plan)
 -> call metric_definition(MetricDraft.implementation)
 -> inspect type(MetricDraft.params)
 -> hash the implementation and custom parameter-model source
@@ -306,11 +314,11 @@ viper.authoring.freeze(plan)
 ```
 
 `viper.metrics.measure()` constructs `viper.params.Metric()` when the caller omits
-`params`. A supplied instance must subclass `viper.params.Metric`. Freezing
+`params`. A supplied instance must subclass `viper.params.Metric`. Compilation
 derives the parameter class from `type(MetricDraft.params)`.
 
-Recomputed metrics require at least one dependency and one comparator. Live
-metrics carry neither. Evaluation metrics use `mode="recompute"`.
+Recomputed metrics require at least one dependency and one comparator. in_stage
+metrics carry neither. Evaluation metrics use `mode="post_stage"`.
 
 `FloatComparator` compares one recorded value with independent recomputation.
 `MetricCriterionDraft` compares a verified benchmark value with a target. The
@@ -320,7 +328,7 @@ two objects keep separate fields and separate consumers.
 
 | Name | Stable role |
 | --- | --- |
-| `MetricDraft` | One configured calculation before freezing |
+| `MetricDraft` | One configured calculation before protocol compilation |
 | `MetricObjectiveDraft` | One metric plus its desired direction of improvement |
 | `MetricCriterionDraft` | One metric plus one optional benchmark threshold |
 | `MetricObjectiveSpec` | The frozen metric-and-direction pair stored on a stage |
@@ -334,17 +342,17 @@ metric ID and direction together. A metric selected through `metrics=` is an
 additional measurement. That selection makes it a diagnostic when the result
 helps explain the stage.
 
-### Live and recomputed metrics
+### in_stage and recomputed metrics
 
 `mode` determines when VIPER calculates a metric and which values the metric
 can use.
 
 | Mode | When VIPER calculates it | What the metric receives | Typical use |
 | --- | --- | --- | --- |
-| `live` | While the stage callable is running | Values held in memory and passed through `MetricHandle.record()` or `MetricHandle.update()` | Batch loss, gradient norm, memory use, and timing |
-| `recompute` | After the stage has persisted its inputs and artifacts | File paths selected by `MetricDependency` | Evaluation loss, accuracy, and other results derived from saved predictions and labels |
+| `in_stage` | While the stage callable is running | Values held in memory and passed through `MetricHandle.record()` or `MetricHandle.update()` | Batch loss, gradient norm, memory use, and timing |
+| `post_stage` | After the stage has persisted its inputs and artifacts | File paths selected by `MetricDependency` | Evaluation loss, accuracy, and other results derived from saved predictions and labels |
 
-A live metric records information that exists during execution. For example,
+An in_stage metric records information that exists during execution. For example,
 the training function can pass one epoch's gradient norms to
 `context.metrics["gradient_norm"].record(...)`. VIPER calculates the scalar and
 appends a `Measurement` while the stage process is active.
@@ -354,8 +362,8 @@ example, an evaluation metric can read saved predictions and evaluation labels,
 calculate accuracy, and store the result. The verifier runs the calculation
 again and uses `FloatComparator` to compare the two values.
 
-Use `live` when the required values exist only while the stage is running. Use
-`recompute` when persisted inputs and artifacts contain everything required for
+Use `in_stage` when the required values exist only while the stage is running. Use
+`post_stage` when persisted inputs and artifacts contain everything required for
 the calculation.
 
 ### Diagnostics
@@ -364,7 +372,7 @@ A diagnostic is a `MetricDraft` selected through a stage's `metrics=` argument.
 Its result explains that stage. The `objective` field separately names the
 primary metric for a stage that declares one.
 
-A live diagnostic uses the stage's `Measurement` and invocation receipt. A
+An in_stage diagnostic uses the stage's `Measurement` and invocation receipt. A
 recomputed diagnostic also uses declared dependencies, a comparator, and a
 `MetricVerificationReceipt`.
 
@@ -376,7 +384,7 @@ from viper.metrics import MetricContext, measure, metric, min
 
 @metric(
     metric_id="gradient_norm",
-    mode="live",
+    mode="in_stage",
 )
 def gradient_norm(
     _context: MetricContext[params.Metric],
@@ -420,13 +428,13 @@ additional measurements, including diagnostics. A fixed embedding stage can
 select `embedding_reconstruction_loss` and `embedding_spread` as diagnostics
 while leaving `objective=None`.
 
-A diagnostic can use `mode="live"` when the stage already holds the required
-values. It can use `mode="recompute"` when the calculation reads persisted
-inputs or artifacts. Build, embed, train, and eval stages can select live
+A diagnostic can use `mode="in_stage"` when the stage already holds the required
+values. It can use `mode="post_stage"` when the calculation reads persisted
+inputs or artifacts. Build, embed, train, and eval stages can select in_stage
 or recomputed diagnostics. A runner-owned download stage selects recomputed
-diagnostics; live `MetricHandle` values come from project stage callables.
+diagnostics; in_stage `MetricHandle` values come from project stage callables.
 
-### One context for live and recomputed metrics
+### One context for in_stage and recomputed metrics
 
 Both metric modes receive the same typed `MetricContext`:
 
@@ -455,7 +463,7 @@ def evaluation_loss(
     ...
 ```
 
-A stateless live metric receives the same context before the observations
+A stateless in_stage metric receives the same context before the observations
 supplied to `record()`:
 
 ```python
@@ -470,7 +478,7 @@ def training_loss(
     ...
 ```
 
-A stateful live metric receives the context once:
+A stateful in_stage metric receives the context once:
 
 ```python
 from viper.metrics import MetricContext, StatefulMetric
@@ -493,7 +501,7 @@ class RunningAccuracy(StatefulMetric[AccuracyMetricParams]):
         return self.correct / self.total
 ```
 
-The live binding operation is:
+The in_stage binding operation is:
 
 ```text
 MetricSpec.parameter_model + MetricSpec.params
@@ -559,7 +567,7 @@ def bind_live_metric(
 ```
 
 One shared `MetricContext` gives both modes the same invocation context and
-parameter-delivery rule.
+parameter-dein_stagery rule.
 
 The alternatives fail at a specific boundary:
 
@@ -567,9 +575,9 @@ The alternatives fail at a specific boundary:
 | --- | --- | --- |
 | Pass `params=` to `MetricHandle.record()` | Small runtime edit | Stage code can supply values that differ from the frozen `MetricSpec.params`. |
 | Decorate a factory that returns a configured metric | Parameters stay inside the returned callable | The returned closure can capture unrecorded values, and its generated identity is harder to bind to one source symbol. |
-| Permit custom parameters only on `StatefulMetric` classes | Constructor delivery is simple | A stateless calculation must become a class solely to receive parameters. |
+| Permit custom parameters only on `StatefulMetric` classes | Constructor dein_stagery is simple | A stateless calculation must become a class solely to receive parameters. |
 | Store parameters on `MetricHandle.params` | Preserves the current metric function signature | Stage code must manually read and forward the values, so the metric invocation itself lacks a required parameter handoff. |
-| Add `LiveMetricContext` | Makes the mode visible in the type | It duplicates the role already carried by `MetricContext` and creates two parameter-delivery APIs. |
+| Add `in_stageMetricContext` | Makes the mode visible in the type | It duplicates the role already carried by `MetricContext` and creates two parameter-dein_stagery APIs. |
 
 ### Frozen metric records
 
@@ -632,10 +640,10 @@ class MetricExecutionReceipt(ProtocolModel):
     outcome: Literal["succeeded"] = "succeeded"
 ```
 
-Live metrics run inside the controlled stage process. Their `Measurement`
+in_stage metrics run inside the controlled stage process. Their `Measurement`
 selects the stage and metric ID. The verifier follows that ID to `MetricSpec`
 and follows the resolved stage to the stage invocation receipt. One
-stage-process receipt covers the live metric binding:
+stage-process receipt covers the in_stage metric binding:
 
 ```text
 Measurement.metric_id
@@ -719,7 +727,7 @@ class EvalSpec(InternalSpec):
 ```
 
 The objective metric ID must occur in the same stage's `metric_ids`. A training
-objective uses a live metric. An evaluation objective uses a recomputed metric.
+objective uses an `in_stage` metric. An evaluation objective uses a recomputed metric.
 An optional embedding objective can use either mode, according to whether the
 embedding implementation records the value during execution or VIPER derives
 the value from persisted files.
@@ -731,9 +739,9 @@ to project stage code.
 ### Experiment drafts
 
 An experiment names factors, variants, and replicates. Its metric registry is
-derived from the stage graph of each frozen plan.
+derived from the stage graph of each compiled plan.
 
-Every artifact draft stores a path relative to the selected run root. Freezing
+Every artifact draft stores a path relative to the selected run root. Compilation
 prefixes `experiments/<experiment-id>/runs/<variant-id>/<run-id>/` and writes
 the resulting repository-relative path to `ArtifactSpec.path`. One variant
 graph can therefore serve every declared replicate.
@@ -773,9 +781,9 @@ class ExperimentDraft(BaseModel):
 ```
 
 `ExperimentDraft` omits `metrics`. Every configured metric must be selected by
-at least one stage in one declared variant. `viper.authoring.freeze()` walks every
-variant's stage objectives and metrics, produces one `MetricSpec` per metric ID,
-and writes those records into `ExperimentSpec.metrics`.
+at least one stage in one declared variant. The internal compiler walks every
+variant's stage objectives and metrics, produces one `MetricSpec` per metric
+ID, and writes those records into `ExperimentSpec.metrics`.
 
 The public constructors are:
 
@@ -827,6 +835,56 @@ class RunPlanDraft(BaseModel):
     reproducibility: ReproducibilitySpec
 ```
 
+`run_id` is readable protocol identity, not caller configuration. The supported
+constructor omits it:
+
+```python
+def plan(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    benchmark: BenchmarkDraft | None = None,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft: ...
+```
+
+`plan()` calls one internal `_new_run_id()` operation, writes that value into
+`RunPlanDraft.run_id`, and returns the completed plan. Deserializing a
+`RunPlanDraft` still requires an explicit `run_id`; the model field does not use
+a default factory. That distinction prevents loading incomplete stored plans
+from silently assigning new identities.
+
+`ConfigDict(frozen=True)` protects model attributes but does not protect a
+dictionary or list stored inside a model. Before `plan()` returns, it therefore
+deep-copies the authored graph and applies one internal `_deep_freeze()` walk:
+
+```text
+dict       -> FrozenDict
+list       -> FrozenList
+set        -> frozenset
+tuple      -> tuple of recursively frozen values
+BaseModel  -> same model type with every field recursively frozen
+scalar     -> unchanged
+```
+
+`FrozenDict` and `FrozenList` retain normal mapping, sequence, equality, and
+Pydantic serialization behavior. Every mutating method raises `TypeError`,
+including item assignment and deletion, `clear`, `pop`, `popitem`, `setdefault`,
+`update`, `append`, `extend`, `insert`, `remove`, `reverse`, `sort`, and in-place
+addition or multiplication. `_deep_freeze()` memoizes objects by identity so
+two references to one stage remain two references to the same frozen stage and
+a recursive project value cannot cause an unbounded walk.
+
+The copy severs caller aliases before the frozen containers are installed.
+Mutating a dictionary, list, set, nested parameter value, or draft model that
+was passed to `experiment()`, `variant()`, `stage()`, or `plan()` cannot change
+the returned plan. Direct mutation through the returned plan also fails. The
+canonical serialization used by the compiler remains ordinary JSON arrays and
+objects; the private frozen-container types never enter the protocol schema.
+
 [`experiment-expansion.md`](experiment-expansion.md) owns the operation that
 creates one `RunPlanDraft` for every selected variant-replicate pair. This
 contract keeps `RunPlanDraft` as the single-run unit and derives each run's
@@ -836,7 +894,8 @@ metric registry from the same `ExperimentDraft`.
 links the source measurement and verification receipt through
 `StageReuseReceipt` while preserving the source `Measurement` identity.
 
-`viper.authoring.freeze()` derives these persisted values:
+The internal compiler invoked by `viper.execution.run(plan)` derives these
+persisted values:
 
 ```text
 RunSpec.experiment_id
@@ -933,7 +992,7 @@ class VariantSpec(ProtocolModel):
 `DownloadSpec` stores request, policy, and transport settings directly. Variant
 parameter records cover project-owned stage parameter objects.
 
-Freezing the first plan for a variant fixes that variant's complete stage
+Compiling the first plan for a variant fixes that variant's complete stage
 parameters. A later plan using the same experiment and variant must produce the
 same `VariantSpec`. Different stage parameters require a different variant ID.
 
@@ -1092,11 +1151,10 @@ baseline_replicate_02_plan = plan(
 `FactorDraft.levels` names the experimental labels. The selected
 `VariantDraft.stages` contains the concrete parameter values associated with
 those labels. `VariantSpec` persists both the labels and the complete stage
-parameter records. VIPER checks their association by freezing them from the
-same `VariantDraft`. VIPER treats `high` as an opaque label and records the
-concrete parameter values from the variant's stages.
+parameter records. VIPER checks their association by compiling them from the
+same `VariantDraft`.
 
-The two baseline plans reuse `baseline_training`. Freezing gives each plan a
+The two baseline plans reuse `baseline_training`. Compilation gives each plan a
 different run root and writes different concrete artifact paths. The draft
 remains the same object.
 
@@ -1209,9 +1267,10 @@ def benchmark(
 ) -> BenchmarkDraft: ...
 ```
 
-`RunPlanDraft.benchmark` carries the complete authoring object. Freezing writes
-`BenchmarkSpec` and writes `RunSpec.benchmark_id`. `BenchmarkResult.run` joins
-the reusable benchmark definition to one candidate run and its experiment.
+`RunPlanDraft.benchmark` carries the complete authoring object. Internal
+compilation writes `BenchmarkSpec` and writes `RunSpec.benchmark_id`.
+`BenchmarkResult.run` joins the reusable benchmark definition to one candidate
+run and its experiment.
 
 The evaluation stage and benchmark reuse the same draft objects:
 
@@ -1223,16 +1282,61 @@ BenchmarkDraft.splits[name]
 == EvalSpecDraft.inputs[name]
 ```
 
-Freezing resolves each `RunArtifactDraft` once. It writes the resulting
+Internal compilation resolves each `RunArtifactDraft` once. It writes the resulting
 `StoredInputRef` into the evaluation stage and reuses that input's
 `ResolvedArtifactPointerRef` in `BenchmarkSpec`. The candidate, confirmation
 execution, and benchmark record therefore share one test-data identity.
 
 ## 5. Execution
 
-### Freezing metrics and objectives
+### Constructing and compiling an immutable plan
 
-For each `MetricDraft`, `viper.authoring.freeze()` performs these operations:
+The public execution boundary accepts the authored plan:
+
+```python
+def run(
+    plan: RunPlanDraft,
+    *,
+    repository_root: Path,
+    timeout_seconds: float | None = None,
+) -> RunResult: ...
+```
+
+`viper.execution.run(plan)` performs these operations in order:
+
+```text
+accept the already generated RunPlanDraft.run_id
+-> compile the draft graph into protocol models in memory
+-> serialize every protocol model canonically
+-> validate the complete serialized set
+-> persist the complete compiled-plan set atomically
+-> invoke the internal path-based executor
+-> create the first attempt
+```
+
+Compilation is an architectural boundary, not a public workflow step. The
+compiler remains one internal operation, `_compile_plan()`, so tests and future
+storage backends can exercise a single plan-to-protocol handoff. The public
+package exports no `freeze()`, the typed API exposes no `freeze_run()`, and the
+CLI exposes no `freeze-run` command. The internal compiled-files value is also
+not a public return type.
+
+Compilation finishes before execution creates an attempt or launches a stage.
+If model construction, serialization, validation, or persistence fails,
+`run()` raises a pre-execution error, publishes no authoritative partial plan,
+and creates no attempt. The persistence mechanism defined by the revised
+[`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) must make the
+compiled set retrievable by `RunPlanDraft.run_id` without requiring a user to
+commit generated files between `plan()` and `run()`.
+
+`RunSpec.run_id`, every attempt, terminal `ResolvedRun`, benchmark execution,
+and retry retain the `run_id` assigned by `plan()`. Neither compilation nor
+execution calls `_new_run_id()`. Retry loads the persisted compiled plan and
+does not recompile the caller's draft graph.
+
+### Compiling metrics and objectives
+
+For each `MetricDraft`, `_compile_plan()` performs these operations:
 
 ```text
 call metric_definition(MetricDraft.implementation)
@@ -1243,7 +1347,7 @@ call metric_definition(MetricDraft.implementation)
 -> merge by metric_id into ExperimentSpec.metrics
 ```
 
-When multiple stages select the same `metric_id`, freezing compiles each
+When multiple stages select the same `metric_id`, compilation converts each
 selected `MetricDraft` into a `MetricSpec` and compares the complete records.
 The implementation, parameter class, parameter values, dependencies, mode, and
 comparator must match. A mismatch raises an error because each metric ID
@@ -1253,9 +1357,9 @@ For each `MetricObjectiveDraft`, the compiler writes one
 `MetricObjectiveSpec`. It places the objective metric ID first in the stage's
 `metric_ids`, followed by the IDs supplied through `metrics=`.
 
-### Executing live metrics
+### Executing in_stage metrics
 
-The stage worker loads every selected live `MetricSpec`. It verifies the metric
+The stage worker loads every selected in_stage `MetricSpec`. It verifies the metric
 implementation bytes and custom parameter-model bytes. It validates
 `MetricSpec.params`, constructs one `MetricContext`, and binds one
 `MetricHandle`.
@@ -1305,11 +1409,11 @@ once.
 Verification repeats that operation in a separate worker and writes
 `MetricVerificationReceipt` after applying `FloatComparator`.
 
-### Freezing experiments
+### Compiling experiments
 
-`viper.authoring.freeze()` validates every factor level, selected variant, replicate, and
-stage parameter set. It writes `ExperimentSpec`, the selected `VariantSpec`, all
-stage specs, and `RunSpec`.
+`_compile_plan()` validates every factor level, selected variant, replicate,
+and stage parameter set. It writes `ExperimentSpec`, the selected
+`VariantSpec`, all stage specs, and `RunSpec`.
 
 The writer merges metrics into an existing experiment by `metric_id`. It
 preserves identical records and rejects conflicting records. Stage selections
@@ -1330,6 +1434,18 @@ the executor to evaluate both candidate and confirmation values and attach
 The successful example produces this evidence chain:
 
 ```text
+plan()
+-> generates one RunPlanDraft.run_id
+-> returns one recursively immutable draft graph
+
+_compile_plan()
+-> preserves RunPlanDraft.run_id in RunSpec.run_id
+-> persists the complete canonical protocol set before execution
+
+execution.run(plan)
+-> executes only that persisted protocol set
+-> preserves the same run_id in attempts and terminal results
+
 ExperimentSpec.metrics["evaluation_accuracy"]
 -> exact implementation, params, dependencies, comparator
 
@@ -1368,9 +1484,12 @@ differentiable objective interface to prove that relationship.
 | Rule | Executable condition |
 | --- | --- |
 | `metric.authoring.complete` <!-- verifier-rule: metric.authoring.complete requirement=UMD-01 --> | Metric, objective, and criterion drafts freeze through their public constructors. |
-| `metric.params.delivered` <!-- verifier-rule: metric.params.delivered requirement=UMD-02 --> | Live and recomputed metric execution receives the frozen parameter class, values, and dependency snapshots. |
+| `metric.params.delivered` <!-- verifier-rule: metric.params.delivered requirement=UMD-02 --> | in_stage and recomputed metric execution receives the frozen parameter class, values, and dependency snapshots. |
 | `metric.objective.enforced` <!-- verifier-rule: metric.objective.enforced requirement=UMD-03 --> | Frozen objectives preserve metric identity and direction, and each stage satisfies its objective rule. |
-| `experiment.authoring.complete` <!-- verifier-rule: experiment.authoring.complete requirement=UMD-04 --> | Experiment, factor, variant, and replicate drafts freeze with one derived metric registry. |
+| `experiment.authoring.complete` <!-- verifier-rule: experiment.authoring.complete requirement=UMD-04 --> | Experiment, factor, variant, and replicate drafts compile with one derived metric registry. |
+| `plan.identity.generated` <!-- verifier-rule: plan.identity.generated requirement=UMD-04 --> | `plan()` generates one valid run ID, exposes it read-only, and every compiled or executed record preserves it. |
+| `plan.graph.immutable` <!-- verifier-rule: plan.graph.immutable requirement=UMD-04 --> | Caller aliases cannot alter a returned plan, and every direct nested mutation fails without changing canonical serialization. |
+| `plan.compilation.internal` <!-- verifier-rule: plan.compilation.internal requirement=UMD-04 --> | `execution.run(plan)` persists one complete compiled plan before starting an attempt, while public Python and CLI surfaces expose no freezing operation. |
 | `benchmark.result.complete` <!-- verifier-rule: benchmark.result.complete requirement=UMD-05 --> | Each benchmark records every metric under fixed inputs before applying optional criteria. |
 | `metric.docs.current` <!-- verifier-rule: metric.docs.current requirement=UMD-06 --> | Protocol and public documentation contain only the final metric, experiment, and benchmark shapes. |
 
@@ -1382,22 +1501,22 @@ implementation. Its metric ID and mode equal the values represented by
 
 ### `metric.draft.parameter_capture`
 
-`type(MetricDraft.params)` subclasses `viper.params.Metric`. Freezing writes
+`type(MetricDraft.params)` subclasses `viper.params.Metric`. Compilation writes
 a `ParameterModelRef` for that exact class. The built-in class uses
 `owner="viper"`; a project subclass uses `owner="project"`. The worker resolves
 the named source root, checks the source digest and byte count, loads the
 symbol, and reconstructs the instance from `MetricSpec.params`.
 
-### `metric.live.parameter_delivery`
+### `metric.in_stage.parameter_dein_stagery`
 
 The stage worker validates `MetricSpec.params` through the frozen parameter
 class. The `MetricContext.params` object supplied by `MetricHandle` equals that
 validated object. The verifier also requires
 `StageInvocationReceipt.context.metric_ids` to equal the frozen stage's
-`metric_ids`. Every live `Measurement.metric_id` must occur in that tuple and
+`metric_ids`. Every in_stage `Measurement.metric_id` must occur in that tuple and
 resolve to exactly one `MetricSpec` in `ExperimentSpec.metrics`.
 
-### `metric.recompute.invocation_binding`
+### `metric.post_stage.invocation_binding`
 
 The production and recomputation `MetricExecutionReceipt` records carry equal
 `implementation`, `parameter_model`, `params`, and `dependencies` fields. Their
@@ -1412,8 +1531,8 @@ have one. `MetricObjectiveSpec.metric_id` occurs exactly once in the stage's
 
 ### `metric.objective.role`
 
-A training objective selects `mode="live"`. An evaluation objective selects
-`mode="recompute"`. An embedding objective can select either mode. In every
+A training objective selects `mode="in_stage"`. An evaluation objective selects
+`mode="post_stage"`. An embedding objective can select either mode. In every
 case, the stage's `objective` field gives the metric its objective role.
 
 ### `metric.objective.evidence`
@@ -1425,7 +1544,7 @@ remains project-owned.
 ### `experiment.metric.registry`
 
 Every stage metric ID resolves to one `MetricSpec` in the selected
-`ExperimentSpec`. Reusing an ID with a different `MetricSpec` stops freezing and
+`ExperimentSpec`. Reusing an ID with a different `MetricSpec` stops compilation and
 verification.
 
 ### `experiment.selection`
@@ -1434,12 +1553,40 @@ verification.
 `ExperimentDraft`. The selected variant has one declared level for every factor,
 and every level belongs to that factor.
 
+### `plan.identity.generated`
+
+Two independent `plan()` calls produce distinct values accepted by the current
+`RunId` validator. Each returned `run_id` remains equal to `RunSpec.run_id`, the
+attempt's run ID, and the terminal result's run ID. Assigning a replacement
+value through the returned plan raises `ValidationError`; compilation and
+execution never generate a second value.
+
+### `plan.graph.immutable`
+
+The test retains every mutable object supplied to the public constructors and
+records `plan.model_dump_json()` immediately after construction. It mutates the
+retained source objects and confirms that the serialized plan is unchanged. It
+then exercises every mutator owned by `FrozenDict` and `FrozenList`, plus a
+nested set and nested project parameter value, and requires `TypeError` without
+changing the serialized plan. Shared stage references remain identical after
+the copy-and-freeze operation.
+
+### `plan.compilation.internal`
+
+The public `authoring`, typed-API, CLI, and package export tests reject
+`freeze`, `freeze_run`, and `freeze-run`. `execution.run(plan)` calls the
+internal compiler exactly once, persists every canonical document before it
+creates the first attempt, and passes the persisted run-spec path to the
+internal executor. Injecting a failure before the complete-set publication
+leaves no authoritative plan and no attempt. Injecting a failure after
+publication leaves the complete plan retrievable under the original `run_id`.
+
 ### `experiment.variant.graph`
 
 Every `StageDraftArtifactRef` used by a variant names a producer in that same
 variant's `stages` mapping. The producer appears before its consumer. The
 variant estimator names an artifact from one train stage in the same mapping.
-Freezing writes that stage and artifact to `RunSpec.estimator`.
+Compilation writes that stage and artifact to `RunSpec.estimator`.
 
 The frozen verifier confirms that every `FutureInputRef` names an earlier run
 stage and that `RunSpec.estimator` names a declared artifact from a train stage.
@@ -1453,7 +1600,7 @@ Each entry repeats the selected stage ID, kind, and frozen parameters.
 ### `benchmark.metric.selection`
 
 `BenchmarkSpec.metric_ids` equals the metric IDs selected by the benchmark's
-evaluation stage. Every benchmark metric uses `mode="recompute"`.
+evaluation stage. Every benchmark metric uses `mode="post_stage"`.
 
 ### `benchmark.input.identity`
 
@@ -1490,7 +1637,7 @@ Section 4.
 | Surface | Change |
 | --- | --- |
 | Public metric API | Add typed metric decorators, preserve `MetricDefinition` attachment and retrieval, remove `MetricKind`, and add `viper.metrics.measure()`, `viper.metrics.min()`, `viper.metrics.max()`, `viper.benchmark.at_least()`, and `viper.benchmark.at_most()`. |
-| Live metric runtime | Pass validated `MetricContext` through `MetricHandle`; functions receive it first and stateful classes receive it at construction. |
+| in_stage metric runtime | Pass validated `MetricContext` through `MetricHandle`; functions receive it first and stateful classes receive it at construction. |
 | Metric protocol | Add `parameter_model` to `MetricSpec` and `MetricExecutionReceipt`. |
 | Parameter-model identity | Add `ParameterModelRef.owner` and resolve `path` relative to either the project or installed VIPER package root. |
 | Shared path scalar | Add `PythonSourceRelPath`; it applies the existing relative Python-file checks and resolves against the owner named by `ParameterModelRef`. |
@@ -1499,12 +1646,17 @@ Section 4.
 | Stage protocol | Add `MetricObjectiveSpec` to embed, train, and evaluate specs. |
 | Experiment API | Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, `ExperimentDraft`, and public constructors. Each variant owns level labels, stages, and its estimator. Draft artifact paths remain relative to the selected run root. Derive metrics from all variant stages. |
 | Experiment protocol | Remove `DownloadVariantStageParams` from `VariantStageParams`; derive entries from build, embed, train, and eval stages. |
-| Run-plan API | Replace repeated experiment, variant, replicate, seed, stages, and estimator values with `ExperimentDraft` plus selected variant and replicate IDs. |
+| Run-plan API | Replace repeated experiment, variant, replicate, seed, stages, and estimator values with `ExperimentDraft` plus selected variant and replicate IDs. Make `plan()` the only supported constructor, generate `run_id` internally, deep-copy caller values, and recursively freeze the returned graph. |
+| Immutable containers | Add internal `FrozenDict`, `FrozenList`, `_deep_freeze()`, and `_new_run_id()` support. Preserve ordinary lookup, equality, iteration, and canonical Pydantic serialization while rejecting every mutation path. |
+| Execution API | Change `viper.execution.run()` to accept `RunPlanDraft`, invoke `_compile_plan()` once, persist the complete compiled set, and then call the internal path-based executor. Retries consume the persisted plan. |
+| Compilation API | Keep the plan-to-protocol compiler internal. Remove public `freeze()`, typed `freeze_run()`, the `freeze-run` CLI command, and public `FrozenPlanFiles`. |
+| Plan identity and storage | Revise [`frozen-plan-git-identity.md`](frozen-plan-git-identity.md) and [`automatic-input-resolution.md`](automatic-input-resolution.md) so compiled records are atomically retrievable by the generated `run_id` without an intervening user Git commit. |
+| Experiment expansion | Revise [`experiment-expansion.md`](experiment-expansion.md) so each expanded variant-replicate plan receives its identity from `plan()` and no caller supplies a `RunIdMap`. |
 | Benchmark API | Add `BenchmarkDraft`; separate selected metrics from optional criteria. |
 | Benchmark protocol | Add `metric_ids` and `criteria`; replace criterion-only metric receipts with `BenchmarkMetricResult`. |
 | Benchmark executor | Iterate `metric_ids`, store every verified result, and apply criteria by metric ID when present. |
 | Verifier | Add the named metric, objective, experiment, and benchmark checks in Section 7. |
-| Tests | Add live invocation binding to [`tests/test_metric_interface.py`](../../tests/test_metric_interface.py) and [`tests/test_metric_provenance.py`](../../tests/test_metric_provenance.py); add tamper rejection to [`tests/test_verification_acceptance.py`](../../tests/test_verification_acceptance.py). |
+| Tests | Add in_stage invocation binding to [`tests/test_metric_interface.py`](../../tests/test_metric_interface.py) and [`tests/test_metric_provenance.py`](../../tests/test_metric_provenance.py); add tamper rejection to [`tests/test_verification_acceptance.py`](../../tests/test_verification_acceptance.py). |
 | Generated project | Replace manual `MetricSpec`, `ExperimentSpec`, `VariantSpec`, and `BenchmarkSpec` construction with the public draft API. |
 | Documentation | Keep the complete model-run program in `automatic-input-resolution.md`; link its metric and experiment rules to this contract. |
 
@@ -1517,10 +1669,14 @@ The superseded behavior has these dispositions:
 | `MetricKind` and the decorator's `kind=` argument | Delete them. The stage's `objective=` or `metrics=` field records the metric's role; `MetricMode` records when VIPER calculates it. |
 | Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metrics.metric` and `viper.metrics.measure()`. |
 | Python stage authoring that accepts `metric_ids=` | Replace with `objective=` and `metrics=`. |
-| Proposed `LiveMetricContext` | Delete; `MetricContext` serves both modes. |
-| Live metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
+| Proposed `in_stageMetricContext` | Delete; `MetricContext` serves both modes. |
+| in_stage metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
 | Parameterless `StatefulMetric` subclasses | Replace constructors with `MetricContext`. |
 | Manual `ExperimentSpec` and `VariantSpec` construction in public examples | Replace with `viper.authoring.experiment()`, `viper.authoring.variant()`, and `viper.authoring.replicate()`. |
+| Caller-supplied `RunPlanDraft.run_id` in public examples | Remove the argument and assert the generated, read-only `plan.run_id`. Explicit IDs remain required only when validating an already persisted `RunPlanDraft`. |
+| Public `viper.authoring.freeze()`, typed `freeze_run()`, and `freeze-run` CLI | Delete. `viper.execution.run(plan)` invokes the same compiler boundary internally. |
+| Public `FrozenPlanFiles` | Make the compiler result internal; callers receive `RunResult` from `execution.run(plan)`. |
+| Git commit between plan compilation and execution | Replace with one atomic, runner-owned persisted plan set in the revised frozen-plan identity contract. Do not create a Git commit as an implicit side effect of `run()`. |
 | `DownloadVariantStageParams` and its `VariantStageParams` union member | Delete with `parameters.Download`; derive variant parameters from project-owned stages. |
 | `BenchmarkSpec.metrics: tuple[MetricCriterion, ...]` | Replace with `metric_ids` and optional `criteria`. |
 | `MetricCriterionReceipt` | Delete after `BenchmarkMetricResult` and `MetricCriterionResult` cover recorded values and optional criteria. |
@@ -1531,8 +1687,8 @@ The superseded behavior has these dispositions:
 
 ### Complete success
 
-The acceptance program defines two live embedding diagnostics, one live training
-objective, one live gradient diagnostic, one recomputed evaluation objective,
+The acceptance program defines two in_stage embedding diagnostics, one in_stage training
+objective, one in_stage gradient diagnostic, one recomputed evaluation objective,
 and one recomputed evaluation accuracy metric.
 
 It creates:
@@ -1610,10 +1766,11 @@ benchmark_draft = benchmark(
 )
 ```
 
-`viper.authoring.plan(benchmark=benchmark_draft, ...)` attaches the benchmark
-to the candidate run. Freezing compiles `benchmark_test` and `benchmark_split` once, writes
-them as `StoredInputRef` values in the evaluation stage, and reuses their
-pointer references in `BenchmarkSpec.test` and `BenchmarkSpec.splits`.
+`viper.authoring.plan(benchmark=benchmark_draft, ...)` generates the candidate
+run ID and attaches the benchmark. `viper.execution.run(plan)` internally
+compiles `benchmark_test` and `benchmark_split` once, writes them as
+`StoredInputRef` values in the evaluation stage, and reuses their pointer
+references in `BenchmarkSpec.test` and `BenchmarkSpec.splits`.
 
 The test asserts:
 
@@ -1623,8 +1780,8 @@ The test asserts:
 - `ExperimentSpec.metrics` contains each selected metric once;
 - the train objective is `training_loss` with direction `min`;
 - the evaluate objective is `evaluation_loss` with direction `min`;
-- live metric contexts contain the frozen parameter object;
-- the successful stage invocation context selects the same live metric IDs as
+- in_stage metric contexts contain the frozen parameter object;
+- the successful stage invocation context selects the same in_stage metric IDs as
   the frozen stage;
 - production and recomputation receipts carry the same parameter-model
   reference as the frozen metric;
@@ -1634,9 +1791,35 @@ The test asserts:
 - the accuracy result contains the `ge 0.90` criterion outcome; and
 - benchmark status follows parity, matching, and the accuracy criterion.
 
+### Automatic identity, immutable plan, and internal compilation
+
+Construct the baseline plan from mutable dictionaries and a project parameter
+model containing a mutable list. Retain the original dictionaries, list, and
+stage objects. The acceptance test asserts:
+
+- the caller does not pass `run_id`;
+- `plan.run_id` is a valid `RunId`, differs from the ID of a second plan, and
+  cannot be assigned;
+- mutating any retained caller object does not change the plan;
+- assigning or deleting nested mapping entries fails with `TypeError`;
+- every other `FrozenDict` and `FrozenList` mutator fails with `TypeError`;
+- nested parameter dictionaries, lists, and sets cannot mutate;
+- shared references to one stage remain shared after construction;
+- `plan.model_dump_json()` uses ordinary JSON objects and arrays and remains
+  byte-for-byte unchanged after every rejected mutation;
+- `viper.execution.run(plan)` invokes `_compile_plan()` once and preserves
+  `plan.run_id` through `RunSpec`, the first attempt, and `RunResult`; and
+- `viper.authoring.freeze`, typed `freeze_run`, public `FrozenPlanFiles`, and
+  the `freeze-run` command do not exist.
+
+Force canonical serialization to fail for one compiled document. The test
+asserts that `run()` creates neither an authoritative compiled plan nor an
+attempt. Force stage execution to fail after publication. The test asserts
+that the complete compiled plan remains retrievable by the original `run_id`.
+
 ### Factor, variant, and replicate selection
 
-Freeze the `baseline` and `high_learning_rate` plans from the experiment example
+Run the `baseline` and `high_learning_rate` plans from the experiment example
 in Section 4. The acceptance test asserts:
 
 - `FactorSpec(factor_id="learning_rate")` permits `baseline` and `high`;
@@ -1662,16 +1845,16 @@ Adding `DownloadVariantStageParams` fails `experiment.variant.parameters`.
 
 ### Targeted rejections
 
-Changing a live metric parameter after freezing fails
-`metric.live.parameter_delivery`.
+Changing an in_stage metric parameter after compilation fails
+`metric.in_stage.parameter_dein_stagery`.
 
 Changing `StageInvocationReceipt.context.metric_ids` while retaining the old
-measurement fails `metric.live.parameter_delivery`.
+measurement fails `metric.in_stage.parameter_dein_stagery`.
 
 Removing the metric decorator metadata fails `metric.definition.binding`.
 
 Changing the parameter-model reference in one recomputation receipt fails
-`metric.recompute.invocation_binding`.
+`metric.post_stage.invocation_binding`.
 
 Removing the training objective measurement from an otherwise successful stage
 fails `metric.objective.evidence`.
@@ -1702,14 +1885,14 @@ existing benchmark input-identity checks before execution.
 - [ ] Compare parameter-model references during parameter reconstruction and
       recomputation verification.
 - [ ] Make `MetricContext` generic.
-- [ ] Deliver `MetricContext` through live functions and stateful constructors.
-- [ ] Join live measurements to
+- [ ] Dein_stager `MetricContext` through in_stage functions and stateful constructors.
+- [ ] Join in_stage measurements to
       `StageInvocationReceipt.context.metric_ids`, frozen stage `metric_ids`,
       and `ExperimentSpec.metrics` during verification.
-- [ ] Add focused decorator, draft, live-parameter, and invocation-binding
+- [ ] Add focused decorator, draft, in_stage-parameter, and invocation-binding
       tests.
 
-**Commit boundary:** one configured live or recomputed metric receives its exact
+**Commit boundary:** one configured in_stage or recomputed metric receives its exact
 frozen parameter object.
 
 ### Implementation Step 2 — Stage objectives
@@ -1737,7 +1920,7 @@ its improvement direction.
       replicate.
 - [ ] Make each variant own its level labels, stage graph, and estimator.
 - [ ] Validate same-variant artifact handles, stage order, and estimator
-      ownership before freezing.
+      ownership before compilation.
 - [ ] Remove `DownloadVariantStageParams` from `VariantStageParams` and update
       variant-parameter verification.
 - [ ] Derive seed, experiment records, selected stage graph, variant
@@ -1745,10 +1928,43 @@ its improvement direction.
 - [ ] Reject duplicate experiment declarations and conflicting metric specs.
 - [ ] Replace manual experiment construction in generated projects and examples.
 
-**Commit boundary:** Python authoring freezes one complete experiment and run
+**Commit boundary:** Python authoring describes one complete experiment and run
 with one compiler-derived metric registry.
 
-### Implementation Step 4 — Benchmark metric results
+### Implementation Step 4 — Immutable plans and internal compilation
+
+- [ ] Add internal `FrozenDict`, `FrozenList`, and `_deep_freeze()` support with
+      identity memoization and complete mutator rejection.
+- [ ] Make `plan()` deep-copy the authored graph, generate one `RunId`, install
+      recursively frozen values, and return the completed `RunPlanDraft`.
+- [ ] Preserve ordinary Pydantic validation, equality, lookup, and canonical
+      JSON serialization for frozen containers.
+- [ ] Change `viper.execution.run()` to accept `RunPlanDraft`, invoke one
+      internal `_compile_plan()`, atomically persist the complete protocol set,
+      and only then call the internal path-based executor.
+- [ ] Preserve `plan.run_id` through compilation, attempts, terminal results,
+      benchmarks, and retries. Never regenerate it outside `plan()`.
+- [ ] Remove public `freeze()`, typed `freeze_run()`, public
+      `FrozenPlanFiles`, and the `freeze-run` CLI command.
+- [ ] Revise `frozen-plan-git-identity.md`, `automatic-input-resolution.md`,
+      `experiment-expansion.md`, generated-project instructions, and the master
+      checklist before implementing this step. The revised identity contract
+      must define atomic runner-owned persistence and must not make `run()`
+      create a Git commit.
+- [ ] Add
+      `tests/test_authoring.py:test_plan_generates_read_only_run_id`,
+      `tests/test_authoring.py:test_plan_severs_mutable_caller_aliases`,
+      `tests/test_authoring.py:test_plan_rejects_every_nested_mutator`,
+      `tests/test_authoring.py:test_frozen_plan_serializes_canonically`,
+      `tests/test_public_api.py:test_freezing_is_not_public`,
+      `tests/test_run_execution.py:test_run_compiles_plan_before_first_attempt`,
+      and
+      `tests/test_run_execution.py:test_compile_failure_leaves_no_partial_plan`.
+
+**Commit boundary:** `plan()` returns one identified immutable graph, and
+`run(plan)` atomically compiles it without a public freezing workflow.
+
+### Implementation Step 5 — Benchmark metric results
 
 - [ ] Add `BenchmarkDraft` and its public constructor.
 - [ ] Name the fixed evaluation input `test` in `BenchmarkDraft`,
@@ -1766,7 +1982,7 @@ with one compiler-derived metric registry.
 **Commit boundary:** a benchmark records verified metric results under exact
 evaluation conditions, with optional threshold judgments.
 
-### Implementation Step 5 — System review
+### Implementation Step 6 — System review
 
 - [ ] Compare every repeated target model mechanically.
 - [ ] Parse every Python example.
@@ -1774,6 +1990,10 @@ evaluation conditions, with optional threshold judgments.
 - [ ] Trace each benchmark input from pointer through both executions.
 - [ ] Trace each recomputed metric dependency to its enclosing stage snapshot
       and assert that one snapshot revision owns the payload.
+- [ ] Assert that every accepted run ID originates in `plan()` and survives
+      plan serialization, compilation, execution, retry, benchmark, and restore.
+- [ ] Search public exports, typed APIs, CLI commands, examples, and generated
+      projects for a remaining public freezing operation.
 - [ ] Run metric, authoring, benchmark, protocol, verification, documentation,
       and generated-project tests selected from the final code diff.
 
@@ -1809,6 +2029,8 @@ targets = [
     "tests/fixtures.py:metric_source",
     "tests/test_metric_interface.py:mean_value",
     "tests/test_metric_interface.py:RunningMean",
+    "tests/test_metric_interface.py:at_least",
+    "tests/test_metric_interface.py:measure",
     "tests/test_verification_acceptance.py:add_plan_records",
 ]
 tests = ["tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors"]
@@ -1826,6 +2048,13 @@ id = "P4-UMD-02"
 requirements = ["UMD-02"]
 targets = [
     "src/viper/_schema.py:PythonSourceRelPath",
+    "src/viper/_parameter/validation.py:TypeVar",
+    "src/viper/_parameter/validation.py:ParameterSetT",
+    "src/viper/metrics.py:Generic",
+    "src/viper/metrics.py:MetricParamsT",
+    "src/viper/parameters.py:hashlib",
+    "src/viper/parameters.py:Path",
+    "src/viper/parameters.py:PythonRepoRelPath",
     "src/viper/parameters.py:ParameterModelOwner",
     "src/viper/parameters.py:PythonSourceRelPath",
     "src/viper/parameters.py:ParameterModelRef",
@@ -1849,6 +2078,9 @@ targets = [
     "src/viper/_workers/metrics.py:parameter_model_path",
     "src/viper/_workers/metrics.py:invoke_metric",
     "tests/test_metric_provenance.py:Path",
+    "tests/test_metric_provenance.py:Field",
+    "tests/test_metric_provenance.py:parameters",
+    "tests/test_metric_provenance.py:MetricContext",
     "tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution",
     "src/viper/_parameter/validation.py:instantiate_parameters",
     "tests/fixtures.py:parameter_model_ref",
@@ -1875,8 +2107,8 @@ gate = "python -m pytest tests/test_metric_interface.py tests/test_metric_proven
 depends_on = ["P4-UMD-01"]
 ```
 
-**Context:** Live handles currently omit the frozen parameter object, while the
-recompute worker receives only its serialized base-model shape. This block
+**Context:** in_stage handles currently omit the frozen parameter object, while the
+post_stage worker receives only its serialized base-model shape. This block
 records the parameter class, reconstructs it from the correct source root, and
 passes one typed `MetricContext` through both invocation paths.
 
@@ -1893,6 +2125,9 @@ targets = [
     "src/viper/_verification/plan.py:verify_stage_objectives",
     "src/viper/_verification/plan.py:verify_run_plan_relationships",
     "tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction",
+    "tests/test_verification.py:pytest",
+    "tests/test_verification.py:verify_stage_objectives",
+    "tests/test_verification.py:MetricSpec",
 ]
 tests = ["tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction"]
 gate = "python -m pytest tests/test_protocol.py tests/test_verification.py -k objective -q"
@@ -1901,7 +2136,7 @@ depends_on = ["P4-UMD-02"]
 
 **Context:** Stage metric IDs currently say only which values to record. This
 block stores the primary metric and direction together, requires that metric
-to be selected by the stage, and checks the stage-specific live or recompute
+to be selected by the stage, and checks the stage-specific in_stage or post_stage
 mode against the frozen experiment registry.
 
 ## 12. ContractTarget
@@ -1940,7 +2175,7 @@ class MetricDefinition:
 DecoratedMetric = Callable[..., Any] | type[Any]
 
 
-class MetricDraft[MetricParamsT: parameters.Metric](BaseModel):
+class MetricDraft(BaseModel, Generic[MetricParamsT]):
     """Hold one configured metric before protocol freezing."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
@@ -2000,7 +2235,7 @@ def metric_definition(implementation: DecoratedMetric) -> MetricDefinition:
     return definition
 
 
-def measure[MetricParamsT: parameters.Metric](
+def measure(
     implementation: DecoratedMetric,
     *,
     params: MetricParamsT | None = None,
@@ -2044,7 +2279,7 @@ def max(metric: MetricDraft[Any]) -> MetricObjectiveDraft:
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:MetricDraft -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:MetricCriterionDraft -->
 ```python contract-target
-from typing import Any
+from typing import Any, Literal
 
 from .metrics import MetricCriterionDraft, MetricDraft
 ```
@@ -2064,12 +2299,35 @@ def at_most(metric: MetricDraft[Any], threshold: float) -> MetricCriterionDraft:
 
 **File: `tests/test_metric_interface.py`**
 
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=tests/test_metric_interface.py:at_least -->
+```python contract-target
+from viper.benchmark import at_least
+```
+
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=tests/test_metric_interface.py:measure -->
+```python contract-target
+from viper.metrics import (
+    FloatComparator,
+    MeasurementSink,
+    MetricContext,
+    MetricDependency,
+    MetricError,
+    MetricImplementationRef,
+    MetricSpec,
+    StatefulMetric,
+    compare_metric_values,
+    load_metric,
+    max,
+    measure,
+    metric,
+    validate_metric_definition,
+)
+```
+
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors -->
 ```python contract-target
 def test_metric_drafts_freeze_through_public_constructors() -> None:
     """Build metric, objective, and criterion drafts from one decorated callable."""
-    from viper.benchmark import at_least
-    from viper.metrics import FloatComparator, MetricContext, max, measure, metric
 
     @metric(metric_id="accuracy", mode="recompute")
     def accuracy(context: MetricContext[parameters.Metric]) -> float:
@@ -2093,7 +2351,7 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
     assert draft.implementation is accuracy
 ```
 
-### P4-UMD-02 — frozen parameter delivery
+### P4-UMD-02 — frozen parameter identity
 
 **File: `src/viper/_schema.py`**
 
@@ -2108,9 +2366,22 @@ PythonSourceRelPath = Annotated[
 
 **File: `src/viper/parameters.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:hashlib -->
+```python contract-target
+import hashlib
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=remove target=src/viper/parameters.py:PythonRepoRelPath -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:PythonSourceRelPath -->
 ```python contract-target
-from ._schema import PythonSourceRelPath
+from ._schema import SHA256, ProtocolModel, PythonSourceRelPath, PythonSymbol
 ```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:ParameterModelOwner -->
@@ -2133,9 +2404,6 @@ class ParameterModelRef(ProtocolModel):
 ```python contract-target
 def model_ref(model: type[ParameterSet]) -> ParameterModelRef:
     """Identify one built-in parameter class by its installed source bytes."""
-    import hashlib
-    from pathlib import Path
-
     path = Path(__file__).resolve()
     raw = path.read_bytes()
     return ParameterModelRef(
@@ -2148,6 +2416,16 @@ def model_ref(model: type[ParameterSet]) -> ParameterModelRef:
 ```
 
 **File: `src/viper/_parameter/validation.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_parameter/validation.py:TypeVar -->
+```python contract-target
+from typing import TypeVar, cast
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_parameter/validation.py:ParameterSetT -->
+```python contract-target
+ParameterSetT = TypeVar("ParameterSetT", bound=parameters.ParameterSet)
+```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_parameter/validation.py:parameter_model_path -->
 ```python contract-target
@@ -2168,6 +2446,16 @@ def parameter_model_path(
 ```
 
 **File: `src/viper/metrics.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/metrics.py:Generic -->
+```python contract-target
+from typing import Any, Generic, Literal, TypeVar, cast
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/metrics.py:MetricParamsT -->
+```python contract-target
+MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
+```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricSpec -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
@@ -2290,7 +2578,7 @@ class MetricVerificationReceipt(ProtocolModel):
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricHandle -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:bind_live_metric -->
 ```python contract-target
-class MetricContext[MetricParamsT: parameters.Metric](BaseModel):
+class MetricContext(BaseModel, Generic[MetricParamsT]):
     """Supply verified paths and frozen parameters to one metric invocation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -2300,7 +2588,7 @@ class MetricContext[MetricParamsT: parameters.Metric](BaseModel):
     params: MetricParamsT
 
 
-class StatefulMetric[MetricParamsT: parameters.Metric](ABC):
+class StatefulMetric(ABC, Generic[MetricParamsT]):
     """Accumulate metric state under one frozen invocation context."""
 
     @abstractmethod
@@ -2395,8 +2683,8 @@ def bind_live_metric(
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/stages.py:MetricContext -->
 ```python contract-target
 from .. import parameters
-from .._parameter.validation import parameter_model_path
-from ..metrics import MetricContext
+from .._parameter.validation import instantiate_parameters, parameter_model_path
+from ..metrics import MeasurementSink, MetricContext, MetricHandle, bind_live_metric
 ```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/stages.py:_live_metric_handles -->
@@ -2463,7 +2751,14 @@ def _live_metric_handles(
 ```python contract-target
 from .. import parameters
 from .._parameter.validation import instantiate_parameters, parameter_model_path
-from ..metrics import invoke_metric
+from ..metrics import (
+    MetricContext,
+    MetricExecutionReceipt,
+    invoke_metric,
+    load_metric,
+    metric_definition,
+    validate_metric_definition,
+)
 ```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/metrics.py:main -->
@@ -2561,6 +2856,27 @@ def main(argv: list[str] | None = None) -> int:
 
 **File: `tests/test_metric_provenance.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:Field -->
+```python contract-target
+from pydantic import Field
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:parameters -->
+```python contract-target
+from viper import parameters
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:MetricContext -->
+```python contract-target
+from viper.metrics import (
+    MeasurementSink,
+    MetricContext,
+    MetricHandle,
+    MetricVerificationReceipt,
+    invoke_metric,
+)
+```
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:Path -->
 ```python contract-target
 from pathlib import Path
@@ -2570,15 +2886,6 @@ from pathlib import Path
 ```python contract-target
 def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> None:
     """Pass one custom parameter instance through both metric invocation paths."""
-    from pydantic import Field
-
-    from viper import parameters
-    from viper.metrics import (
-        MeasurementSink,
-        MetricContext,
-        MetricHandle,
-        invoke_metric,
-    )
 
     class Scale(parameters.Metric):
         factor: float = Field(gt=0)
@@ -2621,7 +2928,7 @@ class MetricObjectiveSpec(ProtocolModel):
 
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=src/viper/stages.py:MetricObjectiveSpec -->
 ```python contract-target
-from .metrics import MetricObjectiveSpec
+from .metrics import MetricHandle, MetricObjectiveSpec
 ```
 
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:EmbedSpec -->
@@ -2638,7 +2945,10 @@ class EmbedSpec(InternalSpec):
     @model_validator(mode="after")
     def validate_objective(self) -> EmbedSpec:
         """Require a selected embedding objective to occur in metric_ids."""
-        if self.objective is not None and self.objective.metric_id not in self.metric_ids:
+        if (
+            self.objective is not None
+            and self.objective.metric_id not in self.metric_ids
+        ):
             raise ValueError("embedding objective must occur in stage metric IDs")
         return self
 
@@ -2653,7 +2963,10 @@ class TrainSpec(InternalSpec):
     @model_validator(mode="after")
     def validate_training_contract(self) -> TrainSpec:
         """Validate any objective and the terminal checkpoint contract."""
-        if self.objective is not None and self.objective.metric_id not in self.metric_ids:
+        if (
+            self.objective is not None
+            and self.objective.metric_id not in self.metric_ids
+        ):
             raise ValueError("training objective must occur in stage metric IDs")
         required_artifacts = {PARAMETERS, RESUME_STATE}
         missing = required_artifacts - set(self.artifacts)
@@ -2701,7 +3014,10 @@ class EvaluateSpec(InternalSpec):
     @model_validator(mode="after")
     def validate_evaluation_contract(self) -> EvaluateSpec:
         """Require the objective, fixed inputs, splits, and prediction artifact."""
-        if self.objective is not None and self.objective.metric_id not in self.metric_ids:
+        if (
+            self.objective is not None
+            and self.objective.metric_id not in self.metric_ids
+        ):
             raise ValueError("evaluation objective must occur in stage metric IDs")
         if len(set(self.metric_ids)) != len(self.metric_ids):
             raise ValueError("evaluation metric IDs must be unique")
@@ -2926,17 +3242,31 @@ def verify_run_plan_relationships(
 
 **File: `tests/test_verification.py`**
 
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:pytest -->
+```python contract-target
+import pytest
+```
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:verify_stage_objectives -->
+```python contract-target
+from viper._verification.plan import (
+    verify_parameter_model_references,
+    verify_run_plan_relationships,
+    verify_run_spec,
+    verify_stage_objectives,
+    verify_stage_plan,
+)
+```
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:MetricSpec -->
+```python contract-target
+from viper.metrics import MetricObjectiveSpec, MetricSpec
+```
+
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction -->
 ```python contract-target
 def test_stage_objectives_preserve_identity_and_direction() -> None:
     """Accept matching objective modes and reject a mismatched training metric."""
-    import pytest
-
-    from viper._verification.plan import verify_stage_objectives
-    from viper.experiments import ExperimentSpec
-    from viper.metrics import MetricObjectiveSpec, MetricSpec
-    from viper.stages import TrainSpec
-
     stage = TrainSpec.model_construct(
         metric_ids=("training_loss",),
         objective=MetricObjectiveSpec(
@@ -3014,6 +3344,7 @@ def metric_source(metric_id: str, kind: MetricKind) -> bytes:
 def mean_value(context: MetricContext) -> float:
     """Return the frozen scalar supplied through metric parameters."""
     return float(context.params.model_dump()["value"])
+
 
 @metric(metric_id="running_mean", mode="live")
 class RunningMean(StatefulMetric):
@@ -3101,7 +3432,7 @@ def add_plan_records(
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_parameter/validation.py:instantiate_parameters -->
 ```python contract-target
-def instantiate_parameters[ParameterSetT: parameters.ParameterSet](
+def instantiate_parameters(
     path: Path,
     reference: ParameterModelRef,
     params: parameters.ParameterSet,
@@ -3137,6 +3468,7 @@ def parameter_model_ref(kind: str) -> ParameterModelRef:
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
     )
+
 
 def metric_spec(
     metric_id: str,
@@ -3183,165 +3515,165 @@ def metric_spec(
 ```python contract-target
 class RunPlanAuthoringTests:
     def test_freeze_run_plan_writes_hash_bound_stage_and_run_files(self) -> None:
-            """Write canonical files whose RunStageRef matches exact stage bytes."""
-            with TemporaryDirectory() as directory:
-                root = Path(directory).resolve()
-                _git(root, "init", "--quiet")
-                _git(root, "config", "user.email", "viper@example.com")
-                _git(root, "config", "user.name", "VIPER Test")
-                _git(
-                    root,
-                    "remote",
-                    "add",
-                    "origin",
-                    "https://github.com/example/viper-project",
-                )
-                parameter_raw = (
-                    b"from pydantic import Field\n"
-                    b"from viper import parameters\n\n"
-                    b"class StrandTrainParameters(parameters.Train):\n"
-                    b"    epochs: int = Field(gt=0)\n"
-                )
-                parameter_path = root / "project/parameters/train.py"
-                parameter_path.parent.mkdir(parents=True)
-                parameter_path.write_bytes(parameter_raw)
-                implementation_raw = (
-                    b"from project.parameters.train import StrandTrainParameters\n"
-                    b"from viper.stages import train\n\n"
-                    b"@train(params=StrandTrainParameters)\n"
-                    b"def fit(context):\n"
-                    b"    pass\n"
-                )
-                implementation_path = root / "project_code/strand/fit.py"
-                implementation_path.parent.mkdir(parents=True)
-                implementation_path.write_bytes(implementation_raw)
-                environment_path = root / "environment.yml"
-                environment_path.write_text("name: viper-test\n", encoding="utf-8")
-                pointer_path = root / "inputs/datasets/replogle/current.pointer.yaml"
-                pointer_path.parent.mkdir(parents=True)
-                pointer_path.write_text("schema_version: 1\n", encoding="utf-8")
-                for relative_path in (
-                    "project_code/loaders/parameters.py",
-                    "project_code/loaders/resume_state.py",
-                ):
-                    loader_path = root / relative_path
-                    loader_path.parent.mkdir(parents=True, exist_ok=True)
-                    loader_path.write_bytes(LOADER_RAW)
-                _git(root, "add", ".")
-                _git(root, "commit", "--quiet", "-m", "source")
-                source_commit = _git(root, "rev-parse", "HEAD")
-                parameter_model = ParameterModelRef(
-                    owner="project",
-                    path="project/parameters/train.py",
-                    symbol="StrandTrainParameters",
-                    sha256=hashlib.sha256(parameter_raw).hexdigest(),
-                    bytes=len(parameter_raw),
-                )
-                implementation = StageImplementationRef(
-                    path="project_code/strand/fit.py",
-                    symbol="fit",
-                    sha256=hashlib.sha256(implementation_raw).hexdigest(),
-                    bytes=len(implementation_raw),
-                )
-                draft_stage = root / "drafts/train.yaml"
-                draft_stage.parent.mkdir(parents=True)
-                draft_stage.write_bytes(
-                    serialize_document(
-                        training_spec(
-                            parameter_model,
-                            implementation,
-                            commit=source_commit,
-                        )
+        """Write canonical files whose RunStageRef matches exact stage bytes."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            _git(root, "init", "--quiet")
+            _git(root, "config", "user.email", "viper@example.com")
+            _git(root, "config", "user.name", "VIPER Test")
+            _git(
+                root,
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/viper-project",
+            )
+            parameter_raw = (
+                b"from pydantic import Field\n"
+                b"from viper import parameters\n\n"
+                b"class StrandTrainParameters(parameters.Train):\n"
+                b"    epochs: int = Field(gt=0)\n"
+            )
+            parameter_path = root / "project/parameters/train.py"
+            parameter_path.parent.mkdir(parents=True)
+            parameter_path.write_bytes(parameter_raw)
+            implementation_raw = (
+                b"from project.parameters.train import StrandTrainParameters\n"
+                b"from viper.stages import train\n\n"
+                b"@train(params=StrandTrainParameters)\n"
+                b"def fit(context):\n"
+                b"    pass\n"
+            )
+            implementation_path = root / "project_code/strand/fit.py"
+            implementation_path.parent.mkdir(parents=True)
+            implementation_path.write_bytes(implementation_raw)
+            environment_path = root / "environment.yml"
+            environment_path.write_text("name: viper-test\n", encoding="utf-8")
+            pointer_path = root / "inputs/datasets/replogle/current.pointer.yaml"
+            pointer_path.parent.mkdir(parents=True)
+            pointer_path.write_text("schema_version: 1\n", encoding="utf-8")
+            for relative_path in (
+                "project_code/loaders/parameters.py",
+                "project_code/loaders/resume_state.py",
+            ):
+                loader_path = root / relative_path
+                loader_path.parent.mkdir(parents=True, exist_ok=True)
+                loader_path.write_bytes(LOADER_RAW)
+            _git(root, "add", ".")
+            _git(root, "commit", "--quiet", "-m", "source")
+            source_commit = _git(root, "rev-parse", "HEAD")
+            parameter_model = ParameterModelRef(
+                owner="project",
+                path="project/parameters/train.py",
+                symbol="StrandTrainParameters",
+                sha256=hashlib.sha256(parameter_raw).hexdigest(),
+                bytes=len(parameter_raw),
+            )
+            implementation = StageImplementationRef(
+                path="project_code/strand/fit.py",
+                symbol="fit",
+                sha256=hashlib.sha256(implementation_raw).hexdigest(),
+                bytes=len(implementation_raw),
+            )
+            draft_stage = root / "drafts/train.yaml"
+            draft_stage.parent.mkdir(parents=True)
+            draft_stage.write_bytes(
+                serialize_document(
+                    training_spec(
+                        parameter_model,
+                        implementation,
+                        commit=source_commit,
                     )
                 )
-                draft = RunPlanDraft.model_validate(
-                    {
-                        "run_id": RUN_ID,
-                        "experiment_id": "e001_strand",
-                        "variant_id": "baseline",
-                        "replicate_id": "replicate_01",
-                        "seed": 42,
-                        "source": {
-                            "kind": "git",
-                            "repository": "https://github.com/example/viper-project",
-                            "commit": source_commit,
-                        },
-                        "environment": environment_payload(source_commit),
-                        "reproducibility": reproducibility_payload(),
-                        "stages": [
-                            {"stage_id": "train", "spec_source": "drafts/train.yaml"}
-                        ],
-                        "estimator": {
-                            "stage_id": "train",
-                            "artifact_name": PARAMETERS,
-                        },
-                    }
-                )
-
-                frozen = freeze_run_plan(root, draft)
-                stage_path, run_path = frozen.files
-                stage_raw = stage_path.read_bytes()
-                loaded_run = RunSpec.model_validate(parse_yaml_bytes(run_path.read_bytes()))
-
-            self.assertEqual(
-                loaded_run.stages[0].sha256,
-                hashlib.sha256(stage_raw).hexdigest(),
             )
-            self.assertEqual(loaded_run.stages[0].bytes, len(stage_raw))
-            self.assertEqual(
-                stage_path.relative_to(root).as_posix(),
-                f"{RUN_ROOT}/stages/train/spec.yaml",
+            draft = RunPlanDraft.model_validate(
+                {
+                    "run_id": RUN_ID,
+                    "experiment_id": "e001_strand",
+                    "variant_id": "baseline",
+                    "replicate_id": "replicate_01",
+                    "seed": 42,
+                    "source": {
+                        "kind": "git",
+                        "repository": "https://github.com/example/viper-project",
+                        "commit": source_commit,
+                    },
+                    "environment": environment_payload(source_commit),
+                    "reproducibility": reproducibility_payload(),
+                    "stages": [
+                        {"stage_id": "train", "spec_source": "drafts/train.yaml"}
+                    ],
+                    "estimator": {
+                        "stage_id": "train",
+                        "artifact_name": PARAMETERS,
+                    },
+                }
             )
-            self.assertEqual(run_path.relative_to(root).as_posix(), f"{RUN_ROOT}/spec.yaml")
+
+            frozen = freeze_run_plan(root, draft)
+            stage_path, run_path = frozen.files
+            stage_raw = stage_path.read_bytes()
+            loaded_run = RunSpec.model_validate(parse_yaml_bytes(run_path.read_bytes()))
+
+        self.assertEqual(
+            loaded_run.stages[0].sha256,
+            hashlib.sha256(stage_raw).hexdigest(),
+        )
+        self.assertEqual(loaded_run.stages[0].bytes, len(stage_raw))
+        self.assertEqual(
+            stage_path.relative_to(root).as_posix(),
+            f"{RUN_ROOT}/stages/train/spec.yaml",
+        )
+        self.assertEqual(run_path.relative_to(root).as_posix(), f"{RUN_ROOT}/spec.yaml")
 
     def test_experiment_and_variant_writers_use_identity_paths(self) -> None:
-            """Write experiment and variant records under one experiment identity."""
-            metric = MetricSpec(
-                parameter_model=parameters.model_ref(parameters.Metric),
-                metric_id="training_loss",
-                implementation=MetricImplementationRef(
-                    path="project_code/metrics/training_loss.py",
-                    symbol="compute",
-                    sha256="a" * 64,
-                    bytes=1,
+        """Write experiment and variant records under one experiment identity."""
+        metric = MetricSpec(
+            parameter_model=parameters.model_ref(parameters.Metric),
+            metric_id="training_loss",
+            implementation=MetricImplementationRef(
+                path="project_code/metrics/training_loss.py",
+                symbol="compute",
+                sha256="a" * 64,
+                bytes=1,
+            ),
+            params=parameters.Metric(),
+            mode="live",
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(FactorSpec(factor_id="rank", levels=("full", "low")),),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(metric,),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={"rank": "full"},
+            stage_params=(
+                TrainVariantStageParams(
+                    stage_id="train",
+                    params=parameters.Train.model_validate({"epochs": 2}),
                 ),
-                params=parameters.Metric(),
-                mode="live",
-            )
-            experiment = ExperimentSpec(
-                experiment_id="e001_strand",
-                factors=(FactorSpec(factor_id="rank", levels=("full", "low")),),
-                variant_ids=("baseline",),
-                replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-                metrics=(metric,),
-            )
-            variant = VariantSpec(
-                experiment_id="e001_strand",
-                variant_id="baseline",
-                levels={"rank": "full"},
-                stage_params=(
-                    TrainVariantStageParams(
-                        stage_id="train",
-                        params=parameters.Train.model_validate({"epochs": 2}),
-                    ),
-                ),
-            )
+            ),
+        )
 
-            with TemporaryDirectory() as directory:
-                root = Path(directory).resolve()
-                experiment_path = write_experiment_spec(root, experiment)
-                variant_path = write_variant_spec(root, variant)
+        with TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            experiment_path = write_experiment_spec(root, experiment)
+            variant_path = write_variant_spec(root, variant)
 
-                self.assertTrue(yaml.safe_load(experiment_path.read_text()))
-                self.assertTrue(yaml.safe_load(variant_path.read_text()))
-                self.assertEqual(
-                    experiment_path.relative_to(root).as_posix(),
-                    "experiments/e001_strand/spec.yaml",
-                )
-                self.assertEqual(
-                    variant_path.relative_to(root).as_posix(),
-                    "experiments/e001_strand/variants/baseline.spec.yaml",
-                )
+            self.assertTrue(yaml.safe_load(experiment_path.read_text()))
+            self.assertTrue(yaml.safe_load(variant_path.read_text()))
+            self.assertEqual(
+                experiment_path.relative_to(root).as_posix(),
+                "experiments/e001_strand/spec.yaml",
+            )
+            self.assertEqual(
+                variant_path.relative_to(root).as_posix(),
+                "experiments/e001_strand/variants/baseline.spec.yaml",
+            )
 ```
 
 **File: `tests/test_execution_signals.py`**
@@ -3516,6 +3848,7 @@ def _parameter_model(root: Path, symbol: str) -> ParameterModelRef:
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
     )
+
 
 def test_generated_project_uses_runner_owned_downloads(
     tmp_path: Path,
@@ -4012,6 +4345,7 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
 
     return create
 
+
 def test_project_http_receives_typed_parameters_and_exact_destination(
     tmp_path: Path,
     local_http_server: tuple[str, int, list[tuple[str, str | None]]],
@@ -4116,6 +4450,7 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
     implementation_path.write_bytes(implementation_raw + b"# modified\n")
     with pytest.raises(HttpRetrievalError, match="byte count"):
         resolve_http(tmp_path, spec)
+
 
 def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
     """Reject a project HTTP callable that returns a file outside its workspace."""
@@ -4249,6 +4584,7 @@ def _reference(raw: bytes) -> ParameterModelRef:
         bytes=len(raw),
     )
 
+
 def test_parameter_model_rejects_implicit_defaults(tmp_path: Path) -> None:
     """Require every effective project-model value in the frozen mapping."""
     raw = (
@@ -4283,18 +4619,44 @@ def test_parameter_model_rejects_implicit_defaults(tmp_path: Path) -> None:
 ```python contract-target
 class ParameterContractTests:
     def test_metric_implementation_accepts_user_repository_path(self) -> None:
-            """Bind a metric to any exact Python file in the user repository."""
-            source = b"def compute(context):\n    return 0.0\n"
-            metric = MetricSpec(
+        """Bind a metric to any exact Python file in the user repository."""
+        source = b"def compute(context):\n    return 0.0\n"
+        metric = MetricSpec(
+            parameter_model=parameters.model_ref(parameters.Metric),
+            metric_id="pearson_correlation",
+            implementation=MetricImplementationRef(
+                path="analysis/quality/correlation.py",
+                symbol="compute",
+                sha256=hashlib.sha256(source).hexdigest(),
+                bytes=len(source),
+            ),
+            params=parameters.Metric.model_validate({"dim": 1}),
+            mode="recompute",
+            dependencies=(
+                MetricDependency(
+                    source="artifact",
+                    name="predictions",
+                    required_data_role="evaluation",
+                ),
+            ),
+            comparator=FloatComparator(mode="exact", tolerance=0),
+        )
+
+        self.assertEqual(metric.params.model_dump()["dim"], 1)
+
+    def test_metric_implementation_requires_python_file(self) -> None:
+        """Reject a metric path that does not identify a Python file."""
+        with self.assertRaisesRegex(ValidationError, "Python file"):
+            MetricSpec(
                 parameter_model=parameters.model_ref(parameters.Metric),
                 metric_id="pearson_correlation",
                 implementation=MetricImplementationRef(
-                    path="analysis/quality/correlation.py",
+                    path="analysis/quality/correlation.yaml",
                     symbol="compute",
-                    sha256=hashlib.sha256(source).hexdigest(),
-                    bytes=len(source),
+                    sha256="a" * 64,
+                    bytes=1,
                 ),
-                params=parameters.Metric.model_validate({"dim": 1}),
+                params=parameters.Metric(),
                 mode="recompute",
                 dependencies=(
                     MetricDependency(
@@ -4305,32 +4667,6 @@ class ParameterContractTests:
                 ),
                 comparator=FloatComparator(mode="exact", tolerance=0),
             )
-
-            self.assertEqual(metric.params.model_dump()["dim"], 1)
-
-    def test_metric_implementation_requires_python_file(self) -> None:
-            """Reject a metric path that does not identify a Python file."""
-            with self.assertRaisesRegex(ValidationError, "Python file"):
-                MetricSpec(
-                    parameter_model=parameters.model_ref(parameters.Metric),
-                    metric_id="pearson_correlation",
-                    implementation=MetricImplementationRef(
-                        path="analysis/quality/correlation.yaml",
-                        symbol="compute",
-                        sha256="a" * 64,
-                        bytes=1,
-                    ),
-                    params=parameters.Metric(),
-                    mode="recompute",
-                    dependencies=(
-                        MetricDependency(
-                            source="artifact",
-                            name="predictions",
-                            required_data_role="evaluation",
-                        ),
-                    ),
-                    comparator=FloatComparator(mode="exact", tolerance=0),
-                )
 ```
 
 **File: `tests/test_run_execution.py`**
@@ -4590,6 +4926,7 @@ def test_train_stage_captures_local_external_input(
     )
     assert resolved_input.file.path == expected_path
     assert (root / expected_path).read_bytes() == b"prior"
+
 
 def test_two_stage_local_run_writes_and_verifies_terminal_result(
     tmp_path: Path,
@@ -5125,4 +5462,1055 @@ def publish_metric_verification(
         bytes=len(raw),
         stored_at=location,
     )
+```
++
+<!-- pair-block-definition: P6-UMD-01 -->
+```toml pair-block
+id = "P6-UMD-01"
+requirements = ["UMD-04"]
+targets = [
+    "src/viper/authoring.py:secrets",
+    "src/viper/authoring.py:time",
+    "src/viper/authoring.py:Never",
+    "src/viper/authoring.py:model_validator",
+    "src/viper/authoring.py:FactorId",
+    "src/viper/authoring.py:LevelId",
+    "src/viper/authoring.py:FactorDraft",
+    "src/viper/authoring.py:VariantDraft",
+    "src/viper/authoring.py:ReplicateDraft",
+    "src/viper/authoring.py:ExperimentDraft",
+    "src/viper/authoring.py:RunPlanDraft",
+    "src/viper/authoring.py:_FrozenDict",
+    "src/viper/authoring.py:_FrozenList",
+    "src/viper/authoring.py:_ULID_ALPHABET",
+    "src/viper/authoring.py:_new_run_id",
+    "src/viper/authoring.py:_deep_freeze",
+    "src/viper/authoring.py:factor",
+    "src/viper/authoring.py:variant",
+    "src/viper/authoring.py:replicate",
+    "src/viper/authoring.py:experiment",
+    "src/viper/authoring.py:plan",
+    "src/viper/authoring.py:freeze_run_plan",
+    "tests/test_authoring.py:pytest",
+    "tests/test_authoring.py:TypeAdapter",
+    "tests/test_authoring.py:ValidationError",
+    "tests/test_authoring.py:VariantDraft",
+    "tests/test_authoring.py:experiment",
+    "tests/test_authoring.py:factor",
+    "tests/test_authoring.py:plan",
+    "tests/test_authoring.py:replicate",
+    "tests/test_authoring.py:variant",
+    "tests/test_authoring.py:GitSource",
+    "tests/test_authoring.py:EnvSpec",
+    "tests/test_authoring.py:ReproducibilitySpec",
+    "tests/test_authoring.py:_immutable_plan",
+    "tests/test_authoring.py:test_plan_generates_read_only_run_id",
+    "tests/test_authoring.py:test_plan_rejects_every_nested_mutator",
+]
+tests = [
+    "tests/test_authoring.py:test_plan_generates_read_only_run_id",
+    "tests/test_authoring.py:test_plan_rejects_every_nested_mutator",
+]
+gate = "python -m pytest tests/test_authoring.py::test_plan_generates_read_only_run_id tests/test_authoring.py::test_plan_rejects_every_nested_mutator -q"
+depends_on = ["P5-AIR-04"]
+```
+
+**Context:** One variant graph should serve several replicates without letting later caller mutation alter an approved run. This block gives the authored graph one generated run ID and freezes every nested container before returning it.
+
+**File: `src/viper/authoring.py`**
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:secrets -->
+```python contract-target
+import secrets
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:time -->
+```python contract-target
+import time
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:Never -->
+```python contract-target
+from typing import Annotated, Any, Literal, Never
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:model_validator -->
+```python contract-target
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:FactorId -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:LevelId -->
+```python contract-target
+from .ids import (
+    EvalId,
+    ExperimentId,
+    FactorId,
+    InputName,
+    LevelId,
+    ReplicateId,
+    RunId,
+    StageId,
+    VariantId,
+)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:FactorDraft -->
+```python contract-target
+class FactorDraft(BaseModel):
+    """Hold the levels available for one experimental factor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    levels: tuple[LevelId, ...] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_levels(self) -> FactorDraft:
+        """Reject duplicate levels within one factor."""
+        if len(set(self.levels)) != len(self.levels):
+            raise ValueError("factor levels must be unique")
+        return self
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:VariantDraft -->
+```python contract-target
+class VariantDraft(BaseModel):
+    """Hold one variant's factor levels, stages, and estimator."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    levels: dict[FactorId, LevelId]
+    stages: dict[StageId, StageDraft] = Field(min_length=1)
+    estimator: StageDraftArtifactRef
+
+    @model_validator(mode="after")
+    def validate_estimator(self) -> VariantDraft:
+        """Require the estimator to come from this variant's stage graph."""
+        if not any(stage is self.estimator.producer for stage in self.stages.values()):
+            raise ValueError("estimator producer is absent from the variant")
+        return self
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:ReplicateDraft -->
+```python contract-target
+class ReplicateDraft(BaseModel):
+    """Hold the seed assigned to one experiment replicate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    seed: RNGSeed
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:ExperimentDraft -->
+```python contract-target
+class ExperimentDraft(BaseModel):
+    """Hold the reusable variants and replicates in one experiment."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    experiment_id: ExperimentId
+    factors: dict[FactorId, FactorDraft] = Field(default_factory=dict)
+    variants: dict[VariantId, VariantDraft] = Field(min_length=1)
+    replicates: dict[ReplicateId, ReplicateDraft] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_variants(self) -> ExperimentDraft:
+        """Require every variant level to belong to its declared factor."""
+        for variant in self.variants.values():
+            if set(variant.levels) != set(self.factors):
+                raise ValueError("variant factors differ from the experiment")
+            for factor_id, level_id in variant.levels.items():
+                if level_id not in self.factors[factor_id].levels:
+                    raise ValueError("variant level is absent from its factor")
+        return self
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=update target=src/viper/authoring.py:RunPlanDraft -->
+```python contract-target
+class RunPlanDraft(BaseModel):
+    """Select one immutable experiment variant and replicate for execution."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    experiment: ExperimentDraft
+    variant: VariantId
+    replicate: ReplicateId
+    source: GitSource
+    env: EnvSpec
+    reproducibility: ReproducibilitySpec
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_FrozenDict -->
+```python contract-target
+class _FrozenDict(dict[Any, Any]):
+    """Keep mapping behavior while rejecting every mutation."""
+
+    def _reject(self, *args: object, **kwargs: object) -> Never:
+        raise TypeError("frozen plan values cannot be changed")
+
+    __delitem__ = _reject
+    __ior__ = _reject
+    __setitem__ = _reject
+    clear = _reject
+    pop = _reject
+    popitem = _reject
+    setdefault = _reject  # pyright: ignore[reportAssignmentType]
+    update = _reject  # pyright: ignore[reportAssignmentType]
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_FrozenList -->
+```python contract-target
+class _FrozenList(list[Any]):
+    """Keep sequence behavior while rejecting every mutation."""
+
+    def _reject(self, *args: object, **kwargs: object) -> Never:
+        raise TypeError("frozen plan values cannot be changed")
+
+    __delitem__ = _reject
+    __iadd__ = _reject
+    __imul__ = _reject
+    __setitem__ = _reject
+    append = _reject
+    clear = _reject
+    extend = _reject
+    insert = _reject
+    pop = _reject
+    remove = _reject
+    reverse = _reject
+    sort = _reject  # pyright: ignore[reportAssignmentType]
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_ULID_ALPHABET -->
+```python contract-target
+_ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_new_run_id -->
+```python contract-target
+def _new_run_id() -> RunId:
+    """Generate one sortable 128-bit run identity."""
+    value = (time.time_ns() // 1_000_000 << 80) | int.from_bytes(
+        secrets.token_bytes(10), "big"
+    )
+    encoded = "".join(
+        _ULID_ALPHABET[(value >> shift) & 31] for shift in range(125, -1, -5)
+    )
+    return TypeAdapter(RunId).validate_python(encoded)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:_deep_freeze -->
+```python contract-target
+def _deep_freeze(
+    value: Any,
+    memo: dict[int, Any] | None = None,
+    active: set[int] | None = None,
+) -> Any:
+    """Replace nested mutable values while preserving shared references."""
+    frozen = {} if memo is None else memo
+    visiting = set() if active is None else active
+    identity = id(value)
+    if identity in frozen:
+        return frozen[identity]
+    if identity in visiting:
+        raise TypeError("recursive plan values are not supported")
+    if isinstance(value, (str, bytes, int, float, bool, type(None))):
+        return value
+
+    visiting.add(identity)
+    try:
+        if isinstance(value, StageDraftArtifactRef):
+            result = StageDraftArtifactRef(
+                producer=_deep_freeze(value.producer, frozen, visiting),
+                artifact_name=value.artifact_name,
+            )
+        elif isinstance(value, BaseModel):
+            updates = {
+                name: _deep_freeze(field, frozen, visiting)
+                for name, field in value.__dict__.items()
+            }
+            result = value.model_copy(update=updates)
+        elif isinstance(value, dict):
+            result = _FrozenDict(
+                (
+                    _deep_freeze(key, frozen, visiting),
+                    _deep_freeze(item, frozen, visiting),
+                )
+                for key, item in value.items()
+            )
+        elif isinstance(value, list):
+            result = _FrozenList(_deep_freeze(item, frozen, visiting) for item in value)
+        elif isinstance(value, tuple):
+            result = tuple(_deep_freeze(item, frozen, visiting) for item in value)
+        elif isinstance(value, (set, frozenset)):
+            result = frozenset(_deep_freeze(item, frozen, visiting) for item in value)
+        else:
+            result = value
+    finally:
+        visiting.remove(identity)
+    frozen[identity] = result
+    return result
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:factor -->
+```python contract-target
+def factor(*, levels: tuple[LevelId, ...]) -> FactorDraft:
+    """Declare one experimental factor."""
+    return FactorDraft(levels=levels)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:variant -->
+```python contract-target
+def variant(
+    *,
+    levels: dict[FactorId, LevelId],
+    stages: dict[StageId, StageDraft],
+    estimator: StageDraftArtifactRef,
+) -> VariantDraft:
+    """Declare one reusable variant graph."""
+    return VariantDraft(levels=levels, stages=stages, estimator=estimator)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:replicate -->
+```python contract-target
+def replicate(*, seed: RNGSeed) -> ReplicateDraft:
+    """Declare one reproducible experiment replicate."""
+    return ReplicateDraft(seed=seed)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:experiment -->
+```python contract-target
+def experiment(
+    *,
+    experiment_id: ExperimentId,
+    variants: dict[VariantId, VariantDraft],
+    replicates: dict[ReplicateId, ReplicateDraft],
+    factors: dict[FactorId, FactorDraft] | None = None,
+) -> ExperimentDraft:
+    """Declare one experiment over reusable variants and replicates."""
+    return ExperimentDraft(
+        experiment_id=experiment_id,
+        factors={} if factors is None else factors,
+        variants=variants,
+        replicates=replicates,
+    )
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=src/viper/authoring.py:plan -->
+```python contract-target
+def plan(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft:
+    """Create one identified plan detached from mutable caller values."""
+    if variant not in experiment.variants:
+        raise ValueError("variant is absent from the experiment")
+    if replicate not in experiment.replicates:
+        raise ValueError("replicate is absent from the experiment")
+    draft = RunPlanDraft(
+        run_id=_new_run_id(),
+        experiment=experiment,
+        variant=variant,
+        replicate=replicate,
+        source=source,
+        env=env,
+        reproducibility=reproducibility,
+    )
+    return _deep_freeze(draft)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=update target=src/viper/authoring.py:freeze_run_plan -->
+```python contract-target
+def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
+    """Freeze the selected immutable draft through the Phase 5 file adapter."""
+    project_root = resolve_root(root)
+    experiment_draft = draft.experiment
+    variant_draft = experiment_draft.variants[draft.variant]
+    replicate_draft = experiment_draft.replicates[draft.replicate]
+    run_root = (
+        f"experiments/{experiment_draft.experiment_id}/runs/"
+        f"{draft.variant}/{draft.run_id}"
+    )
+    files: list[tuple[Path, bytes]] = []
+    stage_refs: list[RunStageRef] = []
+    for stage_id, stage in variant_draft.stages.items():
+        spec = _freeze_stage(
+            project_root,
+            run_root,
+            variant_draft.stages,
+            stage.spec,
+        )
+        raw = serialize_document(spec)
+        relative = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files.append((_target_path(project_root, relative), raw))
+        stage_refs.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=relative,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    estimator_stage = next(
+        (
+            name
+            for name, stage in variant_draft.stages.items()
+            if stage is variant_draft.estimator.producer
+        ),
+        None,
+    )
+    if estimator_stage is None:
+        raise ValueError("estimator producer is absent from the plan")
+    run = RunSpec(
+        run_id=draft.run_id,
+        experiment_id=experiment_draft.experiment_id,
+        variant_id=draft.variant,
+        replicate_id=draft.replicate,
+        benchmark_id=None,
+        seed=replicate_draft.seed,
+        source=draft.source,
+        env=draft.env,
+        reproducibility=draft.reproducibility,
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id=estimator_stage,
+            artifact_name=variant_draft.estimator.artifact_name,
+        ),
+    )
+    files.append(
+        (_target_path(project_root, f"{run_root}/spec.yaml"), serialize_document(run))
+    )
+    for path, raw in files:
+        _write_exact_file(path, raw)
+    return FrozenPlanFiles(run=run, files=tuple(path for path, _ in files))
+```
+
+**File: `tests/test_authoring.py`**
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:pytest -->
+```python contract-target
+import pytest
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:TypeAdapter -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:ValidationError -->
+```python contract-target
+from pydantic import TypeAdapter, ValidationError
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:VariantDraft -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:experiment -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:factor -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:plan -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:replicate -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:variant -->
+```python contract-target
+from viper.authoring import (
+    RunPlanDraft,
+    VariantDraft,
+    expand_http_url,
+    experiment,
+    factor,
+    freeze_run_plan,
+    plan,
+    replicate,
+    stage,
+    variant,
+    write_experiment_spec,
+    write_variant_spec,
+)
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:GitSource -->
+```python contract-target
+from viper.references import GitSource
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:EnvSpec -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:ReproducibilitySpec -->
+```python contract-target
+from viper.runtime import EnvSpec, ReproducibilitySpec
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:_immutable_plan -->
+```python contract-target
+def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
+    """Build one small plan and retain its caller-owned variant mapping."""
+
+    @metric(metric_id="training_loss", mode="live")
+    def training_loss(context) -> float:
+        return 1.0
+
+    @train(params=params.Train)
+    def fit(context: Context[params.Train]) -> None:
+        context.artifacts["model"].write_bytes(b"model")
+
+    loss = measure(training_loss, params=params.Metric())
+    train_stage = stage(
+        fit,
+        params=params.Train(),
+        inputs={
+            "dataset": external_input(
+                path="inputs/raw/dataset.csv",
+                data_role="training",
+            )
+        },
+        artifacts={
+            "model": artifact(
+                path="artifacts/model.bin",
+                loader=lambda path: path.read_bytes(),
+                data_role="training",
+            )
+        },
+        metrics=(loss,),
+        objective=min(loss),
+    )
+    variants = {
+        "baseline": variant(
+            levels={"rank": "full"},
+            stages={"train": train_stage},
+            estimator=train_stage.artifacts["model"],
+        )
+    }
+    authored = experiment(
+        experiment_id="e001_strand",
+        factors={"rank": factor(levels=("full", "low"))},
+        variants=variants,
+        replicates={"replicate_01": replicate(seed=42)},
+    )
+    env_payload = environment_payload()
+    env_payload["python_env"] = env_payload.pop("python_environment")
+    return (
+        plan(
+            experiment=authored,
+            variant="baseline",
+            replicate="replicate_01",
+            source=GitSource(
+                repository="https://github.com/example/viper-project",
+                commit=COMMIT,
+            ),
+            env=TypeAdapter(EnvSpec).validate_python(env_payload),
+            reproducibility=ReproducibilitySpec.model_validate(
+                reproducibility_payload()
+            ),
+        ),
+        variants,
+    )
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:test_plan_generates_read_only_run_id -->
+```python contract-target
+def test_plan_generates_read_only_run_id() -> None:
+    """Generate one valid identity that callers cannot replace afterward."""
+    draft, _ = _immutable_plan()
+
+    assert len(draft.run_id) == 26
+    with pytest.raises(ValidationError):
+        draft.run_id = RUN_ID
+```
+
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-01 action=add target=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
+```python contract-target
+def test_plan_rejects_every_nested_mutator() -> None:
+    """Detach the plan from caller aliases and reject nested mutation."""
+    draft, variants = _immutable_plan()
+    variants.clear()
+
+    assert tuple(draft.experiment.variants) == ("baseline",)
+    with pytest.raises(TypeError, match="frozen plan"):
+        draft.experiment.variants.clear()
+    with pytest.raises(TypeError, match="frozen plan"):
+        draft.experiment.variants["baseline"].stages.update({})
+```
+<!-- pair-block-definition: P6-UMD-02 -->
+```toml pair-block
+id = "P6-UMD-02"
+requirements = ["UMD-04"]
+targets = [
+    "src/viper/execution/__init__.py:importlib",
+    "src/viper/worker.py:os",
+    "src/viper/worker.py:UTC",
+    "src/viper/worker.py:datetime",
+    "src/viper/worker.py:Path",
+    "src/viper/worker.py:Literal",
+    "src/viper/worker.py:BaseModel",
+    "src/viper/worker.py:ConfigDict",
+    "src/viper/worker.py:Field",
+    "src/viper/worker.py:model_validator",
+    "src/viper/worker.py:subprocess",
+    "src/viper/worker.py:WorkerError",
+    "src/viper/worker.py:ExecutionPolicy",
+    "src/viper/worker.py:WorkerRequest",
+    "src/viper/worker.py:WorkerResult",
+    "src/viper/worker.py:execute_worker",
+    "src/viper/worker.py:__all__",
+    "src/viper/_parameter/validation.py:ExecutionPolicy",
+    "src/viper/_parameter/validation.py:WorkerRequest",
+    "src/viper/_parameter/validation.py:execute_worker",
+    "src/viper/artifact_loaders.py:ExecutionPolicy",
+    "src/viper/artifact_loaders.py:WorkerRequest",
+    "src/viper/artifact_loaders.py:execute_worker",
+    "tests/test_worker.py:ExecutionPolicy",
+    "tests/test_worker.py:WorkerError",
+    "tests/test_worker.py:WorkerRequest",
+    "tests/test_worker.py:execute_worker",
+    "src/viper/execution/__init__.py:RunPlanDraft",
+    "src/viper/execution/__init__.py:freeze_run_plan",
+    "src/viper/execution/__init__.py:_benchmark",
+    "src/viper/execution/__init__.py:_retry",
+    "src/viper/execution/__init__.py:_run",
+    "src/viper/execution/__init__.py:run",
+    "src/viper/execution/__init__.py:retry",
+    "src/viper/execution/__init__.py:benchmark",
+    "src/viper/execution/_run.py:ResolvedRunSpecRef",
+    "src/viper/execution/_run.py:run",
+    "src/viper/execution/_run.py:retry",
+    "tests/conftest.py:TIER_BY_MODULE",
+    "tests/conftest.py:DOMAIN_BY_MODULE",
+    "tests/test_plan_execution.py:Path",
+    "tests/test_plan_execution.py:SimpleNamespace",
+    "tests/test_plan_execution.py:pytest",
+    "tests/test_plan_execution.py:execution",
+    "tests/test_plan_execution.py:RunPlanDraft",
+    "tests/test_plan_execution.py:test_run_compiles_plan_before_first_attempt",
+]
+tests = [
+    "tests/test_worker.py:test_worker_executes_one_bounded_command",
+    "tests/test_plan_execution.py:test_run_compiles_plan_before_first_attempt",
+]
+gate = "python -m pytest tests/test_worker.py tests/test_plan_execution.py::test_run_compiles_plan_before_first_attempt -q"
+depends_on = ["P6-FPG-01"]
+```
+
+**Context:** Execution must import cleanly before it can accept an authored plan. This block moves the worker primitive out of the execution package, removes the import cycle, and makes run() compile the plan before the first attempt.
+
+**File: src/viper/execution/__init__.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=remove target=src/viper/execution/__init__.py:importlib -->
+<!-- contract-remove -->
+
+**File: src/viper/worker.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:os -->
+```python contract-target
+import os
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:UTC -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:datetime -->
+```python contract-target
+from datetime import UTC, datetime
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:Literal -->
+```python contract-target
+from typing import Literal
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:BaseModel -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:ConfigDict -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:Field -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:model_validator -->
+```python contract-target
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:subprocess -->
+```python contract-target
+import viper._subprocess as subprocess
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:WorkerError -->
+```python contract-target
+class WorkerError(RuntimeError):
+    """Report a rejected, timed-out, or failed worker invocation."""
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:ExecutionPolicy -->
+```python contract-target
+class ExecutionPolicy(BaseModel):
+    """Select the worker backend and process timeout."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    backend: Literal["trusted_local"] = "trusted_local"
+    timeout_seconds: float | None = Field(default=None, gt=0)
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:WorkerRequest -->
+```python contract-target
+class WorkerRequest(BaseModel):
+    """Describe one command and its bounded local context."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    workspace_root: Path
+    working_directory: Path
+    context_path: Path
+    command: tuple[str, ...] = Field(min_length=1)
+    environment: dict[str, str] = Field(default_factory=dict)
+    policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> WorkerRequest:
+        """Keep the command's files beneath its workspace."""
+        root = self.workspace_root.resolve()
+        for path in (self.working_directory, self.context_path):
+            if not path.resolve().is_relative_to(root):
+                raise ValueError("worker path escapes the workspace root")
+        return self
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:WorkerResult -->
+```python contract-target
+class WorkerResult(BaseModel):
+    """Record the observable result of one worker process."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        ser_json_bytes="base64",
+    )
+
+    backend: Literal["trusted_local"] = "trusted_local"
+    command: tuple[str, ...]
+    started_at: datetime
+    completed_at: datetime
+    returncode: int
+    stdout: bytes
+    stderr: bytes
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:execute_worker -->
+```python contract-target
+def execute_worker(request: WorkerRequest) -> WorkerResult:
+    """Run one command after validating its workspace."""
+    request.working_directory.mkdir(parents=True, exist_ok=True)
+    if not request.context_path.is_file():
+        raise WorkerError("worker context file is missing")
+    environment = os.environ.copy()
+    environment.update(request.environment)
+    environment["VIPER_CONTEXT_PATH"] = str(request.context_path)
+    started_at = datetime.now(UTC)
+    try:
+        process = subprocess.run(
+            request.command,
+            cwd=request.working_directory,
+            env=environment,
+            capture_output=True,
+            timeout=request.policy.timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise WorkerError("worker command exceeded its timeout") from exc
+    completed_at = datetime.now(UTC)
+    result = WorkerResult(
+        command=request.command,
+        started_at=started_at,
+        completed_at=completed_at,
+        returncode=process.returncode,
+        stdout=process.stdout,
+        stderr=process.stderr,
+    )
+    if result.returncode != 0:
+        raise WorkerError(f"worker command exited with status {result.returncode}")
+    return result
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/worker.py:__all__ -->
+```python contract-target
+__all__ = [
+    "ExecutionPolicy",
+    "WorkerError",
+    "WorkerRequest",
+    "WorkerResult",
+    "execute_worker",
+]
+```
+
+**File: src/viper/_parameter/validation.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/_parameter/validation.py:ExecutionPolicy -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/_parameter/validation.py:WorkerRequest -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/_parameter/validation.py:execute_worker -->
+```python contract-target
+from ..worker import ExecutionPolicy, WorkerRequest, execute_worker
+```
+
+**File: src/viper/artifact_loaders.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/artifact_loaders.py:ExecutionPolicy -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/artifact_loaders.py:WorkerRequest -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/artifact_loaders.py:execute_worker -->
+```python contract-target
+from .worker import ExecutionPolicy, WorkerRequest, execute_worker
+```
+
+**File: tests/test_worker.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:ExecutionPolicy -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:WorkerError -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:WorkerRequest -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/test_worker.py:execute_worker -->
+```python contract-target
+from viper.worker import (
+    ExecutionPolicy,
+    WorkerError,
+    WorkerRequest,
+    execute_worker,
+)
+```
+
+**File: src/viper/execution/__init__.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:RunPlanDraft -->
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:freeze_run_plan -->
+```python contract-target
+from ..authoring import RunPlanDraft, freeze_run_plan
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:_benchmark -->
+```python contract-target
+from ._benchmark import benchmark as _benchmark
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:_retry -->
+```python contract-target
+from ._run import retry as _retry
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/__init__.py:_run -->
+```python contract-target
+from ._run import run as _run
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/__init__.py:run -->
+```python contract-target
+def run(
+    repository_root: Path,
+    plan: RunPlanDraft | Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> RunResult:
+    """Compile one authored plan, then execute its immutable files."""
+    if isinstance(plan, Path):
+        return _run(
+            repository_root,
+            plan,
+            timeout_seconds=timeout_seconds,
+        )
+    frozen = freeze_run_plan(repository_root, plan)
+    run_path = repository_root.resolve() / frozen.reference.stored_at.path
+    return _run(
+        repository_root,
+        run_path,
+        plan=frozen.reference,
+        timeout_seconds=timeout_seconds,
+    )
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/__init__.py:retry -->
+```python contract-target
+def retry(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> RunResult:
+    """Append one attempt to a failed frozen run and verify its result."""
+    return _retry(
+        repository_root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+    )
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/__init__.py:benchmark -->
+```python contract-target
+def benchmark(
+    repository_root: Path,
+    resolved_run_path: Path,
+    benchmark_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> BenchmarkExecutionResult:
+    """Execute and verify one independent benchmark confirmation."""
+    return _benchmark(
+        repository_root,
+        resolved_run_path,
+        benchmark_spec_path,
+        timeout_seconds=timeout_seconds,
+    )
+```
+
+**File: src/viper/execution/_run.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=src/viper/execution/_run.py:ResolvedRunSpecRef -->
+```python contract-target
+from ..references import ResolvedRunSpecRef
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/_run.py:run -->
+```python contract-target
+def run(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+    timeout_seconds: float | None = None,
+    retry: bool = False,
+) -> RunResult:
+    """Execute one frozen plan and verify its terminal resolved run."""
+    result = execute_attempt(
+        repository_root,
+        run_spec_path,
+        plan=plan,
+        timeout_seconds=timeout_seconds,
+        retry=retry,
+        purpose="run",
+    )
+    assert isinstance(result, RunResult)
+    return result
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=src/viper/execution/_run.py:retry -->
+```python contract-target
+def retry(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+    timeout_seconds: float | None = None,
+) -> RunResult:
+    """Append one attempt to a failed frozen run and verify its result."""
+    return run(
+        repository_root,
+        run_spec_path,
+        plan=plan,
+        timeout_seconds=timeout_seconds,
+        retry=True,
+    )
+```
+
+**File: tests/conftest.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/conftest.py:TIER_BY_MODULE -->
+```python contract-target
+TIER_BY_MODULE = {
+    "test_api": "contract",
+    "test_api_json": "unit",
+    "test_artifact_validation": "contract",
+    "test_authoring": "contract",
+    "test_benchmark_execution": "contract",
+    "test_cli": "integration",
+    "test_cloud_execution": "contract",
+    "test_contract_documentation": "contract",
+    "test_contract_traceability": "contract",
+    "test_documentation": "contract",
+    "test_execution_acceptance": "integration",
+    "test_generated_project_acceptance": "release",
+    "test_http_retrieval": "contract",
+    "test_inspection": "contract",
+    "test_live_process_startup": "integration",
+    "test_storage": "unit",
+    "test_system_impact": "unit",
+    "test_metric_interface": "contract",
+    "test_metric_provenance": "integration",
+    "test_parameter_validation": "contract",
+    "test_plan_execution": "contract",
+    "test_preflight": "contract",
+    "test_process_startup": "unit",
+    "test_project_init": "contract",
+    "test_protocol": "contract",
+    "test_public_api": "contract",
+    "test_release_tools": "unit",
+    "test_resume": "integration",
+    "test_run_execution": "integration",
+    "test_execution_signals": "integration",
+    "test_stage_invocation": "contract",
+    "test_validation_architecture": "contract",
+    "test_verification": "contract",
+    "test_verification_acceptance": "integration",
+    "test_worker": "integration",
+    "test_workflow_documentation": "contract",
+}
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=update target=tests/conftest.py:DOMAIN_BY_MODULE -->
+```python contract-target
+DOMAIN_BY_MODULE = {
+    "test_api": "domain_application",
+    "test_api_json": "domain_application",
+    "test_artifact_validation": "domain_artifacts",
+    "test_authoring": "domain_authoring",
+    "test_benchmark_execution": "domain_execution",
+    "test_cli": "domain_application",
+    "test_cloud_execution": "domain_execution",
+    "test_contract_documentation": "domain_protocol",
+    "test_contract_traceability": "domain_protocol",
+    "test_documentation": "domain_protocol",
+    "test_execution_acceptance": "domain_execution",
+    "test_generated_project_acceptance": "domain_release",
+    "test_http_retrieval": "domain_http",
+    "test_inspection": "domain_verification",
+    "test_live_process_startup": "domain_execution",
+    "test_storage": "domain_storage",
+    "test_system_impact": "domain_protocol",
+    "test_metric_interface": "domain_metrics",
+    "test_metric_provenance": "domain_metrics",
+    "test_parameter_validation": "domain_parameters",
+    "test_plan_execution": "domain_execution",
+    "test_preflight": "domain_verification",
+    "test_process_startup": "domain_execution",
+    "test_project_init": "domain_application",
+    "test_protocol": "domain_protocol",
+    "test_public_api": "domain_application",
+    "test_release_tools": "domain_release",
+    "test_resume": "domain_execution",
+    "test_run_execution": "domain_execution",
+    "test_execution_signals": "domain_execution",
+    "test_stage_invocation": "domain_execution",
+    "test_validation_architecture": "domain_protocol",
+    "test_verification": "domain_verification",
+    "test_verification_acceptance": "domain_verification",
+    "test_worker": "domain_execution",
+    "test_workflow_documentation": "domain_release",
+}
+```
+
+**File: tests/test_plan_execution.py**
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:SimpleNamespace -->
+```python contract-target
+from types import SimpleNamespace
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:pytest -->
+```python contract-target
+import pytest
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:execution -->
+```python contract-target
+import viper.execution as execution
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:RunPlanDraft -->
+```python contract-target
+from viper.authoring import RunPlanDraft
+```
+<!-- contract-target: requirements=UMD-04 block=P6-UMD-02 action=add target=tests/test_plan_execution.py:test_run_compiles_plan_before_first_attempt -->
+```python contract-target
+def test_run_compiles_plan_before_first_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Publish the plan before handing its exact reference to the runner."""
+    draft = RunPlanDraft.model_construct()
+    reference = SimpleNamespace(stored_at=SimpleNamespace(path="run.yaml"))
+    frozen = SimpleNamespace(reference=reference)
+    result = object()
+    calls: list[str] = []
+
+    def freeze(root: Path, selected: RunPlanDraft):
+        calls.append("freeze")
+        assert root == tmp_path
+        assert selected is draft
+        return frozen
+
+    def run(root: Path, path: Path, **kwargs: object):
+        calls.append("run")
+        assert root == tmp_path
+        assert path == tmp_path / "run.yaml"
+        assert kwargs["plan"] is reference
+        return result
+
+    monkeypatch.setattr(execution, "freeze_run_plan", freeze)
+    monkeypatch.setattr(execution, "_run", run)
+
+    assert execution.run(tmp_path, draft) is result
+    assert calls == ["freeze", "run"]
 ```
