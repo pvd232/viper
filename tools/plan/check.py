@@ -287,12 +287,21 @@ def _parity(
     plan_root: Path,
     source_root: Path,
     targets: tuple[ContractTarget, ...],
+    *,
+    check_imports: bool = True,
 ) -> tuple[str, ...]:
     """Return targets that differ from the contract."""
     failures: list[str] = []
     for target in targets:
         path = source_root / target.target.path
         symbol = target.target.symbol
+        expected = declaration_payload(plan_root, target)
+        if (
+            not check_imports
+            and expected is not None
+            and expected.startswith((b"import ", b"from "))
+        ):
+            continue
         try:
             actual = extract_declaration_bytes(path.read_bytes(), symbol)
         except (OSError, SyntaxError, SourceDeclarationError):
@@ -301,7 +310,6 @@ def _parity(
             if actual is not None:
                 failures.append(str(target.target))
             continue
-        expected = declaration_payload(plan_root, target)
         assert expected is not None
         if actual is None:
             failures.append(str(target.target))
@@ -398,7 +406,7 @@ def validate(
     selected_targets = tuple(
         target for target in traceability.targets if target.block_id in selected_ids
     )
-    raw_parity = _parity(root, raw, selected_targets)
+    raw_parity = _parity(root, raw, selected_targets, check_imports=False)
     if raw_parity:
         result = {
             "passed": False,

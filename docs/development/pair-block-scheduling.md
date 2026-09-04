@@ -157,7 +157,7 @@ rejects nested additions because `ContractTarget` does not yet carry a
 class-body insertion point.
 
 Before Pyright, `tools/plan/check.py` preserves the exact materialization in
-`raw/` and checks its contract parity and imports. It copies `raw/` to
+`raw/` and checks its non-import declarations and imports. It copies `raw/` to
 `candidate/`, lets Ruff format that copy and sort its imports, then checks Ruff
 and contract parity again. Declaration bodies must still match the contract;
 file spacing may change, and imports are compared by the names they bind. An
@@ -1848,12 +1848,21 @@ def _parity(
     plan_root: Path,
     source_root: Path,
     targets: tuple[ContractTarget, ...],
+    *,
+    check_imports: bool = True,
 ) -> tuple[str, ...]:
     """Return targets that differ from the contract."""
     failures: list[str] = []
     for target in targets:
         path = source_root / target.target.path
         symbol = target.target.symbol
+        expected = declaration_payload(plan_root, target)
+        if (
+            not check_imports
+            and expected is not None
+            and expected.startswith((b"import ", b"from "))
+        ):
+            continue
         try:
             actual = extract_declaration_bytes(path.read_bytes(), symbol)
         except (OSError, SyntaxError, SourceDeclarationError):
@@ -1862,7 +1871,6 @@ def _parity(
             if actual is not None:
                 failures.append(str(target.target))
             continue
-        expected = declaration_payload(plan_root, target)
         assert expected is not None
         if actual is None:
             failures.append(str(target.target))
@@ -1959,7 +1967,7 @@ def validate(
     selected_targets = tuple(
         target for target in traceability.targets if target.block_id in selected_ids
     )
-    raw_parity = _parity(root, raw, selected_targets)
+    raw_parity = _parity(root, raw, selected_targets, check_imports=False)
     if raw_parity:
         result = {
             "passed": False,
