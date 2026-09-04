@@ -2842,6 +2842,8 @@ targets = [
     "src/viper/_verification/metrics.py:verify_recomputed_metrics",
     "src/viper/_verification/plan.py:verify_run_plan_relationships",
     "tests/test_public_api.py:test_env_vocabulary_is_complete",
+    "tests/fixtures.py:PythonEnvironmentSpec",
+    "tests/fixtures.py:observe_python_environment",
 ]
 tests = ["tests/test_public_api.py:test_env_vocabulary_is_complete"]
 gate = "python -m pytest tests/test_public_api.py::test_env_vocabulary_is_complete -q"
@@ -2930,6 +2932,7 @@ targets = [
     "src/viper/authoring.py:_freeze_http",
     "tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity",
     "tests/test_authoring.py:test_artifact_constructor_selects_file_or_bundle",
+    "tests/test_http_retrieval.py:EnvironmentSecretRef",
 ]
 tests = [
     "tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity",
@@ -8301,6 +8304,17 @@ def test_env_vocabulary_is_complete() -> None:
     assert not hasattr(runtime, "EnvironmentSpec")
 ```
 
+**File: `tests/fixtures.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=tests/fixtures.py:PythonEnvironmentSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=tests/fixtures.py:observe_python_environment -->
+```python contract-target
+from viper.runtime import (
+    PythonEnvSpec as PythonEnvironmentSpec,
+    observe_python_env as observe_python_environment,
+)
+```
+
 ### P5-AIR-03
 
 **File: `src/viper/artifacts.py`**
@@ -8874,6 +8888,13 @@ def test_artifact_constructor_selects_file_or_bundle() -> None:
 
     assert isinstance(file, SingleFileArtifactDraft)
     assert isinstance(bundle, BundleArtifactDraft)
+```
+
+**File: `tests/test_http_retrieval.py`**
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=tests/test_http_retrieval.py:EnvironmentSecretRef -->
+```python contract-target
+from viper.http import EnvSecretRef as EnvironmentSecretRef
 ```
 
 ### P5-AIR-04
