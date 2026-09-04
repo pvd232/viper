@@ -4696,9 +4696,8 @@ def verify_benchmark_result(
             *attempt.metric_verification_files,
             *attempt.log_files,
         )
-        if (
-            identity := _storage.artifact_revision_identity(reference.stored_at)
-        ) is not None
+        if (identity := _storage.artifact_revision_identity(reference.stored_at))
+        is not None
     }
     confirmation_attempt_file_snapshots = {
         identity
@@ -4708,9 +4707,8 @@ def verify_benchmark_result(
             *confirmation.metric_verification_files,
             *confirmation.log_files,
         )
-        if (
-            identity := _storage.artifact_revision_identity(reference.stored_at)
-        ) is not None
+        if (identity := _storage.artifact_revision_identity(reference.stored_at))
+        is not None
     }
     if original_attempt_file_snapshots & confirmation_attempt_file_snapshots:
         raise VerificationError(
@@ -5591,9 +5589,7 @@ def execute_attempt(
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             captured_inputs: dict[InputName, SnapshotFileRef] = {}
-            stored_input_references: dict[
-                InputName, tuple[ResolvedFileRef, ...]
-            ] = {}
+            stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
             input_paths: dict[str, Path] = {}
             process = None
             journal.append(
@@ -8791,6 +8787,7 @@ def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
 ```python contract-target
 def test_artifact_and_http_drafts_preserve_callable_identity() -> None:
     """Keep selected Python callables attached to their authoring drafts."""
+
     def load(path: Path) -> bytes:
         return path.read_bytes()
 
@@ -8811,6 +8808,7 @@ def test_artifact_and_http_drafts_preserve_callable_identity() -> None:
 ```python contract-target
 def test_artifact_constructor_selects_file_or_bundle() -> None:
     """Select the artifact draft type from the explicit kind."""
+
     def load(path: Path) -> bytes:
         return path.read_bytes()
 
@@ -9920,6 +9918,7 @@ def {stage}(context) -> None:
 ```python contract-target
 def test_python_stage_drafts_replace_yaml_authoring() -> None:
     """Keep a decorated callable and artifact handle in one Python stage draft."""
+
     @train(params=params.Train)
     def fit(context: Context[params.Train]) -> None:
         context.artifacts["model"].write_bytes(b"model")
@@ -10053,9 +10052,7 @@ def _resolve_metric_dependencies(
                 producer = completed_results[declared.producer_stage_id]
                 files = tuple(
                     resolve_snapshot_file_ref(realized.producer.snapshot, file)
-                    for file in _artifact_files(
-                        producer.artifacts[declared.name]
-                    )
+                    for file in _artifact_files(producer.artifacts[declared.name])
                 )
             elif isinstance(realized, ResolvedStoredInputRef):
                 files = stored_inputs[dependency.name]
