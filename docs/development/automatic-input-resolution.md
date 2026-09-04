@@ -2687,6 +2687,7 @@ targets = [
     "src/viper/artifact_loaders.py:validate_artifact_context",
     "src/viper/_workers/parameters.py:main",
     "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
+    "tests/test_protocol.py:EvaluateSpec",
 ]
 tests = [
     "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
@@ -2844,6 +2845,7 @@ targets = [
     "tests/test_public_api.py:test_env_vocabulary_is_complete",
     "tests/fixtures.py:PythonEnvironmentSpec",
     "tests/fixtures.py:observe_python_environment",
+    "tests/test_protocol.py:GCEEnvironmentSpec",
 ]
 tests = ["tests/test_public_api.py:test_env_vocabulary_is_complete"]
 gate = "python -m pytest tests/test_public_api.py::test_env_vocabulary_is_complete -q"
@@ -2932,7 +2934,10 @@ targets = [
     "src/viper/authoring.py:_freeze_http",
     "tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity",
     "tests/test_authoring.py:test_artifact_constructor_selects_file_or_bundle",
+    "tests/test_http_retrieval.py:parameters",
     "tests/test_http_retrieval.py:EnvironmentSecretRef",
+    "tests/test_http_retrieval.py:ParameterModelRef",
+    "tests/test_http_retrieval.py:test_project_http_receives_typed_parameters_and_exact_destination",
 ]
 tests = [
     "tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity",
@@ -5042,6 +5047,13 @@ def test_stage_api_uses_target_decorators_params_and_keys() -> None:
     assert keys.Eval.PREDS == "preds"
     assert issubclass(params.Eval, params.ParameterSet)
     assert callable(eval)
+```
+
+**File: `tests/test_protocol.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=tests/test_protocol.py:EvaluateSpec -->
+```python contract-target
+from viper.stages import EvalSpec as EvaluateSpec
 ```
 
 ### P5-AIR-02
@@ -8315,6 +8327,13 @@ from viper.runtime import (
 )
 ```
 
+**File: `tests/test_protocol.py`**
+
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=tests/test_protocol.py:GCEEnvironmentSpec -->
+```python contract-target
+from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
+```
+
 ### P5-AIR-03
 
 **File: `src/viper/artifacts.py`**
@@ -8892,9 +8911,122 @@ def test_artifact_constructor_selects_file_or_bundle() -> None:
 
 **File: `tests/test_http_retrieval.py`**
 
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=tests/test_http_retrieval.py:parameters -->
 <!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=tests/test_http_retrieval.py:EnvironmentSecretRef -->
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=tests/test_http_retrieval.py:ParameterModelRef -->
 ```python contract-target
+from viper import params as parameters
 from viper.http import EnvSecretRef as EnvironmentSecretRef
+from viper.params import ParameterModelRef
+```
+
+<!-- contract-target: requirements=AIR-02 block=P5-AIR-03 action=update target=tests/test_http_retrieval.py:test_project_http_receives_typed_parameters_and_exact_destination -->
+```python contract-target
+def test_project_http_receives_typed_parameters_and_exact_destination(
+    tmp_path: Path,
+    local_http_server: tuple[str, int, list[tuple[str, str | None]]],
+) -> None:
+    """Load one decorated project HTTP callable and verify its completed body."""
+    host, port, _ = local_http_server
+    body = b"verified response"
+    parameter_raw = (
+        b"from pydantic import Field\n"
+        b"from viper import params as parameters\n\n"
+        b"class ProjectTransportParameters(parameters.Http):\n"
+        b"    chunk_size: int = Field(gt=0)\n"
+    )
+    implementation_raw = (
+        b"import httpx\n"
+        b"from project.transport_params import ProjectTransportParameters\n"
+        b"from viper.http import (\n"
+        b"    HttpResult,\n"
+        b"    ObservedHttpResponse,\n"
+        b"    http,\n"
+        b")\n\n"
+        b"@http(id='project_http', "
+        b"parameter_model=ProjectTransportParameters)\n"
+        b"def transfer(context):\n"
+        b"    assert context.params.chunk_size == 4\n"
+        b"    response = httpx.get(str(context.request.url), "
+        b"headers={'Range': 'bytes=0-'}, "
+        b"follow_redirects=False, trust_env=False)\n"
+        b"    context.destination.write_bytes(response.content)\n"
+        b"    return HttpResult(\n"
+        b"        body=context.destination,\n"
+        b"        response=ObservedHttpResponse(\n"
+        b"            response_url=str(response.url),\n"
+        b"            status=response.status_code,\n"
+        b"            response_headers={\n"
+        b"                'content-length': response.headers['content-length']\n"
+        b"            },\n"
+        b"        ),\n"
+        b"    )\n"
+    )
+    parameter_path = tmp_path / "project/transport_params.py"
+    implementation_path = tmp_path / "project/transport.py"
+    parameter_path.parent.mkdir(parents=True)
+    parameter_path.write_bytes(parameter_raw)
+    implementation_path.write_bytes(implementation_raw)
+    spec = ProjectHttpImplementationSpec(
+        id="project_http",
+        implementation=HttpImplementationRef(
+            path="project/transport.py",
+            symbol="transfer",
+            sha256=hashlib.sha256(implementation_raw).hexdigest(),
+            bytes=len(implementation_raw),
+        ),
+        parameter_model=ParameterModelRef(
+            owner="project",
+            path="project/transport_params.py",
+            symbol="ProjectTransportParameters",
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        ),
+        params=parameters.Http.model_validate({"chunk_size": 4}),
+    )
+    request = _request(
+        url=f"http://{host}:{port}/body",
+        expected_body_sha256=hashlib.sha256(body).hexdigest(),
+        expected_body_bytes=len(body),
+    )
+    transport = resolve_http(tmp_path, spec)
+    workspace = tmp_path / "retrieval"
+    workspace.mkdir()
+    policy = _policy(host=host, port=port).model_copy(
+        update={"accepted_statuses": frozenset({206})}
+    )
+
+    result = invoke_http(
+        tmp_path,
+        transport,
+        request,
+        policy,
+        workspace,
+        workspace / "body",
+    )
+
+    assert result.body == workspace / "body"
+    assert result.body.read_bytes() == body
+    assert result.response.status == 206
+
+    missing_executable = spec.model_copy(
+        update={
+            "executables": (
+                ExternalExecutableSpec(
+                    executable_id="missing",
+                    command="viper-definitely-absent-executable",
+                    sha256="a" * 64,
+                    bytes=1,
+                ),
+            )
+        }
+    )
+    with pytest.raises(HttpRetrievalError, match="unavailable"):
+        resolve_http(tmp_path, missing_executable)
+
+    implementation_path.write_bytes(implementation_raw + b"# modified\n")
+    with pytest.raises(HttpRetrievalError, match="byte count"):
+        resolve_http(tmp_path, spec)
 ```
 
 ### P5-AIR-04

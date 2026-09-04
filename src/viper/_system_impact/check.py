@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import shlex
@@ -35,6 +36,7 @@ from .plan import IMPACT_EDGE_KINDS_V1
 from .source import (
     SourceDeclarationError,
     declaration_payload,
+    extract_declaration_bytes,
     import_binding,
 )
 
@@ -439,6 +441,24 @@ def _unexpected_changes(
                 after.symbol,
             ):
                 continue
+        try:
+            baseline_declaration = extract_declaration_bytes(
+                (baseline_root / before.path).read_bytes(),
+                before.symbol,
+            )
+            realized_declaration = extract_declaration_bytes(
+                (realized_root / after.path).read_bytes(),
+                after.symbol,
+            )
+            baseline_tree = ast.parse(baseline_declaration, type_comments=True)
+            realized_tree = ast.parse(realized_declaration, type_comments=True)
+            if ast.dump(baseline_tree, include_attributes=False) == ast.dump(
+                realized_tree,
+                include_attributes=False,
+            ):
+                continue
+        except (OSError, SyntaxError, SourceDeclarationError):
+            pass
         changed.add(key)
     all_nodes = {**baseline_nodes, **realized_nodes}
     planned: set[tuple[str, str]] = set()

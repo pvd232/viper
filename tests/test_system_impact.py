@@ -1841,6 +1841,45 @@ def test_import_target_owns_names_in_the_same_statement(tmp_path: Path) -> None:
     assert unexpected == ()
 
 
+def test_formatting_only_change_is_not_unexpected(tmp_path: Path) -> None:
+    """Ignore Ruff layout changes that preserve the same Python tree."""
+    path = "src/example.py"
+    before = b"def value():\n    return (\n        1\n    )\n"
+    after = b"def value():\n    return 1\n"
+    baseline_root = tmp_path / "baseline"
+    realized_root = tmp_path / "realized"
+    baseline_path = baseline_root / path
+    realized_path = realized_root / path
+    baseline_path.parent.mkdir(parents=True)
+    realized_path.parent.mkdir(parents=True)
+    baseline_path.write_bytes(before)
+    realized_path.write_bytes(after)
+
+    unexpected = _unexpected_changes(
+        baseline_root=baseline_root,
+        realized_root=realized_root,
+        baseline_nodes={
+            (path, "value"): _node(
+                path=path,
+                symbol="value",
+                kind="function",
+                declaration=before.rstrip(),
+            )
+        },
+        realized_nodes={
+            (path, "value"): _node(
+                path=path,
+                symbol="value",
+                kind="function",
+                declaration=after.rstrip(),
+            )
+        },
+        targets=(),
+    )
+
+    assert unexpected == ()
+
+
 def test_plan_check_runs_gates_and_validates_dependencies(tmp_path: Path) -> None:
     """Run each gate and distinguish satisfied and missing prior block output."""
     baseline_root = tmp_path / "baseline"
