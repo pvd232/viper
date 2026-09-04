@@ -280,7 +280,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, a two-graph one-hop preflight, and rejection of unplanned source changes |
-| [PairBlock scheduling](pair-block-scheduling.md) | In progress | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
+| [PairBlock scheduling](pair-block-scheduling.md) | Complete | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
 | [External input roots](external-input-roots.md) | In progress; Phase 3 implemented; EIR-04 and EIR-05 scheduled | Local input capture and identity verification |
@@ -1396,22 +1396,22 @@ parameter class and values reach the calculation in both modes.
       <!-- contract-implementation: requirement=SCH-01 rule=schedule.plan.materialized state=implemented owner=src/viper/scheduling.py:materialize_plan -->
       <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=implemented test=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
       <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=implemented test=tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations -->
-- [ ] Project declared dependencies, baseline and planned CodeQL edges, and
+- [x] Project declared dependencies, baseline and planned CodeQL edges, and
       shared-file writes onto the selected PairBlocks.
       <!-- pair-block: P4-SCH-02 -->
       <!-- pair-block-contract: P4-SCH-02 contract=pair-block-scheduling.md -->
       <!-- implements: SCH-02 -->
       <!-- verifies: SCH-02 -->
-      <!-- contract-implementation: requirement=SCH-02 rule=schedule.graph.closed state=planned owner=src/viper/scheduling.py:build_block_graph -->
-      <!-- contract-verification: requirement=SCH-02 rule=schedule.graph.closed state=planned test=tests/test_system_impact.py:test_block_graph_combines_dependencies_and_write_conflicts -->
-- [ ] Condense graph cycles and emit deterministic execution waves. Run the
+      <!-- contract-implementation: requirement=SCH-02 rule=schedule.graph.closed state=implemented owner=src/viper/scheduling.py:build_block_graph -->
+      <!-- contract-verification: requirement=SCH-02 rule=schedule.graph.closed state=implemented test=tests/test_system_impact.py:test_block_graph_combines_dependencies_and_write_conflicts -->
+- [x] Condense graph cycles and emit deterministic execution waves. Run the
       focused scheduler cases in `tests/test_system_impact.py`.
       <!-- pair-block: P4-SCH-03 -->
       <!-- pair-block-contract: P4-SCH-03 contract=pair-block-scheduling.md -->
       <!-- implements: SCH-03 -->
       <!-- verifies: SCH-03 -->
-      <!-- contract-implementation: requirement=SCH-03 rule=schedule.waves.complete state=planned owner=src/viper/scheduling.py:schedule_blocks -->
-      <!-- contract-verification: requirement=SCH-03 rule=schedule.waves.complete state=planned test=tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves -->
+      <!-- contract-implementation: requirement=SCH-03 rule=schedule.waves.complete state=implemented owner=src/viper/scheduling.py:schedule_blocks -->
+      <!-- contract-verification: requirement=SCH-03 rule=schedule.waves.complete state=implemented test=tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves -->
 
 The [PairBlock scheduling contract](pair-block-scheduling.md) owns the complete
 code and focused gates. Its generated waves advise checklist order; a reviewed

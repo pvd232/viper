@@ -333,6 +333,146 @@ def test_pre_pairing_modules_document_every_operation() -> None:
     assert missing == []
 
 
+def _schedule_fixture() -> tuple[ContractTraceabilityGraph, SourceGraph, SourceGraph]:
+    """Build four blocks with one dependency and one shared-file conflict."""
+    declaration = _declaration_ref()
+    definitions = (
+        ("P0-TST-01", "src/parse.py", "parse", ()),
+        ("P0-TST-02", "src/load.py", "load", ("P0-TST-01",)),
+        ("P0-TST-03", "src/shared.py", "left", ()),
+        ("P0-TST-04", "src/shared.py", "right", ()),
+    )
+    targets = tuple(
+        ContractTarget.model_construct(
+            requirements=("SCH-02",),
+            block_id=block_id,
+            action="update",
+            target=RepoSymbolRef(path=path, symbol=symbol),
+            declaration=declaration,
+        )
+        for block_id, path, symbol, _dependencies in definitions
+    )
+    blocks = tuple(
+        PairBlock.model_construct(
+            block_id=block_id,
+            requirements=("SCH-02",),
+            targets=(RepoSymbolRef(path=path, symbol=symbol),),
+            assets=(),
+            tests=(
+                RepoSymbolRef(
+                    path="tests/test_system_impact.py",
+                    symbol="test_schedule_blocks_returns_dependency_safe_waves",
+                ),
+            ),
+            gate="python -m pytest tests/test_system_impact.py",
+            depends_on=dependencies,
+            declaration=declaration,
+        )
+        for block_id, path, symbol, dependencies in definitions
+    )
+    traceability = ContractTraceabilityGraph.model_construct(
+        requirements=(),
+        rules=(),
+        edges=(),
+        targets=targets,
+        blocks=blocks,
+    )
+    parse = _node(path="src/parse.py", symbol="parse", kind="function")
+    load = _node(path="src/load.py", symbol="load", kind="function")
+    left = _node(path="src/shared.py", symbol="left", kind="function")
+    right = _node(path="src/shared.py", symbol="right", kind="function")
+    baseline = _source_graph(nodes=(parse, load, left, right))
+    planned = _source_graph(
+        nodes=(parse, load, left, right),
+        edges=(_edge(index=1, source=load, target=parse, kind="calls"),),
+        source_sha256="8" * 64,
+        revision=None,
+    )
+    return traceability, baseline, planned
+
+
+def test_block_graph_combines_dependencies_and_write_conflicts() -> None:
+    """Project explicit, source, and same-file relations onto PairBlocks."""
+    traceability, baseline, planned = _schedule_fixture()
+
+    graph = scheduling.build_block_graph(
+        traceability,
+        ("P0-TST-02", "P0-TST-03", "P0-TST-04"),
+        baseline,
+        planned,
+    )
+
+    relations = {(edge.prerequisite, edge.consumer, edge.kind) for edge in graph.edges}
+    assert ("P0-TST-01", "P0-TST-02", "declared") in relations
+    assert ("P0-TST-01", "P0-TST-02", "source") in relations
+    assert ("P0-TST-03", "P0-TST-04", "write_conflict") in relations
+    assert ("P0-TST-04", "P0-TST-03", "write_conflict") not in relations
+
+
+def test_block_graph_rejects_unselected_endpoint() -> None:
+    """Reject an edge whose consumer is absent from the selected blocks."""
+    with pytest.raises(ValueError, match="unselected PairBlock"):
+        scheduling.BlockGraph(
+            blocks=("P0-TST-01",),
+            edges=(
+                scheduling.ScheduleEdge(
+                    prerequisite="P0-TST-01",
+                    consumer="P0-TST-02",
+                    kind="declared",
+                    evidence="P0-TST-01",
+                ),
+            ),
+        )
+
+
+def test_schedule_blocks_returns_dependency_safe_waves() -> None:
+    """Place independent groups together and their consumer in the next wave."""
+    traceability, baseline, planned = _schedule_fixture()
+    graph = scheduling.build_block_graph(
+        traceability,
+        ("P0-TST-02", "P0-TST-03", "P0-TST-04"),
+        baseline,
+        planned,
+    )
+
+    schedule = scheduling.schedule_blocks(graph)
+    groups = {group.group_id: group.blocks for group in schedule.groups}
+    waves = tuple(
+        tuple(groups[group_id] for group_id in wave.groups) for wave in schedule.waves
+    )
+
+    assert set(waves[0]) == {("P0-TST-01",), ("P0-TST-03",)}
+    assert set(waves[1]) == {("P0-TST-02",), ("P0-TST-04",)}
+
+
+def test_schedule_blocks_keeps_cycle_in_one_group() -> None:
+    """Keep mutually dependent blocks together in one execution group."""
+    graph = scheduling.BlockGraph(
+        blocks=("P0-TST-01", "P0-TST-02"),
+        edges=(
+            scheduling.ScheduleEdge(
+                prerequisite="P0-TST-01",
+                consumer="P0-TST-02",
+                kind="source",
+                evidence="edge-1",
+            ),
+            scheduling.ScheduleEdge(
+                prerequisite="P0-TST-02",
+                consumer="P0-TST-01",
+                kind="source",
+                evidence="edge-2",
+            ),
+        ),
+    )
+
+    schedule = scheduling.schedule_blocks(graph)
+
+    assert tuple(group.blocks for group in schedule.groups) == (
+        ("P0-TST-01", "P0-TST-02"),
+    )
+    assert len(schedule.waves) == 1
+
+
 def _traceability(
     *,
     targets: tuple[ContractTarget, ...],

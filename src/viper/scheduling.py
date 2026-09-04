@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 from collections import defaultdict
 from pathlib import Path
+from typing import Literal, Self
+
+from pydantic import Field, model_validator
 
 from ._contract_traceability import (
     ContractTarget,
@@ -12,12 +16,100 @@ from ._contract_traceability import (
     PairBlockId,
     TargetAction,
 )
+from ._schema import SHA256, NonEmptyStr, ProtocolModel
 from ._system_impact.source import declaration_payload as _declaration_payload
 from .system_impact import SourceGraph
+
+ScheduleEdgeKind = Literal["declared", "source", "write_conflict"]
 
 
 class ScheduleError(ValueError):
     """Report an invalid planned source or block schedule."""
+
+
+class ScheduleEdge(ProtocolModel):
+    """Require one PairBlock to precede or remain coupled to another."""
+
+    prerequisite: PairBlockId = Field(description="Block that must run first.")
+    consumer: PairBlockId = Field(description="Block that must run afterward.")
+    kind: ScheduleEdgeKind = Field(description="Reason the order is required.")
+    evidence: NonEmptyStr = Field(description="Record that establishes the order.")
+
+
+class BlockGraph(ProtocolModel):
+    """Store the complete dependency graph for selected PairBlocks."""
+
+    blocks: tuple[PairBlockId, ...] = Field(
+        min_length=1,
+        description="Selected blocks in canonical order.",
+    )
+    edges: tuple[ScheduleEdge, ...] = Field(
+        description="Required ordering relationships in canonical order."
+    )
+
+    @model_validator(mode="after")
+    def validate_graph(self) -> Self:
+        """Require unique blocks, known endpoints, and canonical order."""
+        if self.blocks != tuple(sorted(set(self.blocks))):
+            raise ValueError("blocks must be unique and sorted")
+        known = set(self.blocks)
+        if any(
+            edge.prerequisite not in known or edge.consumer not in known
+            for edge in self.edges
+        ):
+            raise ValueError("schedule edge names an unselected PairBlock")
+        ordered = tuple(
+            sorted(
+                self.edges,
+                key=lambda edge: (
+                    edge.prerequisite,
+                    edge.consumer,
+                    edge.kind,
+                    edge.evidence,
+                ),
+            )
+        )
+        identities = tuple(
+            (edge.prerequisite, edge.consumer, edge.kind, edge.evidence)
+            for edge in self.edges
+        )
+        if self.edges != ordered or len(identities) != len(set(identities)):
+            raise ValueError("schedule edges must be unique and sorted")
+        return self
+
+
+class WorkGroup(ProtocolModel):
+    """Keep one strongly connected set of PairBlocks together."""
+
+    group_id: SHA256 = Field(description="Digest identifying this exact block set.")
+    blocks: tuple[PairBlockId, ...] = Field(
+        min_length=1,
+        description="Blocks that must remain in one execution unit.",
+    )
+
+
+class WorkWave(ProtocolModel):
+    """List groups eligible after all earlier waves complete."""
+
+    index: int = Field(ge=0, description="Zero-based execution order.")
+    groups: tuple[SHA256, ...] = Field(
+        min_length=1,
+        description="Groups eligible to run in this wave.",
+    )
+
+
+class BlockSchedule(ProtocolModel):
+    """Assign every selected PairBlock to one ordered execution wave."""
+
+    graph: BlockGraph = Field(description="Block graph used to derive the schedule.")
+    groups: tuple[WorkGroup, ...] = Field(
+        min_length=1,
+        description="Strongly connected block groups.",
+    )
+    waves: tuple[WorkWave, ...] = Field(
+        min_length=1,
+        description="Dependency-safe execution waves.",
+    )
 
 
 def select_blocks(
@@ -252,10 +344,171 @@ def materialize_plan(
         output.write_bytes(source)
 
 
+def build_block_graph(
+    traceability: ContractTraceabilityGraph,
+    requested: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+    planned: SourceGraph,
+    *,
+    completed: frozenset[PairBlockId] = frozenset(),
+) -> BlockGraph:
+    """Project plan, source, and write-conflict edges onto selected blocks."""
+    blocks = {block.block_id: block for block in traceability.blocks}
+    selected = set(select_blocks(traceability, requested, completed=completed))
+
+    ordered = order_blocks(traceability, tuple(sorted(selected)))
+    positions = {block: index for index, block in enumerate(ordered)}
+    targets = tuple(
+        target for target in traceability.targets if target.block_id in selected
+    )
+    writers: dict[tuple[str, str], list[PairBlockId]] = defaultdict(list)
+    for target in targets:
+        writers[(target.target.path, target.target.symbol)].append(target.block_id)
+    for blocks_for_target in writers.values():
+        blocks_for_target.sort(key=positions.__getitem__)
+    baseline_owners = {identity: values[0] for identity, values in writers.items()}
+    planned_owners = {identity: values[-1] for identity, values in writers.items()}
+    nodes = {
+        node.node_id: (node.path, node.symbol)
+        for graph in (baseline, planned)
+        for node in graph.nodes
+    }
+    edges: set[tuple[PairBlockId, PairBlockId, ScheduleEdgeKind, str]] = set()
+    for block_id in selected:
+        for dependency in blocks[block_id].depends_on:
+            if dependency in selected:
+                edges.add((dependency, block_id, "declared", dependency))
+    for graph, owners in (
+        (baseline, baseline_owners),
+        (planned, planned_owners),
+    ):
+        for edge in graph.edges:
+            consumer = owners.get(nodes.get(edge.source, ("", "")))
+            prerequisite = owners.get(nodes.get(edge.target, ("", "")))
+            if prerequisite is not None and consumer is not None:
+                if prerequisite != consumer:
+                    edges.add((prerequisite, consumer, "source", edge.edge_id))
+
+    paths: dict[str, set[PairBlockId]] = defaultdict(set)
+    for target in targets:
+        paths[target.target.path].add(target.block_id)
+    for path, path_writers in paths.items():
+        ordered_writers = sorted(path_writers)
+        for left_index, left in enumerate(ordered_writers):
+            for right in ordered_writers[left_index + 1 :]:
+                if _precedes(traceability, left, right):
+                    prerequisite, consumer = left, right
+                elif _precedes(traceability, right, left):
+                    prerequisite, consumer = right, left
+                else:
+                    prerequisite, consumer = left, right
+                edges.add((prerequisite, consumer, "write_conflict", path))
+
+    records = tuple(
+        ScheduleEdge(
+            prerequisite=prerequisite,
+            consumer=consumer,
+            kind=kind,
+            evidence=evidence,
+        )
+        for prerequisite, consumer, kind, evidence in sorted(edges)
+    )
+    return BlockGraph(blocks=tuple(sorted(selected)), edges=records)
+
+
+def strong_components(graph: BlockGraph) -> tuple[WorkGroup, ...]:
+    """Return Tarjan strongly connected components in canonical order."""
+    adjacent = {block: [] for block in graph.blocks}
+    for edge in graph.edges:
+        adjacent[edge.prerequisite].append(edge.consumer)
+    for values in adjacent.values():
+        values.sort()
+
+    index = 0
+    indices: dict[PairBlockId, int] = {}
+    lowlinks: dict[PairBlockId, int] = {}
+    stack: list[PairBlockId] = []
+    active: set[PairBlockId] = set()
+    components: list[tuple[PairBlockId, ...]] = []
+
+    def visit(block: PairBlockId) -> None:
+        nonlocal index
+        indices[block] = index
+        lowlinks[block] = index
+        index += 1
+        stack.append(block)
+        active.add(block)
+        for consumer in adjacent[block]:
+            if consumer not in indices:
+                visit(consumer)
+                lowlinks[block] = min(lowlinks[block], lowlinks[consumer])
+            elif consumer in active:
+                lowlinks[block] = min(lowlinks[block], indices[consumer])
+        if lowlinks[block] != indices[block]:
+            return
+        component: list[PairBlockId] = []
+        while True:
+            member = stack.pop()
+            active.remove(member)
+            component.append(member)
+            if member == block:
+                break
+        components.append(tuple(sorted(component)))
+
+    for block in graph.blocks:
+        if block not in indices:
+            visit(block)
+
+    return tuple(
+        WorkGroup(
+            group_id=hashlib.sha256("\0".join(blocks).encode()).hexdigest(),
+            blocks=blocks,
+        )
+        for blocks in sorted(components)
+    )
+
+
+def schedule_blocks(graph: BlockGraph) -> BlockSchedule:
+    """Condense block cycles and return deterministic zero-indegree waves."""
+    groups = strong_components(graph)
+    owner = {block: group.group_id for group in groups for block in group.blocks}
+    successors = {group.group_id: set() for group in groups}
+    indegree = {group.group_id: 0 for group in groups}
+    for edge in graph.edges:
+        prerequisite = owner[edge.prerequisite]
+        consumer = owner[edge.consumer]
+        if prerequisite == consumer or consumer in successors[prerequisite]:
+            continue
+        successors[prerequisite].add(consumer)
+        indegree[consumer] += 1
+
+    waves: list[WorkWave] = []
+    remaining = set(indegree)
+    while remaining:
+        ready = tuple(sorted(group for group in remaining if indegree[group] == 0))
+        if not ready:
+            raise ScheduleError("condensed block graph contains a cycle")
+        waves.append(WorkWave(index=len(waves), groups=ready))
+        for group in ready:
+            remaining.remove(group)
+            for consumer in successors[group]:
+                indegree[consumer] -= 1
+    return BlockSchedule(graph=graph, groups=groups, waves=tuple(waves))
+
+
 __all__ = [
+    "BlockGraph",
+    "BlockSchedule",
     "ScheduleError",
+    "ScheduleEdge",
+    "ScheduleEdgeKind",
+    "WorkGroup",
+    "WorkWave",
+    "build_block_graph",
     "final_targets",
     "materialize_plan",
     "order_blocks",
+    "schedule_blocks",
     "select_blocks",
+    "strong_components",
 ]

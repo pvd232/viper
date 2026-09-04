@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-**Contract status:** In progress.
+**Contract status:** Complete.
 
 | ID | Implementation obligation |
 | --- | --- |
@@ -331,10 +331,15 @@ targets = [
     "src/viper/scheduling.py:ScheduleEdge",
     "src/viper/scheduling.py:BlockGraph",
     "src/viper/scheduling.py:build_block_graph",
+    "src/viper/scheduling.py:__all__",
     "tests/test_system_impact.py:_schedule_fixture",
     "tests/test_system_impact.py:test_block_graph_combines_dependencies_and_write_conflicts",
+    "tests/test_system_impact.py:test_block_graph_rejects_unselected_endpoint",
 ]
-tests = ["tests/test_system_impact.py:test_block_graph_combines_dependencies_and_write_conflicts"]
+tests = [
+    "tests/test_system_impact.py:test_block_graph_combines_dependencies_and_write_conflicts",
+    "tests/test_system_impact.py:test_block_graph_rejects_unselected_endpoint",
+]
 gate = "python -m pytest tests/test_system_impact.py -k block_graph -q"
 depends_on = ["P4-SCH-01"]
 ```
@@ -350,14 +355,21 @@ requirements = ["SCH-03"]
 targets = [
     "src/viper/scheduling.py:hashlib",
     "src/viper/scheduling.py:SHA256",
+    "src/viper/scheduling.py:NonEmptyStr",
+    "src/viper/scheduling.py:ProtocolModel",
     "src/viper/scheduling.py:WorkGroup",
     "src/viper/scheduling.py:WorkWave",
     "src/viper/scheduling.py:BlockSchedule",
     "src/viper/scheduling.py:strong_components",
     "src/viper/scheduling.py:schedule_blocks",
+    "src/viper/scheduling.py:__all__",
     "tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves",
+    "tests/test_system_impact.py:test_schedule_blocks_keeps_cycle_in_one_group",
 ]
-tests = ["tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves"]
+tests = [
+    "tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves",
+    "tests/test_system_impact.py:test_schedule_blocks_keeps_cycle_in_one_group",
+]
 gate = "python -m pytest tests/test_system_impact.py -k schedule_blocks -q"
 depends_on = ["P4-SCH-02"]
 ```
@@ -1334,17 +1346,22 @@ ScheduleEdgeKind = Literal["declared", "source", "write_conflict"]
 class ScheduleEdge(ProtocolModel):
     """Require one PairBlock to precede or remain coupled to another."""
 
-    prerequisite: PairBlockId
-    consumer: PairBlockId
-    kind: ScheduleEdgeKind
-    evidence: NonEmptyStr
+    prerequisite: PairBlockId = Field(description="Block that must run first.")
+    consumer: PairBlockId = Field(description="Block that must run afterward.")
+    kind: ScheduleEdgeKind = Field(description="Reason the order is required.")
+    evidence: NonEmptyStr = Field(description="Record that establishes the order.")
 
 
 class BlockGraph(ProtocolModel):
     """Store the complete dependency graph for selected PairBlocks."""
 
-    blocks: tuple[PairBlockId, ...] = Field(min_length=1)
-    edges: tuple[ScheduleEdge, ...]
+    blocks: tuple[PairBlockId, ...] = Field(
+        min_length=1,
+        description="Selected blocks in canonical order.",
+    )
+    edges: tuple[ScheduleEdge, ...] = Field(
+        description="Required ordering relationships in canonical order."
+    )
 
     @model_validator(mode="after")
     def validate_graph(self) -> Self:
@@ -1449,6 +1466,21 @@ def build_block_graph(
     return BlockGraph(blocks=tuple(sorted(selected)), edges=records)
 ```
 
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=update target=src/viper/scheduling.py:__all__ -->
+```python contract-target
+__all__ = [
+    "BlockGraph",
+    "ScheduleError",
+    "ScheduleEdge",
+    "ScheduleEdgeKind",
+    "build_block_graph",
+    "final_targets",
+    "materialize_plan",
+    "order_blocks",
+    "select_blocks",
+]
+```
+
 **File: `tests/test_system_impact.py`**
 
 <!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=tests/test_system_impact.py:_schedule_fixture -->
@@ -1524,13 +1556,29 @@ def test_block_graph_combines_dependencies_and_write_conflicts() -> None:
         planned,
     )
 
-    relations = {
-        (edge.prerequisite, edge.consumer, edge.kind) for edge in graph.edges
-    }
+    relations = {(edge.prerequisite, edge.consumer, edge.kind) for edge in graph.edges}
     assert ("P0-TST-01", "P0-TST-02", "declared") in relations
     assert ("P0-TST-01", "P0-TST-02", "source") in relations
     assert ("P0-TST-03", "P0-TST-04", "write_conflict") in relations
     assert ("P0-TST-04", "P0-TST-03", "write_conflict") not in relations
+```
+
+<!-- contract-target: requirements=SCH-02 block=P4-SCH-02 action=add target=tests/test_system_impact.py:test_block_graph_rejects_unselected_endpoint -->
+```python contract-target
+def test_block_graph_rejects_unselected_endpoint() -> None:
+    """Reject an edge whose consumer is absent from the selected blocks."""
+    with pytest.raises(ValueError, match="unselected PairBlock"):
+        scheduling.BlockGraph(
+            blocks=("P0-TST-01",),
+            edges=(
+                scheduling.ScheduleEdge(
+                    prerequisite="P0-TST-01",
+                    consumer="P0-TST-02",
+                    kind="declared",
+                    evidence="P0-TST-01",
+                ),
+            ),
+        )
 ```
 
 ### P4-SCH-03 — execution waves
@@ -1538,11 +1586,15 @@ def test_block_graph_combines_dependencies_and_write_conflicts() -> None:
 **File: `src/viper/scheduling.py`**
 
 <!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:hashlib -->
-<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:SHA256 -->
 ```python contract-target
 import hashlib
+```
 
-from ._schema import SHA256
+<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:SHA256 -->
+<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=update target=src/viper/scheduling.py:NonEmptyStr -->
+<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=update target=src/viper/scheduling.py:ProtocolModel -->
+```python contract-target
+from ._schema import SHA256, NonEmptyStr, ProtocolModel
 ```
 
 <!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=src/viper/scheduling.py:WorkGroup -->
@@ -1554,23 +1606,35 @@ from ._schema import SHA256
 class WorkGroup(ProtocolModel):
     """Keep one strongly connected set of PairBlocks together."""
 
-    group_id: SHA256
-    blocks: tuple[PairBlockId, ...] = Field(min_length=1)
+    group_id: SHA256 = Field(description="Digest identifying this exact block set.")
+    blocks: tuple[PairBlockId, ...] = Field(
+        min_length=1,
+        description="Blocks that must remain in one execution unit.",
+    )
 
 
 class WorkWave(ProtocolModel):
     """List groups eligible after all earlier waves complete."""
 
-    index: int = Field(ge=0)
-    groups: tuple[SHA256, ...] = Field(min_length=1)
+    index: int = Field(ge=0, description="Zero-based execution order.")
+    groups: tuple[SHA256, ...] = Field(
+        min_length=1,
+        description="Groups eligible to run in this wave.",
+    )
 
 
 class BlockSchedule(ProtocolModel):
     """Assign every selected PairBlock to one ordered execution wave."""
 
-    graph: BlockGraph
-    groups: tuple[WorkGroup, ...] = Field(min_length=1)
-    waves: tuple[WorkWave, ...] = Field(min_length=1)
+    graph: BlockGraph = Field(description="Block graph used to derive the schedule.")
+    groups: tuple[WorkGroup, ...] = Field(
+        min_length=1,
+        description="Strongly connected block groups.",
+    )
+    waves: tuple[WorkWave, ...] = Field(
+        min_length=1,
+        description="Dependency-safe execution waves.",
+    )
 
 
 def strong_components(graph: BlockGraph) -> tuple[WorkGroup, ...]:
@@ -1653,6 +1717,26 @@ def schedule_blocks(graph: BlockGraph) -> BlockSchedule:
     return BlockSchedule(graph=graph, groups=groups, waves=tuple(waves))
 ```
 
+<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=update target=src/viper/scheduling.py:__all__ -->
+```python contract-target
+__all__ = [
+    "BlockGraph",
+    "BlockSchedule",
+    "ScheduleError",
+    "ScheduleEdge",
+    "ScheduleEdgeKind",
+    "WorkGroup",
+    "WorkWave",
+    "build_block_graph",
+    "final_targets",
+    "materialize_plan",
+    "order_blocks",
+    "schedule_blocks",
+    "select_blocks",
+    "strong_components",
+]
+```
+
 **File: `tests/test_system_impact.py`**
 
 <!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves -->
@@ -1670,12 +1754,41 @@ def test_schedule_blocks_returns_dependency_safe_waves() -> None:
     schedule = scheduling.schedule_blocks(graph)
     groups = {group.group_id: group.blocks for group in schedule.groups}
     waves = tuple(
-        tuple(groups[group_id] for group_id in wave.groups)
-        for wave in schedule.waves
+        tuple(groups[group_id] for group_id in wave.groups) for wave in schedule.waves
     )
 
     assert set(waves[0]) == {("P0-TST-01",), ("P0-TST-03",)}
     assert set(waves[1]) == {("P0-TST-02",), ("P0-TST-04",)}
+```
+
+<!-- contract-target: requirements=SCH-03 block=P4-SCH-03 action=add target=tests/test_system_impact.py:test_schedule_blocks_keeps_cycle_in_one_group -->
+```python contract-target
+def test_schedule_blocks_keeps_cycle_in_one_group() -> None:
+    """Keep mutually dependent blocks together in one execution group."""
+    graph = scheduling.BlockGraph(
+        blocks=("P0-TST-01", "P0-TST-02"),
+        edges=(
+            scheduling.ScheduleEdge(
+                prerequisite="P0-TST-01",
+                consumer="P0-TST-02",
+                kind="source",
+                evidence="edge-1",
+            ),
+            scheduling.ScheduleEdge(
+                prerequisite="P0-TST-02",
+                consumer="P0-TST-01",
+                kind="source",
+                evidence="edge-2",
+            ),
+        ),
+    )
+
+    schedule = scheduling.schedule_blocks(graph)
+
+    assert tuple(group.blocks for group in schedule.groups) == (
+        ("P0-TST-01", "P0-TST-02"),
+    )
+    assert len(schedule.waves) == 1
 ```
 
 ## Sources
