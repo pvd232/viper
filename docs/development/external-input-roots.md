@@ -1549,14 +1549,18 @@ def test_external_input_identity_survives_execution() -> None:
     snapshot_commit = "7" * 40
     store.put(hf_file(snapshot_commit, captured_path), raw)
 
-    verify_external_inputs(
-        RunAttempt.model_construct(attempt_id=attempt_id),
-        RunSpec.model_construct(run_id=run_id),
-        stage_id,
-        resolved,
-        snapshot(snapshot_commit),
-        fetcher=store.fetch,
+    assert (
+        verify_external_inputs(
+            RunAttempt.model_construct(attempt_id=attempt_id),
+            RunSpec.model_construct(run_id=run_id),
+            stage_id,
+            resolved,
+            snapshot(snapshot_commit),
+            fetcher=store.fetch,
+        )
+        is None
     )
+    assert store.fetch(hf_file(snapshot_commit, captured_path)) == raw
 ```
 
 <!-- contract-target: requirements=EIR-03 block=P3-EIR-03 action=add target=tests/test_verification_acceptance.py:test_external_input_identity_rejects_tampering -->
