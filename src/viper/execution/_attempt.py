@@ -17,6 +17,7 @@ from ..journal import DurableJournal
 from ..preflight import preflight_plan
 from ..references import (
     GitFileRef,
+    ResolvedFileRef,
     ResolvedRunSpecRef,
     ResolvedStageInvocationRef,
     ResolvedStageRef,
@@ -35,6 +36,8 @@ from ..stages import (
     DownloadSpec,
     InternalSpec,
     ParameterizedSpec,
+    ResolvedBaseSpec,
+    ResolvedInternalSpec,
 )
 from ..storage import (
     LocalArtifactStore,
@@ -169,6 +172,7 @@ def execute_attempt(
     resolved_stage_refs: list[ResolvedStageRef] = []
     invocation_refs: list[ResolvedStageInvocationRef] = []
     completed: dict[StageId, ResolvedStageRef] = {}
+    completed_results: dict[StageId, ResolvedBaseSpec] = {}
     loaded_stages: dict[StageId, BaseSpec] = {}
     measurement_paths: list[Path] = []
     metric_verification_paths: list[Path] = []
@@ -219,6 +223,7 @@ def execute_attempt(
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
             captured_inputs: dict[InputName, SnapshotFileRef] = {}
+            stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
             input_paths: dict[str, Path] = {}
             process = None
             journal.append(
@@ -266,17 +271,22 @@ def execute_attempt(
                 ):
                     raise RunError("stage source differs from the frozen source")
                 if isinstance(stage, InternalSpec):
-                    resolved_inputs, input_paths, captured_inputs = resolve_inputs(
-                        root=root,
-                        workspace=workspace,
-                        run_id=run.run_id,
-                        attempt_id=attempt_id,
-                        stage_id=stage_reference.stage_id,
-                        stage=stage,
-                        completed=completed,
-                        stage_specs=loaded_stages,
-                        fetcher=fetcher,
-                        policy=policy,
+                    (
+                        resolved_inputs,
+                        input_paths,
+                        captured_inputs,
+                        stored_input_references,
+                    ) = resolve_inputs(
+                        root,
+                        workspace,
+                        run.run_id,
+                        attempt_id,
+                        stage_reference.stage_id,
+                        stage,
+                        completed,
+                        loaded_stages,
+                        fetcher,
+                        policy,
                     )
                 try:
                     process = execute_stage_process(
@@ -309,7 +319,6 @@ def execute_attempt(
                                 exc.invocation,
                             )
                         )
-                    verify_captured_inputs(root, captured_inputs)
                     raise
                 invocation_path = (
                     f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
@@ -322,7 +331,6 @@ def execute_attempt(
                     process.invocation,
                 )
                 invocation_refs.append(invocation_ref)
-                verify_captured_inputs(root, captured_inputs)
                 stage_completed = datetime.now(UTC)
                 resolved = resolve_stage(
                     stage,
@@ -360,9 +368,11 @@ def execute_attempt(
                 f"/stages/{stage_reference.stage_id}/resolved.yaml"
             )
             resolved_raw = serialize_document(resolved)
-            snapshot_paths: dict[str, Path] = {}
-            for reference in captured_inputs.values():
-                snapshot_paths[reference.path] = root / reference.path
+            verify_captured_inputs(root, captured_inputs)
+            snapshot_paths: dict[str, Path] = {
+                reference.path: root / reference.path
+                for reference in captured_inputs.values()
+            }
             if resolved_retrievals is not None:
                 for retrieval in resolved_retrievals.values():
                     retrieval_path = retrieval.body.path
@@ -395,19 +405,25 @@ def execute_attempt(
             )
             resolved_stage_refs.append(resolved_stage_ref)
             completed[stage_reference.stage_id] = resolved_stage_ref
-            run_after_stage_metrics(
-                root,
-                run,
-                stage_reference.stage_id,
-                stage,
-                experiment,
-                input_paths,
-                measurement_paths,
-                metric_verification_paths,
-                store,
-                timeout_seconds,
-                attempt_id,
-            )
+            completed_results[stage_reference.stage_id] = resolved
+            if isinstance(stage, InternalSpec):
+                assert isinstance(resolved, ResolvedInternalSpec)
+                run_after_stage_metrics(
+                    root,
+                    run,
+                    stage_reference.stage_id,
+                    stage,
+                    resolved,
+                    resolved_stage_ref,
+                    completed_results,
+                    stored_input_references,
+                    experiment,
+                    input_paths,
+                    measurement_paths,
+                    metric_verification_paths,
+                    timeout_seconds,
+                    attempt_id,
+                )
             if process is not None:
                 log_files[
                     f"{run_root}/attempts/{attempt_id}/logs/"

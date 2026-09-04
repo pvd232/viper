@@ -1460,14 +1460,14 @@ checklist revision remains the execution authority.
 - [ ] Join each live measurement through
       `StageInvocationReceipt.context.metric_ids`, the frozen stage
       `metric_ids`, and `ExperimentSpec.metrics`.
-- [ ] Replace `_publish_metric_dependency()` with snapshot-reference
+- [x] Replace `_publish_metric_dependency()` with snapshot-reference
       derivation. Join each selected `SnapshotFileRef` to its enclosing current,
       producer, or pointer-selected stage snapshot.
       <!-- pair-block: P4-RSP-01 -->
       <!-- pair-block-contract: P4-RSP-01 contract=remote-storage.md -->
       <!-- implements: RSP-03 -->
-      <!-- contract-implementation: requirement=RSP-03 rule=metric.reference.reused state=planned owner=src/viper/execution/_metric.py:_resolve_metric_dependencies -->
-      <!-- contract-verification: requirement=RSP-03 rule=metric.reference.reused state=planned test=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
+      <!-- contract-implementation: requirement=RSP-03 rule=metric.reference.reused state=implemented owner=src/viper/execution/_metric.py:_resolve_metric_dependencies -->
+      <!-- contract-verification: requirement=RSP-03 rule=metric.reference.reused state=implemented test=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
 - [ ] Construct `ResolvedMetricDependency.files` from those snapshot locations
       and reuse the existing dependency payload.
 

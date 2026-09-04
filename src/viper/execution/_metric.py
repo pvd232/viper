@@ -16,8 +16,15 @@ from pydantic import BaseModel, ConfigDict, Field
 import viper._subprocess as subprocess
 
 from .._schema import ArtifactName
+from ..artifacts import ResolvedArtifact, ResolvedSingleFileArtifact
 from ..experiments import ExperimentSpec
 from ..ids import InputName, StageId
+from ..inputs import (
+    FutureInputRef,
+    ResolvedExternalInputRef,
+    ResolvedFutureInputRef,
+    ResolvedStoredInputRef,
+)
 from ..metrics import (
     FloatComparator,
     MeasurementSink,
@@ -27,12 +34,16 @@ from ..metrics import (
     ResolvedMetricDependency,
     compare_metric_values,
 )
-from ..references import ResolvedFileRef
+from ..references import (
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    resolve_snapshot_file_ref,
+)
 from ..runs import RunSpec
 from ..runtime import process_environment, select_cuda_device
 from ..serialization import serialize_document
-from ..stages import BaseSpec
-from ..storage import LocalArtifactStore
+from ..stages import BaseSpec, InternalSpec, ResolvedBaseSpec, ResolvedInternalSpec
 from ._publication import write_synchronized
 from .errors import RunError
 
@@ -186,53 +197,56 @@ def _artifact_paths(root: Path, stage: BaseSpec) -> dict[str, Path]:
     return {name: root / artifact.path for name, artifact in stage.artifacts.items()}
 
 
-def _publish_metric_dependency(
-    root: Path,
-    path: Path,
-    store: LocalArtifactStore,
-) -> tuple[ResolvedFileRef, ...]:
-    """Publish every regular file represented by one metric dependency path."""
-    resolved = path.resolve()
-    if not resolved.is_relative_to(root):
-        raise RunError("metric dependency path escapes the repository root")
-    if resolved.is_symlink():
-        raise RunError("metric dependencies must not be symbolic links")
-    if resolved.is_file():
-        relative = resolved.relative_to(root).as_posix()
-        return store.resolved_files({relative: resolved.read_bytes()})
-    if not resolved.is_dir():
-        raise RunError("metric dependency path is absent")
-    files: dict[str, bytes] = {}
-    for member in sorted(resolved.rglob("*")):
-        if member.is_symlink():
-            raise RunError("metric dependency bundles must not contain symlinks")
-        if member.is_file():
-            files[member.relative_to(root).as_posix()] = member.read_bytes()
-    if not files:
-        raise RunError("metric dependency bundle contains no regular files")
-    return store.resolved_files(files)
+def _artifact_files(artifact: ResolvedArtifact) -> tuple[SnapshotFileRef, ...]:
+    """Return every snapshot member represented by one resolved artifact."""
+    if isinstance(artifact, ResolvedSingleFileArtifact):
+        return (artifact.file,)
+    return tuple(member.file for member in artifact.members)
 
 
 def _resolve_metric_dependencies(
-    root: Path,
-    stage: BaseSpec,
+    stage: InternalSpec,
+    resolved_stage: ResolvedInternalSpec,
+    current_stage: ResolvedStageRef,
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
     metric: MetricSpec,
-    input_paths: Mapping[str, Path],
-    store: LocalArtifactStore,
+    stored_inputs: Mapping[InputName, tuple[ResolvedFileRef, ...]],
 ) -> tuple[ResolvedMetricDependency, ...]:
-    """Bind each declared metric dependency to immutable file references."""
-    artifact_paths = _artifact_paths(root, stage)
+    """Reuse the immutable snapshot references selected by each dependency."""
     resolved: list[ResolvedMetricDependency] = []
     for dependency in metric.dependencies:
-        selected = (
-            input_paths[dependency.name]
-            if dependency.source == "input"
-            else artifact_paths[dependency.name]
-        )
+        if dependency.source == "artifact":
+            files = tuple(
+                resolve_snapshot_file_ref(current_stage.snapshot, file)
+                for file in _artifact_files(resolved_stage.artifacts[dependency.name])
+            )
+        else:
+            declared = stage.inputs[dependency.name]
+            realized = resolved_stage.inputs[dependency.name]
+            if isinstance(realized, ResolvedExternalInputRef):
+                files = (
+                    resolve_snapshot_file_ref(
+                        current_stage.snapshot,
+                        realized.file,
+                    ),
+                )
+            elif isinstance(realized, ResolvedFutureInputRef):
+                assert isinstance(declared, FutureInputRef)
+                producer = completed_results[declared.producer_stage_id]
+                files = tuple(
+                    resolve_snapshot_file_ref(realized.producer.snapshot, file)
+                    for file in _artifact_files(producer.artifacts[declared.name])
+                )
+            elif isinstance(realized, ResolvedStoredInputRef):
+                files = stored_inputs[dependency.name]
+            else:
+                raise TypeError(
+                    f"unsupported resolved input: {type(realized).__name__}"
+                )
         resolved.append(
             ResolvedMetricDependency(
                 dependency=dependency,
-                files=_publish_metric_dependency(root, selected, store),
+                files=files,
             )
         )
     return tuple(resolved)
@@ -242,27 +256,31 @@ def run_after_stage_metrics(
     root: Path,
     run: RunSpec,
     stage_id: StageId,
-    stage: BaseSpec,
+    stage: InternalSpec,
+    resolved_stage: ResolvedInternalSpec,
+    current_stage: ResolvedStageRef,
+    completed_results: Mapping[StageId, ResolvedBaseSpec],
+    stored_inputs: Mapping[InputName, tuple[ResolvedFileRef, ...]],
     experiment: ExperimentSpec,
     input_paths: Mapping[str, Path],
     measurement_paths: list[Path],
     metric_verification_paths: list[Path],
-    store: LocalArtifactStore,
     timeout_seconds: float | None,
     attempt_id: int,
 ) -> None:
-    """Invoke each selected recomputed metric in a controlled child process."""
+    """Invoke selected recomputed metrics with existing immutable references."""
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
     for metric_id in stage.metric_ids:
         metric = metrics[metric_id]
         if metric.mode != "recompute":
             continue
         dependencies = _resolve_metric_dependencies(
-            root,
             stage,
+            resolved_stage,
+            current_stage,
+            completed_results,
             metric,
-            input_paths,
-            store,
+            stored_inputs,
         )
         available_artifacts = _artifact_paths(root, stage)
         metric_inputs = {
@@ -276,7 +294,7 @@ def run_after_stage_metrics(
             if dependency.source == "artifact"
         }
         try:
-            process = execute_metric_process(
+            production = execute_metric_process(
                 root,
                 run,
                 stage_id,
@@ -303,10 +321,10 @@ def run_after_stage_metrics(
             attempt_id=attempt_id,
             stage_id=stage_id,
             metric_id=metric_id,
-        ).append(process.receipt.value)
+        ).append(production.receipt.value)
         measurement_paths.append(path)
         try:
-            verification = execute_metric_process(
+            recomputation = execute_metric_process(
                 root,
                 run,
                 stage_id,
@@ -324,15 +342,15 @@ def run_after_stage_metrics(
         comparator = cast(FloatComparator, metric.comparator)
         passed = compare_metric_values(
             measurement.value,
-            verification.receipt.value,
+            recomputation.receipt.value,
             comparator,
         )
         receipt = MetricVerificationReceipt(
             metric_id=metric_id,
             stage_id=stage_id,
             measurement=measurement,
-            production=process.receipt,
-            recomputation=verification.receipt,
+            production=production.receipt,
+            recomputation=recomputation.receipt,
             comparator=comparator,
             passed=passed,
             completed_at=datetime.now(UTC),

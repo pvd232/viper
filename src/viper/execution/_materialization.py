@@ -33,7 +33,12 @@ from ..inputs import (
     ResolvedInputRef,
     ResolvedStoredInputRef,
 )
-from ..references import ResolvedArtifactPointerRef, ResolvedStageRef, SnapshotFileRef
+from ..references import (
+    ResolvedArtifactPointerRef,
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+)
 from ..serialization import parse_yaml_bytes
 from ..stages import (
     BaseSpec,
@@ -121,11 +126,13 @@ def resolve_inputs(
     dict[InputName, ResolvedInputRef],
     dict[str, Path],
     dict[InputName, SnapshotFileRef],
+    dict[InputName, tuple[ResolvedFileRef, ...]],
 ]:
-    """Materialize stage inputs and bind each one to its verified producer."""
+    """Materialize inputs and retain their existing immutable references."""
     resolved: dict[InputName, ResolvedInputRef] = {}
     paths: dict[str, Path] = {}
     captured: dict[InputName, SnapshotFileRef] = {}
+    stored: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
     for name, input_ref in stage.inputs.items():
         if input_ref.kind == "future":
             producer = completed.get(input_ref.producer_stage_id)
@@ -166,7 +173,8 @@ def resolve_inputs(
                 )
             )
             paths[name] = root / input_ref.path
-    return resolved, paths, captured
+            stored[name] = verified.references
+    return resolved, paths, captured, stored
 
 
 def verify_captured_inputs(

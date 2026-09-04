@@ -190,3 +190,29 @@ __all__ = [
     "StorageModel",
     "StorageRef",
 ]
+
+
+def resolve_snapshot_file_ref(
+    snapshot: StageResultSnapshot,
+    file: SnapshotFileRef,
+) -> ResolvedFileRef:
+    """Address one snapshot member without reading or republishing its bytes."""
+    stored_at: StorageModel
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        stored_at = LocalFileRef(
+            store=snapshot.store,
+            commit=snapshot.commit,
+            path=file.path,
+        )
+    else:
+        stored_at = HuggingFaceFileRef(
+            repository=snapshot.repository,
+            commit=snapshot.commit,
+            path=file.path,
+            repo_type=snapshot.repo_type,
+        )
+    return ResolvedFileRef(
+        sha256=file.sha256,
+        bytes=file.bytes,
+        stored_at=stored_at,
+    )
