@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-
-import viper.scheduling as scheduling
 from tools.plan import check as preflight
+from viper import scheduling
 from viper._contract_traceability import (
     ContractRequirement,
     ContractTarget,
@@ -508,9 +507,11 @@ def test_pre_pairing_modules_document_every_operation() -> None:
     ):
         tree = ast.parse(Path(relative_path).read_text(), filename=relative_path)
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if ast.get_docstring(node) is None:
-                    missing.append(f"{relative_path}:{node.name}")
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and ast.get_docstring(node) is None
+            ):
+                missing.append(f"{relative_path}:{node.name}")
 
     assert missing == []
 

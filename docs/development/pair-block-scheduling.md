@@ -156,10 +156,12 @@ imported name that disappears without its own removal target. Version 1
 rejects nested additions because `ContractTarget` does not yet carry a
 class-body insertion point.
 
-Before Pyright, `tools/plan/check.py` requires the materialized files to pass
-Ruff without rewriting them, then imports every added or changed `viper` module
-in its own isolated process. An import failure records the module and traceback
-under `stage="imports"`.
+Before Pyright, `tools/plan/check.py` preserves the exact materialization in
+`raw/` and checks its contract parity and imports. It copies `raw/` to
+`candidate/`, lets Ruff format that copy and sort its imports, then checks Ruff
+and contract parity again. Declaration bodies must still match the contract;
+file spacing may change, and imports are compared by the names they bind. An
+import failure records the module and traceback under `stage="imports"`.
 
 The existing `analyze_source()` operation analyzes that materialized tree with
 the same pinned `CodeQLIdentity` used for the baseline. `build_block_graph()`
@@ -185,7 +187,7 @@ evidence used to update it, not an automatic checklist mutation.
 
 | Rule | Executable condition |
 | --- | --- |
-| `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into the exact terminal planned source without changing either tree during validation; unordered repeat writers and unowned import removals fail; Ruff and isolated imports pass before Pyright. |
+| `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into exact raw declarations; unordered repeat writers and unowned import removals fail; Ruff formats only a copied candidate; contract parity, isolated imports, and read-only Ruff checks pass before Pyright. |
 | `schedule.graph.closed` <!-- verifier-rule: schedule.graph.closed requirement=SCH-02 --> | Every graph endpoint is selected; explicit and planned source dependencies point prerequisite-first; blocks writing one file receive one deterministic serial order. |
 | `schedule.waves.complete` <!-- verifier-rule: schedule.waves.complete requirement=SCH-03 --> | Every selected block occurs in exactly one SCC group and one wave; every predecessor group occurs in an earlier wave. |
 
@@ -251,6 +253,7 @@ requirements = ["SCH-01"]
 targets = [
     "src/viper/scheduling.py:annotations",
     "src/viper/scheduling.py:ast",
+    "src/viper/scheduling.py:itertools",
     "src/viper/scheduling.py:shutil",
     "src/viper/scheduling.py:defaultdict",
     "src/viper/scheduling.py:Path",
@@ -285,7 +288,7 @@ targets = [
     "tests/conftest.py:DOMAIN_BY_MODULE",
     "tests/test_plan_check.py:Path",
     "tests/test_plan_check.py:check",
-    "tests/test_plan_check.py:test_ruff_does_not_rewrite_planned_source",
+    "tests/test_plan_check.py:test_ruff_formats_only_candidate_copy",
     "tools/plan/check.py:annotations",
     "tools/plan/check.py:argparse",
     "tools/plan/check.py:hashlib",
@@ -302,6 +305,11 @@ targets = [
     "tools/plan/check.py:impact",
     "tools/plan/check.py:check_plan",
     "tools/plan/check.py:subprocess",
+    "tools/plan/check.py:ContractTarget",
+    "tools/plan/check.py:SourceDeclarationError",
+    "tools/plan/check.py:declaration_payload",
+    "tools/plan/check.py:extract_declaration_bytes",
+    "tools/plan/check.py:import_binding",
     "tools/plan/check.py:ContractTraceabilityGraph",
     "tools/plan/check.py:PairBlockId",
     "tools/plan/check.py:_implemented_pair_blocks",
@@ -323,6 +331,8 @@ targets = [
     "tools/plan/check.py:_changed_modules",
     "tools/plan/check.py:_import_failure",
     "tools/plan/check.py:_ruff",
+    "tools/plan/check.py:_format",
+    "tools/plan/check.py:_parity",
     "tools/plan/check.py:validate",
     "tools/plan/check.py:main",
 ]
@@ -335,9 +345,9 @@ tests = [
     "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
     "tests/test_system_impact.py:test_pre_pairing_modules_document_every_operation",
     "tests/test_system_impact.py:test_pre_pairing_command_loads",
-    "tests/test_plan_check.py:test_ruff_does_not_rewrite_planned_source",
+    "tests/test_plan_check.py:test_ruff_formats_only_candidate_copy",
 ]
-gate = "python -m pytest tests/test_system_impact.py tests/test_plan_check.py -k 'materialize_plan or pre_pairing_modules or ruff_does_not_rewrite' -q"
+gate = "python -m pytest tests/test_system_impact.py tests/test_plan_check.py -k 'materialize_plan or pre_pairing_modules or ruff_formats_only_candidate' -q"
 depends_on = ["P0-SIG-06"]
 ```
 
@@ -416,6 +426,7 @@ deterministic frontier available at each step.
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:annotations -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:ast -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:itertools -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:shutil -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:defaultdict -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=src/viper/scheduling.py:Path -->
@@ -429,6 +440,7 @@ deterministic frontier available at each step.
 from __future__ import annotations
 
 import ast
+import itertools
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -577,7 +589,7 @@ def final_targets(
     for identity, chain in sorted(chains.items()):
         chain.sort(key=lambda target: positions[target.block_id])
         # Several blocks may edit one target only when depends_on orders them.
-        for earlier, later in zip(chain, chain[1:], strict=False):
+        for earlier, later in itertools.pairwise(chain):
             if not _precedes(traceability, earlier.block_id, later.block_id):
                 raise ScheduleError(
                     "repeat target writers require an explicit dependency path: "
@@ -781,11 +793,7 @@ def materialize_plan(
         )
         if any(
             current[0] < previous[1]
-            for previous, current in zip(
-                ordered_replacements,
-                ordered_replacements[1:],
-                strict=False,
-            )
+            for previous, current in itertools.pairwise(ordered_replacements)
         ):
             raise ScheduleError("planned declaration replacements overlap")
 
@@ -936,8 +944,8 @@ __all__ = [
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:scheduling -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:preflight -->
 ```python contract-target
-import viper.scheduling as scheduling
-from tools import check_plan as preflight
+from tools.plan import check as preflight
+from viper import scheduling
 ```
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
@@ -1302,12 +1310,19 @@ def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> 
 def test_pre_pairing_modules_document_every_operation() -> None:
     """Require docstrings on public, private, and nested pre-pairing operations."""
     missing: list[str] = []
-    for relative_path in ("src/viper/scheduling.py", "tools/plan/check.py"):
+    for relative_path in (
+        "src/viper/scheduling.py",
+        "tools/plan/check.py",
+        "tools/plan/accept.py",
+        "tools/plan/publish.py",
+    ):
         tree = ast.parse(Path(relative_path).read_text(), filename=relative_path)
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if ast.get_docstring(node) is None:
-                    missing.append(f"{relative_path}:{node.name}")
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and ast.get_docstring(node) is None
+            ):
+                missing.append(f"{relative_path}:{node.name}")
 
     assert missing == []
 ```
@@ -1419,7 +1434,7 @@ DOMAIN_BY_MODULE = {
 
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_plan_check.py:Path -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_plan_check.py:check -->
-<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_plan_check.py:test_ruff_does_not_rewrite_planned_source -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tests/test_plan_check.py:test_ruff_formats_only_candidate_copy -->
 ```python contract-target
 """Verify the pre-pairing plan command."""
 
@@ -1428,12 +1443,22 @@ from pathlib import Path
 from tools.plan import check
 
 
-def test_ruff_does_not_rewrite_planned_source() -> None:
-    """Reject unformatted code without changing the planned candidate."""
+def test_ruff_formats_only_candidate_copy() -> None:
+    """Format only the final copy, then keep every Ruff check read-only."""
     python = Path(".venv/bin/python")
     target = "src/viper/example.py"
 
+    formatting = dict(check._format(python, (target,)))
     commands = dict(check._ruff(python, (target,)))
+
+    assert formatting["ruff-format"] == (
+        str(python),
+        "-m",
+        "ruff",
+        "format",
+        target,
+    )
+    assert "--fix" in formatting["ruff-imports"]
 
     assert commands["ruff-format"] == (
         str(python),
@@ -1503,6 +1528,11 @@ def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:impact -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:check_plan -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:subprocess -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:ContractTarget -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:SourceDeclarationError -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:declaration_payload -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:extract_declaration_bytes -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:import_binding -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:ContractTraceabilityGraph -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:PairBlockId -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_implemented_pair_blocks -->
@@ -1524,6 +1554,8 @@ def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_changed_modules -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_import_failure -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_ruff -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_format -->
+<!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:_parity -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:validate -->
 <!-- contract-target: requirements=SCH-01 block=P4-SCH-01 action=add target=tools/plan/check.py:main -->
 ```python contract-target
@@ -1545,6 +1577,7 @@ from typing import Any
 import viper.system_impact.models as impact
 from viper import _subprocess as subprocess
 from viper._contract_traceability import (
+    ContractTarget,
     ContractTraceabilityGraph,
     PairBlockId,
     _implemented_pair_blocks,
@@ -1555,6 +1588,12 @@ from viper._system_impact.codeql import (
     _tree_digest,
     analyze_source,
     source_digest,
+)
+from viper._system_impact.source import (
+    SourceDeclarationError,
+    declaration_payload,
+    extract_declaration_bytes,
+    import_binding,
 )
 from viper.scheduling import (
     ScheduleError,
@@ -1779,6 +1818,62 @@ def _ruff(
     )
 
 
+def _format(
+    python: Path,
+    targets: tuple[str, ...],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Build the two commands that format the final candidate copy."""
+    return (
+        (
+            "ruff-format",
+            (str(python), "-m", "ruff", "format", *targets),
+        ),
+        (
+            "ruff-imports",
+            (
+                str(python),
+                "-m",
+                "ruff",
+                "check",
+                "--fix",
+                "--select",
+                "I001",
+                *targets,
+            ),
+        ),
+    )
+
+
+def _parity(
+    plan_root: Path,
+    source_root: Path,
+    targets: tuple[ContractTarget, ...],
+) -> tuple[str, ...]:
+    """Return targets that differ from the contract."""
+    failures: list[str] = []
+    for target in targets:
+        path = source_root / target.target.path
+        symbol = target.target.symbol
+        try:
+            actual = extract_declaration_bytes(path.read_bytes(), symbol)
+        except (OSError, SyntaxError, SourceDeclarationError):
+            actual = None
+        if target.action == "remove":
+            if actual is not None:
+                failures.append(str(target.target))
+            continue
+        expected = declaration_payload(plan_root, target)
+        assert expected is not None
+        if actual is None:
+            failures.append(str(target.target))
+        elif actual.startswith((b"import ", b"from ")):
+            if import_binding(actual, symbol) != import_binding(expected, symbol):
+                failures.append(str(target.target))
+        elif actual != expected:
+            failures.append(str(target.target))
+    return tuple(sorted(failures))
+
+
 def validate(
     *,
     root: Path,
@@ -1837,7 +1932,7 @@ def validate(
         artifacts=results / "baseline-codeql",
     )
 
-    candidate = results / "candidate"
+    raw = results / "raw"
     try:
         materialize_plan(
             root,
@@ -1845,7 +1940,7 @@ def validate(
             traceability,
             selected,
             baseline,
-            candidate,
+            raw,
             completed=completed,
         )
     except ScheduleError as error:
@@ -1855,6 +1950,38 @@ def validate(
             "revision": revision,
             "blocks": selected,
             "error": str(error),
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
+    selected_targets = tuple(
+        target for target in traceability.targets if target.block_id in selected_ids
+    )
+    raw_parity = _parity(root, raw, selected_targets)
+    if raw_parity:
+        result = {
+            "passed": False,
+            "stage": "raw-parity",
+            "revision": revision,
+            "blocks": selected,
+            "targets": raw_parity,
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
+    raw_modules = _changed_modules(root, raw)
+    import_failure = _import_failure(root, raw, python, raw_modules)
+    if import_failure is not None:
+        result = {
+            "passed": False,
+            "revision": revision,
+            "blocks": selected,
+            "stage": "raw-imports",
+            "error": import_failure,
         }
         (results / "result.json").write_text(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
@@ -1871,6 +1998,25 @@ def validate(
             }
         )
     )
+    candidate = results / "candidate"
+    shutil.copytree(raw, candidate)
+    for stage, command in _format(python, python_targets):
+        completed = _run(command, cwd=candidate)
+        if completed.returncode != 0:
+            result = {
+                "passed": False,
+                "stage": stage,
+                "revision": revision,
+                "blocks": selected,
+                "command": tuple(completed.args),
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
+            }
+            (results / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
+            return result
+
     for stage, command in _ruff(python, python_targets):
         completed = _run(command, cwd=candidate)
         if completed.returncode != 0:
@@ -1887,6 +2033,20 @@ def validate(
                 json.dumps(result, indent=2, sort_keys=True) + "\n"
             )
             return result
+
+    parity = _parity(root, candidate, selected_targets)
+    if parity:
+        result = {
+            "passed": False,
+            "stage": "parity",
+            "revision": revision,
+            "blocks": selected,
+            "targets": parity,
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
 
     modules = _changed_modules(root, candidate)
     import_failure = _import_failure(root, candidate, python, modules)
@@ -1970,6 +2130,7 @@ def validate(
         "stage": "complete",
         "revision": revision,
         "blocks": selected,
+        "raw_imports": raw_modules,
         "imports": modules,
         "pyright": {
             "command": tuple(pyright.args),
@@ -2150,9 +2311,12 @@ def build_block_graph(
         for edge in graph.edges:
             consumer = owners.get(nodes.get(edge.source, ("", "")))
             prerequisite = owners.get(nodes.get(edge.target, ("", "")))
-            if prerequisite is not None and consumer is not None:
-                if prerequisite != consumer:
-                    edges.add((prerequisite, consumer, "source", edge.edge_id))
+            if (
+                prerequisite is not None
+                and consumer is not None
+                and prerequisite != consumer
+            ):
+                edges.add((prerequisite, consumer, "source", edge.edge_id))
 
     paths: dict[str, set[PairBlockId]] = defaultdict(set)
     for target in targets:
@@ -2438,9 +2602,9 @@ def schedule_blocks(graph: BlockGraph) -> BlockSchedule:
 __all__ = [
     "BlockGraph",
     "BlockSchedule",
-    "ScheduleError",
     "ScheduleEdge",
     "ScheduleEdgeKind",
+    "ScheduleError",
     "WorkGroup",
     "WorkWave",
     "build_block_graph",

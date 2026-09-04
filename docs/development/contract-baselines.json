@@ -50,7 +50,7 @@
         "SCH-02",
         "SCH-03"
       ],
-      "sha256": "21debf0b72653eb1b8f39609dcbd242cf42d5432bc7334db7431d50572da58e6"
+      "sha256": "7e47886ff98e8079629b67d4ab0849ec7eb90648e5353ed993f01598c6c2143d"
     },
     {
       "path": "docs/development/child-process-launching.md",
@@ -93,7 +93,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "0b98349d97ec6f368cdf3bc26dc870ec11e6aa77e3dc693c684012862fa5ff7b"
+      "sha256": "ae646a19cb77c233d02999063a816b940016333d0041fa780aecc3f571a6e3ce"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",

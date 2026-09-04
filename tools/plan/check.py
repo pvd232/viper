@@ -16,6 +16,7 @@ from typing import Any
 import viper.system_impact.models as impact
 from viper import _subprocess as subprocess
 from viper._contract_traceability import (
+    ContractTarget,
     ContractTraceabilityGraph,
     PairBlockId,
     _implemented_pair_blocks,
@@ -26,6 +27,12 @@ from viper._system_impact.codeql import (
     _tree_digest,
     analyze_source,
     source_digest,
+)
+from viper._system_impact.source import (
+    SourceDeclarationError,
+    declaration_payload,
+    extract_declaration_bytes,
+    import_binding,
 )
 from viper.scheduling import (
     ScheduleError,
@@ -250,6 +257,62 @@ def _ruff(
     )
 
 
+def _format(
+    python: Path,
+    targets: tuple[str, ...],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Build the two commands that format the final candidate copy."""
+    return (
+        (
+            "ruff-format",
+            (str(python), "-m", "ruff", "format", *targets),
+        ),
+        (
+            "ruff-imports",
+            (
+                str(python),
+                "-m",
+                "ruff",
+                "check",
+                "--fix",
+                "--select",
+                "I001",
+                *targets,
+            ),
+        ),
+    )
+
+
+def _parity(
+    plan_root: Path,
+    source_root: Path,
+    targets: tuple[ContractTarget, ...],
+) -> tuple[str, ...]:
+    """Return targets that differ from the contract."""
+    failures: list[str] = []
+    for target in targets:
+        path = source_root / target.target.path
+        symbol = target.target.symbol
+        try:
+            actual = extract_declaration_bytes(path.read_bytes(), symbol)
+        except (OSError, SyntaxError, SourceDeclarationError):
+            actual = None
+        if target.action == "remove":
+            if actual is not None:
+                failures.append(str(target.target))
+            continue
+        expected = declaration_payload(plan_root, target)
+        assert expected is not None
+        if actual is None:
+            failures.append(str(target.target))
+        elif actual.startswith((b"import ", b"from ")):
+            if import_binding(actual, symbol) != import_binding(expected, symbol):
+                failures.append(str(target.target))
+        elif actual != expected:
+            failures.append(str(target.target))
+    return tuple(sorted(failures))
+
+
 def validate(
     *,
     root: Path,
@@ -308,7 +371,7 @@ def validate(
         artifacts=results / "baseline-codeql",
     )
 
-    candidate = results / "candidate"
+    raw = results / "raw"
     try:
         materialize_plan(
             root,
@@ -316,7 +379,7 @@ def validate(
             traceability,
             selected,
             baseline,
-            candidate,
+            raw,
             completed=completed,
         )
     except ScheduleError as error:
@@ -326,6 +389,38 @@ def validate(
             "revision": revision,
             "blocks": selected,
             "error": str(error),
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
+    selected_targets = tuple(
+        target for target in traceability.targets if target.block_id in selected_ids
+    )
+    raw_parity = _parity(root, raw, selected_targets)
+    if raw_parity:
+        result = {
+            "passed": False,
+            "stage": "raw-parity",
+            "revision": revision,
+            "blocks": selected,
+            "targets": raw_parity,
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
+    raw_modules = _changed_modules(root, raw)
+    import_failure = _import_failure(root, raw, python, raw_modules)
+    if import_failure is not None:
+        result = {
+            "passed": False,
+            "revision": revision,
+            "blocks": selected,
+            "stage": "raw-imports",
+            "error": import_failure,
         }
         (results / "result.json").write_text(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
@@ -342,6 +437,25 @@ def validate(
             }
         )
     )
+    candidate = results / "candidate"
+    shutil.copytree(raw, candidate)
+    for stage, command in _format(python, python_targets):
+        completed = _run(command, cwd=candidate)
+        if completed.returncode != 0:
+            result = {
+                "passed": False,
+                "stage": stage,
+                "revision": revision,
+                "blocks": selected,
+                "command": tuple(completed.args),
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
+            }
+            (results / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
+            return result
+
     for stage, command in _ruff(python, python_targets):
         completed = _run(command, cwd=candidate)
         if completed.returncode != 0:
@@ -358,6 +472,20 @@ def validate(
                 json.dumps(result, indent=2, sort_keys=True) + "\n"
             )
             return result
+
+    parity = _parity(root, candidate, selected_targets)
+    if parity:
+        result = {
+            "passed": False,
+            "stage": "parity",
+            "revision": revision,
+            "blocks": selected,
+            "targets": parity,
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
 
     modules = _changed_modules(root, candidate)
     import_failure = _import_failure(root, candidate, python, modules)
@@ -441,6 +569,7 @@ def validate(
         "stage": "complete",
         "revision": revision,
         "blocks": selected,
+        "raw_imports": raw_modules,
         "imports": modules,
         "pyright": {
             "command": tuple(pyright.args),

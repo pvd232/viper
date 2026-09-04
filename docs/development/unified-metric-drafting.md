@@ -510,7 +510,7 @@ MetricSpec.parameter_model + MetricSpec.params
 active stage input and artifact paths + validated metric params
 -> construct MetricContext
 
-bind_in_stage_metric(..., context)
+bind_live_metric(..., context)
 -> MetricHandle retains MetricContext
 
 MetricHandle.record(*args, **kwargs)
@@ -558,7 +558,7 @@ class MetricHandle:
     ) -> Measurement: ...
 
 
-def bind_in_stage_metric(
+def bind_live_metric(
     repository_root: Path,
     spec: MetricSpec,
     sink: MeasurementSink,
@@ -2029,6 +2029,8 @@ targets = [
     "tests/fixtures.py:metric_source",
     "tests/test_metric_interface.py:mean_value",
     "tests/test_metric_interface.py:RunningMean",
+    "tests/test_metric_interface.py:at_least",
+    "tests/test_metric_interface.py:measure",
     "tests/test_verification_acceptance.py:add_plan_records",
 ]
 tests = ["tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors"]
@@ -2046,6 +2048,13 @@ id = "P4-UMD-02"
 requirements = ["UMD-02"]
 targets = [
     "src/viper/_schema.py:PythonSourceRelPath",
+    "src/viper/_parameter/validation.py:TypeVar",
+    "src/viper/_parameter/validation.py:ParameterSetT",
+    "src/viper/metrics.py:Generic",
+    "src/viper/metrics.py:MetricParamsT",
+    "src/viper/parameters.py:hashlib",
+    "src/viper/parameters.py:Path",
+    "src/viper/parameters.py:PythonRepoRelPath",
     "src/viper/parameters.py:ParameterModelOwner",
     "src/viper/parameters.py:PythonSourceRelPath",
     "src/viper/parameters.py:ParameterModelRef",
@@ -2058,8 +2067,8 @@ targets = [
     "src/viper/metrics.py:StatefulMetric",
     "src/viper/metrics.py:invoke_metric",
     "src/viper/metrics.py:MetricHandle",
-    "src/viper/metrics.py:bind_in_stage_metric",
-    "src/viper/_workers/stages.py:_in_stage_metric_handles",
+    "src/viper/metrics.py:bind_live_metric",
+    "src/viper/_workers/stages.py:_live_metric_handles",
     "src/viper/_workers/stages.py:parameters",
     "src/viper/_workers/stages.py:parameter_model_path",
     "src/viper/_workers/stages.py:MetricContext",
@@ -2069,7 +2078,10 @@ targets = [
     "src/viper/_workers/metrics.py:parameter_model_path",
     "src/viper/_workers/metrics.py:invoke_metric",
     "tests/test_metric_provenance.py:Path",
-    "tests/test_metric_provenance.py:test_metric_params_reach_in_stage_and_recomputed_execution",
+    "tests/test_metric_provenance.py:Field",
+    "tests/test_metric_provenance.py:parameters",
+    "tests/test_metric_provenance.py:MetricContext",
+    "tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution",
     "src/viper/_parameter/validation.py:instantiate_parameters",
     "tests/fixtures.py:parameter_model_ref",
     "tests/fixtures.py:metric_spec",
@@ -2090,7 +2102,7 @@ targets = [
     "tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifies_terminal_result",
     "tests/test_verification_acceptance.py:publish_metric_verification",
 ]
-tests = ["tests/test_metric_provenance.py:test_metric_params_reach_in_stage_and_recomputed_execution"]
+tests = ["tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution"]
 gate = "python -m pytest tests/test_metric_interface.py tests/test_metric_provenance.py -q"
 depends_on = ["P4-UMD-01"]
 ```
@@ -2113,6 +2125,9 @@ targets = [
     "src/viper/_verification/plan.py:verify_stage_objectives",
     "src/viper/_verification/plan.py:verify_run_plan_relationships",
     "tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction",
+    "tests/test_verification.py:pytest",
+    "tests/test_verification.py:verify_stage_objectives",
+    "tests/test_verification.py:MetricSpec",
 ]
 tests = ["tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction"]
 gate = "python -m pytest tests/test_protocol.py tests/test_verification.py -k objective -q"
@@ -2160,7 +2175,7 @@ class MetricDefinition:
 DecoratedMetric = Callable[..., Any] | type[Any]
 
 
-class MetricDraft[MetricParamsT: parameters.Metric](BaseModel):
+class MetricDraft(BaseModel, Generic[MetricParamsT]):
     """Hold one configured metric before protocol freezing."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
@@ -2220,7 +2235,7 @@ def metric_definition(implementation: DecoratedMetric) -> MetricDefinition:
     return definition
 
 
-def measure[MetricParamsT: parameters.Metric](
+def measure(
     implementation: DecoratedMetric,
     *,
     params: MetricParamsT | None = None,
@@ -2233,13 +2248,13 @@ def measure[MetricParamsT: parameters.Metric](
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")
-    if definition.mode == "post_stage":
+    if definition.mode == "recompute":
         if not dependencies:
             raise MetricError("recomputed metrics require dependencies")
         if comparator is None:
             raise MetricError("recomputed metrics require a comparator")
     elif dependencies or comparator is not None:
-        raise MetricError("in_stage metrics do not declare dependencies or a comparator")
+        raise MetricError("live metrics do not declare dependencies or a comparator")
     return MetricDraft(
         implementation=implementation,
         params=selected_params,
@@ -2264,7 +2279,7 @@ def max(metric: MetricDraft[Any]) -> MetricObjectiveDraft:
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:MetricDraft -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=src/viper/benchmark.py:MetricCriterionDraft -->
 ```python contract-target
-from typing import Any
+from typing import Any, Literal
 
 from .metrics import MetricCriterionDraft, MetricDraft
 ```
@@ -2284,11 +2299,37 @@ def at_most(metric: MetricDraft[Any], threshold: float) -> MetricCriterionDraft:
 
 **File: `tests/test_metric_interface.py`**
 
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=tests/test_metric_interface.py:at_least -->
+```python contract-target
+from viper.benchmark import at_least
+```
+
+<!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=tests/test_metric_interface.py:measure -->
+```python contract-target
+from viper.metrics import (
+    FloatComparator,
+    MeasurementSink,
+    MetricContext,
+    MetricDependency,
+    MetricError,
+    MetricImplementationRef,
+    MetricSpec,
+    StatefulMetric,
+    compare_metric_values,
+    load_metric,
+    max,
+    measure,
+    metric,
+    validate_metric_definition,
+)
+```
+
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=add target=tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors -->
 ```python contract-target
 def test_metric_drafts_freeze_through_public_constructors() -> None:
     """Build metric, objective, and criterion drafts from one decorated callable."""
-    @metric(metric_id="accuracy", mode="post_stage")
+
+    @metric(metric_id="accuracy", mode="recompute")
     def accuracy(context: MetricContext[parameters.Metric]) -> float:
         return float(context.params.model_dump()["value"])
 
@@ -2310,7 +2351,7 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
     assert draft.implementation is accuracy
 ```
 
-### P4-UMD-02 — frozen parameter dein_stagery
+### P4-UMD-02 — frozen parameter identity
 
 **File: `src/viper/_schema.py`**
 
@@ -2325,9 +2366,22 @@ PythonSourceRelPath = Annotated[
 
 **File: `src/viper/parameters.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:hashlib -->
+```python contract-target
+import hashlib
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=remove target=src/viper/parameters.py:PythonRepoRelPath -->
+<!-- contract-remove -->
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:PythonSourceRelPath -->
 ```python contract-target
-from ._schema import PythonSourceRelPath
+from ._schema import SHA256, ProtocolModel, PythonSourceRelPath, PythonSymbol
 ```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/parameters.py:ParameterModelOwner -->
@@ -2350,9 +2404,6 @@ class ParameterModelRef(ProtocolModel):
 ```python contract-target
 def model_ref(model: type[ParameterSet]) -> ParameterModelRef:
     """Identify one built-in parameter class by its installed source bytes."""
-    import hashlib
-    from pathlib import Path
-
     path = Path(__file__).resolve()
     raw = path.read_bytes()
     return ParameterModelRef(
@@ -2365,6 +2416,16 @@ def model_ref(model: type[ParameterSet]) -> ParameterModelRef:
 ```
 
 **File: `src/viper/_parameter/validation.py`**
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_parameter/validation.py:TypeVar -->
+```python contract-target
+from typing import TypeVar, cast
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_parameter/validation.py:ParameterSetT -->
+```python contract-target
+ParameterSetT = TypeVar("ParameterSetT", bound=parameters.ParameterSet)
+```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_parameter/validation.py:parameter_model_path -->
 ```python contract-target
@@ -2386,6 +2447,16 @@ def parameter_model_path(
 
 **File: `src/viper/metrics.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/metrics.py:Generic -->
+```python contract-target
+from typing import Any, Generic, Literal, TypeVar, cast
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/metrics.py:MetricParamsT -->
+```python contract-target
+MetricParamsT = TypeVar("MetricParamsT", bound=parameters.Metric)
+```
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricSpec -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
 ```python contract-target
@@ -2403,17 +2474,17 @@ class MetricSpec(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_lifecycle(self) -> MetricSpec:
-        """Require one complete in_stage or recomputed metric configuration."""
+        """Require one complete live or recomputed metric configuration."""
         identities = tuple((item.source, item.name) for item in self.dependencies)
         if len(set(identities)) != len(identities):
             raise ValueError("metric dependencies must be unique")
-        if self.mode == "post_stage":
+        if self.mode == "recompute":
             if not self.dependencies:
                 raise ValueError("recomputed metrics require dependencies")
             if self.comparator is None:
                 raise ValueError("recomputed metrics require a comparator")
         elif self.dependencies or self.comparator is not None:
-            raise ValueError("in_stage metrics do not declare dependencies or a comparator")
+            raise ValueError("live metrics do not declare dependencies or a comparator")
         return self
 
 
@@ -2505,9 +2576,9 @@ class MetricVerificationReceipt(ProtocolModel):
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:StatefulMetric -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/metrics.py:invoke_metric -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricHandle -->
-<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:bind_in_stage_metric -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:bind_live_metric -->
 ```python contract-target
-class MetricContext[MetricParamsT: parameters.Metric](BaseModel):
+class MetricContext(BaseModel, Generic[MetricParamsT]):
     """Supply verified paths and frozen parameters to one metric invocation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -2544,7 +2615,7 @@ def invoke_metric(
 
 
 class MetricHandle:
-    """Bind one in_stage metric implementation, context, and measurement sink."""
+    """Bind one live metric implementation, context, and measurement sink."""
 
     def __init__(
         self,
@@ -2559,7 +2630,7 @@ class MetricHandle:
         self._stateful: StatefulMetric[Any] | None = None
         if inspect.isclass(implementation):
             if not issubclass(implementation, StatefulMetric):
-                raise MetricError("in_stage metric class must subclass StatefulMetric")
+                raise MetricError("live metric class must subclass StatefulMetric")
             self._stateful = implementation(context)
         else:
             self._function = implementation
@@ -2577,7 +2648,7 @@ class MetricHandle:
         step: int | None = None,
         **kwargs: Any,
     ) -> Measurement:
-        """Compute and persist one in_stage measurement."""
+        """Compute and persist one live measurement."""
         if self._stateful is not None:
             if args or kwargs:
                 raise MetricError("stateful metric record uses accumulated state only")
@@ -2588,15 +2659,15 @@ class MetricHandle:
         return self._sink.append(value, epoch=epoch, step=step)
 
 
-def bind_in_stage_metric(
+def bind_live_metric(
     repository_root: Path,
     spec: MetricSpec,
     sink: MeasurementSink,
     context: MetricContext[Any],
 ) -> MetricHandle:
-    """Validate and bind one frozen in_stage metric to its context and sink."""
-    if spec.mode != "in_stage":
-        raise MetricError("metric handle requires in_stage mode")
+    """Validate and bind one frozen live metric to its context and sink."""
+    if spec.mode != "live":
+        raise MetricError("metric handle requires live mode")
     validate_metric_definition(repository_root, spec)
     implementation = load_metric_object(
         repository_root.resolve() / spec.implementation.path,
@@ -2612,19 +2683,19 @@ def bind_in_stage_metric(
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/_workers/stages.py:MetricContext -->
 ```python contract-target
 from .. import parameters
-from .._parameter.validation import parameter_model_path
-from ..metrics import MetricContext
+from .._parameter.validation import instantiate_parameters, parameter_model_path
+from ..metrics import MeasurementSink, MetricContext, MetricHandle, bind_live_metric
 ```
 
-<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/stages.py:_in_stage_metric_handles -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/stages.py:_live_metric_handles -->
 ```python contract-target
-def _in_stage_metric_handles(
+def _live_metric_handles(
     root: Path,
     run: RunSpec,
     stage: ParameterizedSpec,
     binding: StageContextBinding,
 ) -> dict[str, MetricHandle]:
-    """Bind every selected in_stage metric to frozen parameters and stage paths."""
+    """Bind every selected live metric to frozen parameters and stage paths."""
     if not stage.metric_ids:
         return {}
 
@@ -2642,7 +2713,7 @@ def _in_stage_metric_handles(
         spec = metrics.get(metric_id)
         if spec is None:
             raise ValueError("startup.plan: stage selects an undeclared metric")
-        if spec.mode != "in_stage":
+        if spec.mode != "live":
             continue
         params = instantiate_parameters(
             parameter_model_path(root, spec.parameter_model),
@@ -2656,7 +2727,7 @@ def _in_stage_metric_handles(
             / f"attempts/{binding.attempt_id}/measurements"
             / f"{binding.stage_id}.{metric_id}.jsonl"
         )
-        handles[metric_id] = bind_in_stage_metric(
+        handles[metric_id] = bind_live_metric(
             root,
             spec,
             MeasurementSink(
@@ -2680,7 +2751,14 @@ def _in_stage_metric_handles(
 ```python contract-target
 from .. import parameters
 from .._parameter.validation import instantiate_parameters, parameter_model_path
-from ..metrics import invoke_metric
+from ..metrics import (
+    MetricContext,
+    MetricExecutionReceipt,
+    invoke_metric,
+    load_metric,
+    metric_definition,
+    validate_metric_definition,
+)
 ```
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/metrics.py:main -->
@@ -2712,8 +2790,8 @@ def main(argv: list[str] | None = None) -> int:
             root / context.metric.implementation.path,
             context.metric.implementation.symbol,
         )
-        if metric_definition(implementation).mode != "post_stage":
-            raise ValueError("dedicated metric worker requires post_stage mode")
+        if metric_definition(implementation).mode != "recompute":
+            raise ValueError("dedicated metric worker requires recompute mode")
 
         initialization = apply_reproducibility(
             context.run.seed,
@@ -2778,15 +2856,37 @@ def main(argv: list[str] | None = None) -> int:
 
 **File: `tests/test_metric_provenance.py`**
 
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:Field -->
+```python contract-target
+from pydantic import Field
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:parameters -->
+```python contract-target
+from viper import parameters
+```
+
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:MetricContext -->
+```python contract-target
+from viper.metrics import (
+    MeasurementSink,
+    MetricContext,
+    MetricHandle,
+    MetricVerificationReceipt,
+    invoke_metric,
+)
+```
+
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:Path -->
 ```python contract-target
 from pathlib import Path
 ```
 
-<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:test_metric_params_reach_in_stage_and_recomputed_execution -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
 ```python contract-target
-def test_metric_params_reach_in_stage_and_recomputed_execution(tmp_path: Path) -> None:
+def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> None:
     """Pass one custom parameter instance through both metric invocation paths."""
+
     class Scale(parameters.Metric):
         factor: float = Field(gt=0)
 
@@ -2828,7 +2928,7 @@ class MetricObjectiveSpec(ProtocolModel):
 
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=src/viper/stages.py:MetricObjectiveSpec -->
 ```python contract-target
-from .metrics import MetricObjectiveSpec
+from .metrics import MetricHandle, MetricObjectiveSpec
 ```
 
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=update target=src/viper/stages.py:EmbedSpec -->
@@ -2968,9 +3068,9 @@ def verify_stage_objectives(
             raise VerificationError(
                 f"objective of stage {stage_id!r} is absent from the experiment"
             )
-        if isinstance(stage, TrainSpec) and metric.mode != "in_stage":
-            raise VerificationError("training objectives require in_stage metrics")
-        if isinstance(stage, EvaluateSpec) and metric.mode != "post_stage":
+        if isinstance(stage, TrainSpec) and metric.mode != "live":
+            raise VerificationError("training objectives require live metrics")
+        if isinstance(stage, EvaluateSpec) and metric.mode != "recompute":
             raise VerificationError("evaluation objectives require recomputed metrics")
 ```
 
@@ -3133,7 +3233,7 @@ def verify_run_plan_relationships(
         )
     for criterion in benchmark.metrics:
         metric = experiment_metrics[criterion.metric_id]
-        if metric.mode != "post_stage":
+        if metric.mode != "recompute":
             raise VerificationError(
                 f"benchmark criterion {criterion.metric_id!r} must select a "
                 "recomputed metric"
@@ -3141,6 +3241,27 @@ def verify_run_plan_relationships(
 ```
 
 **File: `tests/test_verification.py`**
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:pytest -->
+```python contract-target
+import pytest
+```
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:verify_stage_objectives -->
+```python contract-target
+from viper._verification.plan import (
+    verify_parameter_model_references,
+    verify_run_plan_relationships,
+    verify_run_spec,
+    verify_stage_objectives,
+    verify_stage_plan,
+)
+```
+
+<!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:MetricSpec -->
+```python contract-target
+from viper.metrics import MetricObjectiveSpec, MetricSpec
+```
 
 <!-- contract-target: requirements=UMD-03 block=P4-UMD-03 action=add target=tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction -->
 ```python contract-target
@@ -3153,12 +3274,12 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
             direction="min",
         ),
     )
-    in_stage = MetricSpec.model_construct(
+    live = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="in_stage",
+        mode="live",
     )
     experiment = ExperimentSpec.model_construct(
-        metrics=(in_stage,),
+        metrics=(live,),
     )
 
     verify_stage_objectives({"train": stage}, experiment)
@@ -3167,12 +3288,12 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
 
     recomputed = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="post_stage",
+        mode="recompute",
     )
     invalid = ExperimentSpec.model_construct(
         metrics=(recomputed,),
     )
-    with pytest.raises(VerificationError, match="training objectives require in_stage"):
+    with pytest.raises(VerificationError, match="training objectives require live"):
         verify_stage_objectives({"train": stage}, invalid)
 ```
 
@@ -3205,7 +3326,7 @@ def validate_metric_definition(repository_root: Path, spec: MetricSpec) -> None:
 ```python contract-target
 def metric_source(metric_id: str, kind: MetricKind) -> bytes:
     """Build one decorated metric implementation matched by ``metric_spec``."""
-    mode = "post_stage" if kind == "evaluation" else "in_stage"
+    mode = "recompute" if kind == "evaluation" else "live"
     return (
         "from viper.metrics import metric\n\n"
         f'@metric(metric_id="{metric_id}", mode="{mode}")\n'
@@ -3219,13 +3340,13 @@ def metric_source(metric_id: str, kind: MetricKind) -> bytes:
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=tests/test_metric_interface.py:mean_value -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=tests/test_metric_interface.py:RunningMean -->
 ```python contract-target
-@metric(metric_id="mean_value", mode="post_stage")
+@metric(metric_id="mean_value", mode="recompute")
 def mean_value(context: MetricContext) -> float:
     """Return the frozen scalar supplied through metric parameters."""
     return float(context.params.model_dump()["value"])
 
 
-@metric(metric_id="running_mean", mode="in_stage")
+@metric(metric_id="running_mean", mode="live")
 class RunningMean(StatefulMetric):
     """Accumulate a scalar mean across training updates."""
 
@@ -3285,7 +3406,7 @@ def add_plan_records(
             git_file(source_commit, metric.implementation.path),
             metric_source(
                 metric.metric_id,
-                "training" if metric.mode == "in_stage" else "evaluation",
+                "training" if metric.mode == "live" else "evaluation",
             ),
         )
 
@@ -3311,7 +3432,7 @@ def add_plan_records(
 
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_parameter/validation.py:instantiate_parameters -->
 ```python contract-target
-def instantiate_parameters[ParameterSetT: parameters.ParameterSet](
+def instantiate_parameters(
     path: Path,
     reference: ParameterModelRef,
     params: parameters.ParameterSet,
@@ -3368,7 +3489,7 @@ def metric_spec(
             metric_id=metric_id,
             implementation=implementation,
             params=parameters.Metric(),
-            mode="post_stage",
+            mode="recompute",
             dependencies=(
                 MetricDependency(
                     source="artifact",
@@ -3383,7 +3504,7 @@ def metric_spec(
         metric_id=metric_id,
         implementation=implementation,
         params=parameters.Metric(),
-        mode="in_stage",
+        mode="live",
     )
 ```
 
@@ -3517,7 +3638,7 @@ class RunPlanAuthoringTests:
                 bytes=1,
             ),
             params=parameters.Metric(),
-            mode="in_stage",
+            mode="live",
         )
         experiment = ExperimentSpec(
             experiment_id="e001_strand",
@@ -3903,7 +4024,7 @@ def test_generated_project_uses_runner_owned_downloads(
             bytes=len(metric_raw),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="recompute",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4413,7 +4534,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
     """Match the metric ID and mode declared in source and MetricSpec."""
     source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="accuracy", mode="post_stage")\n'
+        b'@metric(metric_id="accuracy", mode="recompute")\n'
         b"def compute(context):\n"
         b"    return 1.0\n"
     )
@@ -4429,7 +4550,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
             bytes=len(source),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="recompute",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4510,7 +4631,7 @@ class ParameterContractTests:
                 bytes=len(source),
             ),
             params=parameters.Metric.model_validate({"dim": 1}),
-            mode="post_stage",
+            mode="recompute",
             dependencies=(
                 MetricDependency(
                     source="artifact",
@@ -4536,7 +4657,7 @@ class ParameterContractTests:
                     bytes=1,
                 ),
                 params=parameters.Metric(),
-                mode="post_stage",
+                mode="recompute",
                 dependencies=(
                     MetricDependency(
                         source="artifact",
@@ -4570,13 +4691,13 @@ def test_train_stage_captures_local_external_input(
     metric_source = (
         b"from viper.metrics import metric\n\n"
         b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="post_stage")\n'
+        b'mode="recompute")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
-    in_stage_metric_source = (
+    live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="in_stage")\n'
+        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -4595,7 +4716,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="recompute",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4611,11 +4732,11 @@ def test_train_stage_captures_local_external_input(
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
-            sha256=hashlib.sha256(in_stage_metric_source).hexdigest(),
-            bytes=len(in_stage_metric_source),
+            sha256=hashlib.sha256(live_metric_source).hexdigest(),
+            bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="in_stage",
+        mode="live",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -4641,7 +4762,7 @@ def test_train_stage_captures_local_external_input(
             f"    return {resume_state().model_dump(mode='python')!r}\n"
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
-        "project/metrics/epoch_mean.py": in_stage_metric_source,
+        "project/metrics/epoch_mean.py": live_metric_source,
         "project/parameters/train.py": (
             b"from pydantic import Field\n"
             b"from viper import parameters\n\n"
@@ -4664,10 +4785,10 @@ def test_train_stage_captures_local_external_input(
             b"    )\n"
             b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
             b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
-            b"    in_stage_metric = context.metrics['epoch_mean']\n"
-            b"    in_stage_metric.update(1.0)\n"
-            b"    in_stage_metric.update(3.0)\n"
-            b"    in_stage_metric.record(epoch=0, step=1)\n"
+            b"    live_metric = context.metrics['epoch_mean']\n"
+            b"    live_metric.update(1.0)\n"
+            b"    live_metric.update(3.0)\n"
+            b"    live_metric.record(epoch=0, step=1)\n"
         ),
         "inputs/raw/prior.bin": b"prior",
         "experiments/example/spec.yaml": serialize_document(experiment),
@@ -4691,7 +4812,7 @@ def test_train_stage_captures_local_external_input(
             "path": "environment.yml",
         }
     )
-    if os.environ.get("VIPER_in_stage_GCE") == "1":
+    if os.environ.get("VIPER_LIVE_GCE") == "1":
         environment = GCEEnvironmentSpec(
             provisioning=observe_gce_provisioning(),
             machine_type="g2-standard-12",
@@ -4826,13 +4947,13 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     metric_source = (
         b"from viper.metrics import metric\n\n"
         b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="post_stage")\n'
+        b'mode="recompute")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
-    in_stage_metric_source = (
+    live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="in_stage")\n'
+        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -4851,7 +4972,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="recompute",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4867,11 +4988,11 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
-            sha256=hashlib.sha256(in_stage_metric_source).hexdigest(),
-            bytes=len(in_stage_metric_source),
+            sha256=hashlib.sha256(live_metric_source).hexdigest(),
+            bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="in_stage",
+        mode="live",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -4897,7 +5018,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             f"    return {resume_state().model_dump(mode='python')!r}\n"
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
-        "project/metrics/epoch_mean.py": in_stage_metric_source,
+        "project/metrics/epoch_mean.py": live_metric_source,
         "project/parameters/train.py": (
             b"from pydantic import Field\n"
             b"from viper import parameters\n\n"
@@ -4920,10 +5041,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             b"    )\n"
             b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
             b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
-            b"    in_stage_metric = context.metrics['epoch_mean']\n"
-            b"    in_stage_metric.update(1.0)\n"
-            b"    in_stage_metric.update(3.0)\n"
-            b"    in_stage_metric.record(epoch=0, step=1)\n"
+            b"    live_metric = context.metrics['epoch_mean']\n"
+            b"    live_metric.update(1.0)\n"
+            b"    live_metric.update(3.0)\n"
+            b"    live_metric.record(epoch=0, step=1)\n"
         ),
         "experiments/example/spec.yaml": serialize_document(experiment),
         "experiments/example/variants/baseline.spec.yaml": serialize_document(variant),
@@ -4946,7 +5067,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             "path": "environment.yml",
         }
     )
-    if os.environ.get("VIPER_in_stage_GCE") == "1":
+    if os.environ.get("VIPER_LIVE_GCE") == "1":
         environment = GCEEnvironmentSpec(
             provisioning=observe_gce_provisioning(),
             machine_type="g2-standard-12",
@@ -5208,17 +5329,17 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         "terminal",
     )
 
-    in_stage_reference = next(
+    live_reference = next(
         reference
         for reference in successful_attempt.measurement_files
         if str(reference.stored_at.path).endswith("train.epoch_mean.jsonl")
     )
-    in_stage_measurement = Measurement.model_validate_json(
-        fetcher(in_stage_reference.stored_at)
+    live_measurement = Measurement.model_validate_json(
+        fetcher(live_reference.stored_at)
     )
-    assert in_stage_measurement.value == 2.0
-    assert in_stage_measurement.epoch == 0
-    assert in_stage_measurement.step == 1
+    assert live_measurement.value == 2.0
+    assert live_measurement.epoch == 0
+    assert live_measurement.step == 1
     comparison = compare_runs_application(
         CompareRunsRequest(
             left_path=result.resolved_run_path,

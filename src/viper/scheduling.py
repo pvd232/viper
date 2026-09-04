@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import itertools
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -232,7 +233,7 @@ def final_targets(
     for identity, chain in sorted(chains.items()):
         chain.sort(key=lambda target: positions[target.block_id])
         # Several blocks may edit one target only when depends_on orders them.
-        for earlier, later in zip(chain, chain[1:], strict=False):
+        for earlier, later in itertools.pairwise(chain):
             if not _precedes(traceability, earlier.block_id, later.block_id):
                 raise ScheduleError(
                     "repeat target writers require an explicit dependency path: "
@@ -436,11 +437,7 @@ def materialize_plan(
         )
         if any(
             current[0] < previous[1]
-            for previous, current in zip(
-                ordered_replacements,
-                ordered_replacements[1:],
-                strict=False,
-            )
+            for previous, current in itertools.pairwise(ordered_replacements)
         ):
             raise ScheduleError("planned declaration replacements overlap")
 
@@ -615,9 +612,12 @@ def build_block_graph(
         for edge in graph.edges:
             consumer = owners.get(nodes.get(edge.source, ("", "")))
             prerequisite = owners.get(nodes.get(edge.target, ("", "")))
-            if prerequisite is not None and consumer is not None:
-                if prerequisite != consumer:
-                    edges.add((prerequisite, consumer, "source", edge.edge_id))
+            if (
+                prerequisite is not None
+                and consumer is not None
+                and prerequisite != consumer
+            ):
+                edges.add((prerequisite, consumer, "source", edge.edge_id))
 
     paths: dict[str, set[PairBlockId]] = defaultdict(set)
     for target in targets:
@@ -730,9 +730,9 @@ def schedule_blocks(graph: BlockGraph) -> BlockSchedule:
 __all__ = [
     "BlockGraph",
     "BlockSchedule",
-    "ScheduleError",
     "ScheduleEdge",
     "ScheduleEdgeKind",
+    "ScheduleError",
     "WorkGroup",
     "WorkWave",
     "build_block_graph",
