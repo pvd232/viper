@@ -50,7 +50,7 @@
         "SCH-02",
         "SCH-03"
       ],
-      "sha256": "f9bcc89aa4e1af18fbd64c56f9de133a8ae2e71318b7a6c98b824e8767692b24"
+      "sha256": "c5f15e5e8f5ab5e024fb5c89ab59c48351ef1d42b04208d83caf2e854598c583"
     },
     {
       "path": "docs/development/child-process-launching.md",
@@ -93,7 +93,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "1909429c33d6deceb25320f422f8c84a1f5bc04fd4f009d518b7b45daeec11f1"
+      "sha256": "115ef0703a05f0f6fc3af3ef2396852f76a3fd271d1a67afb0c28b7ca22e9032"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -105,7 +105,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "64e0e57a3fd6eaed15e5f402e1beb2995109ef08a8052ac560333f6ec3e0e301"
+      "sha256": "0168600fa2e13cfbfe4895600d84c13c93472ac9bdccde1baac12459368640de"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -131,7 +131,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "4f569164e17aaa34b29eb6d6ba7948811eb87264aaa01815ed54d7d01b39cf5b"
+      "sha256": "e9b62bbebf38b63eb146d83385040ecd577d71f4a1b99401c97c15934ddc3fd8"
     },
     {
       "path": "docs/development/experiment-expansion.md",

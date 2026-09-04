@@ -653,9 +653,14 @@ def materialize_plan(
             assert payload is not None or target.action == "remove"
             span = (start, end)
             replacement = b"" if payload is None else payload
-            # Several names can share one statement. Apply one shared edit.
+            # Removing one name and updating the shared statement are one edit.
             if span in replacements and replacements[span] != replacement:
-                raise ScheduleError("one declaration has conflicting replacements")
+                previous = replacements[span]
+                if not previous:
+                    replacements[span] = replacement
+                elif replacement:
+                    raise ScheduleError("one declaration has conflicting replacements")
+                continue
             replacements[span] = replacement
 
         ordered_replacements = sorted(

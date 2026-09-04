@@ -14,14 +14,14 @@ stage, and run documents without requiring a public freezing step.
 
 ## 1. Status
 
-**Contract status:** planned; Phase 4 code specified.
+**Contract status:** in progress; Phase 4 implemented.
 
 These requirements bind the contract to the master checklist:
 
 | ID | Implementation obligation |
 | --- | --- |
 | UMD-01 <!-- contract-requirement: UMD-01 phase=4 test=tests/test_metric_interface.py --> | Add metric drafts, objective drafts, criterion drafts, and their public constructors. |
-| UMD-02 <!-- contract-requirement: UMD-02 phase=4 test=tests/test_metric_provenance.py --> | Deliver frozen parameter classes and values to in_stage and recomputed metrics while reusing existing dependency snapshots. |
+| UMD-02 <!-- contract-requirement: UMD-02 phase=4 test=tests/test_metric_provenance.py --> | Dein_stager frozen parameter classes and values to in_stage and recomputed metrics while reusing existing dependency snapshots. |
 | UMD-03 <!-- contract-requirement: UMD-03 phase=4 test=tests/test_verification.py --> | Persist objective identity and direction and enforce stage-specific objective rules. |
 | UMD-04 <!-- contract-requirement: UMD-04 phase=6 test=tests/test_authoring.py --> | Add experiment, factor, variant, and replicate drafting with a derived metric registry; generate an immutable run identity; recursively freeze each returned plan; and compile it internally when execution begins. |
 | UMD-05 <!-- contract-requirement: UMD-05 phase=8 test=tests/test_benchmark_execution.py --> | Record every benchmark metric under fixed inputs and apply optional criteria. |
@@ -74,7 +74,7 @@ metric result.
 ## 2. Required claim
 
 When a user selects a configured metric as a stage objective, diagnostic, or
-benchmark measurement, VIPER freezes one exact `MetricSpec`, delivers its
+benchmark measurement, VIPER freezes one exact `MetricSpec`, dein_stagers its
 validated parameters to the metric implementation, records each produced
 value, and verifies every recomputed value from its declared files.
 
@@ -510,7 +510,7 @@ MetricSpec.parameter_model + MetricSpec.params
 active stage input and artifact paths + validated metric params
 -> construct MetricContext
 
-bind_live_metric(..., context)
+bind_in_stage_metric(..., context)
 -> MetricHandle retains MetricContext
 
 MetricHandle.record(*args, **kwargs)
@@ -558,7 +558,7 @@ class MetricHandle:
     ) -> Measurement: ...
 
 
-def bind_live_metric(
+def bind_in_stage_metric(
     repository_root: Path,
     spec: MetricSpec,
     sink: MeasurementSink,
@@ -567,7 +567,7 @@ def bind_live_metric(
 ```
 
 One shared `MetricContext` gives both modes the same invocation context and
-parameter-delivery rule.
+parameter-dein_stagery rule.
 
 The alternatives fail at a specific boundary:
 
@@ -575,9 +575,9 @@ The alternatives fail at a specific boundary:
 | --- | --- | --- |
 | Pass `params=` to `MetricHandle.record()` | Small runtime edit | Stage code can supply values that differ from the frozen `MetricSpec.params`. |
 | Decorate a factory that returns a configured metric | Parameters stay inside the returned callable | The returned closure can capture unrecorded values, and its generated identity is harder to bind to one source symbol. |
-| Permit custom parameters only on `StatefulMetric` classes | Constructor delivery is simple | A stateless calculation must become a class solely to receive parameters. |
+| Permit custom parameters only on `StatefulMetric` classes | Constructor dein_stagery is simple | A stateless calculation must become a class solely to receive parameters. |
 | Store parameters on `MetricHandle.params` | Preserves the current metric function signature | Stage code must manually read and forward the values, so the metric invocation itself lacks a required parameter handoff. |
-| Add `LiveMetricContext` | Makes the mode visible in the type | It duplicates the role already carried by `MetricContext` and creates two parameter-delivery APIs. |
+| Add `in_stageMetricContext` | Makes the mode visible in the type | It duplicates the role already carried by `MetricContext` and creates two parameter-dein_stagery APIs. |
 
 ### Frozen metric records
 
@@ -1484,7 +1484,7 @@ differentiable objective interface to prove that relationship.
 | Rule | Executable condition |
 | --- | --- |
 | `metric.authoring.complete` <!-- verifier-rule: metric.authoring.complete requirement=UMD-01 --> | Metric, objective, and criterion drafts freeze through their public constructors. |
-| `metric.params.delivered` <!-- verifier-rule: metric.params.delivered requirement=UMD-02 --> | in_stage and recomputed metric execution receives the frozen parameter class, values, and dependency snapshots. |
+| `metric.params.dein_stagered` <!-- verifier-rule: metric.params.dein_stagered requirement=UMD-02 --> | in_stage and recomputed metric execution receives the frozen parameter class, values, and dependency snapshots. |
 | `metric.objective.enforced` <!-- verifier-rule: metric.objective.enforced requirement=UMD-03 --> | Frozen objectives preserve metric identity and direction, and each stage satisfies its objective rule. |
 | `experiment.authoring.complete` <!-- verifier-rule: experiment.authoring.complete requirement=UMD-04 --> | Experiment, factor, variant, and replicate drafts compile with one derived metric registry. |
 | `plan.identity.generated` <!-- verifier-rule: plan.identity.generated requirement=UMD-04 --> | `plan()` generates one valid run ID, exposes it read-only, and every compiled or executed record preserves it. |
@@ -1507,7 +1507,7 @@ a `ParameterModelRef` for that exact class. The built-in class uses
 the named source root, checks the source digest and byte count, loads the
 symbol, and reconstructs the instance from `MetricSpec.params`.
 
-### `metric.in_stage.parameter_delivery`
+### `metric.in_stage.parameter_dein_stagery`
 
 The stage worker validates `MetricSpec.params` through the frozen parameter
 class. The `MetricContext.params` object supplied by `MetricHandle` equals that
@@ -1669,7 +1669,7 @@ The superseded behavior has these dispositions:
 | `MetricKind` and the decorator's `kind=` argument | Delete them. The stage's `objective=` or `metrics=` field records the metric's role; `MetricMode` records when VIPER calculates it. |
 | Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metrics.metric` and `viper.metrics.measure()`. |
 | Python stage authoring that accepts `metric_ids=` | Replace with `objective=` and `metrics=`. |
-| Proposed `LiveMetricContext` | Delete; `MetricContext` serves both modes. |
+| Proposed `in_stageMetricContext` | Delete; `MetricContext` serves both modes. |
 | in_stage metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
 | Parameterless `StatefulMetric` subclasses | Replace constructors with `MetricContext`. |
 | Manual `ExperimentSpec` and `VariantSpec` construction in public examples | Replace with `viper.authoring.experiment()`, `viper.authoring.variant()`, and `viper.authoring.replicate()`. |
@@ -1846,10 +1846,10 @@ Adding `DownloadVariantStageParams` fails `experiment.variant.parameters`.
 ### Targeted rejections
 
 Changing an in_stage metric parameter after compilation fails
-`metric.in_stage.parameter_delivery`.
+`metric.in_stage.parameter_dein_stagery`.
 
 Changing `StageInvocationReceipt.context.metric_ids` while retaining the old
-measurement fails `metric.in_stage.parameter_delivery`.
+measurement fails `metric.in_stage.parameter_dein_stagery`.
 
 Removing the metric decorator metadata fails `metric.definition.binding`.
 
@@ -1885,7 +1885,7 @@ existing benchmark input-identity checks before execution.
 - [ ] Compare parameter-model references during parameter reconstruction and
       recomputation verification.
 - [ ] Make `MetricContext` generic.
-- [ ] Deliver `MetricContext` through in_stage functions and stateful constructors.
+- [ ] Dein_stager `MetricContext` through in_stage functions and stateful constructors.
 - [ ] Join in_stage measurements to
       `StageInvocationReceipt.context.metric_ids`, frozen stage `metric_ids`,
       and `ExperimentSpec.metrics` during verification.
@@ -2058,8 +2058,8 @@ targets = [
     "src/viper/metrics.py:StatefulMetric",
     "src/viper/metrics.py:invoke_metric",
     "src/viper/metrics.py:MetricHandle",
-    "src/viper/metrics.py:bind_live_metric",
-    "src/viper/_workers/stages.py:_live_metric_handles",
+    "src/viper/metrics.py:bind_in_stage_metric",
+    "src/viper/_workers/stages.py:_in_stage_metric_handles",
     "src/viper/_workers/stages.py:parameters",
     "src/viper/_workers/stages.py:parameter_model_path",
     "src/viper/_workers/stages.py:MetricContext",
@@ -2069,7 +2069,7 @@ targets = [
     "src/viper/_workers/metrics.py:parameter_model_path",
     "src/viper/_workers/metrics.py:invoke_metric",
     "tests/test_metric_provenance.py:Path",
-    "tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution",
+    "tests/test_metric_provenance.py:test_metric_params_reach_in_stage_and_recomputed_execution",
     "src/viper/_parameter/validation.py:instantiate_parameters",
     "tests/fixtures.py:parameter_model_ref",
     "tests/fixtures.py:metric_spec",
@@ -2090,7 +2090,7 @@ targets = [
     "tests/test_run_execution.py:test_two_stage_local_run_writes_and_verifies_terminal_result",
     "tests/test_verification_acceptance.py:publish_metric_verification",
 ]
-tests = ["tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution"]
+tests = ["tests/test_metric_provenance.py:test_metric_params_reach_in_stage_and_recomputed_execution"]
 gate = "python -m pytest tests/test_metric_interface.py tests/test_metric_provenance.py -q"
 depends_on = ["P4-UMD-01"]
 ```
@@ -2288,9 +2288,6 @@ def at_most(metric: MetricDraft[Any], threshold: float) -> MetricCriterionDraft:
 ```python contract-target
 def test_metric_drafts_freeze_through_public_constructors() -> None:
     """Build metric, objective, and criterion drafts from one decorated callable."""
-    from viper.benchmark import at_least
-    from viper.metrics import FloatComparator, MetricContext, max, measure, metric
-
     @metric(metric_id="accuracy", mode="post_stage")
     def accuracy(context: MetricContext[parameters.Metric]) -> float:
         return float(context.params.model_dump()["value"])
@@ -2313,7 +2310,7 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
     assert draft.implementation is accuracy
 ```
 
-### P4-UMD-02 — frozen parameter delivery
+### P4-UMD-02 — frozen parameter dein_stagery
 
 **File: `src/viper/_schema.py`**
 
@@ -2508,7 +2505,7 @@ class MetricVerificationReceipt(ProtocolModel):
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:StatefulMetric -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=src/viper/metrics.py:invoke_metric -->
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:MetricHandle -->
-<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:bind_live_metric -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/metrics.py:bind_in_stage_metric -->
 ```python contract-target
 class MetricContext[MetricParamsT: parameters.Metric](BaseModel):
     """Supply verified paths and frozen parameters to one metric invocation."""
@@ -2591,7 +2588,7 @@ class MetricHandle:
         return self._sink.append(value, epoch=epoch, step=step)
 
 
-def bind_live_metric(
+def bind_in_stage_metric(
     repository_root: Path,
     spec: MetricSpec,
     sink: MeasurementSink,
@@ -2619,9 +2616,9 @@ from .._parameter.validation import parameter_model_path
 from ..metrics import MetricContext
 ```
 
-<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/stages.py:_live_metric_handles -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=src/viper/_workers/stages.py:_in_stage_metric_handles -->
 ```python contract-target
-def _live_metric_handles(
+def _in_stage_metric_handles(
     root: Path,
     run: RunSpec,
     stage: ParameterizedSpec,
@@ -2659,7 +2656,7 @@ def _live_metric_handles(
             / f"attempts/{binding.attempt_id}/measurements"
             / f"{binding.stage_id}.{metric_id}.jsonl"
         )
-        handles[metric_id] = bind_live_metric(
+        handles[metric_id] = bind_in_stage_metric(
             root,
             spec,
             MeasurementSink(
@@ -2786,20 +2783,10 @@ def main(argv: list[str] | None = None) -> int:
 from pathlib import Path
 ```
 
-<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
+<!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=add target=tests/test_metric_provenance.py:test_metric_params_reach_in_stage_and_recomputed_execution -->
 ```python contract-target
-def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> None:
+def test_metric_params_reach_in_stage_and_recomputed_execution(tmp_path: Path) -> None:
     """Pass one custom parameter instance through both metric invocation paths."""
-    from pydantic import Field
-
-    from viper import parameters
-    from viper.metrics import (
-        MeasurementSink,
-        MetricContext,
-        MetricHandle,
-        invoke_metric,
-    )
-
     class Scale(parameters.Metric):
         factor: float = Field(gt=0)
 
@@ -3159,13 +3146,6 @@ def verify_run_plan_relationships(
 ```python contract-target
 def test_stage_objectives_preserve_identity_and_direction() -> None:
     """Accept matching objective modes and reject a mismatched training metric."""
-    import pytest
-
-    from viper._verification.plan import verify_stage_objectives
-    from viper.experiments import ExperimentSpec
-    from viper.metrics import MetricObjectiveSpec, MetricSpec
-    from viper.stages import TrainSpec
-
     stage = TrainSpec.model_construct(
         metric_ids=("training_loss",),
         objective=MetricObjectiveSpec(
@@ -4594,7 +4574,7 @@ def test_train_stage_captures_local_external_input(
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
-    live_metric_source = (
+    in_stage_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
         b'@metric(metric_id="epoch_mean", kind="training", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
@@ -4631,8 +4611,8 @@ def test_train_stage_captures_local_external_input(
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
-            sha256=hashlib.sha256(live_metric_source).hexdigest(),
-            bytes=len(live_metric_source),
+            sha256=hashlib.sha256(in_stage_metric_source).hexdigest(),
+            bytes=len(in_stage_metric_source),
         ),
         params=parameters.Metric(),
         mode="in_stage",
@@ -4661,7 +4641,7 @@ def test_train_stage_captures_local_external_input(
             f"    return {resume_state().model_dump(mode='python')!r}\n"
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
-        "project/metrics/epoch_mean.py": live_metric_source,
+        "project/metrics/epoch_mean.py": in_stage_metric_source,
         "project/parameters/train.py": (
             b"from pydantic import Field\n"
             b"from viper import parameters\n\n"
@@ -4684,10 +4664,10 @@ def test_train_stage_captures_local_external_input(
             b"    )\n"
             b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
             b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
-            b"    live_metric = context.metrics['epoch_mean']\n"
-            b"    live_metric.update(1.0)\n"
-            b"    live_metric.update(3.0)\n"
-            b"    live_metric.record(epoch=0, step=1)\n"
+            b"    in_stage_metric = context.metrics['epoch_mean']\n"
+            b"    in_stage_metric.update(1.0)\n"
+            b"    in_stage_metric.update(3.0)\n"
+            b"    in_stage_metric.record(epoch=0, step=1)\n"
         ),
         "inputs/raw/prior.bin": b"prior",
         "experiments/example/spec.yaml": serialize_document(experiment),
@@ -4711,7 +4691,7 @@ def test_train_stage_captures_local_external_input(
             "path": "environment.yml",
         }
     )
-    if os.environ.get("VIPER_LIVE_GCE") == "1":
+    if os.environ.get("VIPER_in_stage_GCE") == "1":
         environment = GCEEnvironmentSpec(
             provisioning=observe_gce_provisioning(),
             machine_type="g2-standard-12",
@@ -4850,7 +4830,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
-    live_metric_source = (
+    in_stage_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
         b'@metric(metric_id="epoch_mean", kind="training", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
@@ -4887,8 +4867,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
-            sha256=hashlib.sha256(live_metric_source).hexdigest(),
-            bytes=len(live_metric_source),
+            sha256=hashlib.sha256(in_stage_metric_source).hexdigest(),
+            bytes=len(in_stage_metric_source),
         ),
         params=parameters.Metric(),
         mode="in_stage",
@@ -4917,7 +4897,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             f"    return {resume_state().model_dump(mode='python')!r}\n"
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
-        "project/metrics/epoch_mean.py": live_metric_source,
+        "project/metrics/epoch_mean.py": in_stage_metric_source,
         "project/parameters/train.py": (
             b"from pydantic import Field\n"
             b"from viper import parameters\n\n"
@@ -4940,10 +4920,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             b"    )\n"
             b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
             b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
-            b"    live_metric = context.metrics['epoch_mean']\n"
-            b"    live_metric.update(1.0)\n"
-            b"    live_metric.update(3.0)\n"
-            b"    live_metric.record(epoch=0, step=1)\n"
+            b"    in_stage_metric = context.metrics['epoch_mean']\n"
+            b"    in_stage_metric.update(1.0)\n"
+            b"    in_stage_metric.update(3.0)\n"
+            b"    in_stage_metric.record(epoch=0, step=1)\n"
         ),
         "experiments/example/spec.yaml": serialize_document(experiment),
         "experiments/example/variants/baseline.spec.yaml": serialize_document(variant),
@@ -4966,7 +4946,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             "path": "environment.yml",
         }
     )
-    if os.environ.get("VIPER_LIVE_GCE") == "1":
+    if os.environ.get("VIPER_in_stage_GCE") == "1":
         environment = GCEEnvironmentSpec(
             provisioning=observe_gce_provisioning(),
             machine_type="g2-standard-12",
@@ -5228,17 +5208,17 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         "terminal",
     )
 
-    live_reference = next(
+    in_stage_reference = next(
         reference
         for reference in successful_attempt.measurement_files
         if str(reference.stored_at.path).endswith("train.epoch_mean.jsonl")
     )
-    live_measurement = Measurement.model_validate_json(
-        fetcher(live_reference.stored_at)
+    in_stage_measurement = Measurement.model_validate_json(
+        fetcher(in_stage_reference.stored_at)
     )
-    assert live_measurement.value == 2.0
-    assert live_measurement.epoch == 0
-    assert live_measurement.step == 1
+    assert in_stage_measurement.value == 2.0
+    assert in_stage_measurement.epoch == 0
+    assert in_stage_measurement.step == 1
     comparison = compare_runs_application(
         CompareRunsRequest(
             left_path=result.resolved_run_path,

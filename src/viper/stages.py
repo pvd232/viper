@@ -645,7 +645,6 @@ ResolvedSpec = Annotated[
 ]
 
 
-ParamsT = TypeVar("ParamsT", bound=parameters.ParameterSet)
 DecoratedStage = TypeVar("DecoratedStage", bound=Callable[..., None])
 
 

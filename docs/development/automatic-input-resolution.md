@@ -2609,6 +2609,8 @@ targets = [
     "src/viper/_schema.py:HumanId",
     "src/viper/_parameter/validation.py:parameters",
     "src/viper/_parameter/validation.py:params",
+    "src/viper/_parameter/validation.py:TypeVar",
+    "src/viper/_parameter/validation.py:cast",
     "src/viper/_parameter/validation.py:ParameterModelRef",
     "src/viper/_parameter/validation.py:ParameterSetT",
     "src/viper/experiments.py:parameters",
@@ -2626,6 +2628,10 @@ targets = [
     "src/viper/execution/_benchmark.py:EvalSpec",
     "src/viper/verification/__init__.py:EvaluateSpec",
     "src/viper/verification/__init__.py:EvalSpec",
+    "src/viper/verification/__init__.py:InternalSpec",
+    "src/viper/verification/__init__.py:ResolvedBaseSpec",
+    "src/viper/verification/__init__.py:ResolvedInternalSpec",
+    "src/viper/verification/__init__.py:TrainSpec",
     "tests/test_public_api.py:keys",
     "tests/test_public_api.py:params",
     "tests/test_public_api.py:eval",
@@ -2709,8 +2715,7 @@ targets = [
     "src/viper/_workers/stages.py:observe_execution",
     "src/viper/_workers/stages.py:observe_python_env",
     "src/viper/_workers/stages.py:parameters",
-    "src/viper/_workers/stages.py:parameter_model_path",
-    "src/viper/_workers/stages.py:MetricContext",
+    "src/viper/_workers/stages.py:params",
     "src/viper/_workers/stages.py:_live_metric_handles",
     "src/viper/execution/_attempt.py:resolve_download_stage",
     "src/viper/execution/_attempt.py:resolve_env",
@@ -3074,12 +3079,18 @@ from .ids import HumanId
 from .. import params
 ```
 
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:TypeVar -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:cast -->
+```python contract-target
+from typing import TypeVar, cast
+```
+
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:ParameterModelRef -->
 ```python contract-target
 from ..params import ParameterModelRef
 ```
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/_parameter/validation.py:ParameterSetT -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/_parameter/validation.py:ParameterSetT -->
 ```python contract-target
 ParameterSetT = TypeVar("ParameterSetT", bound=params.ParameterSet)
 ```
@@ -3093,7 +3104,7 @@ from . import params
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:TypeVar -->
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/metrics.py:Generic -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:Generic -->
 ```python contract-target
 from typing import Any, Generic, Literal, TypeVar, cast
 ```
@@ -3111,7 +3122,7 @@ from . import params
 from .params import ParameterModelRef
 ```
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/metrics.py:MetricParamsT -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricParamsT -->
 ```python contract-target
 MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
 ```
@@ -3147,8 +3158,18 @@ from ..stages import EvalSpec
 <!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=src/viper/verification/__init__.py:EvalSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/verification/__init__.py:InternalSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/verification/__init__.py:ResolvedBaseSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/verification/__init__.py:ResolvedInternalSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/verification/__init__.py:TrainSpec -->
 ```python contract-target
-from ..stages import EvalSpec
+from ..stages import (
+    EvalSpec,
+    InternalSpec,
+    ResolvedBaseSpec,
+    ResolvedInternalSpec,
+    TrainSpec,
+)
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=add target=tests/test_public_api.py:keys -->
@@ -3243,11 +3264,10 @@ from ..runtime import (
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_workers/stages.py:parameters -->
 <!-- contract-remove -->
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_workers/stages.py:parameter_model_path -->
-<!-- contract-remove -->
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_workers/stages.py:MetricContext -->
-<!-- contract-remove -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_workers/stages.py:params -->
+```python contract-target
+from .. import params
+```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/execution/_attempt.py:resolve_download_stage -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/execution/_attempt.py:resolve_env -->
