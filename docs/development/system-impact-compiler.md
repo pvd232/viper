@@ -354,8 +354,6 @@ purple for proposed or generated records, and red for an unsupported gap.
 
 ## 4. Models
 
-These records belong to developer tooling, not the experiment protocol.
-
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:CodeQLIdentity -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:SourceSnapshot -->
 <!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-01 action=add target=src/viper/system_impact.py:CodeQLReceipt -->
@@ -2303,33 +2301,38 @@ def _one_hop(
 
     baseline_nodes = {node.node_id: node for node in baseline.nodes}
     realized_nodes = {node.node_id: node for node in realized.nodes}
-    allowed: dict[str, set[str]] = {}
-    for resolved in targets:
-        key = _target_key(resolved.target)
-        kinds = IMPACT_EDGE_KINDS_V1[resolved.change_kind]
-        for nodes in (_node_index(baseline), _node_index(realized)):
-            node = nodes.get(key)
+    indexes = (_node_index(baseline), _node_index(realized))
+    node_kinds: dict[str, set[str]] = {}
+    for target in targets:
+        key = _target_key(target.target)
+        kinds = IMPACT_EDGE_KINDS_V1[target.change_kind]
+
+        # Adds exist only afterward and removals only beforehand, so each target
+        # must be resolved in both graphs.
+        for index in indexes:
+            node = index.get(key)
             if node is not None:
-                allowed.setdefault(node.node_id, set()).update(kinds)
+                node_kinds.setdefault(node.node_id, set()).update(kinds)
 
     before = tuple(
         sorted(
             edge.edge_id
             for edge in baseline.edges
-            if edge.target in allowed and edge.kind in allowed[edge.target]
+            if edge.target in node_kinds and edge.kind in node_kinds[edge.target]
         )
     )
     after = tuple(
         sorted(
             edge.edge_id
             for edge in realized.edges
-            if edge.target in allowed and edge.kind in allowed[edge.target]
+            if edge.target in node_kinds and edge.kind in node_kinds[edge.target]
         )
     )
+    selected_ids = set(before) | set(after)
     selected_edges = tuple(
         edge
         for edge in (*baseline.edges, *realized.edges)
-        if edge.edge_id in set(before) | set(after)
+        if edge.edge_id in selected_ids
     )
     neighbors = tuple(sorted({edge.source for edge in selected_edges}))
     changed = tuple(
@@ -2340,7 +2343,7 @@ def _one_hop(
         or baseline_nodes[node_id].sha256 != realized_nodes[node_id].sha256
     )
     return OneHop(
-        targets=tuple(sorted(allowed)),
+        targets=tuple(sorted(node_kinds)),
         neighbors=neighbors,
         changed=changed,
         before=before,
