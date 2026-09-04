@@ -64,6 +64,20 @@ def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+def test_source_digest_ignores_viper_worktrees(tmp_path: Path) -> None:
+    """Keep generated plan candidates outside the reusable source identity."""
+    source = tmp_path / "src/example.py"
+    source.parent.mkdir()
+    source.write_text("VALUE = 1\n")
+    expected = source_digest(tmp_path)
+
+    generated = tmp_path / ".viper/checks/candidate/example.py"
+    generated.parent.mkdir(parents=True)
+    generated.write_text("VALUE = 2\n")
+
+    assert source_digest(tmp_path) == expected
+
+
 def _declaration_ref(
     *,
     path: str = "docs/plan.md",

@@ -40,7 +40,7 @@
         "SIG-05",
         "SIG-06"
       ],
-      "sha256": "41ea3f70093b60c6b036554006b5c965772a8230d15d5d741cf7f49e30555941"
+      "sha256": "8088868a4556d2496fd824972f48068c6debb8aa1d3e2180281100d9f179e5fb"
     },
     {
       "path": "docs/development/pair-block-scheduling.md",
@@ -92,7 +92,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "deb4db45fa02989fbf25b4abbaea290db278b2b0d1baab8a39b7a895e32cca2a"
+      "sha256": "6683f94b340c0db7c9b0f9bfca0de6e48ef9018116ba019e7decb50da5f77830"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",

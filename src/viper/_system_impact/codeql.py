@@ -23,7 +23,15 @@ from ..system_impact import (
 )
 
 IGNORED_PARTS = frozenset(
-    {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "node_modules"}
+    {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        ".viper",
+        "node_modules",
+    }
 )
 _QUERY_FILES = ("Declarations.ql", "Dependencies.ql")
 _EDGE_KINDS = frozenset(

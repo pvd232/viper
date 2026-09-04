@@ -3182,166 +3182,166 @@ def metric_spec(
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=tests/test_authoring.py:RunPlanAuthoringTests.test_experiment_and_variant_writers_use_identity_paths -->
 ```python contract-target
 class RunPlanAuthoringTests:
-def test_freeze_run_plan_writes_hash_bound_stage_and_run_files(self) -> None:
-        """Write canonical files whose RunStageRef matches exact stage bytes."""
-        with TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
-            _git(root, "init", "--quiet")
-            _git(root, "config", "user.email", "viper@example.com")
-            _git(root, "config", "user.name", "VIPER Test")
-            _git(
-                root,
-                "remote",
-                "add",
-                "origin",
-                "https://github.com/example/viper-project",
-            )
-            parameter_raw = (
-                b"from pydantic import Field\n"
-                b"from viper import parameters\n\n"
-                b"class StrandTrainParameters(parameters.Train):\n"
-                b"    epochs: int = Field(gt=0)\n"
-            )
-            parameter_path = root / "project/parameters/train.py"
-            parameter_path.parent.mkdir(parents=True)
-            parameter_path.write_bytes(parameter_raw)
-            implementation_raw = (
-                b"from project.parameters.train import StrandTrainParameters\n"
-                b"from viper.stages import train\n\n"
-                b"@train(params=StrandTrainParameters)\n"
-                b"def fit(context):\n"
-                b"    pass\n"
-            )
-            implementation_path = root / "project_code/strand/fit.py"
-            implementation_path.parent.mkdir(parents=True)
-            implementation_path.write_bytes(implementation_raw)
-            environment_path = root / "environment.yml"
-            environment_path.write_text("name: viper-test\n", encoding="utf-8")
-            pointer_path = root / "inputs/datasets/replogle/current.pointer.yaml"
-            pointer_path.parent.mkdir(parents=True)
-            pointer_path.write_text("schema_version: 1\n", encoding="utf-8")
-            for relative_path in (
-                "project_code/loaders/parameters.py",
-                "project_code/loaders/resume_state.py",
-            ):
-                loader_path = root / relative_path
-                loader_path.parent.mkdir(parents=True, exist_ok=True)
-                loader_path.write_bytes(LOADER_RAW)
-            _git(root, "add", ".")
-            _git(root, "commit", "--quiet", "-m", "source")
-            source_commit = _git(root, "rev-parse", "HEAD")
-            parameter_model = ParameterModelRef(
-                owner="project",
-                path="project/parameters/train.py",
-                symbol="StrandTrainParameters",
-                sha256=hashlib.sha256(parameter_raw).hexdigest(),
-                bytes=len(parameter_raw),
-            )
-            implementation = StageImplementationRef(
-                path="project_code/strand/fit.py",
-                symbol="fit",
-                sha256=hashlib.sha256(implementation_raw).hexdigest(),
-                bytes=len(implementation_raw),
-            )
-            draft_stage = root / "drafts/train.yaml"
-            draft_stage.parent.mkdir(parents=True)
-            draft_stage.write_bytes(
-                serialize_document(
-                    training_spec(
-                        parameter_model,
-                        implementation,
-                        commit=source_commit,
+    def test_freeze_run_plan_writes_hash_bound_stage_and_run_files(self) -> None:
+            """Write canonical files whose RunStageRef matches exact stage bytes."""
+            with TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                _git(root, "init", "--quiet")
+                _git(root, "config", "user.email", "viper@example.com")
+                _git(root, "config", "user.name", "VIPER Test")
+                _git(
+                    root,
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://github.com/example/viper-project",
+                )
+                parameter_raw = (
+                    b"from pydantic import Field\n"
+                    b"from viper import parameters\n\n"
+                    b"class StrandTrainParameters(parameters.Train):\n"
+                    b"    epochs: int = Field(gt=0)\n"
+                )
+                parameter_path = root / "project/parameters/train.py"
+                parameter_path.parent.mkdir(parents=True)
+                parameter_path.write_bytes(parameter_raw)
+                implementation_raw = (
+                    b"from project.parameters.train import StrandTrainParameters\n"
+                    b"from viper.stages import train\n\n"
+                    b"@train(params=StrandTrainParameters)\n"
+                    b"def fit(context):\n"
+                    b"    pass\n"
+                )
+                implementation_path = root / "project_code/strand/fit.py"
+                implementation_path.parent.mkdir(parents=True)
+                implementation_path.write_bytes(implementation_raw)
+                environment_path = root / "environment.yml"
+                environment_path.write_text("name: viper-test\n", encoding="utf-8")
+                pointer_path = root / "inputs/datasets/replogle/current.pointer.yaml"
+                pointer_path.parent.mkdir(parents=True)
+                pointer_path.write_text("schema_version: 1\n", encoding="utf-8")
+                for relative_path in (
+                    "project_code/loaders/parameters.py",
+                    "project_code/loaders/resume_state.py",
+                ):
+                    loader_path = root / relative_path
+                    loader_path.parent.mkdir(parents=True, exist_ok=True)
+                    loader_path.write_bytes(LOADER_RAW)
+                _git(root, "add", ".")
+                _git(root, "commit", "--quiet", "-m", "source")
+                source_commit = _git(root, "rev-parse", "HEAD")
+                parameter_model = ParameterModelRef(
+                    owner="project",
+                    path="project/parameters/train.py",
+                    symbol="StrandTrainParameters",
+                    sha256=hashlib.sha256(parameter_raw).hexdigest(),
+                    bytes=len(parameter_raw),
+                )
+                implementation = StageImplementationRef(
+                    path="project_code/strand/fit.py",
+                    symbol="fit",
+                    sha256=hashlib.sha256(implementation_raw).hexdigest(),
+                    bytes=len(implementation_raw),
+                )
+                draft_stage = root / "drafts/train.yaml"
+                draft_stage.parent.mkdir(parents=True)
+                draft_stage.write_bytes(
+                    serialize_document(
+                        training_spec(
+                            parameter_model,
+                            implementation,
+                            commit=source_commit,
+                        )
                     )
                 )
+                draft = RunPlanDraft.model_validate(
+                    {
+                        "run_id": RUN_ID,
+                        "experiment_id": "e001_strand",
+                        "variant_id": "baseline",
+                        "replicate_id": "replicate_01",
+                        "seed": 42,
+                        "source": {
+                            "kind": "git",
+                            "repository": "https://github.com/example/viper-project",
+                            "commit": source_commit,
+                        },
+                        "environment": environment_payload(source_commit),
+                        "reproducibility": reproducibility_payload(),
+                        "stages": [
+                            {"stage_id": "train", "spec_source": "drafts/train.yaml"}
+                        ],
+                        "estimator": {
+                            "stage_id": "train",
+                            "artifact_name": PARAMETERS,
+                        },
+                    }
+                )
+
+                frozen = freeze_run_plan(root, draft)
+                stage_path, run_path = frozen.files
+                stage_raw = stage_path.read_bytes()
+                loaded_run = RunSpec.model_validate(parse_yaml_bytes(run_path.read_bytes()))
+
+            self.assertEqual(
+                loaded_run.stages[0].sha256,
+                hashlib.sha256(stage_raw).hexdigest(),
             )
-            draft = RunPlanDraft.model_validate(
-                {
-                    "run_id": RUN_ID,
-                    "experiment_id": "e001_strand",
-                    "variant_id": "baseline",
-                    "replicate_id": "replicate_01",
-                    "seed": 42,
-                    "source": {
-                        "kind": "git",
-                        "repository": "https://github.com/example/viper-project",
-                        "commit": source_commit,
-                    },
-                    "environment": environment_payload(source_commit),
-                    "reproducibility": reproducibility_payload(),
-                    "stages": [
-                        {"stage_id": "train", "spec_source": "drafts/train.yaml"}
-                    ],
-                    "estimator": {
-                        "stage_id": "train",
-                        "artifact_name": PARAMETERS,
-                    },
-                }
+            self.assertEqual(loaded_run.stages[0].bytes, len(stage_raw))
+            self.assertEqual(
+                stage_path.relative_to(root).as_posix(),
+                f"{RUN_ROOT}/stages/train/spec.yaml",
             )
+            self.assertEqual(run_path.relative_to(root).as_posix(), f"{RUN_ROOT}/spec.yaml")
 
-            frozen = freeze_run_plan(root, draft)
-            stage_path, run_path = frozen.files
-            stage_raw = stage_path.read_bytes()
-            loaded_run = RunSpec.model_validate(parse_yaml_bytes(run_path.read_bytes()))
-
-        self.assertEqual(
-            loaded_run.stages[0].sha256,
-            hashlib.sha256(stage_raw).hexdigest(),
-        )
-        self.assertEqual(loaded_run.stages[0].bytes, len(stage_raw))
-        self.assertEqual(
-            stage_path.relative_to(root).as_posix(),
-            f"{RUN_ROOT}/stages/train/spec.yaml",
-        )
-        self.assertEqual(run_path.relative_to(root).as_posix(), f"{RUN_ROOT}/spec.yaml")
-
-def test_experiment_and_variant_writers_use_identity_paths(self) -> None:
-        """Write experiment and variant records under one experiment identity."""
-        metric = MetricSpec(
-            parameter_model=parameters.model_ref(parameters.Metric),
-            metric_id="training_loss",
-            implementation=MetricImplementationRef(
-                path="project_code/metrics/training_loss.py",
-                symbol="compute",
-                sha256="a" * 64,
-                bytes=1,
-            ),
-            params=parameters.Metric(),
-            mode="live",
-        )
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(FactorSpec(factor_id="rank", levels=("full", "low")),),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(metric,),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={"rank": "full"},
-            stage_params=(
-                TrainVariantStageParams(
-                    stage_id="train",
-                    params=parameters.Train.model_validate({"epochs": 2}),
+    def test_experiment_and_variant_writers_use_identity_paths(self) -> None:
+            """Write experiment and variant records under one experiment identity."""
+            metric = MetricSpec(
+                parameter_model=parameters.model_ref(parameters.Metric),
+                metric_id="training_loss",
+                implementation=MetricImplementationRef(
+                    path="project_code/metrics/training_loss.py",
+                    symbol="compute",
+                    sha256="a" * 64,
+                    bytes=1,
                 ),
-            ),
-        )
-
-        with TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
-            experiment_path = write_experiment_spec(root, experiment)
-            variant_path = write_variant_spec(root, variant)
-
-            self.assertTrue(yaml.safe_load(experiment_path.read_text()))
-            self.assertTrue(yaml.safe_load(variant_path.read_text()))
-            self.assertEqual(
-                experiment_path.relative_to(root).as_posix(),
-                "experiments/e001_strand/spec.yaml",
+                params=parameters.Metric(),
+                mode="live",
             )
-            self.assertEqual(
-                variant_path.relative_to(root).as_posix(),
-                "experiments/e001_strand/variants/baseline.spec.yaml",
+            experiment = ExperimentSpec(
+                experiment_id="e001_strand",
+                factors=(FactorSpec(factor_id="rank", levels=("full", "low")),),
+                variant_ids=("baseline",),
+                replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+                metrics=(metric,),
             )
+            variant = VariantSpec(
+                experiment_id="e001_strand",
+                variant_id="baseline",
+                levels={"rank": "full"},
+                stage_params=(
+                    TrainVariantStageParams(
+                        stage_id="train",
+                        params=parameters.Train.model_validate({"epochs": 2}),
+                    ),
+                ),
+            )
+
+            with TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                experiment_path = write_experiment_spec(root, experiment)
+                variant_path = write_variant_spec(root, variant)
+
+                self.assertTrue(yaml.safe_load(experiment_path.read_text()))
+                self.assertTrue(yaml.safe_load(variant_path.read_text()))
+                self.assertEqual(
+                    experiment_path.relative_to(root).as_posix(),
+                    "experiments/e001_strand/spec.yaml",
+                )
+                self.assertEqual(
+                    variant_path.relative_to(root).as_posix(),
+                    "experiments/e001_strand/variants/baseline.spec.yaml",
+                )
 ```
 
 **File: `tests/test_execution_signals.py`**
@@ -4282,45 +4282,19 @@ def test_parameter_model_rejects_implicit_defaults(tmp_path: Path) -> None:
 <!-- contract-target: requirements=UMD-02 block=P4-UMD-02 action=update target=tests/test_protocol.py:ParameterContractTests.test_metric_implementation_requires_python_file -->
 ```python contract-target
 class ParameterContractTests:
-def test_metric_implementation_accepts_user_repository_path(self) -> None:
-        """Bind a metric to any exact Python file in the user repository."""
-        source = b"def compute(context):\n    return 0.0\n"
-        metric = MetricSpec(
-            parameter_model=parameters.model_ref(parameters.Metric),
-            metric_id="pearson_correlation",
-            implementation=MetricImplementationRef(
-                path="analysis/quality/correlation.py",
-                symbol="compute",
-                sha256=hashlib.sha256(source).hexdigest(),
-                bytes=len(source),
-            ),
-            params=parameters.Metric.model_validate({"dim": 1}),
-            mode="recompute",
-            dependencies=(
-                MetricDependency(
-                    source="artifact",
-                    name="predictions",
-                    required_data_role="evaluation",
-                ),
-            ),
-            comparator=FloatComparator(mode="exact", tolerance=0),
-        )
-
-        self.assertEqual(metric.params.model_dump()["dim"], 1)
-
-def test_metric_implementation_requires_python_file(self) -> None:
-        """Reject a metric path that does not identify a Python file."""
-        with self.assertRaisesRegex(ValidationError, "Python file"):
-            MetricSpec(
+    def test_metric_implementation_accepts_user_repository_path(self) -> None:
+            """Bind a metric to any exact Python file in the user repository."""
+            source = b"def compute(context):\n    return 0.0\n"
+            metric = MetricSpec(
                 parameter_model=parameters.model_ref(parameters.Metric),
                 metric_id="pearson_correlation",
                 implementation=MetricImplementationRef(
-                    path="analysis/quality/correlation.yaml",
+                    path="analysis/quality/correlation.py",
                     symbol="compute",
-                    sha256="a" * 64,
-                    bytes=1,
+                    sha256=hashlib.sha256(source).hexdigest(),
+                    bytes=len(source),
                 ),
-                params=parameters.Metric(),
+                params=parameters.Metric.model_validate({"dim": 1}),
                 mode="recompute",
                 dependencies=(
                     MetricDependency(
@@ -4331,6 +4305,32 @@ def test_metric_implementation_requires_python_file(self) -> None:
                 ),
                 comparator=FloatComparator(mode="exact", tolerance=0),
             )
+
+            self.assertEqual(metric.params.model_dump()["dim"], 1)
+
+    def test_metric_implementation_requires_python_file(self) -> None:
+            """Reject a metric path that does not identify a Python file."""
+            with self.assertRaisesRegex(ValidationError, "Python file"):
+                MetricSpec(
+                    parameter_model=parameters.model_ref(parameters.Metric),
+                    metric_id="pearson_correlation",
+                    implementation=MetricImplementationRef(
+                        path="analysis/quality/correlation.yaml",
+                        symbol="compute",
+                        sha256="a" * 64,
+                        bytes=1,
+                    ),
+                    params=parameters.Metric(),
+                    mode="recompute",
+                    dependencies=(
+                        MetricDependency(
+                            source="artifact",
+                            name="predictions",
+                            required_data_role="evaluation",
+                        ),
+                    ),
+                    comparator=FloatComparator(mode="exact", tolerance=0),
+                )
 ```
 
 **File: `tests/test_run_execution.py`**

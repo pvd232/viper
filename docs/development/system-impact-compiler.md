@@ -1213,9 +1213,9 @@ depends_on = ["P0-CRT-07"]
 ```toml pair-block
 id = "P0-SIG-02"
 requirements = ["SIG-01", "SIG-05"]
-targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNodeKind", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceGraph"]
+targets = ["src/viper/_system_impact/codeql.py:IGNORED_PARTS", "src/viper/_system_impact/codeql.py:CodeQLAnalysisError", "src/viper/_system_impact/codeql.py:source_digest", "src/viper/_system_impact/codeql.py:analyze_source", "src/viper/system_impact.py:CodeQLReceipt", "src/viper/system_impact.py:SourceNodeKind", "src/viper/system_impact.py:SourceNode", "src/viper/system_impact.py:SourceGraph", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees"]
 assets = ["tools/codeql/viper-python-impact/qlpack.yml", "tools/codeql/viper-python-impact/codeql-pack.lock.yml", "tools/codeql/viper-python-impact/source-facts.qls", "tools/codeql/viper-python-impact/Declarations.ql", "tools/codeql/viper-python-impact/Dependencies.ql"]
-tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository"]
+tests = ["tests/test_system_impact.py:test_analyze_source_binds_digests_identity_and_database_reuse", "tests/test_system_impact.py:test_analyze_source_rebuilds_tampered_cache_manifest", "tests/test_system_impact.py:test_analyze_source_rejects_source_pack_and_cli_identity_drift", "tests/test_system_impact.py:test_checked_in_codeql_pack_analyzes_tiny_repository", "tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees"]
 gate = "conda run -n mantra python -m pytest tests/test_system_impact.py -k 'analyze_source or checked_in_codeql_pack' -q"
 depends_on = ["P0-SIG-01"]
 ```
@@ -1280,7 +1280,15 @@ PairBlocks. The public records and wrappers remain in Section 4.
 
 ```python contract-target
 IGNORED_PARTS = frozenset(
-    {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "node_modules"}
+    {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        ".viper",
+        "node_modules",
+    }
 )
 
 class CodeQLAnalysisError(RuntimeError):
@@ -2060,3 +2068,21 @@ tests.
   models repository-level multi-agent coding as a weighted dependency-graph
   partitioning problem. The 2026 result is a preprint and supplies motivation
   for VIPER's proposed comparison. VIPER must measure its own gains.
+
+## 13. Generated-candidate exclusion
+
+<!-- contract-target: requirements=SIG-01,SIG-05 block=P0-SIG-02 action=add target=tests/test_system_impact.py:test_source_digest_ignores_viper_worktrees -->
+```python contract-target
+def test_source_digest_ignores_viper_worktrees(tmp_path: Path) -> None:
+    """Keep generated plan candidates outside the reusable source identity."""
+    source = tmp_path / "src/example.py"
+    source.parent.mkdir()
+    source.write_text("VALUE = 1\n")
+    expected = source_digest(tmp_path)
+
+    generated = tmp_path / ".viper/checks/candidate/example.py"
+    generated.parent.mkdir(parents=True)
+    generated.write_text("VALUE = 2\n")
+
+    assert source_digest(tmp_path) == expected
+```
