@@ -2990,6 +2990,8 @@ targets = [
     "src/viper/authoring.py:stage",
     "src/viper/authoring.py:freeze_run_plan",
     "src/viper/project.py:_project_files",
+    "src/viper/parameters.py:hashlib",
+    "src/viper/parameters.py:Path",
     "src/viper/parameters.py:ParameterSet",
     "src/viper/parameters.py:Build",
     "src/viper/parameters.py:Embed",
@@ -3349,10 +3351,8 @@ from .runtime import (
 from .runtime import EnvSpec, ReproducibilitySpec
 ```
 
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/stages.py:parameters -->
-```python contract-target
-from . import params as parameters
-```
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/stages.py:parameters -->
+<!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/stages.py:keys -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/stages.py:params -->
@@ -9477,6 +9477,12 @@ def {stage}(context) -> None:
 ```
 
 **File: `src/viper/parameters.py`**
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:hashlib -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Path -->
+<!-- contract-remove -->
 
 <!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=remove target=src/viper/parameters.py:Literal -->
 <!-- contract-remove -->
