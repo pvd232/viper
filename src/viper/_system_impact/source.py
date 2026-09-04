@@ -120,6 +120,7 @@ def _assignment_names(node: ast.Assign | ast.AnnAssign) -> tuple[str, ...]:
 
 
 def _import_names(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
+    """Return the names created by one import statement."""
     names: list[str] = []
     for alias in node.names:
         if alias.name == "*":
@@ -139,6 +140,7 @@ def _declaration_names(node: ast.stmt) -> tuple[str, ...]:
 
 
 def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
+    """Find the one declaration named by a contract target."""
     parts = qualified_symbol.split(".")
     if not parts or any(not part.isidentifier() for part in parts):
         raise SourceDeclarationError(

@@ -2123,6 +2123,7 @@ def import_binding(source: bytes, symbol: str) -> ImportBinding:
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/source.py:_import_names -->
 ```python contract-target
 def _import_names(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
+    """Return the names created by one import statement."""
     names: list[str] = []
     for alias in node.names:
         if alias.name == "*":
@@ -2134,6 +2135,7 @@ def _import_names(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=update target=src/viper/_system_impact/source.py:_resolve_declaration -->
 ```python contract-target
 def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
+    """Find the one declaration named by a contract target."""
     parts = qualified_symbol.split(".")
     if not parts or any(not part.isidentifier() for part in parts):
         raise SourceDeclarationError(
