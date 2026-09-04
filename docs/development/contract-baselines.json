@@ -105,7 +105,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "1825d929154884c89821fc9355e551a7280a43948d0299f908fe67f6b9b080f4"
+      "sha256": "373d6ef88a57fcdd05531c340680a17758bf2ca4baaa2e95745f4caae995f48f"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",

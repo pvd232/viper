@@ -2700,6 +2700,11 @@ id = "P5-AIR-02"
 requirements = ["AIR-01"]
 targets = [
     "src/viper/_verification/attempt.py:ExecutionContext",
+    "src/viper/_verification/attempt.py:EnvironmentSpec",
+    "src/viper/_verification/attempt.py:GCEEnvironmentSpec",
+    "src/viper/_verification/attempt.py:ResolvedEnvironment",
+    "src/viper/_verification/attempt.py:ResolvedGCEEnvironment",
+    "src/viper/_verification/attempt.py:BaseSpec",
     "src/viper/_verification/attempt.py:EvaluateSpec",
     "src/viper/_verification/attempt.py:EvalSpec",
     "src/viper/_verification/attempt.py:EnvSpec",
@@ -3177,6 +3182,10 @@ from viper.stages import eval
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:ExecutionContext -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:EnvironmentSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:GCEEnvironmentSpec -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:ResolvedEnvironment -->
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:ResolvedGCEEnvironment -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:EnvSpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:GCEEnvSpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:ResolvedEnv -->
@@ -6953,11 +6962,23 @@ def preflight_plan(repository_root: Path, run_spec_path: Path) -> PreflightRepor
 **File: `src/viper/_verification/attempt.py`**
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:EvaluateSpec -->
-<!-- contract-remove -->
-
+<!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=update target=src/viper/_verification/attempt.py:BaseSpec -->
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=add target=src/viper/_verification/attempt.py:EvalSpec -->
 ```python contract-target
-from ..stages import EvalSpec
+from ..stages import (
+    BaseSpec,
+    EvalSpec,
+    InternalSpec,
+    ParameterizedSpec,
+    ParameterizedStageSpec,
+    ResolvedBaseSpec,
+    ResolvedDownloadSpec,
+    ResolvedInternalSpec,
+    ResolvedParameterizedSpec,
+    ResolvedSpec,
+    StageContextBinding,
+    StageInvocationReceipt,
+)
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-02 action=remove target=src/viper/_verification/attempt.py:_verify_effective_environment -->
