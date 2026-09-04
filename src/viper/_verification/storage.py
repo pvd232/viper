@@ -12,7 +12,8 @@ from typing import cast
 import yaml
 from huggingface_hub import HfApi, RepoFile, hf_hub_download
 
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from .._schema import ArtifactName, DataRole, RepoRelPath
 from ..artifact_loaders import (
     ArtifactLoaderError,

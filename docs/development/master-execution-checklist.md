@@ -282,7 +282,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, typed one-hop impact reporting, and rejection of unplanned source changes |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
-| [External input roots](external-input-roots.md) | Planned; Phase 3 PairBlocks in guided execution | Local input capture and identity verification |
+| [External input roots](external-input-roots.md) | In progress; Phase 3 implemented; EIR-04 and EIR-05 scheduled | Local input capture and identity verification |
 | [Unified metric drafting](unified-metric-drafting.md) | Audited; owner approval pending | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
 | [Automatic input resolution](automatic-input-resolution.md) | Audited; owner approval pending | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Audited; owner approval pending | Separate source and generated-plan commits between freezing and execution |
@@ -348,7 +348,8 @@ findings and repair records.
 
 ### 4.1 Schema gate
 
-The executable schema gate is `tests/test_documentation.py`:
+The executable schema gate is split between `tests/test_documentation.py` and
+`tests/test_contract_documentation.py`:
 
 - `test_public_python_examples_are_syntactically_valid()` parses every
   published Python block.
@@ -361,8 +362,9 @@ The executable schema gate is `tests/test_documentation.py`:
 The generated baseline manifest linked in Section 3.2 identifies the exact
 contract revisions under review.
 
-**Current result:** `python -m pytest tests/test_documentation.py -q` completed
-with `62 passed`.
+**Current result:** the partitioned documentation boundary completed with 62
+tests collected; the contract-baseline digest is refreshed after accepted
+contract edits.
 
 ### 4.2 Value-lifecycle decisions
 
@@ -702,9 +704,9 @@ working-file edit must leave the immutable copy retrievable.
       <!-- pair-block-contract: P0-CRT-03 contract=contract-traceability.md -->
       <!-- implements: CRT-03 -->
       <!-- contract-implementation: requirement=CRT-03 rule=contract.example.complete state=implemented owner=src/viper/_contract_traceability.py:validate_contract_example -->
-      <!-- contract-implementation: requirement=CRT-03 rule=contract.diagram.palette state=implemented owner=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
-      <!-- contract-implementation: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented owner=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
-      <!-- contract-implementation: requirement=CRT-03 rule=contract.model.documented state=implemented owner=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
+      <!-- contract-implementation: requirement=CRT-03 rule=contract.diagram.palette state=implemented owner=tests/test_contract_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
+      <!-- contract-implementation: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented owner=tests/test_contract_documentation.py:test_contract_traceability_model_block_matches_runtime -->
+      <!-- contract-implementation: requirement=CRT-03 rule=contract.model.documented state=implemented owner=tests/test_contract_documentation.py:test_contract_traceability_schema_describes_every_field -->
 - [x] Apply the three-DAG and complete worked-example format to every
       implementation contract. Validate
       `IMPLEMENTATION_CONTRACTS` as one closed set before Master Phase 0 closes.
@@ -887,10 +889,10 @@ defines the exact six blocks. It consumes the closed CTG produced by
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.model_exports state=implemented test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
       <!-- contract-verification: requirement=MOD-01 rule=module.verification.operation_exports state=implemented test=tests/test_public_api.py:test_verification_namespace_separates_operations_and_models -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.verification.model_exports state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
-      <!-- contract-verification: requirement=MOD-01 rule=module.verification.operation_exports state=implemented test=tests/test_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.api.owner state=implemented test=tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.owner state=implemented test=tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.model_exports state=implemented test=tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
+      <!-- contract-verification: requirement=MOD-01 rule=module.verification.operation_exports state=implemented test=tests/test_contract_documentation.py:test_module_ownership_pair_blocks_cover_every_moved_definition -->
 
 - [x] In `tests/test_contract_traceability.py`, reject duplicate requirements and
       orphan rules; require canonical declarations.
@@ -912,9 +914,9 @@ defines the exact six blocks. It consumes the closed CTG produced by
       <!-- pair-block-contract: P0-PROOF-03 contract=contract-traceability.md -->
       <!-- verifies: CRT-03 -->
       <!-- contract-verification: requirement=CRT-03 rule=contract.example.complete state=implemented test=tests/test_contract_traceability.py:test_contract_examples_reject_incomplete_structure -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_documentation.py:test_contract_traceability_model_block_matches_runtime -->
-      <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_documentation.py:test_contract_traceability_schema_describes_every_field -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.diagram.palette state=implemented test=tests/test_contract_documentation.py:test_contract_traceability_dags_use_semantic_palette -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.model.matches_runtime state=implemented test=tests/test_contract_documentation.py:test_contract_traceability_model_block_matches_runtime -->
+      <!-- contract-verification: requirement=CRT-03 rule=contract.model.documented state=implemented test=tests/test_contract_documentation.py:test_contract_traceability_schema_describes_every_field -->
 - [x] In `tests/test_contract_traceability.py`, compile twice, require identical graph
       bytes, and require every rule to reach its owner and tests.
       <!-- pair-block: P0-PROOF-04 -->
@@ -969,7 +971,9 @@ python -m pytest \
   tests/test_verification.py \
   tests/test_validation_architecture.py \
   tests/test_inspection.py \
-  tests/test_documentation.py -q
+  tests/test_documentation.py \
+  tests/test_contract_documentation.py \
+  tests/test_workflow_documentation.py -q
 ```
 
 **Commit boundaries:**
@@ -1263,47 +1267,48 @@ through stage consumption. A change fails the stage.
 
 ### 10.1 Model cleanup
 
-- [ ] Delete `HttpSource` and `ExternalInputSource` from `src/viper/inputs.py`.
+- [x] Delete `HttpSource` and `ExternalInputSource` from `src/viper/inputs.py`.
       <!-- pair-block: P3-EIR-01 -->
       <!-- pair-block-contract: P3-EIR-01 contract=external-input-roots.md -->
       <!-- implements: EIR-01 -->
-      <!-- contract-implementation: requirement=EIR-01 rule=input.local.model state=planned owner=src/viper/inputs.py:ExternalInputRef -->
-      <!-- contract-verification: requirement=EIR-01 rule=input.local.model state=planned test=tests/test_protocol.py:test_external_inputs_are_local_only -->
-- [ ] Set both local `source` fields to `LocalSource`.
-- [ ] Delete `ExternalInputRef.path`.
-- [ ] Change `ResolvedExternalInputRef.file` to `SnapshotFileRef`.
-- [ ] Rename `FutureInputRef.producer_artifact` to `FutureInputRef.name` and
+      <!-- contract-implementation: requirement=EIR-01 rule=input.local.model state=implemented owner=src/viper/inputs.py:ExternalInputRef -->
+      <!-- contract-verification: requirement=EIR-01 rule=input.local.model state=implemented test=tests/test_protocol.py:test_external_inputs_are_local_only -->
+- [x] Set both local `source` fields to `LocalSource`.
+- [x] Delete `ExternalInputRef.path`.
+- [x] Change `ResolvedExternalInputRef.file` to `SnapshotFileRef`.
+- [x] Rename `FutureInputRef.producer_artifact` to `FutureInputRef.name` and
       update the Phase 3 consumers owned by the external-input contract.
-- [ ] Remove the HTTP branch and HTTP helper from
-      `execution/_materialization.py:resolve_inputs()`.
+- [x] Remove the HTTP branch from
+      `execution/_materialization.py:resolve_inputs()`; retain the HTTP helper
+      used by runner-owned download stages.
 
 ### 10.2 Capture and custody
 
-- [ ] Reject a local source that is a symlink, resolves outside the repository,
+- [x] Reject a local source that is a symlink, resolves outside the repository,
       or has a file type other than regular before reading it.
       <!-- pair-block: P3-EIR-02 -->
       <!-- pair-block-contract: P3-EIR-02 contract=external-input-roots.md -->
       <!-- implements: EIR-02 -->
-      <!-- contract-implementation: requirement=EIR-02 rule=input.local.capture state=planned owner=src/viper/execution/_materialization.py:capture_external_input -->
-      <!-- contract-verification: requirement=EIR-02 rule=input.local.capture state=planned test=tests/test_run_execution.py:test_local_input_is_captured_by_attempt -->
-- [ ] Add `captured_input_path()` to `src/viper/workspace.py`. Derive the path from
+      <!-- contract-implementation: requirement=EIR-02 rule=input.local.capture state=implemented owner=src/viper/execution/_materialization.py:capture_external_input -->
+      <!-- contract-verification: requirement=EIR-02 rule=input.local.capture state=implemented test=tests/test_run_execution.py:test_local_input_is_captured_by_attempt -->
+- [x] Add `captured_input_path()` to `src/viper/workspace.py`. Derive the path from
       run ID, attempt ID, stage ID, input name, and the source suffix.
-- [ ] Use the helper in `execution/_materialization.py`,
+- [x] Use the helper in `execution/_materialization.py`,
       `_workers/stages.py`, and `_verification/attempt.py`.
       <!-- pair-block: P3-EIR-03 -->
       <!-- pair-block-contract: P3-EIR-03 contract=external-input-roots.md -->
       <!-- implements: EIR-03 -->
-      <!-- contract-implementation: requirement=EIR-03 rule=input.local.identity state=planned owner=src/viper/_verification/attempt.py:verify_external_inputs -->
-      <!-- contract-verification: requirement=EIR-03 rule=input.local.identity state=planned test=tests/test_verification_acceptance.py:test_external_input_identity_survives_execution -->
-- [ ] Read the local source once.
-- [ ] Write a temporary sibling file, flush it, and atomically replace the
+      <!-- contract-implementation: requirement=EIR-03 rule=input.local.identity state=implemented owner=src/viper/_verification/attempt.py:verify_external_inputs -->
+      <!-- contract-verification: requirement=EIR-03 rule=input.local.identity state=implemented test=tests/test_verification_acceptance.py:test_external_input_identity_survives_execution -->
+- [x] Read the local source once.
+- [x] Write a temporary sibling file, flush it, and atomically replace the
       canonical attempt-owned path.
-- [ ] Build `SnapshotFileRef` from the attempt-owned path.
-- [ ] Give that path to the worker.
-- [ ] After the worker exits, hash the path again.
-- [ ] Fail `input.local.identity` if path, digest, or byte count changed.
-- [ ] Add the captured path to `snapshot_paths` before publication.
-- [ ] Verify `ResolvedExternalInputRef.file` through its enclosing
+- [x] Build `SnapshotFileRef` from the attempt-owned path.
+- [x] Give that path to the worker.
+- [x] After the worker exits, hash the path again.
+- [x] Fail `input.local.identity` if path, digest, or byte count changed.
+- [x] Add the captured path to `snapshot_paths` before publication.
+- [x] Verify `ResolvedExternalInputRef.file` through its enclosing
       `ResolvedStageRef.snapshot`.
 
 <details>
@@ -1327,13 +1332,16 @@ verifier reconstruct that path with the shared helper.
 
 ### 10.3 Focused proof
 
-- [ ] Extend `tests/test_run_execution.py:test_train_stage_captures_local_external_input`.
-- [ ] Add a test that changes the captured file during stage execution.
-- [ ] Add worker-startup and failed-stage receipt cases that reject a different
-      local capture path.
-- [ ] Add verifier acceptance and tamper cases.
-- [ ] Add an outside-repository symlink case for `input.local.capture`.
-- [ ] Run: <!-- verifies: EIR-01, EIR-02, EIR-03 -->
+- [x] Extend `tests/test_run_execution.py:test_train_stage_captures_local_external_input`.
+- [x] Add a test that changes the captured file before the post-execution
+      identity check.
+- [x] Add worker-startup path derivation, failed-stage custody wiring, and
+      verifier cases that reject a different local capture path.
+- [x] Add verifier acceptance and tamper cases.
+- [x] Add an outside-repository symlink case for `input.local.capture`.
+- [x] Statically enforce the post-process identity check and captured-file
+      snapshot publication in `execute_attempt()`.
+- [x] Run: <!-- verifies: EIR-01, EIR-02, EIR-03 -->
 
 ```bash
 python -m pytest \
@@ -2981,7 +2989,7 @@ python -m pytest \
   tests/test_cli.py \
   tests/test_inspection.py \
   tests/test_verification_acceptance.py \
-  tests/test_documentation.py -q
+  tests/test_contract_documentation.py -q
 ```
 
 **Commit boundary:** `Expose verified research learning through MCP`
@@ -3026,7 +3034,7 @@ phase.
 
 ### 28.2 Deterministic contract gate
 
-- [ ] Run `tests/test_documentation.py`. Require exact contract baselines,
+- [ ] Run the three documentation test modules. Require exact contract baselines,
       one implementation and verification marker per requirement, exact
       repeated class fields, exact catalog query fields, producer-before-
       consumer ordering, and a terminal phase after every implementation
@@ -3048,7 +3056,10 @@ phase.
       implementation commit.
 
 ```bash
-python -m pytest tests/test_documentation.py -q
+python -m pytest \
+  tests/test_documentation.py \
+  tests/test_contract_documentation.py \
+  tests/test_workflow_documentation.py -q
 make check
 make check-integration
 make check-release

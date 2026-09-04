@@ -46,7 +46,11 @@ from ..storage import (
 from ..verification import verify_run_result
 from ..verification.models import VerificationError, VerificationPolicy
 from ..workspace import AttemptWorkspace, RunWorkspaceLock, next_attempt_id
-from ._materialization import resolve_inputs, retrieve_download_inputs
+from ._materialization import (
+    resolve_inputs,
+    retrieve_download_inputs,
+    verify_captured_inputs,
+)
 from ._metric import MetricExecutionError, run_after_stage_metrics
 from ._publication import (
     publish_attempt_files,
@@ -214,6 +218,7 @@ def execute_attempt(
             effective_environment = stage.environment or run.environment
             resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
             resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
+            captured_inputs: dict[InputName, SnapshotFileRef] = {}
             input_paths: dict[str, Path] = {}
             process = None
             journal.append(
@@ -261,16 +266,17 @@ def execute_attempt(
                 ):
                     raise RunError("stage source differs from the frozen source")
                 if isinstance(stage, InternalSpec):
-                    resolved_inputs, input_paths = resolve_inputs(
-                        root,
-                        workspace,
-                        stage_reference.stage_id,
-                        stage,
-                        completed,
-                        loaded_stages,
-                        fetcher,
-                        policy,
-                        store,
+                    resolved_inputs, input_paths, captured_inputs = resolve_inputs(
+                        root=root,
+                        workspace=workspace,
+                        run_id=run.run_id,
+                        attempt_id=attempt_id,
+                        stage_id=stage_reference.stage_id,
+                        stage=stage,
+                        completed=completed,
+                        stage_specs=loaded_stages,
+                        fetcher=fetcher,
+                        policy=policy,
                     )
                 try:
                     process = execute_stage_process(
@@ -303,6 +309,7 @@ def execute_attempt(
                                 exc.invocation,
                             )
                         )
+                    verify_captured_inputs(root, captured_inputs)
                     raise
                 invocation_path = (
                     f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
@@ -315,6 +322,7 @@ def execute_attempt(
                     process.invocation,
                 )
                 invocation_refs.append(invocation_ref)
+                verify_captured_inputs(root, captured_inputs)
                 stage_completed = datetime.now(UTC)
                 resolved = resolve_stage(
                     stage,
@@ -353,6 +361,8 @@ def execute_attempt(
             )
             resolved_raw = serialize_document(resolved)
             snapshot_paths: dict[str, Path] = {}
+            for reference in captured_inputs.values():
+                snapshot_paths[reference.path] = root / reference.path
             if resolved_retrievals is not None:
                 for retrieval in resolved_retrievals.values():
                     retrieval_path = retrieval.body.path

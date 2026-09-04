@@ -394,7 +394,7 @@ def train_spec(*, future_prior: bool = False) -> TrainSpec:
         inputs["prior"] = FutureInputRef(
             kind="future",
             producer_stage_id="build",
-            producer_artifact="prior",
+            name="prior",
         )
     else:
         inputs["training_dataset"] = StoredInputRef(
@@ -1070,12 +1070,12 @@ class RunAndStageVerificationTests(unittest.TestCase):
             "first_model": {
                 "kind": "future",
                 "producer_stage_id": "train",
-                "producer_artifact": PARAMETERS,
+                "name": PARAMETERS,
             },
             "second_model": {
                 "kind": "future",
                 "producer_stage_id": "train_02",
-                "producer_artifact": PARAMETERS,
+                "name": PARAMETERS,
             },
         }
         consumer = BuildSpec.model_validate(consumer_payload)
@@ -1733,7 +1733,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 "parameters": FutureInputRef(
                     kind="future",
                     producer_stage_id="train",
-                    producer_artifact=PARAMETERS,
+                    name=PARAMETERS,
                 ),
                 "evaluation_dataset": StoredInputRef(
                     kind="stored",

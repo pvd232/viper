@@ -603,7 +603,10 @@ digests and byte counts through the existing storage rules.
 | `tests/test_project_init.py` | Cover explicit-root initialization, root marker discovery, complete tree creation, and occupied-target rollback. |
 | `tests/test_storage.py` | Publish and retrieve beneath a non-current project root; reject an escaping store. |
 | `tests/test_validation_architecture.py` | Require public operation boundaries to use the shared root resolver and internal functions to receive resolved roots. |
-| `tests/test_documentation.py` | Compare the protocol tree, CLI vocabulary, contract requirements, and checklist coverage. |
+| `tests/_documentation.py` | Share Markdown, AST, link, heading, marker, and contract-inventory helpers across documentation test modules. |
+| `tests/test_documentation.py` | Compare public examples, imports, links, protocol parity, and release text. |
+| `tests/test_contract_documentation.py` | Compare contract requirements, PairBlocks, baselines, diagrams, and checklist coverage. |
+| `tests/test_workflow_documentation.py` | Enforce CI and release workflow permissions, action pins, gates, and wheel-smoke checks. |
 | Public documentation | Explain that `ROOT` contains both the visible protocol tree and the separate `.viper/store` subtree. |
 
 ### Legacy cleanup

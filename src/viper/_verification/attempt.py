@@ -12,6 +12,8 @@ from typing import cast
 import yaml
 from pydantic import TypeAdapter
 
+from viper.workspace import captured_input_path
+
 from .._parameter.validation import (
     ParameterValidationError,
     verify_parameter_model_bytes,
@@ -24,7 +26,7 @@ from ..http import (
     validate_request_policy,
 )
 from ..ids import InputName, StageId
-from ..inputs import FutureInputRef
+from ..inputs import ExternalInputRef, FutureInputRef, ResolvedExternalInputRef
 from ..journal import parse_journal_bytes
 from ..metrics import Measurement
 from ..references import (
@@ -59,6 +61,7 @@ from ..stages import (
     ParameterizedStageSpec,
     ResolvedBaseSpec,
     ResolvedDownloadSpec,
+    ResolvedInternalSpec,
     ResolvedParameterizedSpec,
     ResolvedSpec,
     StageContextBinding,
@@ -95,6 +98,7 @@ def unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 def _logical_input_paths(
     run: RunSpec,
+    attempt_id: int,
     stage_id: StageId,
     stage: BaseSpec,
     stage_specs: Mapping[StageId, BaseSpec],
@@ -106,7 +110,15 @@ def _logical_input_paths(
     for name, reference in stage.inputs.items():
         if isinstance(reference, FutureInputRef):
             producer = stage_specs[reference.producer_stage_id]
-            paths[name] = producer.artifacts[reference.producer_artifact].path
+            paths[name] = producer.artifacts[reference.name].path
+        elif isinstance(reference, ExternalInputRef):
+            paths[name] = captured_input_path(
+                run_id=run.run_id,
+                attempt_id=attempt_id,
+                stage_id=stage_id,
+                input_name=name,
+                source_path=reference.source.path,
+            )
         else:
             paths[name] = reference.path
 
@@ -144,7 +156,9 @@ def _verify_stage_invocation(
         stage_id=stage_id,
         parameter_model=stage.parameter_model,
         parameter_digest=document_digest(stage.params),
-        inputs=_logical_input_paths(run, stage_id, stage, stage_specs),
+        inputs=_logical_input_paths(
+            run, attempt.attempt_id, stage_id, stage, stage_specs
+        ),
         artifacts={name: value.path for name, value in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
@@ -368,7 +382,9 @@ def _verify_unresolved_stage_invocation(
         stage_id=stage_id,
         parameter_model=stage.parameter_model,
         parameter_digest=document_digest(stage.params),
-        inputs=_logical_input_paths(run, stage_id, stage, stage_specs),
+        inputs=_logical_input_paths(
+            run, attempt.attempt_id, stage_id, stage, stage_specs
+        ),
         artifacts={name: value.path for name, value in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
@@ -656,6 +672,15 @@ def verify_attempt_stages(
                 stage_reference.snapshot,
                 fetcher=fetcher,
             )
+        elif isinstance(resolved_spec, ResolvedInternalSpec):
+            verify_external_inputs(
+                attempt,
+                run,
+                stage_reference.stage_id,
+                resolved_spec,
+                stage_reference.snapshot,
+                fetcher=fetcher,
+            )
 
         if verified_stages:
             previous_completed_at = next(
@@ -911,3 +936,45 @@ def verify_measurement_stage_times(
             raise VerificationError(
                 "recomputed measurement timestamp precedes stage completion"
             )
+
+
+def verify_external_inputs(
+    attempt: RunAttempt,
+    run: RunSpec,
+    stage_id: StageId,
+    resolved: ResolvedInternalSpec,
+    snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
+    *,
+    fetcher: StorageFetcher | None,
+) -> None:
+    """Verify each local input captured in one completed stage snapshot."""
+    for input_name, resolved_input in resolved.inputs.items():
+        if not isinstance(resolved_input, ResolvedExternalInputRef):
+            continue
+        planned_input = resolved.spec.inputs[input_name]
+        if not isinstance(planned_input, ExternalInputRef):
+            raise VerificationError(
+                "input.local.identity: resolved input differs from its plan"
+            )
+        if (
+            resolved_input.source != planned_input.source
+            or resolved_input.data_role != planned_input.data_role
+        ):
+            raise VerificationError(
+                "input.local.identity: resolved input provenance differs"
+            )
+        expected_path = captured_input_path(
+            run_id=run.run_id,
+            attempt_id=attempt.attempt_id,
+            stage_id=stage_id,
+            input_name=input_name,
+            source_path=planned_input.source.path,
+        )
+        if resolved_input.file.path != expected_path:
+            raise VerificationError("input.local.identity: path differs")
+        try:
+            read_snapshot_file(snapshot, resolved_input.file, fetcher=fetcher)
+        except VerificationError as exc:
+            raise VerificationError(
+                f"input.local.identity: captured input {input_name!r} differs"
+            ) from exc

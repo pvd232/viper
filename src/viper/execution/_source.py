@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from .._schema import RepoRelPath
 from .._verification.storage import (
     fetch_git_file_bytes,

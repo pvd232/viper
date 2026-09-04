@@ -11,7 +11,7 @@
         "CRT-06",
         "CRT-07"
       ],
-      "sha256": "8404d726d1cd613d9a3cb07081ebb1177bf50156bdab80cfc7b23b9965c65bc6"
+      "sha256": "5412f455c3b49f0cb8e6596419d4c2d28377e78e8e67b90e3492f06b658c0f65"
     },
     {
       "path": "docs/development/project-data-root.md",
@@ -21,14 +21,14 @@
         "PDR-03",
         "PDR-04"
       ],
-      "sha256": "fc7569b41ce6ba5c96929118de4df5d258dc85b7a8481913999f15609cd25beb"
+      "sha256": "9ffe9cd8953339fa2d5227c1499d2fd2b47aabcb76764954011ba69cc7c12631"
     },
     {
       "path": "docs/development/module-ownership.md",
       "requirement_ids": [
         "MOD-01"
       ],
-      "sha256": "135dba427aed5412ca3622cd98eed38c008df5d2224f08bb039d6db31de24bea"
+      "sha256": "8e073fba2d7f847d428999caa6ae82f2060ec4b6300970b33b1b5347cd7a4558"
     },
     {
       "path": "docs/development/system-impact-compiler.md",
@@ -48,7 +48,7 @@
         "CPL-01",
         "CPL-02"
       ],
-      "sha256": "11de07dfe1d27f23ff9500747f4d34900332c0d129ab5ff2aec2ac7e6770615e"
+      "sha256": "2f36ff1b8f9c84cac86d418f4542aaf885a83d8b18a57fc103840d3f8fdd064d"
     },
     {
       "path": "docs/development/download-retrieval-artifacts.md",
@@ -60,7 +60,7 @@
         "DRA-05",
         "DRA-06"
       ],
-      "sha256": "c4ee06aaefa8fc60f812ab213a5b2a12c720c082a2f88f4ad9c3312bd0692112"
+      "sha256": "e9ecd98fbc5ef009c27bcaaad60287d9b232de3ac02cd173f20b5cab0e6dea66"
     },
     {
       "path": "docs/development/external-input-roots.md",
@@ -71,7 +71,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "db9bb5e40283954c5bf91d037d18fd567fd42038397bf8af15fd866cb4cbc314"
+      "sha256": "e5e14fbb01c946224ef1a3d86f4148ba920556ea9f90c34ed2d24c6b28b962fb"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",
@@ -95,7 +95,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "ee78e8346371871fcea668879d5751bf309c4c5bf0cc9ef5a340e7c1daeccff7"
+      "sha256": "f55a2d19e15d7cc3d484acde67b065b29927b3728b2da8a9ba2fa42099861035"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -121,7 +121,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "edc426fb9f097da9991051030c921140797e8f468f76703a55a01eabd1bdb6f7"
+      "sha256": "7edd3c82faec41bea4989bd1aada4c0932977a3b0d6ebccc9a7e4e39abecf94f"
     },
     {
       "path": "docs/development/experiment-expansion.md",
@@ -175,7 +175,7 @@
         "RML-05",
         "RML-06"
       ],
-      "sha256": "f22cccf9d2a598f0598849843930c8861f47ff4beded4556fbe2560121c7e6e3"
+      "sha256": "cb022ebcb655ac2f8b44a5b4b4bf17573604b736cec286e021dc44ebb559eca1"
     }
   ],
   "schema_version": 1

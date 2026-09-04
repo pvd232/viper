@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from .ids import RunId
-from .inputs import FutureInputRef, StoredInputRef
+from .inputs import ExternalInputRef, FutureInputRef, StoredInputRef
 from .journal import ATTEMPT_STATE_TRANSITIONS, AttemptState, DurableJournal
 from .runs import RunSpec
 from .serialization import load_stage_spec, parse_yaml_bytes
@@ -313,11 +313,12 @@ def lineage(verified: VerifiedRunResult) -> RunLineage:
                 input_node = f"input:{stage_id}:{input_name}"
                 if isinstance(input_ref, FutureInputRef):
                     producer_stage = verified.plan.stages[input_ref.producer_stage_id]
-                    producer_artifact = producer_stage.artifacts[
-                        input_ref.producer_artifact
-                    ]
+                    producer_artifact = producer_stage.artifacts[input_ref.name]
                     data_role = producer_artifact.data_role
                     input_path = producer_artifact.path
+                elif isinstance(input_ref, ExternalInputRef):
+                    data_role = input_ref.data_role
+                    input_path = input_ref.source.path
                 else:
                     data_role = input_ref.data_role
                     input_path = input_ref.path
@@ -335,12 +336,8 @@ def lineage(verified: VerifiedRunResult) -> RunLineage:
                     )
                 )
                 if isinstance(input_ref, FutureInputRef):
-                    source = (
-                        f"artifact:{input_ref.producer_stage_id}:"
-                        f"{input_ref.producer_artifact}"
-                    )
-                else:
-                    assert isinstance(input_ref, StoredInputRef)
+                    source = f"artifact:{input_ref.producer_stage_id}:{input_ref.name}"
+                elif isinstance(input_ref, StoredInputRef):
                     source = f"promoted:{stage_id}:{input_name}"
                     nodes[source] = LineageNode(
                         node_id=source,
@@ -348,6 +345,8 @@ def lineage(verified: VerifiedRunResult) -> RunLineage:
                         data_role=input_ref.data_role,
                         path=input_ref.pointer.path,
                     )
+                else:
+                    continue
                 edges.append(
                     LineageEdge(
                         source=source,

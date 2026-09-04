@@ -11,8 +11,10 @@ import hashlib
 import unittest
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
+from pathlib import Path
 from typing import Any, cast
 
+import pytest
 import torch
 import yaml
 from pydantic import HttpUrl, TypeAdapter
@@ -37,6 +39,8 @@ from viper._schema import (
     RESUME_STATE,
     DataRole,
 )
+from viper._verification.attempt import verify_external_inputs
+from viper._workers.stages import _planned_stage_context
 from viper.artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
@@ -69,7 +73,10 @@ from viper.http import (
     ResolvedHttpRetrieval,
 )
 from viper.inputs import (
+    ExternalInputRef,
     FutureInputRef,
+    LocalSource,
+    ResolvedExternalInputRef,
     ResolvedFutureInputRef,
     ResolvedStoredInputRef,
     StoredInputRef,
@@ -152,6 +159,7 @@ from viper.verification import (
     verify_run_result,
 )
 from viper.verification.models import VerificationError
+from viper.workspace import captured_input_path
 
 SOURCE_REPOSITORY = HttpUrl("https://github.com/example/viper-project")
 ARTIFACT_REPOSITORY = "example/viper-runs"
@@ -931,7 +939,7 @@ def publish_producer_run(
             "training_dataset": FutureInputRef(
                 kind="future",
                 producer_stage_id="download",
-                producer_artifact="dataset",
+                name="dataset",
             )
         },
         params=parameters.Train.model_validate(
@@ -1249,7 +1257,7 @@ def build_complete_fixture(
             "prior": FutureInputRef(
                 kind="future",
                 producer_stage_id="build",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=parameters.Train.model_validate(
@@ -1284,7 +1292,7 @@ def build_complete_fixture(
             "parameters": FutureInputRef(
                 kind="future",
                 producer_stage_id="train",
-                producer_artifact=PARAMETERS,
+                name=PARAMETERS,
             ),
             "evaluation_dataset": StoredInputRef(
                 kind="stored",
@@ -1935,6 +1943,164 @@ def test_download_verification_binds_receipt_to_artifact() -> None:
     artifact = download.artifacts["dataset"]
     assert isinstance(artifact, ResolvedSingleFileArtifact)
     assert download.retrievals["dataset"].body == artifact.file
+
+
+def test_external_input_identity_survives_execution() -> None:
+    """Accept captured bytes when plan, receipt path, and snapshot agree."""
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    attempt_id = 1
+    stage_id = "train"
+    source = LocalSource(path="inputs/raw/dataset.bin")
+    declared = ExternalInputRef(source=source, data_role="training")
+    captured_path = captured_input_path(
+        run_id=run_id,
+        attempt_id=attempt_id,
+        stage_id=stage_id,
+        input_name="dataset",
+        source_path=source.path,
+    )
+    raw = b"dataset"
+    captured = SnapshotFileRef(
+        path=captured_path,
+        sha256=sha256(raw),
+        bytes=len(raw),
+    )
+    resolved = ResolvedTrainSpec.model_construct(
+        spec=TrainSpec.model_construct(inputs={"dataset": declared}),
+        inputs={
+            "dataset": ResolvedExternalInputRef(
+                source=source,
+                file=captured,
+                data_role="training",
+            )
+        },
+    )
+    store = DocumentStore()
+    snapshot_commit = "7" * 40
+    store.put(hf_file(snapshot_commit, captured_path), raw)
+
+    assert (
+        verify_external_inputs(
+            RunAttempt.model_construct(attempt_id=attempt_id),
+            RunSpec.model_construct(run_id=run_id),
+            stage_id,
+            resolved,
+            snapshot(snapshot_commit),
+            fetcher=store.fetch,
+        )
+        is None
+    )
+    assert store.fetch(hf_file(snapshot_commit, captured_path)) == raw
+
+
+def test_external_input_identity_rejects_tampering() -> None:
+    """Reject snapshot bytes that differ from the captured input identity."""
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    attempt_id = 1
+    stage_id = "train"
+    source = LocalSource(path="inputs/raw/dataset.bin")
+    declared = ExternalInputRef(source=source, data_role="training")
+    captured_path = captured_input_path(
+        run_id=run_id,
+        attempt_id=attempt_id,
+        stage_id=stage_id,
+        input_name="dataset",
+        source_path=source.path,
+    )
+    captured = SnapshotFileRef(
+        path=captured_path,
+        sha256=sha256(b"dataset"),
+        bytes=len(b"dataset"),
+    )
+    resolved = ResolvedTrainSpec.model_construct(
+        spec=TrainSpec.model_construct(inputs={"dataset": declared}),
+        inputs={
+            "dataset": ResolvedExternalInputRef(
+                source=source,
+                file=captured,
+                data_role="training",
+            )
+        },
+    )
+    store = DocumentStore()
+    snapshot_commit = "7" * 40
+    store.put(hf_file(snapshot_commit, captured_path), b"tampered")
+
+    with pytest.raises(VerificationError, match="input.local.identity"):
+        verify_external_inputs(
+            RunAttempt.model_construct(attempt_id=attempt_id),
+            RunSpec.model_construct(run_id=run_id),
+            stage_id,
+            resolved,
+            snapshot(snapshot_commit),
+            fetcher=store.fetch,
+        )
+
+
+def test_worker_startup_derives_attempt_owned_external_input_path(
+    tmp_path: Path,
+) -> None:
+    """Derive the worker binding path from plan-owned local input identity."""
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    run_root = f"experiments/external_input/runs/baseline/{run_id}"
+    stage = TrainSpec(
+        implementation=stage_implementation_ref(
+            "training/fit.py",
+            TRAIN_SOURCE,
+            symbol="fit",
+        ),
+        parameter_model=parameter_model_ref("train"),
+        inputs={
+            "dataset": ExternalInputRef(
+                source=LocalSource(path="inputs/raw/dataset.bin"),
+                data_role="training",
+            )
+        },
+        params=parameters.Train.model_validate(
+            {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
+        ),
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                path=f"{run_root}/artifacts/models/model/parameters.bin",
+                loader=loader_ref("bytes_file"),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                path=f"{run_root}/artifacts/models/model/resume_state.bin",
+                loader=loader_ref("resume_state"),
+                data_role="training",
+            ),
+        },
+    )
+    run = make_run(
+        experiment_id="external_input",
+        run_id=run_id,
+        source_commit=MAIN_SOURCE_COMMIT,
+        plan_commit=MAIN_PLAN_COMMIT,
+        stage_specs=[("train", stage)],
+        estimator_stage_id="train",
+    )
+    stage_path = tmp_path / run.stages[0].spec
+    stage_path.parent.mkdir(parents=True)
+    stage_path.write_bytes(yaml_bytes(stage))
+
+    planned, expected_inputs = _planned_stage_context(
+        tmp_path,
+        run,
+        "train",
+        attempt_id=3,
+    )
+
+    assert planned == stage
+    assert expected_inputs == {
+        "dataset": captured_input_path(
+            run_id=run_id,
+            attempt_id=3,
+            stage_id="train",
+            input_name="dataset",
+            source_path="inputs/raw/dataset.bin",
+        )
+    }
 
 
 class CompleteProvenanceAcceptanceTests(unittest.TestCase):

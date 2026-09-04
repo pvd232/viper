@@ -412,9 +412,9 @@ conda run -n mantra python -m pytest tests/test_inspection.py tests/test_verific
 id = "P20-RML-04"
 requirements = ["RML-05", "RML-06", "PCM-06", "PCM-07"]
 depends_on = ["P20-RML-03"]
-targets = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
-tests = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
-gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py tests/test_inspection.py tests/test_verification_acceptance.py tests/test_documentation.py -q"
+targets = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_contract_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
+tests = ["tests/test_api.py:test_research_mcp_end_to_end", "tests/test_cli.py:test_research_mcp_end_to_end", "tests/test_inspection.py:test_research_catalog_rebuild_end_to_end", "tests/test_verification_acceptance.py:test_research_learning_and_literature_acceptance", "tests/test_contract_documentation.py:test_research_pair_guide_has_executable_ordered_blocks"]
+gate = "conda run -n mantra python -m pytest tests/test_api.py tests/test_cli.py tests/test_inspection.py tests/test_verification_acceptance.py tests/test_contract_documentation.py -q"
 ```
 
 Run the complete research/MCP boundary:
@@ -425,7 +425,7 @@ conda run -n mantra python -m pytest \
   tests/test_cli.py \
   tests/test_inspection.py \
   tests/test_verification_acceptance.py \
-  tests/test_documentation.py -q
+  tests/test_contract_documentation.py -q
 ```
 
 Then run the change-aware test boundary reported for the final diff. Fix every

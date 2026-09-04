@@ -48,7 +48,7 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="dataset",
+                name="dataset",
             )
         },
         artifacts={

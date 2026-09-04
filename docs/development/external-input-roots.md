@@ -22,7 +22,7 @@ attempt-owned input file, supplies that file to the stage, and records it in
 
 ## 1. Status
 
-**Contract status:** Planned; Phase 3 PairBlocks in guided execution.
+**Contract status:** In progress; Phase 3 implemented; EIR-04 and EIR-05 scheduled.
 
 These requirements bind the contract to the master checklist:
 
@@ -42,19 +42,12 @@ recorded for the selected input. The invocation receipt records the same path.
 
 The runner-owned download path is complete: `DownloadSpec` performs each HTTP
 request and publishes the response directly as the same-named artifact. Phase
-3 closes the remaining local-input gaps:
-
-- `HttpSource` still duplicates HTTP acquisition inside `resolve_inputs()`.
-- `ExternalInputRef.path` lets the contract author choose a worker path instead
-  of deriving one attempt-owned custody path.
-- `ResolvedExternalInputRef.file` still points to separate immutable storage;
-  it does not identify the captured file in the consuming stage snapshot.
-- worker startup and post-run verification do not reconstruct and verify the
-  captured local-input identity.
-
-Phase 3 removes `HttpSource` and its `resolve_inputs()` branch. Phase 7 owns
-automatic selection and pointer generation for local, same-run, and prior-run
-inputs.
+3 removed `HttpSource` and the duplicate HTTP branch from `resolve_inputs()`.
+Local inputs now use one attempt-owned custody path,
+`ResolvedExternalInputRef.file` identifies the captured snapshot member, and
+the runner, worker startup check, and verifier reconstruct and check that same
+identity. Phase 7 still owns automatic selection and pointer generation for
+local, same-run, and prior-run inputs.
 
 ## 3. Current gap
 
@@ -750,20 +743,21 @@ targets = [
     "tests/test_run_execution.py:test_local_input_is_captured_by_attempt",
     "tests/test_run_execution.py:test_local_input_rejects_symlink_escape",
     "tests/test_run_execution.py:test_local_input_mutation_fails_attempt",
+    "tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs",
 ]
 tests = [
     "tests/test_run_execution.py:test_local_input_is_captured_by_attempt",
     "tests/test_run_execution.py:test_local_input_rejects_symlink_escape",
     "tests/test_run_execution.py:test_local_input_mutation_fails_attempt",
+    "tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs",
 ]
-gate = "conda run -n mantra python -m pytest tests/test_run_execution.py -k local_input -q"
+gate = "conda run -n mantra python -m pytest tests/test_run_execution.py -k 'local_input or captured_local_inputs' -q"
 depends_on = ["P3-EIR-01"]
 ```
 
-**Context:** Local input materialization still follows source symlinks and
-uses a path selected by the contract author. This block validates the source,
-derives one attempt-owned path, copies the bytes there, and checks them again
-after the stage runs.
+**Context:** This block validates the source, derives one attempt-owned path,
+copies the bytes there, checks them after the stage process exits, and includes
+the captured file in snapshot publication.
 
 <!-- pair-block-definition: P3-EIR-03 -->
 ```toml pair-block
@@ -775,10 +769,12 @@ targets = [
     "src/viper/_verification/attempt.py:verify_external_inputs",
     "tests/test_verification_acceptance.py:test_external_input_identity_survives_execution",
     "tests/test_verification_acceptance.py:test_external_input_identity_rejects_tampering",
+    "tests/test_verification_acceptance.py:test_worker_startup_derives_attempt_owned_external_input_path",
 ]
 tests = [
     "tests/test_verification_acceptance.py:test_external_input_identity_survives_execution",
     "tests/test_verification_acceptance.py:test_external_input_identity_rejects_tampering",
+    "tests/test_verification_acceptance.py:test_worker_startup_derives_attempt_owned_external_input_path",
 ]
 gate = "conda run -n mantra python -m pytest tests/test_verification_acceptance.py -k external_input -q"
 depends_on = ["P3-EIR-02"]
@@ -851,9 +847,6 @@ class FutureInputRef(ProtocolModel):
 ```python contract-target
 def test_external_inputs_are_local_only() -> None:
     """Keep external roots local and same-run selection artifact-named."""
-    from viper.inputs import ResolvedExternalInputRef
-    from viper.references import SnapshotFileRef
-
     declared = ExternalInputRef(
         source=LocalSource(path="inputs/raw/dataset.bin"),
         data_role="training",
@@ -870,10 +863,7 @@ def test_external_inputs_are_local_only() -> None:
         ),
         data_role=declared.data_role,
     )
-    future = FutureInputRef(
-        producer_stage_id="download",
-        name="dataset",
-    )
+    future = FutureInputRef(producer_stage_id="download", name="dataset")
 
     assert "path" not in ExternalInputRef.model_fields
     assert resolved.source == declared.source
@@ -881,7 +871,7 @@ def test_external_inputs_are_local_only() -> None:
     assert future.name == "dataset"
     assert "producer_artifact" not in FutureInputRef.model_fields
 
-    try:
+    with pytest.raises(ValidationError, match="local"):
         ExternalInputRef.model_validate(
             {
                 "kind": "external",
@@ -889,10 +879,6 @@ def test_external_inputs_are_local_only() -> None:
                 "data_role": "training",
             }
         )
-    except ValidationError as error:
-        assert "local" in str(error)
-    else:
-        raise AssertionError("input.local.model: accepted a nonlocal source")
 ```
 
 **File: `src/viper/stages.py`**
@@ -1242,9 +1228,6 @@ def verify_captured_inputs(
 ```python contract-target
 def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
     """Copy one declared source to its canonical attempt-owned path."""
-    from viper.execution._materialization import capture_external_input
-    from viper.workspace import captured_input_path
-
     root = tmp_path / "project"
     source = root / "inputs/raw/dataset.bin"
     source.parent.mkdir(parents=True)
@@ -1284,8 +1267,6 @@ def test_local_input_is_captured_by_attempt(tmp_path: Path) -> None:
 ```python contract-target
 def test_local_input_rejects_symlink_escape(tmp_path: Path) -> None:
     """Reject a declared source link before VIPER reads outside bytes."""
-    from viper.execution._materialization import capture_external_input
-
     root = tmp_path / "project"
     source = root / "inputs/raw/dataset.bin"
     source.parent.mkdir(parents=True)
@@ -1313,11 +1294,6 @@ def test_local_input_rejects_symlink_escape(tmp_path: Path) -> None:
 ```python contract-target
 def test_local_input_mutation_fails_attempt(tmp_path: Path) -> None:
     """Reject a captured input whose bytes change during stage execution."""
-    from viper.execution._materialization import (
-        capture_external_input,
-        verify_captured_inputs,
-    )
-
     root = tmp_path / "project"
     source = root / "inputs/raw/dataset.bin"
     source.parent.mkdir(parents=True)
@@ -1339,6 +1315,53 @@ def test_local_input_mutation_fails_attempt(tmp_path: Path) -> None:
 
     with pytest.raises(RunError, match="input.local.identity"):
         verify_captured_inputs(root, {"dataset": resolved.file})
+```
+
+<!-- contract-target: requirements=EIR-02 block=P3-EIR-02 action=add target=tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs -->
+```python contract-target
+def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
+    """Keep the post-process identity check before snapshot publication."""
+    source = inspect.getsource(execute_attempt)
+    tree = ast.parse(source)
+    call_lines: dict[str, list[int]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            name = node.func.attr
+        else:
+            continue
+        call_lines.setdefault(name, []).append(node.lineno)
+
+    stage_exit = min(call_lines["execute_stage_process"])
+    custody_check = min(call_lines["verify_captured_inputs"])
+    resolution = min(call_lines["resolve_stage"])
+    publication = min(call_lines["publish"])
+
+    assert stage_exit < custody_check < resolution < publication
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "verify_captured_inputs"
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for node in ast.walk(handler)
+    )
+    exception_lines = {
+        node.lineno
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler)
+        for node in ast.walk(handler)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "verify_captured_inputs"
+    }
+    assert any(
+        line not in exception_lines for line in call_lines["verify_captured_inputs"]
+    )
+    assert "for reference in captured_inputs.values()" in source
 ```
 
 **File: `src/viper/_workers/stages.py`**
@@ -1473,10 +1496,6 @@ def verify_external_inputs(
 ```python contract-target
 def test_external_input_identity_survives_execution() -> None:
     """Accept captured bytes when plan, receipt path, and snapshot agree."""
-    from viper._verification.attempt import verify_external_inputs
-    from viper.inputs import ExternalInputRef, LocalSource, ResolvedExternalInputRef
-    from viper.workspace import captured_input_path
-
     run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
     attempt_id = 1
     stage_id = "train"
@@ -1527,10 +1546,6 @@ def test_external_input_identity_survives_execution() -> None:
 ```python contract-target
 def test_external_input_identity_rejects_tampering() -> None:
     """Reject snapshot bytes that differ from the captured input identity."""
-    from viper._verification.attempt import verify_external_inputs
-    from viper.inputs import ExternalInputRef, LocalSource, ResolvedExternalInputRef
-    from viper.workspace import captured_input_path
-
     run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
     attempt_id = 1
     stage_id = "train"
@@ -1562,10 +1577,7 @@ def test_external_input_identity_rejects_tampering() -> None:
     snapshot_commit = "7" * 40
     store.put(hf_file(snapshot_commit, captured_path), b"tampered")
 
-    with unittest.TestCase().assertRaisesRegex(
-        VerificationError,
-        "input.local.identity",
-    ):
+    with pytest.raises(VerificationError, match="input.local.identity"):
         verify_external_inputs(
             RunAttempt.model_construct(attempt_id=attempt_id),
             RunSpec.model_construct(run_id=run_id),
@@ -1574,4 +1586,72 @@ def test_external_input_identity_rejects_tampering() -> None:
             snapshot(snapshot_commit),
             fetcher=store.fetch,
         )
+```
+
+<!-- contract-target: requirements=EIR-03 block=P3-EIR-03 action=add target=tests/test_verification_acceptance.py:test_worker_startup_derives_attempt_owned_external_input_path -->
+```python contract-target
+def test_worker_startup_derives_attempt_owned_external_input_path(
+    tmp_path: Path,
+) -> None:
+    """Derive the worker binding path from plan-owned local input identity."""
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    run_root = f"experiments/external_input/runs/baseline/{run_id}"
+    stage = TrainSpec(
+        implementation=stage_implementation_ref(
+            "training/fit.py",
+            TRAIN_SOURCE,
+            symbol="fit",
+        ),
+        parameter_model=parameter_model_ref("train"),
+        inputs={
+            "dataset": ExternalInputRef(
+                source=LocalSource(path="inputs/raw/dataset.bin"),
+                data_role="training",
+            )
+        },
+        params=parameters.Train.model_validate(
+            {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
+        ),
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                path=f"{run_root}/artifacts/models/model/parameters.bin",
+                loader=loader_ref("bytes_file"),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                path=f"{run_root}/artifacts/models/model/resume_state.bin",
+                loader=loader_ref("resume_state"),
+                data_role="training",
+            ),
+        },
+    )
+    run = make_run(
+        experiment_id="external_input",
+        run_id=run_id,
+        source_commit=MAIN_SOURCE_COMMIT,
+        plan_commit=MAIN_PLAN_COMMIT,
+        stage_specs=[("train", stage)],
+        estimator_stage_id="train",
+    )
+    stage_path = tmp_path / run.stages[0].spec
+    stage_path.parent.mkdir(parents=True)
+    stage_path.write_bytes(yaml_bytes(stage))
+
+    planned, expected_inputs = _planned_stage_context(
+        tmp_path,
+        run,
+        "train",
+        attempt_id=3,
+    )
+
+    assert planned == stage
+    assert expected_inputs == {
+        "dataset": captured_input_path(
+            run_id=run_id,
+            attempt_id=3,
+            stage_id="train",
+            input_name="dataset",
+            source_path="inputs/raw/dataset.bin",
+        )
+    }
 ```

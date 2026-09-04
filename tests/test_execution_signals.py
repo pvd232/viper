@@ -296,7 +296,7 @@ def _freeze_signal_plan(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=parameters.Train(),

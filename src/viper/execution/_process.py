@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 
 
 class WorkerError(RuntimeError):

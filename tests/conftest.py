@@ -12,6 +12,7 @@ TIER_BY_MODULE = {
     "test_benchmark_execution": "contract",
     "test_cli": "integration",
     "test_cloud_execution": "contract",
+    "test_contract_documentation": "contract",
     "test_contract_traceability": "contract",
     "test_documentation": "contract",
     "test_execution_acceptance": "integration",
@@ -38,6 +39,7 @@ TIER_BY_MODULE = {
     "test_verification": "contract",
     "test_verification_acceptance": "integration",
     "test_worker": "integration",
+    "test_workflow_documentation": "contract",
 }
 
 DOMAIN_BY_MODULE = {
@@ -48,6 +50,7 @@ DOMAIN_BY_MODULE = {
     "test_benchmark_execution": "domain_execution",
     "test_cli": "domain_application",
     "test_cloud_execution": "domain_execution",
+    "test_contract_documentation": "domain_protocol",
     "test_contract_traceability": "domain_protocol",
     "test_documentation": "domain_protocol",
     "test_execution_acceptance": "domain_execution",
@@ -74,6 +77,7 @@ DOMAIN_BY_MODULE = {
     "test_verification": "domain_verification",
     "test_verification_acceptance": "domain_verification",
     "test_worker": "domain_execution",
+    "test_workflow_documentation": "domain_release",
 }
 
 if TIER_BY_MODULE.keys() != DOMAIN_BY_MODULE.keys():

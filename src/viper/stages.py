@@ -320,9 +320,9 @@ class TrainSpec(InternalSpec):
                 raise ValueError(
                     "checkpoint inputs must select one checkpoint-producing stage"
                 )
-            if model_input.producer_artifact != PARAMETERS:
+            if model_input.name != PARAMETERS:
                 raise ValueError("parameters input must select parameters")
-            if state_input.producer_artifact != RESUME_STATE:
+            if state_input.name != RESUME_STATE:
                 raise ValueError("resume_state input must select resume_state")
 
         return self
@@ -391,7 +391,7 @@ class EvaluateSpec(InternalSpec):
                 )
 
         if model_input.kind == "future":
-            if model_input.producer_artifact != PARAMETERS:
+            if model_input.name != PARAMETERS:
                 raise ValueError("same-run evaluation must consume parameters")
         elif model_input.kind == "external":
             if model_input.data_role not in {"training", "validation"}:

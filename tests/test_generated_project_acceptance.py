@@ -319,7 +319,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="seed_training",
+                name="seed_training",
             )
         },
         params=train_params,
@@ -499,7 +499,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
-                producer_artifact="dataset",
+                name="dataset",
             )
         },
         params=build_params,
@@ -517,7 +517,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="build",
-                producer_artifact="prior",
+                name="prior",
             )
         },
         params=embed_params,
@@ -535,7 +535,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "embedding": FutureInputRef(
                 producer_stage_id="embed",
-                producer_artifact="embedding",
+                name="embedding",
             )
         },
         params=train_params,
@@ -562,7 +562,7 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             PARAMETERS: FutureInputRef(
                 producer_stage_id="train",
-                producer_artifact=PARAMETERS,
+                name=PARAMETERS,
             ),
             "evaluation_dataset": StoredInputRef(
                 pointer=evaluation_pointer,

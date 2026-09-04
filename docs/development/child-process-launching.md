@@ -131,7 +131,7 @@ flowchart TB
 The caller retains the familiar API:
 
 ```python
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 
 completed = subprocess.run(
     ("git", "rev-parse", "HEAD"),
@@ -259,8 +259,7 @@ targets = [
     "tests/test_project_init.py:test_init_generates_importable_five_stage_project",
     "tests/test_system_impact.py:subprocess",
     "tests/test_verification.py:subprocess",
-    "tests/test_documentation.py:CHILD_PROCESS_LAUNCHING",
-    "tests/test_documentation.py:IMPLEMENTATION_CONTRACTS",
+    "tests/_documentation.py:IMPLEMENTATION_CONTRACTS",
     "src/viper/runtime.py:_observe_execution",
     "tests/test_process_startup.py:runtime",
     "tests/test_process_startup.py:test_runtime_observation_does_not_invoke_platform_processor",
@@ -272,10 +271,10 @@ tests = [
     "tests/test_process_startup.py:test_preflight_git_read_executes_without_fork",
     "tests/test_project_init.py:test_init_generates_importable_five_stage_project",
     "tests/test_process_startup.py:test_runtime_observation_does_not_invoke_platform_processor",
-    "tests/test_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status",
-    "tests/test_documentation.py:test_contract_requirements_map_to_plan_tasks_and_tests",
+    "tests/test_contract_documentation.py:test_pair_blocks_map_to_contract_sections_and_derived_status",
+    "tests/test_contract_documentation.py:test_contract_requirements_map_to_plan_tasks_and_tests",
 ]
-gate = "python -m pytest tests/test_process_startup.py tests/test_preflight.py tests/test_project_init.py tests/test_system_impact.py tests/test_authoring.py tests/test_verification.py tests/test_run_execution.py tests/test_metric_provenance.py tests/test_worker.py tests/test_documentation.py -q"
+gate = "python -m pytest tests/test_process_startup.py tests/test_preflight.py tests/test_project_init.py tests/test_system_impact.py tests/test_authoring.py tests/test_verification.py tests/test_run_execution.py tests/test_metric_provenance.py tests/test_worker.py tests/test_documentation.py tests/test_contract_documentation.py tests/test_workflow_documentation.py -q"
 depends_on = ["P2-CPL-01"]
 ```
 
@@ -287,30 +286,12 @@ implementation of that declaration. A fence may contain several declarations
 from the same file; the parser selects and hashes each named declaration
 separately.
 
-**File: `tests/test_documentation.py`**
+**File: `tests/_documentation.py`**
 
-<!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=add target=tests/test_documentation.py:CHILD_PROCESS_LAUNCHING -->
-<!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_documentation.py:IMPLEMENTATION_CONTRACTS -->
+<!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/_documentation.py:IMPLEMENTATION_CONTRACTS -->
 ```python contract-target
-CHILD_PROCESS_LAUNCHING = ROOT / "docs/development/child-process-launching.md"
-
 IMPLEMENTATION_CONTRACTS = (
-    ROOT / "docs/development/contract-traceability.md",
-    ROOT / "docs/development/project-data-root.md",
-    MODULE_OWNERSHIP,
-    SYSTEM_IMPACT_COMPILER,
-    CHILD_PROCESS_LAUNCHING,
-    ROOT / "docs/development/download-retrieval-artifacts.md",
-    ROOT / "docs/development/external-input-roots.md",
-    ROOT / "docs/development/unified-metric-drafting.md",
-    AUTOMATIC_INPUT_RESOLUTION,
-    ROOT / "docs/development/frozen-plan-git-identity.md",
-    ROOT / "docs/development/remote-storage.md",
-    ROOT / "docs/development/experiment-expansion.md",
-    ROOT / "docs/development/provenance-catalog-mcp.md",
-    ROOT / "docs/development/stage-reuse.md",
-    ROOT / "docs/development/experiment-knowledge-primitives.md",
-    RESEARCH_MEMORY,
+    ROOT / record["path"] for record in CONTRACT_BASELINE_DATA["contracts"]
 )
 ```
 
@@ -675,21 +656,21 @@ def test_preflight_git_read_executes_without_fork(
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/preflight.py:subprocess -->
 ```python contract-target
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/project.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/project.py:subprocess -->
 ```python contract-target
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/runtime.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/runtime.py:subprocess -->
 ```python contract-target
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/runtime.py`**
@@ -742,112 +723,112 @@ def _observe_execution(host: HostContext, compute: ComputeSpec) -> ExecutionCont
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/authoring.py:subprocess -->
 ```python contract-target
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/_system_impact/codeql.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/_system_impact/codeql.py:subprocess -->
 ```python contract-target
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/_system_impact/check.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/_system_impact/check.py:subprocess -->
 ```python contract-target
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/_verification/storage.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/_verification/storage.py:subprocess -->
 ```python contract-target
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/execution/_source.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_source.py:subprocess -->
 ```python contract-target
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/execution/_stage.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_stage.py:subprocess -->
 ```python contract-target
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/execution/_metric.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_metric.py:subprocess -->
 ```python contract-target
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `src/viper/execution/_process.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=src/viper/execution/_process.py:subprocess -->
 ```python contract-target
-from .. import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/git_repository.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/git_repository.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_authoring.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_authoring.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_cli.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_cli.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_execution_signals.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_execution_signals.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_generated_project_acceptance.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_generated_project_acceptance.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_project_init.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_project_init.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_system_impact.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_system_impact.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_verification.py`**
 
 <!-- contract-target: requirements=CPL-02 block=P2-CPL-02 action=update target=tests/test_verification.py:subprocess -->
 ```python contract-target
-from viper import _subprocess as subprocess
+import viper._subprocess as subprocess
 ```
 
 **File: `tests/test_project_init.py`**

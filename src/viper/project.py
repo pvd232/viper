@@ -11,7 +11,8 @@ from typing import Literal
 
 from pydantic import Field, ValidationError
 
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from ._schema import ProtocolModel, RepoRelPath
 
 PACKAGE_PATTERN = re.compile(r"[a-z][a-z0-9_]*\Z")

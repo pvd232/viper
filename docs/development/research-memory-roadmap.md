@@ -1088,7 +1088,7 @@ challenger improves objective score
 | `tests/test_verification_acceptance.py` | Sever each reference and reject every invalid scientific, learning, promotion, and literature claim before publication. |
 | `tests/test_api.py` | Compare Python, typed API, and MCP schemas and structured results. |
 | `tests/test_cli.py` | Cover research commands, access modes, startup-root custody, provider-backed model invocation, MRTR elicitation, tasks, and fallback. |
-| `tests/test_documentation.py` | Bind requirement coverage, exact model shapes, MCP feature ownership, PairBlocks, and contract baselines. |
+| `tests/test_contract_documentation.py` | Bind requirement coverage, exact model shapes, MCP feature ownership, PairBlocks, and contract baselines. |
 | `pyproject.toml` | Add any optional learning dependencies only when their first implemented algorithm requires them. |
 
 ## 18. Implementation order

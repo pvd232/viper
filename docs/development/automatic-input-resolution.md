@@ -2287,12 +2287,12 @@ The graph contains eight distinct input edges:
 
 | Consuming input | Authored value | Frozen value |
 | --- | --- | --- |
-| `build_normalization.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", producer_artifact="training_dataset")` |
+| `build_normalization.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", name="training_dataset")` |
 | `build_normalization.inputs["schema"]` | `feature_schema` | `ExternalInputRef(source=LocalSource(path="inputs/feature_schema.json"))` |
-| `embed_training.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", producer_artifact="training_dataset")` |
-| `embed_training.inputs["normalization"]` | `normalization.artifacts["normalization"]` | `FutureInputRef(producer_stage_id="build_normalization", producer_artifact="normalization")` |
-| `train.inputs["dataset"]` | `training_embeddings.artifacts["embeddings"]` | `FutureInputRef(producer_stage_id="embed_training", producer_artifact="embeddings")` |
-| `eval_stage.inputs[Eval.MODEL]` | `training.artifacts[Train.MODEL]` | `FutureInputRef(producer_stage_id="train", producer_artifact=Train.MODEL)` |
+| `embed_training.inputs["dataset"]` | `download.artifacts["training_dataset"]` | `FutureInputRef(producer_stage_id="download", name="training_dataset")` |
+| `embed_training.inputs["normalization"]` | `normalization.artifacts["normalization"]` | `FutureInputRef(producer_stage_id="build_normalization", name="normalization")` |
+| `train.inputs["dataset"]` | `training_embeddings.artifacts["embeddings"]` | `FutureInputRef(producer_stage_id="embed_training", name="embeddings")` |
+| `eval_stage.inputs[Eval.MODEL]` | `training.artifacts[Train.MODEL]` | `FutureInputRef(producer_stage_id="train", name=Train.MODEL)` |
 | `eval_stage.inputs[Eval.TEST]` | `benchmark_test` | `StoredInputRef(pointer=<test pointer>)` |
 | `eval_stage.inputs["holdout"]` | `benchmark_split` | `StoredInputRef(pointer=<split pointer>)` |
 
@@ -2520,7 +2520,7 @@ The compiler produces the existing types:
 source run is the active run
 -> FutureInputRef(
        producer_stage_id=<producer stage>,
-       producer_artifact=<artifact name>,
+       name=<artifact name>,
    )
 
 source run is a completed prior run

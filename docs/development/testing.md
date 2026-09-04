@@ -116,6 +116,8 @@ schema or verifier relationship:
 ```bash
 python -m pytest \
   tests/test_documentation.py \
+  tests/test_contract_documentation.py \
+  tests/test_workflow_documentation.py \
   tests/test_protocol.py \
   tests/test_validation_architecture.py \
   -q
