@@ -2624,7 +2624,6 @@ targets = [
     "src/viper/metrics.py:MetricParamsT",
     "src/viper/metrics.py:MetricDraft",
     "src/viper/metrics.py:MetricSpec",
-    "src/viper/metrics.py:MetricExecutionReceipt",
     "src/viper/metrics.py:MetricContext",
     "src/viper/metrics.py:measure",
     "src/viper/benchmark.py:BenchmarkSpec",
@@ -2808,7 +2807,6 @@ targets = [
     "src/viper/parameters.py:ParameterModelOwner",
     "src/viper/parameters.py:ParameterModelRef",
     "src/viper/parameters.py:__all__",
-    "tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys",
     "tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring",
     "tests/test_protocol.py:test_python_stage_drafts_freeze_to_protocol_specs",
 ]
@@ -3245,30 +3243,6 @@ class MetricSpec(ProtocolModel):
         elif self.dependencies or self.comparator is not None:
             raise ValueError("live metrics do not declare dependencies or a comparator")
         return self
-```
-
-<!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricExecutionReceipt -->
-```python contract-target
-class MetricExecutionReceipt(ProtocolModel):
-    """Record one controlled metric worker execution and its scalar result."""
-
-    schema_version: Literal[1] = 1
-    run_id: RunId
-    attempt_id: int = Field(ge=1)
-    metric_id: MetricId
-    stage_id: StageId
-    purpose: Literal["measurement", "verification"]
-    implementation: MetricImplementationRef
-    parameter_model: ParameterModelRef
-    params: params.Metric
-    dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
-    startup: ProcessStartupReceipt
-    execution_context: ExecutionContext
-    python_environment: PythonEnvironmentSpec
-    value: float = Field(allow_inf_nan=False)
-    started_at: AwareDatetime
-    completed_at: AwareDatetime
-    outcome: Literal["succeeded"] = "succeeded"
 ```
 
 <!-- contract-target: requirements=AIR-01 block=P5-AIR-01 action=update target=src/viper/metrics.py:MetricContext -->
@@ -8634,19 +8608,6 @@ def {stage}(context) -> None:
 <!-- contract-remove -->
 
 **File: `tests/test_public_api.py`**
-
-<!-- contract-target: requirements=AIR-01,AIR-02,AIR-03 block=P5-AIR-04 action=update target=tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys -->
-```python contract-target
-def test_stage_api_uses_target_decorators_params_and_keys() -> None:
-    """Expose typed stage decorators, concise parameters, and canonical keys."""
-    from viper import keys, params
-    from viper.stages import build, embed, eval, train
-
-    assert keys.Train.MODEL == "model"
-    assert keys.Eval.TEST == "test"
-    assert all(callable(value) for value in (build, embed, train, eval))
-    assert issubclass(params.Eval, params.ParameterSet)
-```
 
 **File: `tests/test_authoring.py`**
 
