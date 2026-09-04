@@ -81,7 +81,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "43ba2a1141e37e2432f01ccc9bbc943cbc35d8f345531d077b1a849a7beaf481"
+      "sha256": "88ac38a4336cab4fd649705c61083680d0f71d5f4f1da6985d83b33393627c73"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",
@@ -105,7 +105,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "e70bd1135d9dfc0bb3caf5b9ff588f4ff5edd7aadf12f2cf9fd0550abf2dd7ec"
+      "sha256": "f0702450df47deb958920261e78cfbfe3411d6d2fe7a7c371d923316ddef3ba3"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -116,7 +116,7 @@
         "FPG-04",
         "FPG-05"
       ],
-      "sha256": "d553f571b6abe85853e9a42bc1876e20c106c047cca2b73c839cb1ce9d04caae"
+      "sha256": "752b3c71b95debe5c4717f72d0274be1a5c1d4c10aa4a3748c49e4ed6b87fc29"
     },
     {
       "path": "docs/development/remote-storage.md",

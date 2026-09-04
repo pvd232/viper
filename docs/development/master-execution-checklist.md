@@ -1384,7 +1384,7 @@ python -m pytest \
 **Outcome:** One configured metric can run live or after a stage. Its frozen
 parameter class and values reach the calculation in both modes.
 
-### 11.0 PairBlock scheduling
+### PairBlocks
 
 - [x] Compose selected target chains into one terminal planned source tree.
       Require repeated writers of one symbol to have an explicit dependency
@@ -1396,6 +1396,7 @@ parameter class and values reach the calculation in both modes.
       <!-- contract-implementation: requirement=SCH-01 rule=schedule.plan.materialized state=implemented owner=src/viper/scheduling.py:materialize_plan -->
       <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=implemented test=tests/test_system_impact.py:test_final_targets_compose_ordered_revisions -->
       <!-- contract-verification: requirement=SCH-01 rule=schedule.plan.materialized state=implemented test=tests/test_system_impact.py:test_materialize_plan_applies_exact_declarations -->
+
 - [x] Project declared dependencies, baseline and planned CodeQL edges, and
       shared-file writes onto the selected PairBlocks.
       <!-- pair-block: P4-SCH-02 -->
@@ -1404,6 +1405,7 @@ parameter class and values reach the calculation in both modes.
       <!-- verifies: SCH-02 -->
       <!-- contract-implementation: requirement=SCH-02 rule=schedule.graph.closed state=implemented owner=src/viper/scheduling.py:build_block_graph -->
       <!-- contract-verification: requirement=SCH-02 rule=schedule.graph.closed state=implemented test=tests/test_system_impact.py:test_block_graph_combines_dependencies_and_write_conflicts -->
+
 - [x] Condense graph cycles and emit deterministic execution waves. Run the
       focused scheduler cases in `tests/test_system_impact.py`.
       <!-- pair-block: P4-SCH-03 -->
@@ -1417,115 +1419,44 @@ The [PairBlock scheduling contract](pair-block-scheduling.md) owns the complete
 code and focused gates. Its generated waves advise checklist order; a reviewed
 checklist revision remains the execution authority.
 
-### 11.1 Definitions and drafts
-
-- [ ] Add `PythonSourceRelPath` and `ParameterModelOwner` to
-      `src/viper/_schema.py`.
-- [ ] Add required `owner` to `ParameterModelRef`.
-- [ ] Resolve `owner="project"` from the repository and `owner="viper"` from
-      the installed package root in `_parameter/validation.py`.
-- [ ] Update parameter workers and preflight checks for both owners.
-- [ ] Remove `MetricKind` and the decorator's `kind=` argument from
-      `src/viper/metrics.py`.
-- [ ] Keep `MetricDefinition.metric_id` and `.mode`.
-- [ ] Add `MetricDraft`, `MetricObjectiveDraft`, and `MetricCriterionDraft`.
 - [x] Add `viper.metrics.measure()`, `viper.metrics.min()`,
       `viper.metrics.max()`, `viper.benchmark.at_least()`, and
       `viper.benchmark.at_most()`.
       <!-- pair-block: P4-UMD-01 -->
       <!-- pair-block-contract: P4-UMD-01 contract=unified-metric-drafting.md -->
       <!-- implements: UMD-01 -->
+      <!-- verifies: UMD-01 -->
       <!-- contract-implementation: requirement=UMD-01 rule=metric.authoring.complete state=implemented owner=src/viper/metrics.py:measure -->
       <!-- contract-verification: requirement=UMD-01 rule=metric.authoring.complete state=implemented test=tests/test_metric_interface.py:test_metric_drafts_freeze_through_public_constructors -->
-- [ ] Derive the parameter class from `type(MetricDraft.params)`.
+
 - [x] Write a mandatory `ParameterModelRef` to `MetricSpec` and
       `MetricExecutionReceipt`.
       <!-- pair-block: P4-UMD-02 -->
       <!-- pair-block-contract: P4-UMD-02 contract=unified-metric-drafting.md -->
       <!-- implements: UMD-02 -->
+      <!-- verifies: UMD-02 -->
       <!-- contract-implementation: requirement=UMD-02 rule=metric.params.delivered state=implemented owner=src/viper/metrics.py:invoke_metric -->
       <!-- contract-verification: requirement=UMD-02 rule=metric.params.delivered state=implemented test=tests/test_metric_provenance.py:test_metric_params_reach_live_and_recomputed_execution -->
 
-### 11.2 Runtime delivery
-
-- [ ] Make `MetricContext` generic over `viper.params.Metric`.
-- [ ] Give it the validated parameter instance and existing dependency paths.
-- [ ] Change live metric functions to receive `MetricContext` first.
-- [ ] Change stateful metric constructors to receive `MetricContext`.
-- [ ] Bind that context once in `MetricHandle`.
-- [ ] Keep `MetricHandle.record(values)` free of parameter arguments.
-- [ ] Change `_workers/metrics.py` to load the frozen parameter class and build
-      the same context for recomputation.
-- [ ] Compare production and verification parameter-model references.
-- [ ] Join each live measurement through
-      `StageInvocationReceipt.context.metric_ids`, the frozen stage
-      `metric_ids`, and `ExperimentSpec.metrics`.
 - [x] Replace `_publish_metric_dependency()` with snapshot-reference
       derivation. Join each selected `SnapshotFileRef` to its enclosing current,
       producer, or pointer-selected stage snapshot.
       <!-- pair-block: P4-RSP-01 -->
       <!-- pair-block-contract: P4-RSP-01 contract=remote-storage.md -->
       <!-- implements: RSP-03 -->
+      <!-- verifies: RSP-03 -->
       <!-- contract-implementation: requirement=RSP-03 rule=metric.reference.reused state=implemented owner=src/viper/execution/_metric.py:_resolve_metric_dependencies -->
       <!-- contract-verification: requirement=RSP-03 rule=metric.reference.reused state=implemented test=tests/test_metric_provenance.py:test_metric_dependencies_reuse_snapshot_references -->
-- [ ] Construct `ResolvedMetricDependency.files` from those snapshot locations
-      and reuse the existing dependency payload.
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Parameters belong in the frozen metric definition. The stage records
-observations; the bound metric context supplies parameters.
-
-**Hint 2:** Live and recomputed calculations differ in timing. They use one
-context because both need the same validated parameters and named paths.
-
-**Hint 3:** The built-in base model still gets a `ParameterModelRef` with
-`owner="viper"`, `path="parameters.py"`, and `symbol="Metric"`.
-
-**Hint 4:** An artifact dependency uses its stage snapshot. An external input
-uses the consuming-stage snapshot. A future input uses the producer snapshot.
-A stored input follows its pointer to the producer snapshot.
-
-</details>
-
-### 11.3 Objectives and verification
 
 - [x] Add `MetricObjectiveSpec`.
       <!-- pair-block: P4-UMD-03 -->
       <!-- pair-block-contract: P4-UMD-03 contract=unified-metric-drafting.md -->
       <!-- implements: UMD-03 -->
+      <!-- verifies: UMD-03 -->
       <!-- contract-implementation: requirement=UMD-03 rule=metric.objective.enforced state=implemented owner=src/viper/_verification/plan.py:verify_stage_objectives -->
       <!-- contract-verification: requirement=UMD-03 rule=metric.objective.enforced state=implemented test=tests/test_verification.py:test_stage_objectives_preserve_identity_and_direction -->
-- [ ] Add required objectives to `TrainSpec` and `EvalSpec`.
-- [ ] Add an optional objective to `EmbedSpec`.
-- [ ] Put the objective metric first in `metric_ids`.
-- [ ] Require live mode for training objectives.
-- [ ] Require recompute mode for evaluation objectives.
-- [ ] Accept either mode for an embedding objective.
-- [ ] Require the final objective measurement.
-- [ ] Permit additional diagnostic metric IDs beside the objective in frozen
-      stage specs. Master Phase 5 exposes them through `metrics=`.
 
-### 11.4 Focused proof
-
-- [ ] Expand `tests/test_metric_interface.py` for parameter delivery.
-- [ ] Expand `tests/test_metric_provenance.py` for parameter identity.
-- [ ] Reject a successful invocation receipt whose metric IDs differ from the
-      frozen stage.
-- [ ] Assert that recomputed metric dependencies reuse existing snapshot
-      revisions and trigger zero additional payload publications.
-- [ ] Add objective cases to `tests/test_protocol.py` and
-      `tests/test_verification.py`.
-- [ ] Run: <!-- verifies: UMD-01, UMD-02, UMD-03, RSP-03 -->
-
-```bash
-python -m pytest \
-  tests/test_metric_interface.py \
-  tests/test_metric_provenance.py \
-  tests/test_protocol.py \
-  tests/test_verification.py -q
-```
+**Validation:** Run each PairBlock gate from its governing contract.
 
 **Commit boundary:** `Unify metric drafting and runtime context`
 
@@ -1538,39 +1469,13 @@ python -m pytest \
 **Outcome:** Users construct complete stage declarations in Python. They stop
 writing stage YAML by hand.
 
-### 12.1 Public names
+### PairBlocks
 
 - [x] Add `src/viper/keys.py` and complete the `Train` and `Eval` public key
       migration in Section 11.1.
       <!-- pair-block: P5-AIR-01 -->
       <!-- pair-block-contract: P5-AIR-01 contract=automatic-input-resolution.md -->
       <!-- implements: AIR-01 -->
-- [ ] Define `Train.MODEL = "model"` and `Train.STATE = "state"`.
-- [ ] Define `Eval.MODEL = "model"`, `Eval.TEST = "test"`, and
-      `Eval.PREDS = "preds"`.
-- [ ] Replace private constants in `src/viper/_schema.py`.
-- [ ] Change validators, workers, tests, fixtures, and docs to the new values.
-- [ ] Define `viper.keys` and `viper.params` as public modules. Keep the package
-      root free of forwarding exports.
-- [ ] Rename `parameters.Evaluate`, `EvaluateSpecDraft`, `EvaluateSpec`,
-      `ResolvedEvaluateSpec`, `EvaluateVariantStageParams`, and `EvaluationId`
-      to `parameters.Eval`, `EvalSpecDraft`, `EvalSpec`, `ResolvedEvalSpec`,
-      `EvalVariantStageParams`, and `EvalId`.
-- [ ] Rename `evaluation_id` to `eval_id` and the persisted stage kind from
-      `"evaluate"` to `"eval"`.
-- [ ] Rename the `DataRole` value `"evaluation"` to `"eval"` and the artifact
-      directory `artifacts/evaluations/` to `artifacts/evals/`.
-- [ ] Replace `@viper.evaluate(params=...)` with `@viper.stages.eval(params=...)`.
-- [ ] Rename example subclasses from `EvaluateParams(viper.params.Evaluate)`
-      to `EvalParams(viper.params.Eval)`.
-- [ ] Apply the `Eval` vocabulary in `src/viper/parameters.py`,
-      `src/viper/stages.py`, `src/viper/experiments.py`,
-      `src/viper/_schema.py`, public exports, workers, validators, fixtures,
-      tests, and documentation.
-- [ ] Delete the retired evaluation-stage names. English prose continues to
-      use “evaluation” and the verb “evaluate.”
-
-### 12.2 `env` vocabulary
 
 - [x] Rename `PythonEnvironmentSpec`, `GCEEnvironmentSpec`,
       `ResolvedGCEEnvironment`, `LocalEnvironmentSpec`,
@@ -1580,56 +1485,19 @@ writing stage YAML by hand.
       `ResolvedEnv` in `src/viper/runtime.py`.
       <!-- pair-block: P5-AIR-02 -->
       <!-- pair-block-contract: P5-AIR-02 contract=automatic-input-resolution.md -->
+      <!-- verifies: AIR-01 -->
       <!-- contract-implementation: requirement=AIR-01 rule=env.vocabulary.complete state=implemented owner=src/viper/runtime.py:EnvSpec -->
       <!-- contract-verification: requirement=AIR-01 rule=env.vocabulary.complete state=implemented test=tests/test_public_api.py:test_env_vocabulary_is_complete -->
-- [ ] Rename `EnvironmentSecretRef` to `EnvSecretRef` in
-      `src/viper/http.py`. Change its discriminator from `kind="environment"`
-      to `kind="env"`.
-- [ ] Rename protocol fields from `environment` to `env` on `RunSpec`,
-      `BaseSpec`, `ResolvedBaseSpec`, and `ProcessStartupReceipt`.
-- [ ] Rename `python_environment` to `python_env` on runtime specs and
-      `MetricExecutionReceipt`.
-- [ ] Rename `observe_python_environment()` to `observe_python_env()` and
-      `resolve_environment()` to `resolve_env()`.
-- [ ] Rename parameters and local variables that hold these values to `env`,
-      `effective_env`, or `resolved_env` in `src/viper/authoring.py`,
-      `src/viper/preflight.py`, `src/viper/execution/`,
-      `src/viper/_verification/`, and `src/viper/_workers/`.
-- [ ] Change persisted protocol keys from `environment` to `env` and from
-      `python_environment` to `python_env` in fixtures and generated YAML.
-- [ ] Change verification codes from `environment.*` to `env.*`.
-- [ ] Update public exports, tests, and documentation. Keep ordinary English,
-      `environment.yml`, and `os.environ` unchanged.
-- [ ] Delete the retired names. The alpha API exposes one spelling for each
-      concept.
 
-### 12.3 Decorators and declarations
-
-- [ ] Define `build(params=...)`, `embed(params=...)`, `train(params=...)`, and
-      `eval(params=...)` in `viper.stages`.
-- [ ] Retain the attached `StageDefinition` and source verification.
-- [ ] Replace `http_transport(transport_id=..., parameter_model=...)` with
-      `http(id=..., params=...)` in `viper.http`.
-- [ ] Pass the decorated function and its optional parameter instance through
-      `download(http=..., params=...)` from `viper.authoring`; remove
-      `transport()`.
 - [x] Add `RunArtifactPath` validation.
       <!-- pair-block: P5-AIR-03 -->
       <!-- pair-block-contract: P5-AIR-03 contract=automatic-input-resolution.md -->
       <!-- implements: AIR-02 -->
+      <!-- verifies: AIR-02 -->
       <!-- contract-implementation: requirement=AIR-02 rule=artifact.authoring.complete state=implemented owner=src/viper/authoring.py:_freeze_artifact -->
       <!-- contract-verification: requirement=AIR-02 rule=artifact.authoring.complete state=implemented test=tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity -->
       <!-- contract-implementation: requirement=AIR-02 rule=http.authoring.complete state=implemented owner=src/viper/authoring.py:_freeze_http -->
       <!-- contract-verification: requirement=AIR-02 rule=http.authoring.complete state=implemented test=tests/test_authoring.py:test_artifact_and_http_drafts_preserve_callable_identity -->
-- [ ] Add `SingleFileArtifactDraft` and `BundleArtifactDraft`.
-- [ ] Add one `artifact()` constructor to `viper.artifacts`. It returns a
-      single-file draft by default and a bundle draft when `kind="bundle"`.
-- [ ] List `artifact` in `viper.artifacts.__all__`; keep the package root free
-      of forwarding exports and omit a second public constructor.
-- [ ] Add `BuiltinHttpImplementationSpec | CustomHttpDraft` authoring and
-      compile it into `HttpImplementationSpec`.
-
-### 12.4 Stage drafts
 
 - [x] Replace `StageDraft(stage_id, spec_source)` with `StageDraft(spec)`.
       <!-- pair-block: P5-AIR-04 -->
@@ -1637,60 +1505,11 @@ writing stage YAML by hand.
       <!-- contract-implementation: requirement=AIR-01 rule=stage.api.complete state=implemented owner=src/viper/authoring.py:_freeze_stage -->
       <!-- contract-verification: requirement=AIR-01 rule=stage.api.complete state=implemented test=tests/test_public_api.py:test_stage_api_uses_target_decorators_params_and_keys -->
       <!-- implements: AIR-03 -->
+      <!-- verifies: AIR-03 -->
       <!-- contract-implementation: requirement=AIR-03 rule=stage.draft.complete state=implemented owner=src/viper/authoring.py:freeze_run_plan -->
       <!-- contract-verification: requirement=AIR-03 rule=stage.draft.complete state=implemented test=tests/test_authoring.py:test_python_stage_drafts_replace_yaml_authoring -->
-- [ ] Add `BaseSpecDraft`, `InternalSpecDraft`, `BuildSpecDraft`,
-      `EmbedSpecDraft`, `TrainSpecDraft`, and `EvalSpecDraft`.
-- [ ] Add `objective` and `metrics` fields to the applicable stage drafts and
-      compile them into `MetricObjectiveSpec` and `metric_ids`.
-- [ ] Add runner-owned `DownloadSpecDraft` and `download()` to
-      `viper.authoring`.
-- [ ] Add `stage()` to `viper.authoring` for a decorated project callable.
-- [ ] Add private `StageDraftArtifactRef` values returned by
-      `StageDraft.artifacts`.
-- [ ] Derive stage kind and parameter class from the decorator.
-- [ ] Validate every draft while retaining each callable as an in-memory Python
-      object.
 
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** A draft may hold Python objects. A frozen spec may hold only closed,
-serialized protocol values.
-
-**Hint 2:** `StageDraft.artifacts[name]` needs the producer object and artifact
-name. The plan mapping supplies the producer's stage ID later.
-
-**Hint 3:** Prefix `ArtifactDraft.path` only during freezing. Reusing a variant
-for a second replicate must leave the draft unchanged.
-
-</details>
-
-### 12.5 Focused proof
-
-- [ ] Rewrite `tests/test_authoring.py` around Python drafts.
-- [ ] Add decorator and key tests to `tests/test_public_api.py`.
-- [ ] Add env type, field, function, serialization, and verification-code
-      cases to `tests/test_public_api.py`, `tests/test_protocol.py`,
-      `tests/test_preflight.py`, `tests/test_cloud_execution.py`,
-      `tests/test_run_execution.py`, and `tests/test_verification.py`.
-- [ ] Assert that `artifact()` from `viper.artifacts` returns
-      `SingleFileArtifactDraft`, that `artifact(kind="bundle")` returns
-      `BundleArtifactDraft`, and that a
-      download draft rejects the bundle form.
-- [ ] Add two-run path compilation to `tests/test_protocol.py`.
-- [ ] Run: <!-- verifies: AIR-01, AIR-02, AIR-03 -->
-
-```bash
-python -m pytest \
-  tests/test_authoring.py \
-  tests/test_cloud_execution.py \
-  tests/test_preflight.py \
-  tests/test_public_api.py \
-  tests/test_protocol.py \
-  tests/test_run_execution.py \
-  tests/test_verification.py -q
-```
+**Validation:** Run each PairBlock gate from its governing contract.
 
 **Commit boundary:** `Add Python stage and artifact drafting`
 
@@ -1706,23 +1525,33 @@ python -m pytest \
 `plan()` supplies the immutable run ID and recursively frozen graph. `run(plan)`
 compiles and persists that graph internally before execution.
 
+### PairBlocks
+
 - [x] Freeze the authored experiment graph and generate its run identity.
       <!-- pair-block: P6-UMD-01 -->
       <!-- pair-block-contract: P6-UMD-01 contract=unified-metric-drafting.md -->
+      <!-- implements: UMD-04 -->
+      <!-- verifies: UMD-04 -->
       <!-- contract-implementation: requirement=UMD-04 rule=experiment.authoring.complete state=implemented owner=src/viper/authoring.py:ExperimentDraft -->
       <!-- contract-verification: requirement=UMD-04 rule=experiment.authoring.complete state=implemented test=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
       <!-- contract-implementation: requirement=UMD-04 rule=plan.identity.generated state=implemented owner=src/viper/authoring.py:plan -->
       <!-- contract-verification: requirement=UMD-04 rule=plan.identity.generated state=implemented test=tests/test_authoring.py:test_plan_generates_read_only_run_id -->
       <!-- contract-implementation: requirement=UMD-04 rule=plan.graph.immutable state=implemented owner=src/viper/authoring.py:_deep_freeze -->
       <!-- contract-verification: requirement=UMD-04 rule=plan.graph.immutable state=implemented test=tests/test_authoring.py:test_plan_rejects_every_nested_mutator -->
+
 - [x] Compile every generated protocol document in memory.
       <!-- pair-block: P6-AIR-01 -->
       <!-- pair-block-contract: P6-AIR-01 contract=automatic-input-resolution.md -->
+      <!-- implements: AIR-04 -->
+      <!-- verifies: AIR-04 -->
       <!-- contract-implementation: requirement=AIR-04 rule=plan.freeze.complete state=implemented owner=src/viper/authoring.py:_compile_plan -->
       <!-- contract-verification: requirement=AIR-04 rule=plan.freeze.complete state=implemented test=tests/test_authoring.py:test_plan_compiles_complete_protocol_graph -->
+
 - [x] Publish the complete plan under one immutable storage revision.
       <!-- pair-block: P6-FPG-01 -->
       <!-- pair-block-contract: P6-FPG-01 contract=frozen-plan-git-identity.md -->
+      <!-- implements: FPG-01, FPG-02, FPG-03, FPG-04, FPG-05 -->
+      <!-- verifies: FPG-01, FPG-02, FPG-03, FPG-04, FPG-05 -->
       <!-- contract-implementation: requirement=FPG-01 rule=plan.files.complete state=implemented owner=src/viper/authoring.py:freeze_run_plan -->
       <!-- contract-verification: requirement=FPG-01 rule=plan.files.complete state=implemented test=tests/test_authoring.py:test_freeze_publishes_one_immutable_plan -->
       <!-- contract-implementation: requirement=FPG-02 rule=plan.commit.head state=implemented owner=src/viper/preflight.py:preflight_plan -->
@@ -1733,6 +1562,7 @@ compiles and persists that graph internally before execution.
       <!-- contract-verification: requirement=FPG-04 rule=run.plan.commit state=implemented test=tests/test_plan_execution.py:test_plan_documents_share_one_storage_revision -->
       <!-- contract-implementation: requirement=FPG-05 rule=benchmark.plan.commit state=implemented owner=src/viper/execution/_benchmark.py:benchmark -->
       <!-- contract-verification: requirement=FPG-05 rule=benchmark.plan.commit state=implemented test=tests/test_plan_execution.py:test_benchmark_spec_accepts_the_plan_revision -->
+
 - [x] Compile and publish the plan before the first execution attempt.
       <!-- pair-block: P6-UMD-02 -->
       <!-- pair-block-contract: P6-UMD-02 contract=unified-metric-drafting.md -->
@@ -1742,104 +1572,11 @@ compiles and persists that graph internally before execution.
 **Contract-alignment gate:** The automatic-input and immutable-plan contracts
 now specify the accepted internal compilation and publication workflow.
 
-### 13.1 Draft graph
-
-- [ ] Add `FactorDraft`, `VariantDraft`, `ReplicateDraft`, and
-      `ExperimentDraft` to `src/viper/experiments.py`.
-      <!-- implements: UMD-04 -->
-- [ ] Add `factor()`, `variant()`, `replicate()`, and `experiment()` to
-      `viper.authoring`.
-- [ ] Put `levels`, `stages`, and `estimator` on each `VariantDraft`.
-- [ ] Put seeds on `ReplicateDraft`.
-- [ ] Change `RunPlanDraft` to hold one experiment and selected variant and
-      replicate IDs.
-- [ ] Add `plan()` to `viper.authoring`; generate one `run_id`, deep-copy the
-      authored graph, and recursively freeze it before returning.
-- [ ] Add internal `FrozenDict`, `FrozenList`, `_deep_freeze()`, and
-      `_new_run_id()` support. Preserve shared-object identity and ordinary
-      canonical serialization while rejecting every nested mutator.
-
-### 13.2 Internal compiler
-
-- [ ] Replace YAML-backed `freeze_run_plan()` with internal `_compile_plan()`
-      over `RunPlanDraft`.
-      <!-- implements: AIR-04 -->
-- [ ] Change `viper.execution.run()` to accept `RunPlanDraft`, atomically
-      persist the complete compiled set, and call the internal path-based
-      executor only after publication succeeds.
-- [ ] Remove public `freeze()`, typed `freeze_run()`, public
-      `FrozenPlanFiles`, and the `freeze-run` CLI command.
-- [ ] Preserve `RunPlanDraft.run_id` through compilation, execution, retry,
-      benchmark, restore, and verification. Only `plan()` generates it.
-- [ ] Keep canonical serialization and exact-file writes.
-- [ ] Derive `RunSpec.experiment_id`, `variant_id`, `replicate_id`, and seed.
-- [ ] Derive stage IDs from `VariantDraft.stages` keys.
-- [ ] Prefix each draft artifact path with the selected run root.
-- [ ] Derive `VariantSpec.stage_params` from project-owned stages only.
-- [ ] Derive the experiment metric registry from every variant stage.
-- [ ] Reject two configured calculations sharing one metric ID.
-- [ ] Keep each variant's estimator inside its own stage graph.
-- [ ] Return `FrozenPlanFiles` with the generated paths.
-- [ ] Include `run_spec_path`, `benchmark_spec_path`, and the complete `files`
-      manifest in `FrozenPlanFiles`. <!-- implements: FPG-01 -->
-- [ ] Require every generated file to enter a later Git plan commit before
-      execution.
-- [ ] Establish `HEAD` as the plan commit during preflight. Load generated
-      experiment, variant, benchmark, stage, and run documents from that
-      commit. <!-- implements: FPG-02 -->
-- [ ] Keep project callables, parameter classes, artifact loaders, HTTP implementations,
-      and metric implementations bound to `RunSpec.source.commit`.
-      <!-- implements: FPG-03 -->
-- [ ] Store the plan commit in `ResolvedRun.spec.stored_at` and use it during
-      terminal verification. <!-- implements: FPG-04 -->
-- [ ] Load and verify the selected `BenchmarkSpec` through the same plan commit
-      in `execution/_benchmark.py`. <!-- implements: FPG-05 -->
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Compile all metric definitions for the experiment, then compile only
-the selected variant's stage and run files.
-
-**Hint 2:** Use object identity to map a private stage-output handle back to one
-key in the selected variant's `stages` mapping.
-
-**Hint 3:** Freeze one baseline variant twice with different run and replicate
-IDs. The two concrete artifact paths must differ.
-
-</details>
-
-### 13.3 Focused proof
-
-- [ ] Add factor, level, variant, and replicate cases to
-      `tests/test_authoring.py`.
-- [ ] Add cross-variant metric collision and estimator rejection cases.
-- [ ] Add two-replicate path isolation.
-- [ ] Add automatic run-ID, caller-alias isolation, nested-mutator rejection,
-      canonical serialization, private-compilation surface, compile-before-run,
-      and partial-publication rejection cases.
-- [ ] Add committed-plan success, uncommitted-plan rejection, changed-source
-      rejection, and wrong-commit benchmark rejection.
-- [ ] Run: <!-- verifies: UMD-04, AIR-04, FPG-01, FPG-02, FPG-03, FPG-04, FPG-05 -->
-
-```bash
-python -m pytest \
-  tests/test_authoring.py \
-  tests/test_protocol.py \
-  tests/test_preflight.py \
-  tests/test_run_execution.py \
-  tests/test_verification.py \
-  tests/test_benchmark_execution.py -q
-```
+**Validation:** Run each PairBlock gate from its governing contract.
 
 **Commit boundary:** `Compile immutable experiment plans internally`
 
 ## 14. Master Phase 7 — automatic input compilation
-
-<!-- contract-implementation: requirement=EIR-04 rule=input.authoring.routes state=planned owner=src/viper/authoring.py:run_artifact -->
-<!-- contract-verification: requirement=EIR-04 rule=input.authoring.routes state=planned test=tests/test_authoring.py:test_input_authoring_compiles_all_three_routes -->
-<!-- contract-implementation: requirement=AIR-05 rule=input.pointer.complete state=planned owner=src/viper/authoring.py:compile_input -->
-<!-- contract-verification: requirement=AIR-05 rule=input.pointer.complete state=planned test=tests/test_verification_acceptance.py:test_prior_run_input_publishes_verified_pointer -->
 
 **Depends on:** Master Phases 3 and 6.
 
@@ -1849,64 +1586,17 @@ python -m pytest \
 **Outcome:** The user assigns one Python value to an input slot. Freezing writes
 the correct provenance edge.
 
-### 14.1 Draft values
+- [ ] Compile and verify local, same-run, and prior-run input references.
+      <!-- pair-block: P7-AIR-01 -->
+      <!-- pair-block-contract: P7-AIR-01 contract=automatic-input-resolution.md -->
+      <!-- implements: EIR-04, AIR-05 -->
+      <!-- verifies: EIR-04, AIR-05 -->
+      <!-- contract-implementation: requirement=EIR-04 rule=input.authoring.routes state=planned owner=src/viper/authoring.py:_freeze_input -->
+      <!-- contract-verification: requirement=EIR-04 rule=input.authoring.routes state=planned test=tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer -->
+      <!-- contract-implementation: requirement=AIR-05 rule=input.pointer.complete state=planned owner=src/viper/authoring.py:_freeze_input -->
+      <!-- contract-verification: requirement=AIR-05 rule=input.pointer.complete state=planned test=tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer -->
 
-- [ ] Add `ExternalInputDraft` and one public `input()` constructor to
-      `viper.authoring`.
-- [ ] Add `RunArtifactDraft` and `run_artifact()` to `viper.authoring`.
-      <!-- implements: EIR-04 -->
-- [ ] Define `StageInputDraft = ExternalInputDraft | StageDraftArtifactRef |
-      RunArtifactDraft`.
-- [ ] List `input` and `run_artifact` in `viper.authoring.__all__`.
-- [ ] Accept `StageInputDraft` in internal stage drafts.
-
-### 14.2 Compilation
-
-- [ ] Compile `ExternalInputDraft` to `ExternalInputRef`.
-- [ ] Compile a handle from an earlier selected stage to `FutureInputRef`.
-- [ ] Load and verify a completed `ResolvedRun` for `RunArtifactDraft`.
-- [ ] Locate the selected resolved stage and artifact.
-- [ ] Build `ArtifactPointer` with the terminal run and selected artifact.
-- [ ] Serialize and publish the pointer through `publish_resolved_files()`.
-- [ ] Call `bind_run_destination()` before publishing a producer terminal file
-      or generated pointer. Execution must later load the same destination.
-- [ ] Store the returned `ResolvedArtifactPointerRef` in `StoredInputRef`.
-      <!-- implements: AIR-05 -->
-- [ ] Reject missing stages, missing artifacts, future producers, role mismatch,
-      and a pointer whose producer graph is unreachable from cloud mode.
-- [ ] Update `ResolvedInternalSpec` validation for the new pointer reference.
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** The input-map key names the consumer slot. The selected value carries
-the source identity and data role.
-
-**Hint 2:** `StoredInputRef.pointer` points to the pointer document. The pointer
-document points to the terminal run and artifact. Verify both layers.
-
-**Hint 3:** Keep explicit frozen `InputRef` support only as a private or harness
-mode. The ordinary API accepts drafts.
-
-</details>
-
-### 14.3 Focused proof
-
-- [ ] Assert that `viper.authoring.input(path=..., data_role=...)` returns the expected
-      `ExternalInputDraft`.
-- [ ] Add local, same-run, and prior-run cases to `tests/test_authoring.py`.
-- [ ] Add stage-order and missing-artifact rejections.
-- [ ] Extend `tests/test_run_execution.py` through actual materialization.
-- [ ] Extend pointer and lineage verification tests.
-- [ ] Run: <!-- verifies: EIR-04, AIR-05 -->
-
-```bash
-python -m pytest \
-  tests/test_authoring.py \
-  tests/test_run_execution.py \
-  tests/test_verification.py \
-  tests/test_verification_acceptance.py -q
-```
+**Validation:** Run the PairBlock gate from the governing contract.
 
 **Commit boundary:** `Compile artifact handles into provenance inputs`
 

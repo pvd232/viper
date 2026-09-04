@@ -153,7 +153,7 @@ _RULE_EDGE_STATE = re.compile(
 )
 
 _PAIR_BLOCK_DEFINITION = re.compile(
-    r"<!-- pair-block-definition: (?P<id>P0-[A-Z]+-\d{2}) -->\n"
+    r"<!-- pair-block-definition: (?P<id>P[0-9]+-[A-Z]+-\d{2}) -->\n"
     r"```toml pair-block\n(?P<manifest>.*?)\n```\n"
     r"(?P<body>.*?)(?=<!-- pair-block-definition: |^## |\Z)",
     re.MULTILINE | re.DOTALL,
@@ -2054,7 +2054,7 @@ def test_contract_requirements_map_to_plan_tasks_and_tests() -> None:
 
     planned_test_paths = {
         value.partition(":")[0]
-        for guide in (CONTRACT_TRACEABILITY, SYSTEM_IMPACT_COMPILER)
+        for guide in IMPLEMENTATION_CONTRACTS
         for definition in _PAIR_BLOCK_DEFINITION.finditer(
             guide.read_text(encoding="utf-8")
         )
@@ -2164,11 +2164,7 @@ def test_master_checklist_names_existing_test_modules() -> None:
             MASTER_EXECUTION_CHECKLIST.read_text(),
         )
     )
-    pair_guides = (
-        MASTER_PHASE_ZERO_PAIR_CODING,
-        CONTRACT_TRACEABILITY,
-        SYSTEM_IMPACT_COMPILER,
-    )
+    pair_guides = IMPLEMENTATION_CONTRACTS
     planned_tests = {
         value.partition(":")[0]
         for guide in pair_guides

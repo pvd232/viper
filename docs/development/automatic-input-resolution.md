@@ -17,7 +17,7 @@ These requirements bind the contract to the master checklist:
 | AIR-02 <!-- contract-requirement: AIR-02 phase=5 test=tests/test_authoring.py --> | Add artifact and HTTP drafts with callable-backed freezing. |
 | AIR-03 <!-- contract-requirement: AIR-03 phase=5 test=tests/test_authoring.py --> | Replace YAML-backed stage drafts with Python `StageSpecDraft` models and artifact handles. |
 | AIR-04 <!-- contract-requirement: AIR-04 phase=6 test=tests/test_authoring.py --> | Compile experiment, variant, replicate, metric, stage, benchmark, and run documents from one plan. |
-| AIR-05 <!-- contract-requirement: AIR-05 phase=7 test=tests/test_verification_acceptance.py --> | Compile local, same-run, and prior-run inputs and publish prior-run pointers through the selected destination. |
+| AIR-05 <!-- contract-requirement: AIR-05 phase=7 test=tests/test_prior_run_inputs.py --> | Compile local, same-run, and prior-run inputs, publish exact prior-run pointers, and verify each pointer before materialization. |
 | AIR-06 <!-- contract-requirement: AIR-06 phase=11 test=tests/test_documentation.py --> | Remove retired authoring forms and publish the complete single-run Python workflow through freeze, run, benchmark, and restore. |
 
 **Current:** Project code imports `download` or `train` from `viper.stages` and
@@ -2146,7 +2146,7 @@ bundle uses the sibling directory itself.
 | `http.authoring.complete` <!-- verifier-rule: http.authoring.complete requirement=AIR-02 --> | HTTP drafts preserve their callable, parameter-model, parameter-value, and executable identities through freezing. |
 | `stage.draft.complete` <!-- verifier-rule: stage.draft.complete requirement=AIR-03 --> | Python stage drafts replace YAML-backed stage drafting and expose typed artifact handles. |
 | `plan.freeze.complete` <!-- verifier-rule: plan.freeze.complete requirement=AIR-04 --> | One plan freezes its experiment, variant, replicate, metrics, stages, benchmark, and run documents. |
-| `input.pointer.complete` <!-- verifier-rule: input.pointer.complete requirement=AIR-05 --> | Local, same-run, and prior-run inputs compile to exact references, and prior-run selection publishes a resolved pointer. |
+| `input.pointer.complete` <!-- verifier-rule: input.pointer.complete requirement=AIR-05 --> | Local, same-run, and prior-run inputs compile to exact references; prior-run selection publishes a digest-bound pointer that execution verifies before use. |
 | `authoring.docs.current` <!-- verifier-rule: authoring.docs.current requirement=AIR-06 --> | Public documentation presents the final Python workflow through freeze, run, benchmark, and restore. |
 
 The following checks cover each generated reference.
@@ -10844,4 +10844,628 @@ def test_plan_compiles_complete_protocol_graph(tmp_path: Path) -> None:
     assert "experiments/e001_strand/spec.yaml" in compiled.files
     assert "experiments/e001_strand/variants/baseline.spec.yaml" in compiled.files
     assert any(path.endswith("/stages/train/spec.yaml") for path in compiled.files)
+```
+
+
+<!-- pair-block-definition: P7-AIR-01 -->
+```toml pair-block
+id = "P7-AIR-01"
+requirements = ["EIR-04", "AIR-05"]
+targets = [
+    "src/viper/references.py:_validate_pointer_path",
+    "src/viper/references.py:ArtifactPointerRef",
+    "src/viper/references.py:ResolvedArtifactPointerRef",
+    "src/viper/inputs.py:PointerRef",
+    "src/viper/inputs.py:pointer_path",
+    "src/viper/inputs.py:StoredInputRef",
+    "src/viper/authoring.py:ArtifactPointer",
+    "src/viper/authoring.py:StoredInputRef",
+    "src/viper/authoring.py:ResolvedArtifactPointerRef",
+    "src/viper/authoring.py:_freeze_input",
+    "src/viper/execution/_materialization.py:resolve_inputs",
+    "src/viper/stages.py:pointer_path",
+    "src/viper/stages.py:TrainSpec",
+    "src/viper/stages.py:EvalSpec",
+    "src/viper/inspection.py:pointer_path",
+    "src/viper/inspection.py:lineage",
+    "tests/conftest.py:TIER_BY_MODULE",
+    "tests/conftest.py:DOMAIN_BY_MODULE",
+    "tests/test_prior_run_inputs.py:hashlib",
+    "tests/test_prior_run_inputs.py:ArtifactPointer",
+    "tests/test_prior_run_inputs.py:StageArtifactRef",
+    "tests/test_prior_run_inputs.py:RunArtifactDraft",
+    "tests/test_prior_run_inputs.py:_freeze_input",
+    "tests/test_prior_run_inputs.py:StoredInputRef",
+    "tests/test_prior_run_inputs.py:LocalFileRef",
+    "tests/test_prior_run_inputs.py:ResolvedArtifactPointerRef",
+    "tests/test_prior_run_inputs.py:ResolvedRunRef",
+    "tests/test_prior_run_inputs.py:parse_yaml_bytes",
+    "tests/test_prior_run_inputs.py:LocalArtifactStore",
+    "tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer",
+]
+tests = ["tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer"]
+gate = "python -m pytest tests/test_prior_run_inputs.py -q"
+depends_on = ["P6-UMD-02"]
+```
+
+**Context:** Prior-run selections currently stop at a placeholder. This block publishes one digest-bound pointer during plan compilation and makes execution verify that pointer before reading the selected artifact.
+
+**File: src/viper/references.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/references.py:_validate_pointer_path -->
+```python contract-target
+def _validate_pointer_path(path: RepoRelPath) -> None:
+    """Require the canonical path for one promoted-input pointer."""
+    parts = path.split("/")
+    selection = parts[3].removesuffix(".pointer.yaml") if len(parts) == 4 else ""
+    if (
+        len(parts) != 4
+        or parts[0] != "inputs"
+        or parts[1] not in {"benchmarks", "datasets", "models", "priors"}
+        or not parts[3].endswith(".pointer.yaml")
+        or re.fullmatch(r"[a-z][a-z0-9_]*", parts[2]) is None
+        or re.fullmatch(r"[a-z][a-z0-9_]*", selection) is None
+    ):
+        raise ValueError(
+            "artifact pointer path must match "
+            "inputs/<category>/<entity_id>/<selection_name>.pointer.yaml"
+        )
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/references.py:ArtifactPointerRef -->
+```python contract-target
+class ArtifactPointerRef(GitFileRef):
+    """A Git reference to the pointer selecting a promoted artifact."""
+
+    @model_validator(mode="after")
+    def validate_pointer_path(self) -> ArtifactPointerRef:
+        """Enforce the canonical promoted-input pointer path."""
+        _validate_pointer_path(self.path)
+        return self
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/references.py:ResolvedArtifactPointerRef -->
+```python contract-target
+class ResolvedArtifactPointerRef(ResolvedFileRef):
+    """Identify an exact verified artifact-pointer file."""
+
+    kind: Literal["artifact_pointer"] = "artifact_pointer"
+
+    @model_validator(mode="after")
+    def validate_pointer_path(self) -> ResolvedArtifactPointerRef:
+        """Enforce the pointer path for every storage backend."""
+        _validate_pointer_path(self.stored_at.path)
+        return self
+```
+
+**File: src/viper/inputs.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/inputs.py:PointerRef -->
+```python contract-target
+PointerRef = ArtifactPointerRef | ResolvedArtifactPointerRef
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/inputs.py:pointer_path -->
+```python contract-target
+def pointer_path(pointer: PointerRef) -> RepoRelPath:
+    """Return the path containing one artifact pointer."""
+    if isinstance(pointer, ResolvedArtifactPointerRef):
+        return pointer.stored_at.path
+    return pointer.path
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/inputs.py:StoredInputRef -->
+```python contract-target
+class StoredInputRef(ProtocolModel):
+    """A promoted artifact selected before the run begins."""
+
+    kind: Literal["stored"] = "stored"
+    pointer: PointerRef
+    path: RepoRelPath
+    data_role: DataRole
+
+    @model_validator(mode="after")
+    def validate_materialization_path(self) -> StoredInputRef:
+        """Keep materialized input bytes within their promoted-input scope."""
+        selected_pointer_path = pointer_path(self.pointer)
+        pointer_scope = selected_pointer_path.split("/")[:3]
+        materialization_parts = self.path.split("/")
+        if (
+            len(materialization_parts) < 3
+            or materialization_parts[:3] != pointer_scope
+            or repo_file_paths_overlap(self.path, selected_pointer_path)
+            or materialization_parts[-1].endswith(".pointer.yaml")
+        ):
+            raise ValueError(
+                "stored input path must use the pointer's category and entity ID "
+                "and must not use or overlap a pointer-file path"
+            )
+        return self
+```
+
+**File: src/viper/authoring.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/authoring.py:ArtifactPointer -->
+```python contract-target
+from .artifacts import (
+    ArtifactDraft,
+    ArtifactLoaderRef,
+    ArtifactPointer,
+    ArtifactSpec,
+    BundleArtifactDraft,
+    BundleArtifactSpec,
+    SingleFileArtifactDraft,
+    SingleFileArtifactSpec,
+    StageArtifactRef,
+)
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/authoring.py:StoredInputRef -->
+```python contract-target
+from .inputs import (
+    ExternalInputRef,
+    FutureInputRef,
+    InputRef,
+    LocalSource,
+    StoredInputRef,
+)
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/authoring.py:ResolvedArtifactPointerRef -->
+```python contract-target
+from .references import (
+    GitSource,
+    LocalFileRef,
+    ResolvedArtifactPointerRef,
+    ResolvedRunRef,
+    ResolvedRunSpecRef,
+)
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/authoring.py:_freeze_input -->
+```python contract-target
+def _freeze_input(
+    root: Path,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageInputDraft,
+) -> InputRef:
+    """Compile one input draft into its frozen reference."""
+    if isinstance(draft, ExternalInputDraft):
+        path = resolve_path(root, draft.path, operation="read")
+        return ExternalInputRef(
+            source=LocalSource(path=path.relative_to(root).as_posix()),
+            data_role=draft.data_role,
+        )
+    if isinstance(draft, StageDraftArtifactRef):
+        owners = [name for name, stage in stages.items() if stage is draft.producer]
+        if len(owners) != 1:
+            raise ValueError("stage artifact must have one producer in this plan")
+        return FutureInputRef(
+            producer_stage_id=owners[0],
+            name=draft.artifact_name,
+        )
+    pointer = ArtifactPointer(run=draft.run, artifact=draft.artifact)
+    raw = serialize_document(pointer)
+    parts = draft.path.split("/")
+    if len(parts) < 4 or parts[0] != "inputs":
+        raise ValueError("prior-run input path must include category and entity")
+    selection = f"{draft.artifact.artifact_name}_{draft.run.sha256}"
+    pointer_path = "/".join((*parts[:3], f"{selection}.pointer.yaml"))
+    published = LocalArtifactStore(root).resolved_files({pointer_path: raw})[0]
+    reference = ResolvedArtifactPointerRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=published.stored_at,
+    )
+    return StoredInputRef(
+        pointer=reference,
+        path=draft.path,
+        data_role=draft.data_role,
+    )
+```
+
+**File: src/viper/execution/_materialization.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/execution/_materialization.py:resolve_inputs -->
+```python contract-target
+def resolve_inputs(
+    root: Path,
+    workspace: AttemptWorkspace,
+    run_id: RunId,
+    attempt_id: int,
+    stage_id: StageId,
+    stage: InternalSpec,
+    completed: Mapping[StageId, ResolvedStageRef],
+    stage_specs: Mapping[StageId, BaseSpec],
+    fetcher: RunFetcher,
+    policy: VerificationPolicy,
+) -> tuple[
+    dict[InputName, ResolvedInputRef],
+    dict[str, Path],
+    dict[InputName, SnapshotFileRef],
+    dict[InputName, tuple[ResolvedFileRef, ...]],
+]:
+    """Materialize inputs and retain their existing immutable references."""
+    resolved: dict[InputName, ResolvedInputRef] = {}
+    paths: dict[str, Path] = {}
+    captured: dict[InputName, SnapshotFileRef] = {}
+    stored: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
+    for name, input_ref in stage.inputs.items():
+        if input_ref.kind == "future":
+            producer = completed.get(input_ref.producer_stage_id)
+            if producer is None:
+                raise RunError("future input producer has not completed")
+            resolved[name] = ResolvedFutureInputRef(producer=producer)
+            producer_spec = stage_specs[input_ref.producer_stage_id]
+            artifact = producer_spec.artifacts[input_ref.name]
+            paths[name] = root / artifact.path
+        elif input_ref.kind == "external":
+            resolved_input, captured_path = capture_external_input(
+                root,
+                workspace,
+                run_id=run_id,
+                attempt_id=attempt_id,
+                stage_id=stage_id,
+                input_name=name,
+                input_ref=input_ref,
+            )
+            resolved[name] = resolved_input
+            paths[name] = captured_path
+            captured[name] = resolved_input.file
+        elif input_ref.kind == "stored":
+            if isinstance(input_ref.pointer, ResolvedArtifactPointerRef):
+                pointer_raw = fetcher(input_ref.pointer.stored_at)
+                if (
+                    len(pointer_raw) != input_ref.pointer.bytes
+                    or hashlib.sha256(pointer_raw).hexdigest()
+                    != input_ref.pointer.sha256
+                ):
+                    raise RunError("stored input pointer identity mismatch")
+                resolved_pointer = input_ref.pointer
+            else:
+                pointer_raw = fetcher(input_ref.pointer)
+                resolved_pointer = ResolvedArtifactPointerRef(
+                    sha256=hashlib.sha256(pointer_raw).hexdigest(),
+                    bytes=len(pointer_raw),
+                    stored_at=input_ref.pointer,
+                )
+            pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
+            verified = verify_promoted_artifact(
+                pointer,
+                policy=policy,
+                expected_data_role=input_ref.data_role,
+                fetcher=fetcher,
+            )
+            _materialize_verified_artifact(root, input_ref.path, verified)
+            resolved[name] = ResolvedStoredInputRef(pointer=resolved_pointer)
+            paths[name] = root / input_ref.path
+            stored[name] = verified.references
+    return resolved, paths, captured, stored
+```
+
+**File: src/viper/stages.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/stages.py:pointer_path -->
+```python contract-target
+from .inputs import InputRef, ResolvedInputRef, pointer_path
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/stages.py:TrainSpec -->
+```python contract-target
+class TrainSpec(InternalSpec):
+    """Request training with a measured minimization or maximization objective."""
+
+    kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
+    objective: MetricObjectiveSpec
+    params: params.Train
+
+    @model_validator(mode="after")
+    def validate_training_contract(self) -> TrainSpec:
+        """Require the objective and canonical terminal checkpoint contract."""
+        if self.objective.metric_id not in self.metric_ids:
+            raise ValueError("training objective must occur in stage metric IDs")
+        required_artifacts = {keys.Train.MODEL, keys.Train.STATE}
+        missing = required_artifacts - set(self.artifacts)
+        if missing:
+            raise ValueError(
+                "training stages must declare terminal checkpoint artifacts: "
+                + ", ".join(sorted(missing))
+            )
+        model_input = self.inputs.get(keys.Train.MODEL)
+        state_input = self.inputs.get(keys.Train.STATE)
+        if (model_input is None) != (state_input is None):
+            raise ValueError("checkpoint inputs must be declared together")
+        if model_input is None or state_input is None:
+            return self
+        if model_input.kind != state_input.kind:
+            raise ValueError("checkpoint inputs must use the same input kind")
+        if model_input.kind == "stored" and state_input.kind == "stored":
+            if any(
+                pointer_path(value.pointer).split("/")[1] != "models"
+                for value in (model_input, state_input)
+            ):
+                raise ValueError("stored checkpoint inputs must use inputs/models")
+        if model_input.kind == "future" and state_input.kind == "future":
+            if model_input.producer_stage_id != state_input.producer_stage_id:
+                raise ValueError("checkpoint inputs must select one producer stage")
+            if model_input.name != keys.Train.MODEL:
+                raise ValueError("parameters input must select parameters")
+            if state_input.name != keys.Train.STATE:
+                raise ValueError("resume_state input must select resume_state")
+        return self
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/stages.py:EvalSpec -->
+```python contract-target
+class EvalSpec(InternalSpec):
+    """Request prediction and recomputed metrics for one fixed eval."""
+
+    kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
+    eval_id: EvalId
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
+    objective: MetricObjectiveSpec
+    split_inputs: tuple[InputName, ...] = Field(min_length=1)
+    params: params.Eval
+
+    @model_validator(mode="after")
+    def validate_eval_contract(self) -> EvalSpec:
+        """Require the objective, fixed inputs, splits, and prediction artifact."""
+        if self.objective.metric_id not in self.metric_ids:
+            raise ValueError("eval objective must occur in stage metric IDs")
+        if len(set(self.metric_ids)) != len(self.metric_ids):
+            raise ValueError("eval metric IDs must be unique")
+        if len(set(self.split_inputs)) != len(self.split_inputs):
+            raise ValueError("eval split input names must be unique")
+        if keys.Train.MODEL not in self.inputs:
+            raise ValueError("eval requires a parameters input")
+        dataset = self.inputs.get(keys.Eval.TEST)
+        if dataset is None:
+            raise ValueError("eval requires an eval_dataset input")
+        if dataset.kind != "stored":
+            raise ValueError("eval_dataset must be a stored input")
+        if pointer_path(dataset.pointer).split("/")[1] != "datasets":
+            raise ValueError("eval_dataset must use inputs/datasets")
+        if dataset.data_role not in {"eval", "benchmark"}:
+            raise ValueError("eval_dataset has an invalid data role")
+        reserved = {keys.Train.MODEL, keys.Eval.TEST}
+        if reserved & set(self.split_inputs):
+            raise ValueError("eval splits must differ from reserved inputs")
+        if any(name not in self.inputs for name in self.split_inputs):
+            raise ValueError("eval split input is absent")
+        predictions = self.artifacts.get(keys.Eval.PREDS)
+        if predictions is None:
+            raise ValueError("eval requires a predictions artifact")
+        return self
+```
+
+**File: src/viper/inspection.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=src/viper/inspection.py:pointer_path -->
+```python contract-target
+from .inputs import ExternalInputRef, FutureInputRef, StoredInputRef, pointer_path
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=src/viper/inspection.py:lineage -->
+```python contract-target
+def lineage(verified: VerifiedRunResult) -> RunLineage:
+    """Build a stable lineage graph from one completely verified run result."""
+    nodes: dict[str, LineageNode] = {}
+    edges: list[LineageEdge] = []
+    for stage_reference in verified.plan.run.stages:
+        stage_id = str(stage_reference.stage_id)
+        stage = verified.plan.stages[stage_reference.stage_id]
+        stage_node = f"stage:{stage_id}"
+        nodes[stage_node] = LineageNode(
+            node_id=stage_node,
+            kind="stage",
+            path=stage_reference.spec,
+        )
+
+        if isinstance(stage, InternalSpec):
+            for input_name, input_ref in sorted(stage.inputs.items()):
+                input_node = f"input:{stage_id}:{input_name}"
+                if isinstance(input_ref, FutureInputRef):
+                    producer_stage = verified.plan.stages[input_ref.producer_stage_id]
+                    producer_artifact = producer_stage.artifacts[input_ref.name]
+                    data_role = producer_artifact.data_role
+                    input_path = producer_artifact.path
+                elif isinstance(input_ref, ExternalInputRef):
+                    data_role = input_ref.data_role
+                    input_path = input_ref.source.path
+                else:
+                    data_role = input_ref.data_role
+                    input_path = input_ref.path
+                nodes[input_node] = LineageNode(
+                    node_id=input_node,
+                    kind="input",
+                    data_role=data_role,
+                    path=input_path,
+                )
+                edges.append(
+                    LineageEdge(
+                        source=input_node,
+                        target=stage_node,
+                        relation="consumes",
+                    )
+                )
+                if isinstance(input_ref, FutureInputRef):
+                    source = f"artifact:{input_ref.producer_stage_id}:{input_ref.name}"
+                elif isinstance(input_ref, StoredInputRef):
+                    source = f"promoted:{stage_id}:{input_name}"
+                    nodes[source] = LineageNode(
+                        node_id=source,
+                        kind="promoted_selection",
+                        data_role=input_ref.data_role,
+                        path=pointer_path(input_ref.pointer),
+                    )
+                else:
+                    continue
+                edges.append(
+                    LineageEdge(
+                        source=source,
+                        target=input_node,
+                        relation="selects",
+                    )
+                )
+
+        for artifact_name, artifact in sorted(stage.artifacts.items()):
+            artifact_node = f"artifact:{stage_id}:{artifact_name}"
+            nodes[artifact_node] = LineageNode(
+                node_id=artifact_node,
+                kind="artifact",
+                data_role=artifact.data_role,
+                path=artifact.path,
+            )
+            edges.append(
+                LineageEdge(
+                    source=stage_node,
+                    target=artifact_node,
+                    relation="produces",
+                )
+            )
+
+    return RunLineage(
+        run_id=verified.plan.run.run_id,
+        nodes=tuple(nodes[node_id] for node_id in sorted(nodes)),
+        edges=tuple(sorted(edges, key=lambda edge: (edge.source, edge.target))),
+    )
+```
+
+**File: tests/conftest.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=tests/conftest.py:TIER_BY_MODULE -->
+```python contract-target
+TIER_BY_MODULE = {
+    "test_api": "contract",
+    "test_api_json": "unit",
+    "test_artifact_validation": "contract",
+    "test_authoring": "contract",
+    "test_benchmark_execution": "contract",
+    "test_cli": "integration",
+    "test_cloud_execution": "contract",
+    "test_contract_documentation": "contract",
+    "test_contract_traceability": "contract",
+    "test_documentation": "contract",
+    "test_execution_acceptance": "integration",
+    "test_generated_project_acceptance": "release",
+    "test_http_retrieval": "contract",
+    "test_inspection": "contract",
+    "test_live_process_startup": "integration",
+    "test_storage": "unit",
+    "test_system_impact": "unit",
+    "test_metric_interface": "contract",
+    "test_metric_provenance": "integration",
+    "test_parameter_validation": "contract",
+    "test_plan_execution": "contract",
+    "test_prior_run_inputs": "contract",
+    "test_preflight": "contract",
+    "test_process_startup": "unit",
+    "test_project_init": "contract",
+    "test_protocol": "contract",
+    "test_public_api": "contract",
+    "test_release_tools": "unit",
+    "test_resume": "integration",
+    "test_run_execution": "integration",
+    "test_execution_signals": "integration",
+    "test_stage_invocation": "contract",
+    "test_validation_architecture": "contract",
+    "test_verification": "contract",
+    "test_verification_acceptance": "integration",
+    "test_worker": "integration",
+    "test_workflow_documentation": "contract",
+}
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=tests/conftest.py:DOMAIN_BY_MODULE -->
+```python contract-target
+DOMAIN_BY_MODULE = {
+    "test_api": "domain_application",
+    "test_api_json": "domain_application",
+    "test_artifact_validation": "domain_artifacts",
+    "test_authoring": "domain_authoring",
+    "test_benchmark_execution": "domain_execution",
+    "test_cli": "domain_application",
+    "test_cloud_execution": "domain_execution",
+    "test_contract_documentation": "domain_protocol",
+    "test_contract_traceability": "domain_protocol",
+    "test_documentation": "domain_protocol",
+    "test_execution_acceptance": "domain_execution",
+    "test_generated_project_acceptance": "domain_release",
+    "test_http_retrieval": "domain_http",
+    "test_inspection": "domain_verification",
+    "test_live_process_startup": "domain_execution",
+    "test_storage": "domain_storage",
+    "test_system_impact": "domain_protocol",
+    "test_metric_interface": "domain_metrics",
+    "test_metric_provenance": "domain_metrics",
+    "test_parameter_validation": "domain_parameters",
+    "test_plan_execution": "domain_execution",
+    "test_prior_run_inputs": "domain_authoring",
+    "test_preflight": "domain_verification",
+    "test_process_startup": "domain_execution",
+    "test_project_init": "domain_application",
+    "test_protocol": "domain_protocol",
+    "test_public_api": "domain_application",
+    "test_release_tools": "domain_release",
+    "test_resume": "domain_execution",
+    "test_run_execution": "domain_execution",
+    "test_execution_signals": "domain_execution",
+    "test_stage_invocation": "domain_execution",
+    "test_validation_architecture": "domain_protocol",
+    "test_verification": "domain_verification",
+    "test_verification_acceptance": "domain_verification",
+    "test_worker": "domain_execution",
+    "test_workflow_documentation": "domain_release",
+}
+```
+
+**File: tests/test_prior_run_inputs.py**
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:hashlib -->
+```python contract-target
+import hashlib
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:ArtifactPointer -->
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:StageArtifactRef -->
+```python contract-target
+from viper.artifacts import ArtifactPointer, StageArtifactRef
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:RunArtifactDraft -->
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:_freeze_input -->
+```python contract-target
+from viper.authoring import RunArtifactDraft, _freeze_input
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:StoredInputRef -->
+```python contract-target
+from viper.inputs import StoredInputRef
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:LocalFileRef -->
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:ResolvedArtifactPointerRef -->
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:ResolvedRunRef -->
+```python contract-target
+from viper.references import LocalFileRef, ResolvedArtifactPointerRef, ResolvedRunRef
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:parse_yaml_bytes -->
+```python contract-target
+from viper.serialization import parse_yaml_bytes
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:LocalArtifactStore -->
+```python contract-target
+from viper.storage import LocalArtifactStore
+```
+<!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=add target=tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer -->
+```python contract-target
+def test_prior_run_input_publishes_verified_pointer(tmp_path) -> None:
+    """Publish one exact pointer for a selected prior-run artifact."""
+    run = ResolvedRunRef(
+        sha256="a" * 64,
+        bytes=10,
+        stored_at=LocalFileRef(
+            commit="b" * 64,
+            path="experiments/source/runs/base/run/resolved.yaml",
+        ),
+    )
+    draft = RunArtifactDraft(
+        run=run,
+        artifact=StageArtifactRef(stage_id="download", artifact_name="dataset"),
+        path="inputs/datasets/toy/current.bin",
+        data_role="training",
+    )
+
+    frozen = _freeze_input(tmp_path, {}, draft)
+
+    assert isinstance(frozen, StoredInputRef)
+    assert isinstance(frozen.pointer, ResolvedArtifactPointerRef)
+    raw = LocalArtifactStore(tmp_path).fetch(frozen.pointer.stored_at)
+    assert len(raw) == frozen.pointer.bytes
+    assert hashlib.sha256(raw).hexdigest() == frozen.pointer.sha256
+    assert ArtifactPointer.model_validate(parse_yaml_bytes(raw)) == ArtifactPointer(
+        run=run,
+        artifact=draft.artifact,
+    )
+    assert frozen.pointer.stored_at.path == (
+        f"inputs/datasets/toy/dataset_{run.sha256}.pointer.yaml"
+    )
 ```

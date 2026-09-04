@@ -8,9 +8,9 @@
 | --- | --- |
 | FPG-01 <!-- contract-requirement: FPG-01 phase=6 test=tests/test_authoring.py --> | Publish every compiled plan document in one content-addressed revision before execution. |
 | FPG-02 <!-- contract-requirement: FPG-02 phase=6 test=tests/test_authoring.py --> | Preflight must verify the working run document against that immutable revision. |
-| FPG-03 <!-- contract-requirement: FPG-03 phase=6 test=tests/test_preflight.py --> | Keep project callables and Python definitions bound to `RunSpec.source.commit`. |
-| FPG-04 <!-- contract-requirement: FPG-04 phase=6 test=tests/test_verification.py --> | Preserve the plan revision in `ResolvedRun.spec` and use it to verify generated documents. |
-| FPG-05 <!-- contract-requirement: FPG-05 phase=6 test=tests/test_benchmark_execution.py --> | Load a selected benchmark from the same plan revision as the candidate run. |
+| FPG-03 <!-- contract-requirement: FPG-03 phase=6 test=tests/test_plan_execution.py --> | Keep project callables and Python definitions bound to `RunSpec.source.commit`. |
+| FPG-04 <!-- contract-requirement: FPG-04 phase=6 test=tests/test_plan_execution.py --> | Preserve the plan revision in `ResolvedRun.spec` and use it to verify generated documents. |
+| FPG-05 <!-- contract-requirement: FPG-05 phase=6 test=tests/test_plan_execution.py --> | Load a selected benchmark from the same plan revision as the candidate run. |
 
 ## 2. Required claim
 
