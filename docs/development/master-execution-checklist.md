@@ -1942,11 +1942,6 @@ python -m pytest \
 
 ## 23. Master Phase 16 — scientific evidence records
 
-<!-- contract-implementation: requirement=EKP-01 rule=knowledge.ontology.complete state=planned owner=src/viper/knowledge.py:OntologySpec -->
-<!-- contract-verification: requirement=EKP-01 rule=knowledge.ontology.complete state=planned test=tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance -->
-<!-- contract-implementation: requirement=EKP-02 rule=knowledge.evidence.complete state=planned owner=src/viper/knowledge.py:KnowledgeStore -->
-<!-- contract-verification: requirement=EKP-02 rule=knowledge.evidence.complete state=planned test=tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence -->
-
 **Depends on:** Master Phases 9, 13, and 15.
 
 **Contract:**
@@ -1965,6 +1960,10 @@ assertions while preserving the immutable run records they cite.
       <!-- implements: EKP-02 -->
       <!-- verifies: EKP-01 -->
       <!-- verifies: EKP-02 -->
+      <!-- contract-implementation: requirement=EKP-01 rule=knowledge.ontology.complete state=planned owner=src/viper/knowledge.py:OntologySpec -->
+      <!-- contract-verification: requirement=EKP-01 rule=knowledge.ontology.complete state=planned test=tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance -->
+      <!-- contract-implementation: requirement=EKP-02 rule=knowledge.evidence.complete state=planned owner=src/viper/knowledge.py:KnowledgeStore -->
+      <!-- contract-verification: requirement=EKP-02 rule=knowledge.evidence.complete state=planned test=tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence -->
 
 **Commit boundary:** `Record verified experiment knowledge`
 
