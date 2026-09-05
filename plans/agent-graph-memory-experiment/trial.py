@@ -133,10 +133,15 @@ def _run_agent(
         prompt,
     )
     started = time.monotonic()
+    environment = os.environ.copy()
+    environment["PATH"] = os.pathsep.join(
+        (os.fspath(Path(sys.executable).parent), environment.get("PATH", ""))
+    )
     with transcript.open("wb") as stream:
         process = subprocess.Popen(
             command,
             cwd=candidate,
+            env=environment,
             stdout=stream,
             stderr=subprocess.STDOUT,
             start_new_session=True,
