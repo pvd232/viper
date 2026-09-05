@@ -952,7 +952,6 @@ targets = [
     "src/viper/verification/__init__.py:_verify_run_result",
     "tests/test_verification.py:ExecutedStageCompletion",
     "tests/test_verification.py:RunAndStageVerificationTests",
-    "tests/test_verification.py:RunPlanRelationshipTests",
     "tests/test_verification.py:FutureInputVerificationTests",
     "tests/test_verification_acceptance.py:current_params",
     "tests/test_verification_acceptance.py:BuildVariantStageParams",
@@ -2391,9 +2390,7 @@ def input_identity(
             continue
         raw = path.read_bytes()
         relative = (
-            path.name
-            if selected.is_file()
-            else path.relative_to(selected).as_posix()
+            path.name if selected.is_file() else path.relative_to(selected).as_posix()
         )
         files.append(
             ReuseFileIdentity(
@@ -3057,8 +3054,7 @@ def test_reuse_identity_appears_in_inspection_surfaces(tmp_path: Path) -> None:
     comparison = compare_runs(verified, verified, right_reuse=reuse)
     assert comparison.identical is False
     assert all(
-        change.path == "stage_reuse"
-        or change.path.startswith("stage_reuse.download")
+        change.path == "stage_reuse" or change.path.startswith("stage_reuse.download")
         for change in comparison.changes
     )
 ```
@@ -3203,11 +3199,14 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
 
     source_file = SnapshotFileRef(path="old/model.bin", sha256=SHA_A, bytes=7)
     target = SnapshotFileRef(path="new/model.bin", sha256=SHA_A, bytes=7)
-    assert ReusedStageFile(
-        artifact_name="model",
-        source=source_file,
-        target=target,
-    ).target == target
+    assert (
+        ReusedStageFile(
+            artifact_name="model",
+            source=source_file,
+            target=target,
+        ).target
+        == target
+    )
     with pytest.raises(ValidationError, match="digests must match"):
         ReusedStageFile(
             artifact_name="model",
@@ -3464,11 +3463,9 @@ def main(argv: list[str] | None = None) -> int:
         if definition.parameter_model.__name__ != stage.parameter_model.symbol:
             raise ValueError("startup.callable: decorator parameter class differs")
         parameter_source = getattr(function, "__viper_parameter_source__", None)
-        if (
-            parameter_source is None
-            or Path(parameter_source).resolve()
-            != parameter_model_path(root, stage.parameter_model)
-        ):
+        if parameter_source is None or Path(
+            parameter_source
+        ).resolve() != parameter_model_path(root, stage.parameter_model):
             raise ValueError("startup.callable: parameter model source differs")
 
         context = Context(
@@ -7312,9 +7309,7 @@ def _verify_reused_stages(
             target_plan=plan,
             target_stage=stage_reference,
             target_result=target,
-            target_inputs=_input_identities(
-                inputs.get(stage_reference.stage_id, {})
-            ),
+            target_inputs=_input_identities(inputs.get(stage_reference.stage_id, {})),
         )
         receipts[stage_reference.stage_id] = receipt
     return receipts
@@ -7416,9 +7411,7 @@ def _verify_run_result(
             fetcher=fetcher,
         )
         external_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
-        stage_references = {
-            item.stage_id: item for item in attempt.resolved_stages
-        }
+        stage_references = {item.stage_id: item for item in attempt.resolved_stages}
         for stage_id, resolved_stage in verified_stages.items():
             if not isinstance(resolved_stage, ResolvedInternalSpec):
                 continue
@@ -7941,522 +7934,6 @@ class RunAndStageVerificationTests(unittest.TestCase):
         )
 
         self.assertEqual(measurements, ())
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification.py:RunPlanRelationshipTests -->
-```python contract-target
-class RunPlanRelationshipTests(unittest.TestCase):
-    """Verify relationships among experiments, variants, stages, and benchmarks."""
-
-    def test_training_accepts_validation_inputs_and_preserves_the_role(self) -> None:
-        """Allow validation-guided training when every output stays validation."""
-        train = train_spec()
-        training_dataset = train.inputs["training_dataset"]
-        if not isinstance(training_dataset, StoredInputRef):
-            self.fail("training_dataset must be a stored input")
-        train = train.model_copy(
-            update={
-                "inputs": {
-                    "training_dataset": training_dataset,
-                    "validation_dataset": StoredInputRef(
-                        kind="stored",
-                        pointer=artifact_pointer(
-                            "inputs/datasets/replogle_validation/current.pointer.yaml"
-                        ),
-                        path=("inputs/datasets/replogle_validation/dataset.h5ad"),
-                        data_role="validation",
-                    ),
-                },
-                "artifacts": {
-                    name: artifact.model_copy(update={"data_role": "validation"})
-                    for name, artifact in train.artifacts.items()
-                },
-            }
-        )
-        run, _ = run_spec([("train", train)])
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
-                ),
-            ),
-        )
-
-        verify_run_plan_relationships(
-            run,
-            experiment,
-            variant,
-            None,
-            {"train": train},
-        )
-
-    def test_training_rejects_evaluation_inputs(self) -> None:
-        """Reject evaluation data supplied to a training stage."""
-        train = train_spec()
-        training_dataset = train.inputs["training_dataset"]
-        if not isinstance(training_dataset, StoredInputRef):
-            self.fail("training_dataset must be a stored input")
-        train = train.model_copy(
-            update={
-                "inputs": {
-                    "training_dataset": training_dataset.model_copy(
-                        update={"data_role": "evaluation"}
-                    )
-                }
-            }
-        )
-        run, _ = run_spec([("train", train)])
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
-                ),
-            ),
-        )
-
-        with self.assertRaisesRegex(VerificationError, "cannot consume evaluation"):
-            verify_run_plan_relationships(
-                run,
-                experiment,
-                variant,
-                None,
-                {"train": train},
-            )
-
-    def test_training_inherits_a_future_artifact_data_role(self) -> None:
-        """Reject a restricted future artifact supplied to a training stage."""
-        build = build_spec()
-        prior = build.artifacts["prior"]
-        build = build.model_copy(
-            update={
-                "artifacts": {
-                    "prior": prior.model_copy(update={"data_role": "evaluation"})
-                }
-            }
-        )
-        train = train_spec(future_prior=True)
-        run, _ = run_spec([("build", build), ("train", train)])
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                BuildVariantStageParams(
-                    kind="build", stage_id="build", params=build.params
-                ),
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
-                ),
-            ),
-        )
-
-        with self.assertRaisesRegex(VerificationError, "cannot consume evaluation"):
-            verify_run_plan_relationships(
-                run,
-                experiment,
-                variant,
-                None,
-                {"build": build, "train": train},
-            )
-
-    def test_artifact_role_cannot_downgrade_an_input_role(self) -> None:
-        """Reject an output whose role is weaker than one of its inputs."""
-        build = build_spec()
-        depmap = build.inputs["depmap"]
-        if not isinstance(depmap, StoredInputRef):
-            self.fail("depmap must be a stored input")
-        build = build.model_copy(
-            update={
-                "inputs": {
-                    "depmap": depmap.model_copy(update={"data_role": "evaluation"})
-                }
-            }
-        )
-        train = train_spec(future_prior=True)
-        run, _ = run_spec([("build", build), ("train", train)])
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                BuildVariantStageParams(
-                    kind="build", stage_id="build", params=build.params
-                ),
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
-                ),
-            ),
-        )
-
-        with self.assertRaisesRegex(VerificationError, "less restricted"):
-            verify_run_plan_relationships(
-                run,
-                experiment,
-                variant,
-                None,
-                {"build": build, "train": train},
-            )
-
-    def test_variant_parameters_match_the_loaded_training_stage(self) -> None:
-        """Verify that variant parameters match the loaded training stage."""
-        train = train_spec()
-        run, _ = run_spec([("train", train)])
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(metric_spec("pearson_correlation", "evaluation"),),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train",
-                    stage_id="train",
-                    params=train.params,
-                ),
-            ),
-        )
-
-        verify_run_plan_relationships(
-            run,
-            experiment,
-            variant,
-            None,
-            {"train": train},
-        )
-
-        mismatched_variant = variant.model_copy(
-            update={
-                "stage_params": (
-                    variant.stage_params[0].model_copy(
-                        update={
-                            "params": train.params.model_copy(update={"epochs": 11})
-                        }
-                    ),
-                )
-            }
-        )
-        with self.assertRaisesRegex(VerificationError, "parameters do not match"):
-            verify_run_plan_relationships(
-                run,
-                experiment,
-                mismatched_variant,
-                None,
-                {"train": train},
-            )
-
-    def test_environment_lockfiles_belong_to_the_source_snapshot(self) -> None:
-        """Bind environment lockfiles to the implementation source snapshot."""
-        train = train_spec()
-        run, _ = run_spec([("train", train)])
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(metric_spec("pearson_correlation", "evaluation"),),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
-                ),
-            ),
-        )
-
-        wrong_lockfile = run.model_copy(
-            update={
-                "environment": run.environment.model_copy(
-                    update={
-                        "lockfile": run.environment.lockfile.model_copy(
-                            update={"commit": "d" * 40}
-                        )
-                    }
-                )
-            }
-        )
-        with self.assertRaisesRegex(VerificationError, "source snapshot"):
-            verify_run_plan_relationships(
-                wrong_lockfile,
-                experiment,
-                variant,
-                None,
-                {"train": train},
-            )
-
-    def test_stored_pointer_may_precede_the_source_snapshot(self) -> None:
-        """Select a promoted pointer from its own earlier immutable commit."""
-        train = train_spec()
-        run, _ = run_spec([("train", train)])
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(metric_spec("pearson_correlation", "evaluation"),),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train",
-                    stage_id="train",
-                    params=train.params,
-                ),
-            ),
-        )
-        input_ref = train.inputs["training_dataset"]
-        if not isinstance(input_ref, StoredInputRef):
-            self.fail("training_dataset must be a stored input")
-        earlier_input = input_ref.model_copy(
-            update={
-                "pointer": input_ref.pointer.model_copy(update={"commit": "d" * 40})
-            }
-        )
-        selected_train = train.model_copy(
-            update={"inputs": {"training_dataset": earlier_input}}
-        )
-
-        verify_run_plan_relationships(
-            run,
-            experiment,
-            variant,
-            None,
-            {"train": selected_train},
-        )
-
-    def test_benchmark_matches_evaluation_inputs_splits_and_metrics(self) -> None:
-        """Verify that benchmark matches evaluation inputs splits and metrics."""
-        train = train_spec()
-        evaluation = EvaluateSpec(
-            implementation=stage_implementation_ref(
-                "analysis/predict.py",
-                b"def predict(context):\n    pass\n",
-                symbol="predict",
-            ),
-        parameter_model=parameter_model_ref("evaluate"),
-            evaluation_id="replogle_predictions",
-            metric_ids=("pearson_correlation",),
-            split_inputs=("perturbation_split",),
-            inputs={
-                "parameters": FutureInputRef(
-                    kind="future",
-                    producer_stage_id="train",
-                    name=PARAMETERS,
-                ),
-                "evaluation_dataset": StoredInputRef(
-                    kind="stored",
-                    pointer=artifact_pointer(
-                        "inputs/datasets/replogle_test/current.pointer.yaml"
-                    ),
-                    path="inputs/datasets/replogle_test/dataset.h5ad",
-                    data_role="benchmark",
-                ),
-                "perturbation_split": StoredInputRef(
-                    kind="stored",
-                    pointer=artifact_pointer(
-                        "inputs/benchmarks/replogle/test_split.pointer.yaml"
-                    ),
-                    path="inputs/benchmarks/replogle/test_split.json",
-                    data_role="benchmark",
-                ),
-            },
-            params=parameters.Evaluate(),
-            artifacts={
-                "predictions": SingleFileArtifactSpec(
-                    kind="file",
-                    path=(
-                        f"{RUN_ROOT}/artifacts/evaluations/"
-                        "replogle_predictions/predictions.json"
-                    ),
-                    loader=loader_ref("json_file"),
-                    data_role="benchmark",
-                )
-            },
-        )
-
-        run, _ = run_spec([("train", train), ("evaluate", evaluation)])
-        run = run.model_copy(update={"benchmark_id": "replogle_strict"})
-        experiment = ExperimentSpec(
-            experiment_id="e001_strand",
-            factors=(),
-            variant_ids=("baseline",),
-            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(
-                metric_spec(
-                    "pearson_correlation",
-                    "evaluation",
-                    required_data_role="benchmark",
-                ),
-            ),
-        )
-        variant = VariantSpec(
-            experiment_id="e001_strand",
-            variant_id="baseline",
-            levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
-                ),
-                EvaluateVariantStageParams(
-                    kind="evaluate", stage_id="evaluate", params=evaluation.params
-                ),
-            ),
-        )
-        benchmark = BenchmarkSpec(
-            benchmark_id="replogle_strict",
-            eval_id="replogle_predictions",
-            test=resolved_pointer("inputs/datasets/replogle_test/current.pointer.yaml"),
-            splits={
-                "perturbation_split": resolved_pointer(
-                    "inputs/benchmarks/replogle/test_split.pointer.yaml"
-                )
-            },
-            metric_ids=("pearson_correlation",),
-            criteria=(
-                MetricCriterion(
-                    metric_id="pearson_correlation",
-                    comparison="ge",
-                    threshold=0.8,
-                ),
-            ),
-        )
-
-        verify_run_plan_relationships(
-            run,
-            experiment,
-            variant,
-            benchmark,
-            {"train": train, "evaluate": evaluation},
-        )
-
-        selected_metric = experiment.metrics[0]
-        missing_dependency = selected_metric.dependencies[0].model_copy(
-            update={"name": "missing_predictions"}
-        )
-        invalid_experiment = experiment.model_copy(
-            update={
-                "metrics": (
-                    selected_metric.model_copy(
-                        update={"dependencies": (missing_dependency,)}
-                    ),
-                )
-            }
-        )
-        with self.assertRaisesRegex(VerificationError, "selects absent artifact"):
-            verify_run_plan_relationships(
-                run,
-                invalid_experiment,
-                variant,
-                benchmark,
-                {"train": train, "evaluate": evaluation},
-            )
-
-        ordinary_payload = evaluation.model_dump(mode="python")
-        ordinary_payload["inputs"]["evaluation_dataset"]["data_role"] = "evaluation"
-        ordinary_payload["inputs"]["perturbation_split"]["data_role"] = "evaluation"
-        ordinary_payload["artifacts"]["predictions"]["data_role"] = "evaluation"
-        ordinary_evaluation = EvaluateSpec.model_validate(ordinary_payload)
-        with self.assertRaisesRegex(VerificationError, "must use 'benchmark'"):
-            verify_run_plan_relationships(
-                run,
-                experiment,
-                variant,
-                benchmark,
-                {"train": train, "evaluate": ordinary_evaluation},
-            )
-
-        wrong_benchmark = benchmark.model_copy(
-            update={"evaluation_id": "other_evaluation"}
-        )
-        with self.assertRaisesRegex(VerificationError, "evaluation ID"):
-            verify_run_plan_relationships(
-                run,
-                experiment,
-                variant,
-                wrong_benchmark,
-                {"train": train, "evaluate": evaluation},
-            )
-
-        other_train = train_spec()
-        wrong_evaluation_payload = evaluation.model_dump(mode="python")
-        wrong_evaluation_payload["inputs"]["parameters"]["producer_stage_id"] = (
-            "other_train"
-        )
-        wrong_evaluation = EvaluateSpec.model_validate(wrong_evaluation_payload)
-        wrong_run, _ = run_spec(
-            [
-                ("train", train),
-                ("other_train", other_train),
-                ("evaluate", wrong_evaluation),
-            ]
-        )
-        wrong_run = wrong_run.model_copy(update={"benchmark_id": "replogle_strict"})
-        wrong_variant_payload = variant.model_dump(mode="python")
-        wrong_variant_payload["stage_params"] = (
-            *wrong_variant_payload["stage_params"],
-            {
-                "kind": "train",
-                "stage_id": "other_train",
-                "params": other_train.params,
-            },
-        )
-        wrong_variant = VariantSpec.model_validate(wrong_variant_payload)
-        with self.assertRaisesRegex(VerificationError, "run estimator"):
-            verify_run_plan_relationships(
-                wrong_run,
-                experiment,
-                wrong_variant,
-                benchmark,
-                {
-                    "train": train,
-                    "other_train": other_train,
-                    "evaluate": wrong_evaluation,
-                },
-            )
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification.py:FutureInputVerificationTests -->
@@ -9969,9 +9446,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
     assert verify_stage_reuse(receipt, **arguments) == receipt
 
     severed_source = receipt.model_copy(
-        update={
-            "source_run": source_reference.model_copy(update={"sha256": "f" * 64})
-        }
+        update={"source_run": source_reference.model_copy(update={"sha256": "f" * 64})}
     )
     with pytest.raises(VerificationError, match="source run"):
         verify_stage_reuse(severed_source, **arguments)
@@ -9995,9 +9470,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
             **arguments,
         )
 
-    severed_measurement = measurement_reference.model_copy(
-        update={"sha256": "9" * 64}
-    )
+    severed_measurement = measurement_reference.model_copy(update={"sha256": "9" * 64})
     severed_metric = receipt.metrics[0].model_copy(
         update={"measurement": severed_measurement}
     )
