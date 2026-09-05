@@ -8054,9 +8054,7 @@ def test_attempt_publishes_evidence_to_selected_destination(tmp_path: Path) -> N
     journal.path.parent.mkdir(parents=True)
     journal.path.write_bytes(b'{"state":"terminal"}\n')
     measurement = tmp_path / run_root / "attempts/1/measurements/score.json"
-    verification = (
-        tmp_path / run_root / "attempts/1/metric_verification/score.json"
-    )
+    verification = tmp_path / run_root / "attempts/1/metric_verification/score.json"
     measurement.parent.mkdir(parents=True)
     verification.parent.mkdir(parents=True)
     measurement.write_bytes(b'{"value":1}\n')
