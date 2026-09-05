@@ -47,111 +47,238 @@ for experiments and benchmarks.
 
 ## A complete workflow
 
-**Repository-derived example.** The names below describe one small training
-run. The commands and interfaces match the current public implementation;
-replace the example model and paths with your project values.
+Here is the shape of a small VIPER project: one training function, one metric,
+and one experiment with two variants and two seeds. The scientific code stays
+ordinary Python. VIPER supplies the paths, records what happened, and verifies
+the result.
 
 ### Define a stage
 
-VIPER owns validation, paths, execution records, and verification. Your
-project function owns the scientific computation.
+Put the project-owned computation in a normal Python module:
 
 ```python
 from pathlib import Path
 
 from my_project.training import train_model
 from viper import parameters
+from viper.metrics import MetricContext, measure, metric, min
 from viper.stages import Context, train
 
 
+def load_bytes(path: Path) -> bytes:
+    """Load one saved model or checkpoint."""
+
+    return path.read_bytes()
+
+
 class TrainParameters(parameters.Train):
-    """Configure one training run."""
+    """Values that distinguish one training run from another."""
 
     epochs: int
     learning_rate: float
 
 
+@metric(metric_id="training_loss", mode="live")
+def training_loss(
+    _context: MetricContext[parameters.Metric],
+    losses: list[float],
+) -> float:
+    """Return the final loss recorded by the training loop."""
+
+    return losses[-1]
+
+
 @train(params=TrainParameters)
 def fit(context: Context[TrainParameters]) -> None:
-    """Train one model using paths allocated by VIPER."""
+    """Train one model using inputs and outputs allocated by VIPER."""
 
     dataset: Path = context.inputs["dataset"]
-    weights: Path = context.artifacts["parameters"]
-    train_model(
+    model: Path = context.artifacts["model"]
+    state: Path = context.artifacts["state"]
+    losses = train_model(
         dataset=dataset,
-        weights=weights,
+        model=model,
+        state=state,
         epochs=context.params.epochs,
         learning_rate=context.params.learning_rate,
     )
+    context.metrics["training_loss"].record(losses)
 ```
 
-The stage context carries validated parameters, materialized input paths,
-writable artifact paths, metric handles, and named random generators. The
-stage writes model state to `context.artifacts["parameters"]`; VIPER records
-that file after the function returns.
+`Context` contains the validated parameters, materialized input paths, writable
+artifact paths, metric handles, and named random generators for this attempt.
+VIPER chooses the run directory and output identity for the function.
 
-### Author the experiment
+### Connect the experiment
 
-Use the Python authoring interface to connect stage functions, inputs,
-artifacts, metrics, variants, and replicates. `viper.authoring.plan()` returns
-an immutable draft. `viper.execution.run()` compiles that draft into canonical
-files before starting the first attempt.
+The authoring module connects those pieces into an experiment. This example
+compares two learning rates and repeats each choice under two seeds:
 
-For this example, the frozen plan appears at:
+```python
+from my_project.benchmarks import benchmark_definition
+from my_project.settings import environment, reproducibility, source
+from my_project.training import TrainParameters, fit, load_bytes, training_loss
+from viper.artifacts import artifact
+from viper.authoring import (
+    experiment,
+    factor,
+    input,
+    plan,
+    replicate,
+    stage,
+    variant,
+)
+from viper.metrics import measure, min
 
-```text
-experiments/example/runs/baseline/run-001/spec.yaml
+
+loss = measure(training_loss)
+dataset = input(path="inputs/dataset.csv", data_role="training")
+
+
+def training(learning_rate: float):
+    """Build one training stage for a selected learning rate."""
+
+    return stage(
+        fit,
+        params=TrainParameters(epochs=20, learning_rate=learning_rate),
+        inputs={"dataset": dataset},
+        artifacts={
+            "model": artifact(
+                path="artifacts/model.bin",
+                loader=load_bytes,
+                data_role="model",
+            ),
+            "state": artifact(
+                path="artifacts/state.bin",
+                loader=load_bytes,
+                data_role="checkpoint",
+            ),
+        },
+        metrics=(loss,),
+        objective=min(loss),
+    )
+
+
+baseline = training(1e-3)
+fast = training(3e-3)
+study = experiment(
+    experiment_id="learning_rate_demo",
+    factors={"learning_rate": factor(levels=("baseline", "fast"))},
+    variants={
+        "baseline": variant(
+            levels={"learning_rate": "baseline"},
+            stages={"train": baseline},
+            estimator=baseline.artifacts["model"],
+        ),
+        "fast": variant(
+            levels={"learning_rate": "fast"},
+            stages={"train": fast},
+            estimator=fast.artifacts["model"],
+        ),
+    },
+    replicates={
+        "seed_7": replicate(seed=7),
+        "seed_11": replicate(seed=11),
+    },
+)
+
+draft = plan(
+    experiment=study,
+    variant="baseline",
+    replicate="seed_7",
+    source=source,
+    env=environment,
+    reproducibility=reproducibility,
+    benchmark=benchmark_definition,
+)
 ```
 
-Commit the project before execution. The plan records the Git commit that owns
-the selected stage, parameter, metric, and loader definitions.
+`source`, `environment`, and `reproducibility` are project settings that pin
+the Git revision, Python environment, and numerical controls. The
+[getting-started guide](docs/tutorials/getting-started.md) explains each one.
+
+`viper.authoring.plan()` returns an immutable draft with a generated run ID.
+`viper.execution.run()` is the public handoff: it compiles the draft into
+canonical YAML before starting the first stage.
+
+### Run it from Python
+
+Commit the project code first so the plan can identify the exact source it
+uses. Then pass the draft directly to `viper.execution.run()`:
 
 ```bash
 git add .
-git commit -m "Define baseline experiment"
+git commit -m "Define learning-rate experiment"
 ```
 
-### Check and run the frozen plan
+```python
+from pathlib import Path
 
-Preflight checks the selected source, inputs, environment, and implementation
-references before training begins:
+from viper import execution
 
-```bash
-viper preflight \
-  experiments/example/runs/baseline/run-001/spec.yaml \
-  --root .
+
+root = Path.cwd()
+result = execution.run(root, draft)
+
+print(result.resolved_run.status)
+print(result.resolved_run_path)
 ```
 
-Run the complete plan:
+One call now covers the normal user journey:
 
-```bash
-viper run \
-  experiments/example/runs/baseline/run-001/spec.yaml \
-  --root .
+```text
+Python experiment
+  -> immutable plan files
+  -> preflight
+  -> stages in dependency order
+  -> terminal verification
+  -> resolved run
 ```
 
-`viper run` executes every stage in dependency order and verifies the terminal
-result before reporting success. The result identifies the generated
-`resolved.yaml`, which records the completed attempt and its stage snapshots.
-
-### Verify and inspect the result
-
-Verification can be repeated later or on another machine. Trust only the
-repository allowed to supply the recorded project implementations:
+The generated plan remains reusable. Run it again from a shell when that is
+more convenient:
 
 ```bash
-viper verify-run \
-  experiments/example/runs/baseline/run-001/resolved.yaml \
-  --root . \
+viper run path/to/spec.yaml --root .
+```
+
+### Confirm, restore, and inspect
+
+If the plan includes a benchmark, run its independent confirmation against the
+verified result:
+
+```python
+benchmark_result = execution.benchmark(
+    root,
+    result.resolved_run_path,
+    root / f"benchmarks/{benchmark_definition.benchmark_id}.spec.yaml",
+)
+print(benchmark_result.result.status)
+```
+
+Restore a verified artifact directly from the stored run evidence:
+
+```python
+from viper.restoration import ArtifactRestoreSelector
+
+
+restored = execution.restore(
+    root,
+    result.resolved_run_ref,
+    artifacts=(
+        ArtifactRestoreSelector(stage_id="train", artifact_name="model"),
+    ),
+    output=root / "restored",
+)
+print(restored.artifacts[0].files[0].path)
+```
+
+The CLI exposes the same records to people, scripts, and agents:
+
+```bash
+viper --json verify-run path/to/resolved.yaml \
   --trust-source https://github.com/example/my-project
-```
-
-Inspect the verified stage, artifact, and measurement relationships:
-
-```bash
-viper --json lineage \
-  experiments/example/runs/baseline/run-001/resolved.yaml \
-  --root . \
+viper --json lineage path/to/resolved.yaml \
   --trust-source https://github.com/example/my-project
 ```
 
@@ -165,7 +292,7 @@ it from one or more verified results:
 
 ```bash
 viper catalog-refresh \
-  experiments/example/runs/baseline/run-001/resolved.yaml \
+  path/to/resolved.yaml \
   --root . \
   --trust-source https://github.com/example/my-project
 ```
@@ -182,7 +309,7 @@ VIPER writes the derived index to `.viper/catalog.sqlite3`. The immutable run
 evidence remains intact when the index is deleted, and refresh rebuilds the
 index from those verified records.
 
-### Add scientific context
+### Add scientific context or agent access
 
 After verification, a project can publish versioned primitive definitions,
 assignments, controlled comparisons, effects, impact assessments, diagnostic
@@ -203,9 +330,7 @@ Exact filters are authoritative. Vector similarity ranks records within one
 declared vector view. Exact identities and reviewed equivalence determine
 experimental identity and duplicate evidence.
 
-### Give an agent the same interface
-
-Start the local MCP server in read mode:
+Start the local MCP server when an agent needs the same typed operations:
 
 ```bash
 viper mcp --root .

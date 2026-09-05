@@ -274,6 +274,7 @@ Public types and functions have one owner:
 | Module | Owns |
 | --- | --- |
 | `viper.api` | Typed operations, dispatch, discovery, and JSON encoding |
+| `viper.authoring` | Python experiment, variant, stage, and immutable plan construction |
 | `viper.parameters` | Project parameter categories and references |
 | `viper.stages` | Stage specifications, decorators, contexts, and invocation evidence |
 | `viper.experiments` | Experiments, variants, factors, levels, and replicates |
@@ -287,6 +288,7 @@ Public types and functions have one owner:
 | `viper.randomness` | Python, NumPy, and PyTorch generator-state contracts |
 | `viper.resume` | Optimizer, DataLoader, and combined resume-state contracts |
 | `viper.execution` | Run, retry, and benchmark operations |
+| `viper.restoration` | Artifact restore selectors and results |
 | `viper.system_impact.explain` | Joined one-hop dependency evidence for tools and agents |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
