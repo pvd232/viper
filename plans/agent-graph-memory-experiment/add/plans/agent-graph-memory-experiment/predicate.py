@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
+
+_VIRTUAL_ENV = os.environ.get("VIRTUAL_ENV")
+if _VIRTUAL_ENV is not None:
+    _VIRTUAL_PYTHON = Path(_VIRTUAL_ENV) / "bin" / "python"
+    if _VIRTUAL_PYTHON.is_file() and Path(sys.executable) != _VIRTUAL_PYTHON:
+        os.execv(
+            os.fspath(_VIRTUAL_PYTHON),
+            (os.fspath(_VIRTUAL_PYTHON), *sys.argv),
+        )
 
 from viper._system_impact.codeql import analyze_overlay_source, source_digest
 from viper.system_impact.models import SourceGraph, SourceSnapshot
