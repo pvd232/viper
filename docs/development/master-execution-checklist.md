@@ -1714,17 +1714,6 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 ## 18. Master Phase 11 — public workflow migration
 
-<!-- contract-implementation: requirement=DRA-06 rule=download.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-verification: requirement=DRA-06 rule=download.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-implementation: requirement=EIR-05 rule=input.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-verification: requirement=EIR-05 rule=input.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-implementation: requirement=UMD-06 rule=metric.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-verification: requirement=UMD-06 rule=metric.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-implementation: requirement=AIR-06 rule=authoring.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-verification: requirement=AIR-06 rule=authoring.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-implementation: requirement=RSP-09 rule=storage.docs.current state=planned owner=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-<!-- contract-verification: requirement=RSP-09 rule=storage.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-
 **Depends on:** Master Phases 1–10.
 
 **Contracts:** [Download retrieval artifacts](download-retrieval-artifacts.md),
@@ -1734,57 +1723,32 @@ authentication exchange, error mapping, and service-side seal semantics.
 [frozen plan Git identity](frozen-plan-git-identity.md), and
 [direct Viper Cloud publication](remote-storage.md).
 
-**Outcome:** The generated project and README teach the single-run API through
-freeze, run, benchmark, and restore.
+**Outcome:** The generated project and public documentation teach one path:
+author a plan, execute it, benchmark the verified result, and restore selected
+artifacts.
 
-### 18.1 Generated project
+- [ ] Execute `P11-AIR-01`: update the generated project and public workflow,
+      then pass both focused acceptance tests. <!-- pair-block: P11-AIR-01 -->
+      <!-- pair-block-contract: P11-AIR-01 contract=automatic-input-resolution.md -->
+      <!-- contract-implementation: requirement=DRA-06 rule=download.docs.current state=planned owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=DRA-06 rule=download.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=EIR-05 rule=input.docs.current state=planned owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=EIR-05 rule=input.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=UMD-06 rule=metric.docs.current state=planned owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=UMD-06 rule=metric.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=AIR-06 rule=authoring.docs.current state=planned owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=AIR-06 rule=authoring.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=RSP-09 rule=storage.docs.current state=planned owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=RSP-09 rule=storage.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
 
-- [ ] Rewrite the scaffold in `src/viper/project.py` around Python authoring.
-- [ ] Generate four project-owned stage decorators and one runner-owned
-      download declaration.
-- [ ] Generate complete parameters, metrics, diagnostics, loaders, HTTP,
-      experiment, variant, replicate, run, and benchmark declarations.
-- [ ] Use `Train` and `Eval` keys.
-- [ ] Use `env`, `eval`, and `proj` in generated Python and persisted fields.
-- [ ] Use run-relative artifact draft paths.
-- [ ] Remove `parameters.Download`, `DownloadContext`, and `download_stage`.
-- [ ] Make the generated project freeze, execute, verify, benchmark, and
-      restore its example.
-
-### 18.2 Public documentation
-
-- [ ] Replace manual YAML authoring in `README.md`.
-- [ ] Update `docs/tutorials/getting-started.md`.
-- [ ] Update `docs/explanation/how-viper-works.md`.
-- [ ] Update `docs/reference/api.md`.
-- [ ] Keep the HTTP decorator and public HTTP types in their defining
-      `viper.http` module. Keep the package-root namespace free of HTTP aliases.
-- [ ] Update `docs/reference/protocol.md` with every model and alias
-      implemented through Master Phase 11.
-- [ ] Update `docs/reference/versioning.md` if alpha compatibility language
-      changes.
-- [ ] Update `docs/README.md` and release evidence.
-- [ ] Keep the complete authoring example on `proj_a`, `proj_b`, `proj_bias`,
-      `min_proj_norm`, and `proj_norm`. Reject `projection` in Python
-      identifiers.
-- [ ] Remove all retired sync, offload, `HttpSource`, download callable,
-      `MetricKind`, and old key references.
-      <!-- implements: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
-
-### 18.3 Migration validation
-
-- [ ] Run `tests/test_documentation.py` after the contract and public-document
-      cleanup. <!-- verifies: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
-- [ ] Run the protocol, generated-project, and documentation tests changed by
-      Master Phases 1–11. Master Phase 21 owns the full repository and clean-wheel gates.
+The block removes the generated `freeze-run` and stage-callable entrypoints,
+fixes the generated parameter-module imports, and updates `README.md`, the
+getting-started tutorial, the architecture explanation, and the API reference.
 
 ```bash
 python -m pytest \
-  tests/test_documentation.py \
-  tests/test_protocol.py \
-  tests/test_validation_architecture.py \
-  tests/test_project_init.py \
-  tests/test_generated_project_acceptance.py -q
+  tests/test_project_init.py::test_init_generates_importable_python_project \
+  tests/test_documentation.py::test_public_workflow_uses_target_api -q
 ```
 
 **Commit boundary:** `Publish the Python-authored VIPER workflow`

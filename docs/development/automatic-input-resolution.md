@@ -11945,3 +11945,345 @@ def build_complete_fixture(
     )
     return resolved_run, store, tamper_location
 ```
+
+## Phase 11 PairBlock
+
+<!-- pair-block-definition: P11-AIR-01 -->
+```toml pair-block
+id = "P11-AIR-01"
+requirements = ["DRA-06", "EIR-05", "UMD-06", "AIR-06", "RSP-09"]
+targets = [
+    "src/viper/project.py:_project_files",
+    "tests/test_project_init.py:test_init_generates_importable_five_stage_project",
+    "tests/test_project_init.py:test_init_generates_importable_python_project",
+    "tests/test_documentation.py:test_public_workflow_uses_target_api",
+]
+assets = [
+    "README.md",
+    "docs/tutorials/getting-started.md",
+    "docs/explanation/how-viper-works.md",
+    "docs/reference/api.md",
+]
+tests = [
+    "tests/test_project_init.py:test_init_generates_importable_python_project",
+    "tests/test_documentation.py:test_public_workflow_uses_target_api",
+]
+gate = "python -m pytest tests/test_project_init.py::test_init_generates_importable_python_project tests/test_documentation.py::test_public_workflow_uses_target_api -q"
+depends_on = ["P10-RSP-02"]
+```
+
+**Context:** Publish one generated project and one public workflow that use the Phase 11 authoring, execution, benchmark, and restore APIs without retired freezing or download-callable concepts.
+
+<!-- contract-target: requirements=DRA-06,EIR-05,UMD-06,AIR-06,RSP-09 block=P11-AIR-01 action=update target=src/viper/project.py:_project_files -->
+```python contract-target
+def _project_files(package: str) -> dict[str, str]:
+    """Return the complete starter-project file mapping."""
+    stage_definitions = {
+        "build": ("BuildParameters", "build", "prior"),
+        "embed": ("EmbedParameters", "embed", "embedding"),
+        "train": ("TrainParameters", "train", "parameters"),
+        "eval": ("EvalParameters", "eval", "predictions"),
+    }
+    files: dict[str, str] = {
+        **ROOT_FILES,
+        ".gitignore": ".viper/\n__pycache__/\n*.egg-info/\n",
+        "README.md": f"""# {package}
+
+This project contains one decorated callable for each VIPER stage kind.
+
+Run the focused project tests:
+
+    python -m pytest -q
+
+After replacing the stage templates, commit the project and build a plan with
+`viper.authoring.plan()`. Pass that plan directly to `viper.execution.run()`.
+
+Benchmark specifications belong under `benchmarks/`.
+""",
+        "pyproject.toml": f'''[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{package.replace("_", "-")}"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["viper-provenance>=0.1.0a2"]
+
+[project.optional-dependencies]
+test = ["pytest>=9,<10"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+''',
+        f"src/{package}/__init__.py": (
+            f'"""Project-owned stages and provenance extensions for {package}."""\n'
+        ),
+        f"src/{package}/params.py": (
+            '''"""Define project-owned stage parameter models."""
+
+from pydantic import Field
+from viper import params
+
+
+class BuildParameters(params.Build):
+    """Select the delimiter consumed by the prior builder."""
+
+    delimiter: str = ","
+
+
+class EmbedParameters(params.Embed):
+    """Select the dimension of the example embedding."""
+
+    dimensions: int = Field(default=2, gt=0)
+
+
+class TrainParameters(params.Train):
+    """Select the number of example training passes."""
+
+    epochs: int = Field(default=1, gt=0)
+
+
+class EvalParameters(params.Eval):
+    """Select the label written beside the example predictions."""
+
+    label: str = "baseline"
+'''
+        ),
+        f"src/{package}/artifact_loaders/__init__.py": (
+            '"""Project-owned artifact reconstruction functions."""\n'
+        ),
+        f"src/{package}/artifact_loaders/bytes_file.py": (
+            '''"""Load one file artifact as exact bytes."""
+
+from pathlib import Path
+
+
+def load(path: Path) -> bytes:
+    """Return the complete file contents."""
+    return path.read_bytes()
+'''
+        ),
+        f"src/{package}/artifact_loaders/resume_state.py": (
+            '''"""Reconstruct the example terminal training state."""
+
+from pathlib import Path
+
+from viper.randomness import (
+    LegacyNumPyRNGState,
+    MainProcessRNGState,
+    NumPyRNGState,
+    PCG64GeneratorState,
+    PCG64InternalState,
+    PythonRNGState,
+)
+from viper.resume import (
+    DataLoaderConfiguration,
+    DataLoaderResumeState,
+    ResumeState,
+)
+
+
+def load(path: Path) -> ResumeState:
+    """Return the example resume state after confirming the file exists."""
+    path.read_bytes()
+    return ResumeState(
+        optimizer_state={"state": {}, "param_groups": []},
+        main_process_rng=MainProcessRNGState(
+            python=PythonRNGState(
+                version=3,
+                internal_state=(1,),
+                gaussian_cache=None,
+            ),
+            numpy=NumPyRNGState(
+                generators={
+                    "training": PCG64GeneratorState(
+                        state=PCG64InternalState(state=1, inc=1),
+                        has_uint32=0,
+                        uinteger=0,
+                    )
+                },
+                legacy_global=LegacyNumPyRNGState(
+                    keys=(0,) * 624,
+                    position=0,
+                    has_gaussian=0,
+                    cached_gaussian=0.0,
+                ),
+            ),
+            torch_cpu=b"torch-cpu",
+            torch_cuda=(),
+        ),
+        dataloader=DataLoaderResumeState(
+            configuration=DataLoaderConfiguration(workers=0),
+            state_dict={"num_yielded": 1},
+        ),
+    )
+'''
+        ),
+        f"src/{package}/metrics/__init__.py": (
+            '"""Project-owned metric implementations."""\n'
+        ),
+        f"src/{package}/metrics/eval.py": (
+            '''"""Define one recomputed eval metric."""
+
+from viper.metrics import metric
+
+
+@metric(metric_id="prediction_bytes", kind="eval", mode="recompute")
+def prediction_bytes(context) -> float:
+    """Return the byte count of the verified prediction artifact."""
+    return float(len(context.artifacts["predictions"].read_bytes()))
+'''
+        ),
+        "experiments/README.md": """# Experiments
+
+Freeze authored experiment, variant, stage, and run documents here. VIPER
+binds every implementation through its repository-relative path and exact
+source identity.
+""",
+        "benchmarks/README.md": """# Benchmarks
+
+A benchmark governs one eval contract across candidate run plans and
+requires an independently executed confirmation.
+""",
+        "run.py": f'''"""Run one authored project plan."""
+
+from pathlib import Path
+
+from viper import execution
+from viper.authoring import RunPlanDraft
+
+
+def execute(root: Path, draft: RunPlanDraft):
+    """Compile and execute one authored plan."""
+    return execution.run(root, draft)
+''',
+        "tests/test_stage_definitions.py": (
+            f'''"""Verify generated stages expose their VIPER definitions."""
+
+from {package}.stages.build import build
+from {package}.stages.embed import embed
+from {package}.stages.eval import eval
+from {package}.stages.train import train
+
+from viper.stages import stage_definition
+
+
+def test_stage_kinds() -> None:
+    """Match each callable with the stage kind fixed by its decorator."""
+    stages = (build, embed, train, eval)
+
+    assert tuple(stage_definition(stage).kind for stage in stages) == (
+        "build",
+        "embed",
+        "train",
+        "eval",
+    )
+'''
+        ),
+    }
+    for stage, (parameter_class, decorator, artifact) in stage_definitions.items():
+        if stage == "eval":
+            input_read = "    payload = context.inputs['parameters'].read_bytes()\n"
+        else:
+            input_read = (
+                "    source = next(iter(context.inputs.values()))\n"
+                "    payload = source.read_bytes()\n"
+            )
+        extra_artifact = ""
+        if stage == "train":
+            extra_artifact = (
+                "    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            )
+        destination_line = f'    destination = context.artifacts["{artifact}"]\n'
+        stage_body = f"""{input_read}{destination_line}\
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(payload)
+{extra_artifact}"""
+        files[
+            f"src/{package}/stages/{stage}.py"
+        ] = f'''"""Execute the example {stage} stage."""
+
+from {package}.params import {parameter_class}
+from viper.stages import {decorator}
+
+
+@{decorator}(params={parameter_class})
+def {stage}(context) -> None:
+    """Write the declared {artifact} artifact from verified inputs."""
+{stage_body}'''
+    files[f"src/{package}/stages/__init__.py"] = (
+        '"""Project-owned decorated stage callables."""\n'
+    )
+    return files
+```
+
+<!-- contract-target: requirements=DRA-06,EIR-05,UMD-06,AIR-06,RSP-09 block=P11-AIR-01 action=remove target=tests/test_project_init.py:test_init_generates_importable_five_stage_project -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=DRA-06,EIR-05,UMD-06,AIR-06,RSP-09 block=P11-AIR-01 action=add target=tests/test_project_init.py:test_init_generates_importable_python_project -->
+```python contract-target
+def test_init_generates_importable_python_project(
+    tmp_path: Path,
+) -> None:
+    """Generate the project and execute its focused tests without editing it."""
+    target = tmp_path / "starter"
+    environment = environ.copy()
+    environment["PYTHONPATH"] = str(Path.cwd())
+
+    result = init_project(InitProjectRequest(path=target, package="sample_project"))
+    completed = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q"],
+        cwd=target,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.project_root == target
+    assert len(result.files) == 21
+    assert target / "viper.toml" in result.files
+    assert target / "inputs" / ".gitkeep" in result.files
+    readme = (target / "README.md").read_text(encoding="utf-8")
+    runner = (target / "run.py").read_text(encoding="utf-8")
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "1 passed" in completed.stdout
+    assert "freeze-run" not in readme
+    assert "viper.execution.run()" in readme
+    assert "execution.run(root, draft)" in runner
+```
+
+<!-- contract-target: requirements=DRA-06,EIR-05,UMD-06,AIR-06,RSP-09 block=P11-AIR-01 action=add target=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+```python contract-target
+def test_public_workflow_uses_target_api() -> None:
+    """Publish the Phase 11 workflow without retired authoring concepts."""
+    documents = (
+        ROOT / "README.md",
+        ROOT / "docs/tutorials/getting-started.md",
+        ROOT / "docs/explanation/how-viper-works.md",
+        ROOT / "docs/reference/api.md",
+    )
+    text = "\n".join(path.read_text(encoding="utf-8") for path in documents)
+
+    required = {
+        "viper.authoring.plan",
+        "viper.execution.run",
+        "viper.execution.benchmark",
+        "viper.execution.restore",
+    }
+    retired = {
+        "freeze-run",
+        "freeze_run_plan",
+        "DownloadContext",
+        "download_stage",
+        "HttpSource",
+    }
+
+    assert required <= {name for name in required if name in text}
+    assert retired.isdisjoint({name for name in retired if name in text})
+```
