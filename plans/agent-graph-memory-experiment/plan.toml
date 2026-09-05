@@ -1,0 +1,46 @@
+schema_version = 1
+id = "agent-graph-memory-experiment-v1"
+contract = "docs/development/agent-graph-memory-experiment.md"
+baseline = "9d2cdba"
+
+[[blocks]]
+id = "P0-AGM-01"
+requirements = ["AGM-01", "AGM-02", "AGM-03", "AGM-04", "AGM-05"]
+depends_on = []
+gate = "python -m pytest plans/agent-graph-memory-experiment/tests/test_experiment.py -q"
+
+[[blocks.files]]
+action = "add"
+source = "add/plans/agent-graph-memory-experiment/trial.py"
+destination = "plans/agent-graph-memory-experiment/trial.py"
+
+[[blocks.files]]
+action = "add"
+source = "add/plans/agent-graph-memory-experiment/predicate.py"
+destination = "plans/agent-graph-memory-experiment/predicate.py"
+
+[[blocks.files]]
+action = "add"
+source = "add/plans/agent-graph-memory-experiment/experiment.py"
+destination = "plans/agent-graph-memory-experiment/experiment.py"
+
+[[blocks.files]]
+action = "add"
+source = "add/plans/agent-graph-memory-experiment/compare.py"
+destination = "plans/agent-graph-memory-experiment/compare.py"
+
+[[blocks.files]]
+action = "add"
+source = "add/plans/agent-graph-memory-experiment/tests/test_experiment.py"
+destination = "plans/agent-graph-memory-experiment/tests/test_experiment.py"
+
+[[blocks]]
+id = "P0-AGM-02"
+requirements = ["AGM-06"]
+depends_on = ["P0-AGM-01"]
+gate = "python plans/agent-graph-memory-experiment/compare.py <experiment-root>"
+
+[[blocks.files]]
+action = "add"
+source = "add/plans/agent-graph-memory-experiment/results.md"
+destination = "plans/agent-graph-memory-experiment/results.md"
