@@ -9,6 +9,7 @@ import os
 import platform
 import shutil
 import sys
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -85,6 +86,59 @@ def _run(command: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[st
         text=True,
     )
     return completed
+
+
+def _project_diagnostics(root: Path, python: Path) -> tuple[str, ...]:
+    """Return Pyright diagnostics with paths relative to the checked project."""
+    checked = _run(
+        (
+            str(python),
+            "-m",
+            "pyright",
+            "--project",
+            str(root / "pyrightconfig.json"),
+            "--pythonpath",
+            str(python),
+            "--outputjson",
+        ),
+        cwd=root,
+    )
+    if checked.returncode not in {0, 1}:
+        raise PlanValidationError(checked.stderr.strip() or "Pyright failed")
+    try:
+        payload = json.loads(checked.stdout)
+        diagnostics = payload["generalDiagnostics"]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        raise PlanValidationError("Pyright returned invalid diagnostics") from error
+
+    identities: list[str] = []
+    for diagnostic in diagnostics:
+        try:
+            path = Path(diagnostic["file"]).resolve().relative_to(root.resolve())
+            identity = {
+                "file": path.as_posix(),
+                "message": diagnostic["message"],
+                "rule": diagnostic.get("rule"),
+                "severity": diagnostic["severity"],
+            }
+        except (KeyError, TypeError, ValueError) as error:
+            raise PlanValidationError(
+                "Pyright returned an invalid diagnostic"
+            ) from error
+        identities.append(json.dumps(identity, sort_keys=True, separators=(",", ":")))
+    return tuple(sorted(identities))
+
+
+def _introduced_diagnostics(
+    baseline: Path,
+    candidate: Path,
+    python: Path,
+) -> tuple[dict[str, Any], ...]:
+    """Return project diagnostics introduced by the materialized candidate."""
+    baseline_counts = Counter(_project_diagnostics(baseline, python))
+    candidate_counts = Counter(_project_diagnostics(candidate, python))
+    introduced = candidate_counts - baseline_counts
+    return tuple(json.loads(identity) for identity in sorted(introduced.elements()))
 
 
 def _git_revision(root: Path) -> str:
@@ -610,6 +664,21 @@ def validate(
                 "command": tuple(pyright.args),
                 "stdout": pyright.stdout,
                 "stderr": pyright.stderr,
+            }
+            (results / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
+            return result
+
+        # Existing diagnostics remain baseline debt; this plan may not add any.
+        introduced_diagnostics = _introduced_diagnostics(root, candidate, python)
+        if introduced_diagnostics:
+            result = {
+                "passed": False,
+                "stage": "pyright-regression",
+                "revision": revision,
+                "blocks": selected,
+                "diagnostics": introduced_diagnostics,
             }
             (results / "result.json").write_text(
                 json.dumps(result, indent=2, sort_keys=True) + "\n"

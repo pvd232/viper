@@ -2796,38 +2796,37 @@ def test_one_hop_records_baseline_and_candidate_neighbors(tmp_path: Path) -> Non
 
 
 def test_pre_pairing_pyright_rejects_stale_caller(tmp_path: Path) -> None:
-    """Reject a caller that omits a new required parameter."""
-    root = tmp_path / "candidate"
-    source = root / "src/example.py"
-    source.parent.mkdir(parents=True)
-    source.write_text(
-        "def save(path: str, overwrite: bool) -> None:\n"
-        "    pass\n"
-        "\n"
-        "def publish() -> None:\n"
-        "    save('artifact')\n",
-        encoding="utf-8",
-    )
-    (root / "pyrightconfig.json").write_text(
-        json.dumps({"include": ["src"], "typeCheckingMode": "standard"}),
-        encoding="utf-8",
+    """Reject a stale test import even when production code still type-checks."""
+    baseline = tmp_path / "baseline"
+    candidate = tmp_path / "candidate"
+    config = {
+        "include": ["src", "tests"],
+        "extraPaths": ["src"],
+        "typeCheckingMode": "standard",
+    }
+    consumer = "from package import Retired\n"
+
+    for root, package in (
+        (baseline, "class Retired:\n    pass\n"),
+        (candidate, "VALUE = 1\n"),
+    ):
+        source = root / "src/package/__init__.py"
+        source.parent.mkdir(parents=True)
+        source.write_text(package, encoding="utf-8")
+        test = root / "tests/test_consumer.py"
+        test.parent.mkdir()
+        test.write_text(consumer, encoding="utf-8")
+        (root / "pyrightconfig.json").write_text(
+            json.dumps(config),
+            encoding="utf-8",
+        )
+
+    diagnostics = preflight._introduced_diagnostics(
+        baseline,
+        candidate,
+        Path(sys.executable),
     )
 
-    checked = run_subprocess(
-        (
-            sys.executable,
-            "-m",
-            "pyright",
-            "--project",
-            str(root / "pyrightconfig.json"),
-            "--pythonpath",
-            sys.executable,
-        ),
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert checked.returncode != 0
-    assert "overwrite" in checked.stdout
+    assert len(diagnostics) == 1
+    assert diagnostics[0]["file"] == "tests/test_consumer.py"
+    assert "Retired" in diagnostics[0]["message"]

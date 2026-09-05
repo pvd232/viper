@@ -101,14 +101,17 @@ C.\mathrm{passed}\iff{}&
 $$
 
 The pre-pairing command returns result $V$ after constructing $R^*$ and calling
-System Impact:
+System Impact. Let $D_0$ and $D^*$ be the multisets of project-wide Pyright
+diagnostics for the baseline and candidate, identified by path, severity, rule,
+and message:
 
 $$
 \begin{aligned}
 V.\mathrm{passed}\iff{}&
 \operatorname{Clean}(R_0)
 \land \operatorname{Defined}(R^*)
-\land \operatorname{Pyright}(R^*)=0 \\
+\land \operatorname{Pyright}(R^*_{src})=0
+\land D^*\subseteq D_0 \\
 &\land C.\mathrm{passed}
 \land \operatorname{PrivateOwnersConsumed}(G^*).
 \end{aligned}
@@ -224,16 +227,16 @@ The four checks are complementary:
 | --- | --- |
 | AST declaration extraction | Exact target identity and declaration bytes |
 | CodeQL | Represented dependency structure and the direct neighborhood |
-| Pyright | Static compatibility of the fully materialized production source |
+| Pyright | Zero errors in candidate production code and no project error absent from the baseline |
 | PairBlock gates | Runtime behavior selected by the contract |
 
-CodeQL establishes represented source dependencies. Pyright runs over the
-entire source tree selected by the materialized candidate's
-`pyrightconfig.json`, covering the one-hop neighborhood and every other
-configured module. It checks that typed callers satisfy the interfaces they
-use. PairBlock gates establish the selected runtime behavior. The one-hop
-guarantee covers the edges emitted by the pinned CodeQL query pack. The CodeQL
-graph defines that scope.
+CodeQL establishes represented source dependencies. Pyright first requires
+zero errors in the candidate's production code. It then checks the complete
+project selected by `pyrightconfig.json` and rejects every diagnostic absent
+from the baseline. This catches stale callers and test imports without making
+old project diagnostics block every plan. PairBlock gates establish the
+selected runtime behavior. The one-hop guarantee covers the edges emitted by
+the pinned CodeQL query pack. The CodeQL graph defines that scope.
 
 ## 3. Current gap
 
@@ -1322,7 +1325,7 @@ is rejected before any upload begins.
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 | `system.source.writes` <!-- verifier-rule: system.source.writes requirement=SIG-06 --> | The checked-in CodeQL pack emits `writes` edges for a function writing a declared module variable and a method writing a declared class attribute; every emitted edge retains the assignment location. |
 | `system.one_hop.recorded` <!-- verifier-rule: system.one_hop.recorded requirement=SIG-07 --> | `check_plan()` derives the exact added and removed policy-selected one-hop edges from the valid baseline and materialized source graphs; the realized-delta check rejects changed declarations outside the selected PairBlocks. |
-| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/plan/check.py:validate` runs Pyright against the fully materialized production source and stops before candidate CodeQL analysis or PairBlock gates when static interfaces are incompatible. PairBlock gates own test behavior. |
+| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/plan/check.py:validate` requires zero Pyright errors in the materialized production source and rejects every project-wide diagnostic absent from the baseline before candidate CodeQL analysis or PairBlock gates. PairBlock gates own runtime behavior. |
 
 ## 8. Propagation
 
@@ -1333,7 +1336,7 @@ is rejected before any upload begins.
 | `src/viper/system_impact/check.py` | Check the realized plan and bind it to its commit. |
 | `src/viper/_system_impact/codeql.py` | Create and query CodeQL databases and return validated canonical rows. |
 | `src/viper/_system_impact/source.py` | Resolve qualified Python symbols, extract exact UTF-8 declaration bytes including decorators, and implement `classify_target_change()`. |
-| `tools/plan/check.py` | Run Pyright against the materialized candidate before candidate CodeQL analysis and restore the caller's `PYTHONPATH` after the check. |
+| `tools/plan/check.py` | Require zero production Pyright errors, reject project errors absent from the baseline, then restore the caller's `PYTHONPATH`. |
 | `tools/plan/publish.py` | Upload one accepted compact evidence bundle and return an immutable `ResolvedFileRef` for its manifest. |
 | `tests/test_release_tools.py` | Prove publication uses a private dataset repository, exact check-owned paths, and one immutable Hugging Face commit. |
 | `tests/test_system_impact.py` | Cover exact declaration extraction, change classification, typed one-hop impact selection, action transitions, unexpected changes, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |
@@ -1385,9 +1388,10 @@ conservative direct-edge fallback.
 The one-hop fixture adds a baseline caller and a candidate adapter around one
 selected function. `OneHop.before` and `OneHop.after` retain the exact incoming
 edge IDs, and `OneHop.neighbors` contains both direct dependents. A separate
-fixture changes a function parameter but leaves its caller unchanged. Pyright
-rejects that materialized candidate before candidate CodeQL analysis or any
-PairBlock gate runs.
+fixture removes a production export while leaving a test import unchanged.
+Production remains valid, but project-wide differential Pyright rejects the
+new test diagnostic before candidate CodeQL analysis or any PairBlock gate
+runs.
 
 ## 10. Implementation order
 
@@ -3531,41 +3535,40 @@ def test_one_hop_records_baseline_and_candidate_neighbors(tmp_path: Path) -> Non
 
 
 def test_pre_pairing_pyright_rejects_stale_caller(tmp_path: Path) -> None:
-    """Reject a caller that omits a new required parameter."""
-    root = tmp_path / "candidate"
-    source = root / "src/example.py"
-    source.parent.mkdir(parents=True)
-    source.write_text(
-        "def save(path: str, overwrite: bool) -> None:\n"
-        "    pass\n"
-        "\n"
-        "def publish() -> None:\n"
-        "    save('artifact')\n",
-        encoding="utf-8",
-    )
-    (root / "pyrightconfig.json").write_text(
-        json.dumps({"include": ["src"], "typeCheckingMode": "standard"}),
-        encoding="utf-8",
+    """Reject a stale test import even when production code still type-checks."""
+    baseline = tmp_path / "baseline"
+    candidate = tmp_path / "candidate"
+    config = {
+        "include": ["src", "tests"],
+        "extraPaths": ["src"],
+        "typeCheckingMode": "standard",
+    }
+    consumer = "from package import Retired\n"
+
+    for root, package in (
+        (baseline, "class Retired:\n    pass\n"),
+        (candidate, "VALUE = 1\n"),
+    ):
+        source = root / "src/package/__init__.py"
+        source.parent.mkdir(parents=True)
+        source.write_text(package, encoding="utf-8")
+        test = root / "tests/test_consumer.py"
+        test.parent.mkdir()
+        test.write_text(consumer, encoding="utf-8")
+        (root / "pyrightconfig.json").write_text(
+            json.dumps(config),
+            encoding="utf-8",
+        )
+
+    diagnostics = preflight._introduced_diagnostics(
+        baseline,
+        candidate,
+        Path(sys.executable),
     )
 
-    checked = run_subprocess(
-        (
-            sys.executable,
-            "-m",
-            "pyright",
-            "--project",
-            str(root / "pyrightconfig.json"),
-            "--pythonpath",
-            sys.executable,
-        ),
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert checked.returncode != 0
-    assert "overwrite" in checked.stdout
+    assert len(diagnostics) == 1
+    assert diagnostics[0]["file"] == "tests/test_consumer.py"
+    assert "Retired" in diagnostics[0]["message"]
 ```
 
 
