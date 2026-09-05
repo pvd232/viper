@@ -417,6 +417,89 @@ def test_materialize_plan_preserves_untargeted_imports(
     )
 
 
+def test_materialize_plan_moves_a_definition_into_the_import_block(
+    tmp_path: Path,
+) -> None:
+    """Place a moved class import with imports instead of at the old class line."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = (
+        b"from package import Existing\n\n"
+        b"class Moved:\n"
+        b"    pass\n\n"
+        b"def use():\n"
+        b"    return Moved()\n"
+    )
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    declaration = _write_target_fence(
+        plan_root,
+        b"from replacement import Moved",
+    )
+    class_bytes = b"class Moved:\n    pass"
+    graph = _source_graph(
+        nodes=(
+            SourceNode(
+                node_id="module.py:Existing",
+                path="module.py",
+                symbol="Existing",
+                kind="import",
+                binding_start_line=1,
+                binding_start_col=20,
+                binding_end_line=1,
+                binding_end_col=28,
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=28,
+                sha256=hashlib.sha256(b"from package import Existing").hexdigest(),
+            ),
+            SourceNode(
+                node_id="module.py:Moved",
+                path="module.py",
+                symbol="Moved",
+                kind="class",
+                binding_start_line=3,
+                binding_start_col=6,
+                binding_end_line=3,
+                binding_end_col=11,
+                start_line=3,
+                start_col=0,
+                end_line=4,
+                end_col=8,
+                sha256=hashlib.sha256(class_bytes).hexdigest(),
+            ),
+        ),
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="update",
+                path="module.py",
+                symbol="Moved",
+                declaration=declaration,
+            ),
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from package import Existing\n"
+        b"from replacement import Moved\n\n\n\n\n"
+        b"def use():\n"
+        b"    return Moved()\n"
+    )
+
+
 def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None:
     """Name the candidate module and error that block preflight."""
     baseline = tmp_path / "baseline"

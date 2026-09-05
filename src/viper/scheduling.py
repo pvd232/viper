@@ -425,15 +425,24 @@ def apply_plan(
             )
             assert payload is not None or target.action == "remove"
             span = (start, end)
+            payload_statement = None if payload is None else _statement(payload)
             if node.kind == "import":
                 existing = replacements.get(span, source[start:end])
                 remaining = _drop_import(existing, target.target.symbol)
-                replacement = remaining
-                if payload is not None:
-                    replacement = b"\n".join(
+                if isinstance(payload_statement, (ast.Import, ast.ImportFrom)):
+                    replacements[span] = b"\n".join(
                         part for part in (remaining, payload) if part
                     )
-                replacements[span] = replacement
+                else:
+                    replacements[span] = remaining
+                    if payload is not None:
+                        additions.append((index, payload))
+                continue
+            if isinstance(payload_statement, (ast.Import, ast.ImportFrom)):
+                # A moved definition must join the import block, not remain at
+                # the old class or function location.
+                replacements[span] = b""
+                additions.append((index, payload))
                 continue
             replacement = b"" if payload is None else payload
             # Removing one name and updating the shared statement are one edit.
