@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
-import tarfile
 import tempfile
 from pathlib import Path
 
@@ -20,27 +19,13 @@ if _VIRTUAL_ENV is not None:
             (os.fspath(_VIRTUAL_PYTHON), *sys.argv),
         )
 
-from viper._system_impact.codeql import analyze_overlay_source, source_digest
+from viper._system_impact.codeql import analyze_source, source_digest
 from viper.system_impact.models import SourceGraph, SourceSnapshot
 from viper.system_impact.rename import (
     RenameAnalysisError,
     RenameObligationSet,
     check_rename_obligations,
 )
-
-
-def _extract_head(root: Path, destination: Path) -> None:
-    """Materialize committed source for the overlay baseline."""
-    archive = destination.parent / "baseline.tar"
-    subprocess.run(
-        ("git", "archive", "--format=tar", f"--output={archive}", "HEAD"),
-        cwd=root,
-        check=True,
-    )
-    destination.mkdir()
-    with tarfile.open(archive) as source:
-        source.extractall(destination, filter="data")
-
 
 def unresolved(root: Path, evidence: Path) -> dict[str, object]:
     """Evaluate one candidate graph and return its obligation anti-join."""
@@ -57,26 +42,25 @@ def unresolved(root: Path, evidence: Path) -> dict[str, object]:
     if codeql_value is None:
         raise RuntimeError("CodeQL is unavailable")
     first = obligations[0]
-    cache = root / ".viper" / "cache"
-    with tempfile.TemporaryDirectory(prefix="viper-unresolved-") as directory:
-        baseline_root = Path(directory) / "baseline"
-        _extract_head(root, baseline_root)
-        graph = analyze_overlay_source(
-            root,
-            baseline_root=baseline_root,
-            baseline_graph=baseline_graph,
-            snapshot=SourceSnapshot(
-                base_revision=baseline_graph.snapshot.base_revision,
-                source_sha256=source_digest(root),
-                revision=None,
-            ),
-            extraction=first.extraction,
-            query=first.query,
-            format=first.format,
-            codeql_executable=Path(codeql_value).resolve(),
-            query_pack=evidence / "query-pack",
-            cache_root=cache,
-        )
+    cache = (
+        Path(tempfile.gettempdir())
+        / "viper-unresolved-cache"
+        / hashlib.sha256(os.fspath(root).encode()).hexdigest()
+    )
+    graph = analyze_source(
+        root,
+        snapshot=SourceSnapshot(
+            base_revision=baseline_graph.snapshot.base_revision,
+            source_sha256=source_digest(root),
+            revision=None,
+        ),
+        extraction=first.extraction,
+        query=first.query,
+        format=first.format,
+        codeql_executable=Path(codeql_value).resolve(),
+        query_pack=evidence / "query-pack",
+        cache_root=cache,
+    )
     rows: list[dict[str, object]] = []
     for frozen in obligations:
         try:
