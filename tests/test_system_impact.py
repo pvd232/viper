@@ -561,6 +561,47 @@ def test_materialize_plan_adds_a_dotted_import(tmp_path: Path) -> None:
     )
 
 
+def test_materialize_plan_places_imports_first_in_a_new_file(tmp_path: Path) -> None:
+    """Build a valid module even when its block lists code before imports."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    plan_root = tmp_path / "plan"
+    reference = _write_target_fence(
+        plan_root,
+        b"def run() -> None:\n    Path('.')\n\nfrom pathlib import Path",
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="add",
+                path="module.py",
+                symbol="run",
+                declaration=reference,
+            ),
+            _target(
+                action="add",
+                path="module.py",
+                symbol="Path",
+                declaration=reference,
+            ),
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        _source_graph(nodes=()),
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from pathlib import Path\n\ndef run() -> None:\n    Path('.')\n"
+    )
+
+
 def test_materialize_plan_rejects_a_nested_addition(tmp_path: Path) -> None:
     """Keep dotted class members out of the top-level addition path."""
     baseline_root = tmp_path / "baseline"

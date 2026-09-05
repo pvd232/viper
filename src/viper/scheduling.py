@@ -56,6 +56,11 @@ def _bound_names(statement: ast.stmt) -> frozenset[str]:
     )
 
 
+def _addition_rank(payload: bytes) -> int:
+    """Place imports before declarations added at the same position."""
+    return 0 if isinstance(_statement(payload), (ast.Import, ast.ImportFrom)) else 1
+
+
 def _import_parts(
     payload: bytes,
 ) -> tuple[tuple[int, str | None], frozenset[str]] | None:
@@ -553,6 +558,8 @@ def materialize_plan(
                 offset = len(source)
             if payload not in insertions[offset]:
                 insertions[offset].append(payload)
+        for payloads in insertions.values():
+            payloads.sort(key=_addition_rank)
 
         replacements_by_start = {
             start: (end, payload) for (start, end), payload in replacements.items()
