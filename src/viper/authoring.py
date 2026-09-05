@@ -519,6 +519,38 @@ def experiment(
     )
 
 
+RunIdMap = dict[VariantId, dict[ReplicateId, RunId]]
+
+
+def _plan_with_run_id(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    run_id: RunId,
+    benchmark: BenchmarkDraft | None,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft:
+    """Create one plan with an already assigned run ID."""
+    if variant not in experiment.variants:
+        raise ValueError("variant is absent from the experiment")
+    if replicate not in experiment.replicates:
+        raise ValueError("replicate is absent from the experiment")
+    draft = RunPlanDraft(
+        run_id=run_id,
+        experiment=experiment,
+        variant=variant,
+        replicate=replicate,
+        benchmark=benchmark,
+        source=source,
+        env=env,
+        reproducibility=reproducibility,
+    )
+    return _deep_freeze(draft)
+
+
 def plan(
     *,
     experiment: ExperimentDraft,
@@ -530,21 +562,16 @@ def plan(
     reproducibility: ReproducibilitySpec,
 ) -> RunPlanDraft:
     """Create one identified plan detached from mutable caller values."""
-    if variant not in experiment.variants:
-        raise ValueError("variant is absent from the experiment")
-    if replicate not in experiment.replicates:
-        raise ValueError("replicate is absent from the experiment")
-    draft = RunPlanDraft(
-        run_id=_new_run_id(),
+    return _plan_with_run_id(
         experiment=experiment,
         variant=variant,
         replicate=replicate,
+        run_id=_new_run_id(),
         benchmark=benchmark,
         source=source,
         env=env,
         reproducibility=reproducibility,
     )
-    return _deep_freeze(draft)
 
 
 class FrozenPlanFiles(BaseModel):
@@ -1244,3 +1271,69 @@ def freeze_run_plan(
         stored_at=LocalFileRef(commit=commit, path=compiled.run_path),
     )
     return FrozenPlanFiles(run=compiled.run, reference=reference, files=paths)
+
+
+def expand(
+    experiment: ExperimentDraft,
+    *,
+    run_ids: RunIdMap,
+    benchmark: BenchmarkDraft | None = None,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+    variants: tuple[VariantId, ...] | None = None,
+    replicates: tuple[ReplicateId, ...] | None = None,
+) -> tuple[RunPlanDraft, ...]:
+    """Expand selected variants and replicates in declaration order."""
+    if variants is not None and len(variants) != len(set(variants)):
+        raise ValueError("variant filter contains duplicates")
+    if replicates is not None and len(replicates) != len(set(replicates)):
+        raise ValueError("replicate filter contains duplicates")
+
+    variant_filter = None if variants is None else set(variants)
+    replicate_filter = None if replicates is None else set(replicates)
+    if variant_filter is not None and not variant_filter <= set(experiment.variants):
+        raise ValueError("variant filter contains an unknown ID")
+    if replicate_filter is not None and not replicate_filter <= set(
+        experiment.replicates
+    ):
+        raise ValueError("replicate filter contains an unknown ID")
+
+    selected_variants = tuple(
+        variant_id
+        for variant_id in experiment.variants
+        if variant_filter is None or variant_id in variant_filter
+    )
+    selected_replicates = tuple(
+        replicate_id
+        for replicate_id in experiment.replicates
+        if replicate_filter is None or replicate_id in replicate_filter
+    )
+    if set(run_ids) != set(selected_variants) or any(
+        set(run_ids[variant_id]) != set(selected_replicates)
+        for variant_id in selected_variants
+    ):
+        raise ValueError("run ID map must match the selected pairs")
+
+    assigned = tuple(
+        run_ids[variant_id][replicate_id]
+        for variant_id in selected_variants
+        for replicate_id in selected_replicates
+    )
+    if len(assigned) != len(set(assigned)):
+        raise ValueError("run IDs must be unique")
+
+    return tuple(
+        _plan_with_run_id(
+            experiment=experiment,
+            variant=variant_id,
+            replicate=replicate_id,
+            run_id=run_ids[variant_id][replicate_id],
+            benchmark=benchmark,
+            source=source,
+            env=env,
+            reproducibility=reproducibility,
+        )
+        for variant_id in selected_variants
+        for replicate_id in selected_replicates
+    )
