@@ -1777,10 +1777,6 @@ python -m pytest \
 
 ## 19. Master Phase 12 — experiment expansion and bounded execution
 
-<!-- contract-implementation: requirement=EXP-01 rule=experiment.expansion.canonical state=planned owner=src/viper/authoring.py:expand -->
-<!-- contract-verification: requirement=EXP-01 rule=experiment.expansion.canonical state=planned test=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
-<!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=planned owner=src/viper/execution/_batch.py:run_many -->
-<!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=planned test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
 <!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=planned owner=src/viper/api.py:run_many -->
 <!-- contract-verification: requirement=EXP-03 rule=experiment.batch.public state=planned test=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
 
@@ -1794,56 +1790,26 @@ limit.
 
 ### 19.1 Deterministic expansion
 
-- [ ] Add `RunIdMap` and `expand()` to `src/viper/authoring.py`.
+- [x] Materialize and verify deterministic experiment expansion.
+      <!-- pair-block: P12-EXP-01 -->
+      <!-- contract-implementation: requirement=EXP-01 rule=experiment.expansion.canonical state=implemented owner=src/viper/authoring.py:expand -->
+      <!-- contract-verification: requirement=EXP-01 rule=experiment.expansion.canonical state=implemented test=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
       <!-- phase-produces: viper.authoring.expand -->
       <!-- implements: EXP-01 -->
-- [ ] Preserve `ExperimentDraft.variants` order and
-      `ExperimentDraft.replicates` order.
-- [ ] Treat `variants` and `replicates` arguments as filters. Reject unknown or
-      repeated IDs.
-- [ ] Require `run_ids` to contain exactly the selected Cartesian product.
-- [ ] Reject one `RunId` assigned to two pairs.
-- [ ] Construct each item by calling the existing `plan()` primitive.
-- [ ] List `expand` in `viper.authoring.__all__`.
 
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Start with two nested loops over the experiment mappings. Check
-membership in the optional filter sets inside those loops. Derive output order
-from the experiment mappings.
-
-**Hint 2:** Build the expected pair set before creating any plan. Compare it
-with the nested `run_ids` pair set and report missing and extra pairs together.
-
-**Hint 3:** The returned value is `tuple[RunPlanDraft, ...]`. Freezing owns all
-file writes after expansion returns.
-
-</details>
+**Evidence:** PlanCheck `b90637e20e6559033341bbecdcdac322f3fe7a83c0cdcae619b6fa09fcab0535`
+accepted implementation commit `f086dc9adbc678d6cada62a7034986796420a84f`.
+The immutable evidence manifest is stored at Hugging Face commit
+`89795520dc87e9eaeda92680073cc8d378d19334` under
+`checks/b90637e20e6559033341bbecdcdac322f3fe7a83c0cdcae619b6fa09fcab0535/manifest.json`.
 
 ### 19.2 Bounded execution
 
-- [ ] Add `ExperimentRunStatus`, `ExperimentRunResult`, and
-      `ExperimentExecutionResult` to `src/viper/execution/results.py`.
-- [ ] Enforce the succeeded, failed, and skipped field combinations with a
-      model validator.
-- [ ] Add `src/viper/execution/_batch.py` and call `execution.run()` once per
-      path. <!-- implements: EXP-02 -->
-- [ ] Validate `timeout_seconds` as `None` or a positive number before any
-      worker starts.
-- [ ] Pass the same positive timeout to every `execution.run()` call. Preserve
-      its existing stage and metric child-process meaning. Convert one process
-      timeout into that run's typed failed result.
-- [ ] Limit active calls to `max_concurrency`.
-- [ ] Store each completed result by its input index. Return results in input
-      order, independent of completion order.
-- [ ] Convert each caught run failure into the same public `ViperFailure` shape
-      used by the typed API.
-- [ ] With `stop_on_failure=True`, stop submitting new paths after the first
-      failure and mark every unstarted path as skipped.
-- [ ] Let already running calls finish.
-- [ ] Define `run_many()` in `viper.execution`. Define its result models in
-      `viper.execution.results`.
+- [ ] Materialize and verify bounded batch execution.
+      <!-- pair-block: P12-EXP-02 -->
+      <!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=planned owner=src/viper/execution/_batch.py:run_many -->
+      <!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=planned test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
+      <!-- implements: EXP-02 -->
       <!-- phase-produces: viper.execution.run_many -->
 
 ### 19.3 Typed API and CLI

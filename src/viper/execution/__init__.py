@@ -5,13 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..authoring import RunPlanDraft, freeze_run_plan
-from ..restoration import (
-    ArtifactRestoreSelector,
-    RestoredArtifact,
-    RestoredFile,
-    RestoreResult,
-    RestoreRunReference,
-)
 from ..storage import ViperCloudClient
 from ._benchmark import benchmark as _benchmark
 from ._restore import restore
@@ -86,11 +79,6 @@ def benchmark(
 
 __all__ = [
     "benchmark",
-    "ArtifactRestoreSelector",
-    "RestoreResult",
-    "RestoreRunReference",
-    "RestoredArtifact",
-    "RestoredFile",
     "retry",
     "restore",
     "run",

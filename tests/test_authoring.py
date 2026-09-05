@@ -25,10 +25,12 @@ from viper.artifacts import (
     artifact,
 )
 from viper.authoring import (
+    RunIdMap,
     RunPlanDraft,
     VariantDraft,
     _compile_plan,
     _CompiledPlan,
+    expand,
     expand_http_url,
     experiment,
     factor,
@@ -739,3 +741,91 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
     assert selected.benchmark.criteria[0].threshold == 0.9
     with pytest.raises(TypeError, match="frozen plan"):
         selected.benchmark.splits["new"] = prior
+
+
+def test_experiment_expansion_is_canonical() -> None:
+    """Use declaration order and the caller's exact run IDs."""
+    single, _ = _immutable_plan()
+    baseline = single.experiment.variants["baseline"]
+    draft = experiment(
+        experiment_id=single.experiment.experiment_id,
+        factors=single.experiment.factors,
+        variants={"baseline": baseline, "l2": baseline},
+        replicates={
+            "replicate_01": replicate(seed=42),
+            "replicate_02": replicate(seed=43),
+        },
+    )
+    run_ids: RunIdMap = {
+        "l2": {
+            "replicate_02": "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+            "replicate_01": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        },
+        "baseline": {
+            "replicate_02": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+            "replicate_01": RUN_ID,
+        },
+    }
+
+    plans = expand(
+        draft,
+        run_ids=run_ids,
+        source=single.source,
+        env=single.env,
+        reproducibility=single.reproducibility,
+    )
+
+    assert tuple((item.variant, item.replicate) for item in plans) == (
+        ("baseline", "replicate_01"),
+        ("baseline", "replicate_02"),
+        ("l2", "replicate_01"),
+        ("l2", "replicate_02"),
+    )
+    assert tuple(item.run_id for item in plans) == (
+        RUN_ID,
+        "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+    )
+
+
+def test_experiment_expansion_rejects_invalid_selection() -> None:
+    """Reject unknown filters, incomplete maps, and reused run IDs."""
+    single, _ = _immutable_plan()
+    arguments = {
+        "experiment": single.experiment,
+        "source": single.source,
+        "env": single.env,
+        "reproducibility": single.reproducibility,
+    }
+
+    with pytest.raises(ValueError, match="unknown ID"):
+        expand(**arguments, run_ids={}, variants=("missing",))
+    with pytest.raises(ValueError, match="duplicates"):
+        expand(
+            **arguments,
+            run_ids={"baseline": {"replicate_01": RUN_ID}},
+            variants=("baseline", "baseline"),
+        )
+    with pytest.raises(ValueError, match="selected pairs"):
+        expand(**arguments, run_ids={})
+
+    duplicate_replicate = replicate(seed=43)
+    duplicated = single.experiment.model_copy(
+        update={
+            "replicates": {
+                **single.experiment.replicates,
+                "replicate_02": duplicate_replicate,
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="unique"):
+        expand(
+            **{**arguments, "experiment": duplicated},
+            run_ids={
+                "baseline": {
+                    "replicate_01": RUN_ID,
+                    "replicate_02": RUN_ID,
+                }
+            },
+        )

@@ -400,32 +400,6 @@ def _ruff(
     )
 
 
-def _format(
-    python: Path,
-    targets: tuple[str, ...],
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    """Build the two commands that format the final candidate copy."""
-    return (
-        (
-            "ruff-format",
-            (str(python), "-m", "ruff", "format", *targets),
-        ),
-        (
-            "ruff-imports",
-            (
-                str(python),
-                "-m",
-                "ruff",
-                "check",
-                "--fix",
-                "--select",
-                "I001",
-                *targets,
-            ),
-        ),
-    )
-
-
 def _parity(
     plan_root: Path,
     source_root: Path,
@@ -611,23 +585,6 @@ def validate(
             }
         )
     )
-    for stage, command in _format(python, python_targets):
-        completed = _run(command, cwd=candidate)
-        if completed.returncode != 0:
-            result = {
-                "passed": False,
-                "stage": stage,
-                "revision": revision,
-                "blocks": selected,
-                "command": tuple(completed.args),
-                "stdout": completed.stdout,
-                "stderr": completed.stderr,
-            }
-            (results / "result.json").write_text(
-                json.dumps(result, indent=2, sort_keys=True) + "\n"
-            )
-            return result
-
     for stage, command in _ruff(python, python_targets):
         completed = _run(command, cwd=candidate)
         if completed.returncode != 0:

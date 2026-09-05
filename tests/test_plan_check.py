@@ -75,22 +75,12 @@ def test_baseline_analysis_uses_clean_candidate_worktree(
     ]
 
 
-def test_ruff_formats_only_candidate_copy() -> None:
-    """Format only the final copy, then keep every Ruff check read-only."""
+def test_ruff_never_rewrites_candidate_copy() -> None:
+    """Keep formatting outside the exact contract materialization."""
     python = Path(".venv/bin/python")
     target = "src/viper/example.py"
 
-    formatting = dict(check._format(python, (target,)))
     commands = dict(check._ruff(python, (target,)))
-
-    assert formatting["ruff-format"] == (
-        str(python),
-        "-m",
-        "ruff",
-        "format",
-        target,
-    )
-    assert "--fix" in formatting["ruff-imports"]
 
     assert commands["ruff-format"] == (
         str(python),

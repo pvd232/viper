@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
@@ -67,9 +68,12 @@ def _files(
             source = results / graph / name
             if not source.is_file():
                 raise PublicationError(f"missing plan evidence: {graph}/{name}")
-            files[f"codeql/{graph.removesuffix('-codeql')}/{name}"] = (
-                source.read_bytes()
-            )
+            content = source.read_bytes()
+            published_name = name
+            if source.suffix == ".bqrs":
+                content = base64.b64encode(content) + b"\n"
+                published_name = f"{name}.base64"
+            files[f"codeql/{graph.removesuffix('-codeql')}/{published_name}"] = content
     for contract in check.contracts:
         files[f"contracts/{contract}"] = _git_file(
             root,

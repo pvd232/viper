@@ -1,5 +1,6 @@
 """Tests for package metadata and deterministic index verification."""
 
+import base64
 import hashlib
 import json
 import subprocess
@@ -196,7 +197,15 @@ def test_publish_binds_compact_evidence_to_one_hugging_face_commit(
     assert f"{prefix}/manifest.json" in paths
     assert f"{prefix}/contracts/docs/plan.md" in paths
     assert f"{prefix}/codeql/baseline/Declarations.json" in paths
-    assert f"{prefix}/codeql/planned/Dependencies.bqrs" in paths
+    assert f"{prefix}/codeql/planned/Dependencies.bqrs.base64" in paths
+    dependency_upload = next(
+        operation
+        for operation in operations
+        if operation.path_in_repo == f"{prefix}/codeql/planned/Dependencies.bqrs.base64"
+    )
+    assert dependency_upload.path_or_fileobj == (
+        base64.b64encode(b"planned-codeql/Dependencies.bqrs") + b"\n"
+    )
     assert isinstance(reference.stored_at, HuggingFaceFileRef)
     assert reference.stored_at.repository == "pvd232/viper-plan-evidence"
     assert reference.stored_at.commit == "a" * 40
