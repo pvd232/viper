@@ -47,7 +47,7 @@ from viper.benchmark import (
 from viper.experiments import (
     BuildVariantStageParams,
     EmbedVariantStageParams,
-    EvaluateVariantStageParams,
+    EvalVariantStageParams,
     ExperimentSpec,
     ReplicateSpec,
     TrainVariantStageParams,
@@ -72,8 +72,8 @@ from viper.references import (
 from viper.runs import ResolvedRun
 from viper.runtime import (
     CPUComputeSpec,
-    GCEEnvironmentSpec,
-    LocalEnvironmentSpec,
+    GCEEnvSpec,
+    LocalEnvSpec,
     observe_gce_provisioning,
 )
 from viper.serialization import parse_yaml_bytes, serialize_document
@@ -82,7 +82,7 @@ from viper.stages import (
     BuildSpec,
     DownloadSpec,
     EmbedSpec,
-    EvaluateSpec,
+    EvalSpec,
     StageImplementationRef,
     TrainSpec,
 )
@@ -150,7 +150,7 @@ def _source(commit: str) -> GitSource:
     return GitSource.model_validate({"repository": REPOSITORY, "commit": commit})
 
 
-def _environment(commit: str) -> LocalEnvironmentSpec | GCEEnvironmentSpec:
+def _environment(commit: str) -> LocalEnvSpec | GCEEnvSpec:
     """Bind the active local or live GCE host to the generated project."""
     lockfile = GitFileRef.model_validate(
         {
@@ -160,16 +160,16 @@ def _environment(commit: str) -> LocalEnvironmentSpec | GCEEnvironmentSpec:
         }
     )
     if os.environ.get("VIPER_LIVE_GCE") == "1":
-        return GCEEnvironmentSpec(
+        return GCEEnvSpec(
             provisioning=observe_gce_provisioning(),
             machine_type="g2-standard-12",
             compute=CPUComputeSpec(),
             lockfile=lockfile,
-            python_environment=python_environment(),
+            python_env=python_environment(),
         )
-    return LocalEnvironmentSpec(
+    return LocalEnvSpec(
         lockfile=lockfile,
-        python_environment=python_environment(),
+        python_env=python_environment(),
     )
 
 
@@ -463,7 +463,7 @@ def test_generated_project_uses_runner_owned_downloads(
                 BuildVariantStageParams(stage_id="build", params=build_params),
                 EmbedVariantStageParams(stage_id="embed", params=embed_params),
                 TrainVariantStageParams(stage_id="train", params=train_params),
-                EvaluateVariantStageParams(
+                EvalVariantStageParams(
                     stage_id="evaluate",
                     params=evaluate_params,
                 ),
@@ -569,7 +569,7 @@ def test_generated_project_uses_runner_owned_downloads(
             ),
         },
     )
-    candidate_evaluate = EvaluateSpec(
+    candidate_evaluate = EvalSpec(
         implementation=_stage_implementation(root, "evaluate"),
         parameter_model=_parameter_model(root, "EvaluateParameters"),
         evaluation_id="starter_eval",

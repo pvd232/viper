@@ -58,7 +58,7 @@ from viper.benchmark import (
 )
 from viper.experiments import (
     BuildVariantStageParams,
-    EvaluateVariantStageParams,
+    EvalVariantStageParams,
     ExperimentSpec,
     ReplicateSpec,
     TrainVariantStageParams,
@@ -105,7 +105,7 @@ from viper.runtime import (
     CPUContext,
     ExecutionContext,
     GCEBootImageRef,
-    GCEEnvironmentSpec,
+    GCEEnvSpec,
     GCEHostContext,
     GeneratorInitializationReceipt,
     NativeLibraryContext,
@@ -115,7 +115,7 @@ from viper.runtime import (
     ParallelismSpec,
     ProcessStartupReceipt,
     ReproducibilitySpec,
-    ResolvedGCEEnvironment,
+    ResolvedGCEEnv,
     TorchDeterminismSpec,
     TorchPrecisionSpec,
     process_environment,
@@ -123,7 +123,7 @@ from viper.runtime import (
 from viper.serialization import document_digest
 from viper.stages import (
     BuildSpec,
-    EvaluateSpec,
+    EvalSpec,
     ResolvedBuildSpec,
     ResolvedTrainSpec,
     StageContextBinding,
@@ -232,9 +232,9 @@ def artifact_pointer(path: str) -> ArtifactPointerRef:
     )
 
 
-def environment() -> GCEEnvironmentSpec:
+def environment() -> GCEEnvSpec:
     """Build the shared requested GCE environment."""
-    return GCEEnvironmentSpec(
+    return GCEEnvSpec(
         kind="gce",
         provisioning=GCEBootImageRef(
             project="viper-project",
@@ -466,9 +466,9 @@ def build_spec() -> BuildSpec:
     )
 
 
-def resolved_environment(lock_raw: bytes) -> ResolvedGCEEnvironment:
+def resolved_environment(lock_raw: bytes) -> ResolvedGCEEnv:
     """Bind the requested environment to its immutable machine image and lockfile."""
-    return ResolvedGCEEnvironment(
+    return ResolvedGCEEnv(
         kind="gce",
         provisioning=GCEBootImageRef(
             project="viper-project",
@@ -1730,7 +1730,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
     def test_benchmark_matches_evaluation_inputs_splits_and_metrics(self) -> None:
         """Verify that benchmark matches evaluation inputs splits and metrics."""
         train = train_spec()
-        evaluation = EvaluateSpec(
+        evaluation = EvalSpec(
             implementation=stage_implementation_ref(
                 "analysis/predict.py",
                 b"def predict(context):\n    pass\n",
@@ -1800,7 +1800,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 TrainVariantStageParams(
                     kind="train", stage_id="train", params=train.params
                 ),
-                EvaluateVariantStageParams(
+                EvalVariantStageParams(
                     kind="evaluate", stage_id="evaluate", params=evaluation.params
                 ),
             ),
@@ -1858,7 +1858,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
         ordinary_payload["inputs"]["evaluation_dataset"]["data_role"] = "evaluation"
         ordinary_payload["inputs"]["perturbation_split"]["data_role"] = "evaluation"
         ordinary_payload["artifacts"]["predictions"]["data_role"] = "evaluation"
-        ordinary_evaluation = EvaluateSpec.model_validate(ordinary_payload)
+        ordinary_evaluation = EvalSpec.model_validate(ordinary_payload)
         with self.assertRaisesRegex(VerificationError, "must use 'benchmark'"):
             verify_run_plan_relationships(
                 run,
@@ -1885,7 +1885,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
         wrong_evaluation_payload["inputs"]["parameters"]["producer_stage_id"] = (
             "other_train"
         )
-        wrong_evaluation = EvaluateSpec.model_validate(wrong_evaluation_payload)
+        wrong_evaluation = EvalSpec.model_validate(wrong_evaluation_payload)
         wrong_run, _ = run_spec(
             [
                 ("train", train),

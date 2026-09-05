@@ -2231,32 +2231,32 @@ files.
 class BuildVariantStageParams(ProtocolModel):
     kind: Literal["build"] = "build"
     stage_id: StageId
-    params: viper.parameters.Build
+    params: viper.params.Build
 
 
 class EmbedVariantStageParams(ProtocolModel):
     kind: Literal["embed"] = "embed"
     stage_id: StageId
-    params: viper.parameters.Embed
+    params: viper.params.Embed
 
 
 class TrainVariantStageParams(ProtocolModel):
     kind: Literal["train"] = "train"
     stage_id: StageId
-    params: viper.parameters.Train
+    params: viper.params.Train
 
 
-class EvaluateVariantStageParams(ProtocolModel):
-    kind: Literal["evaluate"] = "evaluate"
+class EvalVariantStageParams(ProtocolModel):
+    kind: Literal["eval"] = "eval"
     stage_id: StageId
-    params: viper.parameters.Evaluate
+    params: viper.params.Eval
 
 
 VariantStageParams = Annotated[
     BuildVariantStageParams
     | EmbedVariantStageParams
     | TrainVariantStageParams
-    | EvaluateVariantStageParams,
+    | EvalVariantStageParams,
     Field(discriminator="kind"),
 ]
 

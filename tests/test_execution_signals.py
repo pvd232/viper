@@ -65,7 +65,7 @@ from viper.runtime import (
     CPUComputeSpec,
     CUDABackendContext,
     CUDAComputeSpec,
-    LocalEnvironmentSpec,
+    LocalEnvSpec,
 )
 from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
 from viper.stages import (
@@ -231,7 +231,7 @@ def _freeze_signal_plan(
     source = GitSource.model_validate(
         {"repository": REPOSITORY, "commit": source_commit}
     )
-    environment = LocalEnvironmentSpec(
+    environment = LocalEnvSpec(
         compute=CPUComputeSpec() if compute is None else compute,
         lockfile=GitFileRef.model_validate(
             {
@@ -240,7 +240,7 @@ def _freeze_signal_plan(
                 "path": "environment.yml",
             }
         ),
-        python_environment=python_environment(),
+        python_env=python_environment(),
     )
     bytes_loader = ArtifactLoaderRef(
         path="project/loaders/bytes_file.py",

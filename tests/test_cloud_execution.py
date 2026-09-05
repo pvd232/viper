@@ -7,7 +7,7 @@ import platform
 import pytest
 from pydantic import ValidationError
 
-from viper._verification.attempt import _verify_effective_environment
+from viper._verification.attempt import _verify_effective_env
 from viper.references import (
     GitFileRef,
     ResolvedGitFileRef,
@@ -16,14 +16,14 @@ from viper.runtime import (
     CPUBackendContext,
     CPUComputeSpec,
     GCEBootImageRef,
-    GCEEnvironmentSpec,
+    GCEEnvSpec,
     GCEHostContext,
     PythonDistributionSpec,
-    PythonEnvironmentSpec,
-    ResolvedGCEEnvironment,
+    PythonEnvSpec,
+    ResolvedGCEEnv,
     observe_gce_execution,
     observe_gce_provisioning,
-    observe_python_environment,
+    observe_python_env,
 )
 from viper.verification.models import VerificationError
 
@@ -51,7 +51,7 @@ def _provisioning_id(kind: str, project: str, name: str) -> str:
 
 def test_python_environment_is_normalized_sorted_and_exact() -> None:
     """Capture one canonical mapping of the active installed distributions."""
-    environment = observe_python_environment()
+    environment = observe_python_env()
     names = tuple(distribution.name for distribution in environment.distributions)
 
     assert environment.python_version == platform.python_version()
@@ -63,7 +63,7 @@ def test_python_environment_is_normalized_sorted_and_exact() -> None:
 def test_python_environment_rejects_noncanonical_distribution_order() -> None:
     """Reject authored distribution mappings whose order is ambiguous."""
     with pytest.raises(ValidationError, match="sorted by name"):
-        PythonEnvironmentSpec(
+        PythonEnvSpec(
             python_version="3.14.0",
             distributions=(
                 PythonDistributionSpec(name="zeta", version="1"),
@@ -141,15 +141,15 @@ def test_gce_environment_joins_requested_resolved_and_observed_evidence() -> Non
             "path": "uv.lock",
         }
     )
-    python = observe_python_environment()
-    requested = GCEEnvironmentSpec(
+    python = observe_python_env()
+    requested = GCEEnvSpec(
         provisioning=provisioning,
         machine_type="g2-standard-12",
         compute=CPUComputeSpec(),
         lockfile=lockfile,
-        python_environment=python,
+        python_env=python,
     )
-    resolved = ResolvedGCEEnvironment(
+    resolved = ResolvedGCEEnv(
         provisioning=provisioning,
         machine_type="g2-standard-12",
         compute=CPUComputeSpec(),
@@ -158,7 +158,7 @@ def test_gce_environment_joins_requested_resolved_and_observed_evidence() -> Non
             bytes=4,
             stored_at=lockfile,
         ),
-        python_environment=python,
+        python_env=python,
     )
     context = observe_gce_execution(
         CPUComputeSpec(),
@@ -166,7 +166,7 @@ def test_gce_environment_joins_requested_resolved_and_observed_evidence() -> Non
         provisioning_id_get=_provisioning_id,
     )
 
-    _verify_effective_environment("train", requested, resolved, context)
+    _verify_effective_env("train", requested, resolved, context)
 
 
 def test_gce_environment_rejects_each_changed_identity() -> None:
@@ -183,15 +183,15 @@ def test_gce_environment_rejects_each_changed_identity() -> None:
             "path": "uv.lock",
         }
     )
-    python = observe_python_environment()
-    requested = GCEEnvironmentSpec(
+    python = observe_python_env()
+    requested = GCEEnvSpec(
         provisioning=provisioning,
         machine_type="g2-standard-12",
         compute=CPUComputeSpec(),
         lockfile=lockfile,
-        python_environment=python,
+        python_env=python,
     )
-    resolved = ResolvedGCEEnvironment(
+    resolved = ResolvedGCEEnv(
         provisioning=provisioning,
         machine_type="g2-standard-12",
         compute=CPUComputeSpec(),
@@ -200,7 +200,7 @@ def test_gce_environment_rejects_each_changed_identity() -> None:
             bytes=4,
             stored_at=lockfile,
         ),
-        python_environment=python,
+        python_env=python,
     )
     context = observe_gce_execution(
         CPUComputeSpec(),
@@ -245,17 +245,17 @@ def test_gce_environment_rejects_each_changed_identity() -> None:
                 }
             ),
             context,
-            "environment.lockfile",
+            "env.lockfile",
         ),
         (
-            resolved.model_copy(update={"python_environment": changed_python}),
+            resolved.model_copy(update={"python_env": changed_python}),
             context,
-            "environment.python",
+            "env.python",
         ),
     )
     for changed_resolved, changed_context, message in cases:
         with pytest.raises(VerificationError, match=message):
-            _verify_effective_environment(
+            _verify_effective_env(
                 "train",
                 requested,
                 changed_resolved,

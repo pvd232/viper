@@ -63,12 +63,12 @@ from viper.benchmark import (
 )
 from viper.experiments import (
     BuildVariantStageParams,
+    EvalVariantStageParams,
     ExperimentSpec,
     ReplicateSpec,
     TrainVariantStageParams,
     VariantSpec,
 )
-from viper.experiments import EvalVariantStageParams as EvaluateVariantStageParams
 from viper.http import (
     ObservedHttpResponse,
     ResolvedHttpImplementation,
@@ -1427,7 +1427,7 @@ def build_complete_fixture(
             TrainVariantStageParams(
                 kind="train", stage_id="train", params=train.params
             ),
-            EvaluateVariantStageParams(
+            EvalVariantStageParams(
                 kind="eval",
                 stage_id="evaluate",
                 params=evaluate.params,
