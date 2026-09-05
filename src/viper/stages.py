@@ -755,6 +755,9 @@ def load_stage_callable(
             for child in root.iterdir()
             if child.is_dir() or child.suffix == ".py"
         }
+        # An example can run from VIPER's own repository. Keep the framework
+        # module loaded so decorators use the same StageDefinition class.
+        project_prefixes.discard(__name__.partition(".")[0])
         for name in tuple(sys.modules):
             if any(
                 name == prefix or name.startswith(f"{prefix}.")

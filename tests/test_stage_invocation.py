@@ -7,7 +7,7 @@ from types import MappingProxyType
 import numpy as np
 import pytest
 
-from viper import parameters
+from viper import params as parameters
 from viper.stages import (
     Context,
     StageDefinitionError,
@@ -64,8 +64,8 @@ def test_stage_loader_requires_exact_decorated_top_level_callable(
     """Load the selected symbol only when its bytes and decorator agree."""
     raw = (
         b"from viper.stages import train\n"
-        b"from viper import parameters\n\n"
-        b"class Params(parameters.Train):\n"
+        b"from viper import params\n\n"
+        b"class Params(params.Train):\n"
         b"    epochs: int\n\n"
         b"@train(params=Params)\n"
         b"def fit(context):\n"
@@ -103,8 +103,8 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (package_root / "parameters.py").write_text(
-        "from viper import parameters\n\n"
-        "class ProjectParameters(parameters.Train):\n"
+        "from viper import params\n\n"
+        "class ProjectParameters(params.Train):\n"
         "    epochs: int\n",
         encoding="utf-8",
     )
@@ -127,3 +127,20 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
     loaded = load_stage_callable(path, reference, import_root=tmp_path)
 
     assert stage_definition(loaded).parameter_model.__name__ == "ProjectParameters"
+
+
+def test_stage_loader_keeps_framework_identity_in_viper_repository() -> None:
+    """Load the README stage without replacing the running VIPER package."""
+    root = Path(__file__).parents[1]
+    path = root / "examples/cpu_quickstart.py"
+    raw = path.read_bytes()
+    reference = StageImplementationRef(
+        path="examples/cpu_quickstart.py",
+        symbol="fit",
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+
+    loaded = load_stage_callable(path, reference, import_root=root)
+
+    assert stage_definition(loaded).kind == "train"
