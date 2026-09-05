@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .._schema import DataRole, RepoRelPath
 from ..artifacts import ResolvedArtifact
 from ..benchmark import BenchmarkResult, BenchmarkSpec
 from ..experiments import ExperimentSpec, VariantSpec
-from ..ids import StageId
+from ..ids import InputName, StageId
 from ..metrics import Measurement
 from ..references import (
     ResolvedFileRef,
@@ -19,6 +19,8 @@ from ..references import (
 )
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..stages import BaseSpec, ResolvedBaseSpec
+from ..reuse import StageReuseReceipt
+
 
 
 class VerificationError(ValueError):
@@ -88,6 +90,8 @@ class VerifiedRunResult:
     attempts: tuple[RunAttempt, ...]
     resolved_stages: dict[StageId, ResolvedBaseSpec]
     measurements: tuple[Measurement, ...]
+    inputs: dict[StageId, dict[InputName, VerifiedInput]] = field(default_factory=dict)
+    reuse: dict[StageId, StageReuseReceipt] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

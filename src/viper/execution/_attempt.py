@@ -12,7 +12,7 @@ from .._verification.storage import read_attempt_reference
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
-from ..inputs import ResolvedInputRef
+from ..inputs import ExternalInputRef, FutureInputRef, ResolvedInputRef, StoredInputRef
 from ..journal import DurableJournal
 from ..preflight import preflight_plan
 from ..references import (
@@ -82,7 +82,31 @@ from ._stage import (
 )
 from .errors import RunError
 from .results import ConfirmationRunResult, RunResult
+from ..catalog import Catalog
 
+from ..reuse import ReuseInputIdentity, build_stage_reuse_key, input_identity
+
+from ._reuse import reuse_stage
+
+
+
+def _reuse_input_identities(
+    stage: InternalSpec,
+    paths: dict[str, Path],
+    loaded_stages: dict[StageId, BaseSpec],
+) -> tuple[ReuseInputIdentity, ...]:
+    """Hash materialized inputs with the roles declared by their producers."""
+    identities = []
+    for name, reference in stage.inputs.items():
+        if isinstance(reference, (ExternalInputRef, StoredInputRef)):
+            role = reference.data_role
+        elif isinstance(reference, FutureInputRef):
+            producer = loaded_stages[reference.producer_stage_id]
+            role = producer.artifacts[reference.name].data_role
+        else:
+            raise RunError("stage input has no reuse role")
+        identities.append(input_identity(name, role, paths[str(name)]))
+    return tuple(sorted(identities, key=lambda item: item.input_name))
 
 def execute_attempt(
     repository_root: Path,
@@ -320,6 +344,64 @@ def execute_attempt(
                         fetcher,
                         policy,
                     )
+                if (
+                    isinstance(stage, InternalSpec)
+                    and stage.reuse == "verified"
+                    and purpose == "run"
+                ):
+                    metric_specs = {
+                        metric.metric_id: metric for metric in experiment.metrics
+                    }
+                    key = build_stage_reuse_key(
+                        stage_id=stage_reference.stage_id,
+                        stage=stage,
+                        inputs=_reuse_input_identities(
+                            stage,
+                            input_paths,
+                            loaded_stages,
+                        ),
+                        seed=run.seed,
+                        env=effective_environment,
+                        reproducibility=run.reproducibility,
+                        metrics=metric_specs,
+                    )
+                    resolved_path = (
+                        f"experiments/{run.experiment_id}/runs/{run.variant_id}/"
+                        f"{run.run_id}/stages/{stage_reference.stage_id}/resolved.yaml"
+                    )
+                    reused = reuse_stage(
+                        root=root,
+                        catalog=Catalog(root),
+                        key=key,
+                        stage=stage,
+                        inputs=resolved_inputs or {},
+                        captured_inputs=captured_inputs,
+                        resolved_stage_path=resolved_path,
+                        fetcher=fetcher,
+                        policy=policy,
+                        publisher=snapshot_publisher,
+                        destination=destination,
+                        cloud_client=cloud_client,
+                        metrics=metric_specs,
+                    )
+                    if reused is not None:
+                        journal.append(
+                            "publishing_stage",
+                            "verified stage reuse published",
+                            recorded_at=datetime.now(UTC),
+                            details={"stage_id": stage_reference.stage_id},
+                        )
+                        resolved_raw = serialize_document(reused.resolved)
+                        resolved_stage_ref = ResolvedStageRef(
+                            stage_id=stage_reference.stage_id,
+                            snapshot=reused.snapshot,
+                            resolved_spec=snapshot_file(resolved_path, resolved_raw),
+                        )
+                        resolved_stage_refs.append(resolved_stage_ref)
+                        completed[stage_reference.stage_id] = resolved_stage_ref
+                        completed_results[stage_reference.stage_id] = reused.resolved
+                        active_stage_id = None
+                        continue
                 try:
                     process = execute_stage_process(
                         root,

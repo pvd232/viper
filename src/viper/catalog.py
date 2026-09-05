@@ -35,6 +35,8 @@ from .runs import RunAttempt
 from .serialization import document_digest, serialize_document
 from .stages import DownloadSpec, InternalSpec
 from .verification.models import VerifiedBenchmarkResult, VerifiedRunResult
+from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
+
 
 CatalogRunStatus = Literal["succeeded", "failed", "cancelled"]
 
@@ -241,6 +243,7 @@ class CatalogRunSource:
 
     reference: ResolvedRunRef
     verified: VerifiedRunResult
+    reuse_candidates: tuple[StageReuseCandidate, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -286,6 +289,15 @@ CREATE TABLE benchmarks (
 CREATE TABLE edges (
     source_key TEXT NOT NULL,
     payload_json TEXT NOT NULL
+);
+CREATE TABLE stage_reuse_keys (
+    key_sha256 TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    attempt_id INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (key_sha256, source_key)
 );
 """
 
@@ -480,6 +492,29 @@ def _next_cursor(query: BaseModel, offset: int) -> str:
     return base64.urlsafe_b64encode(raw).decode()
 
 
+def _validate_reuse_candidate(
+    source: CatalogRunSource,
+    candidate: StageReuseCandidate,
+) -> None:
+    """Keep every indexed candidate inside its verified successful attempt."""
+    if candidate.source_run != source.reference:
+        raise ValueError("reuse candidate belongs to another run")
+    successful_id = source.verified.result.successful_attempt_id
+    if candidate.source_attempt not in source.verified.result.attempts:
+        raise ValueError("reuse candidate attempt is absent from its run")
+    attempt = next(
+        (
+            item
+            for item in source.verified.attempts
+            if item.attempt_id == candidate.attempt_id
+        ),
+        None,
+    )
+    if attempt is None or attempt.attempt_id != successful_id:
+        raise ValueError("reuse candidate does not use the successful attempt")
+    if candidate.source_stage not in attempt.resolved_stages:
+        raise ValueError("reuse candidate stage is absent from its attempt")
+
 class Catalog:
     """Refresh and query one derived SQLite catalog."""
 
@@ -577,6 +612,19 @@ class Catalog:
                         connection.execute(
                             "INSERT INTO edges VALUES (?, ?)",
                             (key, _json(catalog_edge)),
+                        )
+                    for candidate in source.reuse_candidates:
+                        _validate_reuse_candidate(source, candidate)
+                        connection.execute(
+                            "INSERT INTO stage_reuse_keys VALUES (?, ?, ?, ?, ?, ?)",
+                            (
+                                stage_reuse_key_sha256(candidate.key),
+                                key,
+                                candidate.completed_at.isoformat(),
+                                str(row.run_id),
+                                candidate.attempt_id,
+                                _json(candidate),
+                            ),
                         )
                 for source in benchmarks:
                     key = _reference_key(source.reference)
@@ -899,6 +947,31 @@ class Catalog:
         if row is None:
             raise KeyError("run is absent from the catalog")
         return RunLineage.model_validate_json(row[0])
+
+    def reuse_candidate(self, key: StageReuseKey) -> StageReuseCandidate | None:
+        """Return the newest verified candidate for one exact reuse key."""
+        if not self.path.is_file():
+            return None
+        try:
+            with sqlite3.connect(self.path) as connection:
+                row = connection.execute(
+                    """
+                    SELECT payload_json
+                    FROM stage_reuse_keys
+                    WHERE key_sha256 = ?
+                    ORDER BY completed_at DESC, run_id DESC, attempt_id DESC
+                    LIMIT 1
+                    """,
+                    (stage_reuse_key_sha256(key),),
+                ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+        if row is None:
+            return None
+        candidate = StageReuseCandidate.model_validate_json(row[0])
+        if candidate.key != key:
+            raise ValueError("catalog reuse-key digest collision")
+        return candidate
 
 
 def catalog(*, root: Path | None = None) -> Catalog:

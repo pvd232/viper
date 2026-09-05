@@ -104,6 +104,8 @@ from .verification.models import (
     VerificationError,
     VerificationPolicy,
 )
+from .reuse import catalog_reuse_candidates
+
 
 OperationName = Literal[
     "validate_stage",
@@ -1628,7 +1630,11 @@ def _catalog_run_source(
             path=relative,
         ),
     )
-    return CatalogRunSource(reference=reference, verified=verified)
+    return CatalogRunSource(
+        reference=reference,
+        verified=verified,
+        reuse_candidates=catalog_reuse_candidates(reference, verified),
+    )
 
 
 def catalog_refresh(

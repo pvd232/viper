@@ -62,12 +62,12 @@ from viper.benchmark import (
 )
 from viper.experiments import (
     BuildVariantStageParams,
-    EvaluateVariantStageParams,
     ExperimentSpec,
     ReplicateSpec,
     TrainVariantStageParams,
     VariantSpec,
 )
+from viper.experiments import EvalVariantStageParams as EvaluateVariantStageParams
 from viper.http import (
     ObservedHttpResponse,
     ResolvedHttpImplementation,
@@ -83,8 +83,11 @@ from viper.inputs import (
     StoredInputRef,
 )
 from viper.metrics import (
+    FloatComparator,
     Measurement,
     MetricExecutionReceipt,
+    MetricImplementationRef,
+    MetricObjectiveSpec,
     MetricSpec,
     MetricVerificationReceipt,
     ResolvedMetricDependency,
@@ -103,6 +106,7 @@ from viper.references import (
     ResolvedGitFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
     ResolvedStageRef,
     SnapshotFileRef,
     StageResultSnapshot,
@@ -126,7 +130,6 @@ from viper.runtime import (
     CPUContext,
     ExecutionContext,
     GCEBootImageRef,
-    GCEEnvironmentSpec,
     GCEHostContext,
     GeneratorInitializationReceipt,
     NativeLibraryContext,
@@ -136,34 +139,53 @@ from viper.runtime import (
     ParallelismSpec,
     ProcessStartupReceipt,
     ReproducibilitySpec,
-    ResolvedGCEEnvironment,
     TorchDeterminismSpec,
     TorchPrecisionSpec,
     process_environment,
 )
+from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
+from viper.runtime import ResolvedGCEEnv as ResolvedGCEEnvironment
 from viper.serialization import document_digest
 from viper.stages import (
     BaseSpec,
     BuildSpec,
     DownloadSpec,
-    EvaluateSpec,
     ParameterizedStageSpec,
     ResolvedBuildSpec,
     ResolvedDownloadSpec,
-    ResolvedEvaluateSpec,
-    ResolvedStageInvocationRef,
     ResolvedTrainSpec,
     StageContextBinding,
     StageInvocationReceipt,
     TrainSpec,
 )
+from viper.stages import EvalSpec as EvaluateSpec
+from viper.stages import ResolvedEvalSpec as ResolvedEvaluateSpec
 from viper.verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
     verify_run_result,
+    verify_stage_reuse,
 )
-from viper.verification.models import VerificationError
+from viper.verification.models import (
+    VerificationError,
+    VerifiedRunPlan,
+    VerifiedRunResult,
+)
 from viper.workspace import captured_input_path
+from viper import params as current_params
+
+from viper.params import ParameterModelRef as CurrentParameterModelRef
+
+from viper.reuse import (
+    ExecutedStageCompletion,
+    ReusedMetricEvidence,
+    ReusedStageFile,
+    ReuseFileIdentity,
+    ReuseInputIdentity,
+    StageReuseReceipt,
+    build_stage_reuse_key,
+)
+
 
 SOURCE_REPOSITORY = HttpUrl("https://github.com/example/viper-project")
 ARTIFACT_REPOSITORY = "example/viper-runs"
@@ -336,7 +358,7 @@ def environment(source_commit: str) -> GCEEnvironmentSpec:
         machine_type="n2-standard-8",
         compute=CPUComputeSpec(kind="cpu"),
         lockfile=git_file(source_commit, "environment.yml"),
-        python_environment=python_environment(),
+        python_env=python_environment(),
     )
 
 
@@ -489,7 +511,7 @@ def publish_metric_verification(
         dependencies=dependencies,
         startup=startup_receipt(run),
         execution_context=execution_context(),
-        python_environment=python_environment(),
+        python_env=python_environment(),
         value=measurement.value,
         started_at=stage_completed_at + timedelta(seconds=10),
         completed_at=stage_completed_at + timedelta(seconds=20),
@@ -696,7 +718,7 @@ def resolved_environment(
         machine_type="n2-standard-8",
         compute=CPUComputeSpec(kind="cpu"),
         lockfile=lockfile,
-        python_environment=python_environment(),
+        python_env=python_environment(),
     )
 
 
@@ -1069,7 +1091,7 @@ def publish_producer_run(
     }
     resolved_download = ResolvedDownloadSpec(
         spec=download,
-        environment=resolved_env,
+        env=resolved_env,
         execution_context=execution_context(),
         retrievals=retrievals,
         artifacts=cast(dict[str, ResolvedArtifact], resolved_download_artifacts),
@@ -1098,12 +1120,14 @@ def publish_producer_run(
     )
     resolved_train = ResolvedTrainSpec(
         spec=train,
-        source=train_source,
-        environment=resolved_env,
-        execution_context=execution_context(),
-        startup=startup_receipt(run),
-        invocation=train_invocation,
-        command=("python", "-m", "viper._workers.stages"),
+        completion=ExecutedStageCompletion(
+            source=train_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=train_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
         inputs={
             "training_dataset": ResolvedFutureInputRef(producer=download_stage),
         },
@@ -1300,9 +1324,13 @@ def build_complete_fixture(
             EVALUATE_SOURCE,
             symbol="predict",
         ),
-        parameter_model=parameter_model_ref("evaluate"),
-        evaluation_id="toy_predictions",
+        parameter_model=current_params.model_ref(current_params.Eval),
+        eval_id="toy_predictions",
         metric_ids=("pearson_correlation",),
+        objective=MetricObjectiveSpec(
+            metric_id="pearson_correlation",
+            direction="max",
+        ),
         split_inputs=("test_split",),
         inputs={
             "parameters": FutureInputRef(
@@ -1323,7 +1351,7 @@ def build_complete_fixture(
                 data_role=evaluation_role,
             ),
         },
-        params=parameters.Evaluate(),
+        params=current_params.Eval(),
         artifacts={
             "predictions": SingleFileArtifactSpec(
                 kind="file",
@@ -1390,7 +1418,7 @@ def build_complete_fixture(
                 kind="train", stage_id="train", params=train.params
             ),
             EvaluateVariantStageParams(
-                kind="evaluate",
+                kind="eval",
                 stage_id="evaluate",
                 params=evaluate.params,
             ),
@@ -1460,12 +1488,14 @@ def build_complete_fixture(
     )
     resolved_build = ResolvedBuildSpec(
         spec=build,
-        source=build_source,
-        environment=resolved_env,
-        execution_context=execution_context(),
-        startup=startup_receipt(run),
-        invocation=build_invocation,
-        command=("python", "-m", "viper._workers.stages"),
+        completion=ExecutedStageCompletion(
+            source=build_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=build_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
         inputs={
             "dataset": ResolvedStoredInputRef(
                 kind="stored", pointer=resolved_training_dataset_pointer
@@ -1495,12 +1525,14 @@ def build_complete_fixture(
     )
     resolved_train = ResolvedTrainSpec(
         spec=train,
-        source=train_source,
-        environment=resolved_env,
-        execution_context=execution_context(),
-        startup=startup_receipt(run),
-        invocation=train_invocation,
-        command=("python", "-m", "viper._workers.stages"),
+        completion=ExecutedStageCompletion(
+            source=train_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=train_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
         inputs={"prior": ResolvedFutureInputRef(producer=build_stage)},
         artifacts={
             PARAMETERS: add_single_artifact(
@@ -1543,12 +1575,14 @@ def build_complete_fixture(
     )
     resolved_evaluate = ResolvedEvaluateSpec(
         spec=evaluate,
-        source=evaluate_source,
-        environment=resolved_env,
-        execution_context=execution_context(),
-        startup=startup_receipt(run),
-        invocation=evaluate_invocation,
-        command=("python", "-m", "viper._workers.stages"),
+        completion=ExecutedStageCompletion(
+            source=evaluate_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=evaluate_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
         inputs={
             "parameters": ResolvedFutureInputRef(producer=train_stage),
             "evaluation_dataset": ResolvedStoredInputRef(
@@ -2735,3 +2769,247 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+def test_stage_reuse_rejects_each_severed_relationship() -> None:
+    """Reject source, key, file, and metric evidence changed after reuse."""
+    artifact_file = SnapshotFileRef(
+        path="experiments/reuse/runs/source/run/artifacts/evals/score/predictions.json",
+        sha256="a" * 64,
+        bytes=1,
+    )
+    artifact = ResolvedSingleFileArtifact(file=artifact_file)
+    parameter_model = CurrentParameterModelRef(
+        owner="project",
+        path="project/params/eval.py",
+        symbol="EvalParameters",
+        sha256="b" * 64,
+        bytes=1,
+    )
+    metric = MetricSpec.model_construct(
+        schema_version=1,
+        metric_id="score",
+        implementation=MetricImplementationRef(
+            path="project/metrics/score.py",
+            symbol="compute",
+            sha256="c" * 64,
+            bytes=1,
+        ),
+        parameter_model=parameter_model,
+        params=current_params.Metric(),
+        mode="recompute",
+        dependencies=(),
+        comparator=FloatComparator(),
+    )
+    stage = EvaluateSpec.model_construct(
+        schema_version=1,
+        kind="eval",
+        env=None,
+        metric_ids=(metric.metric_id,),
+        artifacts={
+            "predictions": SingleFileArtifactSpec(
+                path=artifact_file.path,
+                loader=loader_ref("json_file"),
+                data_role="eval",
+            )
+        },
+        implementation=stage_implementation_ref(
+            "evaluation/predict.py",
+            EVALUATE_SOURCE,
+            symbol="predict",
+        ),
+        parameter_model=parameter_model,
+        inputs={},
+        eval_id="reuse_score",
+        split_inputs=(),
+        objective=MetricObjectiveSpec(metric_id=metric.metric_id, direction="max"),
+        params=current_params.Eval(),
+    )
+    env = GCEEnvironmentSpec(
+        provisioning=GCEBootImageRef(
+            project="viper-project",
+            name="viper-image",
+            id="123456789",
+        ),
+        machine_type="n2-standard-8",
+        compute=CPUComputeSpec(),
+        lockfile=git_file(MAIN_SOURCE_COMMIT, "environment.yml"),
+        python_env=python_environment(),
+    )
+    run = RunSpec.model_construct(
+        run_id="01ARZ3NDEKTSV4RRFFQ69G5FAB",
+        experiment_id="model_eval",
+        variant_id="baseline",
+        seed=42,
+        env=env,
+        reproducibility=reproducibility(),
+    )
+    plan = VerifiedRunPlan(
+        run=run,
+        experiment=ExperimentSpec.model_construct(metrics=(metric,)),
+        variant=VariantSpec.model_construct(),
+        benchmark=None,
+        stages={"evaluate": stage},
+    )
+    source_stage = ResolvedStageRef(
+        stage_id="evaluate",
+        snapshot=snapshot("d" * 40),
+        resolved_spec=SnapshotFileRef(
+            path="experiments/reuse/runs/source/run/stages/evaluate/resolved.yaml",
+            sha256="e" * 64,
+            bytes=1,
+        ),
+    )
+    source_result = ResolvedEvaluateSpec.model_construct(
+        spec=stage,
+        artifacts={"predictions": artifact},
+        completed_at=datetime(2026, 8, 20, 21, 40, tzinfo=UTC),
+    )
+    measurement_reference = ResolvedFileRef(
+        sha256="f" * 64,
+        bytes=1,
+        stored_at=hf_file(
+            MAIN_FILES_COMMIT,
+            "experiments/reuse/runs/source/run/attempts/1/"
+            "measurements/evaluate.score.jsonl",
+        ),
+    )
+    verification_reference = ResolvedFileRef(
+        sha256="1" * 64,
+        bytes=1,
+        stored_at=hf_file(
+            MAIN_FILES_COMMIT,
+            "experiments/reuse/runs/source/run/attempts/1/"
+            "metric_verification/evaluate.score.yaml",
+        ),
+    )
+    source_attempt = RunAttempt.model_construct(
+        attempt_id=1,
+        resolved_stages=(source_stage,),
+        measurement_files=(measurement_reference,),
+        metric_verification_files=(verification_reference,),
+    )
+    attempt_reference = ResolvedAttemptRef(
+        sha256="2" * 64,
+        bytes=1,
+        stored_at=hf_file(
+            MAIN_FILES_COMMIT,
+            "experiments/reuse/runs/source/run/attempts/1/resolved.yaml",
+        ),
+    )
+    resolved_run = ResolvedRun.model_construct(
+        status="succeeded",
+        attempts=(attempt_reference,),
+        successful_attempt_id=1,
+    )
+    source = VerifiedRunResult(
+        result=resolved_run,
+        plan=plan,
+        attempts=(source_attempt,),
+        resolved_stages={"evaluate": source_result},
+        measurements=(
+            Measurement(
+                run_id=run.run_id,
+                attempt_id=1,
+                stage_id="evaluate",
+                metric_id=metric.metric_id,
+                value=0.9,
+                measured_at=datetime(2026, 8, 20, 21, 41, tzinfo=UTC),
+            ),
+        ),
+    )
+    input_identity = ReuseInputIdentity(
+        input_name="parameters",
+        data_role="training",
+        files=(
+            ReuseFileIdentity(
+                relative_path="parameters.bin",
+                sha256="d" * 64,
+                bytes=16,
+            ),
+        ),
+    )
+    key = build_stage_reuse_key(
+        stage_id="evaluate",
+        stage=stage,
+        inputs=(input_identity,),
+        seed=run.seed,
+        env=env,
+        reproducibility=run.reproducibility,
+        metrics={metric.metric_id: metric},
+    )
+    source_reference = ResolvedRunRef(
+        sha256="e" * 64,
+        bytes=1,
+        stored_at=hf_file(
+            MAIN_FILES_COMMIT,
+            "experiments/model_eval/runs/baseline/"
+            "01ARZ3NDEKTSV4RRFFQ69G5FAB/resolved.yaml",
+        ),
+    )
+    receipt = StageReuseReceipt(
+        stage_id="evaluate",
+        key=key,
+        source_run=source_reference,
+        source_attempt=resolved_run.attempts[0],
+        source_stage=source_stage,
+        files=(
+            ReusedStageFile(
+                artifact_name="predictions",
+                source=artifact.file,
+                target=artifact.file,
+            ),
+        ),
+        metrics=(
+            ReusedMetricEvidence(
+                metric_id=metric.metric_id,
+                measurement=measurement_reference,
+                verification=verification_reference,
+            ),
+        ),
+        completed_at=datetime(2026, 8, 20, 21, 46, tzinfo=UTC),
+    )
+    arguments = {
+        "source_reference": source_reference,
+        "source": source,
+        "source_inputs": (input_identity,),
+        "target_plan": plan,
+        "target_stage": source_stage,
+        "target_result": source_result,
+        "target_inputs": (input_identity,),
+    }
+
+    assert verify_stage_reuse(receipt, **arguments) == receipt
+
+    severed_source = receipt.model_copy(
+        update={"source_run": source_reference.model_copy(update={"sha256": "f" * 64})}
+    )
+    with pytest.raises(VerificationError, match="source run"):
+        verify_stage_reuse(severed_source, **arguments)
+
+    severed_key = receipt.model_copy(
+        update={"key": key.model_copy(update={"seed": key.seed + 1})}
+    )
+    with pytest.raises(VerificationError, match="key differs"):
+        verify_stage_reuse(severed_key, **arguments)
+
+    severed_file = receipt.files[0].model_copy(
+        update={
+            "source": receipt.files[0].source.model_copy(
+                update={"path": "experiments/other/artifacts/evals/other.json"}
+            )
+        }
+    )
+    with pytest.raises(VerificationError, match="file remapping"):
+        verify_stage_reuse(
+            receipt.model_copy(update={"files": (severed_file,)}),
+            **arguments,
+        )
+
+    severed_measurement = measurement_reference.model_copy(update={"sha256": "9" * 64})
+    severed_metric = receipt.metrics[0].model_copy(
+        update={"measurement": severed_measurement}
+    )
+    with pytest.raises(VerificationError, match="measurement differs"):
+        verify_stage_reuse(
+            receipt.model_copy(update={"metrics": (severed_metric,)}),
+            **arguments,
+        )

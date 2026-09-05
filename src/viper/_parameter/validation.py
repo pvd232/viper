@@ -82,7 +82,11 @@ def validate_parameters(
     """Validate one frozen parameter mapping with its selected project class."""
     raw = path.read_bytes()
     verify_parameter_model_bytes(reference, raw)
-    model = load_parameter_model(path, reference.symbol, expected_base)
+    model = (
+        load_parameter_model(path, reference.symbol, expected_base)
+        if reference.owner == "project"
+        else _installed_parameter_model(reference.symbol, expected_base)
+    )
     frozen = cast(dict[str, JsonValue], params.model_dump(mode="json"))
     validated = model.model_validate(frozen, strict=True)
     effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
@@ -102,7 +106,11 @@ def instantiate_parameters(
     """Construct the exact project parameter class from one frozen mapping."""
     raw = path.read_bytes()
     verify_parameter_model_bytes(reference, raw)
-    model = load_parameter_model(path, reference.symbol, expected_base)
+    model = (
+        load_parameter_model(path, reference.symbol, expected_base)
+        if reference.owner == "project"
+        else _installed_parameter_model(reference.symbol, expected_base)
+    )
     frozen = cast(dict[str, JsonValue], params.model_dump(mode="json"))
     validated = model.model_validate(frozen, strict=True)
     effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
@@ -187,3 +195,14 @@ def parameter_model_path(
     if not path.is_relative_to(base):
         raise ParameterValidationError("parameter model escapes its source root")
     return path
+def _installed_parameter_model(
+    symbol: str,
+    expected_base: type[params.ParameterSet],
+) -> type[params.ParameterSet]:
+    """Resolve a built-in parameter model from the installed VIPER package."""
+    value = getattr(params, symbol, None)
+    if not isinstance(value, type) or not issubclass(value, expected_base):
+        raise ParameterValidationError(
+            f"parameter model must subclass {expected_base.__name__}"
+        )
+    return cast(type[params.ParameterSet], value)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import yaml
 from pydantic import BaseModel
@@ -21,9 +21,14 @@ from .._verification import metrics as _metrics
 from .._verification import paths as _paths
 from .._verification import plan as _plan
 from .._verification import storage as _storage
-from ..artifacts import ArtifactPointer, StageArtifactRef
+from ..artifacts import (
+    ArtifactPointer,
+    ResolvedBundleArtifact,
+    ResolvedSingleFileArtifact,
+    StageArtifactRef,
+)
 from ..benchmark import BenchmarkResult, BenchmarkSpec
-from ..ids import InputName, StageId
+from ..ids import InputName, MetricId, StageId
 from ..inputs import (
     FutureInputRef,
     ResolvedFutureInputRef,
@@ -36,6 +41,9 @@ from ..references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
+    ResolvedRunRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
@@ -44,8 +52,10 @@ from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
     EvalSpec,
     InternalSpec,
+    ParameterizedSpec,
     ResolvedBaseSpec,
     ResolvedInternalSpec,
+    ResolvedParameterizedSpec,
     TrainSpec,
 )
 from .models import (
@@ -55,18 +65,305 @@ from .models import (
     VerifiedArtifact,
     VerifiedBenchmarkResult,
     VerifiedInput,
+    VerifiedRunPlan,
     VerifiedRunResult,
 )
+from ..reuse import (
+    ReusedStageCompletion,
+    ReuseInputIdentity,
+    StageReuseKey,
+    StageReuseReceipt,
+    build_stage_reuse_key,
+    verified_input_identity,
+)
+
 
 __all__ = [
     "verify_attempt_future_inputs",
     "verify_benchmark_result",
     "verify_promoted_artifact",
     "verify_run_result",
+    "verify_stage_reuse",
     "verify_stored_input_selections",
     "verify_stored_inputs",
 ]
 
+
+def _stage_artifact_files(
+    stage: ResolvedBaseSpec,
+) -> dict[str, tuple[SnapshotFileRef, ...]]:
+    """Index every resolved artifact file by artifact name."""
+    files: dict[str, tuple[SnapshotFileRef, ...]] = {}
+    for artifact_name, artifact in stage.artifacts.items():
+        if isinstance(artifact, ResolvedSingleFileArtifact):
+            files[artifact_name] = (artifact.file,)
+        elif isinstance(artifact, ResolvedBundleArtifact):
+            files[artifact_name] = tuple(member.file for member in artifact.members)
+    return files
+
+def _artifact_relative_path(path: str) -> str:
+    """Return the stable portion of an artifact path after its run root."""
+    marker = "/artifacts/"
+    if marker not in path:
+        raise VerificationError("reused artifact file has no artifact path boundary")
+    return path.split(marker, 1)[1]
+
+def _expected_reused_files(
+    source: ResolvedBaseSpec,
+    target: ResolvedBaseSpec,
+) -> tuple[tuple[str, SnapshotFileRef, SnapshotFileRef], ...]:
+    """Join source and target files by artifact name and relative path."""
+    source_files = _stage_artifact_files(source)
+    target_files = _stage_artifact_files(target)
+    if set(source_files) != set(target_files):
+        raise VerificationError("reused source and target artifacts differ")
+
+    pairs: list[tuple[str, SnapshotFileRef, SnapshotFileRef]] = []
+    for artifact_name in sorted(source_files):
+        source_by_path = {
+            _artifact_relative_path(str(file.path)): file
+            for file in source_files[artifact_name]
+        }
+        target_by_path = {
+            _artifact_relative_path(str(file.path)): file
+            for file in target_files[artifact_name]
+        }
+        if set(source_by_path) != set(target_by_path):
+            raise VerificationError("reused source and target file paths differ")
+        pairs.extend(
+            (artifact_name, source_by_path[path], target_by_path[path])
+            for path in sorted(source_by_path)
+        )
+    return tuple(pairs)
+
+def _metric_references(
+    references: Sequence[ResolvedFileRef],
+    *,
+    stage_id: StageId,
+    directory: str,
+) -> dict[MetricId, ResolvedFileRef]:
+    """Index one stage's measurement or verification references by metric ID."""
+    selected: dict[MetricId, ResolvedFileRef] = {}
+    prefix = f"/{directory}/{stage_id}."
+    suffix = ".jsonl" if directory == "measurements" else ".yaml"
+    for reference in references:
+        path = str(reference.stored_at.path)
+        if prefix not in path or not path.endswith(suffix):
+            continue
+        metric_id = path.split(prefix, 1)[1].removesuffix(suffix)
+        if metric_id in selected:
+            raise VerificationError("reused metric evidence is duplicated")
+        selected[metric_id] = reference
+    return selected
+
+def _rebuilt_reuse_key(
+    plan: VerifiedRunPlan,
+    stage_id: StageId,
+    inputs: Sequence[ReuseInputIdentity],
+) -> StageReuseKey:
+    """Rebuild one stage key from its verified plan values and input files."""
+    stage = plan.stages.get(stage_id)
+    if not isinstance(stage, ParameterizedSpec):
+        raise VerificationError("stage reuse requires a parameterized stage")
+    metrics = {metric.metric_id: metric for metric in plan.experiment.metrics}
+    try:
+        return build_stage_reuse_key(
+            stage_id=stage_id,
+            stage=stage,
+            inputs=inputs,
+            seed=plan.run.seed,
+            env=stage.env or plan.run.env,
+            reproducibility=plan.run.reproducibility,
+            metrics=metrics,
+        )
+    except (KeyError, ValueError) as exc:
+        raise VerificationError("stage reuse key cannot be rebuilt") from exc
+
+def verify_stage_reuse(
+    receipt: StageReuseReceipt,
+    *,
+    source_reference: ResolvedRunRef,
+    source: VerifiedRunResult,
+    source_inputs: Sequence[ReuseInputIdentity],
+    target_plan: VerifiedRunPlan,
+    target_stage: ResolvedStageRef,
+    target_result: ResolvedBaseSpec,
+    target_inputs: Sequence[ReuseInputIdentity],
+) -> StageReuseReceipt:
+    """Verify one reuse receipt across its source, key, files, and metrics."""
+    if receipt.stage_id != target_stage.stage_id:
+        raise VerificationError("reuse receipt and target stage IDs differ")
+    if receipt.source_run != source_reference:
+        raise VerificationError("reuse receipt selects a different source run")
+    if source.result.status != "succeeded":
+        raise VerificationError("reused source run did not succeed")
+    expected_source_path = f"{_paths.run_root(source.plan.run)}/resolved.yaml"
+    if source_reference.stored_at.path != expected_source_path:
+        raise VerificationError("reuse receipt source run path differs")
+
+    try:
+        attempt_index = next(
+            index
+            for index, attempt in enumerate(source.attempts)
+            if attempt.attempt_id == source.result.successful_attempt_id
+        )
+    except StopIteration as exc:
+        raise VerificationError("reused source run has no successful attempt") from exc
+    source_attempt = source.attempts[attempt_index]
+    if receipt.source_attempt != source.result.attempts[attempt_index]:
+        raise VerificationError("reuse receipt selects a different source attempt")
+
+    source_stage = next(
+        (
+            stage
+            for stage in source_attempt.resolved_stages
+            if stage.stage_id == receipt.stage_id
+        ),
+        None,
+    )
+    if source_stage is None or receipt.source_stage != source_stage:
+        raise VerificationError("reuse receipt selects a different source stage")
+    source_result = source.resolved_stages.get(receipt.stage_id)
+    if source_result is None:
+        raise VerificationError("reused source stage has no verified result")
+    if isinstance(getattr(source_result, "completion", None), ReusedStageCompletion):
+        raise VerificationError("a reused stage cannot be another reuse source")
+
+    source_key = _rebuilt_reuse_key(source.plan, receipt.stage_id, source_inputs)
+    target_key = _rebuilt_reuse_key(target_plan, receipt.stage_id, target_inputs)
+    if target_result.spec != target_plan.stages.get(receipt.stage_id):
+        raise VerificationError("reuse target result differs from its plan")
+    if receipt.key != source_key or receipt.key != target_key:
+        raise VerificationError("reuse receipt key differs from source or target")
+
+    expected_files = _expected_reused_files(source_result, target_result)
+    received_files = tuple(
+        (file.artifact_name, file.source, file.target) for file in receipt.files
+    )
+    if received_files != expected_files:
+        raise VerificationError("reuse receipt file remapping differs")
+
+    expected_metric_ids = tuple(target_result.spec.metric_ids)
+    received_metric_ids = tuple(metric.metric_id for metric in receipt.metrics)
+    if received_metric_ids != expected_metric_ids:
+        raise VerificationError("reuse receipt metric coverage differs")
+    measurements = _metric_references(
+        source_attempt.measurement_files,
+        stage_id=receipt.stage_id,
+        directory="measurements",
+    )
+    verifications = _metric_references(
+        source_attempt.metric_verification_files,
+        stage_id=receipt.stage_id,
+        directory="metric_verification",
+    )
+    source_metrics = {
+        metric.metric_id: metric for metric in source.plan.experiment.metrics
+    }
+    for evidence in receipt.metrics:
+        if measurements.get(evidence.metric_id) != evidence.measurement:
+            raise VerificationError("reuse receipt measurement differs")
+        metric = source_metrics.get(evidence.metric_id)
+        if metric is None:
+            raise VerificationError("reuse receipt metric is absent from source plan")
+        expected_verification = (
+            verifications.get(evidence.metric_id)
+            if metric.mode == "recompute"
+            else None
+        )
+        if metric.mode == "recompute" and expected_verification is None:
+            raise VerificationError("reused metric has no verification evidence")
+        if evidence.verification != expected_verification:
+            raise VerificationError("reuse receipt metric verification differs")
+        if not any(
+            measurement.attempt_id == source_attempt.attempt_id
+            and measurement.stage_id == receipt.stage_id
+            and measurement.metric_id == evidence.metric_id
+            for measurement in source.measurements
+        ):
+            raise VerificationError("reuse receipt metric has no verified measurement")
+    return receipt
+
+def _merge_stage_inputs(
+    *groups: Mapping[StageId, Mapping[InputName, VerifiedInput]],
+) -> dict[StageId, dict[InputName, VerifiedInput]]:
+    """Combine independently verified input kinds without overwriting a name."""
+    merged: dict[StageId, dict[InputName, VerifiedInput]] = {}
+    for group in groups:
+        for stage_id, inputs in group.items():
+            stage_inputs = merged.setdefault(stage_id, {})
+            duplicate = set(stage_inputs) & set(inputs)
+            if duplicate:
+                raise VerificationError("verified stage input appears more than once")
+            stage_inputs.update(inputs)
+    return merged
+
+def _input_identities(
+    inputs: Mapping[InputName, VerifiedInput],
+) -> tuple[ReuseInputIdentity, ...]:
+    """Convert verified input bytes into the stable identity used by reuse."""
+    return tuple(
+        verified_input_identity(input_name, value)
+        for input_name, value in sorted(inputs.items())
+    )
+
+def _verify_reused_stages(
+    *,
+    result: ResolvedRun,
+    plan: VerifiedRunPlan,
+    attempts: tuple[RunAttempt, ...],
+    stages: Mapping[StageId, ResolvedBaseSpec],
+    inputs: Mapping[StageId, Mapping[InputName, VerifiedInput]],
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+    ancestors: frozenset[str],
+) -> dict[StageId, StageReuseReceipt]:
+    """Follow and verify each reuse receipt in the successful attempt."""
+    if result.successful_attempt_id is None:
+        return {}
+    attempt = next(
+        item for item in attempts if item.attempt_id == result.successful_attempt_id
+    )
+    receipts: dict[StageId, StageReuseReceipt] = {}
+    for stage_reference in attempt.resolved_stages:
+        target = stages[stage_reference.stage_id]
+        if not isinstance(target, ResolvedParameterizedSpec) or not isinstance(
+            target.completion, ReusedStageCompletion
+        ):
+            continue
+        raw = _storage.read_resolved_file(target.completion.receipt, fetcher=fetcher)
+        try:
+            receipt = StageReuseReceipt.model_validate(parse_yaml_bytes(raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError("stage reuse receipt is invalid") from exc
+        source_id = receipt.source_run.sha256
+        if source_id in ancestors:
+            raise VerificationError("stage reuse sources form a cycle")
+        source_raw = _storage.read_resolved_file(receipt.source_run, fetcher=fetcher)
+        try:
+            source_run = ResolvedRun.model_validate(parse_yaml_bytes(source_raw))
+        except (yaml.YAMLError, ValueError) as exc:
+            raise VerificationError("stage reuse source run is invalid") from exc
+        source = _verify_run_result(
+            source_run,
+            policy=policy,
+            fetcher=fetcher,
+            ancestors=ancestors | {source_id},
+        )
+        verify_stage_reuse(
+            receipt,
+            source_reference=receipt.source_run,
+            source=source,
+            source_inputs=_input_identities(
+                source.inputs.get(stage_reference.stage_id, {})
+            ),
+            target_plan=plan,
+            target_stage=stage_reference,
+            target_result=target,
+            target_inputs=_input_identities(inputs.get(stage_reference.stage_id, {})),
+        )
+        receipts[stage_reference.stage_id] = receipt
+    return receipts
 
 def verify_run_result(
     resolved_run: ResolvedRun,
@@ -75,112 +372,11 @@ def verify_run_result(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedRunResult:
     """Verify a terminal run from its RunSpec through every completed attempt."""
-    _verify_cloud_graph(resolved_run)
-    plan = _plan.verify_run_plan(resolved_run, fetcher=fetcher)
-    attempts = _storage.verify_run_attempt_references(
+    return _verify_run_result(
         resolved_run,
-        plan.run,
+        policy=policy,
         fetcher=fetcher,
-    )
-    all_measurements: list[Measurement] = []
-    successful_stages: dict[StageId, ResolvedBaseSpec] = {}
-    stage_result_snapshots: set[tuple[str, ...]] = set()
-    attempt_file_snapshots: set[tuple[str, ...]] = set()
-
-    for attempt in attempts:
-        current_stage_result_snapshots = {
-            _storage.snapshot_identity(stage.snapshot)
-            for stage in attempt.resolved_stages
-        }
-        if stage_result_snapshots & current_stage_result_snapshots:
-            raise VerificationError(
-                "run attempts must use distinct stage-result snapshots"
-            )
-        stage_result_snapshots.update(current_stage_result_snapshots)
-
-        current_attempt_file_snapshots = {
-            identity
-            for reference in (
-                attempt.journal,
-                *attempt.measurement_files,
-                *attempt.metric_verification_files,
-                *attempt.log_files,
-            )
-            if (identity := _storage.artifact_revision_identity(reference.stored_at))
-            is not None
-        }
-        if attempt_file_snapshots & current_attempt_file_snapshots:
-            raise VerificationError(
-                "run attempts must use distinct measurement and log snapshots"
-            )
-        attempt_file_snapshots.update(current_attempt_file_snapshots)
-
-    if stage_result_snapshots & attempt_file_snapshots:
-        raise VerificationError(
-            "stage-result and attempt-file snapshots must be distinct"
-        )
-
-    for attempt in attempts:
-        complete = attempt.status == "succeeded"
-        _attempt.verify_attempt_journal(attempt, plan.run, fetcher=fetcher)
-        verified_stages = _attempt.verify_attempt_stages(
-            attempt,
-            plan.run,
-            plan.stages,
-            require_complete=complete,
-            policy=policy,
-            fetcher=fetcher,
-        )
-        stored_inputs = verify_stored_inputs(
-            verified_stages,
-            policy=policy,
-            fetcher=fetcher,
-        )
-        future_inputs = verify_attempt_future_inputs(
-            attempt,
-            plan.run,
-            verified_stages,
-            fetcher=fetcher,
-        )
-        attempt_measurements = _attempt.verify_attempt_files(
-            attempt,
-            plan.run,
-            plan.experiment,
-            plan.stages,
-            fetcher=fetcher,
-        )
-        _attempt.verify_measurement_stage_times(
-            verified_stages,
-            attempt_measurements,
-            plan.experiment,
-        )
-        _metrics.verify_recomputed_metrics(
-            attempt,
-            plan,
-            verified_stages,
-            attempt_measurements,
-            stored_inputs,
-            future_inputs,
-            policy=policy,
-            fetcher=fetcher,
-        )
-        all_measurements.extend(attempt_measurements)
-        if attempt.attempt_id == resolved_run.successful_attempt_id:
-            successful_stages = verified_stages
-
-    if resolved_run.status == "succeeded":
-        estimator_stage = successful_stages.get(plan.run.estimator.stage_id)
-        if estimator_stage is None:
-            raise VerificationError("successful run has no estimator-producing stage")
-        if plan.run.estimator.artifact_name not in estimator_stage.artifacts:
-            raise VerificationError("successful run has no selected estimator artifact")
-
-    return VerifiedRunResult(
-        result=resolved_run,
-        plan=plan,
-        attempts=attempts,
-        resolved_stages=successful_stages,
-        measurements=tuple(all_measurements),
+        ancestors=frozenset(),
     )
 
 
@@ -941,3 +1137,153 @@ def _verify_cloud_graph(resolved_run: ResolvedRun) -> None:
     )
     if cloud and local:
         raise VerificationError("storage_graph_unreachable")
+def _verify_run_result(
+    resolved_run: ResolvedRun,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None,
+    ancestors: frozenset[str],
+) -> VerifiedRunResult:
+    """Verify one run while retaining the reuse chain already visited."""
+    _verify_cloud_graph(resolved_run)
+    plan = _plan.verify_run_plan(resolved_run, fetcher=fetcher)
+    attempts = _storage.verify_run_attempt_references(
+        resolved_run,
+        plan.run,
+        fetcher=fetcher,
+    )
+    all_measurements: list[Measurement] = []
+    successful_stages: dict[StageId, ResolvedBaseSpec] = {}
+    successful_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
+    stage_result_snapshots: set[tuple[str, ...]] = set()
+    attempt_file_snapshots: set[tuple[str, ...]] = set()
+
+    for attempt in attempts:
+        current_stage_result_snapshots = {
+            _storage.snapshot_identity(stage.snapshot)
+            for stage in attempt.resolved_stages
+        }
+        if stage_result_snapshots & current_stage_result_snapshots:
+            raise VerificationError(
+                "run attempts must use distinct stage-result snapshots"
+            )
+        stage_result_snapshots.update(current_stage_result_snapshots)
+
+        current_attempt_file_snapshots = {
+            identity
+            for reference in (
+                attempt.journal,
+                *attempt.measurement_files,
+                *attempt.metric_verification_files,
+                *attempt.log_files,
+            )
+            if (identity := _storage.artifact_revision_identity(reference.stored_at))
+            is not None
+        }
+        if attempt_file_snapshots & current_attempt_file_snapshots:
+            raise VerificationError(
+                "run attempts must use distinct measurement and log snapshots"
+            )
+        attempt_file_snapshots.update(current_attempt_file_snapshots)
+
+    if stage_result_snapshots & attempt_file_snapshots:
+        raise VerificationError(
+            "stage-result and attempt-file snapshots must be distinct"
+        )
+
+    for attempt in attempts:
+        complete = attempt.status == "succeeded"
+        _attempt.verify_attempt_journal(attempt, plan.run, fetcher=fetcher)
+        verified_stages = _attempt.verify_attempt_stages(
+            attempt,
+            plan.run,
+            plan.stages,
+            require_complete=complete,
+            policy=policy,
+            fetcher=fetcher,
+        )
+        stored_inputs = verify_stored_inputs(
+            verified_stages,
+            policy=policy,
+            fetcher=fetcher,
+        )
+        future_inputs = verify_attempt_future_inputs(
+            attempt,
+            plan.run,
+            verified_stages,
+            fetcher=fetcher,
+        )
+        external_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
+        stage_references = {item.stage_id: item for item in attempt.resolved_stages}
+        for stage_id, resolved_stage in verified_stages.items():
+            if not isinstance(resolved_stage, ResolvedInternalSpec):
+                continue
+            verified_external = _attempt.verify_external_inputs(
+                attempt,
+                plan.run,
+                stage_id,
+                resolved_stage,
+                stage_references[stage_id].snapshot,
+                fetcher=fetcher,
+            )
+            if verified_external:
+                external_inputs[stage_id] = verified_external
+        attempt_inputs = _merge_stage_inputs(
+            stored_inputs,
+            future_inputs,
+            external_inputs,
+        )
+        attempt_measurements = _attempt.verify_attempt_files(
+            attempt,
+            plan.run,
+            plan.experiment,
+            plan.stages,
+            fetcher=fetcher,
+        )
+        _attempt.verify_measurement_stage_times(
+            verified_stages,
+            attempt_measurements,
+            plan.experiment,
+        )
+        _metrics.verify_recomputed_metrics(
+            attempt,
+            plan,
+            verified_stages,
+            attempt_measurements,
+            stored_inputs,
+            future_inputs,
+            policy=policy,
+            fetcher=fetcher,
+        )
+        all_measurements.extend(attempt_measurements)
+        if attempt.attempt_id == resolved_run.successful_attempt_id:
+            successful_stages = verified_stages
+            successful_inputs = attempt_inputs
+
+    if resolved_run.status == "succeeded":
+        estimator_stage = successful_stages.get(plan.run.estimator.stage_id)
+        if estimator_stage is None:
+            raise VerificationError("successful run has no estimator-producing stage")
+        if plan.run.estimator.artifact_name not in estimator_stage.artifacts:
+            raise VerificationError("successful run has no selected estimator artifact")
+
+    reuse = _verify_reused_stages(
+        result=resolved_run,
+        plan=plan,
+        attempts=attempts,
+        stages=successful_stages,
+        inputs=successful_inputs,
+        policy=policy,
+        fetcher=fetcher,
+        ancestors=ancestors,
+    )
+
+    return VerifiedRunResult(
+        result=resolved_run,
+        plan=plan,
+        attempts=attempts,
+        resolved_stages=successful_stages,
+        measurements=tuple(all_measurements),
+        inputs=successful_inputs,
+        reuse=reuse,
+    )

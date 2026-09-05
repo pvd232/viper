@@ -139,6 +139,8 @@ from viper.verification.models import (
     VerifiedArtifact,
     VerifiedSnapshotFile,
 )
+from viper.reuse import ExecutedStageCompletion
+
 
 GIT_COMMIT = "a" * 40
 PLAN_COMMIT = "b" * 40
@@ -1133,12 +1135,14 @@ class RunAndStageVerificationTests(unittest.TestCase):
         )
         resolved = ResolvedTrainSpec(
             spec=spec,
-            source=resolved_git(source_raw, str(spec.implementation.path)),
-            environment=resolved_environment(lock_raw),
-            execution_context=execution_context(),
-            startup=startup_receipt(run),
-            invocation=invocation,
-            command=("python", "-m", "viper._workers.stages"),
+            completion=ExecutedStageCompletion(
+                source=resolved_git(source_raw, str(spec.implementation.path)),
+                env=resolved_environment(lock_raw),
+                execution_context=execution_context(),
+                startup=startup_receipt(run),
+                invocation=invocation,
+                command=("python", "-m", "viper._workers.stages"),
+            ),
             inputs={
                 "training_dataset": ResolvedStoredInputRef(
                     kind="stored",
@@ -1209,10 +1213,16 @@ class RunAndStageVerificationTests(unittest.TestCase):
         changed_controls = run.reproducibility.model_copy(
             update={"precision": changed_precision}
         )
+        completion = resolved.completion
+        assert isinstance(completion, ExecutedStageCompletion)
         changed_resolved = resolved.model_copy(
             update={
-                "startup": resolved.startup.model_copy(
-                    update={"reproducibility": changed_controls}
+                "completion": completion.model_copy(
+                    update={
+                        "startup": completion.startup.model_copy(
+                            update={"reproducibility": changed_controls}
+                        )
+                    }
                 )
             }
         )
@@ -2060,15 +2070,17 @@ class FutureInputVerificationTests(unittest.TestCase):
         )
         resolved_build = ResolvedBuildSpec(
             spec=build,
-            source=resolved_git(
-                build_source_raw,
-                str(build.implementation.path),
+            completion=ExecutedStageCompletion(
+                source=resolved_git(
+                    build_source_raw,
+                    str(build.implementation.path),
+                ),
+                env=resolved_environment(lock_raw),
+                execution_context=execution_context(),
+                startup=startup_receipt(run),
+                invocation=build_invocation,
+                command=("python", "-m", "viper._workers.stages"),
             ),
-            environment=resolved_environment(lock_raw),
-            execution_context=execution_context(),
-            startup=startup_receipt(run),
-            invocation=build_invocation,
-            command=("python", "-m", "viper._workers.stages"),
             inputs={
                 "depmap": ResolvedStoredInputRef(
                     kind="stored",
@@ -2091,15 +2103,17 @@ class FutureInputVerificationTests(unittest.TestCase):
         )
         resolved_train = ResolvedTrainSpec(
             spec=train,
-            source=resolved_git(
-                train_source_raw,
-                str(train.implementation.path),
+            completion=ExecutedStageCompletion(
+                source=resolved_git(
+                    train_source_raw,
+                    str(train.implementation.path),
+                ),
+                env=resolved_environment(lock_raw),
+                execution_context=execution_context(),
+                startup=startup_receipt(run),
+                invocation=train_invocation,
+                command=("python", "-m", "viper._workers.stages"),
             ),
-            environment=resolved_environment(lock_raw),
-            execution_context=execution_context(),
-            startup=startup_receipt(run),
-            invocation=train_invocation,
-            command=("python", "-m", "viper._workers.stages"),
             inputs={
                 "prior": ResolvedFutureInputRef(producer=producer_stage),
             },

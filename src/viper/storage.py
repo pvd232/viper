@@ -87,6 +87,18 @@ class SnapshotPublisher(Protocol):
         """Publish one resolved stage document and its existing member files."""
         ...
 
+    def publish_reuse(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        source_snapshot: StageResultSnapshot,
+        files: Mapping[RepoRelPath, SnapshotFileRef],
+        source_bytes: Mapping[RepoRelPath, bytes],
+    ) -> StageResultSnapshot:
+        """Publish a target stage document and remapped source snapshot files."""
+        ...
+
 
 def content_revision(files: Mapping[RepoRelPath, bytes]) -> str:
     """Derive one revision identity from ordered paths and file identities."""
@@ -229,6 +241,25 @@ class LocalSnapshotPublisher:
             payload[path] = _read_publication_source(self.root, source)
         return self.store.snapshot(payload)
 
+    def publish_reuse(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        source_snapshot: StageResultSnapshot,
+        files: Mapping[RepoRelPath, SnapshotFileRef],
+        source_bytes: Mapping[RepoRelPath, bytes],
+    ) -> LocalStageResultSnapshotRef:
+        """Publish verified local snapshot files under their target paths."""
+        payload: dict[RepoRelPath, bytes] = {resolved_stage_path: resolved_stage}
+        for target_path, source_file in files.items():
+            if target_path == resolved_stage_path:
+                raise StorageConfigurationError("reused file replaces resolved stage")
+            raw = source_bytes[target_path]
+            _verify_reuse_source(source_file, raw)
+            payload[target_path] = raw
+        return self.store.snapshot(payload)
+
 
 def _parse_storage_destination(value: object) -> StorageDestination:
     """Parse one public storage destination string into its protocol model."""
@@ -298,6 +329,17 @@ class ViperCloudClient(Protocol):
         """Upload one file without exposing the revision."""
         ...
 
+    def copy(
+        self,
+        *,
+        source: ViperCloudFileRef,
+        target: ViperCloudFileRef,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Copy one sealed payload to a path in an unsealed revision."""
+        ...
+
     def seal(
         self,
         *,
@@ -355,6 +397,60 @@ def _source_file(
     )
 
 
+def _verify_reuse_source(source: SnapshotFileRef, raw: bytes) -> None:
+    """Reject source bytes that do not match their snapshot identity."""
+    if len(raw) != source.bytes or hashlib.sha256(raw).hexdigest() != source.sha256:
+        raise StorageConfigurationError("reused snapshot file identity changed")
+
+def _cloud_upload_file(
+    *,
+    destination: ViperCloudDestination,
+    client: ViperCloudClient,
+    revision: SHA256,
+    path: RepoRelPath,
+    source: PublicationSource,
+    identity: SnapshotFileRef,
+    attempts: int,
+) -> None:
+    """Upload one cloud file with the configured retry limit."""
+    for attempt in range(attempts):
+        try:
+            client.upload(
+                owner=destination.owner,
+                project=destination.project,
+                revision=revision,
+                path=path,
+                source=source,
+                sha256=identity.sha256,
+                bytes=identity.bytes,
+            )
+            return
+        except Exception as error:
+            if attempt + 1 == attempts:
+                raise StorageConfigurationError("storage_upload_failed") from error
+
+def _cloud_seal(
+    *,
+    destination: ViperCloudDestination,
+    client: ViperCloudClient,
+    revision: SHA256,
+    files: tuple[SnapshotFileRef, ...],
+    attempts: int,
+) -> None:
+    """Seal one cloud revision with the configured retry limit."""
+    for attempt in range(attempts):
+        try:
+            client.seal(
+                owner=destination.owner,
+                project=destination.project,
+                revision=revision,
+                files=files,
+            )
+            return
+        except Exception as error:
+            if attempt + 1 == attempts:
+                raise StorageConfigurationError("storage_seal_failed") from error
+
 def _cloud_publish(
     *,
     root: Path,
@@ -373,35 +469,23 @@ def _cloud_publish(
     identities = {file.path: file for file in files}
 
     for path, source in sorted(sources.items()):
-        identity = identities[path]
-        for attempt in range(attempts):
-            try:
-                client.upload(
-                    owner=destination.owner,
-                    project=destination.project,
-                    revision=revision,
-                    path=path,
-                    source=source,
-                    sha256=identity.sha256,
-                    bytes=identity.bytes,
-                )
-                break
-            except Exception as error:
-                if attempt + 1 == attempts:
-                    raise StorageConfigurationError("storage_upload_failed") from error
+        _cloud_upload_file(
+            destination=destination,
+            client=client,
+            revision=revision,
+            path=path,
+            source=source,
+            identity=identities[path],
+            attempts=attempts,
+        )
 
-    for attempt in range(attempts):
-        try:
-            client.seal(
-                owner=destination.owner,
-                project=destination.project,
-                revision=revision,
-                files=files,
-            )
-            break
-        except Exception as error:
-            if attempt + 1 == attempts:
-                raise StorageConfigurationError("storage_seal_failed") from error
+    _cloud_seal(
+        destination=destination,
+        client=client,
+        revision=revision,
+        files=files,
+        attempts=attempts,
+    )
     return revision, files
 
 
@@ -439,6 +523,110 @@ class ViperCloudSnapshotPublisher:
             destination=self.destination,
             client=self.client,
             sources=sources,
+            attempts=self.attempts,
+        )
+        return ViperCloudStageResultSnapshotRef(
+            owner=self.destination.owner,
+            project=self.destination.project,
+            revision=revision,
+        )
+
+    def publish_reuse(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        source_snapshot: StageResultSnapshot,
+        files: Mapping[RepoRelPath, SnapshotFileRef],
+        source_bytes: Mapping[RepoRelPath, bytes],
+    ) -> ViperCloudStageResultSnapshotRef:
+        """Copy cloud payloads into a sealed target stage snapshot."""
+        source_files = {}
+        if isinstance(source_snapshot, ViperCloudStageResultSnapshotRef):
+            source_files = {
+                file.path: file
+                for file in self.client.list_files(
+                    owner=source_snapshot.owner,
+                    project=source_snapshot.project,
+                    revision=source_snapshot.revision,
+                )
+            }
+        resolved_file = snapshot_file(resolved_stage_path, resolved_stage)
+        target_files: list[SnapshotFileRef] = [resolved_file]
+        for target_path, source_file in sorted(files.items()):
+            if target_path == resolved_stage_path:
+                raise StorageConfigurationError("reused file replaces resolved stage")
+            target_files.append(
+                SnapshotFileRef(
+                    path=target_path,
+                    sha256=source_file.sha256,
+                    bytes=source_file.bytes,
+                )
+            )
+
+        manifest = tuple(sorted(target_files, key=lambda file: file.path))
+        revision = _manifest_revision(manifest)
+        _cloud_upload_file(
+            destination=self.destination,
+            client=self.client,
+            revision=revision,
+            path=resolved_stage_path,
+            source=resolved_stage,
+            identity=resolved_file,
+            attempts=self.attempts,
+        )
+
+        for target_path, source_file in sorted(files.items()):
+            if (
+                isinstance(source_snapshot, ViperCloudStageResultSnapshotRef)
+                and source_files.get(source_file.path) == source_file
+            ):
+                source = ViperCloudFileRef(
+                    owner=source_snapshot.owner,
+                    project=source_snapshot.project,
+                    revision=source_snapshot.revision,
+                    path=source_file.path,
+                )
+                target = ViperCloudFileRef(
+                    owner=self.destination.owner,
+                    project=self.destination.project,
+                    revision=revision,
+                    path=target_path,
+                )
+                for attempt in range(self.attempts):
+                    try:
+                        self.client.copy(
+                            source=source,
+                            target=target,
+                            sha256=source_file.sha256,
+                            bytes=source_file.bytes,
+                        )
+                        break
+                    except Exception as error:
+                        if attempt + 1 == self.attempts:
+                            raise StorageConfigurationError(
+                                "storage_copy_failed"
+                            ) from error
+                continue
+            _cloud_upload_file(
+                destination=self.destination,
+                client=self.client,
+                revision=revision,
+                path=target_path,
+                source=source_bytes[target_path],
+                identity=SnapshotFileRef(
+                    path=target_path,
+                    sha256=source_file.sha256,
+                    bytes=source_file.bytes,
+                ),
+                attempts=self.attempts,
+            )
+
+        _cloud_seal(
+            destination=self.destination,
+            client=self.client,
+            revision=revision,
+            files=manifest,
             attempts=self.attempts,
         )
         return ViperCloudStageResultSnapshotRef(

@@ -36,6 +36,8 @@ from ..verification.models import (
 )
 from .paths import run_root
 from .storage import StorageFetcher, read_resolved_file, verify_snapshot_artifact
+from ..reuse import ReusedStageCompletion
+
 
 
 def _verify_metric_worker_runtime(
@@ -130,6 +132,10 @@ def verify_recomputed_metrics(
         (stage_id, metric_id)
         for stage_id, stage in plan.stages.items()
         if stage_id in stage_refs
+        if not isinstance(
+            getattr(resolved_stages[stage_id], "completion", None),
+            ReusedStageCompletion,
+        )
         for metric_id in stage.metric_ids
         if metric_specs[metric_id].mode == "recompute"
     }
@@ -168,6 +174,11 @@ def verify_recomputed_metrics(
 
     for stage_id, stage in plan.stages.items():
         if stage_id not in stage_refs:
+            continue
+        if isinstance(
+            getattr(resolved_stages[stage_id], "completion", None),
+            ReusedStageCompletion,
+        ):
             continue
         for metric_id in stage.metric_ids:
             metric = metric_specs[metric_id]

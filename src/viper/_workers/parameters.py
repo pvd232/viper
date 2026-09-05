@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .._parameter.validation import (
     ParameterValidationContext,
+    parameter_model_path,
     validate_parameters,
 )
 from ..serialization import load_stage_spec
@@ -27,7 +28,7 @@ def main() -> int:
         raise ValueError("parameter validation requires a parameterized stage")
     reference = stage.parameter_model
     validated = validate_parameters(
-        Path.cwd() / reference.path,
+        parameter_model_path(Path.cwd(), reference),
         reference,
         stage.params,
         type(stage.params),

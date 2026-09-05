@@ -79,6 +79,8 @@ class InMemoryViperCloudClient(ViperCloudClient):
         """Configure how many seal calls fail before the revision appears."""
         self.uploads: dict[tuple[str, str, str, str], bytes] = {}
         self.sealed: dict[tuple[str, str, str], tuple[SnapshotFileRef, ...]] = {}
+        self.upload_calls: list[tuple[str, str, str, str]] = []
+        self.copy_calls: list[tuple[ViperCloudFileRef, ViperCloudFileRef]] = []
         self.rejected_seals = rejected_seals
         self.seal_calls = 0
 
@@ -98,8 +100,25 @@ class InMemoryViperCloudClient(ViperCloudClient):
         assert len(raw) == bytes
         assert hashlib.sha256(raw).hexdigest() == sha256
         key = (owner, project, revision, path)
+        self.upload_calls.append(key)
         existing = self.uploads.setdefault(key, raw)
         assert existing == raw
+
+    def copy(
+        self,
+        *,
+        source: ViperCloudFileRef,
+        target: ViperCloudFileRef,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Reuse one sealed payload under a target revision and path."""
+        assert (source.owner, source.project, source.revision) in self.sealed
+        raw = self.uploads[(source.owner, source.project, source.revision, source.path)]
+        assert len(raw) == bytes
+        assert hashlib.sha256(raw).hexdigest() == sha256
+        self.uploads[(target.owner, target.project, target.revision, target.path)] = raw
+        self.copy_calls.append((source, target))
 
     def seal(
         self,
@@ -435,3 +454,92 @@ def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
 
     assert not first_destination.exists()
     assert second_destination.read_bytes() == b"occupied"
+def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
+    """Publish verified local bytes under the target run's artifact paths."""
+    source_artifact = tmp_path / "source" / "model.bin"
+    source_artifact.parent.mkdir()
+    source_artifact.write_bytes(b"parameters")
+    publisher = LocalSnapshotPublisher(tmp_path)
+    source_snapshot = publisher.publish(
+        resolved_stage_path="runs/source/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\n",
+        files={"runs/source/artifacts/model.bin": source_artifact},
+    )
+    source_file = SnapshotFileRef(
+        path="runs/source/artifacts/model.bin",
+        sha256=hashlib.sha256(b"parameters").hexdigest(),
+        bytes=len(b"parameters"),
+    )
+
+    target_snapshot = publisher.publish_reuse(
+        resolved_stage_path="runs/target/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\ncompletion: reused\n",
+        source_snapshot=source_snapshot,
+        files={"runs/target/artifacts/model.bin": source_file},
+        source_bytes={"runs/target/artifacts/model.bin": b"parameters"},
+    )
+
+    store = LocalArtifactStore(tmp_path)
+    assert store.list_snapshot_files(target_snapshot) == (
+        "runs/target/artifacts/model.bin",
+        "runs/target/stages/train/resolved.yaml",
+    )
+    assert (
+        store.fetch(
+            LocalFileRef(
+                commit=target_snapshot.commit,
+                path="runs/target/artifacts/model.bin",
+            )
+        )
+        == b"parameters"
+    )
+
+def test_cloud_snapshot_reuse_copies_existing_payload(tmp_path: Path) -> None:
+    """Copy a sealed cloud payload and upload only the target stage document."""
+    artifact = tmp_path / "source" / "model.bin"
+    artifact.parent.mkdir()
+    artifact.write_bytes(b"parameters")
+    destination = ViperCloudDestination(owner="machina", project="weekend_models")
+    client = InMemoryViperCloudClient()
+    publisher = ViperCloudSnapshotPublisher(tmp_path, destination, client)
+    source_snapshot = publisher.publish(
+        resolved_stage_path="runs/source/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\n",
+        files={"runs/source/artifacts/model.bin": artifact},
+    )
+    source_files = client.list_files(
+        owner=source_snapshot.owner,
+        project=source_snapshot.project,
+        revision=source_snapshot.revision,
+    )
+    source_file = next(
+        file for file in source_files if file.path.endswith("artifacts/model.bin")
+    )
+    source_uploads = len(client.upload_calls)
+
+    target_snapshot = publisher.publish_reuse(
+        resolved_stage_path="runs/target/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\ncompletion: reused\n",
+        source_snapshot=source_snapshot,
+        files={"runs/target/artifacts/model.bin": source_file},
+        source_bytes={"runs/target/artifacts/model.bin": b"parameters"},
+    )
+
+    assert len(client.upload_calls) == source_uploads + 1
+    assert len(client.copy_calls) == 1
+    source, target = client.copy_calls[0]
+    assert source.path == "runs/source/artifacts/model.bin"
+    assert target.path == "runs/target/artifacts/model.bin"
+    assert (
+        client.uploads[(target.owner, target.project, target.revision, target.path)]
+        is client.uploads[(source.owner, source.project, source.revision, source.path)]
+    )
+    assert (
+        client.fetch(
+            owner=target_snapshot.owner,
+            project=target_snapshot.project,
+            revision=target_snapshot.revision,
+            path=target.path,
+        )
+        == b"parameters"
+    )

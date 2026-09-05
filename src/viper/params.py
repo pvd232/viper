@@ -14,7 +14,8 @@ class ParameterSet(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=True)
 
     __pydantic_extra__: dict[str, JsonValue] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
-        init=False
+        init=False,
+        exclude=True,
     )
     schema_version: Literal[1] = 1
 

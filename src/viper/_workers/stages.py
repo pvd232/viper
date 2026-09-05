@@ -228,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         execution_context = observe_execution(effective_environment)
 
         params = instantiate_parameters(
-            root / stage.parameter_model.path,
+            parameter_model_path(root, stage.parameter_model),
             stage.parameter_model,
             stage.params,
             type(stage.params),
@@ -244,11 +244,9 @@ def main(argv: list[str] | None = None) -> int:
         if definition.parameter_model.__name__ != stage.parameter_model.symbol:
             raise ValueError("startup.callable: decorator parameter class differs")
         parameter_source = getattr(function, "__viper_parameter_source__", None)
-        if (
-            parameter_source is None
-            or Path(parameter_source).resolve()
-            != (root / stage.parameter_model.path).resolve()
-        ):
+        if parameter_source is None or Path(
+            parameter_source
+        ).resolve() != parameter_model_path(root, stage.parameter_model):
             raise ValueError("startup.callable: parameter model source differs")
 
         context = Context(

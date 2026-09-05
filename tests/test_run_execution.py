@@ -37,8 +37,18 @@ from viper.artifacts import (
     ArtifactLoaderRef,
     SingleFileArtifactSpec,
     StageArtifactRef,
+    artifact,
 )
-from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
+from viper.authoring import (
+    RunPlanDraft,
+    StageDraft,
+    experiment,
+    freeze_run_plan,
+    plan,
+    replicate,
+    stage,
+    variant,
+)
 from viper.execution import _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
@@ -72,6 +82,7 @@ from viper.metrics import (
     MetricDependency,
     MetricImplementationRef,
     MetricSpec,
+    measure,
 )
 from viper.parameters import ParameterModelRef
 from viper.references import (
@@ -85,6 +96,7 @@ from viper.runs import (
 )
 from viper.runtime import (
     CUDAComputeSpec,
+    LocalEnvSpec,
     observe_gce_provisioning,
 )
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
@@ -101,6 +113,23 @@ from viper.storage import LocalArtifactStore
 from viper.verification import verify_run_result
 from viper.verification.models import VerificationError, VerificationPolicy
 from viper.workspace import AttemptWorkspace, captured_input_path
+import importlib.util
+
+import viper.params as current_params
+
+from viper.authoring import input as external_input
+
+from viper.catalog import Catalog, CatalogRunSource
+
+from viper.metrics import (
+    min as minimize,
+)
+
+from viper.reuse import (
+    ReusedStageCompletion,
+    catalog_reuse_candidates,
+)
+
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
@@ -1082,3 +1111,164 @@ def test_run_many_retains_one_result_per_plan(
         "failed",
         "skipped",
     )
+def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
+    """Reuse verified output without invoking the project stage a second time."""
+    root = tmp_path / "project"
+    root.mkdir()
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
+
+    source = root / "project/plan.py"
+    source.parent.mkdir()
+    source.write_text(
+        "from pathlib import Path\n"
+        "from viper import params\n"
+        "from viper.metrics import metric\n"
+        "from viper.stages import Context, train\n\n"
+        "@metric(metric_id='loss', mode='live')\n"
+        "def loss(context, values):\n"
+        "    return sum(values) / len(values)\n\n"
+        "@train(params=params.Train)\n"
+        "def train_model(context: Context[params.Train]):\n"
+        "    marker = Path('worker_calls.txt')\n"
+        "    marker.write_text(marker.read_text() + '1\\n' if marker.exists() "
+        "else '1\\n')\n"
+        "    model = context.artifacts['model']\n"
+        "    model.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    model.write_bytes(context.inputs['dataset'].read_bytes())\n"
+        "    context.artifacts['state'].write_bytes(b'state')\n"
+        "    context.metrics['loss'].record([1.0], epoch=0, step=1)\n\n"
+        "def load(path):\n"
+        "    return path.read_bytes()\n\n"
+        "def load_state(path):\n"
+        "    return path.read_bytes()\n",
+        encoding="utf-8",
+    )
+    dataset = root / "inputs/raw/dataset.bin"
+    dataset.parent.mkdir(parents=True)
+    dataset.write_bytes(b"dataset")
+    (root / "environment.yml").write_text("name: viper-test\n", encoding="utf-8")
+    (root / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "source")
+    source_commit = run_git(root, "rev-parse", "HEAD")
+
+    module_spec = importlib.util.spec_from_file_location("project.plan", source)
+    assert module_spec is not None and module_spec.loader is not None
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    loss = measure(module.loss, params=current_params.Metric())
+    trained = stage(
+        module.train_model,
+        params=current_params.Train(),
+        inputs={
+            "dataset": external_input(
+                path="inputs/raw/dataset.bin",
+                data_role="training",
+            )
+        },
+        artifacts={
+            "model": artifact(
+                path="artifacts/models/toy/model.bin",
+                loader=module.load,
+                data_role="training",
+            ),
+            "state": artifact(
+                path="artifacts/models/toy/state.bin",
+                loader=module.load_state,
+                data_role="training",
+            ),
+        },
+        metrics=(loss,),
+        objective=minimize(loss),
+        reuse="verified",
+    )
+    authored = experiment(
+        experiment_id="reuse",
+        variants={
+            "baseline": variant(
+                levels={},
+                stages={"train": trained},
+                estimator=trained.artifacts["model"],
+            )
+        },
+        replicates={"r1": replicate(seed=7)},
+    )
+    source_ref = GitSource.model_validate(
+        {"repository": REPOSITORY, "commit": source_commit}
+    )
+    environment = LocalEnvSpec(
+        lockfile=GitFileRef(
+            repository=source_ref.repository,
+            commit=source_commit,
+            path="environment.yml",
+        ),
+        python_env=python_environment(),
+    )
+
+    first_plan = plan(
+        experiment=authored,
+        variant="baseline",
+        replicate="r1",
+        source=source_ref,
+        env=environment,
+        reproducibility=reproducibility(),
+    )
+    first_frozen = freeze_run_plan(root, first_plan)
+    first = execute_attempt(
+        root,
+        first_frozen.files[-1],
+        plan=first_frozen.reference,
+    )
+    assert isinstance(first, RunResult)
+    store = LocalArtifactStore(root)
+    fetcher = RunFetcher(root, store, REPOSITORY)
+    policy = VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY}))
+    first_verified = verify_run_result(
+        first.resolved_run,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    Catalog(root).refresh(
+        runs=(
+            CatalogRunSource(
+                reference=first.resolved_run_ref,
+                verified=first_verified,
+                reuse_candidates=catalog_reuse_candidates(
+                    first.resolved_run_ref,
+                    first_verified,
+                ),
+            ),
+        )
+    )
+
+    second_plan = plan(
+        experiment=authored,
+        variant="baseline",
+        replicate="r1",
+        source=source_ref,
+        env=environment,
+        reproducibility=reproducibility(),
+    )
+    second_frozen = freeze_run_plan(root, second_plan)
+    second = execute_attempt(
+        root,
+        second_frozen.files[-1],
+        plan=second_frozen.reference,
+    )
+    assert isinstance(second, RunResult)
+    second_verified = verify_run_result(
+        second.resolved_run,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    reused_train = second_verified.resolved_stages["train"]
+    assert isinstance(reused_train, ResolvedTrainSpec)
+    completion = reused_train.completion
+
+    assert isinstance(completion, ReusedStageCompletion)
+    assert second_verified.attempts[-1].invocations == ()
+    assert (root / "worker_calls.txt").read_text(encoding="utf-8") == "1\n"
+    assert tuple(second_verified.reuse) == ("train",)

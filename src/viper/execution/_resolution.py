@@ -32,6 +32,8 @@ from ..stages import (
 from ._source import RunFetcher, resolve_git_file
 from ._stage import StageProcessResult
 from .errors import RunError
+from ..reuse import ExecutedStageCompletion
+
 
 
 def resolve_env(
@@ -101,12 +103,14 @@ def resolve_stage(
     result = process
     common = {
         "spec": stage,
-        "source": source,
-        "env": env,
-        "execution_context": result.execution_context,
-        "startup": result.startup,
-        "invocation": invocation,
-        "command": result.command,
+        "completion": ExecutedStageCompletion(
+            source=source,
+            env=env,
+            execution_context=result.execution_context,
+            startup=result.startup,
+            invocation=invocation,
+            command=result.command,
+        ),
         "artifacts": result.artifacts,
         "completed_at": completed_at,
     }

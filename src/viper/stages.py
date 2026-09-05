@@ -43,19 +43,17 @@ from .ids import EvalId, HumanId, InputName, MetricId, RunId, StageId
 from .inputs import InputRef, ResolvedInputRef, pointer_path
 from .metrics import MetricHandle, MetricObjectiveSpec
 from .params import ParameterModelRef
-from .references import (
-    ResolvedGitFileRef,
-    ResolvedStageInvocationRef,
-)
+
 from .runtime import (
     EnvSpec,
     ExecutionContext,
     GCEEnvSpec,
     GCEHostContext,
-    ProcessStartupReceipt,
     ResolvedEnv,
     ResolvedGCEEnv,
 )
+from .reuse import StageCompletion, StageReuseMode
+
 
 ParamsT = TypeVar("ParamsT", bound=params.ParameterSet)
 
@@ -187,6 +185,7 @@ class ParameterizedSpec(BaseSpec):
 
     implementation: StageImplementationRef
     parameter_model: ParameterModelRef
+    reuse: StageReuseMode = "never"
 
     @model_validator(mode="after")
     def validate_implementation_path(self) -> ParameterizedSpec:
@@ -384,8 +383,6 @@ class ResolvedBaseSpec(ProtocolModel):
     kind: str
 
     spec: BaseSpec
-    env: ResolvedEnv
-    execution_context: ExecutionContext
     artifacts: dict[ArtifactName, ResolvedArtifact] = Field(min_length=1)
     completed_at: AwareDatetime
 
@@ -424,6 +421,18 @@ class ResolvedBaseSpec(ProtocolModel):
                             "its declared bundle root plus relative path"
                         )
 
+        return self
+
+
+class ResolvedExecutedSpec(ResolvedBaseSpec):
+    """Record environment evidence created by a runner-owned execution."""
+
+    env: ResolvedEnv
+    execution_context: ExecutionContext
+
+    @model_validator(mode="after")
+    def validate_execution_environment(self) -> ResolvedExecutedSpec:
+        """Match the resolved environment to its request and observed host."""
         requested_environment = self.spec.env
         if requested_environment is not None:
             if self.env.kind != requested_environment.kind:
@@ -495,8 +504,7 @@ class ResolvedBaseSpec(ProtocolModel):
 
         return self
 
-
-class ResolvedDownloadSpec(ResolvedBaseSpec):
+class ResolvedDownloadSpec(ResolvedExecutedSpec):
     """Bind every frozen HTTP input to its completed retrieval evidence."""
 
     kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -531,18 +539,40 @@ class ResolvedDownloadSpec(ResolvedBaseSpec):
 
 
 class ResolvedParameterizedSpec(ResolvedBaseSpec):
-    """Record evidence produced by one project-owned stage process."""
+    """Record an executed or verified-reused project stage."""
 
     spec: ParameterizedSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-    source: ResolvedGitFileRef
-    startup: ProcessStartupReceipt
-    invocation: ResolvedStageInvocationRef
-    command: tuple[str, ...] = Field(min_length=1)
+    completion: StageCompletion
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_execution(cls, value: object) -> object:
+        """Read existing stage documents into the explicit completion union."""
+        if not isinstance(value, dict) or "completion" in value:
+            return value
+        legacy = {
+            "source",
+            "env",
+            "execution_context",
+            "startup",
+            "invocation",
+            "command",
+        }
+        if not legacy <= set(value):
+            return value
+        payload = dict(value)
+        payload["completion"] = {
+            "kind": "executed",
+            **{name: payload.pop(name) for name in legacy},
+        }
+        return payload
 
     @model_validator(mode="after")
     def validate_project_invocation(self) -> ResolvedParameterizedSpec:
         """Match the resolved source to the selected project callable."""
-        if self.source.stored_at.path != self.spec.implementation.path:
+        if self.completion.kind == "reused":
+            return self
+        if self.completion.source.stored_at.path != self.spec.implementation.path:
             raise ValueError(
                 "resolved source entrypoint must match the stage implementation path"
             )
@@ -798,7 +828,12 @@ def validate_stage_definition(
     source_file = getattr(function, "__viper_parameter_source__", None)
     if (
         source_file is None
-        or Path(source_file).resolve() != (root / stage.parameter_model.path).resolve()
+        or Path(source_file).resolve()
+        != (
+            root / stage.parameter_model.path
+            if stage.parameter_model.owner == "project"
+            else Path(params.__file__).resolve().parent / stage.parameter_model.path
+        ).resolve()
     ):
         raise StageDefinitionError(
             "stage decorator parameter class comes from a different source file"

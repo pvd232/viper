@@ -66,7 +66,12 @@ from ..stages import (
     StageContextBinding,
     StageInvocationReceipt,
 )
-from ..verification.models import VerificationError, VerificationPolicy
+from ..verification.models import (
+    VerificationError,
+    VerificationPolicy,
+    VerifiedInput,
+    VerifiedSnapshotFile,
+)
 from .paths import (
     resolved_stage_spec_path,
     run_root,
@@ -81,6 +86,10 @@ from .storage import (
     read_snapshot_file,
     verify_snapshot_artifact,
 )
+from ..artifacts import ResolvedSingleFileArtifact
+
+from ..reuse import ExecutedStageCompletion
+
 
 RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
 
@@ -179,6 +188,14 @@ def _verify_effective_env(
     _verify_startup_backend(stage_id, requested.compute, context.backend)
 
 
+def _executed_completion(
+    resolved: ResolvedParameterizedSpec,
+) -> ExecutedStageCompletion:
+    """Return project-process evidence or reject a reused stage on this path."""
+    if not isinstance(resolved.completion, ExecutedStageCompletion):
+        raise VerificationError("project stage did not execute")
+    return resolved.completion
+
 def _verify_stage_invocation(
     reference: ResolvedStageInvocationRef,
     *,
@@ -248,7 +265,8 @@ def _verify_stage_invocation(
             f"stage {stage_id!r} invocation timing falls outside its stage"
         )
 
-    startup = resolved_stage.startup
+    completion = _executed_completion(resolved_stage)
+    startup = completion.startup
     if startup.reproducibility != run.reproducibility:
         raise VerificationError(
             f"stage {stage_id!r} startup controls differ from the run plan"
@@ -277,7 +295,7 @@ def _verify_stage_invocation(
     _verify_startup_backend(
         stage_id,
         compute,
-        resolved_stage.execution_context.backend,
+        completion.execution_context.backend,
     )
 
     generators = startup.generators
@@ -546,38 +564,16 @@ def verify_attempt_stages(
 
     if set(stage_specs) != set(expected_stage_ids):
         raise VerificationError("loaded stage specs do not match the run stage plan")
-    resolved_parameterized_ids = tuple(
-        stage_id
-        for stage_id in resolved_stage_ids
-        if isinstance(stage_specs[stage_id], ParameterizedSpec)
-    )
     planned_parameterized_ids = tuple(
         stage_id
         for stage_id in expected_stage_ids
         if isinstance(stage_specs[stage_id], ParameterizedSpec)
     )
-    if len(attempt.invocations) < len(resolved_parameterized_ids):
-        raise VerificationError(
-            "attempt must retain an invocation receipt for every project stage"
-        )
     if len(attempt.invocations) > len(planned_parameterized_ids):
         raise VerificationError("attempt contains more invocations than planned stages")
-    if len(attempt.invocations) > len(resolved_parameterized_ids) + 1:
-        raise VerificationError(
-            "attempt contains invocations after its unresolved active stage"
-        )
-    for index, invocation in enumerate(attempt.invocations):
-        expected_path = stage_invocation_path(
-            run,
-            attempt.attempt_id,
-            planned_parameterized_ids[index],
-        )
-        if invocation.stored_at.path != expected_path:
-            raise VerificationError(
-                "attempt invocation receipts must follow planned stage order"
-            )
 
     verified_stages: dict[StageId, ResolvedBaseSpec] = {}
+    invocation_index = 0
 
     for stage_index, stage_reference in enumerate(attempt.resolved_stages):
         expected_resolved_path = resolved_stage_spec_path(
@@ -623,35 +619,53 @@ def verify_attempt_stages(
         if isinstance(stage_spec, ParameterizedSpec):
             if not isinstance(resolved_spec, ResolvedParameterizedSpec):
                 raise VerificationError("project stage omitted invocation evidence")
-            invocation_index = resolved_parameterized_ids.index(
-                stage_reference.stage_id
-            )
-            invocation_reference = attempt.invocations[invocation_index]
-            if resolved_spec.invocation != invocation_reference:
+            if resolved_spec.completion.kind == "reused":
+                invocation_reference = None
+            elif invocation_index >= len(attempt.invocations):
+                raise VerificationError(
+                    "executed project stage omitted its invocation receipt"
+                )
+            else:
+                invocation_reference = attempt.invocations[invocation_index]
+                invocation_index += 1
+            if invocation_reference is not None and (
+                _executed_completion(resolved_spec).invocation != invocation_reference
+            ):
                 raise VerificationError(
                     f"stage {stage_reference.stage_id!r} invocation reference differs "
                     "from its attempt"
                 )
-            _verify_stage_invocation(
-                invocation_reference,
-                attempt=attempt,
-                run=run,
-                stage_id=stage_reference.stage_id,
-                stage=cast(ParameterizedStageSpec, stage_spec),
-                stage_specs=stage_specs,
-                resolved_stage=resolved_spec,
-                fetcher=fetcher,
-            )
-
-            source_location = resolved_spec.source.stored_at
-            if (
-                source_location.repository != run.source.repository
-                or source_location.commit != run.source.commit
-            ):
-                raise VerificationError(
-                    f"stage {stage_reference.stage_id!r} source does not match the "
-                    "run source snapshot"
+            if invocation_reference is not None:
+                expected_path = stage_invocation_path(
+                    run,
+                    attempt.attempt_id,
+                    stage_reference.stage_id,
                 )
+                if invocation_reference.stored_at.path != expected_path:
+                    raise VerificationError(
+                        "attempt invocation receipt does not match its executed stage"
+                    )
+                _verify_stage_invocation(
+                    invocation_reference,
+                    attempt=attempt,
+                    run=run,
+                    stage_id=stage_reference.stage_id,
+                    stage=cast(ParameterizedStageSpec, stage_spec),
+                    stage_specs=stage_specs,
+                    resolved_stage=resolved_spec,
+                    fetcher=fetcher,
+                )
+
+                completion = _executed_completion(resolved_spec)
+                source_location = completion.source.stored_at
+                if (
+                    source_location.repository != run.source.repository
+                    or source_location.commit != run.source.commit
+                ):
+                    raise VerificationError(
+                        f"stage {stage_reference.stage_id!r} source does not match the "
+                        "run source snapshot"
+                    )
 
         if not (
             attempt.started_at < resolved_spec.completed_at <= attempt.completed_at
@@ -681,26 +695,41 @@ def verify_attempt_stages(
                     "preceding stage"
                 )
 
-        if isinstance(resolved_spec, ResolvedParameterizedSpec):
-            read_resolved_file(resolved_spec.source, fetcher=fetcher)
-        read_resolved_file(resolved_spec.env.lockfile, fetcher=fetcher)
+        if isinstance(resolved_spec, ResolvedDownloadSpec):
+            resolved_environment = resolved_spec.env
+            execution_context = resolved_spec.execution_context
+        elif isinstance(resolved_spec, ResolvedParameterizedSpec):
+            if resolved_spec.completion.kind == "reused":
+                resolved_environment = None
+                execution_context = None
+            else:
+                completion = _executed_completion(resolved_spec)
+                read_resolved_file(completion.source, fetcher=fetcher)
+                resolved_environment = completion.env
+                execution_context = completion.execution_context
+        else:
+            resolved_environment = None
+            execution_context = None
 
-        requested_environment = stage_spec.env or run.env
-        resolved_environment = resolved_spec.env
-        _verify_effective_env(
-            stage_reference.stage_id,
-            requested_environment,
-            resolved_environment,
-            resolved_spec.execution_context,
-        )
+        if resolved_environment is not None and execution_context is not None:
+            read_resolved_file(resolved_environment.lockfile, fetcher=fetcher)
+            _verify_effective_env(
+                stage_reference.stage_id,
+                stage_spec.env or run.env,
+                resolved_environment,
+                execution_context,
+            )
 
-        if isinstance(resolved_spec, ResolvedParameterizedSpec):
+        if (
+            isinstance(resolved_spec, ResolvedParameterizedSpec)
+            and resolved_spec.completion.kind == "executed"
+        ):
             expected_command = (
                 "python",
                 "-m",
                 "viper._workers.stages",
             )
-            if resolved_spec.command != expected_command:
+            if resolved_spec.completion.command != expected_command:
                 raise VerificationError(
                     f"stage {stage_reference.stage_id!r} command does not match "
                     "the run plan"
@@ -725,13 +754,18 @@ def verify_attempt_stages(
 
         verified_stages[stage_reference.stage_id] = resolved_spec
 
-    if len(attempt.invocations) == len(resolved_parameterized_ids) + 1:
+    remaining_invocations = len(attempt.invocations) - invocation_index
+    if require_complete and remaining_invocations:
+        raise VerificationError("successful attempt contains an unused invocation")
+    if remaining_invocations > 1:
+        raise VerificationError("attempt contains invocations after its active stage")
+    if remaining_invocations == 1:
         stage_id = expected_stage_ids[len(attempt.resolved_stages)]
         stage_spec = stage_specs[stage_id]
         if not isinstance(stage_spec, ParameterizedSpec):
             raise VerificationError("unresolved stage invocation is not parameterized")
         _verify_unresolved_stage_invocation(
-            attempt.invocations[-1],
+            attempt.invocations[invocation_index],
             attempt=attempt,
             run=run,
             stage_id=stage_id,
@@ -935,8 +969,9 @@ def verify_external_inputs(
     snapshot: StageResultSnapshot,
     *,
     fetcher: StorageFetcher | None,
-) -> None:
-    """Verify each local input captured in one completed stage snapshot."""
+) -> dict[InputName, VerifiedInput]:
+    """Verify and return each local input captured by one completed stage."""
+    verified: dict[InputName, VerifiedInput] = {}
     for input_name, resolved_input in resolved.inputs.items():
         if not isinstance(resolved_input, ResolvedExternalInputRef):
             continue
@@ -962,8 +997,20 @@ def verify_external_inputs(
         if resolved_input.file.path != expected_path:
             raise VerificationError("input.local.identity: path differs")
         try:
-            read_snapshot_file(snapshot, resolved_input.file, fetcher=fetcher)
+            content = read_snapshot_file(snapshot, resolved_input.file, fetcher=fetcher)
         except VerificationError as exc:
             raise VerificationError(
                 f"input.local.identity: captured input {input_name!r} differs"
             ) from exc
+        verified[input_name] = VerifiedInput(
+            path=planned_input.source.path,
+            data_role=planned_input.data_role,
+            artifact=ResolvedSingleFileArtifact(file=resolved_input.file),
+            files=(
+                VerifiedSnapshotFile(
+                    reference=resolved_input.file,
+                    content=content,
+                ),
+            ),
+        )
+    return verified

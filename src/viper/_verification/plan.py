@@ -47,6 +47,10 @@ from .storage import (
     read_resolved_file,
     verify_resolved_file_bytes,
 )
+from pathlib import Path
+
+from .. import params
+
 
 SPEC_ADAPTER = TypeAdapter(Spec)
 
@@ -495,9 +499,13 @@ def verify_parameter_model_references(
         if not isinstance(stage, ParameterizedSpec):
             continue
         reference = stage.parameter_model
-        location = _source_file(run, reference.path)
         try:
-            raw = retrieve(location)
+            installed_path = Path(params.__file__).resolve().parent / reference.path
+            raw = (
+                retrieve(_source_file(run, reference.path))
+                if reference.owner == "project"
+                else installed_path.read_bytes()
+            )
             verify_parameter_model_bytes(reference, raw)
             tree = ast.parse(raw, filename=reference.path)
         except (KeyError, OSError, SyntaxError, ParameterValidationError) as exc:

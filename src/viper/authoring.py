@@ -119,6 +119,8 @@ from .storage import (
     load_storage_settings,
     publish_resolved_files,
 )
+from .reuse import StageReuseMode
+
 
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 UrlValue = str | int | float | bool
@@ -228,6 +230,7 @@ class ParameterizedSpecDraft(BaseSpecDraft):
     implementation: Callable[[Context[Any]], None]
     params: params.ParameterSet
     metrics: tuple[MetricDraft[Any], ...] = ()
+    reuse: StageReuseMode = "never"
 
 
 class DownloadSpecDraft(BaseSpecDraft):
@@ -840,6 +843,7 @@ def _freeze_stage(
         ),
         "parameter_model": parameter,
         "params": draft.params,
+        "reuse": draft.reuse,
         "inputs": {
             name: _freeze_input(
                 root,
@@ -930,6 +934,7 @@ def stage(
     env: EnvSpec | None = None,
     eval_id: EvalId | None = None,
     split_inputs: tuple[InputName, ...] = (),
+    reuse: StageReuseMode = "never",
 ) -> StageDraft:
     """Build the draft class selected by one decorated project callable."""
     definition = stage_definition(implementation)
@@ -940,6 +945,7 @@ def stage(
         "artifacts": artifacts,
         "metrics": metrics,
         "env": env,
+        "reuse": reuse,
     }
     if definition.kind == "build":
         spec: StageSpecDraft = BuildSpecDraft(**values)

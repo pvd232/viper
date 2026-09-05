@@ -24,16 +24,34 @@ from viper.inspection import (
 from viper.journal import DurableJournal
 from viper.references import (
     GitFileRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
 )
 from viper.runs import (
+    ResolvedAttemptRef,
     ResolvedRun,
     RunSpec,
 )
-from viper.serialization import load_stage_spec, parse_yaml_bytes, serialize_document
+from viper.serialization import (
+    document_digest,
+    load_stage_spec,
+    parse_yaml_bytes,
+    serialize_document,
+)
 from viper.stages import DownloadSpec
 from viper.verification.models import VerifiedRunPlan, VerifiedRunResult
+from viper.reuse import (
+    ReusedStageFile,
+    StageReuseCandidate,
+    StageReuseKey,
+    StageReuseReceipt,
+    stage_reuse_key_sha256,
+)
+
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"
@@ -361,3 +379,131 @@ def test_catalog_results_retain_immutable_sources(tmp_path: Path) -> None:
         assert "another query" in str(error)
     else:
         raise AssertionError("a cursor was accepted under different filters")
+def _reuse_receipt() -> StageReuseReceipt:
+    """Build one valid reuse receipt for inspection tests."""
+    resolved_file = SnapshotFileRef(
+        path=f"{RUN_ROOT}/artifacts/datasets/toy/dataset.bin",
+        sha256="c" * 64,
+        bytes=1,
+    )
+    return StageReuseReceipt(
+        stage_id="download",
+        key=StageReuseKey(
+            stage_id="download",
+            stage_sha256="d" * 64,
+            inputs=(),
+            seed=42,
+            env_sha256="e" * 64,
+            reproducibility_sha256="f" * 64,
+            metric_sha256s=(),
+        ),
+        source_run=ResolvedRunRef(
+            sha256="1" * 64,
+            bytes=1,
+            stored_at=LocalFileRef(
+                commit="2" * 64,
+                path=f"{RUN_ROOT}/resolved.yaml",
+            ),
+        ),
+        source_attempt=ResolvedAttemptRef(
+            sha256="3" * 64,
+            bytes=1,
+            stored_at=LocalFileRef(
+                commit="4" * 64,
+                path=f"{RUN_ROOT}/attempts/1/resolved.yaml",
+            ),
+        ),
+        source_stage=ResolvedStageRef(
+            stage_id="download",
+            snapshot=LocalStageResultSnapshotRef(commit="5" * 64),
+            resolved_spec=SnapshotFileRef(
+                path=f"{RUN_ROOT}/stages/download/resolved.yaml",
+                sha256="6" * 64,
+                bytes=1,
+            ),
+        ),
+        files=(
+            ReusedStageFile(
+                artifact_name="dataset",
+                source=resolved_file,
+                target=resolved_file,
+            ),
+        ),
+        metrics=(),
+        completed_at=datetime(2026, 8, 22, tzinfo=UTC),
+    )
+
+def test_reuse_identity_appears_in_inspection_surfaces(tmp_path: Path) -> None:
+    """Expose one verified reuse receipt in lineage and run comparison."""
+    run_path = _write_plan(tmp_path, seed=42)
+    verified = _verified_result(tmp_path, run_path)
+    receipt = _reuse_receipt()
+    reuse = {receipt.stage_id: receipt}
+
+    result = lineage(verified, reuse=reuse)
+    key_sha256 = document_digest(receipt.key)
+    stage = next(node for node in result.nodes if node.node_id == "stage:download")
+    source = next(node for node in result.nodes if node.kind == "source_run")
+    assert stage.reuse_key_sha256 == key_sha256
+    assert source.node_id == f"source-run:{receipt.source_run.sha256}"
+    assert any(edge.relation == "reuses" for edge in result.edges)
+
+    comparison = compare_runs(verified, verified, right_reuse=reuse)
+    assert comparison.identical is False
+    assert all(
+        change.path == "stage_reuse" or change.path.startswith("stage_reuse.download")
+        for change in comparison.changes
+    )
+
+def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
+    """Index one successful stage by its complete canonical reuse key."""
+    root = tmp_path / "project"
+    run_path = _write_plan(root, seed=42)
+    source = _catalog_source(_verified_result(root, run_path))
+    key = StageReuseKey(
+        stage_id="download",
+        stage_sha256="a" * 64,
+        inputs=(),
+        seed=source.verified.plan.run.seed,
+        env_sha256="b" * 64,
+        reproducibility_sha256="c" * 64,
+        metric_sha256s=(),
+    )
+    candidate = StageReuseCandidate(
+        key=key,
+        source_run=source.reference,
+        source_attempt=ResolvedAttemptRef(
+            sha256="d" * 64,
+            bytes=1,
+            stored_at=LocalFileRef(commit="e" * 64, path="attempt.yaml"),
+        ),
+        attempt_id=1,
+        source_stage=ResolvedStageRef(
+            stage_id="download",
+            snapshot=LocalStageResultSnapshotRef(commit="f" * 64),
+            resolved_spec=SnapshotFileRef(
+                path="resolved.yaml",
+                sha256="0" * 64,
+                bytes=1,
+            ),
+        ),
+        completed_at=source.verified.result.completed_at,
+    )
+    catalog = Catalog(root)
+
+    catalog.refresh(runs=(source,))
+    with sqlite3.connect(catalog.path) as connection:
+        connection.execute(
+            "INSERT INTO stage_reuse_keys VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                stage_reuse_key_sha256(key),
+                "source",
+                candidate.completed_at.isoformat(),
+                RUN_ID,
+                1,
+                candidate.model_dump_json(),
+            ),
+        )
+
+    assert catalog.reuse_candidate(key) == candidate
+    assert catalog.reuse_candidate(key.model_copy(update={"seed": 43})) is None

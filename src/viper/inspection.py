@@ -9,13 +9,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from .ids import RunId
+from .ids import RunId, StageId
 from .inputs import ExternalInputRef, FutureInputRef, StoredInputRef, pointer_path
 from .journal import ATTEMPT_STATE_TRANSITIONS, AttemptState, DurableJournal
 from .runs import RunSpec
-from .serialization import load_stage_spec, parse_yaml_bytes
+from .serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from .stages import InternalSpec
 from .verification.models import VerifiedRunResult
+from collections.abc import Mapping
+
+from ._schema import SHA256
+
+from .reuse import StageReuseReceipt
+
 
 
 class InspectionError(RuntimeError):
@@ -87,9 +93,16 @@ class LineageNode(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     node_id: str
-    kind: Literal["stage", "input", "artifact", "promoted_selection"]
+    kind: Literal[
+        "stage",
+        "input",
+        "artifact",
+        "promoted_selection",
+        "source_run",
+    ]
     data_role: str | None = None
     path: str | None = None
+    reuse_key_sha256: SHA256 | None = None
 
 
 class LineageEdge(BaseModel):
@@ -99,7 +112,7 @@ class LineageEdge(BaseModel):
 
     source: str
     target: str
-    relation: Literal["produces", "selects", "consumes"]
+    relation: Literal["produces", "selects", "consumes", "reuses"]
 
 
 class RunLineage(BaseModel):
@@ -228,8 +241,12 @@ def attempt_status(journal_path: Path) -> AttemptJournalStatus:
     )
 
 
-def _verified_run_document(verified: VerifiedRunResult) -> dict[str, Any]:
+def _verified_run_document(
+    verified: VerifiedRunResult,
+    reuse: Mapping[StageId, StageReuseReceipt] | None = None,
+) -> dict[str, Any]:
     """Convert one verified terminal run into a stable comparison document."""
+    reuse = verified.reuse if reuse is None else reuse
     plan = verified.plan
     measurements = sorted(
         (measurement.model_dump(mode="json") for measurement in verified.measurements),
@@ -259,16 +276,23 @@ def _verified_run_document(verified: VerifiedRunResult) -> dict[str, Any]:
             for stage_id in sorted(verified.resolved_stages, key=str)
         },
         "measurements": measurements,
+        "stage_reuse": {
+            str(stage_id): receipt.model_dump(mode="json")
+            for stage_id, receipt in sorted(reuse.items())
+        },
     }
 
 
 def compare_runs(
     left: VerifiedRunResult,
     right: VerifiedRunResult,
+    *,
+    left_reuse: Mapping[StageId, StageReuseReceipt] | None = None,
+    right_reuse: Mapping[StageId, StageReuseReceipt] | None = None,
 ) -> RunComparison:
     """Compare every connected value in two verified terminal runs."""
-    left_values = _flatten(_verified_run_document(left))
-    right_values = _flatten(_verified_run_document(right))
+    left_values = _flatten(_verified_run_document(left, left_reuse))
+    right_values = _flatten(_verified_run_document(right, right_reuse))
     changes: list[RunChange] = []
     for path in sorted(left_values.keys() | right_values.keys()):
         left_value = left_values.get(path, _MISSING)
@@ -294,8 +318,16 @@ def compare_runs(
     )
 
 
-def lineage(verified: VerifiedRunResult) -> RunLineage:
+def lineage(
+    verified: VerifiedRunResult,
+    *,
+    reuse: Mapping[StageId, StageReuseReceipt] | None = None,
+) -> RunLineage:
     """Build a stable lineage graph from one completely verified run result."""
+    reuse = verified.reuse if reuse is None else reuse
+    planned_stage_ids = {stage.stage_id for stage in verified.plan.run.stages}
+    if set(reuse) - planned_stage_ids:
+        raise InspectionError("reuse receipt selects an absent stage")
     nodes: dict[str, LineageNode] = {}
     edges: list[LineageEdge] = []
     for stage_reference in verified.plan.run.stages:
@@ -306,7 +338,28 @@ def lineage(verified: VerifiedRunResult) -> RunLineage:
             node_id=stage_node,
             kind="stage",
             path=stage_reference.spec,
+            reuse_key_sha256=(
+                document_digest(reuse[stage_reference.stage_id].key)
+                if stage_reference.stage_id in reuse
+                else None
+            ),
         )
+
+        receipt = reuse.get(stage_reference.stage_id)
+        if receipt is not None:
+            source_node = f"source-run:{receipt.source_run.sha256}"
+            nodes[source_node] = LineageNode(
+                node_id=source_node,
+                kind="source_run",
+                path=str(receipt.source_run.stored_at.path),
+            )
+            edges.append(
+                LineageEdge(
+                    source=source_node,
+                    target=stage_node,
+                    relation="reuses",
+                )
+            )
 
         if isinstance(stage, InternalSpec):
             for input_name, input_ref in sorted(stage.inputs.items()):

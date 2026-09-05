@@ -13,6 +13,7 @@ import viper._subprocess as subprocess
 
 from ._parameter.validation import (
     ParameterValidationError,
+    parameter_model_path,
     validate_stage_parameters,
     verify_parameter_model_bytes,
 )
@@ -365,14 +366,17 @@ def preflight_plan(
             parameter_identity_valid = False
             parameter_validation_valid = False
             parameter_reference = stage.parameter_model
-            model_path = root / parameter_reference.path
+            model_path = parameter_model_path(root, parameter_reference)
             try:
                 local_raw = model_path.read_bytes()
                 verify_parameter_model_bytes(parameter_reference, local_raw)
-                parameter_identity_valid = local_raw == _git_bytes(
-                    root,
-                    run.source.commit,
-                    parameter_reference.path,
+                parameter_identity_valid = parameter_reference.owner == "viper" or (
+                    local_raw
+                    == _git_bytes(
+                        root,
+                        run.source.commit,
+                        parameter_reference.path,
+                    )
                 )
             except (
                 OSError,

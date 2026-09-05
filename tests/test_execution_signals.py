@@ -399,12 +399,13 @@ def test_live_l4_stage_records_requested_backend(
 
     train_result = verified.resolved_stages["train"]
     assert isinstance(train_result, ResolvedTrainSpec)
-    backend = train_result.execution_context.backend
+    assert train_result.completion.kind == "executed"
+    backend = train_result.completion.execution_context.backend
 
     assert result.resolved_run.status == "succeeded"
     assert verified.attempts[-1].status == "succeeded"
     assert isinstance(backend, expected_backend_type)
-    assert train_result.startup.environment["CUDA_VISIBLE_DEVICES"] == (
+    assert train_result.completion.startup.environment["CUDA_VISIBLE_DEVICES"] == (
         "" if compute.kind == "cpu" else "0"
     )
 

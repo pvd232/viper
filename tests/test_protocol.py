@@ -43,11 +43,21 @@ from viper.runs import (
     RunAttempt,
     RunSpec,
 )
-from viper.runtime import CUDABackendContext
+from viper.runtime import CUDABackendContext, ReproducibilitySpec
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 from viper.serialization import load_stage_spec
 from viper.stages import DownloadSpec, ParameterizedSpec, TrainSpec
 from viper.stages import EvalSpec as EvaluateSpec
+from viper import params as current_params
+
+from viper.reuse import (
+    ReusedStageFile,
+    ReuseFileIdentity,
+    ReuseInputIdentity,
+    build_stage_reuse_key,
+    stage_reuse_key_sha256,
+)
+
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -1017,3 +1027,69 @@ def test_python_stage_drafts_freeze_to_protocol_specs(tmp_path: Path) -> None:
     """Freeze one Python stage mapping without reading authored stage YAML."""
     assert "stages" in RunPlanDraft.model_fields
     assert "spec_source" not in RunPlanDraft.model_fields
+def test_stage_reuse_models_form_valid_completion_union() -> None:
+    """Bind reuse permission, canonical inputs, and remapped file identity."""
+    payload = train_payload()
+    payload["artifacts"]["model"] = payload["artifacts"].pop(PARAMETERS)
+    payload["artifacts"]["state"] = payload["artifacts"].pop(RESUME_STATE)
+    payload["metric_ids"] = ["loss"]
+    payload["objective"] = {"metric_id": "loss", "direction": "min"}
+    stage = TrainSpec.model_validate(payload)
+    enabled = stage.model_copy(update={"reuse": "verified"})
+    selected_input = ReuseInputIdentity(
+        input_name="training_dataset",
+        data_role="training",
+        files=(
+            ReuseFileIdentity(
+                relative_path="dataset.h5ad",
+                sha256=SHA_A,
+                bytes=7,
+            ),
+        ),
+    )
+    source = b"def compute(context):\n    return 0.0\n"
+    metric = MetricSpec(
+        parameter_model=current_params.model_ref(current_params.Metric),
+        metric_id="loss",
+        implementation=MetricImplementationRef(
+            path="analysis/loss.py",
+            symbol="compute",
+            sha256=hashlib.sha256(source).hexdigest(),
+            bytes=len(source),
+        ),
+        params=current_params.Metric(),
+        mode="live",
+    )
+    env_payload = environment()
+    env_payload["python_env"] = env_payload.pop("python_environment")
+    key = build_stage_reuse_key(
+        stage_id="train",
+        stage=enabled,
+        inputs=(selected_input,),
+        seed=42,
+        env=GCEEnvironmentSpec.model_validate(env_payload),
+        reproducibility=ReproducibilitySpec.model_validate(reproducibility()),
+        metrics={metric.metric_id: metric},
+    )
+
+    assert stage.reuse == "never"
+    assert enabled.reuse == "verified"
+    assert len(stage_reuse_key_sha256(key)) == 64
+    assert key.inputs == (selected_input,)
+
+    source_file = SnapshotFileRef(path="old/model.bin", sha256=SHA_A, bytes=7)
+    target = SnapshotFileRef(path="new/model.bin", sha256=SHA_A, bytes=7)
+    assert (
+        ReusedStageFile(
+            artifact_name="model",
+            source=source_file,
+            target=target,
+        ).target
+        == target
+    )
+    with pytest.raises(ValidationError, match="digests must match"):
+        ReusedStageFile(
+            artifact_name="model",
+            source=source_file,
+            target=target.model_copy(update={"sha256": SHA_B}),
+        )
