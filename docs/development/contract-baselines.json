@@ -181,7 +181,7 @@
         "EKP-03",
         "EKP-04"
       ],
-      "sha256": "759bc519311dcfec2acf99f3b0bd88a077e76e55d474cf1d4d2d440eea7a581e"
+      "sha256": "8b552d36bb58b9c57a125200346785b046046c36ff109493791f96da3fb3fbda"
     },
     {
       "path": "docs/development/research-memory-roadmap.md",

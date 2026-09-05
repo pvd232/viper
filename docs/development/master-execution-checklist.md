@@ -1969,11 +1969,6 @@ assertions while preserving the immutable run records they cite.
 
 ## 24. Master Phase 17 — knowledge graph and agent search
 
-<!-- contract-implementation: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned owner=src/viper/knowledge.py:search -->
-<!-- contract-verification: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned test=tests/test_inspection.py:test_knowledge_retrieval_keeps_exact_indexes_authoritative -->
-<!-- contract-implementation: requirement=EKP-04 rule=knowledge.public.complete state=planned owner=src/viper/api.py:search_knowledge -->
-<!-- contract-verification: requirement=EKP-04 rule=knowledge.public.complete state=planned test=tests/test_api.py:test_knowledge_operations_match_python_cli_and_mcp -->
-
 **Depends on:** Master Phase 16.
 
 **Contracts:**
@@ -1984,108 +1979,19 @@ assertions while preserving the immutable run records they cite.
 Optional vector indexes rank nearby diagnostic patterns and journal assertions
 as derived search aids outside the evidence and duplicate-rejection rules.
 
-### 24.1 Exact graph and vector views
+### PairBlocks
 
-- [ ] Add `DiagnosticVectorView`, `JournalVectorView`, `VectorViewSpec`, and
-      `KnowledgeVector` with exact source and dimension validation.
-      <!-- phase-produces: KnowledgeVector -->
-- [ ] Add `RetrievalJudgment` after `KnowledgeVector`. Validate its query and
-      candidate vector references, shared view identity, aspect labels,
-      reviewed relevance score, and reviewer identity.
-      <!-- phase-consumes: KnowledgeVector -->
-      <!-- phase-produces: RetrievalJudgment -->
-- [ ] Extend `KnowledgeRecordKind`, `KnowledgeRecord`, `KnowledgeStore`, and
-      verifier dispatch with `KnowledgeVector`, `RetrievalJudgment`,
-      `publish_vector()`, and `publish_retrieval_judgment()`.
-      <!-- phase-consumes: KnowledgeVector, RetrievalJudgment -->
-- [ ] Add verified ontology, primitive, assignment, modulation, effect, impact,
-      diagnostic, journal, vector-view, vector, and retrieval-judgment tables
-      to catalog refresh.
-      <!-- phase-consumes: KnowledgeVector, RetrievalJudgment -->
-- [ ] Add typed exact queries for primitive labels, assignment origin and
-      review state, comparison context, metric, impact, evidence kind, and
-      graph neighbors. Run these filters before vector search.
-- [ ] Add exact retrieval-judgment filters by vector view, aspect, relevance,
-      and reviewer.
-      <!-- phase-consumes: RetrievalJudgment -->
-- [ ] Add every exact query, catalog row, page, and `KnowledgeCatalog` method
-      declared by the contract. Bind each cursor to the query and final sort
-      key.
-- [ ] Add `Catalog.knowledge` after `KnowledgeCatalog` exists.
-- [ ] Add exhaustive cosine-distance search with stable distance and immutable
-      reference ordering.
-- [ ] Add `knowledge = ["usearch>=2.26,<3"]` as an optional dependency. Use
-      USearch's HNSW implementation to build one derived index per view digest.
-- [ ] Store each index at `.viper/knowledge/<view-sha256>/hnsw.bin`. Rebuild it
-      from verified vectors after deletion or corruption.
-- [ ] Exact-rerank HNSW candidates. Use exhaustive search for small filtered
-      sets. Keep exact identity and reviewed equivalence as the only duplicate
-      rejection rules. <!-- implements: EKP-03 -->
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Use the immutable vector reference as the integer-index key through
-a deterministic side table. Rebuild both files together.
-
-**Hint 2:** A query names exactly one `(view_id, version)`. Reject mixed-view
-distance calculations.
-
-**Hint 3:** Compare fixed-fixture HNSW recall with exhaustive search. Scope the
-recorded result to that fixture and those index settings.
-
-</details>
-
-### 24.2 Python, API, CLI, and MCP
-
-- [ ] Define `knowledge` and its protocol, query, and result models in the
-      public module that owns the knowledge interface. Export only local
-      definitions from that module.
-- [ ] Add typed knowledge publication, exact search, graph traversal, and
-      similarity-search request and success models to `src/viper/api.py`.
-- [ ] Define every operation body in `src/viper/api.py` and register that local
-      function in `HANDLER_REGISTRY`.
-- [ ] Add `viper knowledge publish`, `viper knowledge search`, and
-      `viper knowledge refresh` commands with deterministic JSON output.
-- [ ] Add knowledge searches to MCP read mode. Add publication and refresh to
-      execute mode. Generate every schema from the typed operation registry.
+- [ ] Execute `P17-EKP-01` from the governing contract.
+      <!-- pair-block: P17-EKP-01 -->
+      <!-- pair-block-contract: P17-EKP-01 contract=experiment-knowledge-primitives.md -->
+      <!-- implements: EKP-03 -->
       <!-- implements: EKP-04 -->
-- [ ] Match the contract's exact read and execute tool-name lists.
-- [ ] Add one complete documentation example that publishes an ontology,
-      assigns a primitive, compares matched runs, records a journal assertion,
-      refreshes the catalog, and retrieves its complete evidence chain.
-
-### 24.3 Focused proof
-
-- [ ] Add exact vector-view, vector, retrieval-judgment, union, and JSON
-      round-trip cases to `tests/test_protocol.py`. Sever each vector source
-      and each retrieval-judgment vector reference in
-      `tests/test_verification_acceptance.py`.
-
-```bash
-python -m pytest \
-  tests/test_protocol.py \
-  tests/test_verification_acceptance.py -q
-```
-
-- [ ] Delete and rebuild exact graph and HNSW files. Cover every exact filter,
-      graph edge, view boundary, dimension error, stable ordering, exhaustive
-      fallback, and fixed-fixture recall. <!-- verifies: EKP-03 -->
-
-```bash
-python -m pytest tests/test_inspection.py -q
-```
-
-- [ ] Compare Python, typed API, CLI, and MCP schemas and ordered results.
-      Prove read mode omits publication and refresh. <!-- verifies: EKP-04 -->
-
-```bash
-python -m pytest \
-  tests/test_api.py \
-  tests/test_cli.py \
-  tests/test_public_api.py \
-  tests/test_documentation.py -q
-```
+      <!-- verifies: EKP-03 -->
+      <!-- verifies: EKP-04 -->
+      <!-- contract-implementation: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned owner=src/viper/catalog.py:KnowledgeCatalog -->
+      <!-- contract-verification: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned test=tests/test_inspection.py:test_knowledge_retrieval_keeps_exact_indexes_authoritative -->
+      <!-- contract-implementation: requirement=EKP-04 rule=knowledge.public.complete state=planned owner=src/viper/api.py:search_primitives -->
+      <!-- contract-verification: requirement=EKP-04 rule=knowledge.public.complete state=planned test=tests/test_api.py:test_knowledge_operations_match_python_cli_and_mcp -->
 
 **Commit boundary:** `Search experiment knowledge through every public surface`
 
