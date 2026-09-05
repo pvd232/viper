@@ -9,7 +9,7 @@
 | SCH-01 <!-- contract-requirement: SCH-01 phase=4 test=tests/test_system_impact.py --> | Compose dependency-ordered `ContractTarget` records into one terminal planned source tree so the existing CodeQL adapter can analyze the plan before implementation. |
 | SCH-02 <!-- contract-requirement: SCH-02 phase=4 test=tests/test_system_impact.py --> | Project explicit PairBlock dependencies, planned source dependencies, and overlapping target files into one deterministic block graph. |
 | SCH-03 <!-- contract-requirement: SCH-03 phase=4 test=tests/test_system_impact.py --> | Condense strongly connected blocks and return deterministic execution waves whose groups may run concurrently. |
-| SCH-04 <!-- contract-requirement: SCH-04 phase=4 test=tests/test_system_impact.py --> | Check changed-module imports with one baseline process and one candidate process instead of starting two processes per module. |
+| SCH-04 <!-- contract-requirement: SCH-04 phase=4 test=tests/test_system_impact.py --> | Bound preflight setup by importing changed modules in two total processes and parsing identical declaration payloads once. |
 
 ## 2. Required claim
 
@@ -191,7 +191,7 @@ evidence used to update it, not an automatic checklist mutation.
 | `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into exact raw declarations; unordered repeat writers and unowned import removals fail; raw contract parity passes before Ruff formats the candidate; Pyright, CodeQL, and PairBlock gates inspect the formatted result. |
 | `schedule.graph.closed` <!-- verifier-rule: schedule.graph.closed requirement=SCH-02 --> | Every graph endpoint is selected; explicit and planned source dependencies point prerequisite-first; blocks writing one file receive one deterministic serial order. |
 | `schedule.waves.complete` <!-- verifier-rule: schedule.waves.complete requirement=SCH-03 --> | Every selected block occurs in exactly one SCC group and one wave; every predecessor group occurs in an earlier wave. |
-| `schedule.imports.batched` <!-- verifier-rule: schedule.imports.batched requirement=SCH-04 --> | Changed modules are imported in two total subprocesses, and the first failure introduced by the candidate is reported. |
+| `schedule.imports.batched` <!-- verifier-rule: schedule.imports.batched requirement=SCH-04 --> | Changed modules use two total subprocesses, repeated source bytes share one parsed AST, and the first failure introduced by the candidate is reported. |
 
 ## 8. Propagation
 
@@ -433,17 +433,35 @@ targets = [
     "plans/codeql-analysis/replace/tools/plan/check.py:_IMPORT_RESULT_PREFIX",
     "plans/codeql-analysis/replace/tools/plan/check.py:_import_failure",
     "plans/codeql-analysis/replace/tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
+    "src/viper/_system_impact/source.py:lru_cache",
+    "src/viper/_system_impact/source.py:_contract_target_payloads",
+    "src/viper/_system_impact/source.py:declaration_payload",
+    "src/viper/_system_impact/source.py:_line_offsets",
+    "src/viper/_system_impact/source.py:_parse_python",
+    "src/viper/_system_impact/source.py:extract_declaration_bytes",
+    "tests/test_system_impact.py:source_extraction",
+    "tests/test_system_impact.py:test_source_extraction_parses_shared_payload_once",
+    "plans/codeql-analysis/replace/src/viper/_system_impact/source.py:lru_cache",
+    "plans/codeql-analysis/replace/src/viper/_system_impact/source.py:_contract_target_payloads",
+    "plans/codeql-analysis/replace/src/viper/_system_impact/source.py:declaration_payload",
+    "plans/codeql-analysis/replace/src/viper/_system_impact/source.py:_line_offsets",
+    "plans/codeql-analysis/replace/src/viper/_system_impact/source.py:_parse_python",
+    "plans/codeql-analysis/replace/src/viper/_system_impact/source.py:extract_declaration_bytes",
+    "plans/codeql-analysis/replace/tests/test_system_impact.py:source_extraction",
+    "plans/codeql-analysis/replace/tests/test_system_impact.py:test_source_extraction_parses_shared_payload_once",
 ]
 tests = [
     "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
+    "tests/test_system_impact.py:test_source_extraction_parses_shared_payload_once",
 ]
-gate = "python -m pytest tests/test_system_impact.py -k preflight_reports_changed_module_import_failure -q"
+gate = "python -m pytest tests/test_system_impact.py -k 'preflight_reports_changed_module_import_failure or source_extraction_parses_shared_payload_once' -q"
 depends_on = ["P4-SCH-03"]
 ```
 
-**Context:** Starting a fresh interpreter for every changed module made import
-preflight grow linearly with the plan size. This block imports the ordered
-module set once per tree while preserving candidate-only failure reporting.
+**Context:** Starting a fresh interpreter for every changed module and parsing
+the same contract or source file for every target made preflight grow with the
+plan size. This block shares those two setup costs while preserving exact-byte
+and candidate-only failure checks.
 
 ## 12. ContractTarget
 
@@ -2979,6 +2997,193 @@ def test_preflight_reports_changed_module_import_failure(
     assert failure["stage"] == "imports"
     assert failure["module"] == "viper.broken"
     assert "RuntimeError: broken candidate" in failure["error"]
+```
+
+**Files: `src/viper/_system_impact/source.py` and
+`plans/codeql-analysis/replace/src/viper/_system_impact/source.py`**
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=src/viper/_system_impact/source.py:lru_cache -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=plans/codeql-analysis/replace/src/viper/_system_impact/source.py:lru_cache -->
+```python contract-target
+from functools import lru_cache
+```
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=src/viper/_system_impact/source.py:_contract_target_payloads -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=plans/codeql-analysis/replace/src/viper/_system_impact/source.py:_contract_target_payloads -->
+```python contract-target
+@lru_cache(maxsize=64)
+def _contract_target_payloads(source: bytes) -> dict[tuple[int, int, str], bytes]:
+    """Index each contract-target fence once for the current file bytes."""
+    opening = b"```python contract-target\n"
+    closing = b"\n```"
+    payloads: dict[tuple[int, int, str], bytes] = {}
+    position = 0
+    while True:
+        start = source.find(opening, position)
+        if start < 0:
+            break
+        end = source.find(closing, start + len(opening))
+        if end < 0:
+            break
+        declaration_end = end + len(closing)
+        declaration = source[start:declaration_end]
+        key = (
+            source.count(b"\n", 0, start) + 1,
+            source.count(b"\n", 0, declaration_end) + 1,
+            hashlib.sha256(declaration).hexdigest(),
+        )
+        payloads[key] = source[start + len(opening) : end]
+        position = declaration_end
+    return payloads
+```
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=src/viper/_system_impact/source.py:declaration_payload -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=plans/codeql-analysis/replace/src/viper/_system_impact/source.py:declaration_payload -->
+```python contract-target
+def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
+    """Read the exact declaration owned by one ContractTarget."""
+    if target.action == "remove":
+        return None
+
+    path = root / target.declaration.path
+    try:
+        source = path.read_bytes()
+    except OSError as error:
+        raise SourceDeclarationError(
+            f"cannot read ContractTarget declaration: {target.declaration.path}"
+        ) from error
+
+    key = (
+        target.declaration.start_line,
+        target.declaration.end_line,
+        target.declaration.sha256,
+    )
+    payload = _contract_target_payloads(source).get(key)
+    if payload is None:
+        raise SourceDeclarationError(
+            "ContractTarget declaration cannot be reconstructed exactly: "
+            f"{target.block_id} {target.target.path}:{target.target.symbol}"
+        )
+    try:
+        return extract_declaration_bytes(payload, target.target.symbol)
+    except SourceDeclarationError as error:
+        raise SourceDeclarationError(
+            "ContractTarget payload does not resolve its declared symbol: "
+            f"{target.target.path}:{target.target.symbol}"
+        ) from error
+```
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=src/viper/_system_impact/source.py:_line_offsets -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=plans/codeql-analysis/replace/src/viper/_system_impact/source.py:_line_offsets -->
+```python contract-target
+@lru_cache(maxsize=256)
+def _line_offsets(source: bytes) -> tuple[tuple[bytes, ...], tuple[int, ...]]:
+    lines = tuple(source.splitlines(keepends=True))
+    offsets: list[int] = []
+    position = 0
+    for line in lines:
+        offsets.append(position)
+        position += len(line)
+    return lines, tuple(offsets)
+```
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=src/viper/_system_impact/source.py:_parse_python -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=plans/codeql-analysis/replace/src/viper/_system_impact/source.py:_parse_python -->
+```python contract-target
+@lru_cache(maxsize=256)
+def _parse_python(source: bytes) -> ast.Module:
+    """Parse identical source bytes once across target lookups."""
+    try:
+        text = source.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SourceDeclarationError("Python source is not valid UTF-8") from error
+    try:
+        return ast.parse(text, type_comments=True)
+    except SyntaxError as error:
+        raise SourceDeclarationError("Python source cannot be parsed") from error
+```
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=src/viper/_system_impact/source.py:extract_declaration_bytes -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=plans/codeql-analysis/replace/src/viper/_system_impact/source.py:extract_declaration_bytes -->
+```python contract-target
+@lru_cache(maxsize=1024)
+def extract_declaration_bytes(
+    source: bytes,
+    qualified_symbol: str,
+) -> bytes:
+    """Return one declaration exactly as encoded in UTF-8 source.
+
+    Module declarations and class members may be functions, classes,
+    assignments, annotated assignments, or import statements. The operation
+    raises ``SourceDeclarationError`` when the source or symbol cannot identify
+    one exact declaration.
+    """
+    tree = _parse_python(source)
+    node = _resolve_declaration(tree, qualified_symbol)
+    if (
+        getattr(node, "lineno", None) is None
+        or getattr(node, "col_offset", None) is None
+        or node.end_lineno is None
+        or node.end_col_offset is None
+    ):
+        raise SourceDeclarationError(
+            f"Python declaration lacks a complete source span: {qualified_symbol}"
+        )
+
+    lines, offsets = _line_offsets(source)
+    try:
+        start_line, start_column = _declaration_start(node, lines)
+        start = offsets[start_line - 1] + start_column
+        end = offsets[node.end_lineno - 1] + node.end_col_offset
+        # Keep an inline directive with the declaration it qualifies.
+        end_line = lines[node.end_lineno - 1]
+        suffix = end_line[node.end_col_offset :]
+        if suffix.lstrip().startswith(b"#"):
+            end = offsets[node.end_lineno - 1] + len(end_line.rstrip(b"\r\n"))
+    except (IndexError, ValueError) as error:
+        raise SourceDeclarationError(
+            f"Python declaration has an invalid source span: {qualified_symbol}"
+        ) from error
+
+    if start < 0 or end < start or end > len(source):
+        raise SourceDeclarationError(
+            f"Python declaration has an invalid source span: {qualified_symbol}"
+        )
+    return source[start:end]
+```
+
+**Files: `tests/test_system_impact.py` and
+`plans/codeql-analysis/replace/tests/test_system_impact.py`**
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=tests/test_system_impact.py:source_extraction -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=plans/codeql-analysis/replace/tests/test_system_impact.py:source_extraction -->
+```python contract-target
+from viper._system_impact import source as source_extraction
+```
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=tests/test_system_impact.py:test_source_extraction_parses_shared_payload_once -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=plans/codeql-analysis/replace/tests/test_system_impact.py:test_source_extraction_parses_shared_payload_once -->
+```python contract-target
+def test_source_extraction_parses_shared_payload_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse one AST when several targets share the same source bytes."""
+    payload = b"VALUE = 1\nOTHER = 2\n"
+    parse_calls = 0
+    original_parse = source_extraction.ast.parse
+
+    def counted_parse(*args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse(*args, **kwargs)
+
+    source_extraction._parse_python.cache_clear()
+    source_extraction.extract_declaration_bytes.cache_clear()
+    monkeypatch.setattr(source_extraction.ast, "parse", counted_parse)
+
+    assert source_extraction.extract_declaration_bytes(payload, "VALUE") == b"VALUE = 1"
+    assert source_extraction.extract_declaration_bytes(payload, "OTHER") == b"OTHER = 2"
+    assert parse_calls == 1
 ```
 
 ## Sources

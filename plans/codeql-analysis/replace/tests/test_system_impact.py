@@ -28,6 +28,7 @@ from viper._contract_traceability import (
     compile_contract_plan,
 )
 from viper._subprocess import run as run_subprocess
+from viper._system_impact import source as source_extraction
 from viper._system_impact.codeql import (
     CodeQLAnalysisError,
     _binding_span,
@@ -461,6 +462,28 @@ def test_preflight_reports_changed_module_import_failure(
     assert failure["stage"] == "imports"
     assert failure["module"] == "viper.broken"
     assert "RuntimeError: broken candidate" in failure["error"]
+
+
+def test_source_extraction_parses_shared_payload_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reuse one AST when several targets share the same source bytes."""
+    payload = b"VALUE = 1\nOTHER = 2\n"
+    parse_calls = 0
+    original_parse = source_extraction.ast.parse
+
+    def counted_parse(*args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse(*args, **kwargs)
+
+    source_extraction._parse_python.cache_clear()
+    source_extraction.extract_declaration_bytes.cache_clear()
+    monkeypatch.setattr(source_extraction.ast, "parse", counted_parse)
+
+    assert source_extraction.extract_declaration_bytes(payload, "VALUE") == b"VALUE = 1"
+    assert source_extraction.extract_declaration_bytes(payload, "OTHER") == b"OTHER = 2"
+    assert parse_calls == 1
 
 
 def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 from collections.abc import Iterator, Sequence
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal, TypeAlias, cast
 
@@ -87,6 +88,32 @@ def import_binding(source: bytes, symbol: str) -> ImportBinding:
     return matches[0]
 
 
+@lru_cache(maxsize=64)
+def _contract_target_payloads(source: bytes) -> dict[tuple[int, int, str], bytes]:
+    """Index each contract-target fence once for the current file bytes."""
+    opening = b"```python contract-target\n"
+    closing = b"\n```"
+    payloads: dict[tuple[int, int, str], bytes] = {}
+    position = 0
+    while True:
+        start = source.find(opening, position)
+        if start < 0:
+            break
+        end = source.find(closing, start + len(opening))
+        if end < 0:
+            break
+        declaration_end = end + len(closing)
+        declaration = source[start:declaration_end]
+        key = (
+            source.count(b"\n", 0, start) + 1,
+            source.count(b"\n", 0, declaration_end) + 1,
+            hashlib.sha256(declaration).hexdigest(),
+        )
+        payloads[key] = source[start + len(opening) : end]
+        position = declaration_end
+    return payloads
+
+
 def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
     """Read the exact declaration owned by one ContractTarget."""
     if target.action == "remove":
@@ -100,36 +127,19 @@ def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
             f"cannot read ContractTarget declaration: {target.declaration.path}"
         ) from error
 
-    opening = b"```python contract-target\n"
-    closing = b"\n```"
-    candidates: list[bytes] = []
-    position = 0
-    while True:
-        start = source.find(opening, position)
-        if start < 0:
-            break
-        end = source.find(closing, start + len(opening))
-        if end < 0:
-            break
-        declaration_end = end + len(closing)
-        declaration = source[start:declaration_end]
-        start_line = source.count(b"\n", 0, start) + 1
-        end_line = source.count(b"\n", 0, declaration_end) + 1
-        if (
-            start_line == target.declaration.start_line
-            and end_line == target.declaration.end_line
-            and hashlib.sha256(declaration).hexdigest() == target.declaration.sha256
-        ):
-            candidates.append(source[start + len(opening) : end])
-        position = declaration_end
-
-    if len(candidates) != 1:
+    key = (
+        target.declaration.start_line,
+        target.declaration.end_line,
+        target.declaration.sha256,
+    )
+    payload = _contract_target_payloads(source).get(key)
+    if payload is None:
         raise SourceDeclarationError(
             "ContractTarget declaration cannot be reconstructed exactly: "
             f"{target.block_id} {target.target.path}:{target.target.symbol}"
         )
     try:
-        return extract_declaration_bytes(candidates[0], target.target.symbol)
+        return extract_declaration_bytes(payload, target.target.symbol)
     except SourceDeclarationError as error:
         raise SourceDeclarationError(
             "ContractTarget payload does not resolve its declared symbol: "
@@ -214,6 +224,7 @@ def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
     raise AssertionError("qualified symbol resolution exhausted without a result")
 
 
+@lru_cache(maxsize=256)
 def _line_offsets(source: bytes) -> tuple[tuple[bytes, ...], tuple[int, ...]]:
     lines = tuple(source.splitlines(keepends=True))
     offsets: list[int] = []
@@ -242,6 +253,20 @@ def _declaration_start(
     return node.lineno, node.col_offset
 
 
+@lru_cache(maxsize=256)
+def _parse_python(source: bytes) -> ast.Module:
+    """Parse identical source bytes once across target lookups."""
+    try:
+        text = source.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SourceDeclarationError("Python source is not valid UTF-8") from error
+    try:
+        return ast.parse(text, type_comments=True)
+    except SyntaxError as error:
+        raise SourceDeclarationError("Python source cannot be parsed") from error
+
+
+@lru_cache(maxsize=1024)
 def extract_declaration_bytes(
     source: bytes,
     qualified_symbol: str,
@@ -253,16 +278,7 @@ def extract_declaration_bytes(
     raises ``SourceDeclarationError`` when the source or symbol cannot identify
     one exact declaration.
     """
-    try:
-        text = source.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise SourceDeclarationError("Python source is not valid UTF-8") from error
-
-    try:
-        tree = ast.parse(text, type_comments=True)
-    except SyntaxError as error:
-        raise SourceDeclarationError("Python source cannot be parsed") from error
-
+    tree = _parse_python(source)
     node = _resolve_declaration(tree, qualified_symbol)
     if (
         getattr(node, "lineno", None) is None

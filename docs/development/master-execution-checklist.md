@@ -1445,14 +1445,15 @@ parameter class and values reach the calculation in both modes.
       <!-- contract-implementation: requirement=SCH-03 rule=schedule.waves.complete state=implemented owner=src/viper/scheduling.py:schedule_blocks -->
       <!-- contract-verification: requirement=SCH-03 rule=schedule.waves.complete state=implemented test=tests/test_system_impact.py:test_schedule_blocks_returns_dependency_safe_waves -->
 
-- [x] Batch changed-module import checks into one baseline process and one
-      candidate process.
+- [x] Batch changed-module imports into two total processes and reuse one AST
+      for targets backed by identical source bytes.
       <!-- pair-block: P4-SCH-04 -->
       <!-- pair-block-contract: P4-SCH-04 contract=pair-block-scheduling.md -->
       <!-- implements: SCH-04 -->
       <!-- verifies: SCH-04 -->
       <!-- contract-implementation: requirement=SCH-04 rule=schedule.imports.batched state=implemented owner=tools/plan/check.py:_import_failure -->
       <!-- contract-verification: requirement=SCH-04 rule=schedule.imports.batched state=implemented test=tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure -->
+      <!-- contract-verification: requirement=SCH-04 rule=schedule.imports.batched state=implemented test=tests/test_system_impact.py:test_source_extraction_parses_shared_payload_once -->
 
 The [PairBlock scheduling contract](pair-block-scheduling.md) owns the complete
 code and focused gates. Its generated waves advise checklist order; a reviewed
