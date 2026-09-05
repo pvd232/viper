@@ -217,6 +217,7 @@ def _one_hop(
 
 
 def _declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
+    """Read a target's approved code from its contract."""
     try:
         return declaration_payload(root, target)
     except SourceDeclarationError as error:
@@ -225,17 +226,19 @@ def _declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
 
 def _target_is_satisfied(
     *,
-    root: Path,
+    plan_root: Path,
+    source_root: Path,
     target: ContractTarget,
     nodes: dict[tuple[str, str], SourceNode],
 ) -> bool:
+    """Compare one prior target with the inspected baseline source."""
     node = nodes.get(_target_key(target))
     if target.action == "remove":
         return node is None
-    expected = _declaration_payload(root, target)
+    expected = _declaration_payload(plan_root, target)
     assert expected is not None
     if node is not None and node.kind == "import":
-        realized = (root / target.target.path).read_bytes()
+        realized = (source_root / target.target.path).read_bytes()
         return import_binding(expected, target.target.symbol) == import_binding(
             realized,
             target.target.symbol,
@@ -245,12 +248,14 @@ def _target_is_satisfied(
 
 def _dependency_results(
     *,
-    root: Path,
+    plan_root: Path,
+    baseline_root: Path,
     traceability: ContractTraceabilityGraph,
     blocks: tuple[PairBlock, ...],
     selected: set[PairBlockId],
     baseline_nodes: dict[tuple[str, str], SourceNode],
 ) -> tuple[tuple[PairBlockId, ...], tuple[PairBlockId, ...]]:
+    """Separate dependencies already present in the baseline from missing ones."""
     block_by_id = {block.block_id: block for block in traceability.blocks}
     targets_by_block: dict[PairBlockId, list[ContractTarget]] = {}
     for target in traceability.targets:
@@ -269,7 +274,8 @@ def _dependency_results(
                 and dependency_targets
                 and all(
                     _target_is_satisfied(
-                        root=root,
+                        plan_root=plan_root,
+                        source_root=baseline_root,
                         target=target,
                         nodes=baseline_nodes,
                     )
@@ -597,7 +603,8 @@ def check_plan(
         targets=targets,
     )
     baseline_dependencies, unsatisfied_dependencies = _dependency_results(
-        root=root,
+        plan_root=root,
+        baseline_root=baseline_root,
         traceability=traceability,
         blocks=blocks,
         selected={block.block_id for block in blocks},
