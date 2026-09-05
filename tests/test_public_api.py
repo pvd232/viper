@@ -84,6 +84,7 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert tuple(execution.__all__) == (
         "benchmark",
         "retry",
+        "restore",
         "run",
     )
     assert issubclass(BenchmarkExecutionError, RuntimeError)
@@ -93,6 +94,7 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert callable(execution.run)
     assert callable(execution.retry)
     assert callable(execution.benchmark)
+    assert callable(execution.restore)
 
 
 def test_stage_interface_uses_parsimonious_names() -> None:

@@ -10299,11 +10299,6 @@ def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
 id = "P10-RSP-02"
 requirements = ["RSP-08"]
 targets = [
-    "src/viper/execution/__init__.py:ArtifactRestoreSelector",
-    "src/viper/execution/__init__.py:RestoreResult",
-    "src/viper/execution/__init__.py:RestoreRunReference",
-    "src/viper/execution/__init__.py:RestoredArtifact",
-    "src/viper/execution/__init__.py:RestoredFile",
     "src/viper/execution/__init__.py:restore",
     "src/viper/execution/__init__.py:__all__",
     "src/viper/api.py:Annotated",
@@ -10364,21 +10359,6 @@ depends_on = ["P10-RSP-01"]
 
 **Context:** Expose the verified restore engine through the Python API, typed operation registry, and CLI.
 
-<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:ArtifactRestoreSelector -->
-<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoreResult -->
-<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoreRunReference -->
-<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoredArtifact -->
-<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoredFile -->
-```python contract-target
-from ..restoration import (
-    ArtifactRestoreSelector,
-    RestoredArtifact,
-    RestoredFile,
-    RestoreResult,
-    RestoreRunReference,
-)
-```
-
 <!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:restore -->
 ```python contract-target
 from ._restore import restore
@@ -10388,11 +10368,6 @@ from ._restore import restore
 ```python contract-target
 __all__ = [
     "benchmark",
-    "ArtifactRestoreSelector",
-    "RestoreResult",
-    "RestoreRunReference",
-    "RestoredArtifact",
-    "RestoredFile",
     "retry",
     "restore",
     "run",
