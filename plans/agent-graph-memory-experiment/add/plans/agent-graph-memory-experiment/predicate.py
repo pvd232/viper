@@ -1,5 +1,7 @@
 """Print baseline rename relationships unresolved in the current candidate."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import hashlib
@@ -10,13 +12,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-_VIRTUAL_ENV = os.environ.get("VIRTUAL_ENV")
-if _VIRTUAL_ENV is not None:
-    _VIRTUAL_PYTHON = Path(_VIRTUAL_ENV) / "bin" / "python"
-    if _VIRTUAL_PYTHON.is_file() and Path(sys.executable) != _VIRTUAL_PYTHON:
+_PREDICATE_PYTHON = Path("__VIPER_PREDICATE_PYTHON__")
+if _PREDICATE_PYTHON.is_file():
+    if Path(sys.executable) != _PREDICATE_PYTHON:
         os.execv(
-            os.fspath(_VIRTUAL_PYTHON),
-            (os.fspath(_VIRTUAL_PYTHON), *sys.argv),
+            os.fspath(_PREDICATE_PYTHON),
+            (os.fspath(_PREDICATE_PYTHON), *sys.argv),
         )
 
 from viper._system_impact.codeql import analyze_source, source_digest
@@ -26,6 +27,7 @@ from viper.system_impact.rename import (
     RenameObligationSet,
     check_rename_obligations,
 )
+
 
 def unresolved(root: Path, evidence: Path) -> dict[str, object]:
     """Evaluate one candidate graph and return its obligation anti-join."""

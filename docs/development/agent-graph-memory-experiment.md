@@ -2,7 +2,11 @@
 
 ## 1. Status
 
-**Contract status:** Apparatus implemented; no experiment result is accepted yet.
+**Contract status:** Apparatus and one verified pilot completed; the pilot found
+no successful arm and therefore supports no efficiency winner.
+
+The measured result and apparatus incidents are recorded in the
+[source-plan result](../../plans/agent-graph-memory-experiment/results.md).
 
 The existing rename experiments retain prompts, transcripts, patches, and
 verdicts in separate records. They do not expose one verifier that proves which

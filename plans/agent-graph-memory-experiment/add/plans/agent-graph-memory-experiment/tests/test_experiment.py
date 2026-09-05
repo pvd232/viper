@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -42,6 +43,14 @@ def test_prompts_are_complete_and_parsimonious() -> None:
             "Complete the task.\n"
         ),
     }
+
+
+def test_predicate_source_freezes_the_verified_python() -> None:
+    """Make the copied command independent of the agent's login-shell Python."""
+    runtime = Path("/verified/environment/bin/python")
+    source = experiment._predicate_source(runtime).decode()
+    assert "__VIPER_PREDICATE_PYTHON__" not in source
+    assert os.fspath(runtime) in source
 
 
 def test_trial_parameters_freeze_input_digests() -> None:
@@ -107,6 +116,13 @@ def test_usage_counts_commands_searches_and_predicate_calls(tmp_path: Path) -> N
                 "command": "python .viper/unresolved.py",
             },
         },
+        {
+            "type": "item.completed",
+            "item": {
+                "type": "command_execution",
+                "command": "sed -n '1,80p' .viper/unresolved.py",
+            },
+        },
         {"type": "item.completed", "item": {"type": "agent_message"}},
         {
             "type": "turn.completed",
@@ -129,7 +145,7 @@ def test_usage_counts_commands_searches_and_predicate_calls(tmp_path: Path) -> N
         "output_tokens": 20,
         "reasoning_tokens": 7,
         "agent_messages": 1,
-        "commands": 2,
+        "commands": 3,
         "repository_searches": 1,
         "predicate_calls": 1,
     }

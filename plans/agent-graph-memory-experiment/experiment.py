@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import runpy
 import shutil
 import subprocess
@@ -239,6 +240,15 @@ def _prompts() -> dict[str, str]:
     }
 
 
+def _predicate_source(python_executable: Path) -> bytes:
+    """Freeze the verified predicate runtime into the copied tool."""
+    source = Path(__file__).with_name("predicate.py").read_text(encoding="utf-8")
+    marker = "__VIPER_PREDICATE_PYTHON__"
+    if source.count(marker) != 1:
+        raise ValueError("predicate runtime marker is absent or repeated")
+    return source.replace(marker, os.fspath(python_executable)).encode()
+
+
 def prepare_project(root: Path) -> str:
     """Create one committed VIPER project containing every frozen input."""
     root.mkdir(parents=True, exist_ok=False)
@@ -258,7 +268,7 @@ def prepare_project(root: Path) -> str:
         (RENAME_PLAN / "evaluate_pairblock_candidate.py").read_bytes(),
     )
     _write(root / "trial.py", Path(__file__).with_name("trial.py").read_bytes())
-    _write(root / "predicate.py", Path(__file__).with_name("predicate.py").read_bytes())
+    _write(root / "predicate.py", _predicate_source(Path(sys.executable)))
     _write(root / "viper.toml", "[project]\nschema_version = 1\n")
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     _write(root / "environment.lock", f"python=={python_version}\n")

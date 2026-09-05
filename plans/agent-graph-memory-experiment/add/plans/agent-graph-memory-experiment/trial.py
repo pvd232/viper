@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -105,7 +106,11 @@ def _usage(transcript: Path) -> dict[str, int]:
         "agent_messages": agent_messages,
         "commands": len(commands),
         "repository_searches": searches,
-        "predicate_calls": sum(".viper/unresolved.py" in item for item in commands),
+        "predicate_calls": sum(
+            re.search(r"python(?:\d+(?:\.\d+)?)? \.viper/unresolved\.py", item)
+            is not None
+            for item in commands
+        ),
     }
 
 

@@ -8,6 +8,9 @@ comparison defined by
 `unresolved()` predicate, experiment authoring, verified comparison, and focused tests.
 `P0-AGM-02` runs the accepted apparatus and adds the verified result report.
 
+The completed pilot is reported in [results.md](results.md). All three runs
+passed VIPER provenance verification; none passed the hidden evaluator.
+
 The three prompts are deliberately short. The ordinary arm receives the task.
 The static-graph arm also receives one flat typed relationship file. The
 predicate arm receives the same file and one command that returns the current
