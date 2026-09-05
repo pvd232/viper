@@ -718,8 +718,8 @@ def test_materialize_plan_replaces_one_shared_import_once(tmp_path: Path) -> Non
     )
 
 
-def test_materialize_plan_can_split_one_shared_import(tmp_path: Path) -> None:
-    """Replace one import statement with the distinct declarations in the plan."""
+def test_materialize_plan_moves_one_name_from_a_shared_import(tmp_path: Path) -> None:
+    """Move one imported name without duplicating its destination statement."""
     baseline_root = tmp_path / "baseline"
     baseline_root.mkdir()
     source = b"from package import First, Second\n"
@@ -729,7 +729,7 @@ def test_materialize_plan_can_split_one_shared_import(tmp_path: Path) -> None:
     plan_path.parent.mkdir(parents=True)
     first_payload = b"```python contract-target\nfrom package import First\n```"
     second_payload = (
-        b"```python contract-target\nfrom package import Second as Second\n```"
+        b"```python contract-target\nfrom other_package import Second\n```"
     )
     plan_path.write_bytes(first_payload + b"\n\n" + second_payload + b"\n")
     first = _declaration_ref(
@@ -794,7 +794,7 @@ def test_materialize_plan_can_split_one_shared_import(tmp_path: Path) -> None:
 
     assert (destination / "module.py").read_bytes() == (
         b"from package import First\n"
-        b"from package import Second as Second\n"
+        b"from other_package import Second\n"
     )
 
 

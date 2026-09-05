@@ -431,15 +431,22 @@ def apply_plan(
                 target.target.symbol for target in span_targets
             }:
                 continue
-            payloads = tuple(
-                dict.fromkeys(
-                    payload
-                    for target in span_targets
-                    if target.action != "remove"
-                    and (payload := _declaration_payload(plan_root, target)) is not None
-                )
+            existing_parts = _import_parts(source[span[0] : span[1]])
+            assert existing_parts is not None
+            replacements_for_owner: list[bytes] = []
+            for target in span_targets:
+                if target.action == "remove":
+                    continue
+                payload = _declaration_payload(plan_root, target)
+                assert payload is not None
+                payload_parts = _import_parts(payload)
+                if payload_parts is not None and payload_parts[0] == existing_parts[0]:
+                    replacements_for_owner.append(payload)
+                else:
+                    additions.append((file_targets.index(target), payload))
+            complete_import_replacements[span] = b"\n".join(
+                dict.fromkeys(replacements_for_owner)
             )
-            complete_import_replacements[span] = b"\n".join(payloads)
         for index, target in enumerate(file_targets):
             node = nodes.get((target.target.path, target.target.symbol))
             if target.action == "add":
