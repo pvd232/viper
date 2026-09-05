@@ -31,6 +31,10 @@ from viper.restoration import (
     RestoredFile,
     RestoreResult,
 )
+from viper.api import RunManyRequest, run_many
+
+from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
+
 
 
 def test_api_schema_and_capability_discovery() -> None:
@@ -243,4 +247,83 @@ def test_restore_result_matches_python_api_and_cli(
             (selector,),
             Path("model.bin"),
         ),
+    ]
+def test_run_many_result_matches_python_api_and_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Route typed and command batch requests through one execution result."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    run_spec = Path("experiments/example/runs/baseline/run/spec.yaml")
+    expected = ExperimentExecutionResult(
+        runs=(
+            ExperimentRunResult(
+                variant_id="baseline",
+                replicate_id="replicate_01",
+                run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                run_spec_path=run_spec,
+                status="skipped",
+                skip_reason="not started",
+            ),
+        )
+    )
+    calls = []
+
+    def fake_run_many(
+        repository_root: Path,
+        run_specs: tuple[Path, ...],
+        *,
+        max_concurrency: int,
+        timeout_seconds: float | None,
+        stop_on_failure: bool,
+    ) -> ExperimentExecutionResult:
+        """Record normalized batch arguments and return one result."""
+        calls.append(
+            (
+                repository_root,
+                run_specs,
+                max_concurrency,
+                timeout_seconds,
+                stop_on_failure,
+            )
+        )
+        return expected
+
+    monkeypatch.setattr("viper.api.execute_many", fake_run_many)
+    monkeypatch.setattr("viper.api.resolve_root", lambda root: root.resolve())
+    request = RunManyRequest(
+        run_specs=(run_spec,),
+        root=tmp_path,
+        max_concurrency=2,
+        timeout_seconds=5.0,
+        stop_on_failure=True,
+    )
+
+    direct = run_many(request)
+    status = main(
+        [
+            "--json",
+            "run-many",
+            str(run_spec),
+            "--root",
+            str(tmp_path),
+            "--max-concurrency",
+            "2",
+            "--timeout-seconds",
+            "5",
+            "--stop-on-failure",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert direct.result == expected
+    assert json.loads(output) == json.loads(result_json_bytes(direct))
+    assert calls == [
+        (tmp_path, (run_spec,), 2, 5.0, True),
+        (tmp_path, (run_spec,), 2, 5.0, True),
     ]

@@ -104,6 +104,16 @@ def build_parser() -> ArgumentParser:
     add_root(run_command)
     run_command.add_argument("--timeout-seconds", type=float)
 
+    run_many = commands.add_parser(
+        "run-many",
+        help="execute several frozen run plans with bounded concurrency",
+    )
+    run_many.add_argument("run_specs", nargs="+", type=Path)
+    add_root(run_many)
+    run_many.add_argument("--max-concurrency", type=int, default=1)
+    run_many.add_argument("--timeout-seconds", type=float)
+    run_many.add_argument("--stop-on-failure", action="store_true")
+
     retry_command = commands.add_parser(
         "retry",
         help="append one attempt to a failed frozen run",
@@ -251,6 +261,7 @@ def _operation_and_payload(
         "preflight": "preflight",
         "execute-stage": "execute_stage",
         "run": "run",
+        "run-many": "run_many",
         "retry": "retry",
         "execute-benchmark": "execute_benchmark",
         "restore": "restore",
@@ -316,6 +327,10 @@ def _human_success(result: SuccessModel) -> str:
         )
     if result.operation == "run":
         return f"completed and verified run {getattr(result, 'run_id')}"
+    if result.operation == "run_many":
+        runs = getattr(result, "result").runs
+        failures = sum(run.status == "failed" for run in runs)
+        return f"completed {len(runs)} runs with {failures} failures"
     if result.operation == "retry":
         return (
             f"completed attempt {getattr(result, 'attempt_id')} for run "

@@ -88,6 +88,10 @@ from .verification.models import (
     VerificationError,
     VerificationPolicy,
 )
+from .execution._batch import run_many as execute_many
+
+from .execution.results import ExperimentExecutionResult
+
 
 OperationName = Literal[
     "validate_stage",
@@ -97,6 +101,7 @@ OperationName = Literal[
     "preflight",
     "execute_stage",
     "run",
+    "run_many",
     "retry",
     "execute_benchmark",
     "restore",
@@ -652,6 +657,21 @@ class RestoreSuccess(SuccessModel):
     result: RestoreResult
 
 
+class RunManyRequest(APIModel):
+    """Select frozen plans for bounded execution on the active host."""
+
+    run_specs: tuple[Path, ...] = Field(min_length=1)
+    root: Path
+    max_concurrency: int = Field(default=1, ge=1)
+    timeout_seconds: float | None = Field(default=None, gt=0)
+    stop_on_failure: bool = False
+
+class RunManySuccess(SuccessModel):
+    """Return every batch outcome in the requested plan order."""
+
+    operation: Literal["run_many"] = "run_many"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: ExperimentExecutionResult
+
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
@@ -684,6 +704,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "ResolvedRun": ResolvedRun,
     "RunRequest": RunRequest,
     "RunSuccess": RunSuccess,
+    "RunManyRequest": RunManyRequest,
+    "RunManySuccess": RunManySuccess,
     "RetryRequest": RetryRequest,
     "RetrySuccess": RetrySuccess,
     "RunSpec": RunSpec,
@@ -713,6 +735,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "preflight",
     "execute_stage",
     "run",
+    "run_many",
     "retry",
     "execute_benchmark",
     "restore",
@@ -1455,6 +1478,22 @@ def restore_artifacts(request: RestoreRequest) -> RestoreSuccess:
     return RestoreSuccess(result=result)
 
 
+def run_many(request: RunManyRequest) -> RunManySuccess:
+    """Execute several frozen plans through the shared batch scheduler."""
+    project_root = _root(request.root, "run_many")
+    try:
+        result = execute_many(
+            project_root,
+            request.run_specs,
+            max_concurrency=request.max_concurrency,
+            timeout_seconds=request.timeout_seconds,
+            stop_on_failure=request.stop_on_failure,
+        )
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        path = request.run_specs[0]
+        raise _document_error("run_many", path, exc) from exc
+    return RunManySuccess(result=result)
+
 REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "validate_stage": ValidateStageRequest,
     "validate_resolved_stage": ValidateResolvedStageRequest,
@@ -1463,6 +1502,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "preflight": PreflightRequest,
     "execute_stage": ExecuteStageRequest,
     "run": RunRequest,
+    "run_many": RunManyRequest,
     "retry": RetryRequest,
     "execute_benchmark": ExecuteBenchmarkRequest,
     "restore": RestoreRequest,
@@ -1488,6 +1528,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "preflight": preflight,
     "execute_stage": execute_stage,
     "run": run_request,
+    "run_many": run_many,
     "retry": retry_request,
     "execute_benchmark": execute_benchmark,
     "restore": restore_artifacts,
@@ -1727,6 +1768,8 @@ __all__ = [
     "PreflightSuccess",
     "RunRequest",
     "RunSuccess",
+    "RunManyRequest",
+    "RunManySuccess",
     "RetryRequest",
     "RetrySuccess",
     "RestoreRequest",
@@ -1770,6 +1813,7 @@ __all__ = [
     "result_json_bytes",
     "retry",
     "run",
+    "run_many",
     "status",
     "validate_resolved_stage",
     "validate_run_spec",
