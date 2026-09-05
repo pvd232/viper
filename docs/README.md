@@ -28,6 +28,7 @@ Start with the task you need to complete.
 | [Project data root contract](development/project-data-root.md) | Bind initialization, protocol paths, local storage, and later commands to one selected project root |
 | [System Impact Check](development/system-impact-compiler.md) | Compare one closed CTG plan with pinned CodeQL observations before and after implementation |
 | [PairBlock scheduling](development/pair-block-scheduling.md) | Derive dependency-safe parallel execution waves from approved PairBlocks and CodeQL source edges |
+| [CodeQL graph cache reuse](development/codeql-graph-cache-reuse.md) | Reuse a verified source graph while skipping publication decoding on the search path |
 | [CodeQL impact observations](development/codeql-impact-observations.md) | Track whether typed one-hop reports add actionable dependencies during contract execution |
 | [Child-process launching](development/child-process-launching.md) | Start repository-owned child processes without calling `fork()` from an initialized macOS process |
 | [Research Memory and Agent Learning](development/research-memory-roadmap.md) | Record auditable research episodes, curate leakage-safe learning data, evaluate policy changes, and connect literature through the full MCP layout |

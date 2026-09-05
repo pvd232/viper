@@ -281,6 +281,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, a two-graph one-hop preflight, and rejection of unplanned source changes |
 | [CodeQL Analysis](codeql-analysis.md) | Design approved; source plan validated | Exact graph semantics plus separate extraction, query, and graph-lowering keys, caches, and receipts |
+| [CodeQL graph cache reuse](codeql-graph-cache-reuse.md) | Planned | Verified warm graph reuse without BQRS decoding unless a caller explicitly requests publication evidence |
 | [PairBlock scheduling](pair-block-scheduling.md) | Complete | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
@@ -306,6 +307,7 @@ The contracts share models. One contract owns each shared decision:
 | Requirements, targets, rule edges, tests, gates, and dependency order form one closed implementation plan | Contract Traceability |
 | Pinned CodeQL observations report policy-selected direct dependents before and after a planned change; Pyright checks the materialized interfaces; and realized source changes must match the closed plan | System Impact Check |
 | Source extraction, query execution, and graph lowering have independent identities and receipts | CodeQL Analysis |
+| A valid graph-cache hit skips BQRS decoding unless the caller requests publication evidence | CodeQL graph cache reuse |
 | Explicit dependencies, planned source edges, and shared-file writes determine safe PairBlock execution waves | PairBlock scheduling |
 | Repository-owned child processes use the spawn-safe facade on macOS | Child-process launching |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |
@@ -632,7 +634,8 @@ operations.
 **Contracts:** [Project data root](project-data-root.md),
 [Contract Traceability](contract-traceability.md),
 [public module ownership](module-ownership.md), and
-[System Impact Check](system-impact-compiler.md)
+[System Impact Check](system-impact-compiler.md), and
+[CodeQL graph cache reuse](codeql-graph-cache-reuse.md)
 
 **Outcome:** `viper init ROOT` creates the complete protocol tree and every
 later local operation resolves that same root. Every contract requirement then
@@ -1020,8 +1023,9 @@ PairBlock's focused tests remain the behavioral gate.
 
 **Depends on:** Module-privacy work already implemented.
 
-**Contracts:** [Contract traceability](contract-traceability.md) and
-[Direct Viper Cloud publication](remote-storage.md)
+**Contracts:** [Contract traceability](contract-traceability.md),
+[Direct Viper Cloud publication](remote-storage.md), and
+[CodeQL graph cache reuse](codeql-graph-cache-reuse.md)
 
 **Outcome:** Current local runs produce the same bytes and references through a
 new publisher boundary. Cloud implementation begins in Master Phase 9.
@@ -1101,7 +1105,25 @@ publisher.
 
 </details>
 
-### 8.3 Focused proof
+### 8.3 CodeQL graph cache reuse
+
+- [ ] Validate `graphs/<k_G>/source-graph.json` before BQRS decoding. Let
+      graph-only callers omit `artifact_root`; retain explicit BQRS and JSON
+      materialization for accepted-plan evidence.
+      <!-- pair-block: P1-CGR-01 -->
+      <!-- pair-block-contract: P1-CGR-01 contract=codeql-graph-cache-reuse.md -->
+      <!-- implements: CGR-01 -->
+      <!-- verifies: CGR-01 -->
+      <!-- contract-implementation: requirement=CGR-01 rule=codeql.graph.warm_reuse state=planned owner=src/viper/_system_impact/codeql.py:_lower_graph -->
+      <!-- contract-verification: requirement=CGR-01 rule=codeql.graph.warm_reuse state=planned test=tests/test_codeql_analysis.py:test_cached_graph_reuse_decodes_only_requested_artifacts -->
+      <!-- contract-implementation: requirement=CGR-01 rule=codeql.evidence.requested state=planned owner=src/viper/_system_impact/codeql.py:_decode_query_results -->
+      <!-- contract-verification: requirement=CGR-01 rule=codeql.evidence.requested state=planned test=tests/test_codeql_analysis.py:test_requested_artifacts_reject_decode_failure -->
+
+The [CodeQL graph cache reuse contract](codeql-graph-cache-reuse.md#10-implementation-order)
+owns the exact source declarations and focused gate. `P1-CGR-01` consumes the
+staged analysis and candidate-typing guarantees closed by `P0-SIG-07`.
+
+### 8.4 Focused proof
 
 - [x] Extend `tests/test_storage.py` for destination parsing, union round trips,
       mapping-return publication, and local snapshot compatibility.

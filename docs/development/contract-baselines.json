@@ -44,6 +44,13 @@
       "sha256": "1cf8041abe2c2e6cad8df24c308c75030462af732e2040d98b05f930a2462d6c"
     },
     {
+      "path": "docs/development/codeql-graph-cache-reuse.md",
+      "requirement_ids": [
+        "CGR-01"
+      ],
+      "sha256": "15fbc187e3edd3ec50698bfbe97116e74a08430ec036d78ba59810ccb16ece21"
+    },
+    {
       "path": "docs/development/pair-block-scheduling.md",
       "requirement_ids": [
         "SCH-01",
