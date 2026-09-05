@@ -5,9 +5,9 @@ baseline = "d541e31df9f88af3bdaac36bd245dcf7960408c4"
 
 [[blocks]]
 id = "P0-ROC-02"
-requirements = ["ROC-05", "ROC-06", "ROC-07", "ROC-08"]
+requirements = ["ROC-05", "ROC-06", "ROC-07", "ROC-08", "ROC-09"]
 depends_on = []
-gate = "python -m pytest tests/test_rename_obligations.py tests/test_codeql_analysis.py tests/test_system_impact.py -q"
+gate = "python -m pytest tests/test_impact_cli.py tests/test_rename_obligations.py tests/test_codeql_analysis.py tests/test_system_impact.py -q"
 
 [[blocks.files]]
 action = "patch"
@@ -15,15 +15,21 @@ source = "blocks/P0-ROC-02.patch"
 destinations = [
   "docs/development/rename-obligation-check.md",
   "docs/reference/api.md",
+  "plans/rename-obligation-check/README.md",
+  "plans/rename-obligation-check/agent-experiment.md",
+  "pyproject.toml",
   "src/viper/_system_impact/codeql.py",
   "src/viper/_system_impact/workflow.py",
   "src/viper/api.py",
   "src/viper/cli.py",
+  "src/viper/impact_cli.py",
   "src/viper/system_impact/models.py",
   "src/viper/system_impact/rename.py",
   "tests/test_api.py",
   "tests/test_cli.py",
+  "tests/conftest.py",
   "tests/test_codeql_analysis.py",
+  "tests/test_impact_cli.py",
   "tests/test_rename_obligations.py",
   "tests/test_system_impact.py",
   "tools/codeql/viper-python-impact/Dependencies.ql",

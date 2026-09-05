@@ -1,8 +1,8 @@
 diff --git a/docs/development/rename-obligation-check.md b/docs/development/rename-obligation-check.md
-index 1090964..98df65f 100644
+index 1090964..5026f7d 100644
 --- a/docs/development/rename-obligation-check.md
 +++ b/docs/development/rename-obligation-check.md
-@@ -4,363 +4,222 @@
+@@ -4,363 +4,234 @@
  
  **Contract status:** Implemented and validated on branch.
  
@@ -29,6 +29,7 @@ index 1090964..98df65f 100644
 +| ROC-06 <!-- contract-requirement: ROC-06 phase=0 test=tests/test_codeql_analysis.py --> | Bind an overlay candidate to its overlay-base receipt and exact changed-path manifest. |
 +| ROC-07 <!-- contract-requirement: ROC-07 phase=0 test=tests/test_rename_obligations.py --> | Permit added replacement uses while requiring zero old uses and at least the baseline replacement count per dependent. |
 +| ROC-08 <!-- contract-requirement: ROC-08 phase=0 test=tests/test_rename_obligations.py --> | Publish the frozen baseline obligations as a source-located worklist before candidate editing begins. |
++| ROC-09 <!-- contract-requirement: ROC-09 phase=0 test=tests/test_impact_cli.py --> | Serve a precomputed, digest-bound worklist without loading VIPER, running CodeQL, or writing repository state. |
  
  ## 2. Required claim
  
@@ -245,6 +246,8 @@ index 1090964..98df65f 100644
 +    Q1 --> G1["Candidate SourceGraph"]
 +    G0 --> C["compile_rename_obligations()"]
 +    C --> P["rename-plan<br/>pre-edit worklist"]
++    P --> F["rename-worklist.json<br/>fast read-only index"]
++    F --> A["viper-impact<br/>paged agent lookup"]
 +    G1 --> K["check_rename_obligations()"]
 +    C --> K
 +    K --> R["accepted or rejected report"]
@@ -311,7 +314,8 @@ index 1090964..98df65f 100644
 +4. `compile_rename_obligations()` unions both relations and deduplicates by
 +   `(path, line, column)`.
 +5. `viper impact rename-plan` renders those frozen baseline sites before the
-+   replacement declaration or candidate graph exists.
++   replacement declaration or candidate graph exists and writes a flattened
++   `rename-worklist.json` beside the authoritative obligations.
 +6. `check_rename_obligations()` joins candidate rows by dependent, operation,
 +   imported module, and symbol. Star imports, dynamic lookup, and relevant
 +   alias rebinding fail closed.
@@ -319,6 +323,11 @@ index 1090964..98df65f 100644
 +   from byte digests, builds the overlay, and records its base and manifest.
 +8. Ordinary impact analysis retains full databases because the tested overlay
 +   preserved rename-reference tuples but not the broader dependency relation.
++9. `viper-impact` reads one page from `rename-worklist.json` with only the
++   Python standard library. It verifies that the adjacent obligation bytes
++   still match the digest recorded by the index. It does not invoke CodeQL,
++   import the VIPER application, or write files. This lookup is advisory;
++   `rename-check` remains the acceptance authority.
 +
 +The Python joins use hash maps and are linear in selected occurrences. CodeQL
 +performs the language-aware relation evaluation.
@@ -340,6 +349,7 @@ index 1090964..98df65f 100644
 +| overlay `DatabaseReceipt` | Snapshot, base key and digest, changes digest, command, and result digest |
 +| `RenameObligationSet` | Baseline sites and frozen identities |
 +| `rename-plan.txt` | Compact pre-edit list of required paths, locations, operations, and owners |
++| `rename-worklist.json` | Flattened, paged agent index bound to the adjacent obligation-file digest |
 +| `RenameCheck` | Candidate snapshot, graph digest, transitions, unresolved rows, and verdict |
  
  ## 7. Verification
@@ -363,6 +373,7 @@ index 1090964..98df65f 100644
 +| `rename.overlay.parity` | Historical and toy cases produce identical rename-reference tuples under overlay and full extraction. |
 +| `rename.scope.boundary` | Ordinary impact does not consume overlays until dependency-edge parity is established. |
 +| `rename.plan.complete` | The pre-edit report contains every compiled baseline site exactly once. |
++| `rename.worklist.read_only` | The fast command returns the indexed sites, rejects stale obligation bytes, and creates no files. |
  
  ## 8. Propagation
  
@@ -412,7 +423,7 @@ index 1090964..98df65f 100644
 +| Checker | Compile and verify query relations; support cross-module top-level replacements. |
 +| Database protocol | Add full, overlay-base, and overlay receipt modes. |
 +| Orchestration | Expose baseline-only `plan_working_tree_rename()` and use overlays only in candidate checking. |
-+| Agent interface | Add `viper impact rename-plan` before editing and retain `rename-check` as the completion gate. |
++| Agent interface | Add `viper impact rename-plan` for offline compilation, `viper-impact` for fast lookup, and retain `rename-check` as the completion gate. |
 +| Tests | Cover lowering, provenance, reuse, stale uses, ambiguity, and completion. |
 +| Evidence | Retain toy timing/parity and historical Supervision results. |
  
@@ -475,6 +486,7 @@ index 1090964..98df65f 100644
 +4. Restrict overlays to rename verification and test full-result parity.
 +5. Run a historical refactor and repair measured false rejections.
 +6. Expose baseline obligations before editing and measure agent localization separately from completion checking.
++7. Flatten the frozen obligations into a stdlib-only, digest-bound worklist for the interactive edit loop.
  
 -Each declaration difference must compile to one `ContractTarget` in
 -`P0-ROC-01`. Checklist closure remains blocked until the CTG enforces that
@@ -483,9 +495,9 @@ index 1090964..98df65f 100644
  
 -## Future work
 +- `P0-ROC-01` owns the initial protocol and agent operation.
-+- `P0-ROC-02` depends on it and owns ROC-05 through ROC-08: CodeQL transition
-+  rows, overlay provenance, query-derived checking, pre-edit planning, and
-+  historical validation.
++- `P0-ROC-02` depends on it and owns ROC-05 through ROC-09: CodeQL transition
++  rows, overlay provenance, query-derived checking, pre-edit planning, fast
++  indexed lookup, and historical validation.
  
 -`RenameCheck.transitions` can later feed a proposed `NodeSignalSet` containing
 -graph distance, semantic similarity, co-change history, churn, test evidence,
@@ -517,18 +529,19 @@ index 1090964..98df65f 100644
 +The suite runs through `database run-queries`, which stores BQRS results in the
 +database copy; see the [CodeQL CLI manual](https://docs.github.com/en/enterprise-server@3.19/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-run-queries).
 diff --git a/docs/reference/api.md b/docs/reference/api.md
-index d3844ad..0cd53f8 100644
+index d3844ad..41b0dff 100644
 --- a/docs/reference/api.md
 +++ b/docs/reference/api.md
-@@ -165,6 +165,7 @@ model, schema registry, handler registry, and JSON encoder.
+@@ -165,6 +165,8 @@ model, schema registry, handler registry, and JSON encoder.
  | `init_project` | `InitProjectRequest` | `InitProjectSuccess` | `init` |
  | `explain_impact` | `ExplainImpactRequest` | `ExplainImpactSuccess` | `impact-explain` |
  | `analyze_impact` | `AnalyzeImpactRequest` | `AnalyzeImpactSuccess` | `impact-analyze` |
 +| `plan_rename` | `RenamePlanRequest` | `RenamePlanSuccess` | `impact-rename-plan` |
++| `get_rename_worklist` | `RenameWorklistRequest` | `RenameWorklistSuccess` | `impact-rename-worklist` |
  | `check_rename` | `RenameCheckRequest` | `RenameCheckSuccess` | `impact-rename-check` |
  
  Python callers can invoke a concrete operation directly:
-@@ -333,7 +334,19 @@ traversal over the baseline graph. Each candidate includes the complete path
+@@ -333,7 +335,35 @@ traversal over the baseline graph. Each candidate includes the complete path
  from the selected target, every edge kind, and the exact source location that
  supports each step.
  
@@ -545,10 +558,163 @@ index d3844ad..0cd53f8 100644
 +```
 +
 +The plan reports each required path, line, column, operation, and containing
-+declaration. After editing, agents can verify the same transformation:
++declaration. It also writes `rename-worklist.json`. Agents can page through
++that precomputed index without starting CodeQL or loading the VIPER
++application:
++
++```bash
++viper-impact \
++  --index .viper/system-impact/rename-plan/rename-worklist.json \
++  --offset 0 \
++  --limit 50
++```
++
++The fast command uses only the Python standard library, verifies the adjacent
++obligation-file digest, and does not write repository state. The equivalent
++typed operation is `get_rename_worklist`; the full CLI surface is
++`viper impact rename-worklist --obligations <rename-obligations.json>`.
++This index guides editing but does not decide completion. After editing, agents
++verify the same transformation:
  
  ```bash
  viper impact rename-check \
+diff --git a/plans/rename-obligation-check/README.md b/plans/rename-obligation-check/README.md
+index 658224d..9f53603 100644
+--- a/plans/rename-obligation-check/README.md
++++ b/plans/rename-obligation-check/README.md
+@@ -4,14 +4,21 @@ This directory retains the reviewed source plan that produced the first exact
+ rename-check implementation. Production behavior now belongs to
+ [`system_impact/rename.py`](../../src/viper/system_impact/rename.py), the typed
+ API, and `viper impact rename-check`.
++`viper impact rename-plan` publishes the frozen baseline worklist before edits.
++It also publishes `rename-worklist.json`; the stdlib-only `viper-impact`
++command serves that index during the edit loop without starting CodeQL.
+ 
+-[`agent-experiment.md`](agent-experiment.md) records the paired coding-agent
+-smoke test and its bounded conclusion.
++[`agent-experiment.md`](agent-experiment.md) records the original smoke tests
++and the staged paired trial of ordinary search against the precomputed index.
+ 
+-`plan.toml` binds `P0-ROC-01` to two complete added files. `check.py` extracts
+-the recorded baseline into a temporary directory, adds those files, runs Ruff,
+-Pyright, and the focused tests, then analyzes the baseline and candidate with
+-one CodeQL identity. The checker leaves the active working tree unchanged.
++`plan.toml` takes the accepted `P0-ROC-01` commit as its baseline and binds
++`P0-ROC-02` to the query-derived checker and overlay optimization. `check.py`
++extracts that baseline, applies the update, runs static and focused tests, then
++analyzes baseline and candidate source. The checker leaves the active working
++tree unchanged.
++
++[`historical-refactor-results.md`](historical-refactor-results.md) records the
++Supervision gold-patch coverage, parity, and timing observations.
+ 
+ Run the complete gate with the repository environment:
+ 
+diff --git a/plans/rename-obligation-check/agent-experiment.md b/plans/rename-obligation-check/agent-experiment.md
+index a3fa238..db40757 100644
+--- a/plans/rename-obligation-check/agent-experiment.md
++++ b/plans/rename-obligation-check/agent-experiment.md
+@@ -58,3 +58,88 @@ The success estimate is tied at one success in each arm. Measuring marginal
+ localization or repair value requires a larger fixture where lexical search
+ yields competing aliases, generated references, or enough candidates to
+ exhaust the agent's search budget.
++
++## Pre-edit worklist trial
++
++A later paired `gpt-5.4-mini` trial compared ordinary repository navigation
++with the baseline-only `rename-plan` command. Both arms began at the same
++commit, made the same four correct edits, ran a Python smoke test, and were
++instructed not to commit or push.
++
++| Arm | Correct references | Repository-wide reference searches | Tool commands | Wall time | Output tokens |
++|---|---:|---:|---:|---:|---:|
++| Ordinary search | 4/4 | 4 | 29 | 103 s | 4,493 |
++| Pre-edit worklist | 4/4 | 0 | 28 | 169 s | 6,827 |
++
++The worklist returned all four typed occurrences before editing and the agent
++used only those locations. It eliminated lexical reference searches but did
++not improve correctness, total commands, tokens, or elapsed time on this tiny
++fixture. CodeQL startup and unrelated agent procedure dominated the run. This
++is interface evidence, not evidence of an end-to-end performance gain.
++
++## Precomputed-index staged trial
++
++A paired `gpt-5.3-codex-spark` trial used two fresh checkouts at fixture commit
++`1339ce9c0835b6596003eb898cb1858025ce3264`. The task required three ordered
++renames across eight files. Each stage had to pass the same three-test unittest
++suite before the next stage began. Unrelated declarations and standard-library
++calls used the same names as lexical decoys.
++
++The treatment received three precomputed CodeQL worklists containing 6, 5,
++and 4 governed reference sites. Offline worklist compilation took 16.53,
++5.35, and 4.95 seconds. That cost was excluded from interactive wall time
++because this trial tests a background repository index. The stdlib-only lookup
++had a 45.4 ms median over 20 warm process invocations.
++
++| Arm | Correct final references | Repository-wide searches | Validation runs | Wall time | Output tokens |
++|---|---:|---:|---:|---:|---:|
++| Ordinary search | 15/15 | 3 | 4 | 92 s | 6,843 |
++| Precomputed graph worklist | 15/15 | 0 | 3 | 72 s | 5,399 |
++
++Both agents produced the same source patch, preserved every decoy, and passed
++an independent final test run. The ordinary-search arm omitted one test import
++in Stage 1, failed validation, then found and repaired it. The graph arm used
++all three worklists and passed every stage on its first validation. It had one
++failed patch application caused by incorrect unchanged context; this did not
++change the resulting source patch.
++
++In this deliberately graph-friendly paired case, the precomputed index removed
++three searches and one repair cycle, reduced measured wall time by 20 seconds
++(22%), and reduced output by 1,444 tokens (21%). This is an `n=1` mechanism
++test under favorable topology, not an estimate of general repository-task win
++rate.
++
++## Fixed-budget closure stress test
++
++A second paired `gpt-5.3-codex-spark` trial raised the workload to four ordered
++renames, 48 real consumer modules, 24 same-name decoy modules, 53 required
++file edits, and 70 typed baseline reference transitions. The unittest suite
++covered only representative paths. Both arms had a 120-second cutoff.
++
++| Arm | State at cutoff | Files changed | Semantically complete transitions | Failed validations | Wall time |
++|---|---|---:|---:|---:|---:|
++| Ordinary search | All four stages complete | 53 | 70/70 | 2 | 87 s |
++| Precomputed graph worklist | Stage 1 complete; Stage 2 partial | 16 | 20/70 | 0 | 120 s cutoff |
++
++The ordinary-search agent batched edits with `perl` after discovering each
++binding form. It initially missed package-module aliases in Stage 3 and a test
++call in Stage 4; validation and a final audit repaired both. The graph agent
++located every Stage 1 relationship immediately, but opened and patched most
++files individually. The worklist therefore removed localization uncertainty
++while increasing edit-operation overhead. On this workload, the current
++row-oriented interface was decisively slower.
++
++The exact checker exposed a separate compound-refactor limitation. It reported
++67/70 satisfied transitions for the semantically complete ordinary-search
++patch. The three apparent misses were calls whose targets changed correctly
++but whose containing declarations were themselves renamed in later stages:
++`prepare` to `prepare_verified`, `execute` to `execute_verified`, and `run` to
++`run_verified`. The candidate graph retained each correct new edge under the
++new owner name. Joining transitions by the baseline dependent symbol therefore
++produces false `replacement_missing` results for sequential dependent renames.
++
++The next treatment should group sites by file and binding form and emit one
++batch edit plan per stage. The completion protocol also needs an explicit
++baseline-to-candidate dependent-symbol mapping before it can judge compound
++refactors. Another agent trial before those two changes would measure the same
++known interface and join failures again.
+diff --git a/pyproject.toml b/pyproject.toml
+index cbf2be3..d18ece8 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -55,6 +55,7 @@ Issues = "https://github.com/pvd232/viper/issues"
+ 
+ [project.scripts]
+ viper = "viper.cli:main"
++viper-impact = "viper.impact_cli:main"
+ 
+ [tool.ruff]
+ exclude = ["archive"]
 diff --git a/src/viper/_system_impact/codeql.py b/src/viper/_system_impact/codeql.py
 index c1e54b8..15da719 100644
 --- a/src/viper/_system_impact/codeql.py
@@ -960,12 +1126,22 @@ index c1e54b8..15da719 100644
      "resolve_analysis_specs",
      "source_digest",
 diff --git a/src/viper/_system_impact/workflow.py b/src/viper/_system_impact/workflow.py
-index abb8253..d7de9a9 100644
+index abb8253..3580b18 100644
 --- a/src/viper/_system_impact/workflow.py
 +++ b/src/viper/_system_impact/workflow.py
-@@ -27,11 +27,13 @@ from viper.system_impact.rename import (
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import hashlib
+ import json
+ import shutil
+ import tarfile
+@@ -26,12 +27,15 @@ from viper.system_impact.rename import (
+     RenameSpec,
      check_rename_obligations,
      compile_rename_obligations,
++    rename_worklist_sites,
      render_rename_check,
 +    render_rename_plan,
  )
@@ -977,7 +1153,7 @@ index abb8253..d7de9a9 100644
      analyze_source,
      resolve_analysis_specs,
      source_digest,
-@@ -70,6 +72,19 @@ class WorkingTreeRenameCheck:
+@@ -70,6 +74,20 @@ class WorkingTreeRenameCheck:
      check: RenameCheck
  
  
@@ -990,6 +1166,7 @@ index abb8253..d7de9a9 100644
 +    artifact_root: Path
 +    baseline_graph: Path
 +    obligations_path: Path
++    worklist_path: Path
 +    report: str
 +    obligations: RenameObligationSet
 +
@@ -997,7 +1174,34 @@ index abb8253..d7de9a9 100644
  def _git(root: Path, *arguments: str) -> bytes:
      """Run one bounded Git read and return its standard output."""
      try:
-@@ -318,6 +333,101 @@ def analyze_working_tree_impact(
+@@ -186,6 +204,26 @@ def _write_model(path: Path, value: RenameObligationSet | RenameCheck) -> None:
+     temporary.replace(path)
+ 
+ 
++def _write_worklist_index(
++    path: Path, *, obligations_path: Path, obligations: RenameObligationSet
++) -> None:
++    """Persist the stdlib-only index consumed by the fast agent command."""
++    sites = rename_worklist_sites(obligations, limit=10_000)
++    document = {
++        "schema_version": 1,
++        "obligations_file": obligations_path.name,
++        "obligations_sha256": hashlib.sha256(obligations_path.read_bytes()).hexdigest(),
++        "total": len(sites),
++        "sites": [site.model_dump(mode="json") for site in sites],
++    }
++    temporary = path.with_suffix(f"{path.suffix}.tmp")
++    temporary.write_text(
++        json.dumps(document, sort_keys=True, separators=(",", ":")),
++        encoding="utf-8",
++    )
++    temporary.replace(path)
++
++
+ def analyze_working_tree_impact(
+     root: Path,
+     *,
+@@ -318,6 +356,108 @@ def analyze_working_tree_impact(
      )
  
  
@@ -1081,9 +1285,15 @@ index abb8253..d7de9a9 100644
 +
 +    baseline_path = output / "baseline-source-graph.json"
 +    obligations_path = output / "rename-obligations.json"
++    worklist_path = output / "rename-worklist.json"
 +    report = render_rename_plan(obligations)
 +    _write_graph(baseline_path, baseline)
 +    _write_model(obligations_path, obligations)
++    _write_worklist_index(
++        worklist_path,
++        obligations_path=obligations_path,
++        obligations=obligations,
++    )
 +    (output / "rename-plan.txt").write_text(report + "\n", encoding="utf-8")
 +    return WorkingTreeRenamePlan(
 +        repository_root=repository,
@@ -1091,6 +1301,7 @@ index abb8253..d7de9a9 100644
 +        artifact_root=output,
 +        baseline_graph=baseline_path,
 +        obligations_path=obligations_path,
++        worklist_path=worklist_path,
 +        report=report,
 +        obligations=obligations,
 +    )
@@ -1099,7 +1310,7 @@ index abb8253..d7de9a9 100644
  def analyze_working_tree_rename(
      root: Path,
      *,
-@@ -361,6 +471,7 @@ def analyze_working_tree_rename(
+@@ -361,6 +501,7 @@ def analyze_working_tree_rename(
              repository,
              codeql_executable=executable,
              query_pack=pack,
@@ -1107,7 +1318,7 @@ index abb8253..d7de9a9 100644
          )
          with tempfile.TemporaryDirectory(prefix="viper-rename-analysis.") as directory:
              temporary_root = Path(directory)
-@@ -392,10 +503,13 @@ def analyze_working_tree_rename(
+@@ -392,10 +533,13 @@ def analyze_working_tree_rename(
                      revision=revision,
                  ),
                  artifact_root=output / "baseline",
@@ -1122,7 +1333,7 @@ index abb8253..d7de9a9 100644
                  snapshot=SourceSnapshot(
                      base_revision=revision,
                      source_sha256=candidate_sha256,
-@@ -444,6 +558,8 @@ __all__ = [
+@@ -444,6 +588,8 @@ __all__ = [
      "WorkingTreeImpact",
      "WorkingTreeImpactError",
      "WorkingTreeRenameCheck",
@@ -1132,7 +1343,7 @@ index abb8253..d7de9a9 100644
 +    "plan_working_tree_rename",
  ]
 diff --git a/src/viper/api.py b/src/viper/api.py
-index 56b141b..0d9a0f1 100644
+index 56b141b..432b9f4 100644
 --- a/src/viper/api.py
 +++ b/src/viper/api.py
 @@ -29,6 +29,7 @@ from ._system_impact.workflow import (
@@ -1143,24 +1354,33 @@ index 56b141b..0d9a0f1 100644
  )
  from .artifacts import (
      ArtifactPointer,
-@@ -80,7 +81,7 @@ from .system_impact.explain import (
+@@ -80,7 +81,15 @@ from .system_impact.explain import (
      explain_plan_check,
  )
  from .system_impact.models import CommitId, PlanCheck, SourceGraph
 -from .system_impact.rename import ReferenceKind, RenameCheck
-+from .system_impact.rename import ReferenceKind, RenameCheck, RenameObligationSet
++from .system_impact.rename import (
++    ReferenceKind,
++    ReferenceSite,
++    RenameAnalysisError,
++    RenameCheck,
++    RenameObligationSet,
++    rename_worklist_sites,
++    render_rename_worklist,
++)
  from .verification import (
      verify_benchmark_result,
      verify_promoted_artifact,
-@@ -115,6 +116,7 @@ OperationName = Literal[
+@@ -115,6 +124,8 @@ OperationName = Literal[
      "init_project",
      "explain_impact",
      "analyze_impact",
 +    "plan_rename",
++    "get_rename_worklist",
      "check_rename",
  ]
  FailureOrigin = Literal["request", "application", "cli", "internal"]
-@@ -657,6 +659,10 @@ class RenameCheckRequest(APIModel):
+@@ -657,6 +668,10 @@ class RenameCheckRequest(APIModel):
      )
  
  
@@ -1171,7 +1391,7 @@ index 56b141b..0d9a0f1 100644
  class RenameCheckSuccess(SuccessModel):
      """Return an exact rename verdict and its persisted evidence paths."""
  
-@@ -684,6 +690,23 @@ class RenameCheckSuccess(SuccessModel):
+@@ -684,6 +699,44 @@ class RenameCheckSuccess(SuccessModel):
      )
  
  
@@ -1186,36 +1406,100 @@ index 56b141b..0d9a0f1 100644
 +    artifact_root: Path = Field(description="Directory containing plan evidence.")
 +    baseline_graph: Path = Field(description="Receipt-bound baseline graph.")
 +    obligations_path: Path = Field(description="Machine-readable frozen worklist.")
++    worklist_path: Path = Field(description="Fast stdlib-only lookup index.")
 +    report: str = Field(description="Compact source-located worklist.")
 +    obligations: RenameObligationSet = Field(
 +        description="Validated baseline rename obligations."
 +    )
 +
 +
++class RenameWorklistRequest(APIModel):
++    """Select one page from an already compiled rename obligation set."""
++
++    obligations_path: Path = Field(description="Frozen obligation-set JSON path.")
++    offset: int = Field(default=0, ge=0, description="Zero-based first site index.")
++    limit: int = Field(default=50, ge=1, le=200, description="Maximum sites returned.")
++
++
++class RenameWorklistSuccess(SuccessModel):
++    """Return a read-only page from the persisted rename index."""
++
++    operation: Literal["get_rename_worklist"] = "get_rename_worklist"  # pyright: ignore[reportIncompatibleVariableOverride]
++    obligations_path: Path = Field(description="Loaded obligation-set path.")
++    obligations_sha256: str = Field(description="Digest of the exact loaded bytes.")
++    total: int = Field(ge=1, description="All indexed reference sites.")
++    offset: int = Field(ge=0, description="Requested zero-based first index.")
++    sites: tuple[ReferenceSite, ...] = Field(description="Selected source sites.")
++    report: str = Field(description="Compact agent-facing source worklist.")
++
++
  class LocalRunPath(APIModel):
      """Select a terminal run document beneath the project root."""
  
-@@ -737,6 +760,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
+@@ -737,6 +790,10 @@ SCHEMA_REGISTRY: dict[str, Any] = {
      "AnalyzeImpactSuccess": AnalyzeImpactSuccess,
      "RenameCheckRequest": RenameCheckRequest,
      "RenameCheckSuccess": RenameCheckSuccess,
 +    "RenamePlanRequest": RenamePlanRequest,
 +    "RenamePlanSuccess": RenamePlanSuccess,
++    "RenameWorklistRequest": RenameWorklistRequest,
++    "RenameWorklistSuccess": RenameWorklistSuccess,
      "FreezeRunRequest": FreezeRunRequest,
      "FreezeRunSuccess": FreezeRunSuccess,
      "InitProjectRequest": InitProjectRequest,
-@@ -798,6 +823,7 @@ OPERATIONS: tuple[OperationName, ...] = (
+@@ -798,6 +855,8 @@ OPERATIONS: tuple[OperationName, ...] = (
      "init_project",
      "explain_impact",
      "analyze_impact",
 +    "plan_rename",
++    "get_rename_worklist",
      "check_rename",
  )
  
-@@ -1490,6 +1516,40 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
+@@ -1490,6 +1549,81 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
      )
  
  
++def get_rename_worklist(
++    request: RenameWorklistRequest,
++) -> RenameWorklistSuccess:
++    """Read one page from a persisted baseline index without running CodeQL."""
++    path = request.obligations_path.resolve()
++    try:
++        content = path.read_bytes()
++        obligations = RenameObligationSet.model_validate_json(content)
++        sites = rename_worklist_sites(
++            obligations,
++            offset=request.offset,
++            limit=request.limit,
++        )
++        report = render_rename_worklist(
++            obligations,
++            offset=request.offset,
++            limit=request.limit,
++        )
++    except (OSError, ValueError, RenameAnalysisError) as exc:
++        raise ViperError(
++            ViperFailure(
++                operation="get_rename_worklist",
++                origin="application",
++                code="invalid_document",
++                message=str(exc),
++            )
++        ) from exc
++    total = sum(
++        len(obligation.baseline_sites) for obligation in obligations.obligations
++    )
++    return RenameWorklistSuccess(
++        obligations_path=path,
++        obligations_sha256=hashlib.sha256(content).hexdigest(),
++        total=total,
++        offset=request.offset,
++        sites=sites,
++        report=report,
++    )
++
++
 +def plan_rename(request: RenamePlanRequest) -> RenamePlanSuccess:
 +    """Compile one exact baseline rename worklist."""
 +    try:
@@ -1245,6 +1529,7 @@ index 56b141b..0d9a0f1 100644
 +        artifact_root=result.artifact_root,
 +        baseline_graph=result.baseline_graph,
 +        obligations_path=result.obligations_path,
++        worklist_path=result.worklist_path,
 +        report=result.report,
 +        obligations=result.obligations,
 +    )
@@ -1253,32 +1538,41 @@ index 56b141b..0d9a0f1 100644
  def check_rename(request: RenameCheckRequest) -> RenameCheckSuccess:
      """Compile and verify one exact rename against the current working tree."""
      try:
-@@ -1591,6 +1651,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
+@@ -1591,6 +1725,8 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
      "init_project": InitProjectRequest,
      "explain_impact": ExplainImpactRequest,
      "analyze_impact": AnalyzeImpactRequest,
 +    "plan_rename": RenamePlanRequest,
++    "get_rename_worklist": RenameWorklistRequest,
      "check_rename": RenameCheckRequest,
  }
  
-@@ -1617,6 +1678,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
+@@ -1617,6 +1753,8 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
      "init_project": init_project,
      "explain_impact": explain_impact,
      "analyze_impact": analyze_impact,
 +    "plan_rename": plan_rename,
++    "get_rename_worklist": get_rename_worklist,
      "check_rename": check_rename,
  }
  
-@@ -1818,6 +1880,8 @@ __all__ = [
+@@ -1818,6 +1956,10 @@ __all__ = [
      "AnalyzeImpactSuccess",
      "RenameCheckRequest",
      "RenameCheckSuccess",
 +    "RenamePlanRequest",
 +    "RenamePlanSuccess",
++    "RenameWorklistRequest",
++    "RenameWorklistSuccess",
      "CapabilitiesRequest",
      "CapabilitiesSuccess",
      "CompareRunsRequest",
-@@ -1884,6 +1948,7 @@ __all__ = [
+@@ -1880,10 +2022,12 @@ __all__ = [
+     "restore_artifacts",
+     "freeze_run",
+     "get_capabilities",
++    "get_rename_worklist",
+     "init_project",
      "get_schema",
      "lineage",
      "plan_diff",
@@ -1287,10 +1581,10 @@ index 56b141b..0d9a0f1 100644
      "result_json_bytes",
      "retry",
 diff --git a/src/viper/cli.py b/src/viper/cli.py
-index 5ec3e1e..b9be40a 100644
+index 5ec3e1e..e8776dc 100644
 --- a/src/viper/cli.py
 +++ b/src/viper/cli.py
-@@ -241,6 +241,28 @@ def build_parser() -> ArgumentParser:
+@@ -241,6 +241,40 @@ def build_parser() -> ArgumentParser:
      analyze.add_argument("--cache-root", type=Path)
      analyze.add_argument("--codeql-executable", type=Path)
      analyze.add_argument("--query-pack", type=Path)
@@ -1316,18 +1610,31 @@ index 5ec3e1e..b9be40a 100644
 +    rename_plan.add_argument("--cache-root", type=Path)
 +    rename_plan.add_argument("--codeql-executable", type=Path)
 +    rename_plan.add_argument("--query-pack", type=Path)
++    rename_worklist = impact_commands.add_parser(
++        "rename-worklist",
++        help="read a precomputed rename worklist without running CodeQL",
++    )
++    rename_worklist.add_argument(
++        "--obligations",
++        dest="obligations_path",
++        type=Path,
++        required=True,
++    )
++    rename_worklist.add_argument("--offset", type=int, default=0)
++    rename_worklist.add_argument("--limit", type=int, default=50)
      rename_check = impact_commands.add_parser(
          "rename-check",
          help="verify an exact old-to-new dependency transition",
-@@ -303,6 +325,7 @@ def _operation_and_payload(
+@@ -303,6 +337,8 @@ def _operation_and_payload(
          "init": "init_project",
          "impact-explain": "explain_impact",
          "impact-analyze": "analyze_impact",
 +        "impact-rename-plan": "plan_rename",
++        "impact-rename-worklist": "get_rename_worklist",
          "impact-rename-check": "check_rename",
      }
      operation = mapping[command]
-@@ -321,7 +344,10 @@ def _operation_and_payload(
+@@ -321,7 +357,10 @@ def _operation_and_payload(
      trusted = values.pop("trust_source", None)
      if trusted is not None:
          values["trusted_source_repositories"] = trusted
@@ -1339,15 +1646,128 @@ index 5ec3e1e..b9be40a 100644
          values.pop("edge_kinds")
      return operation, values
  
-@@ -422,7 +448,7 @@ def _human_success(result: SuccessModel) -> str:
+@@ -422,7 +461,11 @@ def _human_success(result: SuccessModel) -> str:
              f"at {item.use_path}:{item.use_line}"
              for item in evidence
          )
 -    if result.operation == "check_rename":
-+    if result.operation in {"plan_rename", "check_rename"}:
++    if result.operation in {
++        "plan_rename",
++        "get_rename_worklist",
++        "check_rename",
++    }:
          return getattr(result, "report")
      capabilities = getattr(result, "operations")
      return "\n".join(capabilities)
+diff --git a/src/viper/impact_cli.py b/src/viper/impact_cli.py
+new file mode 100644
+index 0000000..1bdabc0
+--- /dev/null
++++ b/src/viper/impact_cli.py
+@@ -0,0 +1,103 @@
++"""Serve precomputed impact indexes without importing the VIPER application."""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import sys
++from pathlib import Path
++from typing import Any
++
++
++class WorklistError(ValueError):
++    """Report an invalid or stale precomputed worklist."""
++
++
++def _load(path: Path) -> dict[str, Any]:
++    """Load and bind one worklist to its exact obligation bytes."""
++    try:
++        document = json.loads(path.read_text(encoding="utf-8"))
++    except (OSError, json.JSONDecodeError) as error:
++        raise WorklistError(f"cannot load worklist: {error}") from error
++    if not isinstance(document, dict) or document.get("schema_version") != 1:
++        raise WorklistError("unsupported worklist schema")
++    obligations_file = document.get("obligations_file")
++    expected_sha256 = document.get("obligations_sha256")
++    if not isinstance(obligations_file, str) or not isinstance(expected_sha256, str):
++        raise WorklistError("worklist provenance is incomplete")
++    obligations_path = path.parent / obligations_file
++    try:
++        actual_sha256 = hashlib.sha256(obligations_path.read_bytes()).hexdigest()
++    except OSError as error:
++        raise WorklistError(f"cannot load obligations: {error}") from error
++    if actual_sha256 != expected_sha256:
++        raise WorklistError("worklist obligations digest differs")
++    sites = document.get("sites")
++    total = document.get("total")
++    if not isinstance(sites, list) or total != len(sites) or not sites:
++        raise WorklistError("worklist sites are incomplete")
++    return document
++
++
++def _site_line(index: int, site: object) -> str:
++    """Render one validated source site."""
++    if not isinstance(site, dict):
++        raise WorklistError("worklist site is not an object")
++    dependent = site.get("dependent")
++    if not isinstance(dependent, dict):
++        raise WorklistError("worklist dependent is not an object")
++    values = (
++        site.get("path"),
++        site.get("line"),
++        site.get("column"),
++        site.get("kind"),
++        dependent.get("symbol"),
++    )
++    if (
++        not isinstance(values[0], str)
++        or not isinstance(values[1], int)
++        or not isinstance(values[2], int)
++        or not isinstance(values[3], str)
++        or not isinstance(values[4], str)
++    ):
++        raise WorklistError("worklist site fields are invalid")
++    return f"{index}. {values[0]}:{values[1]}:{values[2]} {values[3]} in {values[4]}"
++
++
++def main(argv: list[str] | None = None) -> int:
++    """Read one page from a precomputed index without writing repository state."""
++    parser = argparse.ArgumentParser(prog="viper-impact")
++    parser.add_argument("--index", type=Path, required=True)
++    parser.add_argument("--offset", type=int, default=0)
++    parser.add_argument("--limit", type=int, default=50)
++    parser.add_argument("--json", action="store_true", dest="json_output")
++    arguments = parser.parse_args(argv)
++    try:
++        if arguments.offset < 0 or not 1 <= arguments.limit <= 200:
++            raise WorklistError("offset or limit is outside the supported range")
++        document = _load(arguments.index.resolve())
++        all_sites = document["sites"]
++        sites = all_sites[arguments.offset : arguments.offset + arguments.limit]
++        if arguments.json_output:
++            result = {
++                "status": "ok",
++                "total": document["total"],
++                "offset": arguments.offset,
++                "sites": sites,
++            }
++            print(json.dumps(result, sort_keys=True, separators=(",", ":")))
++        else:
++            end = arguments.offset + len(sites)
++            start = arguments.offset + 1 if sites else 0
++            print(f"References: {start}-{end}/{document['total']}")
++            for index, site in enumerate(sites, start=arguments.offset + 1):
++                print(_site_line(index, site))
++    except WorklistError as error:
++        print(str(error), file=sys.stderr)
++        return 1
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
 diff --git a/src/viper/system_impact/models.py b/src/viper/system_impact/models.py
 index fee650b..e7bdd8e 100644
 --- a/src/viper/system_impact/models.py
@@ -1531,7 +1951,7 @@ index fee650b..e7bdd8e 100644
      "TargetCheck",
      "stage_key",
 diff --git a/src/viper/system_impact/rename.py b/src/viper/system_impact/rename.py
-index 102c372..fa79aee 100644
+index 102c372..90d9e3e 100644
 --- a/src/viper/system_impact/rename.py
 +++ b/src/viper/system_impact/rename.py
 @@ -2,10 +2,9 @@
@@ -1996,12 +2416,7 @@ index 102c372..fa79aee 100644
 +                item.path == obligation.dependent.path
 +                if module_imports
 +                else owner is not None and item.source == owner.node_id
-             )
--            new_sites, new_unresolved = _scan_dependent(
--                root=root,
--                owner=owner,
--                target=obligations.spec.new_target,
--                target_modules=target_modules,
++            )
 +        ]
 +        failures = tuple(
 +            sorted(
@@ -2012,9 +2427,11 @@ index 102c372..fa79aee 100644
 +                    and item.target_module in {old_module, new_module}
 +                }
              )
--            failures = tuple(sorted(set((*old_unresolved, *new_unresolved))))
--            scans[key] = (old_sites, new_sites, failures)
--        old_sites, new_sites, failures = scans[key]
+-            new_sites, new_unresolved = _scan_dependent(
+-                root=root,
+-                owner=owner,
+-                target=obligations.spec.new_target,
+-                target_modules=target_modules,
 +        )
 +        old_sites = tuple(
 +            ReferenceSite(
@@ -2037,7 +2454,10 @@ index 102c372..fa79aee 100644
 +                path=item.path,
 +                line=item.line,
 +                column=item.column,
-+            )
+             )
+-            failures = tuple(sorted(set((*old_unresolved, *new_unresolved))))
+-            scans[key] = (old_sites, new_sites, failures)
+-        old_sites, new_sites, failures = scans[key]
 +            for item in relevant
 +            if item.resolution == "resolved"
 +            and item.target_module == new_module
@@ -2059,7 +2479,7 @@ index 102c372..fa79aee 100644
                  unresolved=bool(failures),
              )
          )
-@@ -692,6 +537,32 @@ def render_rename_check(check: RenameCheck) -> str:
+@@ -692,6 +537,66 @@ def render_rename_check(check: RenameCheck) -> str:
      return "\n".join(lines)
  
  
@@ -2089,41 +2509,79 @@ index 102c372..fa79aee 100644
 +    return "\n".join(lines)
 +
 +
++def rename_worklist_sites(
++    obligations: RenameObligationSet, *, offset: int = 0, limit: int = 50
++) -> tuple[ReferenceSite, ...]:
++    """Select one deterministic page from an already compiled worklist."""
++    if obligations.checker_sha256 != rename_checker_digest():
++        raise RenameAnalysisError("rename worklist was compiled by another checker")
++    sites = sorted(
++        (
++            site
++            for obligation in obligations.obligations
++            for site in obligation.baseline_sites
++        ),
++        key=lambda site: (site.path, site.line, site.column, site.kind),
++    )
++    return tuple(sites[offset : offset + limit])
++
++
++def render_rename_worklist(
++    obligations: RenameObligationSet, *, offset: int = 0, limit: int = 50
++) -> str:
++    """Render one compact page without invoking CodeQL or writing artifacts."""
++    sites = rename_worklist_sites(obligations, offset=offset, limit=limit)
++    total = sum(
++        len(obligation.baseline_sites) for obligation in obligations.obligations
++    )
++    lines = [f"References: {offset + 1 if sites else 0}-{offset + len(sites)}/{total}"]
++    for index, site in enumerate(sites, start=offset + 1):
++        lines.append(
++            f"{index}. {site.path}:{site.line}:{site.column} "
++            f"{site.kind} in {site.dependent.symbol}"
++        )
++    return "\n".join(lines)
++
++
  __all__ = [
      "DependencyTransition",
      "ReferenceSite",
-@@ -703,5 +574,6 @@ __all__ = [
+@@ -703,5 +608,8 @@ __all__ = [
      "check_rename_obligations",
      "compile_rename_obligations",
      "render_rename_check",
 +    "render_rename_plan",
++    "render_rename_worklist",
++    "rename_worklist_sites",
      "rename_checker_digest",
  ]
 diff --git a/tests/test_api.py b/tests/test_api.py
-index 76a3168..d1f0d84 100644
+index 76a3168..f92e683 100644
 --- a/tests/test_api.py
 +++ b/tests/test_api.py
-@@ -53,6 +53,7 @@ def test_api_schema_and_capability_discovery() -> None:
+@@ -53,6 +53,8 @@ def test_api_schema_and_capability_discovery() -> None:
      assert "compare_runs" in capabilities.operations
      assert "explain_impact" in capabilities.operations
      assert "analyze_impact" in capabilities.operations
 +    assert "plan_rename" in capabilities.operations
++    assert "get_rename_worklist" in capabilities.operations
      assert "check_rename" in capabilities.operations
      assert "RunSpec" in capabilities.schemas
      assert "CompareRunsRequest" in capabilities.schemas
-@@ -60,6 +61,7 @@ def test_api_schema_and_capability_discovery() -> None:
+@@ -60,6 +62,8 @@ def test_api_schema_and_capability_discovery() -> None:
      assert "InitProjectRequest" in capabilities.schemas
      assert "ExplainImpactRequest" in capabilities.schemas
      assert "AnalyzeImpactRequest" in capabilities.schemas
 +    assert "RenamePlanRequest" in capabilities.schemas
++    assert "RenameWorklistRequest" in capabilities.schemas
      assert "RenameCheckRequest" in capabilities.schemas
      assert capabilities.execution_backends == ("trusted_local",)
  
 diff --git a/tests/test_cli.py b/tests/test_cli.py
-index c88055e..6d77147 100644
+index c88055e..e9ff395 100644
 --- a/tests/test_cli.py
 +++ b/tests/test_cli.py
-@@ -252,6 +252,18 @@ class CommandLineTests(unittest.TestCase):
+@@ -252,6 +252,24 @@ class CommandLineTests(unittest.TestCase):
                  "--kind",
                  "calls",
              ],
@@ -2139,9 +2597,35 @@ index c88055e..6d77147 100644
 +                "--kind",
 +                "calls",
 +            ],
++            "impact-rename-worklist": [
++                "impact",
++                "rename-worklist",
++                "--obligations",
++                "missing-obligations.json",
++            ],
          }
          for name, arguments in cases.items():
              with self.subTest(command=name):
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 25919b6..f02aa25 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -22,6 +22,7 @@ TIER_BY_MODULE = {
+     "test_execution_acceptance": "integration",
+     "test_generated_project_acceptance": "release",
+     "test_http_retrieval": "contract",
++    "test_impact_cli": "unit",
+     "test_inspection": "contract",
+     "test_live_process_startup": "integration",
+     "test_storage": "unit",
+@@ -69,6 +70,7 @@ DOMAIN_BY_MODULE = {
+     "test_execution_acceptance": "domain_execution",
+     "test_generated_project_acceptance": "domain_release",
+     "test_http_retrieval": "domain_http",
++    "test_impact_cli": "domain_protocol",
+     "test_inspection": "domain_verification",
+     "test_live_process_startup": "domain_execution",
+     "test_storage": "domain_storage",
 diff --git a/tests/test_codeql_analysis.py b/tests/test_codeql_analysis.py
 index 2087178..6756303 100644
 --- a/tests/test_codeql_analysis.py
@@ -2323,8 +2807,79 @@ index 2087178..6756303 100644
      }
  
  
+diff --git a/tests/test_impact_cli.py b/tests/test_impact_cli.py
+new file mode 100644
+index 0000000..bdd2c9c
+--- /dev/null
++++ b/tests/test_impact_cli.py
+@@ -0,0 +1,65 @@
++"""Verify the stdlib-only precomputed impact lookup."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++from pathlib import Path
++
++from viper.impact_cli import main
++
++
++def _index(tmp_path: Path) -> Path:
++    """Write one bound worklist fixture."""
++    obligations = tmp_path / "rename-obligations.json"
++    obligations.write_bytes(b'{"frozen":true}')
++    index = tmp_path / "rename-worklist.json"
++    index.write_text(
++        json.dumps(
++            {
++                "schema_version": 1,
++                "obligations_file": obligations.name,
++                "obligations_sha256": hashlib.sha256(
++                    obligations.read_bytes()
++                ).hexdigest(),
++                "total": 1,
++                "sites": [
++                    {
++                        "dependent": {"path": "src/app.py", "symbol": "caller"},
++                        "kind": "calls",
++                        "path": "src/app.py",
++                        "line": 7,
++                        "column": 4,
++                    }
++                ],
++            }
++        ),
++        encoding="utf-8",
++    )
++    return index
++
++
++def test_worklist_lookup_reads_one_bound_page(tmp_path: Path, capsys) -> None:
++    """Return source evidence without creating another artifact."""
++    index = _index(tmp_path)
++    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
++
++    status = main(["--index", str(index), "--limit", "1"])
++
++    after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
++    assert status == 0
++    assert capsys.readouterr().out == (
++        "References: 1-1/1\n1. src/app.py:7:4 calls in caller\n"
++    )
++    assert after == before
++
++
++def test_worklist_lookup_rejects_changed_obligations(tmp_path: Path, capsys) -> None:
++    """Reject an index whose frozen obligation bytes have changed."""
++    index = _index(tmp_path)
++    (tmp_path / "rename-obligations.json").write_bytes(b'{"frozen":false}')
++
++    status = main(["--index", str(index)])
++
++    assert status == 1
++    assert "digest differs" in capsys.readouterr().err
 diff --git a/tests/test_rename_obligations.py b/tests/test_rename_obligations.py
-index 31a9cb9..a7081d4 100644
+index 31a9cb9..9b86970 100644
 --- a/tests/test_rename_obligations.py
 +++ b/tests/test_rename_obligations.py
 @@ -5,6 +5,7 @@ from __future__ import annotations
@@ -2343,15 +2898,16 @@ index 31a9cb9..a7081d4 100644
      SourceSnapshot,
      stage_key,
  )
-@@ -31,6 +33,7 @@ from viper.system_impact.rename import (
+@@ -31,6 +33,8 @@ from viper.system_impact.rename import (
      check_rename_obligations,
      compile_rename_obligations,
      render_rename_check,
 +    render_rename_plan,
++    render_rename_worklist,
  )
  
  _SHA = "0" * 64
-@@ -135,10 +138,77 @@ def _graph(
+@@ -135,10 +139,77 @@ def _graph(
                  query="viper/python-impact/dependencies",
                  path="tests/test_use.py",
                  line=caller_node.start_line + 1,
@@ -2429,7 +2985,7 @@ index 31a9cb9..a7081d4 100644
      snapshot = SourceSnapshot(
          base_revision=_REVISION,
          source_sha256=source_digest(root),
-@@ -167,6 +237,7 @@ def _graph(
+@@ -167,6 +238,7 @@ def _graph(
          {
              "nodes": [item.model_dump(mode="json") for item in nodes],
              "edges": [item.model_dump(mode="json") for item in edges],
@@ -2437,7 +2993,7 @@ index 31a9cb9..a7081d4 100644
          },
          sort_keys=True,
          separators=(",", ":"),
-@@ -184,6 +255,7 @@ def _graph(
+@@ -184,6 +256,7 @@ def _graph(
          snapshot=snapshot,
          nodes=nodes,
          edges=edges,
@@ -2445,7 +3001,7 @@ index 31a9cb9..a7081d4 100644
          receipt=CodeQLAnalysisReceipt(
              database=database,
              query=query,
-@@ -209,7 +281,7 @@ def _baseline(root: Path) -> SourceGraph:
+@@ -209,7 +282,7 @@ def _baseline(root: Path) -> SourceGraph:
      return _graph(root, target="run", include_edge=True, committed=True)
  
  
@@ -2454,7 +3010,7 @@ index 31a9cb9..a7081d4 100644
      """Write and graph one candidate with a new declaration."""
      _write(
          root,
-@@ -221,7 +293,7 @@ def _candidate(root: Path, call: str) -> SourceGraph:
+@@ -221,7 +294,7 @@ def _candidate(root: Path, call: str) -> SourceGraph:
          "tests/test_use.py",
          "from viper import _subprocess as subprocess\n\n"
          "def call() -> None:\n"
@@ -2463,13 +3019,16 @@ index 31a9cb9..a7081d4 100644
      )
      return _graph(
          root,
-@@ -252,11 +324,36 @@ def test_complete_rename_satisfies_every_compiled_obligation(tmp_path: Path) ->
+@@ -252,11 +325,39 @@ def test_complete_rename_satisfies_every_compiled_obligation(tmp_path: Path) ->
      )
  
      assert check.passed
 +    plan = render_rename_plan(obligations)
 +    assert "Required references: 1" in plan
 +    assert "tests/test_use.py:4:4 calls in call" in plan
++    assert render_rename_worklist(obligations, limit=1) == (
++        "References: 1-1/1\n1. tests/test_use.py:4:4 calls in call"
++    )
      assert [transition.status for transition in check.transitions] == ["satisfied"]
      assert "Satisfied: 1/1 references" in render_rename_check(check)
      assert "Completion: accepted" in render_rename_check(check)
@@ -2500,7 +3059,7 @@ index 31a9cb9..a7081d4 100644
  @pytest.mark.unit
  @pytest.mark.domain_protocol
  def test_stale_old_call_is_rejected_after_old_declaration_disappears(
-@@ -368,7 +465,7 @@ def test_alias_rebinding_fails_closed(tmp_path: Path) -> None:
+@@ -368,7 +469,7 @@ def test_alias_rebinding_fails_closed(tmp_path: Path) -> None:
  
      assert not check.passed
      assert check.transitions[0].status == "analysis_unresolved"

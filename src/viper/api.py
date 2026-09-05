@@ -81,7 +81,15 @@ from .system_impact.explain import (
     explain_plan_check,
 )
 from .system_impact.models import CommitId, PlanCheck, SourceGraph
-from .system_impact.rename import ReferenceKind, RenameCheck, RenameObligationSet
+from .system_impact.rename import (
+    ReferenceKind,
+    ReferenceSite,
+    RenameAnalysisError,
+    RenameCheck,
+    RenameObligationSet,
+    rename_worklist_sites,
+    render_rename_worklist,
+)
 from .verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
@@ -117,6 +125,7 @@ OperationName = Literal[
     "explain_impact",
     "analyze_impact",
     "plan_rename",
+    "get_rename_worklist",
     "check_rename",
 ]
 FailureOrigin = Literal["request", "application", "cli", "internal"]
@@ -701,10 +710,31 @@ class RenamePlanSuccess(SuccessModel):
     artifact_root: Path = Field(description="Directory containing plan evidence.")
     baseline_graph: Path = Field(description="Receipt-bound baseline graph.")
     obligations_path: Path = Field(description="Machine-readable frozen worklist.")
+    worklist_path: Path = Field(description="Fast stdlib-only lookup index.")
     report: str = Field(description="Compact source-located worklist.")
     obligations: RenameObligationSet = Field(
         description="Validated baseline rename obligations."
     )
+
+
+class RenameWorklistRequest(APIModel):
+    """Select one page from an already compiled rename obligation set."""
+
+    obligations_path: Path = Field(description="Frozen obligation-set JSON path.")
+    offset: int = Field(default=0, ge=0, description="Zero-based first site index.")
+    limit: int = Field(default=50, ge=1, le=200, description="Maximum sites returned.")
+
+
+class RenameWorklistSuccess(SuccessModel):
+    """Return a read-only page from the persisted rename index."""
+
+    operation: Literal["get_rename_worklist"] = "get_rename_worklist"  # pyright: ignore[reportIncompatibleVariableOverride]
+    obligations_path: Path = Field(description="Loaded obligation-set path.")
+    obligations_sha256: str = Field(description="Digest of the exact loaded bytes.")
+    total: int = Field(ge=1, description="All indexed reference sites.")
+    offset: int = Field(ge=0, description="Requested zero-based first index.")
+    sites: tuple[ReferenceSite, ...] = Field(description="Selected source sites.")
+    report: str = Field(description="Compact agent-facing source worklist.")
 
 
 class LocalRunPath(APIModel):
@@ -762,6 +792,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "RenameCheckSuccess": RenameCheckSuccess,
     "RenamePlanRequest": RenamePlanRequest,
     "RenamePlanSuccess": RenamePlanSuccess,
+    "RenameWorklistRequest": RenameWorklistRequest,
+    "RenameWorklistSuccess": RenameWorklistSuccess,
     "FreezeRunRequest": FreezeRunRequest,
     "FreezeRunSuccess": FreezeRunSuccess,
     "InitProjectRequest": InitProjectRequest,
@@ -824,6 +856,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "explain_impact",
     "analyze_impact",
     "plan_rename",
+    "get_rename_worklist",
     "check_rename",
 )
 
@@ -1516,6 +1549,46 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
     )
 
 
+def get_rename_worklist(
+    request: RenameWorklistRequest,
+) -> RenameWorklistSuccess:
+    """Read one page from a persisted baseline index without running CodeQL."""
+    path = request.obligations_path.resolve()
+    try:
+        content = path.read_bytes()
+        obligations = RenameObligationSet.model_validate_json(content)
+        sites = rename_worklist_sites(
+            obligations,
+            offset=request.offset,
+            limit=request.limit,
+        )
+        report = render_rename_worklist(
+            obligations,
+            offset=request.offset,
+            limit=request.limit,
+        )
+    except (OSError, ValueError, RenameAnalysisError) as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="get_rename_worklist",
+                origin="application",
+                code="invalid_document",
+                message=str(exc),
+            )
+        ) from exc
+    total = sum(
+        len(obligation.baseline_sites) for obligation in obligations.obligations
+    )
+    return RenameWorklistSuccess(
+        obligations_path=path,
+        obligations_sha256=hashlib.sha256(content).hexdigest(),
+        total=total,
+        offset=request.offset,
+        sites=sites,
+        report=report,
+    )
+
+
 def plan_rename(request: RenamePlanRequest) -> RenamePlanSuccess:
     """Compile one exact baseline rename worklist."""
     try:
@@ -1545,6 +1618,7 @@ def plan_rename(request: RenamePlanRequest) -> RenamePlanSuccess:
         artifact_root=result.artifact_root,
         baseline_graph=result.baseline_graph,
         obligations_path=result.obligations_path,
+        worklist_path=result.worklist_path,
         report=result.report,
         obligations=result.obligations,
     )
@@ -1652,6 +1726,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "explain_impact": ExplainImpactRequest,
     "analyze_impact": AnalyzeImpactRequest,
     "plan_rename": RenamePlanRequest,
+    "get_rename_worklist": RenameWorklistRequest,
     "check_rename": RenameCheckRequest,
 }
 
@@ -1679,6 +1754,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "explain_impact": explain_impact,
     "analyze_impact": analyze_impact,
     "plan_rename": plan_rename,
+    "get_rename_worklist": get_rename_worklist,
     "check_rename": check_rename,
 }
 
@@ -1882,6 +1958,8 @@ __all__ = [
     "RenameCheckSuccess",
     "RenamePlanRequest",
     "RenamePlanSuccess",
+    "RenameWorklistRequest",
+    "RenameWorklistSuccess",
     "CapabilitiesRequest",
     "CapabilitiesSuccess",
     "CompareRunsRequest",
@@ -1944,6 +2022,7 @@ __all__ = [
     "restore_artifacts",
     "freeze_run",
     "get_capabilities",
+    "get_rename_worklist",
     "init_project",
     "get_schema",
     "lineage",

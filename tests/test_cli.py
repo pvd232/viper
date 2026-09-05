@@ -264,6 +264,12 @@ class CommandLineTests(unittest.TestCase):
                 "--kind",
                 "calls",
             ],
+            "impact-rename-worklist": [
+                "impact",
+                "rename-worklist",
+                "--obligations",
+                "missing-obligations.json",
+            ],
         }
         for name, arguments in cases.items():
             with self.subTest(command=name):

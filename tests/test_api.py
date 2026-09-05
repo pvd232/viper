@@ -54,6 +54,7 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "explain_impact" in capabilities.operations
     assert "analyze_impact" in capabilities.operations
     assert "plan_rename" in capabilities.operations
+    assert "get_rename_worklist" in capabilities.operations
     assert "check_rename" in capabilities.operations
     assert "RunSpec" in capabilities.schemas
     assert "CompareRunsRequest" in capabilities.schemas
@@ -62,6 +63,7 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "ExplainImpactRequest" in capabilities.schemas
     assert "AnalyzeImpactRequest" in capabilities.schemas
     assert "RenamePlanRequest" in capabilities.schemas
+    assert "RenameWorklistRequest" in capabilities.schemas
     assert "RenameCheckRequest" in capabilities.schemas
     assert capabilities.execution_backends == ("trusted_local",)
 

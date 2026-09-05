@@ -166,6 +166,7 @@ model, schema registry, handler registry, and JSON encoder.
 | `explain_impact` | `ExplainImpactRequest` | `ExplainImpactSuccess` | `impact-explain` |
 | `analyze_impact` | `AnalyzeImpactRequest` | `AnalyzeImpactSuccess` | `impact-analyze` |
 | `plan_rename` | `RenamePlanRequest` | `RenamePlanSuccess` | `impact-rename-plan` |
+| `get_rename_worklist` | `RenameWorklistRequest` | `RenameWorklistSuccess` | `impact-rename-worklist` |
 | `check_rename` | `RenameCheckRequest` | `RenameCheckSuccess` | `impact-rename-check` |
 
 Python callers can invoke a concrete operation directly:
@@ -346,7 +347,23 @@ viper impact rename-plan \
 ```
 
 The plan reports each required path, line, column, operation, and containing
-declaration. After editing, agents can verify the same transformation:
+declaration. It also writes `rename-worklist.json`. Agents can page through
+that precomputed index without starting CodeQL or loading the VIPER
+application:
+
+```bash
+viper-impact \
+  --index .viper/system-impact/rename-plan/rename-worklist.json \
+  --offset 0 \
+  --limit 50
+```
+
+The fast command uses only the Python standard library, verifies the adjacent
+obligation-file digest, and does not write repository state. The equivalent
+typed operation is `get_rename_worklist`; the full CLI surface is
+`viper impact rename-worklist --obligations <rename-obligations.json>`.
+This index guides editing but does not decide completion. After editing, agents
+verify the same transformation:
 
 ```bash
 viper impact rename-check \

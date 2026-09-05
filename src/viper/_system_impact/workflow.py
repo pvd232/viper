@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import tarfile
@@ -26,6 +27,7 @@ from viper.system_impact.rename import (
     RenameSpec,
     check_rename_obligations,
     compile_rename_obligations,
+    rename_worklist_sites,
     render_rename_check,
     render_rename_plan,
 )
@@ -81,6 +83,7 @@ class WorkingTreeRenamePlan:
     artifact_root: Path
     baseline_graph: Path
     obligations_path: Path
+    worklist_path: Path
     report: str
     obligations: RenameObligationSet
 
@@ -198,6 +201,26 @@ def _write_model(path: Path, value: RenameObligationSet | RenameCheck) -> None:
     """Atomically persist one canonical rename protocol record."""
     temporary = path.with_suffix(f"{path.suffix}.tmp")
     temporary.write_text(value.model_dump_json(), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _write_worklist_index(
+    path: Path, *, obligations_path: Path, obligations: RenameObligationSet
+) -> None:
+    """Persist the stdlib-only index consumed by the fast agent command."""
+    sites = rename_worklist_sites(obligations, limit=10_000)
+    document = {
+        "schema_version": 1,
+        "obligations_file": obligations_path.name,
+        "obligations_sha256": hashlib.sha256(obligations_path.read_bytes()).hexdigest(),
+        "total": len(sites),
+        "sites": [site.model_dump(mode="json") for site in sites],
+    }
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(
+        json.dumps(document, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
     temporary.replace(path)
 
 
@@ -413,9 +436,15 @@ def plan_working_tree_rename(
 
     baseline_path = output / "baseline-source-graph.json"
     obligations_path = output / "rename-obligations.json"
+    worklist_path = output / "rename-worklist.json"
     report = render_rename_plan(obligations)
     _write_graph(baseline_path, baseline)
     _write_model(obligations_path, obligations)
+    _write_worklist_index(
+        worklist_path,
+        obligations_path=obligations_path,
+        obligations=obligations,
+    )
     (output / "rename-plan.txt").write_text(report + "\n", encoding="utf-8")
     return WorkingTreeRenamePlan(
         repository_root=repository,
@@ -423,6 +452,7 @@ def plan_working_tree_rename(
         artifact_root=output,
         baseline_graph=baseline_path,
         obligations_path=obligations_path,
+        worklist_path=worklist_path,
         report=report,
         obligations=obligations,
     )

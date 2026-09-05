@@ -263,6 +263,18 @@ def build_parser() -> ArgumentParser:
     rename_plan.add_argument("--cache-root", type=Path)
     rename_plan.add_argument("--codeql-executable", type=Path)
     rename_plan.add_argument("--query-pack", type=Path)
+    rename_worklist = impact_commands.add_parser(
+        "rename-worklist",
+        help="read a precomputed rename worklist without running CodeQL",
+    )
+    rename_worklist.add_argument(
+        "--obligations",
+        dest="obligations_path",
+        type=Path,
+        required=True,
+    )
+    rename_worklist.add_argument("--offset", type=int, default=0)
+    rename_worklist.add_argument("--limit", type=int, default=50)
     rename_check = impact_commands.add_parser(
         "rename-check",
         help="verify an exact old-to-new dependency transition",
@@ -326,6 +338,7 @@ def _operation_and_payload(
         "impact-explain": "explain_impact",
         "impact-analyze": "analyze_impact",
         "impact-rename-plan": "plan_rename",
+        "impact-rename-worklist": "get_rename_worklist",
         "impact-rename-check": "check_rename",
     }
     operation = mapping[command]
@@ -448,7 +461,11 @@ def _human_success(result: SuccessModel) -> str:
             f"at {item.use_path}:{item.use_line}"
             for item in evidence
         )
-    if result.operation in {"plan_rename", "check_rename"}:
+    if result.operation in {
+        "plan_rename",
+        "get_rename_worklist",
+        "check_rename",
+    }:
         return getattr(result, "report")
     capabilities = getattr(result, "operations")
     return "\n".join(capabilities)

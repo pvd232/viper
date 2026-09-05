@@ -55,6 +55,7 @@ Issues = "https://github.com/pvd232/viper/issues"
 
 [project.scripts]
 viper = "viper.cli:main"
+viper-impact = "viper.impact_cli:main"
 
 [tool.ruff]
 exclude = ["archive"]

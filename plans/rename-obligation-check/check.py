@@ -187,6 +187,7 @@ def _validate(
             str(python),
             "-m",
             "pytest",
+            "tests/test_impact_cli.py",
             "tests/test_rename_obligations.py",
             "-q",
         ),
@@ -251,7 +252,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     evidence_path.write_text(
         json.dumps(
             {
-                "block": "P0-ROC-01",
+                "block": "P0-ROC-02",
                 "candidate": str(candidate),
                 "changed": [str(path) for path in changed],
                 **evidence,

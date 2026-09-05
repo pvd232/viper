@@ -5,9 +5,11 @@ rename-check implementation. Production behavior now belongs to
 [`system_impact/rename.py`](../../src/viper/system_impact/rename.py), the typed
 API, and `viper impact rename-check`.
 `viper impact rename-plan` publishes the frozen baseline worklist before edits.
+It also publishes `rename-worklist.json`; the stdlib-only `viper-impact`
+command serves that index during the edit loop without starting CodeQL.
 
-[`agent-experiment.md`](agent-experiment.md) records the paired coding-agent
-smoke test and its bounded conclusion.
+[`agent-experiment.md`](agent-experiment.md) records the original smoke tests
+and the staged paired trial of ordinary search against the precomputed index.
 
 `plan.toml` takes the accepted `P0-ROC-01` commit as its baseline and binds
 `P0-ROC-02` to the query-derived checker and overlay optimization. `check.py`

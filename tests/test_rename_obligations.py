@@ -34,6 +34,7 @@ from viper.system_impact.rename import (
     compile_rename_obligations,
     render_rename_check,
     render_rename_plan,
+    render_rename_worklist,
 )
 
 _SHA = "0" * 64
@@ -327,6 +328,9 @@ def test_complete_rename_satisfies_every_compiled_obligation(tmp_path: Path) -> 
     plan = render_rename_plan(obligations)
     assert "Required references: 1" in plan
     assert "tests/test_use.py:4:4 calls in call" in plan
+    assert render_rename_worklist(obligations, limit=1) == (
+        "References: 1-1/1\n1. tests/test_use.py:4:4 calls in call"
+    )
     assert [transition.status for transition in check.transitions] == ["satisfied"]
     assert "Satisfied: 1/1 references" in render_rename_check(check)
     assert "Completion: accepted" in render_rename_check(check)

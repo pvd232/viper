@@ -563,6 +563,40 @@ def render_rename_plan(obligations: RenameObligationSet) -> str:
     return "\n".join(lines)
 
 
+def rename_worklist_sites(
+    obligations: RenameObligationSet, *, offset: int = 0, limit: int = 50
+) -> tuple[ReferenceSite, ...]:
+    """Select one deterministic page from an already compiled worklist."""
+    if obligations.checker_sha256 != rename_checker_digest():
+        raise RenameAnalysisError("rename worklist was compiled by another checker")
+    sites = sorted(
+        (
+            site
+            for obligation in obligations.obligations
+            for site in obligation.baseline_sites
+        ),
+        key=lambda site: (site.path, site.line, site.column, site.kind),
+    )
+    return tuple(sites[offset : offset + limit])
+
+
+def render_rename_worklist(
+    obligations: RenameObligationSet, *, offset: int = 0, limit: int = 50
+) -> str:
+    """Render one compact page without invoking CodeQL or writing artifacts."""
+    sites = rename_worklist_sites(obligations, offset=offset, limit=limit)
+    total = sum(
+        len(obligation.baseline_sites) for obligation in obligations.obligations
+    )
+    lines = [f"References: {offset + 1 if sites else 0}-{offset + len(sites)}/{total}"]
+    for index, site in enumerate(sites, start=offset + 1):
+        lines.append(
+            f"{index}. {site.path}:{site.line}:{site.column} "
+            f"{site.kind} in {site.dependent.symbol}"
+        )
+    return "\n".join(lines)
+
+
 __all__ = [
     "DependencyTransition",
     "ReferenceSite",
@@ -575,5 +609,7 @@ __all__ = [
     "compile_rename_obligations",
     "render_rename_check",
     "render_rename_plan",
+    "render_rename_worklist",
+    "rename_worklist_sites",
     "rename_checker_digest",
 ]
