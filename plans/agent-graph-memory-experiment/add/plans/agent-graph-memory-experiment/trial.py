@@ -240,9 +240,9 @@ def run_agent_trial(context: Context[AgentTrialParameters]) -> None:
             evaluator.stdout + evaluator.stderr,
             encoding="utf-8",
         )
-        _candidate_archive(candidate, outputs["candidate"])
+        _candidate_archive(candidate, outputs["model"])
         candidate_archive_sha256 = hashlib.sha256(
-            outputs["candidate"].read_bytes()
+            outputs["model"].read_bytes()
         ).hexdigest()
         usage = _usage(outputs["transcript"])
         outputs["usage"].write_text(

@@ -328,7 +328,7 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
             for name, filename in {
                 "transcript": "transcript.jsonl",
                 "patch": "candidate.patch",
-                "candidate": "candidate.tar.gz",
+                "model": "candidate.tar.gz",
                 "usage": "usage.json",
                 "verdict": "verdict.json",
                 "evaluator_output": "hidden-evaluator.txt",
@@ -349,7 +349,7 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
         drafts[arm] = variant(
             levels={"arm": arm},
             stages={"agent_trial": trial_stage},
-            estimator=trial_stage.artifacts["candidate"],
+            estimator=trial_stage.artifacts["model"],
         )
     study = experiment(
         experiment_id="agent_graph_memory",
