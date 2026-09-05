@@ -9442,6 +9442,7 @@ targets = [
     "src/viper/execution/_restore.py:LocalArtifactStore",
     "src/viper/execution/_restore.py:ViperCloudClient",
     "src/viper/execution/_restore.py:content_revision",
+    "src/viper/execution/_restore.py:StorageFetcher",
     "src/viper/execution/_restore.py:RunFetcher",
     "src/viper/execution/_restore.py:RestoreError",
     "src/viper/execution/_restore.py:_PlannedFile",
@@ -9730,6 +9731,11 @@ from ..stages import ResolvedSpec
 from ..storage import LocalArtifactStore, ViperCloudClient, content_revision
 ```
 
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:StorageFetcher -->
+```python contract-target
+from ..verification.models import StorageFetcher
+```
+
 <!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RunFetcher -->
 ```python contract-target
 from ._source import RunFetcher
@@ -9759,7 +9765,7 @@ _RESOLVED_SPEC = TypeAdapter(ResolvedSpec)
 
 <!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_verified_bytes -->
 ```python contract-target
-def _verified_bytes(fetcher: RunFetcher, reference: ResolvedFileRef) -> bytes:
+def _verified_bytes(fetcher: StorageFetcher, reference: ResolvedFileRef) -> bytes:
     """Retrieve one file and require its recorded byte identity."""
     try:
         raw = fetcher(reference.stored_at)
@@ -9849,7 +9855,7 @@ def _run_reference(
 ```python contract-target
 def _successful_attempt(
     run: ResolvedRun,
-    fetcher: RunFetcher,
+    fetcher: StorageFetcher,
 ) -> RunAttempt:
     """Load the successful attempt named by a terminal run."""
     if run.status != "succeeded" or run.successful_attempt_id is None:
@@ -9868,7 +9874,7 @@ def _successful_attempt(
 ```python contract-target
 def _stage_artifacts(
     attempt: RunAttempt,
-    fetcher: RunFetcher,
+    fetcher: StorageFetcher,
 ) -> dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]]:
     """Load each resolved stage and index its immutable artifact files."""
     indexed: dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]] = {}
@@ -9967,7 +9973,7 @@ def _plan_files(
 <!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_restore_files -->
 ```python contract-target
 def _restore_files(
-    fetcher: RunFetcher,
+    fetcher: StorageFetcher,
     planned: tuple[_PlannedFile, ...],
 ) -> dict[ArtifactRestoreSelector, list[RestoredFile]]:
     """Verify every source and destination before atomically replacing files."""
