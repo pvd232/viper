@@ -16,6 +16,8 @@ from .api import (
     dispatch,
     result_json_bytes,
 )
+import json
+
 
 RootArg = Literal["root", "left_root", "right_root"]
 
@@ -53,6 +55,16 @@ def parse_artifact_selector(value: str) -> tuple[str, str]:
         raise argparse.ArgumentTypeError("artifact selector must use STAGE.ARTIFACT")
     return stage_id, artifact_name
 
+
+def parse_query(value: str) -> dict[str, Any]:
+    """Parse one catalog query object from the command line."""
+    try:
+        query = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise argparse.ArgumentTypeError("query must be valid JSON") from error
+    if not isinstance(query, dict):
+        raise argparse.ArgumentTypeError("query must be a JSON object")
+    return query
 
 def build_parser() -> ArgumentParser:
     """Build the VIPER command parser and its API subcommands."""
@@ -113,6 +125,34 @@ def build_parser() -> ArgumentParser:
     run_many.add_argument("--max-concurrency", type=int, default=1)
     run_many.add_argument("--timeout-seconds", type=float)
     run_many.add_argument("--stop-on-failure", action="store_true")
+
+    catalog_refresh = commands.add_parser(
+        "catalog-refresh",
+        help="verify terminal runs and rebuild the local catalog",
+    )
+    catalog_refresh.add_argument("run_paths", nargs="+", type=Path)
+    add_root(catalog_refresh)
+    catalog_refresh.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
+    for name, help_text in (
+        ("search-runs", "query verified runs"),
+        ("search-artifacts", "query verified artifacts"),
+        ("search-measurements", "query verified measurements"),
+        ("search-benchmarks", "query verified benchmark results"),
+    ):
+        search = commands.add_parser(name, help=help_text)
+        add_root(search)
+        search.add_argument(
+            "--query",
+            type=parse_query,
+            default={},
+            help="exact query model as one JSON object",
+        )
 
     retry_command = commands.add_parser(
         "retry",
@@ -262,6 +302,11 @@ def _operation_and_payload(
         "execute-stage": "execute_stage",
         "run": "run",
         "run-many": "run_many",
+        "catalog-refresh": "catalog_refresh",
+        "search-runs": "search_runs",
+        "search-artifacts": "search_artifacts",
+        "search-measurements": "search_measurements",
+        "search-benchmarks": "search_benchmarks",
         "retry": "retry",
         "execute-benchmark": "execute_benchmark",
         "restore": "restore",
@@ -331,6 +376,12 @@ def _human_success(result: SuccessModel) -> str:
         runs = getattr(result, "result").runs
         failures = sum(run.status == "failed" for run in runs)
         return f"completed {len(runs)} runs with {failures} failures"
+    if result.operation == "catalog_refresh":
+        refreshed = getattr(result, "result")
+        return f"cataloged {refreshed.accepted} sources; rejected {refreshed.rejected}"
+    if result.operation.startswith("search_"):
+        page = getattr(result, "page")
+        return f"returned {len(page.items)} catalog results"
     if result.operation == "retry":
         return (
             f"completed attempt {getattr(result, 'attempt_id')} for run "

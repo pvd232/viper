@@ -29,6 +29,18 @@ from viper.runs import (
 )
 from viper.serialization import load_stage_spec, parse_yaml_bytes, serialize_document
 from viper.verification.models import VerifiedRunPlan, VerifiedRunResult
+import sqlite3
+
+from dataclasses import replace
+
+from datetime import timedelta
+
+from viper.catalog import Catalog, CatalogRunSource, RunQuery
+
+from viper.references import ResolvedRunRef
+
+from viper.stages import DownloadSpec
+
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"
@@ -50,10 +62,10 @@ def _run(stage_raw: bytes, *, seed: int) -> RunSpec:
                 "repository": "https://github.com/example/project",
                 "commit": COMMIT,
             },
-            "environment": {
+            "env": {
                 "kind": "local",
                 "compute": {"kind": "cpu"},
-                "python_environment": python_environment().model_dump(mode="json"),
+                "python_env": python_environment().model_dump(mode="json"),
                 "lockfile": {
                     "kind": "git",
                     "repository": "https://github.com/example/project",
@@ -101,7 +113,7 @@ def _run(stage_raw: bytes, *, seed: int) -> RunSpec:
             ],
             "estimator": {
                 "stage_id": "download",
-                "artifact_name": "parameters",
+                "artifact_name": "model",
             },
         }
     )
@@ -109,7 +121,12 @@ def _run(stage_raw: bytes, *, seed: int) -> RunSpec:
 
 def _write_plan(root: Path, *, seed: int) -> Path:
     """Write one complete frozen plan beneath a temporary repository root."""
-    stage_raw = EXAMPLE_STAGE.read_bytes()
+    stage_data = parse_yaml_bytes(EXAMPLE_STAGE.read_bytes())
+    stage_data.pop("environment")
+    for artifact in stage_data["artifacts"].values():
+        if artifact["data_role"] == "evaluation":
+            artifact["data_role"] = "eval"
+    stage_raw = serialize_document(DownloadSpec.model_validate(stage_data))
     stage_path = root / RUN_ROOT / "stages/download/spec.yaml"
     stage_path.parent.mkdir(parents=True)
     stage_path.write_bytes(stage_raw)
@@ -246,3 +263,104 @@ def test_compare_runs_reports_verified_evidence_changes(tmp_path: Path) -> None:
     assert tuple(change.path for change in result.changes) == ("run_spec.seed",)
     assert result.changes[0].left == 42
     assert result.changes[0].right == 43
+def _catalog_source(verified: VerifiedRunResult) -> CatalogRunSource:
+    """Bind the verified terminal document to its exact immutable reference."""
+    raw = serialize_document(verified.result)
+    reference = ResolvedRunRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=GitFileRef.model_validate(
+            {
+                "repository": "https://github.com/example/project",
+                "commit": COMMIT,
+                "path": f"{RUN_ROOT}/resolved.yaml",
+            }
+        ),
+    )
+    return CatalogRunSource(reference=reference, verified=verified)
+
+def test_catalog_refresh_is_atomic_and_rebuildable(
+    tmp_path: Path,
+) -> None:
+    """Replace the index atomically and retain each run's immutable source."""
+    root = tmp_path / "project"
+    run_path = _write_plan(root, seed=42)
+    source = _catalog_source(_verified_result(root, run_path))
+    index = Catalog(root)
+
+    first = index.refresh(runs=(source,))
+    page = index.runs()
+    assert first.accepted == 1
+    assert first.rejected == 0
+    assert page.items[0].run == source.reference
+
+    reader = sqlite3.connect(first.database)
+    try:
+        reader.execute("BEGIN")
+        assert reader.execute("SELECT COUNT(*) FROM runs").fetchone() == (1,)
+        second = index.refresh(runs=(source,))
+        assert reader.execute("SELECT COUNT(*) FROM runs").fetchone() == (1,)
+    finally:
+        reader.close()
+    assert second.sha256 == first.sha256
+
+    first.database.unlink()
+    rebuilt = index.refresh(runs=(source,))
+    assert rebuilt.sha256 == first.sha256
+    assert index.runs() == page
+
+    invalid = CatalogRunSource(
+        reference=source.reference.model_copy(update={"sha256": "c" * 64}),
+        verified=source.verified,
+    )
+    rejected = index.refresh(runs=(invalid,))
+    assert rejected.accepted == 0
+    assert rejected.rejected == 1
+    assert index.runs().items == ()
+
+def test_catalog_results_retain_immutable_sources(tmp_path: Path) -> None:
+    """Page stable rows and reject a cursor reused with different filters."""
+    root = tmp_path / "project"
+    run_path = _write_plan(root, seed=42)
+    first_verified = _verified_result(root, run_path)
+    first = _catalog_source(first_verified)
+    second_verified = replace(
+        first_verified,
+        result=first_verified.result.model_copy(
+            update={
+                "completed_at": first_verified.result.completed_at
+                + timedelta(minutes=1)
+            }
+        ),
+        plan=replace(
+            first_verified.plan,
+            run=first_verified.plan.run.model_copy(
+                update={
+                    "run_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+                    "variant_id": "candidate",
+                }
+            ),
+        ),
+    )
+    second = _catalog_source(second_verified)
+    index = Catalog(root)
+    index.refresh(runs=(second, first))
+
+    page = index.runs(RunQuery(limit=1))
+    assert tuple(item.run_id for item in page.items) == (RUN_ID,)
+    assert page.next_cursor is not None
+    next_page = index.runs(RunQuery(limit=1, cursor=page.next_cursor))
+    assert tuple(item.run_id for item in next_page.items) == (
+        "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+    )
+    assert tuple(
+        item.variant_id
+        for item in index.runs(RunQuery(variant_ids=("candidate",))).items
+    ) == ("candidate",)
+
+    try:
+        index.runs(RunQuery(statuses=("succeeded",), cursor=page.next_cursor))
+    except ValueError as error:
+        assert "another query" in str(error)
+    else:
+        raise AssertionError("a cursor was accepted under different filters")

@@ -90,6 +90,26 @@ from .verification.models import (
     VerificationError,
     VerificationPolicy,
 )
+import sqlite3
+
+from .catalog import (
+    ArtifactPage,
+    ArtifactQuery,
+    BenchmarkPage,
+    BenchmarkQuery,
+    CatalogRefreshResult,
+    CatalogRunSource,
+    MeasurementPage,
+    MeasurementQuery,
+    RunPage,
+    RunQuery,
+    catalog,
+)
+
+from .references import LocalFileRef
+
+from .storage import content_revision
+
 
 OperationName = Literal[
     "validate_stage",
@@ -115,6 +135,11 @@ OperationName = Literal[
     "init_project",
     "explain_impact",
     "analyze_impact",
+    "catalog_refresh",
+    "search_runs",
+    "search_artifacts",
+    "search_measurements",
+    "search_benchmarks",
 ]
 FailureOrigin = Literal["request", "application", "cli", "internal"]
 ErrorCode = Literal[
@@ -672,11 +697,74 @@ class RunManySuccess(SuccessModel):
     result: ExperimentExecutionResult
 
 
+class CatalogRefreshRequest(APIModel):
+    """Select terminal run files for one complete catalog rebuild."""
+
+    root: Path
+    run_paths: tuple[Path, ...]
+    trusted_source_repositories: frozenset[str] = Field(min_length=1)
+
+class CatalogRefreshSuccess(SuccessModel):
+    """Return the accepted and rejected source counts for one rebuild."""
+
+    operation: Literal["catalog_refresh"] = "catalog_refresh"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: CatalogRefreshResult
+
+class SearchRunsRequest(APIModel):
+    """Select one project catalog and exact run query."""
+
+    root: Path
+    query: RunQuery = RunQuery()
+
+class SearchRunsSuccess(SuccessModel):
+    """Return one page of source-linked run results."""
+
+    operation: Literal["search_runs"] = "search_runs"  # pyright: ignore[reportIncompatibleVariableOverride]
+    page: RunPage
+
+class SearchArtifactsRequest(APIModel):
+    """Select one project catalog and exact artifact query."""
+
+    root: Path
+    query: ArtifactQuery = ArtifactQuery()
+
+class SearchArtifactsSuccess(SuccessModel):
+    """Return one page of source-linked artifact results."""
+
+    operation: Literal["search_artifacts"] = "search_artifacts"  # pyright: ignore[reportIncompatibleVariableOverride]
+    page: ArtifactPage
+
+class SearchMeasurementsRequest(APIModel):
+    """Select one project catalog and exact measurement query."""
+
+    root: Path
+    query: MeasurementQuery = MeasurementQuery()
+
+class SearchMeasurementsSuccess(SuccessModel):
+    """Return one page of source-linked measurement results."""
+
+    operation: Literal["search_measurements"] = "search_measurements"  # pyright: ignore[reportIncompatibleVariableOverride]
+    page: MeasurementPage
+
+class SearchBenchmarksRequest(APIModel):
+    """Select one project catalog and exact benchmark query."""
+
+    root: Path
+    query: BenchmarkQuery = BenchmarkQuery()
+
+class SearchBenchmarksSuccess(SuccessModel):
+    """Return one page of source-linked benchmark results."""
+
+    operation: Literal["search_benchmarks"] = "search_benchmarks"  # pyright: ignore[reportIncompatibleVariableOverride]
+    page: BenchmarkPage
+
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
     "CapabilitiesRequest": CapabilitiesRequest,
     "CapabilitiesSuccess": CapabilitiesSuccess,
+    "CatalogRefreshRequest": CatalogRefreshRequest,
+    "CatalogRefreshSuccess": CatalogRefreshSuccess,
     "ExecuteStageRequest": ExecuteStageRequest,
     "ExecuteStageSuccess": ExecuteStageSuccess,
     "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
@@ -711,6 +799,14 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "RunSpec": RunSpec,
     "SchemaRequest": SchemaRequest,
     "SchemaSuccess": SchemaSuccess,
+    "SearchArtifactsRequest": SearchArtifactsRequest,
+    "SearchArtifactsSuccess": SearchArtifactsSuccess,
+    "SearchBenchmarksRequest": SearchBenchmarksRequest,
+    "SearchBenchmarksSuccess": SearchBenchmarksSuccess,
+    "SearchMeasurementsRequest": SearchMeasurementsRequest,
+    "SearchMeasurementsSuccess": SearchMeasurementsSuccess,
+    "SearchRunsRequest": SearchRunsRequest,
+    "SearchRunsSuccess": SearchRunsSuccess,
     "Spec": Spec,
     "ValidateResolvedStageRequest": ValidateResolvedStageRequest,
     "ValidateResolvedStageSuccess": ValidateResolvedStageSuccess,
@@ -751,6 +847,11 @@ OPERATIONS: tuple[OperationName, ...] = (
     "init_project",
     "explain_impact",
     "analyze_impact",
+    "catalog_refresh",
+    "search_runs",
+    "search_artifacts",
+    "search_measurements",
+    "search_benchmarks",
 )
 
 
@@ -1495,6 +1596,105 @@ def run_many(request: RunManyRequest) -> RunManySuccess:
     return RunManySuccess(result=result)
 
 
+def _catalog_run_source(
+    project_root: Path,
+    path: Path,
+    repositories: frozenset[str],
+    fetcher: StorageFetcher,
+) -> CatalogRunSource:
+    """Verify one local terminal file and recover its immutable store reference."""
+    selected = path if path.is_absolute() else project_root / path
+    selected = selected.resolve(strict=True)
+    try:
+        relative = selected.relative_to(project_root).as_posix()
+    except ValueError as error:
+        raise ValueError("catalog run path is outside the project root") from error
+    raw = selected.read_bytes()
+    resolved = ResolvedRun.model_validate(parse_yaml_bytes(raw))
+    verified = verify_run_result(
+        resolved,
+        policy=_policy(repositories),
+        fetcher=fetcher,
+    )
+    reference = ResolvedRunRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=LocalFileRef(
+            commit=content_revision({relative: raw}),
+            path=relative,
+        ),
+    )
+    return CatalogRunSource(reference=reference, verified=verified)
+
+def catalog_refresh(
+    request: CatalogRefreshRequest,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> CatalogRefreshSuccess:
+    """Verify selected terminal runs and atomically rebuild the local catalog."""
+    project_root = _root(request.root, "catalog_refresh")
+    fetcher = _local_fetcher(project_root, fetcher)
+    try:
+        sources = tuple(
+            _catalog_run_source(
+                project_root,
+                path,
+                request.trusted_source_repositories,
+                fetcher,
+            )
+            for path in request.run_paths
+        )
+        result = catalog(root=project_root).refresh(runs=sources)
+    except VerificationError as error:
+        raise ViperError(
+            ViperFailure(
+                operation="catalog_refresh",
+                origin="application",
+                code="verification_failed",
+                message="catalog source verification failed",
+            )
+        ) from error
+    except (OSError, ValueError, yaml.YAMLError, sqlite3.Error) as error:
+        raise ViperError(
+            ViperFailure(
+                operation="catalog_refresh",
+                origin="application",
+                code="invalid_document",
+                message="catalog refresh failed",
+            )
+        ) from error
+    return CatalogRefreshSuccess(result=result)
+
+def search_runs(request: SearchRunsRequest) -> SearchRunsSuccess:
+    """Return one exact page from the selected project's run catalog."""
+    project_root = _root(request.root, "search_runs")
+    return SearchRunsSuccess(page=catalog(root=project_root).runs(request.query))
+
+def search_artifacts(request: SearchArtifactsRequest) -> SearchArtifactsSuccess:
+    """Return one exact page from the selected project's artifact catalog."""
+    project_root = _root(request.root, "search_artifacts")
+    return SearchArtifactsSuccess(
+        page=catalog(root=project_root).artifacts(request.query)
+    )
+
+def search_measurements(
+    request: SearchMeasurementsRequest,
+) -> SearchMeasurementsSuccess:
+    """Return one exact page from the selected project's measurement catalog."""
+    project_root = _root(request.root, "search_measurements")
+    return SearchMeasurementsSuccess(
+        page=catalog(root=project_root).measurements(request.query)
+    )
+
+def search_benchmarks(
+    request: SearchBenchmarksRequest,
+) -> SearchBenchmarksSuccess:
+    """Return one exact page from the selected project's benchmark catalog."""
+    project_root = _root(request.root, "search_benchmarks")
+    return SearchBenchmarksSuccess(
+        page=catalog(root=project_root).benchmarks(request.query)
+    )
+
 REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "validate_stage": ValidateStageRequest,
     "validate_resolved_stage": ValidateResolvedStageRequest,
@@ -1519,6 +1719,11 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "init_project": InitProjectRequest,
     "explain_impact": ExplainImpactRequest,
     "analyze_impact": AnalyzeImpactRequest,
+    "catalog_refresh": CatalogRefreshRequest,
+    "search_runs": SearchRunsRequest,
+    "search_artifacts": SearchArtifactsRequest,
+    "search_measurements": SearchMeasurementsRequest,
+    "search_benchmarks": SearchBenchmarksRequest,
 }
 
 HANDLER_REGISTRY: dict[OperationName, Handler] = {
@@ -1545,6 +1750,11 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "init_project": init_project,
     "explain_impact": explain_impact,
     "analyze_impact": analyze_impact,
+    "catalog_refresh": catalog_refresh,
+    "search_runs": search_runs,
+    "search_artifacts": search_artifacts,
+    "search_measurements": search_measurements,
+    "search_benchmarks": search_benchmarks,
 }
 
 
@@ -1745,6 +1955,8 @@ __all__ = [
     "AnalyzeImpactSuccess",
     "CapabilitiesRequest",
     "CapabilitiesSuccess",
+    "CatalogRefreshRequest",
+    "CatalogRefreshSuccess",
     "CompareRunsRequest",
     "CompareRunsSuccess",
     "ExecuteStageRequest",
@@ -1780,6 +1992,14 @@ __all__ = [
     "ViperCloudRunReference",
     "SchemaRequest",
     "SchemaSuccess",
+    "SearchArtifactsRequest",
+    "SearchArtifactsSuccess",
+    "SearchBenchmarksRequest",
+    "SearchBenchmarksSuccess",
+    "SearchMeasurementsRequest",
+    "SearchMeasurementsSuccess",
+    "SearchRunsRequest",
+    "SearchRunsSuccess",
     "StatusRequest",
     "StatusSuccess",
     "SuccessModel",
@@ -1798,6 +2018,7 @@ __all__ = [
     "ViperError",
     "ViperFailure",
     "analyze_impact",
+    "catalog_refresh",
     "compare_runs",
     "dispatch",
     "execute_stage",
@@ -1815,6 +2036,10 @@ __all__ = [
     "retry",
     "run",
     "run_many",
+    "search_artifacts",
+    "search_benchmarks",
+    "search_measurements",
+    "search_runs",
     "status",
     "validate_resolved_stage",
     "validate_run_spec",

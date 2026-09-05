@@ -34,6 +34,15 @@ from viper.restoration import (
     RestoredFile,
     RestoreResult,
 )
+from viper.api import (
+    CatalogRefreshRequest,
+    SearchRunsRequest,
+    catalog_refresh,
+    search_runs,
+)
+
+from viper.catalog import Catalog, CatalogRefreshResult
+
 
 
 def test_api_schema_and_capability_discovery() -> None:
@@ -56,12 +65,16 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "compare_runs" in capabilities.operations
     assert "explain_impact" in capabilities.operations
     assert "analyze_impact" in capabilities.operations
+    assert "catalog_refresh" in capabilities.operations
+    assert "search_runs" in capabilities.operations
     assert "RunSpec" in capabilities.schemas
     assert "CompareRunsRequest" in capabilities.schemas
     assert "ExecuteBenchmarkRequest" in capabilities.schemas
     assert "InitProjectRequest" in capabilities.schemas
     assert "ExplainImpactRequest" in capabilities.schemas
     assert "AnalyzeImpactRequest" in capabilities.schemas
+    assert "CatalogRefreshRequest" in capabilities.schemas
+    assert "SearchRunsRequest" in capabilities.schemas
     assert capabilities.execution_backends == ("trusted_local",)
 
 
@@ -328,3 +341,71 @@ def test_run_many_result_matches_python_api_and_cli(
         (tmp_path, (run_spec,), 2, 5.0, True),
         (tmp_path, (run_spec,), 2, 5.0, True),
     ]
+def test_catalog_result_matches_python_api_and_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Route catalog refresh and search through the same typed operations."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    run_path = Path("runs/example/resolved.yaml")
+    expected = CatalogRefreshResult(
+        database=tmp_path / ".viper/catalog.sqlite3",
+        sha256="a" * 64,
+        accepted=1,
+        rejected=0,
+    )
+    calls: list[tuple[Path, ...]] = []
+
+    class FakeCatalog:
+        """Record refresh inputs and return the fixed catalog result."""
+
+        def refresh(self, *, runs: tuple[object, ...]) -> CatalogRefreshResult:
+            """Return the fixed result after recording one source tuple."""
+            calls.append(tuple(Path(str(item)) for item in runs))
+            return expected
+
+    monkeypatch.setattr("viper.api.resolve_root", lambda root: root.resolve())
+    monkeypatch.setattr("viper.api._local_fetcher", lambda root, fetcher: object())
+    monkeypatch.setattr(
+        "viper.api._catalog_run_source",
+        lambda root, path, repositories, fetcher: path,
+    )
+    monkeypatch.setattr("viper.api.catalog", lambda root: FakeCatalog())
+    request = CatalogRefreshRequest(
+        root=tmp_path,
+        run_paths=(run_path,),
+        trusted_source_repositories=frozenset({"https://example.test/source"}),
+    )
+
+    direct = catalog_refresh(request)
+    status_code = main(
+        [
+            "--json",
+            "catalog-refresh",
+            str(run_path),
+            "--root",
+            str(tmp_path),
+            "--trust-source",
+            "https://example.test/source",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert status_code == 0
+    assert json.loads(output) == json.loads(result_json_bytes(direct))
+    assert calls == [(run_path,), (run_path,)]
+
+    monkeypatch.setattr("viper.api.catalog", lambda root: Catalog(root))
+    actual_catalog = Catalog(tmp_path)
+    actual_catalog.refresh()
+    search = search_runs(SearchRunsRequest(root=tmp_path))
+    status_code = main(
+        ["--json", "search-runs", "--root", str(tmp_path), "--query", "{}"]
+    )
+    output = capsys.readouterr().out
+    assert status_code == 0
+    assert json.loads(output) == json.loads(result_json_bytes(search))
