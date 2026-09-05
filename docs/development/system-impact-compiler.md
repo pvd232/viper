@@ -1325,7 +1325,7 @@ is rejected before any upload begins.
 | `system.codeql.identity` <!-- verifier-rule: system.codeql.identity requirement=SIG-05 --> | Baseline and candidate receipts contain the same pinned CodeQL identity and their exact source-snapshot and result digests. |
 | `system.source.writes` <!-- verifier-rule: system.source.writes requirement=SIG-06 --> | The checked-in CodeQL pack emits `writes` edges for a function writing a declared module variable and a method writing a declared class attribute; every emitted edge retains the assignment location. |
 | `system.one_hop.recorded` <!-- verifier-rule: system.one_hop.recorded requirement=SIG-07 --> | `check_plan()` derives the exact added and removed policy-selected one-hop edges from the valid baseline and materialized source graphs; the realized-delta check rejects changed declarations outside the selected PairBlocks. |
-| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/plan/check.py:validate` requires zero Pyright errors in the materialized production source and rejects every project-wide diagnostic absent from the baseline before candidate CodeQL analysis or PairBlock gates. PairBlock gates own runtime behavior. |
+| `system.candidate.typed` <!-- verifier-rule: system.candidate.typed requirement=SIG-07 --> | `tools/plan/check.py:validate` requires zero Pyright errors in the materialized production source, rejects every project-wide diagnostic absent from the baseline, and keeps the selected Python environment active through every PairBlock gate. |
 
 ## 8. Propagation
 
@@ -1336,7 +1336,7 @@ is rejected before any upload begins.
 | `src/viper/system_impact/check.py` | Check the realized plan and bind it to its commit. |
 | `src/viper/_system_impact/codeql.py` | Create and query CodeQL databases and return validated canonical rows. |
 | `src/viper/_system_impact/source.py` | Resolve qualified Python symbols, extract exact UTF-8 declaration bytes including decorators, and implement `classify_target_change()`. |
-| `tools/plan/check.py` | Require zero production Pyright errors, reject project errors absent from the baseline, then restore the caller's `PYTHONPATH`. |
+| `tools/plan/check.py` | Require zero production Pyright errors, reject project errors absent from the baseline, keep the selected Python environment active through `check_plan()`, then restore the caller's environment. |
 | `tools/plan/publish.py` | Upload one accepted compact evidence bundle and return an immutable `ResolvedFileRef` for its manifest. |
 | `tests/test_release_tools.py` | Prove publication uses a private dataset repository, exact check-owned paths, and one immutable Hugging Face commit. |
 | `tests/test_system_impact.py` | Cover exact declaration extraction, change classification, typed one-hop impact selection, action transitions, unexpected changes, plan-digest validation, gate execution, accepted dependencies, committed source-and-plan binding, identity drift, and both committed fixtures. |

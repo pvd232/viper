@@ -702,19 +702,19 @@ def validate(
                 cache=cache,
                 artifacts=results / "planned-codeql",
             )
-        unconsumed = _unconsumed_private_owners(
-            traceability,
-            frozenset(selected),
-            planned,
-        )
-        checked = check_plan(
-            root=candidate,
-            baseline_root=root,
-            traceability=traceability,
-            block_ids=selected,
-            baseline=baseline,
-            realized=planned,
-        )
+            unconsumed = _unconsumed_private_owners(
+                traceability,
+                frozenset(selected),
+                planned,
+            )
+            checked = check_plan(
+                root=candidate,
+                baseline_root=root,
+                traceability=traceability,
+                block_ids=selected,
+                baseline=baseline,
+                realized=planned,
+            )
     result = {
         "passed": checked.passed and not unconsumed,
         "stage": "complete",
