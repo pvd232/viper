@@ -3178,7 +3178,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             bytes=len(source),
         ),
         params=current_params.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     env_payload = environment()
     env_payload["python_env"] = env_payload.pop("python_environment")
@@ -3936,7 +3936,7 @@ def execute_attempt(
                     metric.metric_id: metric for metric in experiment.metrics
                 }
                 for metric_id in stage.metric_ids:
-                    if metric_specs[metric_id].mode != "live":
+                    if metric_specs[metric_id].mode != "in_stage":
                         continue
                     live_path = (
                         root
@@ -4562,7 +4562,7 @@ def _metric_evidence(
             if metric_id in metrics:
                 verifications[metric_id] = reference
     if any(
-        metric.mode == "recompute" and metric_id not in verifications
+        metric.mode == "post_stage" and metric_id not in verifications
         for metric_id, metric in metrics.items()
     ):
         raise ValueError("reuse source is missing metric verification evidence")
@@ -4572,7 +4572,7 @@ def _metric_evidence(
             measurement=found[metric_id],
             verification=(
                 verifications.get(metric_id)
-                if metrics[metric_id].mode == "recompute"
+                if metrics[metric_id].mode == "post_stage"
                 else None
             ),
         )
@@ -5811,7 +5811,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         "from viper import params\n"
         "from viper.metrics import metric\n"
         "from viper.stages import Context, train\n\n"
-        "@metric(metric_id='loss', mode='live')\n"
+        "@metric(metric_id='loss', mode='in_stage')\n"
         "def loss(context, values):\n"
         "    return sum(values) / len(values)\n\n"
         "@train(params=params.Train)\n"
@@ -6659,7 +6659,7 @@ def verify_recomputed_metrics(
             ReusedStageCompletion,
         )
         for metric_id in stage.metric_ids
-        if metric_specs[metric_id].mode == "recompute"
+        if metric_specs[metric_id].mode == "post_stage"
     }
     if len(attempt.metric_verification_files) != len(expected_keys):
         raise VerificationError(
@@ -6704,7 +6704,7 @@ def verify_recomputed_metrics(
             continue
         for metric_id in stage.metric_ids:
             metric = metric_specs[metric_id]
-            if metric.mode != "recompute":
+            if metric.mode != "post_stage":
                 continue
             recorded = tuple(
                 measurement
@@ -7208,10 +7208,10 @@ def verify_stage_reuse(
             raise VerificationError("reuse receipt metric is absent from source plan")
         expected_verification = (
             verifications.get(evidence.metric_id)
-            if metric.mode == "recompute"
+            if metric.mode == "post_stage"
             else None
         )
-        if metric.mode == "recompute" and expected_verification is None:
+        if metric.mode == "post_stage" and expected_verification is None:
             raise VerificationError("reused metric has no verification evidence")
         if evidence.verification != expected_verification:
             raise VerificationError("reuse receipt metric verification differs")
@@ -9261,7 +9261,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
         ),
         parameter_model=parameter_model,
         params=current_params.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(),
         comparator=FloatComparator(),
     )

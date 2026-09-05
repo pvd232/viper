@@ -2190,7 +2190,7 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
     )
     live = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec.model_construct(
         metrics=(live,),
@@ -2202,7 +2202,7 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
 
     recomputed = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="recompute",
+        mode="post_stage",
     )
     invalid = ExperimentSpec.model_construct(
         metrics=(recomputed,),

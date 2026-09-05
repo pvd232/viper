@@ -945,14 +945,14 @@ def verify_measurement_stage_times(
             raise VerificationError("measurement stage has no resolved stage result")
         metric = metrics[measurement.metric_id]
         if (
-            metric.mode == "live"
+            metric.mode == "in_stage"
             and measurement.measured_at > resolved_stage.completed_at
         ):
             raise VerificationError(
                 "live measurement timestamp follows its named stage completion"
             )
         if (
-            metric.mode == "recompute"
+            metric.mode == "post_stage"
             and measurement.measured_at < resolved_stage.completed_at
         ):
             raise VerificationError(

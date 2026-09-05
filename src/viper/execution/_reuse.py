@@ -153,7 +153,7 @@ def _metric_evidence(
             if metric_id in metrics:
                 verifications[metric_id] = reference
     if any(
-        metric.mode == "recompute" and metric_id not in verifications
+        metric.mode == "post_stage" and metric_id not in verifications
         for metric_id, metric in metrics.items()
     ):
         raise ValueError("reuse source is missing metric verification evidence")
@@ -163,7 +163,7 @@ def _metric_evidence(
             measurement=found[metric_id],
             verification=(
                 verifications.get(metric_id)
-                if metrics[metric_id].mode == "recompute"
+                if metrics[metric_id].mode == "post_stage"
                 else None
             ),
         )

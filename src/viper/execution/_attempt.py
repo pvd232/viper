@@ -464,7 +464,7 @@ def execute_attempt(
                     metric.metric_id: metric for metric in experiment.metrics
                 }
                 for metric_id in stage.metric_ids:
-                    if metric_specs[metric_id].mode != "live":
+                    if metric_specs[metric_id].mode != "in_stage":
                         continue
                     live_path = (
                         root

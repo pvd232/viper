@@ -2173,7 +2173,7 @@ def measure(
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")
-    if definition.mode == "recompute":
+    if definition.mode == "post_stage":
         if not dependencies:
             raise MetricError("recomputed metrics require dependencies")
         if comparator is None:
@@ -2254,7 +2254,7 @@ from viper.metrics import (
 def test_metric_drafts_freeze_through_public_constructors() -> None:
     """Build metric, objective, and criterion drafts from one decorated callable."""
 
-    @metric(metric_id="accuracy", mode="recompute")
+    @metric(metric_id="accuracy", mode="post_stage")
     def accuracy(context: MetricContext[parameters.Metric]) -> float:
         return float(context.params.model_dump()["value"])
 
@@ -2403,7 +2403,7 @@ class MetricSpec(ProtocolModel):
         identities = tuple((item.source, item.name) for item in self.dependencies)
         if len(set(identities)) != len(identities):
             raise ValueError("metric dependencies must be unique")
-        if self.mode == "recompute":
+        if self.mode == "post_stage":
             if not self.dependencies:
                 raise ValueError("recomputed metrics require dependencies")
             if self.comparator is None:
@@ -2591,7 +2591,7 @@ def bind_live_metric(
     context: MetricContext[Any],
 ) -> MetricHandle:
     """Validate and bind one frozen live metric to its context and sink."""
-    if spec.mode != "live":
+    if spec.mode != "in_stage":
         raise MetricError("metric handle requires live mode")
     validate_metric_definition(repository_root, spec)
     implementation = load_metric_object(
@@ -2638,7 +2638,7 @@ def _live_metric_handles(
         spec = metrics.get(metric_id)
         if spec is None:
             raise ValueError("startup.plan: stage selects an undeclared metric")
-        if spec.mode != "live":
+        if spec.mode != "in_stage":
             continue
         params = instantiate_parameters(
             parameter_model_path(root, spec.parameter_model),
@@ -2715,7 +2715,7 @@ def main(argv: list[str] | None = None) -> int:
             root / context.metric.implementation.path,
             context.metric.implementation.symbol,
         )
-        if metric_definition(implementation).mode != "recompute":
+        if metric_definition(implementation).mode != "post_stage":
             raise ValueError("dedicated metric worker requires recompute mode")
 
         initialization = apply_reproducibility(
@@ -2993,9 +2993,9 @@ def verify_stage_objectives(
             raise VerificationError(
                 f"objective of stage {stage_id!r} is absent from the experiment"
             )
-        if isinstance(stage, TrainSpec) and metric.mode != "live":
+        if isinstance(stage, TrainSpec) and metric.mode != "in_stage":
             raise VerificationError("training objectives require live metrics")
-        if isinstance(stage, EvaluateSpec) and metric.mode != "recompute":
+        if isinstance(stage, EvaluateSpec) and metric.mode != "post_stage":
             raise VerificationError("evaluation objectives require recomputed metrics")
 ```
 
@@ -3158,7 +3158,7 @@ def verify_run_plan_relationships(
         )
     for criterion in benchmark.metrics:
         metric = experiment_metrics[criterion.metric_id]
-        if metric.mode != "recompute":
+        if metric.mode != "post_stage":
             raise VerificationError(
                 f"benchmark criterion {criterion.metric_id!r} must select a "
                 "recomputed metric"
@@ -3201,7 +3201,7 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
     )
     live = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec.model_construct(
         metrics=(live,),
@@ -3213,7 +3213,7 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
 
     recomputed = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="recompute",
+        mode="post_stage",
     )
     invalid = ExperimentSpec.model_construct(
         metrics=(recomputed,),
@@ -3251,7 +3251,7 @@ def validate_metric_definition(repository_root: Path, spec: MetricSpec) -> None:
 ```python contract-target
 def metric_source(metric_id: str, kind: MetricKind) -> bytes:
     """Build one decorated metric implementation matched by ``metric_spec``."""
-    mode = "recompute" if kind == "evaluation" else "live"
+    mode = "post_stage" if kind == "evaluation" else "in_stage"
     return (
         "from viper.metrics import metric\n\n"
         f'@metric(metric_id="{metric_id}", mode="{mode}")\n'
@@ -3265,13 +3265,13 @@ def metric_source(metric_id: str, kind: MetricKind) -> bytes:
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=tests/test_metric_interface.py:mean_value -->
 <!-- contract-target: requirements=UMD-01 block=P4-UMD-01 action=update target=tests/test_metric_interface.py:RunningMean -->
 ```python contract-target
-@metric(metric_id="mean_value", mode="recompute")
+@metric(metric_id="mean_value", mode="post_stage")
 def mean_value(context: MetricContext) -> float:
     """Return the frozen scalar supplied through metric parameters."""
     return float(context.params.model_dump()["value"])
 
 
-@metric(metric_id="running_mean", mode="live")
+@metric(metric_id="running_mean", mode="in_stage")
 class RunningMean(StatefulMetric):
     """Accumulate a scalar mean across training updates."""
 
@@ -3331,7 +3331,7 @@ def add_plan_records(
             git_file(source_commit, metric.implementation.path),
             metric_source(
                 metric.metric_id,
-                "training" if metric.mode == "live" else "evaluation",
+                "training" if metric.mode == "in_stage" else "evaluation",
             ),
         )
 
@@ -3414,7 +3414,7 @@ def metric_spec(
             metric_id=metric_id,
             implementation=implementation,
             params=parameters.Metric(),
-            mode="recompute",
+            mode="post_stage",
             dependencies=(
                 MetricDependency(
                     source="artifact",
@@ -3429,7 +3429,7 @@ def metric_spec(
         metric_id=metric_id,
         implementation=implementation,
         params=parameters.Metric(),
-        mode="live",
+        mode="in_stage",
     )
 ```
 
@@ -3563,7 +3563,7 @@ class RunPlanAuthoringTests:
                 bytes=1,
             ),
             params=parameters.Metric(),
-            mode="live",
+            mode="in_stage",
         )
         experiment = ExperimentSpec(
             experiment_id="e001_strand",
@@ -3949,7 +3949,7 @@ def test_generated_project_uses_runner_owned_downloads(
             bytes=len(metric_raw),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4459,7 +4459,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
     """Match the metric ID and mode declared in source and MetricSpec."""
     source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="accuracy", mode="recompute")\n'
+        b'@metric(metric_id="accuracy", mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return 1.0\n"
     )
@@ -4475,7 +4475,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
             bytes=len(source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4556,7 +4556,7 @@ class ParameterContractTests:
                 bytes=len(source),
             ),
             params=parameters.Metric.model_validate({"dim": 1}),
-            mode="recompute",
+            mode="post_stage",
             dependencies=(
                 MetricDependency(
                     source="artifact",
@@ -4582,7 +4582,7 @@ class ParameterContractTests:
                     bytes=1,
                 ),
                 params=parameters.Metric(),
-                mode="recompute",
+                mode="post_stage",
                 dependencies=(
                     MetricDependency(
                         source="artifact",
@@ -4615,14 +4615,14 @@ def test_train_stage_captures_local_external_input(
     )
     metric_source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="recompute")\n'
+        b'@metric(metric_id="parameter_bytes", '
+        b'mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
     live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -4641,7 +4641,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4661,7 +4661,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -4871,14 +4871,14 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
     metric_source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="recompute")\n'
+        b'@metric(metric_id="parameter_bytes", '
+        b'mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
     live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -4897,7 +4897,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -4917,7 +4917,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -5868,7 +5868,7 @@ from viper.runtime import EnvSpec, ReproducibilitySpec
 def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
     """Build one small plan and retain its caller-owned variant mapping."""
 
-    @metric(metric_id="training_loss", mode="live")
+    @metric(metric_id="training_loss", mode="in_stage")
     def training_loss(context) -> float:
         return 1.0
 
@@ -7935,7 +7935,7 @@ def verify_run_plan_relationships(
         raise VerificationError("eval metrics do not match the benchmark specification")
     for metric_id in benchmark.metric_ids:
         metric = experiment_metrics[metric_id]
-        if metric.mode != "recompute":
+        if metric.mode != "post_stage":
             raise VerificationError(
                 f"benchmark metric {metric_id!r} must select a recomputed eval metric"
             )
@@ -8214,7 +8214,7 @@ from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
     """Keep benchmark inputs, metrics, and optional criteria immutable."""
 
-    @metric(metric_id="accuracy", mode="recompute")
+    @metric(metric_id="accuracy", mode="post_stage")
     def accuracy(context) -> float:
         return 0.95
 
@@ -8470,7 +8470,7 @@ def test_generated_project_uses_runner_owned_downloads(
             bytes=len(metric_raw),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",

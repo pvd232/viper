@@ -33,7 +33,7 @@ from .runtime import ExecutionContext, ProcessStartupReceipt, PythonEnvSpec
 MetricKind = Literal["training", "evaluation", "diagnostic"]
 
 
-MetricMode = Literal["recompute", "live"]
+MetricMode = Literal["post_stage", "in_stage"]
 MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
 
 
@@ -88,7 +88,7 @@ class MetricSpec(ProtocolModel):
         identities = tuple((item.source, item.name) for item in self.dependencies)
         if len(set(identities)) != len(identities):
             raise ValueError("metric dependencies must be unique")
-        if self.mode == "recompute":
+        if self.mode == "post_stage":
             if not self.dependencies:
                 raise ValueError("recomputed metrics require dependencies")
             if self.comparator is None:
@@ -357,7 +357,7 @@ def bind_live_metric(
     context: MetricContext[Any],
 ) -> MetricHandle:
     """Validate and bind one frozen live metric to its context and sink."""
-    if spec.mode != "live":
+    if spec.mode != "in_stage":
         raise MetricError("metric handle requires live mode")
     validate_metric_definition(repository_root, spec)
     implementation = load_metric_object(
@@ -481,7 +481,7 @@ def measure(
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")
-    if definition.mode == "recompute":
+    if definition.mode == "post_stage":
         if not dependencies:
             raise MetricError("recomputed metrics require dependencies")
         if comparator is None:

@@ -128,7 +128,7 @@ def _live_metric_handles(
         spec = metrics.get(metric_id)
         if spec is None:
             raise ValueError("startup.plan: stage selects an undeclared metric")
-        if spec.mode != "live":
+        if spec.mode != "in_stage":
             continue
         values = instantiate_parameters(
             parameter_model_path(root, spec.parameter_model),

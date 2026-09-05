@@ -785,7 +785,7 @@ def add_plan_records(
             git_file(source_commit, metric.implementation.path),
             metric_source(
                 metric.metric_id,
-                "training" if metric.mode == "live" else "evaluation",
+                "training" if metric.mode == "in_stage" else "evaluation",
             ),
         )
 
@@ -2805,7 +2805,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
         ),
         parameter_model=parameter_model,
         params=current_params.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(),
         comparator=FloatComparator(),
     )

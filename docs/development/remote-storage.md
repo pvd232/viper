@@ -2169,7 +2169,7 @@ def execute_attempt(
                 raise
             metric_specs = {metric.metric_id: metric for metric in experiment.metrics}
             for metric_id in stage.metric_ids:
-                if metric_specs[metric_id].mode != "live":
+                if metric_specs[metric_id].mode != "in_stage":
                     continue
                 live_path = (
                     root
@@ -2497,14 +2497,14 @@ def test_train_stage_captures_local_external_input(
     )
     metric_source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="recompute")\n'
+        b'@metric(metric_id="parameter_bytes", '
+        b'mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
     live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -2523,7 +2523,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -2543,7 +2543,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -2746,14 +2746,14 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
     metric_source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="recompute")\n'
+        b'@metric(metric_id="parameter_bytes", '
+        b'mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
     live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -2772,7 +2772,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -2792,7 +2792,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -3654,7 +3654,7 @@ def execute_attempt(
                     metric.metric_id: metric for metric in experiment.metrics
                 }
                 for metric_id in stage.metric_ids:
-                    if metric_specs[metric_id].mode != "live":
+                    if metric_specs[metric_id].mode != "in_stage":
                         continue
                     live_path = (
                         root
@@ -4074,7 +4074,7 @@ def run_after_stage_metrics(
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
     for metric_id in stage.metric_ids:
         metric = metrics[metric_id]
-        if metric.mode != "recompute":
+        if metric.mode != "post_stage":
             continue
         dependencies = _resolve_metric_dependencies(
             stage,
@@ -4301,7 +4301,7 @@ def verify_recomputed_metrics(
         for stage_id, stage in plan.stages.items()
         if stage_id in stage_refs
         for metric_id in stage.metric_ids
-        if metric_specs[metric_id].mode == "recompute"
+        if metric_specs[metric_id].mode == "post_stage"
     }
     if len(attempt.metric_verification_files) != len(expected_keys):
         raise VerificationError(
@@ -4341,7 +4341,7 @@ def verify_recomputed_metrics(
             continue
         for metric_id in stage.metric_ids:
             metric = metric_specs[metric_id]
-            if metric.mode != "recompute":
+            if metric.mode != "post_stage":
                 continue
             recorded = tuple(
                 measurement
@@ -6425,7 +6425,7 @@ def execute_attempt(
                     metric.metric_id: metric for metric in experiment.metrics
                 }
                 for metric_id in stage.metric_ids:
-                    if metric_specs[metric_id].mode != "live":
+                    if metric_specs[metric_id].mode != "in_stage":
                         continue
                     live_path = (
                         root
@@ -8308,14 +8308,14 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
     metric_source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="recompute")\n'
+        b'@metric(metric_id="parameter_bytes", '
+        b'mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
     live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -8334,7 +8334,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -8354,7 +8354,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec(
         experiment_id="example",

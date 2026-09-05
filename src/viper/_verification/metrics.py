@@ -136,7 +136,7 @@ def verify_recomputed_metrics(
             ReusedStageCompletion,
         )
         for metric_id in stage.metric_ids
-        if metric_specs[metric_id].mode == "recompute"
+        if metric_specs[metric_id].mode == "post_stage"
     }
     if len(attempt.metric_verification_files) != len(expected_keys):
         raise VerificationError(
@@ -181,7 +181,7 @@ def verify_recomputed_metrics(
             continue
         for metric_id in stage.metric_ids:
             metric = metric_specs[metric_id]
-            if metric.mode != "recompute":
+            if metric.mode != "post_stage":
                 continue
             recorded = tuple(
                 measurement

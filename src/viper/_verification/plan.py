@@ -253,7 +253,7 @@ def verify_experiment_and_variant(
             ) from exc
         permitted_nodes: tuple[type[ast.AST], ...] = (
             (ast.FunctionDef, ast.AsyncFunctionDef)
-            if metric.mode == "recompute"
+            if metric.mode == "post_stage"
             else (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
         )
         if not any(
@@ -479,7 +479,7 @@ def verify_run_plan_relationships(
         raise VerificationError("eval metrics do not match the benchmark specification")
     for metric_id in benchmark.metric_ids:
         metric = experiment_metrics[metric_id]
-        if metric.mode != "recompute":
+        if metric.mode != "post_stage":
             raise VerificationError(
                 f"benchmark metric {metric_id!r} must select a recomputed eval metric"
             )
@@ -717,7 +717,7 @@ def verify_stage_objectives(
             raise VerificationError(
                 f"objective of stage {stage_id!r} is absent from the experiment"
             )
-        if isinstance(stage, TrainSpec) and metric.mode != "live":
+        if isinstance(stage, TrainSpec) and metric.mode != "in_stage":
             raise VerificationError("training objectives require live metrics")
-        if isinstance(stage, EvalSpec) and metric.mode != "recompute":
+        if isinstance(stage, EvalSpec) and metric.mode != "post_stage":
             raise VerificationError("evaluation objectives require recomputed metrics")

@@ -105,7 +105,7 @@ def execute_metric_process(
 ) -> MetricProcessResult:
     """Apply startup controls and execute one frozen metric callable."""
     root = repository_root.resolve()
-    if metric.mode != "recompute":
+    if metric.mode != "post_stage":
         raise MetricExecutionError("metric worker requires recompute mode")
     if metric.metric_id not in stage.metric_ids:
         raise MetricExecutionError("stage does not select the metric")
@@ -272,7 +272,7 @@ def run_after_stage_metrics(
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
     for metric_id in stage.metric_ids:
         metric = metrics[metric_id]
-        if metric.mode != "recompute":
+        if metric.mode != "post_stage":
             continue
         dependencies = _resolve_metric_dependencies(
             stage,

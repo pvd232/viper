@@ -3805,7 +3805,7 @@ def execute_attempt(
                     metric.metric_id: metric for metric in experiment.metrics
                 }
                 for metric_id in stage.metric_ids:
-                    if metric_specs[metric_id].mode != "live":
+                    if metric_specs[metric_id].mode != "in_stage":
                         continue
                     live_path = (
                         root
@@ -5317,14 +5317,14 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
     metric_source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="parameter_bytes", kind="diagnostic", '
-        b'mode="recompute")\n'
+        b'@metric(metric_id="parameter_bytes", '
+        b'mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
     live_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", kind="training", mode="live")\n'
+        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
         b"class EpochMean(StatefulMetric):\n"
         b"    def __init__(self):\n"
         b"        self.values = []\n"
@@ -5343,7 +5343,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -5363,7 +5363,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(live_metric_source),
         ),
         params=parameters.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -6686,7 +6686,7 @@ def verify_run_plan_relationships(
         )
     for criterion in benchmark.metrics:
         metric = experiment_metrics[criterion.metric_id]
-        if metric.kind != "evaluation" or metric.mode != "recompute":
+        if metric.kind != "evaluation" or metric.mode != "post_stage":
             raise VerificationError(
                 f"benchmark criterion {criterion.metric_id!r} must select a "
                 "recomputed evaluation metric"
@@ -7734,7 +7734,7 @@ def load(path: Path) -> ResumeState:
 from viper.metrics import metric
 
 
-@metric(metric_id="prediction_bytes", kind="evaluation", mode="recompute")
+@metric(metric_id="prediction_bytes", mode="post_stage")
 def prediction_bytes(context) -> float:
     """Return the byte count of the verified prediction artifact."""
     return float(len(context.artifacts["predictions"].read_bytes()))
@@ -8223,7 +8223,7 @@ def test_generated_project_uses_runner_owned_downloads(
             bytes=len(metric_raw),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",

@@ -176,9 +176,7 @@ def test_knowledge_vectors_preserve_view_identity() -> None:
     )
 
     assert KnowledgeVector.model_validate_json(vector.model_dump_json()) == vector
-    assert RetrievalJudgment.model_validate_json(
-        judgment.model_dump_json()
-    ) == judgment
+    assert RetrievalJudgment.model_validate_json(judgment.model_dump_json()) == judgment
 
     with pytest.raises(ValueError, match="width differs"):
         KnowledgeVector(
@@ -493,7 +491,7 @@ class ParameterContractTests(unittest.TestCase):
                 bytes=len(source),
             ),
             params=parameters.Metric.model_validate({"dim": 1}),
-            mode="recompute",
+            mode="post_stage",
             dependencies=(
                 MetricDependency(
                     source="artifact",
@@ -519,7 +517,7 @@ class ParameterContractTests(unittest.TestCase):
                     bytes=1,
                 ),
                 params=parameters.Metric(),
-                mode="recompute",
+                mode="post_stage",
                 dependencies=(
                     MetricDependency(
                         source="artifact",
@@ -1182,7 +1180,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             bytes=len(source),
         ),
         params=current_params.Metric(),
-        mode="live",
+        mode="in_stage",
     )
     env_payload = environment()
     env_payload["python_env"] = env_payload.pop("python_environment")

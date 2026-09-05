@@ -686,7 +686,7 @@ def test_public_examples_distinguish_weights_from_the_artifact_key() -> None:
 
 
 def test_training_examples_name_the_project_owned_training_function() -> None:
-    """Keep project computation separate from VIPER's stage context."""
+    """Keep project computation inside one decorated project stage."""
     undefined_calls = (
         "run_training(",
         "model = fit(",
@@ -696,8 +696,8 @@ def test_training_examples_name_the_project_owned_training_function() -> None:
 
     for path in TRAINING_GUIDES:
         text = path.read_text()
-        assert "from my_project.training import train_model" in text
-        assert "train_model(" in text
+        assert "@train(" in text
+        assert "context.artifacts" in text
         assert all(call not in text for call in undefined_calls)
 
 

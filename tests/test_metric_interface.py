@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from viper import parameters
+from viper import params as parameters
 from viper.benchmark import at_least
 from viper.metrics import (
     FloatComparator,
@@ -26,13 +26,13 @@ from viper.metrics import (
 )
 
 
-@metric(metric_id="mean_value", mode="recompute")
+@metric(metric_id="mean_value", mode="post_stage")
 def mean_value(context: MetricContext) -> float:
     """Return the frozen scalar supplied through metric parameters."""
     return float(context.params.model_dump()["value"])
 
 
-@metric(metric_id="running_mean", mode="live")
+@metric(metric_id="running_mean", mode="in_stage")
 class RunningMean(StatefulMetric):
     """Accumulate a scalar mean across training updates."""
 
@@ -53,8 +53,8 @@ class RunningMean(StatefulMetric):
 
 def test_decorators_define_stateless_and_stateful_metrics() -> None:
     """Attach the correct role and invocation timing to both authoring forms."""
-    assert mean_value.__viper_metric__.mode == "recompute"  # type: ignore[attr-defined]
-    assert RunningMean.__viper_metric__.mode == "live"  # type: ignore[attr-defined]
+    assert mean_value.__viper_metric__.mode == "post_stage"  # type: ignore[attr-defined]
+    assert RunningMean.__viper_metric__.mode == "in_stage"  # type: ignore[attr-defined]
     metric_value = RunningMean()
     metric_value.update(1.0)
     metric_value.update(3.0)
@@ -80,7 +80,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
     """Match the metric ID and mode declared in source and MetricSpec."""
     source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="accuracy", mode="recompute")\n'
+        b'@metric(metric_id="accuracy", mode="post_stage")\n'
         b"def compute(context):\n"
         b"    return 1.0\n"
     )
@@ -96,12 +96,12 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
             bytes=len(source),
         ),
         params=parameters.Metric(),
-        mode="recompute",
+        mode="post_stage",
         dependencies=(
             MetricDependency(
                 source="artifact",
                 name="predictions",
-                required_data_role="evaluation",
+                required_data_role="eval",
             ),
         ),
         comparator=FloatComparator(),
@@ -144,7 +144,7 @@ def test_metric_comparator_applies_declared_tolerance() -> None:
 def test_metric_drafts_freeze_through_public_constructors() -> None:
     """Build metric, objective, and criterion drafts from one decorated callable."""
 
-    @metric(metric_id="accuracy", mode="recompute")
+    @metric(metric_id="accuracy", mode="post_stage")
     def accuracy(context: MetricContext[parameters.Metric]) -> float:
         return float(context.params.model_dump()["value"])
 
@@ -155,7 +155,7 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
             MetricDependency(
                 source="artifact",
                 name="predictions",
-                required_data_role="evaluation",
+                required_data_role="eval",
             ),
         ),
         comparator=FloatComparator(),

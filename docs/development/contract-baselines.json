@@ -78,7 +78,7 @@
         "DRA-05",
         "DRA-06"
       ],
-      "sha256": "b63cc2e823e34a42e7ee06bd6ded44ee7737f461282306f38a2de94b3c23c2ca"
+      "sha256": "50265270014ad58b8b783fbd4dd8f42b0966437a96bf44b89967e7f87c5d383d"
     },
     {
       "path": "docs/development/external-input-roots.md",
@@ -101,7 +101,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "f0fde6c21417a50b62128640ef569d032a76e795be46645be1d78e59a6c056bf"
+      "sha256": "c262a8fdd4cd739cda29c0d675f512b6842bc5bb959d7c31c1b6c145541cd348"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -113,7 +113,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "e1682f449528966b389b9d7fe66a1db0905b46696e49ef9a94cd98f65eb0977d"
+      "sha256": "c9912e6eac8928d3e31a63d805c1a2241617c232f46df5206dfa47ade1d78e78"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -124,7 +124,7 @@
         "FPG-04",
         "FPG-05"
       ],
-      "sha256": "752b3c71b95debe5c4717f72d0274be1a5c1d4c10aa4a3748c49e4ed6b87fc29"
+      "sha256": "b3866c70b2b67f7ae7ac75bb801929da2f33c95bc4f4eedc1d7d310775f16510"
     },
     {
       "path": "docs/development/remote-storage.md",
@@ -139,7 +139,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "d552a09cecd15f3c7f520d1e05ed093d9eccfefad6913c9f25d496b278e72fcd"
+      "sha256": "cd76a1b8a8598ddc433a819becd25b723c385e322a274e6870cadc1903b15add"
     },
     {
       "path": "docs/development/experiment-expansion.md",
@@ -171,7 +171,7 @@
         "SRU-03",
         "SRU-04"
       ],
-      "sha256": "d59cf658405b6dd484dc4507d3190df19d640e1e1b49c0937279427f2ab33a91"
+      "sha256": "26000d5e106167f3d3ac2bd4d93bb7265a6fa4576c6acd11f8997a419d52bf23"
     },
     {
       "path": "docs/development/experiment-knowledge-primitives.md",

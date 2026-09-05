@@ -272,10 +272,10 @@ def verify_stage_reuse(
             raise VerificationError("reuse receipt metric is absent from source plan")
         expected_verification = (
             verifications.get(evidence.metric_id)
-            if metric.mode == "recompute"
+            if metric.mode == "post_stage"
             else None
         )
-        if metric.mode == "recompute" and expected_verification is None:
+        if metric.mode == "post_stage" and expected_verification is None:
             raise VerificationError("reused metric has no verification evidence")
         if evidence.verification != expected_verification:
             raise VerificationError("reuse receipt metric verification differs")

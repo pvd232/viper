@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
                 context.metric.implementation.symbol,
             )
         )
-        if definition.mode != "recompute":
+        if definition.mode != "post_stage":
             raise ValueError("dedicated metric worker requires recompute mode")
 
         initialization = apply_reproducibility(

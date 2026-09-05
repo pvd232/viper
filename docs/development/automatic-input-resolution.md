@@ -985,7 +985,7 @@ download = download(
 # published artifacts after the stage finishes.
 @metric(
     metric_id="embedding_reconstruction_loss",
-    mode="live",
+    mode="in_stage",
 )
 def embedding_reconstruction_loss(
     context: MetricContext[params.Metric],
@@ -996,7 +996,7 @@ def embedding_reconstruction_loss(
 
 @metric(
     metric_id="embedding_spread",
-    mode="live",
+    mode="in_stage",
 )
 def embedding_spread(
     context: MetricContext[params.Metric],
@@ -1008,7 +1008,7 @@ def embedding_spread(
 
 @metric(
     metric_id="training_loss",
-    mode="live",
+    mode="in_stage",
 )
 def training_loss(
     context: MetricContext[params.Metric],
@@ -1019,7 +1019,7 @@ def training_loss(
 
 @metric(
     metric_id="gradient_norm",
-    mode="live",
+    mode="in_stage",
 )
 def gradient_norm(
     context: MetricContext[params.Metric],
@@ -1038,7 +1038,7 @@ class LossMetricParams(params.Metric):
 
 @metric(
     metric_id="evaluation_loss",
-    mode="recompute",
+    mode="post_stage",
 )
 def evaluation_loss(
     context: MetricContext[LossMetricParams],
@@ -1066,7 +1066,7 @@ def evaluation_loss(
 
 @metric(
     metric_id="evaluation_accuracy",
-    mode="recompute",
+    mode="post_stage",
 )
 def evaluation_accuracy(
     context: MetricContext[params.Metric],
@@ -2436,7 +2436,7 @@ the selection.
 
 Freezing a train draft with a missing `objective` fails
 `metric.objective.selection`. Freezing an evaluation draft whose objective uses
-`mode="live"` fails `metric.objective.role`. Removing the final `training_loss`
+`mode="in_stage"` fails `metric.objective.role`. Removing the final `training_loss`
 measurement from an otherwise successful attempt fails
 `metric.objective.evidence`.
 
@@ -4311,7 +4311,7 @@ class MetricSpec(ProtocolModel):
         identities = tuple((item.source, item.name) for item in self.dependencies)
         if len(set(identities)) != len(identities):
             raise ValueError("metric dependencies must be unique")
-        if self.mode == "recompute":
+        if self.mode == "post_stage":
             if not self.dependencies:
                 raise ValueError("recomputed metrics require dependencies")
             if self.comparator is None:
@@ -4348,7 +4348,7 @@ def measure(
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")
-    if definition.mode == "recompute":
+    if definition.mode == "post_stage":
         if not dependencies:
             raise MetricError("recomputed metrics require dependencies")
         if comparator is None:
@@ -5782,7 +5782,7 @@ def execute_attempt(
                     metric.metric_id: metric for metric in experiment.metrics
                 }
                 for metric_id in stage.metric_ids:
-                    if metric_specs[metric_id].mode != "live":
+                    if metric_specs[metric_id].mode != "in_stage":
                         continue
                     live_path = (
                         root
@@ -6334,7 +6334,7 @@ def execute_metric_process(
 ) -> MetricProcessResult:
     """Apply startup controls and execute one frozen metric callable."""
     root = repository_root.resolve()
-    if metric.mode != "recompute":
+    if metric.mode != "post_stage":
         raise MetricExecutionError("metric worker requires recompute mode")
     if metric.metric_id not in stage.metric_ids:
         raise MetricExecutionError("stage does not select the metric")
@@ -6449,7 +6449,7 @@ def _live_metric_handles(
         spec = metrics.get(metric_id)
         if spec is None:
             raise ValueError("startup.plan: stage selects an undeclared metric")
-        if spec.mode != "live":
+        if spec.mode != "in_stage":
             continue
         values = instantiate_parameters(
             parameter_model_path(root, spec.parameter_model),
@@ -6665,7 +6665,7 @@ def main(argv: list[str] | None = None) -> int:
                 context.metric.implementation.symbol,
             )
         )
-        if definition.mode != "recompute":
+        if definition.mode != "post_stage":
             raise ValueError("dedicated metric worker requires recompute mode")
 
         initialization = apply_reproducibility(
@@ -7869,7 +7869,7 @@ def verify_recomputed_metrics(
         for stage_id, stage in plan.stages.items()
         if stage_id in stage_refs
         for metric_id in stage.metric_ids
-        if metric_specs[metric_id].mode == "recompute"
+        if metric_specs[metric_id].mode == "post_stage"
     }
     if len(attempt.metric_verification_files) != len(expected_keys):
         raise VerificationError(
@@ -7909,7 +7909,7 @@ def verify_recomputed_metrics(
             continue
         for metric_id in stage.metric_ids:
             metric = metric_specs[metric_id]
-            if metric.mode != "recompute":
+            if metric.mode != "post_stage":
                 continue
             recorded = tuple(
                 measurement
@@ -8127,9 +8127,9 @@ def verify_stage_objectives(
             raise VerificationError(
                 f"objective of stage {stage_id!r} is absent from the experiment"
             )
-        if isinstance(stage, TrainSpec) and metric.mode != "live":
+        if isinstance(stage, TrainSpec) and metric.mode != "in_stage":
             raise VerificationError("training objectives require live metrics")
-        if isinstance(stage, EvalSpec) and metric.mode != "recompute":
+        if isinstance(stage, EvalSpec) and metric.mode != "post_stage":
             raise VerificationError("evaluation objectives require recomputed metrics")
 ```
 
@@ -8294,7 +8294,7 @@ def verify_run_plan_relationships(
         raise VerificationError("eval metrics do not match the benchmark specification")
     for criterion in benchmark.metrics:
         metric = experiment_metrics[criterion.metric_id]
-        if metric.mode != "recompute":
+        if metric.mode != "post_stage":
             raise VerificationError(
                 f"benchmark criterion {criterion.metric_id!r} must select a "
                 "recomputed eval metric"
@@ -10023,7 +10023,7 @@ def load(path: Path) -> ResumeState:
 from viper.metrics import metric
 
 
-@metric(metric_id="prediction_bytes", kind="eval", mode="recompute")
+@metric(metric_id="prediction_bytes", mode="post_stage")
 def prediction_bytes(context) -> float:
     """Return the byte count of the verified prediction artifact."""
     return float(len(context.artifacts["predictions"].read_bytes()))
@@ -10123,7 +10123,7 @@ def {stage}(context) -> None:
 def test_python_stage_drafts_replace_yaml_authoring() -> None:
     """Keep a decorated callable and artifact handle in one Python stage draft."""
 
-    @metric(metric_id="training_loss", mode="live")
+    @metric(metric_id="training_loss", mode="in_stage")
     def training_loss(context) -> float:
         """Return one stable loss for the authoring boundary."""
         return 1.0
@@ -10751,7 +10751,7 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
         "from viper import params\n"
         "from viper.metrics import metric\n"
         "from viper.stages import Context, train\n\n"
-        "@metric(metric_id='training_loss', mode='live')\n"
+        "@metric(metric_id='training_loss', mode='in_stage')\n"
         "def training_loss(context):\n"
         "    return 1.0\n\n"
         "@train(params=params.Train)\n"
@@ -12144,7 +12144,7 @@ def load(path: Path) -> ResumeState:
 from viper.metrics import metric
 
 
-@metric(metric_id="prediction_bytes", kind="eval", mode="recompute")
+@metric(metric_id="prediction_bytes", mode="post_stage")
 def prediction_bytes(context) -> float:
     """Return the byte count of the verified prediction artifact."""
     return float(len(context.artifacts["predictions"].read_bytes()))
