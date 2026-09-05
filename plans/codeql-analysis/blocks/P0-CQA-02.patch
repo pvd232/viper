@@ -1,0 +1,70 @@
+diff --git a/tests/test_codeql_graph_semantics.py b/tests/test_codeql_graph_semantics.py
+index 1d56f44..3f86ec8 100644
+--- a/tests/test_codeql_graph_semantics.py
++++ b/tests/test_codeql_graph_semantics.py
+@@ -17,17 +17,20 @@ from viper._contract_traceability import ContractTarget, RepoSymbolRef
+ from viper._subprocess import run as run_subprocess
+ from viper._system_impact.codeql import (
+     _qualified_declarations,
+     _tree_digest,
+     analyze_source,
++    lowering_digest,
+     source_digest,
+ )
+ from viper._system_impact.source import extract_declaration_bytes
+ from viper.system_impact.check import _one_hop
+ from viper.system_impact.models import (
+-    CodeQLIdentity,
++    CodeQLExtractionSpec,
++    CodeQLQuerySpec,
+     ResolvedContractTarget,
+     SourceEdge,
+     SourceGraph,
++    SourceGraphFormat,
+     SourceNode,
+     SourceSnapshot,
+ )
+@@ -153,5 +156,11 @@ def test_codeql_distinguishes_attribute_reads_and_writes(tmp_path: Path) -> None
+         capture_output=True,
+         text=True,
+     )
++    languages = run_subprocess(
++        (str(executable), "resolve", "languages", "--format=json"),
++        check=True,
++        capture_output=True,
++        text=True,
++    )
+ 
+     root = tmp_path / "source"
+@@ -180,11 +189,21 @@ def test_codeql_distinguishes_attribute_reads_and_writes(tmp_path: Path) -> None
+         source_sha256=source_digest(root),
+         revision=None,
+     )
+-    identity = CodeQLIdentity(
++    extraction = CodeQLExtractionSpec(
+         version=json.loads(version.stdout)["version"],
+         platform=sys.platform,
+         executable_sha256=_sha256(executable.read_bytes()),
++        extractor_sha256=_tree_digest(
++            Path(json.loads(languages.stdout)["python"][0]).resolve()
++        ),
++    )
++    query = CodeQLQuerySpec(
+         pack="viper/python-impact@1.1.0",
+         pack_sha256=_tree_digest(pack),
++        suite="source-facts.qls",
++    )
++    format = SourceGraphFormat(
++        schema_version=3,
++        lowering_sha256=lowering_digest(),
+     )
+ 
+@@ -193,5 +212,7 @@ def test_codeql_distinguishes_attribute_reads_and_writes(tmp_path: Path) -> None
+         root,
+         snapshot=snapshot,
+-        identity=identity,
++        extraction=extraction,
++        query=query,
++        format=format,
+         codeql_executable=executable,
+         query_pack=pack,

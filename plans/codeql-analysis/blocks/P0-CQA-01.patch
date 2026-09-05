@@ -1,0 +1,250 @@
+diff --git a/src/viper/_system_impact/source.py b/src/viper/_system_impact/source.py
+index c7a567f..1f5dc7f 100644
+--- a/src/viper/_system_impact/source.py
++++ b/src/viper/_system_impact/source.py
+@@ -4,7 +4,7 @@ from __future__ import annotations
+ 
+ import ast
+ import hashlib
+-from collections.abc import Sequence
++from collections.abc import Iterator, Sequence
+ from pathlib import Path
+ from typing import Literal, TypeAlias, cast
+ 
+@@ -36,6 +36,33 @@ class SourceDeclarationError(ValueError):
+     """Report an absent, ambiguous, malformed, or impossible declaration change."""
+ 
+ 
++def declaration_statements(body: Sequence[ast.stmt]) -> Iterator[ast.stmt]:
++    """Yield declarations from module or class control-flow blocks."""
++    for node in body:
++        yield node
++
++        # Classes get their own qualified scope; functions are intentionally local.
++        if isinstance(
++            node,
++            (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
++        ):
++            continue
++        if isinstance(node, (ast.If, ast.For, ast.AsyncFor, ast.While)):
++            yield from declaration_statements(node.body)
++            yield from declaration_statements(node.orelse)
++        elif isinstance(node, (ast.With, ast.AsyncWith)):
++            yield from declaration_statements(node.body)
++        elif isinstance(node, (ast.Try, ast.TryStar)):
++            yield from declaration_statements(node.body)
++            for handler in node.handlers:
++                yield from declaration_statements(handler.body)
++            yield from declaration_statements(node.orelse)
++            yield from declaration_statements(node.finalbody)
++        elif isinstance(node, ast.Match):
++            for case in node.cases:
++                yield from declaration_statements(case.body)
++
++
+ def import_binding(source: bytes, symbol: str) -> ImportBinding:
+     """Return the import that creates one local name."""
+     matches: list[ImportBinding] = []
+@@ -148,7 +175,9 @@ def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
+         )
+ 
+     direct = [
+-        node for node in tree.body if qualified_symbol in _declaration_names(node)
++        node
++        for node in declaration_statements(tree.body)
++        if qualified_symbol in _declaration_names(node)
+     ]
+     if len(direct) == 1:
+         return direct[0]
+@@ -159,7 +188,11 @@ def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
+ 
+     body: Sequence[ast.stmt] = tree.body
+     for index, part in enumerate(parts):
+-        matches = [node for node in body if part in _declaration_names(node)]
++        matches = [
++            node
++            for node in declaration_statements(body)
++            if part in _declaration_names(node)
++        ]
+         if not matches:
+             raise SourceDeclarationError(
+                 f"Python declaration is absent: {qualified_symbol}"
+diff --git a/src/viper/_system_impact/codeql.py b/src/viper/_system_impact/codeql.py
+index d74d8a1..1a5b0d8 100644
+--- a/src/viper/_system_impact/codeql.py
++++ b/src/viper/_system_impact/codeql.py
+@@ -25,6 +25,7 @@ from ..system_impact.models import (
+     SourceNodeKind,
+     SourceSnapshot,
+ )
++from .source import declaration_statements
+ 
+ IGNORED_PARTS = frozenset(
+     {
+@@ -148,7 +149,7 @@ def _qualified_declarations(
+ 
+     def visit(body: Sequence[ast.stmt], prefix: str = "") -> None:
+         """Collect declarations from one module or class body."""
+-        for node in body:
++        for node in declaration_statements(body):
+             bindings: tuple[tuple[str, ast.AST], ...] = ()
+             kind: SourceNodeKind | None = None
+             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+diff --git a/src/viper/scheduling.py b/src/viper/scheduling.py
+index 3a0ecff..3ddac1b 100644
+--- a/src/viper/scheduling.py
++++ b/src/viper/scheduling.py
+@@ -277,7 +277,7 @@ def final_targets(
+ 
+ 
+ def _imports(source: bytes) -> frozenset[str]:
+-    """Return the names bound by top-level imports."""
++    """Return ContractTarget identities for top-level imports."""
+     try:
+         tree = ast.parse(source)
+     except SyntaxError as error:
+@@ -292,8 +292,6 @@ def _imports(source: bytes) -> frozenset[str]:
+                 continue
+             if alias.asname is not None:
+                 names.add(alias.asname)
+-            elif isinstance(node, ast.Import):
+-                names.add(alias.name.split(".", maxsplit=1)[0])
+             else:
+                 names.add(alias.name)
+     return frozenset(names)
+@@ -314,13 +312,7 @@ def _drop_import(source: bytes, symbol: str) -> bytes:
+         aliases: list[ast.alias] = []
+         for alias in node.names:
+-            local = alias.asname
+-            if local is None:
+-                local = (
+-                    alias.name.split(".", maxsplit=1)[0]
+-                    if isinstance(node, ast.Import)
+-                    else alias.name
+-                )
+-            if local == symbol:
++            identity = alias.asname or alias.name
++            if identity == symbol:
+                 found = True
+             else:
+                 aliases.append(alias)
+diff --git a/src/viper/system_impact/plan.py b/src/viper/system_impact/plan.py
+index ebd7fef..736fb27 100644
+--- a/src/viper/system_impact/plan.py
++++ b/src/viper/system_impact/plan.py
+@@ -20,16 +20,16 @@ from .models import (
+     SourceNode,
+ )
+ 
++ALL_EDGE_KINDS: frozenset[EdgeKind] = frozenset(
++    {"imports", "calls", "constructs", "inherits", "reads", "writes"}
++)
++
+ IMPACT_EDGE_KINDS_V1: dict[str, frozenset[EdgeKind]] = {
+     "satisfied": frozenset(),
+-    "added": frozenset(),
+-    "removed": frozenset(
+-        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+-    ),
++    "added": ALL_EDGE_KINDS,
++    "removed": ALL_EDGE_KINDS,
+     "callable_interface_changed": frozenset({"calls", "constructs"}),
+     "type_interface_changed": frozenset({"constructs", "inherits", "reads", "writes"}),
+     "implementation_changed": frozenset({"calls", "reads"}),
+-    "unclassified": frozenset(
+-        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+-    ),
++    "unclassified": ALL_EDGE_KINDS,
+ }
+diff --git a/tools/codeql/viper-python-impact/Dependencies.ql b/tools/codeql/viper-python-impact/Dependencies.ql
+index 2e347e3..42cafa8 100644
+--- a/tools/codeql/viper-python-impact/Dependencies.ql
++++ b/tools/codeql/viper-python-impact/Dependencies.ql
+@@ -93,11 +93,31 @@ private predicate directNameRead(
+   )
+ }
+ 
+-/**
+- * Resolve a direct attribute store to its declaring class when CodeQL knows
+- * the receiver class.
+- */
+-private predicate attributeOwner(
++/** Resolve an attribute read to its declaring class. */
++private predicate attributeReadOwner(
++  Attribute load,
++  Class owner,
++  string name
++) {
++  exists(SelfAttributeRead selfRead |
++    load = selfRead and
++    owner = selfRead.getClass() and
++    name = selfRead.getName()
++  )
++  or
++  exists(AttrNode cfg, ClassObject classObject |
++    cfg.getNode() = load and
++    cfg.isLoad() and
++    name = load.getName() and
++    cfg.getObject(name)
++      .(ControlFlowNodeWithPointsTo)
++      .refersTo(_, classObject, _) and
++    owner = classObject.getPyClass()
++  )
++}
++
++/** Resolve an attribute write to its declaring class. */
++private predicate attributeWriteOwner(
+   Attribute store,
+   Class owner,
+   string name
+@@ -108,12 +128,6 @@ private predicate attributeOwner(
+     name = selfStore.getName()
+   )
+   or
+-  exists(SelfAttributeRead selfRead |
+-    store = selfRead and
+-    owner = selfRead.getClass() and
+-    name = selfRead.getName()
+-  )
+-  or
+   exists(AttrNode cfg, ClassObject classObject |
+     cfg.getNode() = store and
+     cfg.isStore() and
+@@ -132,7 +146,7 @@ private predicate directAttributeRead(
+   AstNode evidence
+ ) {
+   exists(Attribute load, Class owner, string name, Variable variable |
+-    attributeOwner(load, owner, name) and
++    attributeReadOwner(load, owner, name) and
+     variable.getScope() = owner and
+     variable.getId() = name and
+     canonicalAssignment(variable, target) and
+@@ -176,7 +190,7 @@ private predicate directAttributeWrite(
+   AstNode evidence
+ ) {
+   exists(Attribute store, Class owner, string name, Variable variable |
+-    attributeOwner(store, owner, name) and
++    attributeWriteOwner(store, owner, name) and
+     variable.getScope() = owner and
+     variable.getId() = name and
+     canonicalAssignment(variable, target) and
+diff --git a/tests/conftest.py b/tests/conftest.py
+index a0c8905..3018541 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -12,6 +12,7 @@ TIER_BY_MODULE = {
+     "test_benchmark_execution": "contract",
+     "test_cli": "integration",
+     "test_cloud_execution": "contract",
++    "test_codeql_graph_semantics": "integration",
+     "test_code_style": "unit",
+     "test_contract_documentation": "contract",
+     "test_contract_traceability": "contract",
+@@ -53,6 +54,7 @@ DOMAIN_BY_MODULE = {
+     "test_benchmark_execution": "domain_execution",
+     "test_cli": "domain_application",
+     "test_cloud_execution": "domain_execution",
++    "test_codeql_graph_semantics": "domain_protocol",
+     "test_code_style": "domain_protocol",
+     "test_contract_documentation": "domain_protocol",
+     "test_contract_traceability": "domain_protocol",

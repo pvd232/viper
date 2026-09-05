@@ -280,6 +280,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Project data root](project-data-root.md) | Complete | One selected root for source, protocol paths, working artifacts, and separate local immutable evidence |
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, a two-graph one-hop preflight, and rejection of unplanned source changes |
+| [CodeQL Analysis](codeql-analysis.md) | Design approved; source plan validated | Exact graph semantics plus separate extraction, query, and graph-lowering keys, caches, and receipts |
 | [PairBlock scheduling](pair-block-scheduling.md) | Complete | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
@@ -304,6 +305,7 @@ The contracts share models. One contract owns each shared decision:
 | Public API and verification symbols are implemented in the modules callers import | Public module ownership |
 | Requirements, targets, rule edges, tests, gates, and dependency order form one closed implementation plan | Contract Traceability |
 | Pinned CodeQL observations report policy-selected direct dependents before and after a planned change; Pyright checks the materialized interfaces; and realized source changes must match the closed plan | System Impact Check |
+| Source extraction, query execution, and graph lowering have independent identities and receipts | CodeQL Analysis |
 | Explicit dependencies, planned source edges, and shared-file writes determine safe PairBlock execution waves | PairBlock scheduling |
 | Repository-owned child processes use the spawn-safe facade on macOS | Child-process launching |
 | HTTP receipt and artifact share one file | Download retrieval artifacts |

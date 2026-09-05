@@ -1,0 +1,77 @@
+schema_version = 1
+id = "codeql-analysis"
+contract = "docs/development/codeql-analysis.md"
+baseline = "d00ba13b69408f95f351be250049fea808f0c5b5"
+
+[[blocks]]
+id = "P0-CQA-01"
+requirements = ["CQA-01"]
+depends_on = []
+gate = "VIPER_RUN_CODEQL_TESTS=1 python -m pytest tests/test_codeql_graph_semantics.py -q"
+
+[[blocks.files]]
+action = "patch"
+source = "blocks/P0-CQA-01.patch"
+destinations = [
+    "src/viper/_system_impact/source.py",
+    "src/viper/_system_impact/codeql.py",
+    "src/viper/scheduling.py",
+    "src/viper/system_impact/plan.py",
+    "tools/codeql/viper-python-impact/Dependencies.ql",
+    "tests/conftest.py",
+]
+
+[[blocks.files]]
+action = "add"
+source = "blocks/P0-CQA-01/tests/test_codeql_graph_semantics.py"
+destination = "tests/test_codeql_graph_semantics.py"
+
+[[blocks]]
+id = "P0-CQA-02"
+requirements = ["CQA-02", "CQA-03", "CQA-04", "CQA-05", "CQA-06"]
+depends_on = ["P0-CQA-01"]
+gate = "python -m pytest tests/test_codeql_analysis.py tests/test_system_impact.py -q"
+
+[[blocks.files]]
+action = "replace"
+source = "replace/src/viper/system_impact/models.py"
+destination = "src/viper/system_impact/models.py"
+
+[[blocks.files]]
+action = "replace"
+source = "replace/src/viper/_system_impact/codeql.py"
+destination = "src/viper/_system_impact/codeql.py"
+
+[[blocks.files]]
+action = "replace"
+source = "replace/src/viper/system_impact/check.py"
+destination = "src/viper/system_impact/check.py"
+
+[[blocks.files]]
+action = "replace"
+source = "replace/tools/plan/check.py"
+destination = "tools/plan/check.py"
+
+[[blocks.files]]
+action = "replace"
+source = "replace/tests/conftest.py"
+destination = "tests/conftest.py"
+
+[[blocks.files]]
+action = "replace"
+source = "replace/tests/test_system_impact.py"
+destination = "tests/test_system_impact.py"
+
+[[blocks.files]]
+action = "add"
+source = "add/tests/test_codeql_analysis.py"
+destination = "tests/test_codeql_analysis.py"
+
+[[blocks.files]]
+action = "remove"
+destination = "tools/codeql/v2/models.py"
+
+[[blocks.files]]
+action = "patch"
+source = "blocks/P0-CQA-02.patch"
+destinations = ["tests/test_codeql_graph_semantics.py"]
