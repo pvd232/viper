@@ -138,7 +138,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "e74365a4694eac7d4f43f4b3a2339522abb2898b4e4ae1f69792c5e7905e96ee"
+      "sha256": "6c0a92d73f9e9386fb8d7f4ce3b037589e66b5e61568192c72cb9125a5effbae"
     },
     {
       "path": "docs/development/experiment-expansion.md",
