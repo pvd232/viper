@@ -17,13 +17,13 @@ from typing import Literal
 
 from pydantic import Field
 
-from viper.params import Build
-from viper.stages import Context, build
+from viper.params import Embed
+from viper.stages import Context, embed
 
 Arm = Literal["ordinary", "static_graph", "graph_predicate"]
 
 
-class AgentTrialParameters(Build):
+class AgentTrialParameters(Embed):
     """Select one treatment and its externally enforced agent controls."""
 
     arm: Arm
@@ -177,7 +177,7 @@ def _candidate_digest(candidate: Path) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-@build(params=AgentTrialParameters)
+@embed(params=AgentTrialParameters)
 def run_agent_trial(context: Context[AgentTrialParameters]) -> None:
     """Run one arm, evaluate it once, and write only declared artifacts."""
     outputs = context.artifacts
