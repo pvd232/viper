@@ -3076,7 +3076,10 @@ def _unexpected_changes(
     for target in targets:
         target_key = _target_key(target)
         planned.add(target_key)
-        target_node = all_nodes.get(target_key)
+        target_nodes = (
+            baseline_nodes.get(target_key),
+            realized_nodes.get(target_key),
+        )
         for node in (baseline_nodes.get(target_key), realized_nodes.get(target_key)):
             if node is not None and node.kind == "import":
                 import_spans.add(
@@ -3092,8 +3095,7 @@ def _unexpected_changes(
             if key[0] != target_key[0]:
                 continue
             target_contains_node = (
-                target_node is not None
-                and target_node.kind == "class"
+                any(item is not None and item.kind == "class" for item in target_nodes)
                 and node.symbol.startswith(f"{target_key[1]}.")
             )
             node_contains_target = node.kind == "class" and target_key[1].startswith(
@@ -3345,6 +3347,24 @@ def test_class_target_owns_nested_declaration_changes(tmp_path: Path) -> None:
     )
 
     assert unexpected == ()
+    realized_import = _node(
+        path=path,
+        symbol="Example",
+        kind="import",
+        declaration=b"from .models import Example",
+    )
+    replaced = _unexpected_changes(
+        baseline_root=tmp_path,
+        realized_root=tmp_path,
+        baseline_nodes={
+            (path, "Example"): baseline_class,
+            (path, "Example.value"): baseline_field,
+        },
+        realized_nodes={(path, "Example"): realized_import},
+        targets=(target,),
+    )
+
+    assert replaced == ()
 ```
 
 <!-- contract-target: requirements=SIG-07 block=P0-SIG-07 action=add target=tests/test_system_impact.py:test_import_target_owns_names_in_the_same_statement -->

@@ -517,7 +517,10 @@ def _unexpected_changes(
     for target in targets:
         target_key = _target_key(target)
         planned.add(target_key)
-        target_node = all_nodes.get(target_key)
+        target_nodes = (
+            baseline_nodes.get(target_key),
+            realized_nodes.get(target_key),
+        )
         for node in (baseline_nodes.get(target_key), realized_nodes.get(target_key)):
             if node is not None and node.kind == "import":
                 import_spans.add(
@@ -533,8 +536,7 @@ def _unexpected_changes(
             if key[0] != target_key[0]:
                 continue
             target_contains_node = (
-                target_node is not None
-                and target_node.kind == "class"
+                any(item is not None and item.kind == "class" for item in target_nodes)
                 and node.symbol.startswith(f"{target_key[1]}.")
             )
             node_contains_target = node.kind == "class" and target_key[1].startswith(

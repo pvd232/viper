@@ -41,7 +41,7 @@
         "SIG-06",
         "SIG-07"
       ],
-      "sha256": "1cf8041abe2c2e6cad8df24c308c75030462af732e2040d98b05f930a2462d6c"
+      "sha256": "1eb8462c982cf127d2a5bedb0368844f01c661a905168cc9840ef475e0a0a42e"
     },
     {
       "path": "docs/development/codeql-graph-cache-reuse.md",

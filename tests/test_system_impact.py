@@ -2335,6 +2335,24 @@ def test_class_target_owns_nested_declaration_changes(tmp_path: Path) -> None:
     )
 
     assert unexpected == ()
+    realized_import = _node(
+        path=path,
+        symbol="Example",
+        kind="import",
+        declaration=b"from .models import Example",
+    )
+    replaced = _unexpected_changes(
+        baseline_root=tmp_path,
+        realized_root=tmp_path,
+        baseline_nodes={
+            (path, "Example"): baseline_class,
+            (path, "Example.value"): baseline_field,
+        },
+        realized_nodes={(path, "Example"): realized_import},
+        targets=(target,),
+    )
+
+    assert replaced == ()
 
 
 def test_import_target_owns_names_in_the_same_statement(tmp_path: Path) -> None:
