@@ -145,11 +145,11 @@ The complete planned declarations belong to the
    compiles all five obligation sets, and writes the three short prompts.
 2. `run_experiment()` constructs one `ExperimentDraft` with three variants
    and one replicate. `AgentTrialParameters.arm` is the only treatment level.
-3. `plan()` authors one arm draft. `execution.run()` freezes it as an immutable
-   `RunSpec` that identifies the committed stage implementation and
-   digest-bound inputs.
-4. `execution.run()` invokes `run_agent_trial()` once per plan. The three runs
-   execute sequentially so CPU contention does not distort elapsed time.
+3. `plan()` authors one arm draft. `freeze_run_plan()` writes its immutable
+   `RunSpec`; the runner commits those plan files before execution.
+4. `execution.run()` invokes `run_agent_trial()` from the committed plan. The
+   three runs execute sequentially so CPU contention does not distort elapsed
+   time.
 5. `run_agent_trial()` extracts the fixture, launches Codex, enforces the
    external limit, captures JSONL, then runs the hidden evaluator once.
 6. The stage writes the transcript, patch, candidate archive, usage, and verdict

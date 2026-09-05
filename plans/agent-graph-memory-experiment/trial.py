@@ -21,13 +21,11 @@ from viper.metrics import MetricContext, metric
 from viper.params import Train
 from viper.stages import Context, train
 
-Arm = Literal["ordinary", "static_graph", "graph_predicate"]
-
 
 class AgentTrialParameters(Train):
     """Select one treatment and its externally enforced agent controls."""
 
-    arm: Arm
+    arm: Literal["ordinary", "static_graph", "graph_predicate"]
     model: str = Field(min_length=1)
     timeout_seconds: int = Field(gt=0)
     fixture_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")

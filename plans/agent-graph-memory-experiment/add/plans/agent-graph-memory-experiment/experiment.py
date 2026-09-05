@@ -24,7 +24,16 @@ from viper._system_impact.codeql import (
 )
 from viper.api import VerifyRunRequest, verify_run
 from viper.artifacts import artifact
-from viper.authoring import experiment, factor, input, plan, replicate, stage, variant
+from viper.authoring import (
+    experiment,
+    factor,
+    freeze_run_plan,
+    input,
+    plan,
+    replicate,
+    stage,
+    variant,
+)
 from viper.metrics import max, measure
 from viper.params import Metric
 from viper.references import GitFileRef, GitSource
@@ -387,9 +396,13 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
             reproducibility=_reproducibility(),
         )
         print(f"{arm}: starting VIPER run", flush=True)
+        frozen = freeze_run_plan(project, draft)
+        _git(project, "add", "experiments")
+        _git(project, "commit", "-qm", f"Freeze {arm} trial plan")
+        run_path = project / frozen.reference.stored_at.path
         result = execution.run(
             project,
-            draft,
+            run_path,
             timeout_seconds=timeout_seconds + 180,
         )
         verified = verify_run(
