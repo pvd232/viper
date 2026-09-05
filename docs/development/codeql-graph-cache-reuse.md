@@ -2,7 +2,7 @@
 
 ## 1. Status
 
-**Contract status:** Planned.
+**Contract status:** Complete.
 
 | ID | Implementation obligation |
 | --- | --- |
@@ -109,7 +109,7 @@ flowchart TB
 ```mermaid
 flowchart TB
     Contract["CGR-01<br/>optional evidence output"]
-    Checklist["P1-CGR-01<br/>planned"]
+    Checklist["P1-CGR-01<br/>implemented"]
     Call["analyze_source()"]
     Query["_run_query_suite()<br/>verified BQRS"]
     Graph["_lower_graph()<br/>validate graph first"]

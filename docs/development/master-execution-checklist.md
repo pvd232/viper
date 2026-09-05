@@ -281,7 +281,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, a two-graph one-hop preflight, and rejection of unplanned source changes |
 | [CodeQL Analysis](codeql-analysis.md) | Design approved; source plan validated | Exact graph semantics plus separate extraction, query, and graph-lowering keys, caches, and receipts |
-| [CodeQL graph cache reuse](codeql-graph-cache-reuse.md) | Planned | Verified warm graph reuse without BQRS decoding unless a caller explicitly requests publication evidence |
+| [CodeQL graph cache reuse](codeql-graph-cache-reuse.md) | Complete | Verified warm graph reuse without BQRS decoding unless a caller explicitly requests publication evidence |
 | [PairBlock scheduling](pair-block-scheduling.md) | Complete | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
 | [Download retrieval artifacts](download-retrieval-artifacts.md) | Complete | Runner-owned downloads and the shared HTTP-body artifact |
@@ -1107,17 +1107,17 @@ publisher.
 
 ### 8.3 CodeQL graph cache reuse
 
-- [ ] Validate `graphs/<k_G>/source-graph.json` before BQRS decoding. Let
+- [x] Validate `graphs/<k_G>/source-graph.json` before BQRS decoding. Let
       graph-only callers omit `artifact_root`; retain explicit BQRS and JSON
       materialization for accepted-plan evidence.
       <!-- pair-block: P1-CGR-01 -->
       <!-- pair-block-contract: P1-CGR-01 contract=codeql-graph-cache-reuse.md -->
       <!-- implements: CGR-01 -->
       <!-- verifies: CGR-01 -->
-      <!-- contract-implementation: requirement=CGR-01 rule=codeql.graph.warm_reuse state=planned owner=src/viper/_system_impact/codeql.py:_lower_graph -->
-      <!-- contract-verification: requirement=CGR-01 rule=codeql.graph.warm_reuse state=planned test=tests/test_codeql_analysis.py:test_cached_graph_reuse_decodes_only_requested_artifacts -->
-      <!-- contract-implementation: requirement=CGR-01 rule=codeql.evidence.requested state=planned owner=src/viper/_system_impact/codeql.py:_decode_query_results -->
-      <!-- contract-verification: requirement=CGR-01 rule=codeql.evidence.requested state=planned test=tests/test_codeql_analysis.py:test_requested_artifacts_reject_decode_failure -->
+      <!-- contract-implementation: requirement=CGR-01 rule=codeql.graph.warm_reuse state=implemented owner=src/viper/_system_impact/codeql.py:_lower_graph -->
+      <!-- contract-verification: requirement=CGR-01 rule=codeql.graph.warm_reuse state=implemented test=tests/test_codeql_analysis.py:test_cached_graph_reuse_decodes_only_requested_artifacts -->
+      <!-- contract-implementation: requirement=CGR-01 rule=codeql.evidence.requested state=implemented owner=src/viper/_system_impact/codeql.py:_decode_query_results -->
+      <!-- contract-verification: requirement=CGR-01 rule=codeql.evidence.requested state=implemented test=tests/test_codeql_analysis.py:test_requested_artifacts_reject_decode_failure -->
 
 The [CodeQL graph cache reuse contract](codeql-graph-cache-reuse.md#10-implementation-order)
 owns the exact source declarations and focused gate. `P1-CGR-01` consumes the
