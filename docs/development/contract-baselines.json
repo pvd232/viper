@@ -48,7 +48,7 @@
       "requirement_ids": [
         "CGR-01"
       ],
-      "sha256": "15fbc187e3edd3ec50698bfbe97116e74a08430ec036d78ba59810ccb16ece21"
+      "sha256": "8bb87d4b9711f601ba19807d941b0351d2a672bdb2e3ecc74c8c3e8eece51fff"
     },
     {
       "path": "docs/development/pair-block-scheduling.md",

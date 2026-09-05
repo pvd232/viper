@@ -360,7 +360,9 @@ def _decode_query_results(
 ]:
     """Decode verified BQRS and optionally materialize publication evidence."""
 
-    def decode_to(output_root: Path) -> tuple[
+    def decode_to(
+        output_root: Path,
+    ) -> tuple[
         dict[str, list[list[Any]]],
         tuple[tuple[str, ...], ...],
         str,
