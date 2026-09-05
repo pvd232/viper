@@ -527,6 +527,139 @@ def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> 
     )
 
 
+def test_materialize_plan_adds_a_dotted_import(tmp_path: Path) -> None:
+    """Treat an imported module path as an import, not a nested declaration."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    (baseline_root / "module.py").write_bytes(b"VALUE = 1\n")
+    plan_root = tmp_path / "plan"
+    declaration = b"import importlib.util"
+    reference = _write_target_fence(plan_root, declaration)
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="add",
+                path="module.py",
+                symbol="importlib.util",
+                declaration=reference,
+            ),
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        _source_graph(nodes=()),
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"import importlib.util\n\nVALUE = 1\n"
+    )
+
+
+def test_materialize_plan_rejects_a_nested_addition(tmp_path: Path) -> None:
+    """Keep dotted class members out of the top-level addition path."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    (baseline_root / "module.py").write_bytes(b"VALUE = 1\n")
+    plan_root = tmp_path / "plan"
+    reference = _write_target_fence(
+        plan_root,
+        b"class Owner:\n    def child(self) -> None:\n        pass",
+    )
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="add",
+                path="module.py",
+                symbol="Owner.child",
+                declaration=reference,
+            ),
+        )
+    )
+
+    with pytest.raises(scheduling.ScheduleError, match="not a top-level declaration"):
+        scheduling.materialize_plan(
+            baseline_root,
+            plan_root,
+            traceability,
+            (_BLOCK_ID,),
+            _source_graph(nodes=()),
+            tmp_path / "planned",
+        )
+
+
+def test_materialize_plan_preserves_an_unowned_inline_comment(tmp_path: Path) -> None:
+    """Replace only the declaration span selected by the source graph."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"VALUE = 1  # retained context\n"
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    reference = _write_target_fence(plan_root, b"VALUE = 2")
+    traceability = _traceability(
+        targets=(
+            _target(
+                action="update",
+                path="module.py",
+                symbol="VALUE",
+                declaration=reference,
+            ),
+        )
+    )
+    declaration = b"VALUE = 1"
+    baseline = _source_graph(
+        nodes=(
+            SourceNode(
+                node_id="module.py:VALUE",
+                path="module.py",
+                symbol="VALUE",
+                kind="assignment",
+                binding_start_line=1,
+                binding_start_col=0,
+                binding_end_line=1,
+                binding_end_col=5,
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=len(declaration),
+                sha256=_sha256(declaration),
+            ),
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        baseline,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"VALUE = 2  # retained context\n"
+    )
+
+
+def test_select_blocks_rejects_an_unknown_completed_request() -> None:
+    """Validate a requested ID before accepting its completion status."""
+    unknown = "P0-TST-99"
+    traceability, _, _ = _schedule_fixture()
+
+    with pytest.raises(scheduling.ScheduleError, match="unknown PairBlock"):
+        scheduling.select_blocks(
+            traceability,
+            (unknown,),
+            completed=frozenset((unknown,)),
+        )
+
+
 def test_pre_pairing_modules_document_every_operation() -> None:
     """Require docstrings on public, private, and nested pre-pairing operations."""
     missing: list[str] = []

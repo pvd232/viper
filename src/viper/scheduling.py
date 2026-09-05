@@ -25,17 +25,42 @@ from .system_impact.models import SourceGraph
 ScheduleEdgeKind = Literal["declared", "source", "write_conflict"]
 
 
-def _import_parts(
-    payload: bytes,
-) -> tuple[tuple[int, str | None], frozenset[str]] | None:
-    """Return the module and imported names for one import statement."""
+def _statement(payload: bytes) -> ast.stmt | None:
+    """Return the payload's single Python statement."""
     try:
         tree = ast.parse(payload)
     except SyntaxError:
         return None
     if len(tree.body) != 1:
         return None
-    statement = tree.body[0]
+    return tree.body[0]
+
+
+def _bound_names(statement: ast.stmt) -> frozenset[str]:
+    """Return the top-level names bound by one Python statement."""
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return frozenset((statement.name,))
+    if isinstance(statement, (ast.Import, ast.ImportFrom)):
+        return frozenset(alias.asname or alias.name for alias in statement.names)
+    if isinstance(statement, ast.Assign):
+        targets = statement.targets
+    elif isinstance(statement, ast.AnnAssign):
+        targets = (statement.target,)
+    else:
+        return frozenset()
+    return frozenset(
+        node.id
+        for target in targets
+        for node in ast.walk(target)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+    )
+
+
+def _import_parts(
+    payload: bytes,
+) -> tuple[tuple[int, str | None], frozenset[str]] | None:
+    """Return the module and imported names for one import statement."""
+    statement = _statement(payload)
     if isinstance(statement, ast.ImportFrom):
         owner = (statement.level, statement.module)
     elif isinstance(statement, ast.Import) and len(statement.names) == 1:
@@ -147,11 +172,11 @@ def select_blocks(
 
     def include(block_id: PairBlockId) -> None:
         """Add this block and its unfinished dependencies."""
-        if block_id in completed or block_id in selected:
-            return
         block = blocks.get(block_id)
         if block is None:
             raise ScheduleError(f"unknown PairBlock: {block_id}")
+        if block_id in completed or block_id in selected:
+            return
         selected.add(block_id)
         for dependency in block.depends_on:
             include(dependency)
@@ -380,10 +405,13 @@ def materialize_plan(
             if target.action == "add":
                 if node is not None:
                     raise ScheduleError(f"added target already exists: {target.target}")
-                if "." in target.target.symbol:
-                    raise ScheduleError("version 1 cannot place a nested added target")
                 payload = _declaration_payload(plan_root, target)
                 assert payload is not None
+                statement = _statement(payload)
+                if statement is None or target.target.symbol not in _bound_names(
+                    statement
+                ):
+                    raise ScheduleError("added target is not a top-level declaration")
                 additions.append((index, payload))
                 continue
             if node is None:
@@ -391,11 +419,6 @@ def materialize_plan(
             # Convert CodeQL positions to byte offsets in the baseline file.
             start = starts[node.start_line - 1] + node.start_col
             end = starts[node.end_line - 1] + node.end_col
-            # Replace the old inline directive with its declaration.
-            end_line = lines[node.end_line - 1]
-            suffix = end_line[node.end_col :]
-            if suffix.lstrip().startswith(b"#"):
-                end = starts[node.end_line - 1] + len(end_line.rstrip(b"\r\n"))
             payload = (
                 b""
                 if target.action == "remove"
@@ -497,7 +520,7 @@ def materialize_plan(
                 ),
                 None,
             )
-            if payload.startswith((b"import ", b"from ")):
+            if isinstance(_statement(payload), (ast.Import, ast.ImportFrom)):
                 imports = tuple(
                     node
                     for node in nodes.values()

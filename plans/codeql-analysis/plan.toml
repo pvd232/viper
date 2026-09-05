@@ -54,6 +54,11 @@ destination = "src/viper/system_impact/plan.py"
 
 [[blocks.files]]
 action = "replace"
+source = "replace/src/viper/scheduling.py"
+destination = "src/viper/scheduling.py"
+
+[[blocks.files]]
+action = "replace"
 source = "replace/tools/plan/check.py"
 destination = "tools/plan/check.py"
 
