@@ -3411,3 +3411,1055 @@ def test_catalog_results_retain_immutable_sources(tmp_path: Path) -> None:
     else:
         raise AssertionError("a cursor was accepted under different filters")
 ```
+
+## 16. Phase 15 executable plan
+
+<!-- pair-block-definition: P15-PCM-01 -->
+```toml pair-block
+id = "P15-PCM-01"
+requirements = ["PCM-03", "PCM-04", "PCM-05"]
+targets = [
+    "src/viper/mcp.py:annotations",
+    "src/viper/mcp.py:hashlib",
+    "src/viper/mcp.py:json",
+    "src/viper/mcp.py:sqlite3",
+    "src/viper/mcp.py:ArgumentParser",
+    "src/viper/mcp.py:Iterator",
+    "src/viper/mcp.py:Mapping",
+    "src/viper/mcp.py:Path",
+    "src/viper/mcp.py:Any",
+    "src/viper/mcp.py:Literal",
+    "src/viper/mcp.py:get_type_hints",
+    "src/viper/mcp.py:anyio",
+    "src/viper/mcp.py:types",
+    "src/viper/mcp.py:Server",
+    "src/viper/mcp.py:stdio_server",
+    "src/viper/mcp.py:BaseModel",
+    "src/viper/mcp.py:HANDLER_REGISTRY",
+    "src/viper/mcp.py:REQUEST_REGISTRY",
+    "src/viper/mcp.py:OperationName",
+    "src/viper/mcp.py:SuccessModel",
+    "src/viper/mcp.py:ViperFailure",
+    "src/viper/mcp.py:dispatch",
+    "src/viper/mcp.py:result_json_bytes",
+    "src/viper/mcp.py:AccessMode",
+    "src/viper/mcp.py:READ_OPERATIONS",
+    "src/viper/mcp.py:EXECUTION_OPERATIONS",
+    "src/viper/mcp.py:_ROOT_FIELDS",
+    "src/viper/mcp.py:_PROMPTS",
+    "src/viper/mcp.py:_RESOURCE_TEMPLATES",
+    "src/viper/mcp.py:_operations",
+    "src/viper/mcp.py:_success_model",
+    "src/viper/mcp.py:tool_registry",
+    "src/viper/mcp.py:_paths",
+    "src/viper/mcp.py:_request_payload",
+    "src/viper/mcp.py:call_tool",
+    "src/viper/mcp.py:_catalog_sources",
+    "src/viper/mcp.py:resource_registry",
+    "src/viper/mcp.py:resource_templates",
+    "src/viper/mcp.py:read_resource",
+    "src/viper/mcp.py:prompt_registry",
+    "src/viper/mcp.py:get_prompt",
+    "src/viper/mcp.py:MCPAdapter",
+    "src/viper/mcp.py:build_server",
+    "src/viper/mcp.py:_run_stdio",
+    "src/viper/mcp.py:serve_stdio",
+    "src/viper/mcp.py:main",
+    "src/viper/mcp.py:__all__",
+    "src/viper/cli.py:subprocess",
+    "src/viper/cli.py:build_parser",
+    "src/viper/cli.py:main",
+    "tests/test_api.py:sqlite3",
+    "tests/test_api.py:cast",
+    "tests/test_api.py:get_type_hints",
+    "tests/test_api.py:types",
+    "tests/test_api.py:HANDLER_REGISTRY",
+    "tests/test_api.py:REQUEST_REGISTRY",
+    "tests/test_api.py:OperationName",
+    "tests/test_api.py:SuccessModel",
+    "tests/test_api.py:call_tool",
+    "tests/test_api.py:prompt_registry",
+    "tests/test_api.py:read_resource",
+    "tests/test_api.py:resource_registry",
+    "tests/test_api.py:resource_templates",
+    "tests/test_api.py:tool_registry",
+    "tests/test_api.py:test_mcp_tool_schemas_match_typed_operations",
+    "tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root",
+    "tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access",
+]
+assets = ["pyproject.toml"]
+tests = [
+    "tests/test_api.py:test_mcp_tool_schemas_match_typed_operations",
+    "tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root",
+    "tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access",
+]
+gate = "python -m pytest tests/test_api.py::test_mcp_tool_schemas_match_typed_operations tests/test_api.py::test_mcp_resources_are_stateless_inside_startup_root tests/test_cli.py::test_mcp_stdio_requires_explicit_execution_access -q"
+depends_on = ["P14-SRU-03"]
+```
+
+**Context:** Phase 15 adds one thin MCP adapter over the existing typed API and
+catalog. The block derives tool schemas from the API registries, fixes one
+startup root, exposes catalog-backed resources and review prompts, and starts
+stdio in read mode unless execution access is explicitly selected.
+
+## 17. Phase 15 ContractTargets
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:annotations -->
+```python contract-target
+from __future__ import annotations
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:hashlib -->
+```python contract-target
+import hashlib
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:json -->
+```python contract-target
+import json
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:sqlite3 -->
+```python contract-target
+import sqlite3
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:ArgumentParser -->
+```python contract-target
+from argparse import ArgumentParser
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:Iterator -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:Mapping -->
+```python contract-target
+from collections.abc import Iterator, Mapping
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:Any -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:Literal -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:get_type_hints -->
+```python contract-target
+from typing import Any, Literal, get_type_hints
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:anyio -->
+```python contract-target
+import anyio
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:types -->
+```python contract-target
+from mcp import types
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:Server -->
+```python contract-target
+from mcp.server import Server
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:stdio_server -->
+```python contract-target
+from mcp.server.stdio import stdio_server
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:BaseModel -->
+```python contract-target
+from pydantic import BaseModel
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:HANDLER_REGISTRY -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:REQUEST_REGISTRY -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:OperationName -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:SuccessModel -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:ViperFailure -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:dispatch -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:result_json_bytes -->
+```python contract-target
+from .api import (
+    HANDLER_REGISTRY,
+    REQUEST_REGISTRY,
+    OperationName,
+    SuccessModel,
+    ViperFailure,
+    dispatch,
+    result_json_bytes,
+)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:AccessMode -->
+```python contract-target
+AccessMode = Literal["read", "execute"]
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:READ_OPERATIONS -->
+```python contract-target
+READ_OPERATIONS: tuple[OperationName, ...] = (
+    "compare_runs",
+    "get_capabilities",
+    "get_schema",
+    "lineage",
+    "plan_diff",
+    "search_artifacts",
+    "search_benchmarks",
+    "search_measurements",
+    "search_runs",
+    "status",
+    "verify_benchmark",
+    "verify_pointer",
+    "verify_run",
+)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:EXECUTION_OPERATIONS -->
+```python contract-target
+EXECUTION_OPERATIONS: tuple[OperationName, ...] = (
+    "catalog_refresh",
+    "execute_benchmark",
+    "preflight",
+    "restore",
+    "retry",
+    "run",
+    "run_many",
+)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_ROOT_FIELDS -->
+```python contract-target
+_ROOT_FIELDS = frozenset({"root", "repository_root", "left_root", "right_root"})
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_PROMPTS -->
+```python contract-target
+_PROMPTS = (
+    "compare_agent_policies",
+    "compare_runs",
+    "investigate_failure",
+    "review_experiment_proposal",
+    "review_literature_claim",
+    "review_run",
+)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_RESOURCE_TEMPLATES -->
+```python contract-target
+_RESOURCE_TEMPLATES = (
+    ("artifact", "viper://artifact/{sha256}"),
+    ("benchmark", "viper://benchmark/{sha256}"),
+    ("knowledge", "viper://knowledge/{sha256}"),
+    ("measurement", "viper://measurement/{sha256}"),
+    ("run", "viper://run/{sha256}"),
+)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_operations -->
+```python contract-target
+def _operations(access: AccessMode) -> tuple[OperationName, ...]:
+    """Return the operations granted by one server access mode."""
+    operations = READ_OPERATIONS
+    if access == "execute":
+        operations += EXECUTION_OPERATIONS
+    return tuple(sorted(operations))
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_success_model -->
+```python contract-target
+def _success_model(operation: OperationName) -> type[SuccessModel]:
+    """Read the success model from the same handler used by API dispatch."""
+    result = get_type_hints(HANDLER_REGISTRY[operation])["return"]
+    if not isinstance(result, type) or not issubclass(result, SuccessModel):
+        raise TypeError(f"{operation} handler has no concrete success model")
+    return result
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:tool_registry -->
+```python contract-target
+def tool_registry(access: AccessMode = "read") -> tuple[types.Tool, ...]:
+    """Build deterministic MCP tools from VIPER's API registries."""
+    tools = []
+    for operation in _operations(access):
+        request = REQUEST_REGISTRY[operation]
+        success = _success_model(operation)
+        read_only = operation in READ_OPERATIONS
+        tools.append(
+            types.Tool(
+                name=operation,
+                description=HANDLER_REGISTRY[operation].__doc__,
+                input_schema=request.model_json_schema(),
+                output_schema=success.model_json_schema(),
+                annotations=types.ToolAnnotations(
+                    read_only_hint=read_only,
+                    destructive_hint=not read_only,
+                    idempotent_hint=read_only,
+                    open_world_hint=False,
+                ),
+            )
+        )
+    return tuple(tools)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_paths -->
+```python contract-target
+def _paths(value: object) -> Iterator[Path]:
+    """Yield every local path carried by one validated request."""
+    if isinstance(value, Path):
+        yield value
+    elif isinstance(value, BaseModel):
+        yield from _paths(value.model_dump(mode="python"))
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            yield from _paths(item)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            yield from _paths(item)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_request_payload -->
+```python contract-target
+def _request_payload(
+    root: Path,
+    operation: OperationName,
+    arguments: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind an MCP request to the server root before API dispatch."""
+    payload = dict(arguments)
+    request_type = REQUEST_REGISTRY[operation]
+    for field in _ROOT_FIELDS & request_type.model_fields.keys():
+        supplied = payload.get(field)
+        if supplied is not None and Path(supplied).resolve() != root:
+            raise ValueError(f"{field} differs from the MCP startup root")
+        payload[field] = root
+
+    request = request_type.model_validate(payload)
+    for path in _paths(request):
+        resolved = path.resolve() if path.is_absolute() else (root / path).resolve()
+        if not resolved.is_relative_to(root):
+            raise ValueError(f"request path escapes the MCP startup root: {path}")
+    return payload
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:call_tool -->
+```python contract-target
+def call_tool(
+    root: Path,
+    access: AccessMode,
+    name: str,
+    arguments: Mapping[str, Any] | None = None,
+) -> types.CallToolResult:
+    """Validate and dispatch one MCP tool call through the typed API."""
+    allowed = _operations(access)
+    if name not in allowed:
+        raise ValueError(f"MCP tool is unavailable in {access} mode: {name}")
+    operation = name
+    payload = _request_payload(root.resolve(), operation, arguments or {})
+    result = dispatch(operation, payload)
+    document = json.loads(result_json_bytes(result))
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=json.dumps(document))],
+        structured_content=document,
+        is_error=isinstance(result, ViperFailure),
+    )
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_catalog_sources -->
+```python contract-target
+def _catalog_sources(root: Path) -> tuple[tuple[str, str, str], ...]:
+    """Load immutable source references from the disposable catalog."""
+    database = root / ".viper/catalog.sqlite3"
+    if not database.is_file():
+        return ()
+    with sqlite3.connect(database) as connection:
+        rows = connection.execute(
+            """
+            SELECT sources.source_key, sources.reference_json,
+                   CASE WHEN runs.source_key IS NOT NULL THEN 'run'
+                        WHEN benchmarks.source_key IS NOT NULL THEN 'benchmark'
+                        ELSE 'evidence' END
+            FROM sources
+            LEFT JOIN runs USING (source_key)
+            LEFT JOIN benchmarks USING (source_key)
+            WHERE sources.accepted = 1
+            ORDER BY sources.source_key
+            """
+        ).fetchall()
+    return tuple((str(key), str(reference), str(kind)) for key, reference, kind in rows)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:resource_registry -->
+```python contract-target
+def resource_registry(root: Path) -> tuple[types.Resource, ...]:
+    """List immutable catalog sources and the current derived catalog head."""
+    resources = [
+        types.Resource(
+            name=f"{kind}:{key}",
+            uri=f"viper://{kind}/{key}",
+            mime_type="application/json",
+        )
+        for key, _reference, kind in _catalog_sources(root.resolve())
+    ]
+    database = root.resolve() / ".viper/catalog.sqlite3"
+    if database.is_file():
+        resources.append(
+            types.Resource(
+                name="catalog-head",
+                uri="viper://catalog/head",
+                mime_type="application/json",
+            )
+        )
+    return tuple(sorted(resources, key=lambda resource: resource.uri))
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:resource_templates -->
+```python contract-target
+def resource_templates() -> tuple[types.ResourceTemplate, ...]:
+    """Return stable templates for VIPER evidence resources."""
+    return tuple(
+        types.ResourceTemplate(
+            name=name,
+            uri_template=template,
+            mime_type="application/json",
+        )
+        for name, template in _RESOURCE_TEMPLATES
+    )
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:read_resource -->
+```python contract-target
+def read_resource(root: Path, uri: str) -> types.ReadResourceResult:
+    """Read one catalog-backed resource without changing server state."""
+    project_root = root.resolve()
+    if uri == "viper://catalog/head":
+        database = project_root / ".viper/catalog.sqlite3"
+        if not database.is_file():
+            raise ValueError("catalog head is unavailable")
+        payload = {
+            "sha256": hashlib.sha256(database.read_bytes()).hexdigest(),
+            "sources": len(_catalog_sources(project_root)),
+        }
+        ttl = 1_000
+    else:
+        matches = [
+            reference
+            for key, reference, kind in _catalog_sources(project_root)
+            if uri == f"viper://{kind}/{key}"
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"unknown VIPER resource: {uri}")
+        payload = json.loads(matches[0])
+        ttl = 86_400_000
+    return types.ReadResourceResult(
+        contents=[
+            types.TextResourceContents(
+                uri=uri,
+                mime_type="application/json",
+                text=json.dumps(payload, sort_keys=True),
+            )
+        ],
+        ttl_ms=ttl,
+        cache_scope="private",
+    )
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:prompt_registry -->
+```python contract-target
+def prompt_registry() -> tuple[types.Prompt, ...]:
+    """List the user-selected review prompts in deterministic order."""
+    return tuple(
+        types.Prompt(
+            name=name,
+            description=f"Prepare the {name.replace('_', ' ')} review.",
+            arguments=[types.PromptArgument(name="reference", required=True)],
+        )
+        for name in _PROMPTS
+    )
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:get_prompt -->
+```python contract-target
+def get_prompt(name: str, arguments: Mapping[str, str] | None) -> types.GetPromptResult:
+    """Build one review prompt without executing a VIPER operation."""
+    if name not in _PROMPTS:
+        raise ValueError(f"unknown VIPER prompt: {name}")
+    reference = (arguments or {}).get("reference")
+    if not reference:
+        raise ValueError("prompt reference is required")
+    return types.GetPromptResult(
+        description=name.replace("_", " "),
+        messages=[
+            types.PromptMessage(
+                role="user",
+                content=types.TextContent(
+                    type="text",
+                    text=f"{name.replace('_', ' ').capitalize()}: {reference}",
+                ),
+            )
+        ],
+    )
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:MCPAdapter -->
+```python contract-target
+class MCPAdapter:
+    """Bind stateless MCP handlers to one repository and access mode."""
+
+    def __init__(self, root: Path, access: AccessMode):
+        """Keep one startup root for every request."""
+        self.root = root.resolve()
+        self.access: AccessMode = access
+
+    async def list_tools(self, _context: Any, _params: Any) -> types.ListToolsResult:
+        """Return deterministic tools for the configured access mode."""
+        return types.ListToolsResult(tools=list(tool_registry(self.access)))
+
+    async def call_tool(
+        self,
+        _context: Any,
+        params: types.CallToolRequestParams,
+    ) -> types.CallToolResult:
+        """Dispatch one tool request through VIPER's API."""
+        return call_tool(self.root, self.access, params.name, params.arguments)
+
+    async def list_resources(
+        self, _context: Any, _params: Any
+    ) -> types.ListResourcesResult:
+        """Return the current catalog resource listing."""
+        return types.ListResourcesResult(
+            resources=list(resource_registry(self.root)),
+            ttl_ms=1_000,
+            cache_scope="private",
+        )
+
+    async def list_resource_templates(
+        self, _context: Any, _params: Any
+    ) -> types.ListResourceTemplatesResult:
+        """Return the stable resource templates."""
+        return types.ListResourceTemplatesResult(
+            resource_templates=list(resource_templates()),
+            ttl_ms=86_400_000,
+            cache_scope="private",
+        )
+
+    async def read_resource(
+        self,
+        _context: Any,
+        params: types.ReadResourceRequestParams,
+    ) -> types.ReadResourceResult:
+        """Return one immutable resource or the derived catalog head."""
+        return read_resource(self.root, str(params.uri))
+
+    async def list_prompts(
+        self, _context: Any, _params: Any
+    ) -> types.ListPromptsResult:
+        """Return deterministic review prompts."""
+        return types.ListPromptsResult(
+            prompts=list(prompt_registry()),
+            ttl_ms=86_400_000,
+            cache_scope="private",
+        )
+
+    async def get_prompt(
+        self,
+        _context: Any,
+        params: types.GetPromptRequestParams,
+    ) -> types.GetPromptResult:
+        """Return one user-selected review prompt."""
+        return get_prompt(params.name, params.arguments)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:build_server -->
+```python contract-target
+def build_server(root: Path, access: AccessMode = "read") -> Server[None]:
+    """Build the official MCP server around one stateless VIPER adapter."""
+    adapter = MCPAdapter(root, access)
+    return Server(
+        "viper",
+        version="0.1.0a2",
+        on_list_tools=adapter.list_tools,
+        on_call_tool=adapter.call_tool,
+        on_list_resources=adapter.list_resources,
+        on_list_resource_templates=adapter.list_resource_templates,
+        on_read_resource=adapter.read_resource,
+        on_list_prompts=adapter.list_prompts,
+        on_get_prompt=adapter.get_prompt,
+    )
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:_run_stdio -->
+```python contract-target
+async def _run_stdio(root: Path, access: AccessMode) -> None:
+    """Serve one MCP connection over standard input and output."""
+    server = build_server(root, access)
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            server.create_initialization_options(),
+        )
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:serve_stdio -->
+```python contract-target
+def serve_stdio(root: Path, access: AccessMode = "read") -> None:
+    """Run the local MCP server until its standard-input stream closes."""
+    anyio.run(_run_stdio, root, access)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:main -->
+```python contract-target
+def main(argv: list[str] | None = None) -> int:
+    """Parse the isolated MCP process configuration and serve stdio."""
+    parser = ArgumentParser(prog="python -m viper.mcp")
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--access", choices=("read", "execute"), default="read")
+    arguments = parser.parse_args(argv)
+    serve_stdio(arguments.root, arguments.access)
+    return 0
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/mcp.py:__all__ -->
+```python contract-target
+__all__ = [
+    "AccessMode",
+    "build_server",
+    "call_tool",
+    "get_prompt",
+    "main",
+    "prompt_registry",
+    "read_resource",
+    "resource_registry",
+    "resource_templates",
+    "serve_stdio",
+    "tool_registry",
+]
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=src/viper/cli.py:subprocess -->
+```python contract-target
+from . import _subprocess as subprocess
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=update target=src/viper/cli.py:build_parser -->
+```python contract-target
+def build_parser() -> ArgumentParser:
+    """Build the VIPER command parser and its API subcommands."""
+    parser = ViperArgumentParser(prog="viper")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="emit one machine-readable result document",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    for name, help_text in (
+        ("validate-stage", "validate one authored stage specification"),
+        ("validate-resolved-stage", "validate one resolved stage specification"),
+        ("validate-run", "validate one frozen run specification"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+
+    freeze = commands.add_parser(
+        "freeze-run",
+        help="write canonical stage specs and a hash-bound RunSpec",
+    )
+    freeze.add_argument("draft", type=Path)
+    add_root(freeze)
+
+    preflight = commands.add_parser(
+        "preflight",
+        help="inspect every applicable check before local execution",
+    )
+    preflight.add_argument("run_spec", type=Path)
+    add_root(preflight)
+
+    execute = commands.add_parser(
+        "execute-stage",
+        help="run one stage from a frozen local run plan",
+    )
+    execute.add_argument("run_spec", type=Path)
+    execute.add_argument("stage_id")
+    add_root(execute)
+    execute.add_argument("--timeout-seconds", type=float)
+
+    run_command = commands.add_parser(
+        "run",
+        help="execute and verify one complete run on this host",
+    )
+    run_command.add_argument("run_spec", type=Path)
+    add_root(run_command)
+    run_command.add_argument("--timeout-seconds", type=float)
+
+    run_many = commands.add_parser(
+        "run-many",
+        help="execute several frozen run plans with bounded concurrency",
+    )
+    run_many.add_argument("run_specs", nargs="+", type=Path)
+    add_root(run_many)
+    run_many.add_argument("--max-concurrency", type=int, default=1)
+    run_many.add_argument("--timeout-seconds", type=float)
+    run_many.add_argument("--stop-on-failure", action="store_true")
+
+    catalog_refresh = commands.add_parser(
+        "catalog-refresh",
+        help="verify terminal runs and rebuild the local catalog",
+    )
+    catalog_refresh.add_argument("run_paths", nargs="+", type=Path)
+    add_root(catalog_refresh)
+    catalog_refresh.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
+    for name, help_text in (
+        ("search-runs", "query verified runs"),
+        ("search-artifacts", "query verified artifacts"),
+        ("search-measurements", "query verified measurements"),
+        ("search-benchmarks", "query verified benchmark results"),
+    ):
+        search = commands.add_parser(name, help=help_text)
+        add_root(search)
+        search.add_argument(
+            "--query",
+            type=parse_query,
+            default={},
+            help="exact query model as one JSON object",
+        )
+
+    mcp = commands.add_parser(
+        "mcp",
+        help="serve the typed VIPER API over local MCP stdio",
+    )
+    add_root(mcp)
+    mcp.add_argument("--access", choices=("read", "execute"), default="read")
+
+    retry_command = commands.add_parser(
+        "retry",
+        help="append one attempt to a failed frozen run",
+    )
+    retry_command.add_argument("run_spec", type=Path)
+    add_root(retry_command)
+    retry_command.add_argument("--timeout-seconds", type=float)
+
+    benchmark_command = commands.add_parser(
+        "execute-benchmark",
+        help="execute and verify one independent benchmark confirmation",
+    )
+    benchmark_command.add_argument("resolved_run", type=Path)
+    benchmark_command.add_argument("benchmark_spec", type=Path)
+    add_root(benchmark_command)
+    benchmark_command.add_argument("--timeout-seconds", type=float)
+
+    restore = commands.add_parser(
+        "restore",
+        help="restore verified artifacts from one successful run",
+    )
+    restore.add_argument("run_reference")
+    add_root(restore)
+    restore.add_argument(
+        "--artifacts",
+        nargs="+",
+        default=[],
+        type=parse_artifact_selector,
+        metavar="STAGE.ARTIFACT",
+    )
+    restore.add_argument("--output", type=Path)
+
+    plan_diff = commands.add_parser(
+        "plan-diff",
+        help="compare two complete frozen run plans",
+    )
+    plan_diff.add_argument("left_run_spec", type=Path)
+    plan_diff.add_argument("right_run_spec", type=Path)
+    add_root(plan_diff, "left_root")
+    add_root(plan_diff, "right_root")
+
+    status = commands.add_parser(
+        "status",
+        help="read the latest durable state of one local attempt",
+    )
+    status.add_argument("path", type=Path)
+
+    compare_runs = commands.add_parser(
+        "compare-runs",
+        help="compare all connected evidence from two verified runs",
+    )
+    compare_runs.add_argument("left_path", type=Path)
+    compare_runs.add_argument("right_path", type=Path)
+    add_root(compare_runs, "left_root")
+    add_root(compare_runs, "right_root")
+    compare_runs.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
+    for name, help_text in (
+        ("verify-run", "verify one terminal resolved run"),
+        ("verify-benchmark", "verify one benchmark result"),
+        ("verify-pointer", "verify one promoted artifact pointer"),
+        ("lineage", "return the verified upstream lineage of one run"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+        add_root(command)
+        command.add_argument(
+            "--trust-source",
+            action="append",
+            required=True,
+            help="source repository URL approved to supply executable loaders",
+        )
+
+    schema = commands.add_parser("schema", help="return one public JSON Schema")
+    schema.add_argument("name")
+    commands.add_parser("capabilities", help="list installed VIPER capabilities")
+    initialize = commands.add_parser(
+        "init",
+        help="create a five-stage starter project",
+    )
+    initialize.add_argument("path", type=Path)
+    initialize.add_argument("--package", required=True)
+    impact = commands.add_parser(
+        "impact",
+        help="inspect verified source-impact evidence",
+    )
+    impact_commands = impact.add_subparsers(dest="impact_command", required=True)
+    explain = impact_commands.add_parser(
+        "explain",
+        help="join one PlanCheck one-hop result to source locations",
+    )
+    explain.add_argument("--check", type=Path, required=True)
+    explain.add_argument("--baseline-graph", type=Path, required=True)
+    explain.add_argument("--realized-graph", type=Path, required=True)
+    explain.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        default=[],
+        help="limit evidence to one PATH:SYMBOL target; repeat for several targets",
+    )
+    analyze = impact_commands.add_parser(
+        "analyze",
+        help="compile direct impact from one Git baseline to the working tree",
+    )
+    add_root(analyze)
+    analyze.add_argument(
+        "--base",
+        default="HEAD",
+        help="baseline Git revision; defaults to HEAD",
+    )
+    analyze.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        required=True,
+        help="analyze one PATH:SYMBOL target; repeat for several targets",
+    )
+    analyze.add_argument("--artifact-root", type=Path)
+    analyze.add_argument("--cache-root", type=Path)
+    analyze.add_argument("--codeql-executable", type=Path)
+    analyze.add_argument("--query-pack", type=Path)
+    return parser
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=update target=src/viper/cli.py:main -->
+```python contract-target
+def main(argv: list[str] | None = None) -> int:
+    """Parse, dispatch, and render one VIPER command."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    json_output = "--json" in arguments
+    parser = build_parser()
+    try:
+        parsed = parser.parse_args(arguments)
+    except CliParseError as exc:
+        failure = ViperFailure(
+            operation=None,
+            origin="cli",
+            code="invalid_request",
+            message=str(exc),
+        )
+        if json_output:
+            return _render(failure, json_output=True)
+        parser.print_usage(sys.stderr)
+        return _render(failure, json_output=False)
+
+    if parsed.command == "mcp":
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "viper.mcp",
+                "--root",
+                str(parsed.root),
+                "--access",
+                parsed.access,
+            ],
+            check=False,
+        )
+        return completed.returncode
+
+    operation, payload = _operation_and_payload(parsed)
+    result = dispatch(operation, payload)
+    return _render(result, json_output=parsed.json_output)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:sqlite3 -->
+```python contract-target
+import sqlite3
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:cast -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:get_type_hints -->
+```python contract-target
+from typing import cast, get_type_hints
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:types -->
+```python contract-target
+from mcp import types
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:HANDLER_REGISTRY -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:REQUEST_REGISTRY -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:OperationName -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:SuccessModel -->
+```python contract-target
+from viper.api import (
+    HANDLER_REGISTRY,
+    REQUEST_REGISTRY,
+    CapabilitiesRequest,
+    CatalogRefreshRequest,
+    LocalRunPath,
+    OperationName,
+    RestoreRequest,
+    RunManyRequest,
+    SchemaRequest,
+    SearchRunsRequest,
+    StatusRequest,
+    SuccessModel,
+    ValidateStageRequest,
+    ViperFailure,
+    catalog_refresh,
+    dispatch,
+    get_capabilities,
+    get_schema,
+    restore_artifacts,
+    result_json_bytes,
+    run_many,
+    search_runs,
+    status,
+    validate_stage,
+)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:call_tool -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:prompt_registry -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:read_resource -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:resource_registry -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:resource_templates -->
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:tool_registry -->
+```python contract-target
+from viper.mcp import (
+    call_tool,
+    prompt_registry,
+    read_resource,
+    resource_registry,
+    resource_templates,
+    tool_registry,
+)
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:test_mcp_tool_schemas_match_typed_operations -->
+```python contract-target
+def test_mcp_tool_schemas_match_typed_operations() -> None:
+    """Build MCP tools directly from the request and handler registries."""
+    first = tool_registry("read")
+    second = tool_registry("read")
+
+    assert first == second
+    assert tuple(tool.name for tool in first) == tuple(
+        sorted(tool.name for tool in first)
+    )
+    for tool in tool_registry("execute"):
+        operation = cast(OperationName, tool.name)
+        request = REQUEST_REGISTRY[operation]
+        success = get_type_hints(HANDLER_REGISTRY[operation])["return"]
+        assert isinstance(success, type) and issubclass(success, SuccessModel)
+        assert tool.input_schema == request.model_json_schema()
+        assert tool.output_schema == success.model_json_schema()
+
+    result = call_tool(Path.cwd(), "read", "get_capabilities")
+    assert result.is_error is False
+    assert result.structured_content["operation"] == "get_capabilities"
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root -->
+```python contract-target
+def test_mcp_resources_are_stateless_inside_startup_root(tmp_path: Path) -> None:
+    """Resolve catalog resources and prompts from only the fixed startup root."""
+    database = tmp_path / ".viper/catalog.sqlite3"
+    database.parent.mkdir()
+    key = "a" * 64
+    reference = json.dumps({"path": "runs/final.yaml", "sha256": "b" * 64})
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE sources (
+                source_key TEXT PRIMARY KEY,
+                reference_json TEXT NOT NULL,
+                accepted INTEGER NOT NULL,
+                error TEXT
+            );
+            CREATE TABLE runs (source_key TEXT PRIMARY KEY);
+            CREATE TABLE benchmarks (source_key TEXT PRIMARY KEY);
+            """
+        )
+        connection.execute(
+            "INSERT INTO sources VALUES (?, ?, 1, NULL)",
+            (key, reference),
+        )
+        connection.execute("INSERT INTO runs VALUES (?)", (key,))
+
+    first = resource_registry(tmp_path)
+    second = resource_registry(tmp_path)
+    assert first == second
+    assert tuple(resource.uri for resource in first) == (
+        "viper://catalog/head",
+        f"viper://run/{key}",
+    )
+    loaded = read_resource(tmp_path, f"viper://run/{key}")
+    assert isinstance(loaded.contents[0], types.TextResourceContents)
+    assert json.loads(loaded.contents[0].text) == json.loads(reference)
+    assert resource_templates() == resource_templates()
+    assert prompt_registry() == prompt_registry()
+
+    with pytest.raises(ValueError, match="escapes the MCP startup root"):
+        call_tool(tmp_path, "read", "status", {"path": "../outside"})
+```
+
+<!-- contract-target: requirements=PCM-03,PCM-04,PCM-05 block=P15-PCM-01 action=add target=tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access -->
+```python contract-target
+def test_mcp_stdio_requires_explicit_execution_access(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Start MCP in read mode unless the caller explicitly selects execution."""
+    calls: list[tuple[str, ...]] = []
+
+    def run(arguments, **_kwargs):
+        calls.append(tuple(str(item) for item in arguments))
+        return type("Completed", (), {"returncode": 0})()
+
+    monkeypatch.setattr("viper.cli.subprocess.run", run)
+
+    assert main(["mcp", "--root", str(tmp_path)]) == 0
+    assert calls[-1][-1] == "read"
+    assert main(["mcp", "--root", str(tmp_path), "--access", "execute"]) == 0
+    assert calls[-1][-1] == "execute"
+```

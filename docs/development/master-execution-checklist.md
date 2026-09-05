@@ -1907,13 +1907,6 @@ stage invocation.
 
 ## 22. Master Phase 15 — local MCP server
 
-<!-- contract-implementation: requirement=PCM-03 rule=mcp.schema.parity state=planned owner=src/viper/mcp.py:tool_registry -->
-<!-- contract-verification: requirement=PCM-03 rule=mcp.schema.parity state=planned test=tests/test_api.py:test_mcp_tool_schemas_match_typed_operations -->
-<!-- contract-implementation: requirement=PCM-04 rule=mcp.stdio.access state=planned owner=src/viper/mcp.py:serve_stdio -->
-<!-- contract-verification: requirement=PCM-04 rule=mcp.stdio.access state=planned test=tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access -->
-<!-- contract-implementation: requirement=PCM-05 rule=mcp.resources.complete state=planned owner=src/viper/mcp.py:resource_registry -->
-<!-- contract-verification: requirement=PCM-05 rule=mcp.resources.complete state=planned test=tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root -->
-
 **Depends on:** Master Phases 12–14.
 
 **Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
@@ -1922,79 +1915,27 @@ stage invocation.
 resources, prompts, and read-only tools by default. An explicit startup flag
 adds the existing execution operations.
 
-### 22.1 Dependency and server
-
-- [ ] Add `mcp = ["mcp>=2,<3"]` to project optional dependencies.
-- [ ] Add `src/viper/mcp.py` using the stable official Python SDK version 2.
-- [ ] Implement stateless request validation, required `resultType` values,
-      per-request protocol version and client capability metadata, and
-      `server/discover`.
-- [ ] Generate one tool for each allowed typed API operation.
-- [ ] Use the API request model's JSON Schema as the tool input schema.
-- [ ] Use the success model's JSON Schema as the output schema.
-- [ ] Route tool calls through `viper.api.dispatch()` and return matching
-      structured content and JSON text. <!-- implements: PCM-03 -->
-- [ ] Sort the tool list by operation name.
-- [ ] Mark read tools as read-only and execution tools as state-changing.
-- [ ] Keep the repository root fixed at server startup and reject every path
-      that resolves outside it.
-- [ ] Add `viper://` immutable resource URIs, typed resource templates, and the
-      six user-selected prompts declared by the contract.
-- [ ] Add deterministic resource and prompt listings with `ttlMs` and
-      `cacheScope`, catalog-head subscriptions through `subscriptions/listen`,
-      request-scoped progress, cancellation, and `stderr` diagnostics.
-      <!-- implements: PCM-05 -->
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Build the tool registry from `REQUEST_REGISTRY`,
-`HANDLER_REGISTRY`, and an explicit access allowlist. Import the existing
-Pydantic request classes.
-
-**Hint 2:** Test with the SDK's in-process client before testing stdio framing.
-
-**Hint 3:** Python draft objects stay outside MCP. Expose frozen-path
-operations and immutable-reference operations.
-
-</details>
-
-### 22.2 Access modes and CLI
-
-- [ ] Add `viper mcp --root <path> --access read|execute`.
-      <!-- implements: PCM-04 -->
-- [ ] Default to `read`.
-- [ ] Expose the exact read and execution tool sets listed in the contract.
-- [ ] Put `catalog_refresh` in execute mode and `search_benchmarks` in read
-      mode.
-- [ ] Write protocol messages only to stdout and logs only to stderr.
-- [ ] Keep Streamable HTTP outside this phase.
-- [ ] Add MCP installation and client configuration to the README and API
-      reference.
-
-### 22.3 Focused proof
-
-- [ ] List tools twice and require equal order and schemas.
-- [ ] Compare every tool input schema with its API request schema.
-- [ ] Validate every successful structured result with its success model.
-- [ ] Validate `ViperFailure` results and credential redaction.
-- [ ] Prove read mode omits execution tools.
-- [ ] Prove execute mode calls the same mocked operations as typed API dispatch.
-- [ ] Prove a path outside the fixed root fails before the handler runs.
-- [ ] Exercise one stdio discovery, list, and call sequence.
-- [ ] List and read one immutable resource; expand one resource template; get
-      one prompt; reject one path outside the startup root; refresh the catalog
-      head; and verify equal ordering, cache metadata, one
-      `resourcesListChanged` event through `subscriptions/listen`, progress,
-      cancellation, and `stderr` custody.
-- [ ] Run: <!-- verifies: PCM-03, PCM-04, PCM-05 -->
+- [ ] Materialize and verify the typed local MCP adapter.
+      <!-- pair-block: P15-PCM-01 -->
+      <!-- pair-block-contract: P15-PCM-01 contract=provenance-catalog-mcp.md -->
+      <!-- contract-implementation: requirement=PCM-03 rule=mcp.schema.parity state=planned owner=src/viper/mcp.py:tool_registry -->
+      <!-- contract-verification: requirement=PCM-03 rule=mcp.schema.parity state=planned test=tests/test_api.py:test_mcp_tool_schemas_match_typed_operations -->
+      <!-- contract-implementation: requirement=PCM-04 rule=mcp.stdio.access state=planned owner=src/viper/mcp.py:serve_stdio -->
+      <!-- contract-verification: requirement=PCM-04 rule=mcp.stdio.access state=planned test=tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access -->
+      <!-- contract-implementation: requirement=PCM-05 rule=mcp.resources.complete state=planned owner=src/viper/mcp.py:resource_registry -->
+      <!-- contract-verification: requirement=PCM-05 rule=mcp.resources.complete state=planned test=tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root -->
+      <!-- implements: PCM-03, PCM-04, PCM-05 -->
+      <!-- verifies: PCM-03, PCM-04, PCM-05 -->
+      Install the optional MCP SDK, derive deterministic tool schemas from the
+      typed API registries, bind all requests to one startup root, expose
+      catalog-backed resources and review prompts, and default stdio to read
+      access. Run the block's focused gate before implementation.
 
 ```bash
 python -m pytest \
-  tests/test_api.py \
-  tests/test_cli.py \
-  tests/test_public_api.py \
-  tests/test_documentation.py -q
+  tests/test_api.py::test_mcp_tool_schemas_match_typed_operations \
+  tests/test_api.py::test_mcp_resources_are_stateless_inside_startup_root \
+  tests/test_cli.py::test_mcp_stdio_requires_explicit_execution_access -q
 ```
 
 **Commit boundary:** `Expose VIPER through a typed local MCP server`
