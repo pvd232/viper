@@ -978,7 +978,6 @@ adapters and proves that direct and command-line calls return the same models.
 
 ## 15. ContractTarget
 
-<!-- contract-target: requirements=PCM-01,PCM-02 block=P13-PCM-01 action=add target=src/viper/catalog.py:annotations -->
 <!-- contract-target: requirements=PCM-02 block=P13-PCM-02 action=add target=src/viper/api.py:sqlite3 -->
 ```python contract-target
 import sqlite3
