@@ -441,6 +441,7 @@ def apply_plan(
             if isinstance(payload_statement, (ast.Import, ast.ImportFrom)):
                 # A moved definition must join the import block, not remain at
                 # the old class or function location.
+                assert payload is not None
                 replacements[span] = b""
                 additions.append((index, payload))
                 continue
