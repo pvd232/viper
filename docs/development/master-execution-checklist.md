@@ -291,8 +291,8 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Complete | Immutable generated plans with source code kept on its source commit |
 | [Direct Viper Cloud publication](remote-storage.md) | Complete | Destination-neutral publication, cloud references, retrieval, and restore |
 | [Experiment expansion](experiment-expansion.md) | Complete | Deterministic variant-replicate expansion and bounded multi-run execution |
-| [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
-| [Verified stage reuse](stage-reuse.md) | Audited; owner approval pending | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
+| [Provenance catalog and MCP](provenance-catalog-mcp.md) | In progress; Phase 13 implemented; Phase 15 planned | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
+| [Verified stage reuse](stage-reuse.md) | Planned | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
 | [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Audited; owner approval pending | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
 | [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
@@ -1844,6 +1844,7 @@ evidence and returns exact references with every result.
 - [x] Build and expose the source-linked SQLite catalog.
       <!-- pair-block: P13-PCM-01 -->
       <!-- pair-block-contract: P13-PCM-01 contract=provenance-catalog-mcp.md -->
+      <!-- phase-produces: viper.catalog -->
       <!-- contract-implementation: requirement=PCM-01 rule=catalog.refresh.atomic state=implemented owner=src/viper/catalog.py:Catalog -->
       <!-- contract-verification: requirement=PCM-01 rule=catalog.refresh.atomic state=implemented test=tests/test_inspection.py:test_catalog_refresh_is_atomic_and_rebuildable -->
       <!-- contract-implementation: requirement=PCM-02 rule=catalog.search.evidenced state=implemented owner=src/viper/catalog.py:Catalog -->
@@ -1865,15 +1866,6 @@ The immutable evidence manifest is stored at Hugging Face commit
 
 ## 21. Master Phase 14 — verified stage reuse
 
-<!-- contract-implementation: requirement=SRU-01 rule=reuse.model.complete state=planned owner=src/viper/protocol.py:StageReuseReceipt -->
-<!-- contract-verification: requirement=SRU-01 rule=reuse.model.complete state=planned test=tests/test_protocol.py:test_stage_reuse_models_form_valid_completion_union -->
-<!-- contract-implementation: requirement=SRU-02 rule=reuse.execution.verified state=planned owner=src/viper/execution/_attempt.py:reuse_stage -->
-<!-- contract-verification: requirement=SRU-02 rule=reuse.execution.verified state=planned test=tests/test_run_execution.py:test_verified_reuse_skips_stage_process -->
-<!-- contract-implementation: requirement=SRU-03 rule=reuse.verification.complete state=planned owner=src/viper/verification/__init__.py:verify_stage_reuse -->
-<!-- contract-verification: requirement=SRU-03 rule=reuse.verification.complete state=planned test=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
-<!-- contract-implementation: requirement=SRU-04 rule=reuse.inspection.complete state=planned owner=src/viper/inspection.py:lineage -->
-<!-- contract-verification: requirement=SRU-04 rule=reuse.inspection.complete state=planned test=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
-
 **Depends on:** Master Phases 9 and 13.
 
 **Contract:** [Verified stage reuse](stage-reuse.md)
@@ -1882,106 +1874,32 @@ The immutable evidence manifest is stored at Hugging Face commit
 publish it under the target paths, and record selection separately from a new
 stage invocation.
 
-### 21.1 Models and canonical key
-
-- [ ] Add `StageReuseMode` to project-owned stage drafts and frozen specs.
-- [ ] Add `reuse=` to `viper.authoring.stage()` and default it to `"never"`.
-- [ ] Add `ReuseFileIdentity`, `ReuseInputIdentity`, and `StageReuseKey`.
+- [ ] Define the reuse identity, completion evidence, catalog index, and
+      inspection surfaces.
+      <!-- pair-block: P14-SRU-01 -->
+      <!-- pair-block-contract: P14-SRU-01 contract=stage-reuse.md -->
+      <!-- phase-consumes: viper.catalog -->
       <!-- phase-produces: StageReuseKey -->
-- [ ] Extend the version-1 catalog with the `stage_reuse_keys` table and a
-      private candidate lookup that returns the complete source references and
-      metric evidence.
-      <!-- phase-consumes: StageReuseKey, viper.catalog -->
-- [ ] Normalize artifact paths back to their run-relative draft paths and omit
-      the policy field before hashing the stage spec.
-- [ ] Include the target stage ID in `StageReuseKey`.
-- [ ] Resolve every input to sorted digest and byte-count identities.
-- [ ] Include the frozen run seed and hash the effective `env`, complete
-      reproducibility record, and complete selected `MetricSpec` records.
-- [ ] Add `ReusedStageFile`, `ReusedMetricEvidence`, `StageReuseReceipt`, and
-      `ResolvedStageReuseRef`.
-- [ ] Add `ExecutedStageCompletion`, `ReusedStageCompletion`, and the
-      discriminated `StageCompletion` union. <!-- implements: SRU-01 -->
-- [ ] Move project execution-only fields into `ExecutedStageCompletion` and
-      leave runner fields on `ResolvedExecutedSpec`.
-- [ ] Update `RunAttempt` so actual invocations correspond only to executed
-      completions.
+      <!-- contract-implementation: requirement=SRU-01 rule=reuse.model.complete state=planned owner=src/viper/reuse.py:StageReuseReceipt -->
+      <!-- contract-verification: requirement=SRU-01 rule=reuse.model.complete state=planned test=tests/test_protocol.py:test_stage_reuse_models_form_valid_completion_union -->
+      <!-- contract-implementation: requirement=SRU-04 rule=reuse.inspection.complete state=planned owner=src/viper/inspection.py:lineage -->
+      <!-- contract-verification: requirement=SRU-04 rule=reuse.inspection.complete state=planned test=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
+      <!-- implements: SRU-01, SRU-04 -->
 
-<details>
-<summary>Hints</summary>
+- [ ] Verify and publish a reusable stage without starting its process.
+      <!-- pair-block: P14-SRU-02 -->
+      <!-- pair-block-contract: P14-SRU-02 contract=stage-reuse.md -->
+      <!-- contract-implementation: requirement=SRU-02 rule=reuse.execution.verified state=planned owner=src/viper/execution/_reuse.py:reuse_stage -->
+      <!-- contract-verification: requirement=SRU-02 rule=reuse.execution.verified state=planned test=tests/test_run_execution.py:test_verified_reuse_skips_stage_process -->
+      <!-- implements: SRU-02 -->
 
-**Hint 1:** Build the target key after input resolution and before the
-`running_stage` journal event. At that point every selected byte identity is
-available. Child-process startup follows candidate selection.
-
-**Hint 2:** Hash canonical serialized protocol models. Avoid a hand-built
-delimiter format.
-
-**Hint 3:** Keep source and target `SnapshotFileRef` values in each
-`ReusedStageFile`. Their paths differ; their digests and byte counts match.
-
-</details>
-
-### 21.2 Runtime reuse
-
-- [ ] Query catalog candidates in completion-time order with run and attempt
-      tie breakers.
-      <!-- phase-consumes: StageReuseKey, viper.catalog -->
-- [ ] Select only a source with
-      `source_stage.completion.kind == "executed"`. Reused completions remain
-      searchable and stay outside the candidate source set.
-- [ ] Fully verify each selected source run before accepting the candidate.
-- [ ] Rebuild the source key and compare the complete model.
-- [ ] Fall back to ordinary execution after a stale, invalid, or absent hit.
-- [ ] Publish `StageReuseReceipt` through `publish_resolved_files()`.
-- [ ] Add `SnapshotPublisher.publish_reuse()` for local and cloud publishers.
-- [ ] Link immutable local files when possible and copy verified bytes as a
-      fallback.
-- [ ] Seal a cloud target manifest over existing payload objects.
-- [ ] Publish one new target snapshot containing target paths and target
-      `resolved.yaml`. <!-- implements: SRU-02 -->
-- [ ] Record `ReusedStageCompletion` and continue normal future-input
-      resolution through the new target snapshot.
-- [ ] Ignore reuse during `benchmark_confirmation` attempts.
-
-### 21.3 Metrics, verification, and inspection
-
-- [ ] Link every source stage metric through `ReusedMetricEvidence`.
-- [ ] Preserve original measurement identity and expose
-      `CatalogMeasurement.origin="reused"`.
-- [ ] Accept objective evidence through a verified reuse receipt while
-      preserving the source measurement identity.
-- [ ] Rebuild both source and target keys during verification.
-- [ ] Verify source-run success, source attempt, source stage, file membership,
-      target snapshot membership, artifact metadata, and metric coverage.
+- [ ] Rebuild and verify every source, key, file, input, completion, and metric
+      relationship before accepting reuse.
+      <!-- pair-block: P14-SRU-03 -->
+      <!-- pair-block-contract: P14-SRU-03 contract=stage-reuse.md -->
+      <!-- contract-implementation: requirement=SRU-03 rule=reuse.verification.complete state=planned owner=src/viper/verification/__init__.py:verify_stage_reuse -->
+      <!-- contract-verification: requirement=SRU-03 rule=reuse.verification.complete state=planned test=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
       <!-- implements: SRU-03 -->
-- [ ] Add `reuses` to lineage and include reuse fields in run comparison,
-      status, typed API results, and catalog rows. <!-- implements: SRU-04 -->
-
-### 21.4 Focused proof
-
-- [ ] Add model and invalid-state cases to `tests/test_protocol.py`.
-- [ ] Add worker-call-count hits, every key miss, invalid-catalog fallback,
-      local remapping, and cloud manifest reuse to `tests/test_run_execution.py`
-      and `tests/test_storage.py`.
-- [ ] Add a newer reused candidate and prove selection reaches the earlier
-      executed source. An absent valid executed source triggers ordinary
-      execution.
-- [ ] Sever every source, key, file, metric, and completion join in
-      `tests/test_verification_acceptance.py`.
-- [ ] Prove benchmark confirmation executes and publishes new snapshots.
-- [ ] Add lineage and comparison cases to `tests/test_inspection.py`.
-- [ ] Run: <!-- verifies: SRU-01, SRU-02, SRU-03, SRU-04 -->
-
-```bash
-python -m pytest \
-  tests/test_protocol.py \
-  tests/test_run_execution.py \
-  tests/test_storage.py \
-  tests/test_verification_acceptance.py \
-  tests/test_benchmark_execution.py \
-  tests/test_inspection.py -q
-```
 
 **Commit boundary:** `Reuse verified stage results with explicit evidence`
 

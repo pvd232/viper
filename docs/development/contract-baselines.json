@@ -161,7 +161,7 @@
         "PCM-06",
         "PCM-07"
       ],
-      "sha256": "d3fe94ed6e0c217302aaf7d45fae43de6f54192e0941f61dfc23ea9c8e635770"
+      "sha256": "90db149ae5f95aff6f81d833613bdc1d4e439024897cbcc01c7a57197d510eb4"
     },
     {
       "path": "docs/development/stage-reuse.md",
@@ -171,7 +171,7 @@
         "SRU-03",
         "SRU-04"
       ],
-      "sha256": "15f05d57a895a5be73e5e3259738966169b666599314b527c55f12c3a87e5163"
+      "sha256": "c580c3a0ebee325ef1c6735cbd48bb8cf1abf26d0ffdf92139884cb8f1eaeb5d"
     },
     {
       "path": "docs/development/experiment-knowledge-primitives.md",
