@@ -51,10 +51,19 @@ from viper.system_impact.check import check_plan
 ROOT = Path(__file__).parents[2]
 _IMPORT_SCRIPT = (
     "import importlib\n"
+    "import json\n"
     "import sys\n"
+    "import traceback\n"
     "sys.path.insert(0, sys.argv[1])\n"
-    "importlib.import_module(sys.argv[2])\n"
+    "failures = {}\n"
+    "for module in sys.argv[2:]:\n"
+    "    try:\n"
+    "        importlib.import_module(module)\n"
+    "    except BaseException:\n"
+    "        failures[module] = traceback.format_exc()\n"
+    "print('__VIPER_IMPORT_FAILURES__=' + json.dumps(failures, sort_keys=True))\n"
 )
+_IMPORT_RESULT_PREFIX = "__VIPER_IMPORT_FAILURES__="
 
 
 class PlanValidationError(RuntimeError):
@@ -309,40 +318,63 @@ def _import_failure(
     modules: tuple[str, ...],
 ) -> dict[str, Any] | None:
     """Return the first import failure introduced by the candidate."""
-    for module in modules:
-        baseline = _run(
-            (
-                str(python),
-                "-I",
-                "-c",
-                _IMPORT_SCRIPT,
-                str(root / "src"),
-                module,
-            ),
-            cwd=root,
-        )
+    if not modules:
+        return None
+
+    def import_failures(
+        source: Path,
+        cwd: Path,
+    ) -> tuple[dict[str, str], subprocess.CompletedProcess[str]]:
+        """Import the ordered module set once and return every failure."""
         completed = _run(
             (
                 str(python),
                 "-I",
                 "-c",
                 _IMPORT_SCRIPT,
-                str(candidate / "src"),
-                module,
+                str(source),
+                *modules,
             ),
-            cwd=candidate,
+            cwd=cwd,
         )
-        if completed.returncode == 0 or baseline.returncode != 0:
+        result_line = next(
+            (
+                line
+                for line in reversed(completed.stdout.splitlines())
+                if line.startswith(_IMPORT_RESULT_PREFIX)
+            ),
+            None,
+        )
+        if completed.returncode != 0 or result_line is None:
+            raise PlanValidationError("module import batch returned no result")
+        try:
+            failures = json.loads(result_line.removeprefix(_IMPORT_RESULT_PREFIX))
+        except json.JSONDecodeError as error:
+            raise PlanValidationError(
+                "module import batch returned invalid JSON"
+            ) from error
+        if not isinstance(failures, dict) or not all(
+            isinstance(module, str) and isinstance(message, str)
+            for module, message in failures.items()
+        ):
+            raise PlanValidationError("module import batch returned invalid failures")
+        return failures, completed
+
+    baseline_failures, _ = import_failures(root / "src", root)
+    candidate_failures, candidate_result = import_failures(
+        candidate / "src",
+        candidate,
+    )
+    for module in modules:
+        if module not in candidate_failures or module in baseline_failures:
             continue
         return {
             "stage": "imports",
             "module": module,
-            "error": completed.stderr.strip()
-            or completed.stdout.strip()
-            or f"failed to import {module}",
-            "command": tuple(completed.args),
-            "stdout": completed.stdout,
-            "stderr": completed.stderr,
+            "error": candidate_failures[module],
+            "command": tuple(candidate_result.args),
+            "stdout": candidate_result.stdout,
+            "stderr": candidate_result.stderr,
         }
     return None
 

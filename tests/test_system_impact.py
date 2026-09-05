@@ -501,7 +501,10 @@ def test_materialize_plan_moves_a_definition_into_the_import_block(
     )
 
 
-def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None:
+def test_preflight_reports_changed_module_import_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Name the candidate module and error that block preflight."""
     baseline = tmp_path / "baseline"
     candidate = tmp_path / "candidate"
@@ -513,6 +516,17 @@ def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None
     (candidate / "src/viper/broken.py").write_text(
         'raise RuntimeError("broken candidate")\n'
     )
+    (baseline / "src/viper/healthy.py").write_text("VALUE = 1\n")
+    (candidate / "src/viper/healthy.py").write_text("VALUE = 2\n")
+    commands: list[tuple[str, ...]] = []
+    original_run = preflight._run
+
+    def counted_run(command, *, cwd):
+        """Record each isolated import batch before running it."""
+        commands.append(tuple(command))
+        return original_run(command, cwd=cwd)
+
+    monkeypatch.setattr(preflight, "_run", counted_run)
 
     modules = preflight._changed_modules(baseline, candidate)
     failure = preflight._import_failure(
@@ -522,7 +536,10 @@ def test_preflight_reports_changed_module_import_failure(tmp_path: Path) -> None
         modules,
     )
 
-    assert modules == ("viper.broken",)
+    assert modules == ("viper.broken", "viper.healthy")
+    assert len(commands) == 2
+    assert all("viper.broken" in command for command in commands)
+    assert all("viper.healthy" in command for command in commands)
     assert failure is not None
     assert failure["stage"] == "imports"
     assert failure["module"] == "viper.broken"

@@ -9,6 +9,7 @@
 | SCH-01 <!-- contract-requirement: SCH-01 phase=4 test=tests/test_system_impact.py --> | Compose dependency-ordered `ContractTarget` records into one terminal planned source tree so the existing CodeQL adapter can analyze the plan before implementation. |
 | SCH-02 <!-- contract-requirement: SCH-02 phase=4 test=tests/test_system_impact.py --> | Project explicit PairBlock dependencies, planned source dependencies, and overlapping target files into one deterministic block graph. |
 | SCH-03 <!-- contract-requirement: SCH-03 phase=4 test=tests/test_system_impact.py --> | Condense strongly connected blocks and return deterministic execution waves whose groups may run concurrently. |
+| SCH-04 <!-- contract-requirement: SCH-04 phase=4 test=tests/test_system_impact.py --> | Check changed-module imports with one baseline process and one candidate process instead of starting two processes per module. |
 
 ## 2. Required claim
 
@@ -190,6 +191,7 @@ evidence used to update it, not an automatic checklist mutation.
 | `schedule.plan.materialized` <!-- verifier-rule: schedule.plan.materialized requirement=SCH-01 --> | Dependency-ordered additions, updates, and removals compose into exact raw declarations; unordered repeat writers and unowned import removals fail; raw contract parity passes before Ruff formats the candidate; Pyright, CodeQL, and PairBlock gates inspect the formatted result. |
 | `schedule.graph.closed` <!-- verifier-rule: schedule.graph.closed requirement=SCH-02 --> | Every graph endpoint is selected; explicit and planned source dependencies point prerequisite-first; blocks writing one file receive one deterministic serial order. |
 | `schedule.waves.complete` <!-- verifier-rule: schedule.waves.complete requirement=SCH-03 --> | Every selected block occurs in exactly one SCC group and one wave; every predecessor group occurs in an earlier wave. |
+| `schedule.imports.batched` <!-- verifier-rule: schedule.imports.batched requirement=SCH-04 --> | Changed modules are imported in two total subprocesses, and the first failure introduced by the candidate is reported. |
 
 ## 8. Propagation
 
@@ -417,6 +419,31 @@ depends_on = ["P4-SCH-02"]
 **Context:** A directed block graph states precedence and coupling but does not
 assign executable work. This block condenses cycles and returns the maximal
 deterministic frontier available at each step.
+
+<!-- pair-block-definition: P4-SCH-04 -->
+```toml pair-block
+id = "P4-SCH-04"
+requirements = ["SCH-04"]
+targets = [
+    "tools/plan/check.py:_IMPORT_SCRIPT",
+    "tools/plan/check.py:_IMPORT_RESULT_PREFIX",
+    "tools/plan/check.py:_import_failure",
+    "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
+    "plans/codeql-analysis/replace/tools/plan/check.py:_IMPORT_SCRIPT",
+    "plans/codeql-analysis/replace/tools/plan/check.py:_IMPORT_RESULT_PREFIX",
+    "plans/codeql-analysis/replace/tools/plan/check.py:_import_failure",
+    "plans/codeql-analysis/replace/tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
+]
+tests = [
+    "tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure",
+]
+gate = "python -m pytest tests/test_system_impact.py -k preflight_reports_changed_module_import_failure -q"
+depends_on = ["P4-SCH-03"]
+```
+
+**Context:** Starting a fresh interpreter for every changed module made import
+preflight grow linearly with the plan size. This block imports the ordered
+module set once per tree while preserving candidate-only failure reporting.
 
 ## 12. ContractTarget
 
@@ -2805,6 +2832,153 @@ def test_schedule_blocks_keeps_cycle_in_one_group() -> None:
         ("P0-TST-01", "P0-TST-02"),
     )
     assert len(schedule.waves) == 1
+```
+
+### P4-SCH-04 — batched import preflight
+
+**File: `tools/plan/check.py`**
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=tools/plan/check.py:_IMPORT_SCRIPT -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=tools/plan/check.py:_IMPORT_RESULT_PREFIX -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=plans/codeql-analysis/replace/tools/plan/check.py:_IMPORT_SCRIPT -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=add target=plans/codeql-analysis/replace/tools/plan/check.py:_IMPORT_RESULT_PREFIX -->
+```python contract-target
+_IMPORT_SCRIPT = (
+    "import importlib\n"
+    "import json\n"
+    "import sys\n"
+    "import traceback\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "failures = {}\n"
+    "for module in sys.argv[2:]:\n"
+    "    try:\n"
+    "        importlib.import_module(module)\n"
+    "    except BaseException:\n"
+    "        failures[module] = traceback.format_exc()\n"
+    "print('__VIPER_IMPORT_FAILURES__=' + json.dumps(failures, sort_keys=True))\n"
+)
+_IMPORT_RESULT_PREFIX = "__VIPER_IMPORT_FAILURES__="
+```
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=tools/plan/check.py:_import_failure -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=plans/codeql-analysis/replace/tools/plan/check.py:_import_failure -->
+```python contract-target
+def _import_failure(
+    root: Path,
+    candidate: Path,
+    python: Path,
+    modules: tuple[str, ...],
+) -> dict[str, Any] | None:
+    """Return the first import failure introduced by the candidate."""
+    if not modules:
+        return None
+
+    def import_failures(
+        source: Path,
+        cwd: Path,
+    ) -> tuple[dict[str, str], subprocess.CompletedProcess[str]]:
+        """Import the ordered module set once and return every failure."""
+        completed = _run(
+            (
+                str(python),
+                "-I",
+                "-c",
+                _IMPORT_SCRIPT,
+                str(source),
+                *modules,
+            ),
+            cwd=cwd,
+        )
+        result_line = next(
+            (
+                line
+                for line in reversed(completed.stdout.splitlines())
+                if line.startswith(_IMPORT_RESULT_PREFIX)
+            ),
+            None,
+        )
+        if completed.returncode != 0 or result_line is None:
+            raise PlanValidationError("module import batch returned no result")
+        try:
+            failures = json.loads(result_line.removeprefix(_IMPORT_RESULT_PREFIX))
+        except json.JSONDecodeError as error:
+            raise PlanValidationError(
+                "module import batch returned invalid JSON"
+            ) from error
+        if not isinstance(failures, dict) or not all(
+            isinstance(module, str) and isinstance(message, str)
+            for module, message in failures.items()
+        ):
+            raise PlanValidationError("module import batch returned invalid failures")
+        return failures, completed
+
+    baseline_failures, _ = import_failures(root / "src", root)
+    candidate_failures, candidate_result = import_failures(
+        candidate / "src",
+        candidate,
+    )
+    for module in modules:
+        if module not in candidate_failures or module in baseline_failures:
+            continue
+        return {
+            "stage": "imports",
+            "module": module,
+            "error": candidate_failures[module],
+            "command": tuple(candidate_result.args),
+            "stdout": candidate_result.stdout,
+            "stderr": candidate_result.stderr,
+        }
+    return None
+```
+
+**File: `tests/test_system_impact.py`**
+
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure -->
+<!-- contract-target: requirements=SCH-04 block=P4-SCH-04 action=update target=plans/codeql-analysis/replace/tests/test_system_impact.py:test_preflight_reports_changed_module_import_failure -->
+```python contract-target
+def test_preflight_reports_changed_module_import_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Name the candidate module and error that block preflight."""
+    baseline = tmp_path / "baseline"
+    candidate = tmp_path / "candidate"
+    for root in (baseline, candidate):
+        package = root / "src/viper"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text('"""Fixture package."""\n')
+    (baseline / "src/viper/broken.py").write_text("VALUE = 1\n")
+    (candidate / "src/viper/broken.py").write_text(
+        'raise RuntimeError("broken candidate")\n'
+    )
+    (baseline / "src/viper/healthy.py").write_text("VALUE = 1\n")
+    (candidate / "src/viper/healthy.py").write_text("VALUE = 2\n")
+    commands: list[tuple[str, ...]] = []
+    original_run = preflight._run
+
+    def counted_run(command, *, cwd):
+        """Record each isolated import batch before running it."""
+        commands.append(tuple(command))
+        return original_run(command, cwd=cwd)
+
+    monkeypatch.setattr(preflight, "_run", counted_run)
+
+    modules = preflight._changed_modules(baseline, candidate)
+    failure = preflight._import_failure(
+        baseline,
+        candidate,
+        Path(sys.executable),
+        modules,
+    )
+
+    assert modules == ("viper.broken", "viper.healthy")
+    assert len(commands) == 2
+    assert all("viper.broken" in command for command in commands)
+    assert all("viper.healthy" in command for command in commands)
+    assert failure is not None
+    assert failure["stage"] == "imports"
+    assert failure["module"] == "viper.broken"
+    assert "RuntimeError: broken candidate" in failure["error"]
 ```
 
 ## Sources
