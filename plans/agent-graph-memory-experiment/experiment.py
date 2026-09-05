@@ -321,7 +321,7 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
         )
         outputs = {
             name: artifact(
-                path=f"artifacts/benchmark/{filename}",
+                path=f"artifacts/priors/agent_trial/{filename}",
                 loader=trial.load_bytes,
                 data_role="benchmark",
             )
@@ -395,9 +395,11 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
         )
         run_root = result.resolved_run_path.parent
         verdict = json.loads(
-            (run_root / "artifacts/benchmark/verdict.json").read_text()
+            (run_root / "artifacts/priors/agent_trial/verdict.json").read_text()
         )
-        usage = json.loads((run_root / "artifacts/benchmark/usage.json").read_text())
+        usage = json.loads(
+            (run_root / "artifacts/priors/agent_trial/usage.json").read_text()
+        )
         verification_path = project / "results" / f"{arm}-verification.json"
         _write(
             verification_path,
