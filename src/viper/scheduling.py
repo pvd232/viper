@@ -537,20 +537,17 @@ def apply_plan(
                     replacement_imports[replaced] = parts
                     replacement_payloads.add(payload)
                     continue
-                prior = next(
-                    (
-                        existing
-                        for existing in unique_additions
-                        if (
-                            (existing_parts := _import_parts(existing)) is not None
-                            and existing_parts[0] == owner
-                            and existing_parts[1] <= names
-                        )
-                    ),
-                    None,
-                )
-                if prior is not None:
-                    unique_additions.pop(prior)
+                existing_imports = {
+                    existing: existing_parts
+                    for existing in unique_additions
+                    if (existing_parts := _import_parts(existing)) is not None
+                    and existing_parts[0] == owner
+                }
+                if any(names <= existing[1] for existing in existing_imports.values()):
+                    continue
+                for existing, existing_parts in existing_imports.items():
+                    if existing_parts[1] < names:
+                        unique_additions.pop(existing)
             unique_additions.setdefault(payload, (index, payload))
         additions = sorted(unique_additions.values(), key=lambda addition: addition[0])
         insertions: dict[int, list[bytes]] = defaultdict(list)
