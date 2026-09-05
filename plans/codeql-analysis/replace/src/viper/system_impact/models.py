@@ -8,12 +8,12 @@ from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from .._contract_traceability import (
+from viper._contract_traceability import (
     ContractTarget,
     PairBlockId,
     RepoSymbolRef,
 )
-from .._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
+from viper._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 NodeId = NonEmptyStr

@@ -5,12 +5,16 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .._contract_traceability import (
+from viper._contract_traceability import (
     ContractTarget,
     ContractTraceabilityGraph,
     PairBlockId,
 )
-from .._system_impact.source import classify_target_change, extract_declaration_bytes
+from viper._system_impact.source import (
+    classify_target_change,
+    extract_declaration_bytes,
+)
+
 from .models import (
     EdgeKind,
     Impact,
@@ -20,20 +24,18 @@ from .models import (
     SourceNode,
 )
 
+ALL_EDGE_KINDS: frozenset[EdgeKind] = frozenset(
+    {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+)
+
 IMPACT_EDGE_KINDS_V1: dict[str, frozenset[EdgeKind]] = {
     "satisfied": frozenset(),
-    "added": frozenset(
-        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
-    ),
-    "removed": frozenset(
-        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
-    ),
+    "added": ALL_EDGE_KINDS,
+    "removed": ALL_EDGE_KINDS,
     "callable_interface_changed": frozenset({"calls", "constructs"}),
     "type_interface_changed": frozenset({"constructs", "inherits", "reads", "writes"}),
     "implementation_changed": frozenset({"calls", "reads"}),
-    "unclassified": frozenset(
-        {"imports", "calls", "constructs", "inherits", "reads", "writes"}
-    ),
+    "unclassified": ALL_EDGE_KINDS,
 }
 
 

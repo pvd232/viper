@@ -10,8 +10,7 @@ import tempfile
 from pathlib import Path
 
 import viper._subprocess as subprocess
-
-from .._contract_traceability import (
+from viper._contract_traceability import (
     ContractTarget,
     ContractTraceabilityGraph,
     PairBlock,
@@ -19,13 +18,14 @@ from .._contract_traceability import (
     RepoSymbolRef,
     compile_contract_plan,
 )
-from .._system_impact.codeql import IGNORED_PARTS, source_digest
-from .._system_impact.source import (
+from viper._system_impact.codeql import IGNORED_PARTS, source_digest
+from viper._system_impact.source import (
     SourceDeclarationError,
     declaration_payload,
     extract_declaration_bytes,
     import_binding,
 )
+
 from .models import (
     Acceptance,
     CommitId,
@@ -355,6 +355,11 @@ def _receipt_pair_is_valid(baseline: SourceGraph, realized: SourceGraph) -> bool
             )
         )
 
+    try:
+        baseline = SourceGraph.model_validate(baseline.model_dump())
+        realized = SourceGraph.model_validate(realized.model_dump())
+    except ValueError:
+        return False
     baseline_database = baseline.receipt.database
     realized_database = realized.receipt.database
     baseline_query = baseline.receipt.query

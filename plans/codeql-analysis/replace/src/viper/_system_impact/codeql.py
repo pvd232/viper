@@ -809,41 +809,12 @@ def _lower_graph(
         artifact_results.append(artifact)
     graph_root = cache_root / "graphs" / key
     graph_path = graph_root / "source-graph.json"
-    decoded_root = graph_root / "decoded"
-    decoded_paths = tuple(
-        decoded_root / f"{result.stem}.json" for result in artifact_results
-    )
-    if graph_path.is_file():
-        try:
-            graph = SourceGraph.model_validate_json(
-                graph_path.read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeDecodeError, ValueError):
-            graph = None
-        if (
-            graph is not None
-            and graph.receipt.database == database
-            and graph.receipt.query == results.receipt
-            and graph.receipt.graph.key == key
-            and graph.receipt.graph.format == format
-            and all(path.is_file() for path in decoded_paths)
-        ):
-            for path in decoded_paths:
-                shutil.copy2(path, artifact_root / path.name)
-            return graph
-
-    if graph_root.exists():
-        shutil.rmtree(graph_root)
-    decoded_root.mkdir(parents=True)
 
     decoded: dict[str, list[list[Any]]] = {}
     commands: list[tuple[str, ...]] = []
     stderr_parts: list[bytes] = []
-    for result, decoded_path in zip(
-        artifact_results,
-        decoded_paths,
-        strict=True,
-    ):
+    for result in artifact_results:
+        decoded_path = artifact_root / f"{result.stem}.json"
         command = (
             str(executable),
             "bqrs",
@@ -860,7 +831,22 @@ def _lower_graph(
             key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":"))
         )
         decoded[result.stem] = rows
-        shutil.copy2(decoded_path, artifact_root / decoded_path.name)
+    if graph_path.is_file():
+        try:
+            graph = SourceGraph.model_validate_json(
+                graph_path.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, ValueError):
+            graph = None
+        if (
+            graph is not None
+            and graph.receipt.database == database
+            and graph.receipt.query == results.receipt
+            and graph.receipt.graph.key == key
+            and graph.receipt.graph.format == format
+        ):
+            return graph
+
     try:
         declaration_rows = decoded["Declarations"]
         dependency_rows = decoded["Dependencies"]
@@ -901,6 +887,9 @@ def _lower_graph(
             graph=receipt,
         ),
     )
+    if graph_root.exists():
+        shutil.rmtree(graph_root)
+    graph_root.mkdir(parents=True)
     graph_path.write_text(graph.model_dump_json(), encoding="utf-8")
     return graph
 
