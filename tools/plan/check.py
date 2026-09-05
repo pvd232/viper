@@ -40,8 +40,8 @@ from viper._system_impact.source import (
 )
 from viper.scheduling import (
     ScheduleError,
+    apply_plan,
     final_targets,
-    materialize_plan,
     order_blocks,
     select_blocks,
 )
@@ -98,6 +98,27 @@ def _git_revision(root: Path) -> str:
     if revision.returncode != 0:
         raise PlanValidationError(revision.stderr.strip() or "git rev-parse failed")
     return revision.stdout.strip()
+
+
+def _checkout_candidate(root: Path, revision: str, destination: Path) -> None:
+    """Check out the baseline once in an isolated Git worktree."""
+    if destination.exists():
+        raise PlanValidationError("candidate worktree already exists")
+    completed = _run(
+        (
+            "git",
+            "worktree",
+            "add",
+            "--detach",
+            str(destination),
+            revision,
+        ),
+        cwd=root,
+    )
+    if completed.returncode != 0:
+        raise PlanValidationError(
+            completed.stderr.strip() or "candidate worktree checkout failed"
+        )
 
 
 def _contracts(root: Path) -> tuple[Path, ...]:
@@ -421,15 +442,29 @@ def validate(
         artifacts=results / "baseline-codeql",
     )
 
-    raw = results / "raw"
+    candidate = results / "candidate"
     try:
-        materialize_plan(
-            root,
+        _checkout_candidate(root, revision, candidate)
+    except PlanValidationError as error:
+        result = {
+            "passed": False,
+            "stage": "checkout",
+            "revision": revision,
+            "blocks": selected,
+            "error": str(error),
+        }
+        (results / "result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n"
+        )
+        return result
+
+    try:
+        apply_plan(
+            candidate,
             root,
             traceability,
             selected,
             baseline,
-            raw,
             completed=completed,
         )
     except ScheduleError as error:
@@ -450,7 +485,7 @@ def validate(
         order_blocks(traceability, selected),
         baseline,
     )
-    raw_parity = _parity(root, raw, selected_targets, check_imports=False)
+    raw_parity = _parity(root, candidate, selected_targets, check_imports=False)
     if raw_parity:
         result = {
             "passed": False,
@@ -464,8 +499,8 @@ def validate(
         )
         return result
 
-    raw_modules = _changed_modules(root, raw)
-    import_failure = _import_failure(root, raw, python, raw_modules)
+    raw_modules = _changed_modules(root, candidate)
+    import_failure = _import_failure(root, candidate, python, raw_modules)
     if import_failure is not None:
         result = {
             "passed": False,
@@ -489,8 +524,6 @@ def validate(
             }
         )
     )
-    candidate = results / "candidate"
-    shutil.copytree(raw, candidate)
     for stage, command in _format(python, python_targets):
         completed = _run(command, cwd=candidate)
         if completed.returncode != 0:

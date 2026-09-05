@@ -366,24 +366,18 @@ def _guard_imports(
     return tuple(sorted(removed - allowed))
 
 
-def materialize_plan(
-    baseline_root: Path,
+def apply_plan(
+    destination: Path,
     plan_root: Path,
     traceability: ContractTraceabilityGraph,
     block_ids: tuple[PairBlockId, ...],
     baseline: SourceGraph,
-    destination: Path,
     *,
     completed: frozenset[PairBlockId] = frozenset(),
 ) -> None:
-    """Copy the baseline and apply selected edits to a new tree."""
-    if destination.exists():
-        raise ScheduleError("planned source destination already exists")
-    shutil.copytree(
-        baseline_root,
-        destination,
-        ignore=shutil.ignore_patterns(".git", ".venv", ".viper", "__pycache__"),
-    )
+    """Apply selected edits to an existing candidate tree."""
+    if not destination.is_dir():
+        raise ScheduleError("planned source destination does not exist")
     selected = select_blocks(traceability, block_ids, completed=completed)
     ordered = order_blocks(traceability, selected)
     targets = final_targets(traceability, ordered, baseline)
@@ -593,6 +587,34 @@ def materialize_plan(
         raise ScheduleError("\n".join(import_errors))
 
 
+def materialize_plan(
+    baseline_root: Path,
+    plan_root: Path,
+    traceability: ContractTraceabilityGraph,
+    block_ids: tuple[PairBlockId, ...],
+    baseline: SourceGraph,
+    destination: Path,
+    *,
+    completed: frozenset[PairBlockId] = frozenset(),
+) -> None:
+    """Copy a baseline tree, then apply the selected edits."""
+    if destination.exists():
+        raise ScheduleError("planned source destination already exists")
+    shutil.copytree(
+        baseline_root,
+        destination,
+        ignore=shutil.ignore_patterns(".git", ".venv", ".viper", "__pycache__"),
+    )
+    apply_plan(
+        destination,
+        plan_root,
+        traceability,
+        block_ids,
+        baseline,
+        completed=completed,
+    )
+
+
 def build_block_graph(
     traceability: ContractTraceabilityGraph,
     requested: tuple[PairBlockId, ...],
@@ -757,6 +779,7 @@ __all__ = [
     "ScheduleError",
     "WorkGroup",
     "WorkWave",
+    "apply_plan",
     "build_block_graph",
     "final_targets",
     "materialize_plan",
