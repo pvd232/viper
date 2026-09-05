@@ -1951,26 +1951,10 @@ def _human_success(result: SuccessModel) -> str:
 <!-- contract-target: requirements=PCM-02 block=P13-PCM-02 action=add target=tests/test_api.py:search_runs -->
 ```python contract-target
 from viper.api import (
-    CapabilitiesRequest,
     CatalogRefreshRequest,
-    LocalRunPath,
-    RestoreRequest,
-    RunManyRequest,
-    SchemaRequest,
     SearchRunsRequest,
-    StatusRequest,
-    ValidateStageRequest,
-    ViperFailure,
     catalog_refresh,
-    dispatch,
-    get_capabilities,
-    get_schema,
-    restore_artifacts,
-    result_json_bytes,
-    run_many,
     search_runs,
-    status,
-    validate_stage,
 )
 ```
 
