@@ -48,6 +48,7 @@ from viper._system_impact.source import (
 )
 from viper.system_impact.check import (
     SystemImpactCheckError,
+    _run_gate,
     _unexpected_changes,
     accept,
     check_plan,
@@ -852,6 +853,32 @@ def test_pre_pairing_keeps_virtual_environment_python(
         == 0
     )
     assert captured["python"] == executable.absolute()
+
+
+def test_pair_block_gate_uses_selected_python(tmp_path: Path) -> None:
+    """Run a Python gate with the interpreter selected by preflight."""
+    python = tmp_path / "selected-python"
+    python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    python.chmod(0o755)
+    block = PairBlock.model_construct(
+        block_id="P0-TST-01",
+        requirements=("TST-01",),
+        targets=(),
+        tests=(),
+        gate="python -c pass",
+        depends_on=(),
+        declaration=_declaration_ref(),
+    )
+
+    result = _run_gate(
+        root=tmp_path,
+        block=block,
+        python=python,
+        timeout_seconds=1,
+    )
+
+    assert result.exit_code == 0
+    assert result.command[0] == str(python)
 
 
 def _schedule_fixture() -> tuple[ContractTraceabilityGraph, SourceGraph, SourceGraph]:

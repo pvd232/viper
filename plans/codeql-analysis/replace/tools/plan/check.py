@@ -714,6 +714,7 @@ def validate(
                 block_ids=selected,
                 baseline=baseline,
                 realized=planned,
+                python=python,
             )
     result = {
         "passed": checked.passed and not unconsumed,

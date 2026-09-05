@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import shlex
+import sys
 import tempfile
 from pathlib import Path
 
@@ -292,6 +293,7 @@ def _run_gate(
     *,
     root: Path,
     block: PairBlock,
+    python: Path,
     timeout_seconds: float,
 ) -> GateCheck:
     try:
@@ -312,6 +314,8 @@ def _run_gate(
             stdout_sha256=_sha256(b""),
             stderr_sha256=_sha256(b"empty gate command"),
         )
+    if command[0] == "python":
+        command = (str(python), *command[1:])
 
     try:
         completed = subprocess.run(
@@ -568,12 +572,14 @@ def check_plan(
     baseline: SourceGraph,
     realized: SourceGraph,
     gate_timeout_seconds: float = 900.0,
+    python: Path | None = None,
 ) -> PlanCheck:
     """Check selected PairBlocks against independently observed source graphs."""
     root = root.resolve()
     baseline_root = baseline_root.resolve()
     if gate_timeout_seconds <= 0:
         raise SystemImpactCheckError("gate timeout must be greater than zero")
+    gate_python = (python or Path(sys.executable)).absolute()
 
     blocks, targets = _selected_records(traceability, block_ids)
     baseline_nodes = _node_index(baseline)
@@ -620,6 +626,7 @@ def check_plan(
         _run_gate(
             root=root,
             block=block,
+            python=gate_python,
             timeout_seconds=gate_timeout_seconds,
         )
         for block in blocks
