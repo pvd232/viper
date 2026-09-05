@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from subprocess import run as run_subprocess
 
 import pytest
 
@@ -22,6 +23,7 @@ from viper._system_impact.codeql import (
     lowering_digest,
     source_digest,
 )
+from viper._system_impact.workflow import analyze_working_tree_impact
 from viper.system_impact.models import (
     CodeQLExtractionSpec,
     CodeQLQuerySpec,
@@ -567,3 +569,66 @@ def test_requested_artifacts_reject_decode_failure(
     with pytest.raises(CodeQLAnalysisError, match="CodeQL command failed"):
         analyze_source(**arguments, artifact_root=artifact_root)
     assert not artifact_root.exists()
+
+
+def test_working_tree_analysis_builds_and_explains_both_snapshots(
+    tmp_path: Path,
+) -> None:
+    """Compile one Git baseline and changed working tree into direct evidence."""
+    root = tmp_path / "repository"
+    root.mkdir()
+    _write_source(root)
+    for arguments in (
+        ("init",),
+        ("config", "user.email", "test@example.com"),
+        ("config", "user.name", "Test"),
+        ("add", "."),
+        ("commit", "-m", "baseline"),
+    ):
+        completed = run_subprocess(
+            ("git", "-C", str(root), *arguments),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+    revision = run_subprocess(
+        ("git", "-C", str(root), "rev-parse", "HEAD"),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (root / "src/example.py").write_text(
+        "def dependency() -> int:\n"
+        "    return 1\n"
+        "\n"
+        "def dependent() -> int:\n"
+        "    return dependency() + 1\n",
+        encoding="utf-8",
+    )
+
+    calls = tmp_path / "calls.jsonl"
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor, calls)
+    query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
+    result = analyze_working_tree_impact(
+        root,
+        base="HEAD",
+        targets=("src/example.py:dependency",),
+        artifact_root=tmp_path / "artifacts",
+        cache_root=tmp_path / "cache",
+        codeql_executable=executable,
+        query_pack=query_pack,
+    )
+
+    assert result.base_revision == revision
+    assert result.baseline_graph.is_file()
+    assert result.realized_graph.is_file()
+    assert len(result.evidence) == 1
+    assert result.evidence[0].dependent.symbol == "dependent"
+    assert result.evidence[0].state == "unchanged"
+    assert result.evidence[0].dependent_changed is True
+    persisted = json.loads(
+        (result.artifact_root / "dependency-evidence.json").read_text()
+    )
+    assert persisted[0]["use_path"] == "src/example.py"

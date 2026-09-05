@@ -37,11 +37,13 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "status" in capabilities.operations
     assert "compare_runs" in capabilities.operations
     assert "explain_impact" in capabilities.operations
+    assert "analyze_impact" in capabilities.operations
     assert "RunSpec" in capabilities.schemas
     assert "CompareRunsRequest" in capabilities.schemas
     assert "ExecuteBenchmarkRequest" in capabilities.schemas
     assert "InitProjectRequest" in capabilities.schemas
     assert "ExplainImpactRequest" in capabilities.schemas
+    assert "AnalyzeImpactRequest" in capabilities.schemas
     assert capabilities.execution_backends == ("trusted_local",)
 
 
@@ -59,6 +61,18 @@ def test_validate_stage_returns_typed_success() -> None:
 def test_dispatch_returns_typed_request_failure() -> None:
     """Return stable request errors before an operation is invoked."""
     result = dispatch("validate_stage", {})
+
+    assert isinstance(result, ViperFailure)
+    assert result.origin == "request"
+    assert result.code == "invalid_request"
+
+
+def test_analyze_impact_rejects_duplicate_targets_before_execution() -> None:
+    """Reject repeated source targets at the public request boundary."""
+    result = dispatch(
+        "analyze_impact",
+        {"targets": ["src/example.py:target", "src/example.py:target"]},
+    )
 
     assert isinstance(result, ViperFailure)
     assert result.origin == "request"

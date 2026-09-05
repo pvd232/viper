@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import shutil
+import sys
 import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -152,6 +153,74 @@ def lowering_digest() -> str:
             ) from error
         parts.extend((relative.encode(), source))
     return _hash_parts(parts)
+
+
+def resolve_analysis_specs(
+    root: Path,
+    *,
+    codeql_executable: Path,
+    query_pack: Path,
+    suite: str = "source-facts.qls",
+) -> tuple[CodeQLExtractionSpec, CodeQLQuerySpec, SourceGraphFormat]:
+    """Resolve the installed analyzer, checked-in query pack, and lowerer."""
+    executable = codeql_executable.resolve()
+    pack_root = query_pack.resolve()
+    if not executable.is_file():
+        raise CodeQLAnalysisError(f"CodeQL executable is absent: {executable}")
+    if not pack_root.is_dir():
+        raise CodeQLAnalysisError(f"CodeQL query pack is absent: {pack_root}")
+
+    version_stdout, _ = _run(
+        (str(executable), "version", "--format=json"),
+        cwd=root,
+    )
+    languages_stdout, _ = _run(
+        (str(executable), "resolve", "languages", "--format=json"),
+        cwd=root,
+    )
+    try:
+        version = json.loads(version_stdout)["version"]
+        extractors = json.loads(languages_stdout)["python"]
+        extractor = Path(extractors[0]).resolve()
+        metadata = yaml.safe_load(
+            (pack_root / "qlpack.yml").read_text(encoding="utf-8")
+        )
+        pack = f"{metadata['name']}@{metadata['version']}"
+    except (
+        KeyError,
+        IndexError,
+        OSError,
+        TypeError,
+        UnicodeDecodeError,
+        yaml.YAMLError,
+    ) as error:
+        raise CodeQLAnalysisError(
+            "cannot resolve CodeQL analysis specifications"
+        ) from error
+    if not isinstance(version, str) or not version:
+        raise CodeQLAnalysisError("CodeQL returned an invalid version")
+    if not extractor.is_dir():
+        raise CodeQLAnalysisError("CodeQL returned an absent Python extractor")
+    if not (pack_root / suite).is_file():
+        raise CodeQLAnalysisError(f"CodeQL query suite is absent: {suite}")
+
+    return (
+        CodeQLExtractionSpec(
+            version=version,
+            platform=sys.platform,
+            executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
+            extractor_sha256=_tree_digest(extractor),
+        ),
+        CodeQLQuerySpec(
+            pack=pack,
+            pack_sha256=_tree_digest(pack_root),
+            suite=suite,
+        ),
+        SourceGraphFormat(
+            schema_version=3,
+            lowering_sha256=lowering_digest(),
+        ),
+    )
 
 
 def _database_digest(database: Path) -> str:
@@ -998,5 +1067,6 @@ __all__ = [
     "IGNORED_PARTS",
     "analyze_source",
     "lowering_digest",
+    "resolve_analysis_specs",
     "source_digest",
 ]

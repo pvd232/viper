@@ -185,6 +185,27 @@ def build_parser() -> ArgumentParser:
         default=[],
         help="limit evidence to one PATH:SYMBOL target; repeat for several targets",
     )
+    analyze = impact_commands.add_parser(
+        "analyze",
+        help="compile direct impact from one Git baseline to the working tree",
+    )
+    add_root(analyze)
+    analyze.add_argument(
+        "--base",
+        default="HEAD",
+        help="baseline Git revision; defaults to HEAD",
+    )
+    analyze.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        required=True,
+        help="analyze one PATH:SYMBOL target; repeat for several targets",
+    )
+    analyze.add_argument("--artifact-root", type=Path)
+    analyze.add_argument("--cache-root", type=Path)
+    analyze.add_argument("--codeql-executable", type=Path)
+    analyze.add_argument("--query-pack", type=Path)
     return parser
 
 
@@ -218,6 +239,7 @@ def _operation_and_payload(
         "capabilities": "get_capabilities",
         "init": "init_project",
         "impact-explain": "explain_impact",
+        "impact-analyze": "analyze_impact",
     }
     operation = mapping[command]
     trusted = values.pop("trust_source", None)
@@ -297,6 +319,17 @@ def _human_success(result: SuccessModel) -> str:
     if result.operation == "init_project":
         return f"created project at {getattr(result, 'project_root')}"
     if result.operation == "explain_impact":
+        evidence = getattr(result, "evidence")
+        if not evidence:
+            return "no direct dependency evidence"
+        return "\n".join(
+            f"{item.state} {item.kind}: "
+            f"{item.dependent.path}:{item.dependent.symbol} -> "
+            f"{item.target.path}:{item.target.symbol} "
+            f"at {item.use_path}:{item.use_line}"
+            for item in evidence
+        )
+    if result.operation == "analyze_impact":
         evidence = getattr(result, "evidence")
         if not evidence:
             return "no direct dependency evidence"

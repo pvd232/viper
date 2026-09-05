@@ -295,3 +295,21 @@ viper --json impact explain \
   --realized-graph realized-source-graph.json \
   --target src/package/api.py:parse
 ```
+
+When those evidence files do not exist yet, agents can compile the committed
+baseline and current Python working tree before receiving the same joined
+answer:
+
+```bash
+viper --json impact analyze \
+  --root . \
+  --base HEAD \
+  --target src/package/api.py:parse
+```
+
+`impact analyze` exports the baseline commit without changing the working tree,
+runs the checked-in Python CodeQL suite against both source snapshots, persists
+both receipt-bound graphs under `.viper/system-impact/analysis`, and reports
+every direct import, call, construction, inheritance, read, or write involving
+the selected target. Use `--artifact-root`, `--cache-root`,
+`--codeql-executable`, or `--query-pack` to override the resolved defaults.

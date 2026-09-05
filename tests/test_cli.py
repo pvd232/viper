@@ -232,6 +232,14 @@ class CommandLineTests(unittest.TestCase):
                 "--realized-graph",
                 "missing-realized.json",
             ],
+            "impact-analyze": [
+                "impact",
+                "analyze",
+                "--root",
+                "missing-repository",
+                "--target",
+                "src/example.py:target",
+            ],
         }
         for name, arguments in cases.items():
             with self.subTest(command=name):

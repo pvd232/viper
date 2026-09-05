@@ -228,9 +228,68 @@ def explain_plan_check(
     )
 
 
+def explain_source_comparison(
+    *,
+    baseline: SourceGraph,
+    realized: SourceGraph,
+    targets: tuple[str, ...],
+) -> tuple[DependencyEvidence, ...]:
+    """Return every direct dependency around explicit source targets."""
+    requested = set(targets)
+    if not targets or len(requested) != len(targets):
+        raise ValueError("targets must contain unique source declarations")
+    if baseline.snapshot.revision is None:
+        raise ValueError("baseline SourceGraph must identify an exact revision")
+    if realized.snapshot.base_revision != baseline.snapshot.revision:
+        raise ValueError("realized SourceGraph does not derive from the baseline")
+    if baseline.receipt.database.extraction != realized.receipt.database.extraction:
+        raise ValueError("source graphs use different CodeQL extraction settings")
+    if baseline.receipt.query.query != realized.receipt.query.query:
+        raise ValueError("source graphs use different CodeQL query settings")
+    if baseline.receipt.graph.format != realized.receipt.graph.format:
+        raise ValueError("source graphs use different lowering formats")
+
+    known = {node.node_id for graph in (baseline, realized) for node in graph.nodes}
+    missing = requested - known
+    if missing:
+        raise ValueError(f"requested targets are absent: {sorted(missing)!r}")
+
+    before = tuple(
+        sorted(edge.edge_id for edge in baseline.edges if edge.target in requested)
+    )
+    after = tuple(
+        sorted(edge.edge_id for edge in realized.edges if edge.target in requested)
+    )
+    before_ids = set(before)
+    after_ids = set(after)
+    selected = before_ids | after_ids
+    edges = {
+        edge.edge_id: edge
+        for graph in (baseline, realized)
+        for edge in graph.edges
+        if edge.edge_id in selected
+    }
+    neighbors = tuple(sorted({edge.source for edge in edges.values()}))
+    one_hop = OneHop(
+        targets=tuple(sorted(requested)),
+        neighbors=neighbors,
+        changed=tuple(sorted(_changed_nodes(baseline, realized, set(neighbors)))),
+        before=before,
+        after=after,
+        removed=tuple(sorted(before_ids - after_ids)),
+        added=tuple(sorted(after_ids - before_ids)),
+    )
+    return explain_one_hop(
+        baseline=baseline,
+        realized=realized,
+        one_hop=one_hop,
+    )
+
+
 __all__ = [
     "DependencyEvidence",
     "DependencyState",
     "explain_one_hop",
     "explain_plan_check",
+    "explain_source_comparison",
 ]

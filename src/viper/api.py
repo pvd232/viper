@@ -24,6 +24,10 @@ from pydantic import (
     field_validator,
 )
 
+from ._system_impact.workflow import (
+    WorkingTreeImpactError,
+    analyze_working_tree_impact,
+)
 from .artifacts import (
     ArtifactPointer,
     ResolvedArtifact,
@@ -62,7 +66,7 @@ from .stages import (
 )
 from .storage import LocalArtifactStore
 from .system_impact.explain import DependencyEvidence, explain_plan_check
-from .system_impact.models import PlanCheck, SourceGraph
+from .system_impact.models import CommitId, PlanCheck, SourceGraph
 from .verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
@@ -95,6 +99,7 @@ OperationName = Literal[
     "get_capabilities",
     "init_project",
     "explain_impact",
+    "analyze_impact",
 ]
 FailureOrigin = Literal["request", "application", "cli", "internal"]
 ErrorCode = Literal[
@@ -512,6 +517,72 @@ class ExplainImpactSuccess(SuccessModel):
     )
 
 
+class AnalyzeImpactRequest(APIModel):
+    """Select one Git baseline and current Python working tree for analysis."""
+
+    root: Path = Field(
+        default_factory=Path.cwd,
+        description="Git repository whose current Python working tree is analyzed.",
+    )
+    base: str = Field(
+        default="HEAD",
+        min_length=1,
+        description="Git revision expression resolved as the comparison baseline.",
+    )
+    targets: tuple[str, ...] = Field(
+        min_length=1,
+        description="PATH:SYMBOL declarations whose direct dependents are selected.",
+    )
+    artifact_root: Path | None = Field(
+        default=None,
+        description="Optional directory for graphs, decoded rows, and joined evidence.",
+    )
+    cache_root: Path | None = Field(
+        default=None,
+        description="Optional persistent directory for staged CodeQL cache entries.",
+    )
+    codeql_executable: Path | None = Field(
+        default=None,
+        description="Optional CodeQL executable; otherwise resolved from PATH.",
+    )
+    query_pack: Path | None = Field(
+        default=None,
+        description="Optional Python impact query pack directory.",
+    )
+
+    @field_validator("targets")
+    @classmethod
+    def unique_targets(cls, targets: tuple[str, ...]) -> tuple[str, ...]:
+        """Reject repeated declarations before starting source analysis."""
+        if len(targets) != len(set(targets)):
+            raise ValueError("targets must contain unique source declarations")
+        return targets
+
+
+class AnalyzeImpactSuccess(SuccessModel):
+    """Return direct dependencies compiled from the baseline and working tree."""
+
+    operation: Literal["analyze_impact"] = "analyze_impact"  # pyright: ignore[reportIncompatibleVariableOverride]
+    repository_root: Path = Field(
+        description="Resolved Git top-level directory that supplied the working tree."
+    )
+    base_revision: CommitId = Field(
+        description="Complete commit identifier resolved from the requested baseline."
+    )
+    artifact_root: Path = Field(
+        description="Directory containing the persisted analysis evidence."
+    )
+    baseline_graph: Path = Field(
+        description="Path to the receipt-bound graph for the baseline commit."
+    )
+    realized_graph: Path = Field(
+        description="Path to the receipt-bound graph for the captured working tree."
+    )
+    evidence: tuple[DependencyEvidence, ...] = Field(
+        description="Joined direct dependency occurrences around the selected targets."
+    )
+
+
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
@@ -523,6 +594,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
     "ExplainImpactRequest": ExplainImpactRequest,
     "ExplainImpactSuccess": ExplainImpactSuccess,
+    "AnalyzeImpactRequest": AnalyzeImpactRequest,
+    "AnalyzeImpactSuccess": AnalyzeImpactSuccess,
     "FreezeRunRequest": FreezeRunRequest,
     "FreezeRunSuccess": FreezeRunSuccess,
     "InitProjectRequest": InitProjectRequest,
@@ -582,6 +655,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "get_capabilities",
     "init_project",
     "explain_impact",
+    "analyze_impact",
 )
 
 
@@ -1233,6 +1307,42 @@ def explain_impact(request: ExplainImpactRequest) -> ExplainImpactSuccess:
     return ExplainImpactSuccess(evidence=evidence)
 
 
+def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
+    """Compile and explain impact from one Git baseline to the working tree."""
+    try:
+        result = analyze_working_tree_impact(
+            request.root,
+            base=request.base,
+            targets=request.targets,
+            artifact_root=request.artifact_root,
+            cache_root=request.cache_root,
+            codeql_executable=request.codeql_executable,
+            query_pack=request.query_pack,
+        )
+    except WorkingTreeImpactError as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="analyze_impact",
+                origin="application",
+                code="execution_failed",
+                message=str(exc),
+                details={
+                    "root": request.root.as_posix(),
+                    "base": request.base,
+                    "targets": list(request.targets),
+                },
+            )
+        ) from exc
+    return AnalyzeImpactSuccess(
+        repository_root=result.repository_root,
+        base_revision=result.base_revision,
+        artifact_root=result.artifact_root,
+        baseline_graph=result.baseline_graph,
+        realized_graph=result.realized_graph,
+        evidence=result.evidence,
+    )
+
+
 RequestType = type[APIModel]
 Handler = Callable[[Any], SuccessModel]
 
@@ -1257,6 +1367,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "get_capabilities": CapabilitiesRequest,
     "init_project": InitProjectRequest,
     "explain_impact": ExplainImpactRequest,
+    "analyze_impact": AnalyzeImpactRequest,
 }
 
 HANDLER_REGISTRY: dict[OperationName, Handler] = {
@@ -1280,6 +1391,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "get_capabilities": get_capabilities,
     "init_project": init_project,
     "explain_impact": explain_impact,
+    "analyze_impact": analyze_impact,
 }
 
 
@@ -1476,6 +1588,8 @@ def retry(
 
 __all__ = [
     "APIModel",
+    "AnalyzeImpactRequest",
+    "AnalyzeImpactSuccess",
     "CapabilitiesRequest",
     "CapabilitiesSuccess",
     "CompareRunsRequest",
@@ -1523,6 +1637,7 @@ __all__ = [
     "VerifyRunSuccess",
     "ViperError",
     "ViperFailure",
+    "analyze_impact",
     "compare_runs",
     "dispatch",
     "execute_stage",
