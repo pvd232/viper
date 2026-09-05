@@ -640,6 +640,9 @@ targets = [
     "src/viper/reuse.py:ProcessStartupReceipt",
     "src/viper/reuse.py:ReproducibilitySpec",
     "src/viper/reuse.py:ResolvedEnv",
+    "src/viper/reuse.py:ParameterizedSpec",
+    "src/viper/reuse.py:VerifiedInput",
+    "src/viper/reuse.py:VerifiedRunResult",
     "src/viper/reuse.py:StageReuseMode",
     "src/viper/reuse.py:ReuseFileIdentity",
     "src/viper/reuse.py:ReuseInputIdentity",
@@ -2183,6 +2186,15 @@ from .runtime import (
     ReproducibilitySpec,
     ResolvedEnv,
 )
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ParameterizedSpec -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:VerifiedInput -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:VerifiedRunResult -->
+```python contract-target
+if TYPE_CHECKING:
+    from .stages import ParameterizedSpec
+    from .verification.models import VerifiedInput, VerifiedRunResult
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageReuseMode -->
