@@ -92,8 +92,10 @@ viper run experiments/example/runs/run-001/spec.yaml
 ## 2. Freezing fixes the computation
 
 An experiment selects a variant and replicate. The variant supplies stage
-parameters. The replicate supplies the run's global seed. `freeze_run_plan()`
-then writes one `RunSpec` and the exact stage specifications it references.
+parameters. The replicate supplies the run's global seed.
+`viper.authoring.plan()` creates an immutable draft, and
+`viper.execution.run()` compiles one `RunSpec` plus the exact stage
+specifications it references before execution.
 
 For each project-owned implementation, freezing records its repository-relative
 path, top-level symbol, SHA-256 digest, and byte count. The source commit fixes
@@ -171,13 +173,13 @@ path. An output inherits the strongest restriction carried by its inputs. The
 [verifier](../../src/viper/verification/__init__.py) enforces these joins across the
 complete plan.
 
-Download stages use frozen HTTP requests. A request fixes the URL, accepted
-statuses, expected response byte count, and expected SHA-256 digest. The
-selected transport retrieves the body. VIPER checks the response before the
-download callable receives it through `DownloadContext`. Projects can register
-another transport through `@http_transport` from `viper.http` while retaining the same
-request and response contract. The [HTTP module](../../src/viper/http.py) owns
-this interface.
+External inputs use frozen HTTP requests. A request fixes the URL and retrieval
+policy. The selected transport retrieves the body, and VIPER records and checks
+the observed response before any stage consumes it. The
+[HTTP module](../../src/viper/http.py) owns this interface.
+
+After a verified run, `viper.execution.benchmark()` performs an independent
+confirmation and `viper.execution.restore()` recovers selected artifacts.
 
 ## 6. Artifacts become immutable evidence
 

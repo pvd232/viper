@@ -284,12 +284,12 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [CodeQL graph cache reuse](codeql-graph-cache-reuse.md) | Planned | Verified warm graph reuse without BQRS decoding unless a caller explicitly requests publication evidence |
 | [PairBlock scheduling](pair-block-scheduling.md) | Complete | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
-| [Download retrieval artifacts](download-retrieval-artifacts.md) | In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11 | Runner-owned downloads and the shared HTTP-body artifact |
-| [External input roots](external-input-roots.md) | In progress; Phase 3 implemented; EIR-04 and EIR-05 scheduled | Local input capture and identity verification |
-| [Unified metric drafting](unified-metric-drafting.md) | In progress | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
-| [Automatic input resolution](automatic-input-resolution.md) | In progress | Python stage authoring and compilation of local, same-run, and prior-run inputs |
+| [Download retrieval artifacts](download-retrieval-artifacts.md) | Complete | Runner-owned downloads and the shared HTTP-body artifact |
+| [External input roots](external-input-roots.md) | Complete | Local input capture and identity verification |
+| [Unified metric drafting](unified-metric-drafting.md) | Complete | Metrics, objectives, diagnostics, experiments, variants, replicates, and benchmarks |
+| [Automatic input resolution](automatic-input-resolution.md) | Complete | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Complete | Immutable generated plans with source code kept on its source commit |
-| [Direct Viper Cloud publication](remote-storage.md) | In progress | Destination-neutral publication, cloud references, retrieval, and restore |
+| [Direct Viper Cloud publication](remote-storage.md) | Complete | Destination-neutral publication, cloud references, retrieval, and restore |
 | [Experiment expansion](experiment-expansion.md) | Audited; owner approval pending | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Audited; owner approval pending | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
@@ -1743,19 +1743,23 @@ Pyright diagnostics, and both restore acceptance tests passed.
 author a plan, execute it, benchmark the verified result, and restore selected
 artifacts.
 
-- [ ] Execute `P11-AIR-01`: update the generated project and public workflow,
+- [x] Execute `P11-AIR-01`: update the generated project and public workflow,
       then pass both focused acceptance tests. <!-- pair-block: P11-AIR-01 -->
       <!-- pair-block-contract: P11-AIR-01 contract=automatic-input-resolution.md -->
-      <!-- contract-implementation: requirement=DRA-06 rule=download.docs.current state=planned owner=src/viper/project.py:_project_files -->
-      <!-- contract-verification: requirement=DRA-06 rule=download.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-      <!-- contract-implementation: requirement=EIR-05 rule=input.docs.current state=planned owner=src/viper/project.py:_project_files -->
-      <!-- contract-verification: requirement=EIR-05 rule=input.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-      <!-- contract-implementation: requirement=UMD-06 rule=metric.docs.current state=planned owner=src/viper/project.py:_project_files -->
-      <!-- contract-verification: requirement=UMD-06 rule=metric.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-      <!-- contract-implementation: requirement=AIR-06 rule=authoring.docs.current state=planned owner=src/viper/project.py:_project_files -->
-      <!-- contract-verification: requirement=AIR-06 rule=authoring.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
-      <!-- contract-implementation: requirement=RSP-09 rule=storage.docs.current state=planned owner=src/viper/project.py:_project_files -->
-      <!-- contract-verification: requirement=RSP-09 rule=storage.docs.current state=planned test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=DRA-06 rule=download.docs.current state=implemented owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=DRA-06 rule=download.docs.current state=implemented test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=EIR-05 rule=input.docs.current state=implemented owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=EIR-05 rule=input.docs.current state=implemented test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=UMD-06 rule=metric.docs.current state=implemented owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=UMD-06 rule=metric.docs.current state=implemented test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=AIR-06 rule=authoring.docs.current state=implemented owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=AIR-06 rule=authoring.docs.current state=implemented test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+      <!-- contract-implementation: requirement=RSP-09 rule=storage.docs.current state=implemented owner=src/viper/project.py:_project_files -->
+      <!-- contract-verification: requirement=RSP-09 rule=storage.docs.current state=implemented test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
+
+**Evidence:** Raw code-target parity and batched imports passed. The four public
+documentation assets now teach the same authoring, run, benchmark, and restore
+workflow. Ruff, differential Pyright, and both focused acceptance tests passed.
 
 The block removes the generated `freeze-run` and stage-callable entrypoints,
 fixes the generated parameter-module imports, and updates `README.md`, the

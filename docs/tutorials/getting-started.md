@@ -20,7 +20,7 @@ viper --json capabilities
 
 ## Create a project
 
-Generate the five-stage starter project:
+Generate the starter project:
 
 ```bash
 viper init my-project --package my_project
@@ -29,7 +29,7 @@ python -m pip install -e '.[test]'
 python -m pytest -q
 ```
 
-The project contains download, build, embed, train, and evaluate callables. It
+The project contains build, embed, train, and evaluate callables. It
 also contains project parameter classes, one evaluation metric, artifact
 loaders, and authored protocol directories.
 
@@ -93,21 +93,21 @@ python train.py \
 `run(fit)` checks that `fit` matches the implementation selected by
 the frozen stage. It then executes and verifies the complete run.
 
-## Freeze and inspect a plan
+## Author and inspect a plan
 
-Commit the project source before freezing. The source commit becomes part of
+Commit the project source before authoring. The source commit becomes part of
 the run identity.
 
-```bash
-viper freeze-run path/to/draft.yaml --root .
-viper validate-run experiments/example/runs/run-001/spec.yaml
-viper preflight experiments/example/runs/run-001/spec.yaml --root .
-```
+Create the draft with `viper.authoring.plan()`, then call
+`viper.execution.run()` with the project root and draft. Execution compiles the
+immutable files before starting the run. Use `viper.execution.benchmark()` to
+run an independent confirmation and `viper.execution.restore()` to recover
+selected artifacts afterward.
 
-`freeze-run` writes canonical stage specifications and the `RunSpec` that
-references them. `preflight` checks the selected source, implementations,
+The compiled plan writes canonical stage specifications and the `RunSpec` that
+references them. Preflight checks the selected source, implementations,
 parameters, inputs, environment, and execution requirements on the current
-host.
+host before execution begins.
 
 ## Execute and verify
 
