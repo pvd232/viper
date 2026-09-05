@@ -2465,6 +2465,7 @@ class CatalogRefreshResult(BaseModel):
 
 <!-- contract-target: requirements=PCM-01,PCM-02 block=P13-PCM-01 action=add target=src/viper/catalog.py:CatalogRunSource -->
 ```python contract-target
+@dataclass(frozen=True)
 class CatalogRunSource:
     """Pair one immutable terminal reference with its verified contents."""
 
@@ -2474,6 +2475,7 @@ class CatalogRunSource:
 
 <!-- contract-target: requirements=PCM-01,PCM-02 block=P13-PCM-01 action=add target=src/viper/catalog.py:CatalogBenchmarkSource -->
 ```python contract-target
+@dataclass(frozen=True)
 class CatalogBenchmarkSource:
     """Pair one immutable benchmark reference with its verified contents."""
 
