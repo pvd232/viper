@@ -4717,6 +4717,11 @@ targets = [
     "src/viper/execution/_source.py:ViperCloudStageResultSnapshotRef",
     "src/viper/execution/_source.py:ViperCloudClient",
     "src/viper/execution/_source.py:RunFetcher",
+    "src/viper/_verification/attempt.py:LocalStageResultSnapshotRef",
+    "src/viper/_verification/attempt.py:StageResultSnapshot",
+    "src/viper/_verification/attempt.py:StageResultSnapshotRef",
+    "src/viper/_verification/attempt.py:_verify_download_retrievals",
+    "src/viper/_verification/attempt.py:verify_external_inputs",
     "src/viper/verification/models.py:LocalStageResultSnapshotRef",
     "src/viper/verification/models.py:StageResultSnapshot",
     "src/viper/verification/models.py:StageResultSnapshotRef",
@@ -5336,6 +5341,177 @@ class RunFetcher:
                 )
             )
         return self.store.list_snapshot_files(snapshot)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/_verification/attempt.py:LocalStageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/_verification/attempt.py:StageResultSnapshot -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    LocalFileRef,
+    ResolvedStageInvocationRef,
+    StageResultSnapshot,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/_verification/attempt.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/attempt.py:_verify_download_retrievals -->
+```python contract-target
+def _verify_download_retrievals(
+    attempt: RunAttempt,
+    run: RunSpec,
+    stage_id: StageId,
+    resolved: ResolvedDownloadSpec,
+    snapshot: StageResultSnapshot,
+    *,
+    fetcher: StorageFetcher | None,
+) -> None:
+    """Verify each HTTP request, response, implementation, and artifact body."""
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    for input_name, retrieval in resolved.retrievals.items():
+        try:
+            validate_request_policy(retrieval.request, resolved.spec.policy)
+            terminal_request = retrieval.request.model_copy(
+                update={"url": retrieval.response.response_url}
+            )
+            validate_request_policy(terminal_request, resolved.spec.policy)
+        except HttpRetrievalError as exc:
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} violates its frozen policy"
+            ) from exc
+        if retrieval.response.status not in resolved.spec.policy.accepted_statuses:
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} has an unaccepted status"
+            )
+        expected_path = resolved.spec.artifacts[input_name].path
+        if retrieval.body.path != expected_path:
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} body uses another path"
+            )
+        body_raw = read_snapshot_file(
+            snapshot,
+            retrieval.body,
+            fetcher=fetcher,
+        )
+        artifact = resolved.artifacts[input_name]
+        if artifact.kind != "file" or artifact.file != retrieval.body:
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} differs from its artifact"
+            )
+        if (
+            hashlib.sha256(body_raw).hexdigest()
+            != retrieval.request.expected_body_sha256
+            or len(body_raw) != retrieval.request.expected_body_bytes
+        ):
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} body differs from its request"
+            )
+        if not (
+            attempt.started_at
+            <= retrieval.started_at
+            < retrieval.completed_at
+            <= resolved.completed_at
+        ):
+            raise VerificationError(
+                f"HTTP retrieval {input_name!r} timing falls outside its stage"
+            )
+
+        http = retrieval.http
+        if isinstance(http.spec, ProjectHttpImplementationSpec):
+            implementation = http.spec.implementation
+            implementation_raw = retrieve(
+                GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=implementation.path,
+                )
+            )
+            if (
+                len(implementation_raw) != implementation.bytes
+                or hashlib.sha256(implementation_raw).hexdigest()
+                != implementation.sha256
+            ):
+                raise VerificationError(
+                    f"HTTP retrieval {input_name!r} implementation source differs"
+                )
+            parameter_reference = http.spec.parameter_model
+            parameter_raw = retrieve(
+                GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=parameter_reference.path,
+                )
+            )
+            try:
+                verify_parameter_model_bytes(parameter_reference, parameter_raw)
+            except ParameterValidationError as exc:
+                raise VerificationError(
+                    f"HTTP retrieval {input_name!r} HTTP parameter model differs"
+                ) from exc
+            for executable in http.external_executables:
+                try:
+                    executable_raw = executable.path.read_bytes()
+                except OSError as exc:
+                    raise VerificationError(
+                        f"HTTP retrieval {input_name!r} executable is unavailable"
+                    ) from exc
+                if (
+                    len(executable_raw) != executable.spec.bytes
+                    or hashlib.sha256(executable_raw).hexdigest()
+                    != executable.spec.sha256
+                ):
+                    raise VerificationError(
+                        f"HTTP retrieval {input_name!r} executable identity differs"
+                    )
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/attempt.py:verify_external_inputs -->
+```python contract-target
+def verify_external_inputs(
+    attempt: RunAttempt,
+    run: RunSpec,
+    stage_id: StageId,
+    resolved: ResolvedInternalSpec,
+    snapshot: StageResultSnapshot,
+    *,
+    fetcher: StorageFetcher | None,
+) -> None:
+    """Verify each local input captured in one completed stage snapshot."""
+    for input_name, resolved_input in resolved.inputs.items():
+        if not isinstance(resolved_input, ResolvedExternalInputRef):
+            continue
+        planned_input = resolved.spec.inputs[input_name]
+        if not isinstance(planned_input, ExternalInputRef):
+            raise VerificationError(
+                "input.local.identity: resolved input differs from its plan"
+            )
+        if (
+            resolved_input.source != planned_input.source
+            or resolved_input.data_role != planned_input.data_role
+        ):
+            raise VerificationError(
+                "input.local.identity: resolved input provenance differs"
+            )
+        expected_path = captured_input_path(
+            run_id=run.run_id,
+            attempt_id=attempt.attempt_id,
+            stage_id=stage_id,
+            input_name=input_name,
+            source_path=planned_input.source.path,
+        )
+        if resolved_input.file.path != expected_path:
+            raise VerificationError("input.local.identity: path differs")
+        try:
+            read_snapshot_file(snapshot, resolved_input.file, fetcher=fetcher)
+        except VerificationError as exc:
+            raise VerificationError(
+                f"input.local.identity: captured input {input_name!r} differs"
+            ) from exc
 ```
 
 <!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/verification/models.py:LocalStageResultSnapshotRef -->
@@ -8030,7 +8206,6 @@ def snapshot(commit: str) -> HuggingFaceStageResultSnapshotRef:
         repo_type="dataset",
     )
 ```
-
 ## Implementation sources
 
 - [Local store implementation](../../src/viper/storage.py)
