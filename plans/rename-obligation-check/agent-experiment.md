@@ -288,3 +288,55 @@ declared keyword to every resolved call edge. The scheduler should then return
 the remaining non-code obligations and run the gate. That would test whether a
 complete graph-derived transformation removes search and repeated reasoning;
 the present symbol-only executor does not.
+
+## Gate-free complete-transformation trial
+
+A final paired trial used fixture commit
+`d4abaafa51d1d1b4b65b3dbb4155f05a2b1b84de`. The fixture exposed the
+five contracts, checklist, implementation, resources, and sparse unittest
+suite. It contained no scheduler, phase checker, evidence recorder, or release
+validator. Both `gpt-5.4-mini` agents could choose their own edit order and
+validation strategy under a 480-second limit.
+
+The treatment received five optional CodeQL-derived transformations. Each
+operation validated its obligation digest and original token spans, renamed
+the declaration and resolved references, added the keyword-only parameter,
+and added the keyword argument at every resolved call. It did not modify
+resources or contract metadata. The ordinary arm received no graph artifact or
+special operation. A separate hidden evaluator checked the 98 required import
+and call transitions, all 50 consumers, five contracts and manifest digests,
+resource changes, sparse tests, and untouched decoys after both agents stopped.
+
+| Arm | Hidden acceptance | Wall time | Commands | Search-like commands | Output tokens | Reasoning tokens | Patch churn |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Gate-free ordinary search | Passed | 356 s | 48 | 8 | 20,788 | 8,567 | 307 lines |
+| Gate-free typed transformation | Passed | 228 s | 38 | 11 | 11,050 | 4,382 | 266 lines |
+
+Both candidates satisfied every hidden obligation and ran 50/50 consumers.
+The treatment finished 128 seconds, or 36%, faster; used 21% fewer commands,
+47% fewer output tokens, and 49% fewer reasoning tokens; and produced 13% less
+line churn. Its total input-token count was 1,192,039 versus 863,900 for the
+ordinary arm, an increase of 38%; 1,116,672 treatment input tokens were cached.
+The treatment's one failed command was an initial unittest invocation without
+`PYTHONPATH=src`. The ordinary arm had no failed commands.
+
+The treatment voluntarily ran the five transformations in dependency order.
+Its code relationships were complete before it edited resources and contract
+metadata. The ordinary agent first read the stage modules and all consumer
+families, constructed a governed call graph in its reasoning, and then applied
+one broad rewrite. It correctly recognized the literal-policy requirement and
+also passed the hidden oracle.
+
+The patches were semantically equivalent but not byte-identical. The graph
+preserved module-qualified and symbol-alias binding forms. The ordinary agent
+normalized 35 aliased consumers to direct imports, which remained valid but
+accounted for much of its additional churn. The treatment still issued more
+search-like commands because it audited the transformed source and metadata;
+its speedup came from eliminating manual relationship reconstruction and edit
+generation, not from eliminating search commands altogether.
+
+This `n=1` favorable synthetic trial provides efficiency and minimal-edit
+evidence, not a repair-rate estimate. It did not show a correctness advantage
+because both arms passed. Repeated paired runs or historical repository
+refactors are required to estimate whether the transformation also improves
+success probability under weak visible tests.

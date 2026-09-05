@@ -60,15 +60,16 @@ def _stage_module(index: int, old: str) -> str:
     )
 
 
-def _contract(index: int, old: str, new: str) -> str:
+def _contract(index: int, old: str, new: str, *, visible_gates: bool) -> str:
     dependency = "" if index == 0 else f'\ndepends_on = "PB-{index:02d}"'
+    gate = f'gate = "python tools/check_stage.py {index + 1}"\n'
     return (
         f'title = "Migrate {old}"\n'
         'state = "planned"\n'
         f'pair_block = "PB-{index + 1:02d}"{dependency}\n'
         f'old_target = "src/orbit/{old}.py:{old}"\n'
         f'new_target = "src/orbit/{old}.py:{new}"\n'
-        f'gate = "python tools/check_stage.py {index + 1}"\n'
+        + (gate if visible_gates else "")
     )
 
 
@@ -389,7 +390,7 @@ if __name__ == "__main__":
 '''
 
 
-def build(root: Path) -> None:
+def build(root: Path, *, visible_gates: bool = True) -> None:
     """Create and commit one fresh stress-fixture repository."""
     root.mkdir(parents=True, exist_ok=False)
     _write(root, "src/orbit/__init__.py", '"""Stress-fixture package."""\n')
@@ -442,7 +443,11 @@ def build(root: Path) -> None:
     contracts = []
     for index, (old, new) in enumerate(STAGES):
         relative = f"docs/contracts/PB-{index + 1:02d}.toml"
-        _write(root, relative, _contract(index, old, new))
+        _write(
+            root,
+            relative,
+            _contract(index, old, new, visible_gates=visible_gates),
+        )
         path = root / relative
         contracts.append(
             {
@@ -452,27 +457,26 @@ def build(root: Path) -> None:
                 "state": "planned",
             }
         )
+    checklist_rows = []
+    for index, (old, _new) in enumerate(STAGES, start=1):
+        row = f"## Phase {index}\n\n- [ ] PB-{index:02d} — migrate {old}"
+        if visible_gates:
+            row += f"; gate: `python tools/check_stage.py {index}`"
+        checklist_rows.append(row + "\n")
     _write(
         root,
         "docs/master-execution-checklist.md",
-        "# Orbit Master Execution Checklist\n\n"
-        + "\n".join(
-            f"## Phase {index}\n\n- [ ] PB-{index:02d} — migrate {old}; "
-            f"gate: `python tools/check_stage.py {index}`\n"
-            for index, (old, _new) in enumerate(STAGES, start=1)
-        ),
+        "# Orbit Master Execution Checklist\n\n" + "\n".join(checklist_rows),
     )
     _write(
         root,
         "docs/contract-baselines.json",
         json.dumps({"schema_version": 1, "contracts": contracts}, indent=2) + "\n",
     )
-    _write(root, "tools/check_stage.py", _check_stage_script())
-    _write(root, "tools/validate_release.py", _release_script())
-    _write(
-        root,
-        "TASK.md",
-        """# Task
+    if visible_gates:
+        _write(root, "tools/check_stage.py", _check_stage_script())
+        _write(root, "tools/validate_release.py", _release_script())
+        task = """# Task
 
 Complete PairBlocks PB-01 through PB-05 in dependency order.
 
@@ -493,8 +497,29 @@ For each block:
 
 After PB-05, run `python tools/validate_release.py`. Fix every failure. Do not
 commit. Do not inspect Git history, remotes, or another checkout.
-""",
-    )
+"""
+    else:
+        task = """# Task
+
+Complete PairBlocks PB-01 through PB-05.
+
+For each block:
+
+1. Rename its declared function to the contract's `new_target` and update every
+   governed import and call. Leave `src/orbit/decoys/` unchanged.
+2. Change the renamed definition to accept
+   `*, policy: str = \"verified\"`. Every governed call must pass
+   `policy=\"verified\"` explicitly.
+3. Replace that stage's exact key and command in `config/registry.json` and
+   `config/commands.txt`. The registry value must identify the renamed symbol.
+4. Set the block contract state to `complete` and check its one master-checklist
+   item. Refresh that contract's digest and state in
+   `docs/contract-baselines.json` after the contract edit.
+
+Use the repository's ordinary tests as you judge appropriate. Do not commit.
+Do not inspect Git history, remotes, or another checkout.
+"""
+    _write(root, "TASK.md", task)
     subprocess.run(("git", "init", "-q"), cwd=root, check=True)
     subprocess.run(
         ("git", "config", "user.email", "fixture@example.invalid"), cwd=root, check=True
@@ -512,8 +537,13 @@ def main() -> None:
     """Parse the destination and build the fixture."""
     parser = argparse.ArgumentParser()
     parser.add_argument("destination", type=Path)
+    parser.add_argument(
+        "--wild",
+        action="store_true",
+        help="omit the task-specific scheduler and acceptance gates",
+    )
     args = parser.parse_args()
-    build(args.destination.resolve())
+    build(args.destination.resolve(), visible_gates=not args.wild)
 
 
 if __name__ == "__main__":

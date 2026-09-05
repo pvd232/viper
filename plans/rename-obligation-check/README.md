@@ -17,6 +17,10 @@ five-PairBlock fixture used by the orchestration stress test.
 [`pairblock_control.py`](pairblock_control.py) is the experimental dependency
 frontier and digest-bound transition executor used to hold scheduling constant
 between the final paired arms.
+[`typed_transform.py`](typed_transform.py) applies the gate-free experiment's
+complete rename-and-call contract.
+[`evaluate_pairblock_candidate.py`](evaluate_pairblock_candidate.py) is its
+agent-hidden acceptance oracle.
 
 `plan.toml` takes the accepted `P0-ROC-01` commit as its baseline and binds
 `P0-ROC-02` to the query-derived checker and overlay optimization. `check.py`
