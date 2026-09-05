@@ -7,7 +7,7 @@ frozen plans and returns every outcome.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** approved for implementation.
 
 These requirements bind the contract to the master checklist:
 
@@ -382,3 +382,261 @@ work.
 4. Add typed API and CLI entry points.
 5. Update the complete authoring example and generated project.
 6. Run the contract-to-checklist audit and focused execution tests.
+
+## 12. Contract-owned PairBlocks
+
+<!-- pair-block-definition: P12-EXP-01 -->
+```toml pair-block
+id = "P12-EXP-01"
+requirements = ["EXP-01"]
+targets = [
+    "src/viper/authoring.py:RunIdMap",
+    "src/viper/authoring.py:_plan_with_run_id",
+    "src/viper/authoring.py:plan",
+    "src/viper/authoring.py:expand",
+    "tests/test_authoring.py:RunIdMap",
+    "tests/test_authoring.py:expand",
+    "tests/test_authoring.py:test_experiment_expansion_is_canonical",
+    "tests/test_authoring.py:test_experiment_expansion_rejects_invalid_selection",
+]
+tests = [
+    "tests/test_authoring.py:test_experiment_expansion_is_canonical",
+    "tests/test_authoring.py:test_experiment_expansion_rejects_invalid_selection",
+]
+gate = "python -m pytest tests/test_authoring.py -k experiment_expansion -q"
+depends_on = ["P11-AIR-01"]
+```
+
+**Context:** `plan()` generates one private run ID, so it cannot implement a
+caller-reviewed `RunIdMap`. This block factors the shared constructor behind
+`plan()` and lets `expand()` supply each reviewed ID without making run-ID
+assignment part of the public single-plan API.
+
+## 13. ContractTarget
+
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=add target=src/viper/authoring.py:RunIdMap -->
+```python contract-target
+RunIdMap = dict[VariantId, dict[ReplicateId, RunId]]
+```
+
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=add target=src/viper/authoring.py:_plan_with_run_id -->
+```python contract-target
+def _plan_with_run_id(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    run_id: RunId,
+    benchmark: BenchmarkDraft | None,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft:
+    """Create one plan with an already assigned run ID."""
+    if variant not in experiment.variants:
+        raise ValueError("variant is absent from the experiment")
+    if replicate not in experiment.replicates:
+        raise ValueError("replicate is absent from the experiment")
+    draft = RunPlanDraft(
+        run_id=run_id,
+        experiment=experiment,
+        variant=variant,
+        replicate=replicate,
+        benchmark=benchmark,
+        source=source,
+        env=env,
+        reproducibility=reproducibility,
+    )
+    return _deep_freeze(draft)
+```
+
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=update target=src/viper/authoring.py:plan -->
+```python contract-target
+def plan(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    benchmark: BenchmarkDraft | None = None,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft:
+    """Create one identified plan detached from mutable caller values."""
+    return _plan_with_run_id(
+        experiment=experiment,
+        variant=variant,
+        replicate=replicate,
+        run_id=_new_run_id(),
+        benchmark=benchmark,
+        source=source,
+        env=env,
+        reproducibility=reproducibility,
+    )
+```
+
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=add target=src/viper/authoring.py:expand -->
+```python contract-target
+def expand(
+    experiment: ExperimentDraft,
+    *,
+    run_ids: RunIdMap,
+    benchmark: BenchmarkDraft | None = None,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+    variants: tuple[VariantId, ...] | None = None,
+    replicates: tuple[ReplicateId, ...] | None = None,
+) -> tuple[RunPlanDraft, ...]:
+    """Expand selected variants and replicates in declaration order."""
+    if variants is not None and len(variants) != len(set(variants)):
+        raise ValueError("variant filter contains duplicates")
+    if replicates is not None and len(replicates) != len(set(replicates)):
+        raise ValueError("replicate filter contains duplicates")
+
+    variant_filter = None if variants is None else set(variants)
+    replicate_filter = None if replicates is None else set(replicates)
+    if variant_filter is not None and not variant_filter <= set(experiment.variants):
+        raise ValueError("variant filter contains an unknown ID")
+    if replicate_filter is not None and not replicate_filter <= set(
+        experiment.replicates
+    ):
+        raise ValueError("replicate filter contains an unknown ID")
+
+    selected_variants = tuple(
+        variant_id
+        for variant_id in experiment.variants
+        if variant_filter is None or variant_id in variant_filter
+    )
+    selected_replicates = tuple(
+        replicate_id
+        for replicate_id in experiment.replicates
+        if replicate_filter is None or replicate_id in replicate_filter
+    )
+    if set(run_ids) != set(selected_variants) or any(
+        set(run_ids[variant_id]) != set(selected_replicates)
+        for variant_id in selected_variants
+    ):
+        raise ValueError("run ID map must match the selected pairs")
+
+    assigned = tuple(
+        run_ids[variant_id][replicate_id]
+        for variant_id in selected_variants
+        for replicate_id in selected_replicates
+    )
+    if len(assigned) != len(set(assigned)):
+        raise ValueError("run IDs must be unique")
+
+    return tuple(
+        _plan_with_run_id(
+            experiment=experiment,
+            variant=variant_id,
+            replicate=replicate_id,
+            run_id=run_ids[variant_id][replicate_id],
+            benchmark=benchmark,
+            source=source,
+            env=env,
+            reproducibility=reproducibility,
+        )
+        for variant_id in selected_variants
+        for replicate_id in selected_replicates
+    )
+```
+
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=add target=tests/test_authoring.py:RunIdMap -->
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=add target=tests/test_authoring.py:expand -->
+```python contract-target
+from viper.authoring import RunIdMap, expand
+```
+
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=add target=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
+```python contract-target
+def test_experiment_expansion_is_canonical() -> None:
+    """Use declaration order and the caller's exact run IDs."""
+    single, _ = _immutable_plan()
+    baseline = single.experiment.variants["baseline"]
+    draft = experiment(
+        experiment_id=single.experiment.experiment_id,
+        factors=single.experiment.factors,
+        variants={"baseline": baseline, "l2": baseline},
+        replicates={
+            "replicate_01": replicate(seed=42),
+            "replicate_02": replicate(seed=43),
+        },
+    )
+    run_ids: RunIdMap = {
+        "l2": {
+            "replicate_02": "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+            "replicate_01": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        },
+        "baseline": {
+            "replicate_02": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+            "replicate_01": RUN_ID,
+        },
+    }
+
+    plans = expand(
+        draft,
+        run_ids=run_ids,
+        source=single.source,
+        env=single.env,
+        reproducibility=single.reproducibility,
+    )
+
+    assert tuple((item.variant, item.replicate) for item in plans) == (
+        ("baseline", "replicate_01"),
+        ("baseline", "replicate_02"),
+        ("l2", "replicate_01"),
+        ("l2", "replicate_02"),
+    )
+    assert tuple(item.run_id for item in plans) == (
+        RUN_ID,
+        "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+    )
+```
+
+<!-- contract-target: requirements=EXP-01 block=P12-EXP-01 action=add target=tests/test_authoring.py:test_experiment_expansion_rejects_invalid_selection -->
+```python contract-target
+def test_experiment_expansion_rejects_invalid_selection() -> None:
+    """Reject unknown filters, incomplete maps, and reused run IDs."""
+    single, _ = _immutable_plan()
+    arguments = {
+        "experiment": single.experiment,
+        "source": single.source,
+        "env": single.env,
+        "reproducibility": single.reproducibility,
+    }
+
+    with pytest.raises(ValueError, match="unknown ID"):
+        expand(**arguments, run_ids={}, variants=("missing",))
+    with pytest.raises(ValueError, match="duplicates"):
+        expand(
+            **arguments,
+            run_ids={"baseline": {"replicate_01": RUN_ID}},
+            variants=("baseline", "baseline"),
+        )
+    with pytest.raises(ValueError, match="selected pairs"):
+        expand(**arguments, run_ids={})
+
+    duplicate_replicate = replicate(seed=43)
+    duplicated = single.experiment.model_copy(
+        update={
+            "replicates": {
+                **single.experiment.replicates,
+                "replicate_02": duplicate_replicate,
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="unique"):
+        expand(
+            **{**arguments, "experiment": duplicated},
+            run_ids={
+                "baseline": {
+                    "replicate_01": RUN_ID,
+                    "replicate_02": RUN_ID,
+                }
+            },
+        )
+```

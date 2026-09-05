@@ -1775,8 +1775,6 @@ python -m pytest \
 
 ## 19. Master Phase 12 — experiment expansion and bounded execution
 
-<!-- contract-implementation: requirement=EXP-01 rule=experiment.expansion.canonical state=planned owner=src/viper/authoring.py:expand -->
-<!-- contract-verification: requirement=EXP-01 rule=experiment.expansion.canonical state=planned test=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
 <!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=planned owner=src/viper/execution/_batch.py:run_many -->
 <!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=planned test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
 <!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=planned owner=src/viper/api.py:run_many -->
@@ -1791,6 +1789,11 @@ variant-replicate pair and executes those frozen plans with a fixed concurrency
 limit.
 
 ### 19.1 Deterministic expansion
+
+- [ ] Materialize and verify deterministic experiment expansion.
+      <!-- pair-block: P12-EXP-01 -->
+      <!-- contract-implementation: requirement=EXP-01 rule=experiment.expansion.canonical state=planned owner=src/viper/authoring.py:expand -->
+      <!-- contract-verification: requirement=EXP-01 rule=experiment.expansion.canonical state=planned test=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
 
 - [ ] Add `RunIdMap` and `expand()` to `src/viper/authoring.py`.
       <!-- phase-produces: viper.authoring.expand -->
