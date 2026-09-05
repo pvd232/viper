@@ -844,7 +844,6 @@ def accept(
     checked_targets = tuple(
         sorted(
             (
-                target.resolved.target.block_id,
                 target.resolved.target.target.path,
                 target.resolved.target.target.symbol,
             )
@@ -853,13 +852,12 @@ def accept(
     )
     expected_targets = tuple(
         sorted(
-            (target.block_id, target.target.path, target.target.symbol)
-            for target in committed_targets
+            {(target.target.path, target.target.symbol) for target in committed_targets}
         )
     )
     if checked_targets != expected_targets:
         raise SystemImpactCheckError(
-            "accepted PlanCheck does not cover every committed ContractTarget"
+            "accepted PlanCheck does not cover every committed target identity"
         )
 
     check_sha256 = _sha256(_canonical_json(check.model_dump(mode="json")))
