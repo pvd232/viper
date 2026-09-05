@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import sqlite3
 from argparse import ArgumentParser
 from base64 import b64encode
 from collections.abc import Callable, Mapping, Sequence
@@ -34,6 +35,19 @@ from .artifacts import (
 )
 from .authoring import freeze_run_plan, load_run_plan_draft
 from .benchmark import BenchmarkResult
+from .catalog import (
+    ArtifactPage,
+    ArtifactQuery,
+    BenchmarkPage,
+    BenchmarkQuery,
+    CatalogRefreshResult,
+    CatalogRunSource,
+    MeasurementPage,
+    MeasurementQuery,
+    RunPage,
+    RunQuery,
+    catalog,
+)
 from .execution._batch import run_many as execute_many
 from .execution._benchmark import benchmark as execute_benchmark_run
 from .execution._restore import restore as restore_run_artifacts
@@ -56,7 +70,7 @@ from .inspection import plan_diff as compare_frozen_plans
 from .journal import AttemptState
 from .preflight import PreflightCheck, preflight_plan
 from .project import InitError, RootError, init, resolve_root
-from .references import ResolvedRunRef
+from .references import LocalFileRef, ResolvedRunRef
 from .restoration import (
     ArtifactRestoreSelector,
     RestoreResult,
@@ -73,7 +87,7 @@ from .stages import (
     stage_definition,
     verify_stage_implementation_bytes,
 )
-from .storage import LocalArtifactStore
+from .storage import LocalArtifactStore, content_revision
 from .system_impact.explain import (
     DependencyEvidence,
     ImpactPathSearch,
@@ -90,26 +104,6 @@ from .verification.models import (
     VerificationError,
     VerificationPolicy,
 )
-import sqlite3
-
-from .catalog import (
-    ArtifactPage,
-    ArtifactQuery,
-    BenchmarkPage,
-    BenchmarkQuery,
-    CatalogRefreshResult,
-    CatalogRunSource,
-    MeasurementPage,
-    MeasurementQuery,
-    RunPage,
-    RunQuery,
-    catalog,
-)
-
-from .references import LocalFileRef
-
-from .storage import content_revision
-
 
 OperationName = Literal[
     "validate_stage",
@@ -704,11 +698,13 @@ class CatalogRefreshRequest(APIModel):
     run_paths: tuple[Path, ...]
     trusted_source_repositories: frozenset[str] = Field(min_length=1)
 
+
 class CatalogRefreshSuccess(SuccessModel):
     """Return the accepted and rejected source counts for one rebuild."""
 
     operation: Literal["catalog_refresh"] = "catalog_refresh"  # pyright: ignore[reportIncompatibleVariableOverride]
     result: CatalogRefreshResult
+
 
 class SearchRunsRequest(APIModel):
     """Select one project catalog and exact run query."""
@@ -716,11 +712,13 @@ class SearchRunsRequest(APIModel):
     root: Path
     query: RunQuery = RunQuery()
 
+
 class SearchRunsSuccess(SuccessModel):
     """Return one page of source-linked run results."""
 
     operation: Literal["search_runs"] = "search_runs"  # pyright: ignore[reportIncompatibleVariableOverride]
     page: RunPage
+
 
 class SearchArtifactsRequest(APIModel):
     """Select one project catalog and exact artifact query."""
@@ -728,11 +726,13 @@ class SearchArtifactsRequest(APIModel):
     root: Path
     query: ArtifactQuery = ArtifactQuery()
 
+
 class SearchArtifactsSuccess(SuccessModel):
     """Return one page of source-linked artifact results."""
 
     operation: Literal["search_artifacts"] = "search_artifacts"  # pyright: ignore[reportIncompatibleVariableOverride]
     page: ArtifactPage
+
 
 class SearchMeasurementsRequest(APIModel):
     """Select one project catalog and exact measurement query."""
@@ -740,11 +740,13 @@ class SearchMeasurementsRequest(APIModel):
     root: Path
     query: MeasurementQuery = MeasurementQuery()
 
+
 class SearchMeasurementsSuccess(SuccessModel):
     """Return one page of source-linked measurement results."""
 
     operation: Literal["search_measurements"] = "search_measurements"  # pyright: ignore[reportIncompatibleVariableOverride]
     page: MeasurementPage
+
 
 class SearchBenchmarksRequest(APIModel):
     """Select one project catalog and exact benchmark query."""
@@ -752,11 +754,13 @@ class SearchBenchmarksRequest(APIModel):
     root: Path
     query: BenchmarkQuery = BenchmarkQuery()
 
+
 class SearchBenchmarksSuccess(SuccessModel):
     """Return one page of source-linked benchmark results."""
 
     operation: Literal["search_benchmarks"] = "search_benchmarks"  # pyright: ignore[reportIncompatibleVariableOverride]
     page: BenchmarkPage
+
 
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
@@ -1626,6 +1630,7 @@ def _catalog_run_source(
     )
     return CatalogRunSource(reference=reference, verified=verified)
 
+
 def catalog_refresh(
     request: CatalogRefreshRequest,
     *,
@@ -1665,10 +1670,12 @@ def catalog_refresh(
         ) from error
     return CatalogRefreshSuccess(result=result)
 
+
 def search_runs(request: SearchRunsRequest) -> SearchRunsSuccess:
     """Return one exact page from the selected project's run catalog."""
     project_root = _root(request.root, "search_runs")
     return SearchRunsSuccess(page=catalog(root=project_root).runs(request.query))
+
 
 def search_artifacts(request: SearchArtifactsRequest) -> SearchArtifactsSuccess:
     """Return one exact page from the selected project's artifact catalog."""
@@ -1676,6 +1683,7 @@ def search_artifacts(request: SearchArtifactsRequest) -> SearchArtifactsSuccess:
     return SearchArtifactsSuccess(
         page=catalog(root=project_root).artifacts(request.query)
     )
+
 
 def search_measurements(
     request: SearchMeasurementsRequest,
@@ -1686,6 +1694,7 @@ def search_measurements(
         page=catalog(root=project_root).measurements(request.query)
     )
 
+
 def search_benchmarks(
     request: SearchBenchmarksRequest,
 ) -> SearchBenchmarksSuccess:
@@ -1694,6 +1703,7 @@ def search_benchmarks(
     return SearchBenchmarksSuccess(
         page=catalog(root=project_root).benchmarks(request.query)
     )
+
 
 REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "validate_stage": ValidateStageRequest,

@@ -1841,19 +1841,25 @@ The immutable evidence manifest is stored at Hugging Face commit
 **Outcome:** VIPER rebuilds one searchable local database from immutable run
 evidence and returns exact references with every result.
 
-- [ ] Build and expose the source-linked SQLite catalog.
+- [x] Build and expose the source-linked SQLite catalog.
       <!-- pair-block: P13-PCM-01 -->
       <!-- pair-block-contract: P13-PCM-01 contract=provenance-catalog-mcp.md -->
-      <!-- contract-implementation: requirement=PCM-01 rule=catalog.refresh.atomic state=planned owner=src/viper/catalog.py:Catalog -->
-      <!-- contract-verification: requirement=PCM-01 rule=catalog.refresh.atomic state=planned test=tests/test_inspection.py:test_catalog_refresh_is_atomic_and_rebuildable -->
-      <!-- contract-implementation: requirement=PCM-02 rule=catalog.search.evidenced state=planned owner=src/viper/catalog.py:Catalog -->
-      <!-- contract-verification: requirement=PCM-02 rule=catalog.search.evidenced state=planned test=tests/test_inspection.py:test_catalog_results_retain_immutable_sources -->
+      <!-- contract-implementation: requirement=PCM-01 rule=catalog.refresh.atomic state=implemented owner=src/viper/catalog.py:Catalog -->
+      <!-- contract-verification: requirement=PCM-01 rule=catalog.refresh.atomic state=implemented test=tests/test_inspection.py:test_catalog_refresh_is_atomic_and_rebuildable -->
+      <!-- contract-implementation: requirement=PCM-02 rule=catalog.search.evidenced state=implemented owner=src/viper/catalog.py:Catalog -->
+      <!-- contract-verification: requirement=PCM-02 rule=catalog.search.evidenced state=implemented test=tests/test_inspection.py:test_catalog_results_retain_immutable_sources -->
       <!-- implements: PCM-01, PCM-02 -->
 
-- [ ] Expose catalog refresh and exact search through the typed Python API and CLI.
+- [x] Expose catalog refresh and exact search through the typed Python API and CLI.
       <!-- pair-block: P13-PCM-02 -->
       <!-- pair-block-contract: P13-PCM-02 contract=provenance-catalog-mcp.md -->
       <!-- implements: PCM-02 -->
+
+**Evidence:** PlanCheck `6ec4a517868481de3c622123f3115354bfddaccfad4544324d618631e14a4b67`
+accepted implementation commit `468a7b6e62dd00f4e2fcc7d1ad520682ece5304d`.
+The immutable evidence manifest is stored at Hugging Face commit
+`309188e66893d4f8d5945130e1e44f7aeff3489d` under
+`checks/6ec4a517868481de3c622123f3115354bfddaccfad4544324d618631e14a4b67/manifest.json`.
 
 **Commit boundary:** `Index and search verified provenance`
 

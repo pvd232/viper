@@ -8,22 +8,27 @@ import pytest
 
 from viper.api import (
     CapabilitiesRequest,
+    CatalogRefreshRequest,
     LocalRunPath,
     RestoreRequest,
     RunManyRequest,
     SchemaRequest,
+    SearchRunsRequest,
     StatusRequest,
     ValidateStageRequest,
     ViperFailure,
+    catalog_refresh,
     dispatch,
     get_capabilities,
     get_schema,
     restore_artifacts,
     result_json_bytes,
     run_many,
+    search_runs,
     status,
     validate_stage,
 )
+from viper.catalog import Catalog, CatalogRefreshResult
 from viper.cli import main
 from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
 from viper.journal import DurableJournal
@@ -34,15 +39,6 @@ from viper.restoration import (
     RestoredFile,
     RestoreResult,
 )
-from viper.api import (
-    CatalogRefreshRequest,
-    SearchRunsRequest,
-    catalog_refresh,
-    search_runs,
-)
-
-from viper.catalog import Catalog, CatalogRefreshResult
-
 
 
 def test_api_schema_and_capability_discovery() -> None:
@@ -341,6 +337,8 @@ def test_run_many_result_matches_python_api_and_cli(
         (tmp_path, (run_spec,), 2, 5.0, True),
         (tmp_path, (run_spec,), 2, 5.0, True),
     ]
+
+
 def test_catalog_result_matches_python_api_and_cli(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

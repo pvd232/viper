@@ -1,21 +1,15 @@
+"""Build and query the local provenance catalog."""
+
 from __future__ import annotations
 
 import base64
-
 import hashlib
-
 import json
-
 import os
-
 import sqlite3
-
 import tempfile
-
 from dataclasses import dataclass
-
 from pathlib import Path
-
 from typing import Generic, Literal, TypeVar
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -27,13 +21,9 @@ from ._schema import (
     DataRole,
     GitCommit,
 )
-
 from .benchmark import BenchmarkMetricResult
-
 from .ids import ExperimentId, MetricId, ReplicateId, RunId, StageId, VariantId
-
 from .inspection import RunLineage, lineage
-
 from .references import (
     ResolvedBenchmarkResultRef,
     ResolvedFileRef,
@@ -41,13 +31,9 @@ from .references import (
     SnapshotFileRef,
     StageResultSnapshot,
 )
-
 from .runs import RunAttempt
-
 from .serialization import document_digest, serialize_document
-
 from .stages import DownloadSpec, InternalSpec
-
 from .verification.models import VerifiedBenchmarkResult, VerifiedRunResult
 
 CatalogRunStatus = Literal["succeeded", "failed", "cancelled"]
@@ -55,6 +41,7 @@ CatalogRunStatus = Literal["succeeded", "failed", "cancelled"]
 CatalogBenchmarkStatus = Literal["verified", "passed", "failed"]
 
 MeasurementOrigin = Literal["executed", "reused"]
+
 
 class CatalogRun(BaseModel):
     """Return one verified run with its immutable terminal reference."""
@@ -74,6 +61,7 @@ class CatalogRun(BaseModel):
     verification: Literal["verified"] = "verified"
     completed_at: AwareDatetime
 
+
 class CatalogFile(BaseModel):
     """Identify one file inside a verified stage snapshot."""
 
@@ -81,6 +69,7 @@ class CatalogFile(BaseModel):
 
     snapshot: StageResultSnapshot
     file: SnapshotFileRef
+
 
 class CatalogArtifact(BaseModel):
     """Return one verified artifact and all of its file identities."""
@@ -94,6 +83,7 @@ class CatalogArtifact(BaseModel):
     kind: Literal["file", "bundle"]
     data_role: DataRole
     files: tuple[CatalogFile, ...] = Field(min_length=1)
+
 
 class CatalogMeasurement(BaseModel):
     """Return one verified metric value and its immutable file reference."""
@@ -111,6 +101,7 @@ class CatalogMeasurement(BaseModel):
     origin: MeasurementOrigin
     measured_at: AwareDatetime
 
+
 class CatalogBenchmark(BaseModel):
     """Return one independently verified benchmark result."""
 
@@ -122,6 +113,7 @@ class CatalogBenchmark(BaseModel):
     status: CatalogBenchmarkStatus
     metrics: tuple[BenchmarkMetricResult, ...] = Field(min_length=1)
 
+
 class CatalogEdge(BaseModel):
     """Retain one lineage relationship from a verified run."""
 
@@ -131,6 +123,7 @@ class CatalogEdge(BaseModel):
     source: str
     target: str
     relation: Literal["produces", "selects", "consumes", "reuses"]
+
 
 class RunQuery(BaseModel):
     """Filter verified runs by exact recorded identities."""
@@ -150,6 +143,7 @@ class RunQuery(BaseModel):
     limit: int = Field(default=50, ge=1, le=500)
     cursor: str | None = None
 
+
 class ArtifactQuery(BaseModel):
     """Filter verified artifacts by run, stage, role, or file identity."""
 
@@ -164,6 +158,7 @@ class ArtifactQuery(BaseModel):
     source_commit: GitCommit | None = None
     limit: int = Field(default=50, ge=1, le=500)
     cursor: str | None = None
+
 
 class MeasurementQuery(BaseModel):
     """Filter verified measurements by run context and scalar value."""
@@ -182,6 +177,7 @@ class MeasurementQuery(BaseModel):
     limit: int = Field(default=50, ge=1, le=500)
     cursor: str | None = None
 
+
 class BenchmarkQuery(BaseModel):
     """Filter verified benchmark results by run and evaluated evidence."""
 
@@ -199,7 +195,9 @@ class BenchmarkQuery(BaseModel):
     limit: int = Field(default=50, ge=1, le=500)
     cursor: str | None = None
 
+
 ItemT = TypeVar("ItemT", bound=BaseModel)
+
 
 class CatalogPage(BaseModel, Generic[ItemT]):
     """Return one deterministic page from an exact catalog query."""
@@ -209,17 +207,22 @@ class CatalogPage(BaseModel, Generic[ItemT]):
     items: tuple[ItemT, ...]
     next_cursor: str | None = None
 
+
 class RunPage(CatalogPage[CatalogRun]):
     """Return one page of verified runs."""
+
 
 class ArtifactPage(CatalogPage[CatalogArtifact]):
     """Return one page of verified artifacts."""
 
+
 class MeasurementPage(CatalogPage[CatalogMeasurement]):
     """Return one page of verified measurements."""
 
+
 class BenchmarkPage(CatalogPage[CatalogBenchmark]):
     """Return one page of verified benchmark results."""
+
 
 class CatalogRefreshResult(BaseModel):
     """Describe one complete atomic catalog replacement."""
@@ -231,6 +234,7 @@ class CatalogRefreshResult(BaseModel):
     accepted: int = Field(ge=0)
     rejected: int = Field(ge=0)
 
+
 @dataclass(frozen=True)
 class CatalogRunSource:
     """Pair one immutable terminal reference with its verified contents."""
@@ -238,12 +242,14 @@ class CatalogRunSource:
     reference: ResolvedRunRef
     verified: VerifiedRunResult
 
+
 @dataclass(frozen=True)
 class CatalogBenchmarkSource:
     """Pair one immutable benchmark reference with its verified contents."""
 
     reference: ResolvedBenchmarkResultRef
     verified: VerifiedBenchmarkResult
+
 
 _SCHEMA = """
 PRAGMA user_version = 1;
@@ -283,6 +289,7 @@ CREATE TABLE edges (
 );
 """
 
+
 def _json(value: BaseModel) -> str:
     """Serialize one model for deterministic SQLite storage."""
     return json.dumps(
@@ -292,9 +299,11 @@ def _json(value: BaseModel) -> str:
         sort_keys=True,
     )
 
+
 def _reference_key(reference: BaseModel) -> str:
     """Return one stable key for an immutable reference."""
     return hashlib.sha256(_json(reference).encode()).hexdigest()
+
 
 def _source_error(source: CatalogRunSource) -> str | None:
     """Return why a verified result does not match its terminal reference."""
@@ -304,6 +313,7 @@ def _source_error(source: CatalogRunSource) -> str | None:
     if hashlib.sha256(raw).hexdigest() != source.reference.sha256:
         return "terminal run digest differs from its immutable reference"
     return None
+
 
 def _benchmark_error(
     source: CatalogBenchmarkSource,
@@ -318,6 +328,7 @@ def _benchmark_error(
     if _reference_key(source.verified.result.run) not in accepted_runs:
         return "benchmark run is absent from the accepted catalog sources"
     return None
+
 
 def _digests(value: object) -> tuple[str, ...]:
     """Collect SHA-256 fields from one resolved input tree."""
@@ -336,6 +347,7 @@ def _digests(value: object) -> tuple[str, ...]:
         return tuple(digest for item in value for digest in _digests(item))
     return ()
 
+
 def _successful_attempt(verified: VerifiedRunResult) -> RunAttempt | None:
     """Return the attempt selected by the terminal run."""
     selected = verified.result.successful_attempt_id
@@ -343,6 +355,7 @@ def _successful_attempt(verified: VerifiedRunResult) -> RunAttempt | None:
         (attempt for attempt in verified.attempts if attempt.attempt_id == selected),
         None,
     )
+
 
 def _run_row(source: CatalogRunSource) -> CatalogRun:
     """Build one searchable run row from verified evidence."""
@@ -360,6 +373,7 @@ def _run_row(source: CatalogRunSource) -> CatalogRun:
         benchmark_id=run.benchmark_id,
         completed_at=source.verified.result.completed_at,
     )
+
 
 def _artifact_rows(source: CatalogRunSource) -> tuple[CatalogArtifact, ...]:
     """Build artifact rows from the successful verified stage snapshots."""
@@ -391,6 +405,7 @@ def _artifact_rows(source: CatalogRunSource) -> tuple[CatalogArtifact, ...]:
                 )
             )
     return tuple(rows)
+
 
 def _measurement_rows(source: CatalogRunSource) -> tuple[CatalogMeasurement, ...]:
     """Pair each verified measurement with its immutable measurement file."""
@@ -428,11 +443,13 @@ def _measurement_rows(source: CatalogRunSource) -> tuple[CatalogMeasurement, ...
         raise ValueError("measurement file has no verified measurement")
     return tuple(rows)
 
+
 def _query_digest(query: BaseModel) -> str:
     """Bind one cursor to every filter except its current cursor value."""
     payload = query.model_dump(mode="json", exclude={"cursor"})
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest()
+
 
 def _cursor_offset(query: BaseModel) -> int:
     """Decode a cursor and reject one issued for another query."""
@@ -452,6 +469,7 @@ def _cursor_offset(query: BaseModel) -> int:
         raise ValueError("catalog cursor offset is invalid")
     return offset
 
+
 def _next_cursor(query: BaseModel, offset: int) -> str:
     """Encode the next offset with the exact query identity."""
     raw = json.dumps(
@@ -460,6 +478,7 @@ def _next_cursor(query: BaseModel, offset: int) -> str:
         separators=(",", ":"),
     ).encode()
     return base64.urlsafe_b64encode(raw).decode()
+
 
 class Catalog:
     """Refresh and query one derived SQLite catalog."""
@@ -881,9 +900,11 @@ class Catalog:
             raise KeyError("run is absent from the catalog")
         return RunLineage.model_validate_json(row[0])
 
+
 def catalog(*, root: Path | None = None) -> Catalog:
     """Open the derived catalog beneath one project root."""
     return Catalog(Path.cwd() if root is None else root)
+
 
 __all__ = [
     "ArtifactPage",

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, datetime
+import sqlite3
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from tests.fixtures import python_environment
+from viper.catalog import Catalog, CatalogRunSource, RunQuery
 from viper.experiments import (
     ExperimentSpec,
     VariantSpec,
@@ -21,6 +24,7 @@ from viper.inspection import (
 from viper.journal import DurableJournal
 from viper.references import (
     GitFileRef,
+    ResolvedRunRef,
     ResolvedRunSpecRef,
 )
 from viper.runs import (
@@ -28,19 +32,8 @@ from viper.runs import (
     RunSpec,
 )
 from viper.serialization import load_stage_spec, parse_yaml_bytes, serialize_document
-from viper.verification.models import VerifiedRunPlan, VerifiedRunResult
-import sqlite3
-
-from dataclasses import replace
-
-from datetime import timedelta
-
-from viper.catalog import Catalog, CatalogRunSource, RunQuery
-
-from viper.references import ResolvedRunRef
-
 from viper.stages import DownloadSpec
-
+from viper.verification.models import VerifiedRunPlan, VerifiedRunResult
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"
@@ -263,6 +256,8 @@ def test_compare_runs_reports_verified_evidence_changes(tmp_path: Path) -> None:
     assert tuple(change.path for change in result.changes) == ("run_spec.seed",)
     assert result.changes[0].left == 42
     assert result.changes[0].right == 43
+
+
 def _catalog_source(verified: VerifiedRunResult) -> CatalogRunSource:
     """Bind the verified terminal document to its exact immutable reference."""
     raw = serialize_document(verified.result)
@@ -278,6 +273,7 @@ def _catalog_source(verified: VerifiedRunResult) -> CatalogRunSource:
         ),
     )
     return CatalogRunSource(reference=reference, verified=verified)
+
 
 def test_catalog_refresh_is_atomic_and_rebuildable(
     tmp_path: Path,
@@ -317,6 +313,7 @@ def test_catalog_refresh_is_atomic_and_rebuildable(
     assert rejected.accepted == 0
     assert rejected.rejected == 1
     assert index.runs().items == ()
+
 
 def test_catalog_results_retain_immutable_sources(tmp_path: Path) -> None:
     """Page stable rows and reject a cursor reused with different filters."""

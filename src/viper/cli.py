@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
@@ -16,8 +17,6 @@ from .api import (
     dispatch,
     result_json_bytes,
 )
-import json
-
 
 RootArg = Literal["root", "left_root", "right_root"]
 
@@ -65,6 +64,7 @@ def parse_query(value: str) -> dict[str, Any]:
     if not isinstance(query, dict):
         raise argparse.ArgumentTypeError("query must be a JSON object")
     return query
+
 
 def build_parser() -> ArgumentParser:
     """Build the VIPER command parser and its API subcommands."""
