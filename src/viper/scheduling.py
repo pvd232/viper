@@ -19,7 +19,7 @@ from ._contract_traceability import (
     TargetAction,
 )
 from ._schema import SHA256, NonEmptyStr, ProtocolModel
-from ._system_impact.source import declaration_payload as _declaration_payload
+from ._system_impact.source import materialization_payload as _declaration_payload
 from .system_impact.models import SourceGraph
 
 ScheduleEdgeKind = Literal["declared", "source", "write_conflict"]
@@ -42,6 +42,12 @@ def _bound_names(statement: ast.stmt) -> frozenset[str]:
         return frozenset((statement.name,))
     if isinstance(statement, (ast.Import, ast.ImportFrom)):
         return frozenset(alias.asname or alias.name for alias in statement.names)
+    if isinstance(statement, ast.If):
+        return frozenset(
+            name
+            for child in (*statement.body, *statement.orelse)
+            for name in _bound_names(child)
+        )
     if isinstance(statement, ast.Assign):
         targets = statement.targets
     elif isinstance(statement, ast.AnnAssign):
@@ -57,8 +63,15 @@ def _bound_names(statement: ast.stmt) -> frozenset[str]:
 
 
 def _addition_rank(payload: bytes) -> int:
-    """Place imports before declarations added at the same position."""
-    return 0 if isinstance(_statement(payload), (ast.Import, ast.ImportFrom)) else 1
+    """Place future, direct, and conditional imports before declarations."""
+    statement = _statement(payload)
+    if isinstance(statement, ast.ImportFrom) and statement.module == "__future__":
+        return 0
+    if isinstance(statement, (ast.Import, ast.ImportFrom)):
+        return 1
+    if isinstance(statement, ast.If):
+        return 2
+    return 3
 
 
 def _import_parts(
@@ -399,6 +412,33 @@ def apply_plan(
             starts.append(starts[-1] + len(line))
         replacements: dict[tuple[int, int], bytes] = {}
         additions: list[tuple[int, bytes]] = []
+        targets_by_span: dict[tuple[int, int], list[ContractTarget]] = defaultdict(
+            list
+        )
+        for target in file_targets:
+            node = nodes.get((target.target.path, target.target.symbol))
+            if node is None or node.kind != "import":
+                continue
+            span = (
+                starts[node.start_line - 1] + node.start_col,
+                starts[node.end_line - 1] + node.end_col,
+            )
+            targets_by_span[span].append(target)
+        complete_import_replacements: dict[tuple[int, int], bytes] = {}
+        for span, span_targets in targets_by_span.items():
+            statement = _statement(source[span[0] : span[1]])
+            if statement is None or not _bound_names(statement) <= {
+                target.target.symbol for target in span_targets
+            }:
+                continue
+            payloads = {
+                payload
+                for target in span_targets
+                if target.action != "remove"
+                and (payload := _declaration_payload(plan_root, target)) is not None
+            }
+            if len(payloads) <= 1:
+                complete_import_replacements[span] = next(iter(payloads), b"")
         for index, target in enumerate(file_targets):
             node = nodes.get((target.target.path, target.target.symbol))
             if target.action == "add":
@@ -425,6 +465,9 @@ def apply_plan(
             )
             assert payload is not None or target.action == "remove"
             span = (start, end)
+            if span in complete_import_replacements:
+                replacements[span] = complete_import_replacements[span]
+                continue
             payload_statement = None if payload is None else _statement(payload)
             if node.kind == "import":
                 existing = replacements.get(span, source[start:end])

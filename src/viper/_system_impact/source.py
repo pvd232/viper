@@ -114,8 +114,8 @@ def _contract_target_payloads(source: bytes) -> dict[tuple[int, int, str], bytes
     return payloads
 
 
-def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
-    """Read the exact declaration owned by one ContractTarget."""
+def _authored_payload(root: Path, target: ContractTarget) -> bytes | None:
+    """Read the Python payload attached to one ContractTarget."""
     if target.action == "remove":
         return None
 
@@ -138,6 +138,14 @@ def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
             "ContractTarget declaration cannot be reconstructed exactly: "
             f"{target.block_id} {target.target.path}:{target.target.symbol}"
         )
+    return payload
+
+
+def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
+    """Read the exact declaration owned by one ContractTarget."""
+    payload = _authored_payload(root, target)
+    if payload is None:
+        return None
     try:
         return extract_declaration_bytes(payload, target.target.symbol)
     except SourceDeclarationError as error:
@@ -145,6 +153,38 @@ def declaration_payload(root: Path, target: ContractTarget) -> bytes | None:
             "ContractTarget payload does not resolve its declared symbol: "
             f"{target.target.path}:{target.target.symbol}"
         ) from error
+
+
+def materialization_payload(root: Path, target: ContractTarget) -> bytes | None:
+    """Keep a declaration's top-level condition when applying its target."""
+    payload = _authored_payload(root, target)
+    if payload is None:
+        return None
+    tree = _parse_python(payload)
+    node = _resolve_declaration(tree, target.target.symbol)
+    wrapper = next(
+        (
+            statement
+            for statement in tree.body
+            if isinstance(
+                statement,
+                (
+                    ast.If,
+                    ast.For,
+                    ast.AsyncFor,
+                    ast.While,
+                    ast.With,
+                    ast.AsyncWith,
+                    ast.Try,
+                    ast.TryStar,
+                    ast.Match,
+                ),
+            )
+            and any(child is node for child in ast.walk(statement))
+        ),
+        node,
+    )
+    return _node_bytes(payload, wrapper, target.target.symbol)
 
 
 def _assignment_names(node: ast.Assign | ast.AnnAssign) -> tuple[str, ...]:
@@ -280,6 +320,11 @@ def extract_declaration_bytes(
     """
     tree = _parse_python(source)
     node = _resolve_declaration(tree, qualified_symbol)
+    return _node_bytes(source, node, qualified_symbol)
+
+
+def _node_bytes(source: bytes, node: ast.stmt, label: str) -> bytes:
+    """Slice one AST statement from its original UTF-8 bytes."""
     if (
         getattr(node, "lineno", None) is None
         or getattr(node, "col_offset", None) is None
@@ -287,7 +332,7 @@ def extract_declaration_bytes(
         or node.end_col_offset is None
     ):
         raise SourceDeclarationError(
-            f"Python declaration lacks a complete source span: {qualified_symbol}"
+            f"Python declaration lacks a complete source span: {label}"
         )
 
     lines, offsets = _line_offsets(source)
@@ -302,12 +347,12 @@ def extract_declaration_bytes(
             end = offsets[node.end_lineno - 1] + len(end_line.rstrip(b"\r\n"))
     except (IndexError, ValueError) as error:
         raise SourceDeclarationError(
-            f"Python declaration has an invalid source span: {qualified_symbol}"
+            f"Python declaration has an invalid source span: {label}"
         ) from error
 
     if start < 0 or end < start or end > len(source):
         raise SourceDeclarationError(
-            f"Python declaration has an invalid source span: {qualified_symbol}"
+            f"Python declaration has an invalid source span: {label}"
         )
     return source[start:end]
 

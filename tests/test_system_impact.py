@@ -651,6 +651,115 @@ def test_materialize_plan_composes_one_import_across_targets(tmp_path: Path) -> 
     )
 
 
+def test_materialize_plan_replaces_one_shared_import_once(tmp_path: Path) -> None:
+    """Replace a fully targeted import without duplicating its final payload."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    source = b"from package import First, Second\n"
+    (baseline_root / "module.py").write_bytes(source)
+    plan_root = tmp_path / "plan"
+    declaration = _write_target_fence(
+        plan_root,
+        b"from package import First, Second, Third",
+    )
+    declaration_end = len(source.rstrip(b"\n"))
+    graph = _source_graph(
+        nodes=tuple(
+            SourceNode(
+                node_id=f"module.py:{symbol}",
+                path="module.py",
+                symbol=symbol,
+                kind="import",
+                binding_start_line=1,
+                binding_start_col=20 if symbol == "First" else 27,
+                binding_end_line=1,
+                binding_end_col=25 if symbol == "First" else 33,
+                start_line=1,
+                start_col=0,
+                end_line=1,
+                end_col=declaration_end,
+                sha256=_sha256(source.rstrip(b"\n")),
+            )
+            for symbol in ("First", "Second")
+        ),
+    )
+    traceability = _traceability(
+        targets=(
+            *(
+                _target(
+                    action="update",
+                    path="module.py",
+                    symbol=symbol,
+                    declaration=declaration,
+                )
+                for symbol in ("First", "Second")
+            ),
+            _target(
+                action="add",
+                path="module.py",
+                symbol="Third",
+                declaration=declaration,
+            ),
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        graph,
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from package import First, Second, Third\n"
+    )
+
+
+def test_materialize_plan_keeps_conditional_type_imports(tmp_path: Path) -> None:
+    """Materialize type-only imports after ordinary imports in a new module."""
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    plan_root = tmp_path / "plan"
+    declaration = _write_target_fence(
+        plan_root,
+        b"from __future__ import annotations\n\n"
+        b"from typing import TYPE_CHECKING\n\n"
+        b"if TYPE_CHECKING:\n    from package import Model\n\n"
+        b"def load(value: Model) -> Model:\n    return value",
+    )
+    traceability = _traceability(
+        targets=tuple(
+            _target(
+                action="add",
+                path="module.py",
+                symbol=symbol,
+                declaration=declaration,
+            )
+            for symbol in ("load", "Model", "TYPE_CHECKING", "annotations")
+        )
+    )
+
+    destination = tmp_path / "planned"
+    scheduling.materialize_plan(
+        baseline_root,
+        plan_root,
+        traceability,
+        (_BLOCK_ID,),
+        _source_graph(nodes=()),
+        destination,
+    )
+
+    assert (destination / "module.py").read_bytes() == (
+        b"from __future__ import annotations\n\n"
+        b"from typing import TYPE_CHECKING\n\n"
+        b"if TYPE_CHECKING:\n    from package import Model\n\n"
+        b"def load(value: Model) -> Model:\n    return value\n"
+    )
+
+
 def test_materialize_plan_adds_a_dotted_import(tmp_path: Path) -> None:
     """Treat an imported module path as an import, not a nested declaration."""
     baseline_root = tmp_path / "baseline"
