@@ -5388,7 +5388,7 @@ def publish_metric_verification(
         stored_at=location,
     )
 ```
-+
+
 <!-- pair-block-definition: P6-UMD-01 -->
 ```toml pair-block
 id = "P6-UMD-01"
@@ -8265,11 +8265,11 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
     with pytest.raises(TypeError, match="frozen plan"):
         selected.benchmark.splits["new"] = prior
 ```
-+
+
 ### Phase 8 propagation
-+
+
 **File: tests/test_generated_project_acceptance.py**
-+
+
 <!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_generated_project_acceptance.py:ResolvedArtifactPointerRef -->
 ```python contract-target
 from viper.references import (
@@ -8706,12 +8706,13 @@ def test_generated_project_uses_runner_owned_downloads(
     assert len(benchmark_result.artifacts) == 2
     assert len(benchmark_result.metrics) == 1
 ```
-+
+
 **File: tests/test_verification.py**
-+
+
 <!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_verification.py:RunPlanRelationshipTests.test_benchmark_matches_evaluation_inputs_splits_and_metrics -->
 ```python contract-target
-def test_benchmark_matches_evaluation_inputs_splits_and_metrics(self) -> None:
+class RunPlanRelationshipTests:
+    def test_benchmark_matches_evaluation_inputs_splits_and_metrics(self) -> None:
         """Verify that benchmark matches evaluation inputs splits and metrics."""
         train = train_spec()
         evaluation = EvaluateSpec(
@@ -8901,9 +8902,9 @@ def test_benchmark_matches_evaluation_inputs_splits_and_metrics(self) -> None:
                 },
             )
 ```
-+
+
 **File: tests/test_verification_acceptance.py**
-+
+
 <!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=remove target=tests/test_verification_acceptance.py:MetricCriterionReceipt -->
 <!-- contract-remove -->
 <!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_verification_acceptance.py:BenchmarkMetricResult -->
@@ -9679,7 +9680,8 @@ def build_benchmark_fixture(
 ```
 <!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_verification_acceptance.py:CompleteProvenanceAcceptanceTests.test_strict_benchmark_records_a_threshold_failure -->
 ```python contract-target
-def test_strict_benchmark_records_a_threshold_failure(self) -> None:
+class CompleteProvenanceAcceptanceTests:
+    def test_strict_benchmark_records_a_threshold_failure(self) -> None:
         """Accept a failed result when both recomputed values miss the threshold."""
         result, _, store = build_benchmark_fixture(threshold=0.95)
 

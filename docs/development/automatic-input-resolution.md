@@ -11470,9 +11470,9 @@ def test_prior_run_input_publishes_verified_pointer(tmp_path) -> None:
         f"inputs/datasets/toy/dataset_{run.sha256}.pointer.yaml"
     )
 ```
-+
+
 **File: tests/test_verification_acceptance.py**
-+
+
 <!-- contract-target: requirements=EIR-04,AIR-05 block=P7-AIR-01 action=update target=tests/test_verification_acceptance.py:build_complete_fixture -->
 ```python contract-target
 def build_complete_fixture(

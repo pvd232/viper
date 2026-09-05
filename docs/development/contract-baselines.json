@@ -100,7 +100,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "f5a1e3295579fd7fece1e11e7506cb32603a2c656cedd6d7fc4847d8c9f660cc"
+      "sha256": "f0fde6c21417a50b62128640ef569d032a76e795be46645be1d78e59a6c056bf"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -112,7 +112,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "fb45471b8b41a172aca5853744732d2b6f0a15479962bd59b0e49b14d774cb24"
+      "sha256": "f36ee3a4bfc369ee0103c01f8d0f4be28d318b3e6daca421ce3306882fb650a6"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
