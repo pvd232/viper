@@ -6556,6 +6556,16 @@ targets = [
     "tests/test_authoring.py:LocalFileRef",
     "tests/test_authoring.py:ResolvedRunRef",
     "tests/test_authoring.py:test_benchmark_draft_is_frozen_with_the_run_plan",
+    "tests/test_generated_project_acceptance.py:ResolvedArtifactPointerRef",
+    "tests/test_generated_project_acceptance.py:_resolved_pointer_ref",
+    "tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads",
+    "tests/test_verification.py:RunPlanRelationshipTests.test_benchmark_matches_evaluation_inputs_splits_and_metrics",
+    "tests/test_verification_acceptance.py:BenchmarkMetricResult",
+    "tests/test_verification_acceptance.py:MetricCriterionReceipt",
+    "tests/test_verification_acceptance.py:MetricCriterionResult",
+    "tests/test_verification_acceptance.py:build_complete_fixture",
+    "tests/test_verification_acceptance.py:build_benchmark_fixture",
+    "tests/test_verification_acceptance.py:CompleteProvenanceAcceptanceTests.test_strict_benchmark_records_a_threshold_failure",
 ]
 tests = [
     "tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria",
@@ -8254,4 +8264,1434 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
     assert selected.benchmark.criteria[0].threshold == 0.9
     with pytest.raises(TypeError, match="frozen plan"):
         selected.benchmark.splits["new"] = prior
+```
++
+### Phase 8 propagation
++
+**File: tests/test_generated_project_acceptance.py**
++
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_generated_project_acceptance.py:ResolvedArtifactPointerRef -->
+```python contract-target
+from viper.references import (
+    ArtifactPointerRef,
+    GitFileRef,
+    GitSource,
+    ResolvedArtifactPointerRef,
+    ResolvedRunRef,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_generated_project_acceptance.py:_resolved_pointer_ref -->
+```python contract-target
+def _resolved_pointer_ref(
+    root: Path,
+    pointer: ArtifactPointerRef,
+) -> ResolvedArtifactPointerRef:
+    """Bind a promoted pointer to the exact file bytes used by a benchmark."""
+    raw = (root / pointer.path).read_bytes()
+    return ResolvedArtifactPointerRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=pointer,
+    )
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_generated_project_acceptance.py:test_generated_project_uses_runner_owned_downloads -->
+```python contract-target
+def test_generated_project_uses_runner_owned_downloads(
+    tmp_path: Path,
+    http_source: tuple[str, int],
+) -> None:
+    """Run generated code through acquisition, training, and confirmation."""
+    root = tmp_path / "generated"
+    init(root, "sample_project")
+    assert not (root / "src/sample_project/stages/download.py").exists()
+    assert "DownloadParameters" not in (
+        root / "src/sample_project/parameters.py"
+    ).read_text(encoding="utf-8")
+    run_git(root, "init", "--quiet")
+    run_git(root, "config", "user.email", "viper@example.com")
+    run_git(root, "config", "user.name", "VIPER Test")
+    run_git(root, "remote", "add", "origin", REPOSITORY)
+    host, port = http_source
+
+    train_params = parameters.Train.model_validate({"epochs": 1})
+    write_experiment_spec(
+        root,
+        ExperimentSpec(
+            experiment_id="acquisition",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="r1", seed=11),),
+            metrics=(),
+        ),
+    )
+    write_variant_spec(
+        root,
+        VariantSpec(
+            experiment_id="acquisition",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(stage_id="train", params=train_params),
+            ),
+        ),
+    )
+    run_git(root, "add", ".")
+    run_git(root, "commit", "--quiet", "-m", "generated acquisition source")
+    acquisition_source_commit = run_git(root, "rev-parse", "HEAD")
+    acquisition_root = f"experiments/acquisition/runs/baseline/{ACQUISITION_RUN_ID}"
+    acquisition_download = DownloadSpec(
+        inputs={
+            name: http_request(
+                url=f"http://{host}:{port}/prior",
+                body=b"prior",
+                version=f"{name}-v1",
+            )
+            for name in ("seed_training", "evaluation_dataset", "test_split")
+        },
+        http=builtin_http(),
+        policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
+        artifacts={
+            "seed_training": _artifact(
+                root,
+                f"{acquisition_root}/artifacts/datasets/starter/seed.bin",
+                "training",
+            ),
+            "evaluation_dataset": _artifact(
+                root,
+                f"{acquisition_root}/artifacts/datasets/starter/evaluation.bin",
+                "benchmark",
+            ),
+            "test_split": _artifact(
+                root,
+                f"{acquisition_root}/artifacts/datasets/starter/test_split.bin",
+                "benchmark",
+            ),
+        },
+    )
+    acquisition_train = TrainSpec(
+        implementation=_stage_implementation(root, "train"),
+        parameter_model=_parameter_model(root, "TrainParameters"),
+        inputs={
+            "dataset": FutureInputRef(
+                producer_stage_id="download",
+                name="seed_training",
+            )
+        },
+        params=train_params,
+        artifacts={
+            PARAMETERS: _artifact(
+                root,
+                f"{acquisition_root}/artifacts/models/starter/parameters.bin",
+                "training",
+            ),
+            RESUME_STATE: _artifact(
+                root,
+                f"{acquisition_root}/artifacts/models/starter/resume_state.bin",
+                "training",
+                loader_name="resume_state",
+            ),
+        },
+    )
+    acquisition_plan = _freeze(
+        root,
+        run_id=ACQUISITION_RUN_ID,
+        experiment_id="acquisition",
+        seed=11,
+        source_commit=acquisition_source_commit,
+        stages={"download": acquisition_download, "train": acquisition_train},
+    )
+    child_environment = _child_environment(root)
+    acquisition_process = subprocess.run(
+        (
+            sys.executable,
+            "-m",
+            "viper.cli",
+            "--json",
+            "run",
+            str(acquisition_plan),
+            "--root",
+            str(root),
+        ),
+        cwd=root,
+        env=child_environment,
+        check=False,
+        capture_output=True,
+    )
+    assert acquisition_process.returncode == 0, acquisition_process.stderr.decode()
+    acquisition_result_path = root / acquisition_root / "resolved.yaml"
+    acquisition_result = ResolvedRun.model_validate(
+        parse_yaml_bytes(acquisition_result_path.read_bytes())
+    )
+    assert acquisition_result.status == "succeeded"
+
+    store = LocalArtifactStore(root)
+    resolved_run_raw = acquisition_result_path.read_bytes()
+    resolved_run_file = store.resolved_files(
+        {acquisition_result_path.relative_to(root).as_posix(): resolved_run_raw}
+    )[0]
+    producer = ResolvedRunRef.model_validate(resolved_run_file.model_dump())
+    evaluation_pointer_path = "inputs/datasets/starter/evaluation.pointer.yaml"
+    split_pointer_path = "inputs/benchmarks/starter/test_split.pointer.yaml"
+    pointer_documents = {
+        evaluation_pointer_path: ArtifactPointer(
+            run=producer,
+            artifact=StageArtifactRef(
+                stage_id="download",
+                artifact_name="evaluation_dataset",
+            ),
+        ),
+        split_pointer_path: ArtifactPointer(
+            run=producer,
+            artifact=StageArtifactRef(
+                stage_id="download",
+                artifact_name="test_split",
+            ),
+        ),
+    }
+    for path, pointer in pointer_documents.items():
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(serialize_document(pointer))
+    run_git(root, "add", *pointer_documents)
+    run_git(root, "commit", "--quiet", "-m", "promote benchmark inputs")
+    pointer_commit = run_git(root, "rev-parse", "HEAD")
+    evaluation_pointer = _pointer_ref(pointer_commit, evaluation_pointer_path)
+    split_pointer = _pointer_ref(pointer_commit, split_pointer_path)
+
+    metric_path = "src/sample_project/metrics/evaluation.py"
+    metric_raw = (root / metric_path).read_bytes()
+    metric = MetricSpec(
+        parameter_model=parameters.model_ref(parameters.Metric),
+        metric_id="prediction_bytes",
+        implementation=MetricImplementationRef(
+            path=metric_path,
+            symbol="prediction_bytes",
+            sha256=hashlib.sha256(metric_raw).hexdigest(),
+            bytes=len(metric_raw),
+        ),
+        params=parameters.Metric(),
+        mode="recompute",
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name=PREDICTIONS,
+                required_data_role="benchmark",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+    build_params = parameters.Build.model_validate({"delimiter": ","})
+    embed_params = parameters.Embed.model_validate({"dimensions": 2})
+    evaluate_params = parameters.Evaluate.model_validate({"label": "baseline"})
+    write_experiment_spec(
+        root,
+        ExperimentSpec(
+            experiment_id="starter",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="r1", seed=17),),
+            metrics=(metric,),
+        ),
+    )
+    write_variant_spec(
+        root,
+        VariantSpec(
+            experiment_id="starter",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                BuildVariantStageParams(stage_id="build", params=build_params),
+                EmbedVariantStageParams(stage_id="embed", params=embed_params),
+                TrainVariantStageParams(stage_id="train", params=train_params),
+                EvaluateVariantStageParams(
+                    stage_id="evaluate",
+                    params=evaluate_params,
+                ),
+            ),
+        ),
+    )
+    benchmark_path = write_benchmark_spec(
+        root,
+        BenchmarkSpec(
+            benchmark_id="starter",
+            eval_id="starter_eval",
+            test=_resolved_pointer_ref(root, evaluation_pointer),
+            splits={"test_split": _resolved_pointer_ref(root, split_pointer)},
+            metric_ids=("prediction_bytes",),
+            criteria=(
+                MetricCriterion(
+                    metric_id="prediction_bytes",
+                    comparison="ge",
+                    threshold=1.0,
+                ),
+            ),
+        ),
+    )
+    run_git(root, "add", "experiments/starter", "benchmarks/starter.spec.yaml")
+    run_git(root, "commit", "--quiet", "-m", "define benchmark candidate")
+    candidate_source_commit = run_git(root, "rev-parse", "HEAD")
+    candidate_root = f"experiments/starter/runs/baseline/{CANDIDATE_RUN_ID}"
+    candidate_download = DownloadSpec(
+        inputs={
+            "dataset": http_request(
+                url=f"http://{host}:{port}/prior",
+                body=b"prior",
+                version="training-v1",
+            )
+        },
+        http=builtin_http(),
+        policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
+        artifacts={
+            "dataset": _artifact(
+                root,
+                f"{candidate_root}/artifacts/datasets/starter/dataset.bin",
+                "training",
+            )
+        },
+    )
+    candidate_build = BuildSpec(
+        implementation=_stage_implementation(root, "build"),
+        parameter_model=_parameter_model(root, "BuildParameters"),
+        inputs={
+            "dataset": FutureInputRef(
+                producer_stage_id="download",
+                name="dataset",
+            )
+        },
+        params=build_params,
+        artifacts={
+            "prior": _artifact(
+                root,
+                f"{candidate_root}/artifacts/priors/starter/prior.bin",
+                "training",
+            )
+        },
+    )
+    candidate_embed = EmbedSpec(
+        implementation=_stage_implementation(root, "embed"),
+        parameter_model=_parameter_model(root, "EmbedParameters"),
+        inputs={
+            "prior": FutureInputRef(
+                producer_stage_id="build",
+                name="prior",
+            )
+        },
+        params=embed_params,
+        artifacts={
+            "embedding": _artifact(
+                root,
+                f"{candidate_root}/artifacts/models/starter/embedding.bin",
+                "training",
+            )
+        },
+    )
+    candidate_train = TrainSpec(
+        implementation=_stage_implementation(root, "train"),
+        parameter_model=_parameter_model(root, "TrainParameters"),
+        inputs={
+            "embedding": FutureInputRef(
+                producer_stage_id="embed",
+                name="embedding",
+            )
+        },
+        params=train_params,
+        artifacts={
+            PARAMETERS: _artifact(
+                root,
+                f"{candidate_root}/artifacts/models/starter/parameters.bin",
+                "training",
+            ),
+            RESUME_STATE: _artifact(
+                root,
+                f"{candidate_root}/artifacts/models/starter/resume_state.bin",
+                "training",
+                loader_name="resume_state",
+            ),
+        },
+    )
+    candidate_evaluate = EvaluateSpec(
+        implementation=_stage_implementation(root, "evaluate"),
+        parameter_model=_parameter_model(root, "EvaluateParameters"),
+        evaluation_id="starter_eval",
+        metric_ids=("prediction_bytes",),
+        split_inputs=("test_split",),
+        inputs={
+            PARAMETERS: FutureInputRef(
+                producer_stage_id="train",
+                name=PARAMETERS,
+            ),
+            "evaluation_dataset": StoredInputRef(
+                pointer=evaluation_pointer,
+                path="inputs/datasets/starter/evaluation.bin",
+                data_role="benchmark",
+            ),
+            "test_split": StoredInputRef(
+                pointer=split_pointer,
+                path="inputs/benchmarks/starter/test_split.bin",
+                data_role="benchmark",
+            ),
+        },
+        params=evaluate_params,
+        artifacts={
+            PREDICTIONS: _artifact(
+                root,
+                (
+                    f"{candidate_root}/artifacts/evaluations/"
+                    "starter_eval/predictions.bin"
+                ),
+                "benchmark",
+            )
+        },
+    )
+    candidate_plan = _freeze(
+        root,
+        run_id=CANDIDATE_RUN_ID,
+        experiment_id="starter",
+        seed=17,
+        source_commit=candidate_source_commit,
+        benchmark_id="starter",
+        stages={
+            "download": candidate_download,
+            "build": candidate_build,
+            "embed": candidate_embed,
+            "train": candidate_train,
+            "evaluate": candidate_evaluate,
+        },
+    )
+    subprocess.run(
+        (
+            sys.executable,
+            "train.py",
+            "--run",
+            str(candidate_plan),
+            "--stage",
+            "train",
+            "--root",
+            str(root),
+        ),
+        cwd=root,
+        env=child_environment,
+        check=True,
+        capture_output=True,
+    )
+    candidate_result_path = root / candidate_root / "resolved.yaml"
+    candidate_result = ResolvedRun.model_validate(
+        parse_yaml_bytes(candidate_result_path.read_bytes())
+    )
+    subprocess.run(
+        (
+            sys.executable,
+            "-m",
+            "viper.cli",
+            "--json",
+            "execute-benchmark",
+            str(candidate_result_path),
+            str(benchmark_path),
+            "--root",
+            str(root),
+        ),
+        cwd=root,
+        env=child_environment,
+        check=True,
+        capture_output=True,
+    )
+    benchmark_result = BenchmarkResult.model_validate(
+        parse_yaml_bytes(
+            (candidate_result_path.parent / "benchmark.result.yaml").read_bytes()
+        )
+    )
+
+    assert candidate_result.status == "succeeded"
+    assert benchmark_result.status == "passed"
+    assert len(benchmark_result.artifacts) == 2
+    assert len(benchmark_result.metrics) == 1
+```
++
+**File: tests/test_verification.py**
++
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_verification.py:RunPlanRelationshipTests.test_benchmark_matches_evaluation_inputs_splits_and_metrics -->
+```python contract-target
+def test_benchmark_matches_evaluation_inputs_splits_and_metrics(self) -> None:
+        """Verify that benchmark matches evaluation inputs splits and metrics."""
+        train = train_spec()
+        evaluation = EvaluateSpec(
+            implementation=stage_implementation_ref(
+                "analysis/predict.py",
+                b"def predict(context):\n    pass\n",
+                symbol="predict",
+            ),
+            parameter_model=parameter_model_ref("evaluate"),
+            evaluation_id="replogle_predictions",
+            metric_ids=("pearson_correlation",),
+            split_inputs=("perturbation_split",),
+            inputs={
+                "parameters": FutureInputRef(
+                    kind="future",
+                    producer_stage_id="train",
+                    name=PARAMETERS,
+                ),
+                "evaluation_dataset": StoredInputRef(
+                    kind="stored",
+                    pointer=artifact_pointer(
+                        "inputs/datasets/replogle_test/current.pointer.yaml"
+                    ),
+                    path="inputs/datasets/replogle_test/dataset.h5ad",
+                    data_role="benchmark",
+                ),
+                "perturbation_split": StoredInputRef(
+                    kind="stored",
+                    pointer=artifact_pointer(
+                        "inputs/benchmarks/replogle/test_split.pointer.yaml"
+                    ),
+                    path="inputs/benchmarks/replogle/test_split.json",
+                    data_role="benchmark",
+                ),
+            },
+            params=parameters.Evaluate(),
+            artifacts={
+                "predictions": SingleFileArtifactSpec(
+                    kind="file",
+                    path=(
+                        f"{RUN_ROOT}/artifacts/evaluations/"
+                        "replogle_predictions/predictions.json"
+                    ),
+                    loader=loader_ref("json_file"),
+                    data_role="benchmark",
+                )
+            },
+        )
+
+        run, _ = run_spec([("train", train), ("evaluate", evaluation)])
+        run = run.model_copy(update={"benchmark_id": "replogle_strict"})
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(
+                metric_spec(
+                    "pearson_correlation",
+                    "evaluation",
+                    required_data_role="benchmark",
+                ),
+            ),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(
+                    kind="train", stage_id="train", params=train.params
+                ),
+                EvaluateVariantStageParams(
+                    kind="evaluate", stage_id="evaluate", params=evaluation.params
+                ),
+            ),
+        )
+        benchmark = BenchmarkSpec(
+            benchmark_id="replogle_strict",
+            eval_id="replogle_predictions",
+            test=resolved_pointer("inputs/datasets/replogle_test/current.pointer.yaml"),
+            splits={
+                "perturbation_split": resolved_pointer(
+                    "inputs/benchmarks/replogle/test_split.pointer.yaml"
+                )
+            },
+            metric_ids=("pearson_correlation",),
+            criteria=(
+                MetricCriterion(
+                    metric_id="pearson_correlation",
+                    comparison="ge",
+                    threshold=0.8,
+                ),
+            ),
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            benchmark,
+            {"train": train, "evaluate": evaluation},
+        )
+
+        selected_metric = experiment.metrics[0]
+        missing_dependency = selected_metric.dependencies[0].model_copy(
+            update={"name": "missing_predictions"}
+        )
+        invalid_experiment = experiment.model_copy(
+            update={
+                "metrics": (
+                    selected_metric.model_copy(
+                        update={"dependencies": (missing_dependency,)}
+                    ),
+                )
+            }
+        )
+        with self.assertRaisesRegex(VerificationError, "selects absent artifact"):
+            verify_run_plan_relationships(
+                run,
+                invalid_experiment,
+                variant,
+                benchmark,
+                {"train": train, "evaluate": evaluation},
+            )
+
+        ordinary_payload = evaluation.model_dump(mode="python")
+        ordinary_payload["inputs"]["evaluation_dataset"]["data_role"] = "evaluation"
+        ordinary_payload["inputs"]["perturbation_split"]["data_role"] = "evaluation"
+        ordinary_payload["artifacts"]["predictions"]["data_role"] = "evaluation"
+        ordinary_evaluation = EvaluateSpec.model_validate(ordinary_payload)
+        with self.assertRaisesRegex(VerificationError, "must use 'benchmark'"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                benchmark,
+                {"train": train, "evaluate": ordinary_evaluation},
+            )
+
+        wrong_benchmark = benchmark.model_copy(
+            update={"evaluation_id": "other_evaluation"}
+        )
+        with self.assertRaisesRegex(VerificationError, "evaluation ID"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                wrong_benchmark,
+                {"train": train, "evaluate": evaluation},
+            )
+
+        other_train = train_spec()
+        wrong_evaluation_payload = evaluation.model_dump(mode="python")
+        wrong_evaluation_payload["inputs"]["parameters"]["producer_stage_id"] = (
+            "other_train"
+        )
+        wrong_evaluation = EvaluateSpec.model_validate(wrong_evaluation_payload)
+        wrong_run, _ = run_spec(
+            [
+                ("train", train),
+                ("other_train", other_train),
+                ("evaluate", wrong_evaluation),
+            ]
+        )
+        wrong_run = wrong_run.model_copy(update={"benchmark_id": "replogle_strict"})
+        wrong_variant_payload = variant.model_dump(mode="python")
+        wrong_variant_payload["stage_params"] = (
+            *wrong_variant_payload["stage_params"],
+            {
+                "kind": "train",
+                "stage_id": "other_train",
+                "params": other_train.params,
+            },
+        )
+        wrong_variant = VariantSpec.model_validate(wrong_variant_payload)
+        with self.assertRaisesRegex(VerificationError, "run estimator"):
+            verify_run_plan_relationships(
+                wrong_run,
+                experiment,
+                wrong_variant,
+                benchmark,
+                {
+                    "train": train,
+                    "other_train": other_train,
+                    "evaluate": wrong_evaluation,
+                },
+            )
+```
++
+**File: tests/test_verification_acceptance.py**
++
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=remove target=tests/test_verification_acceptance.py:MetricCriterionReceipt -->
+<!-- contract-remove -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_verification_acceptance.py:BenchmarkMetricResult -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_verification_acceptance.py:MetricCriterionResult -->
+```python contract-target
+from viper.benchmark import (
+    ArtifactComparisonReceipt,
+    BenchmarkMetricResult,
+    BenchmarkResult,
+    BenchmarkSpec,
+    MetricCriterion,
+    MetricCriterionResult,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_verification_acceptance.py:build_complete_fixture -->
+```python contract-target
+def build_complete_fixture(
+    *,
+    benchmark_enabled: bool = False,
+    benchmark_threshold: float = 0.9,
+    producer_evaluation_role: DataRole | None = None,
+) -> tuple[
+    ResolvedRun,
+    DocumentStore,
+    HuggingFaceFileRef,
+]:
+    """Publish one complete valid provenance chain and return its roots."""
+    store = DocumentStore()
+    evaluation_role = "benchmark" if benchmark_enabled else "evaluation"
+    producer_run_ref, _ = publish_producer_run(
+        store,
+        evaluation_role=producer_evaluation_role or evaluation_role,
+    )
+
+    training_dataset_pointer = ArtifactPointer(
+        run=producer_run_ref,
+        artifact=StageArtifactRef(stage_id="download", artifact_name="dataset"),
+    )
+    evaluation_dataset_pointer = ArtifactPointer(
+        run=producer_run_ref,
+        artifact=StageArtifactRef(
+            stage_id="download",
+            artifact_name="evaluation_dataset",
+        ),
+    )
+    split_pointer = ArtifactPointer(
+        run=producer_run_ref,
+        artifact=StageArtifactRef(stage_id="download", artifact_name="split"),
+    )
+    training_dataset_pointer_path = "inputs/datasets/toy/training.pointer.yaml"
+    evaluation_dataset_pointer_path = "inputs/datasets/toy/evaluation.pointer.yaml"
+    split_pointer_path = "inputs/benchmarks/toy/test_split.pointer.yaml"
+    resolved_training_dataset_pointer = resolved_pointer(
+        store,
+        MAIN_SOURCE_COMMIT,
+        training_dataset_pointer_path,
+        training_dataset_pointer,
+    )
+    resolved_evaluation_dataset_pointer = resolved_pointer(
+        store,
+        MAIN_SOURCE_COMMIT,
+        evaluation_dataset_pointer_path,
+        evaluation_dataset_pointer,
+    )
+    resolved_split_pointer = resolved_pointer(
+        store,
+        MAIN_SOURCE_COMMIT,
+        split_pointer_path,
+        split_pointer,
+    )
+
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    run_root = f"experiments/model_eval/runs/baseline/{run_id}"
+    build = BuildSpec(
+        implementation=stage_implementation_ref(
+            "features/build_prior.py",
+            BUILD_SOURCE,
+            symbol="build_prior",
+        ),
+        parameter_model=parameter_model_ref("build"),
+        inputs={
+            "dataset": StoredInputRef(
+                kind="stored",
+                pointer=resolved_training_dataset_pointer,
+                path="inputs/datasets/toy/current.bin",
+                data_role="training",
+            )
+        },
+        params=parameters.Build(),
+        artifacts={
+            "prior": BundleArtifactSpec(
+                kind="bundle",
+                path=f"{run_root}/artifacts/priors/toy",
+                loader=loader_ref("prior_bundle", bundle=True),
+                data_role="training",
+            )
+        },
+    )
+    train = TrainSpec(
+        implementation=stage_implementation_ref(
+            "training/fit.py",
+            TRAIN_SOURCE,
+            symbol="fit",
+        ),
+        parameter_model=parameter_model_ref("train"),
+        inputs={
+            "prior": FutureInputRef(
+                kind="future",
+                producer_stage_id="build",
+                name="prior",
+            )
+        },
+        params=parameters.Train.model_validate(
+            {"epochs": 2, "batch_size": 2, "learning_rate": 0.01}
+        ),
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/models/toy/parameters.bin",
+                loader=loader_ref("bytes_file"),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/models/toy/resume_state.bin",
+                loader=loader_ref("resume_state"),
+                data_role="training",
+            ),
+        },
+    )
+    evaluate = EvaluateSpec(
+        implementation=stage_implementation_ref(
+            "evaluation/predict.py",
+            EVALUATE_SOURCE,
+            symbol="predict",
+        ),
+        parameter_model=parameter_model_ref("evaluate"),
+        evaluation_id="toy_predictions",
+        metric_ids=("pearson_correlation",),
+        split_inputs=("test_split",),
+        inputs={
+            "parameters": FutureInputRef(
+                kind="future",
+                producer_stage_id="train",
+                name=PARAMETERS,
+            ),
+            "evaluation_dataset": StoredInputRef(
+                kind="stored",
+                pointer=resolved_evaluation_dataset_pointer,
+                path="inputs/datasets/toy/evaluation.bin",
+                data_role=evaluation_role,
+            ),
+            "test_split": StoredInputRef(
+                kind="stored",
+                pointer=resolved_split_pointer,
+                path="inputs/benchmarks/toy/test_split.json",
+                data_role=evaluation_role,
+            ),
+        },
+        params=parameters.Evaluate(),
+        artifacts={
+            "predictions": SingleFileArtifactSpec(
+                kind="file",
+                path=(
+                    f"{run_root}/artifacts/evaluations/toy_predictions/predictions.json"
+                ),
+                loader=loader_ref("json_file"),
+                data_role=evaluation_role,
+            )
+        },
+    )
+    stage_specs: list[tuple[str, BaseSpec]] = [
+        ("build", build),
+        ("train", train),
+        ("evaluate", evaluate),
+    ]
+    run = make_run(
+        experiment_id="model_eval",
+        run_id=run_id,
+        source_commit=MAIN_SOURCE_COMMIT,
+        plan_commit=MAIN_PLAN_COMMIT,
+        stage_specs=stage_specs,
+        estimator_stage_id="train",
+    )
+    benchmark = None
+    if benchmark_enabled:
+        benchmark = BenchmarkSpec(
+            benchmark_id="toy_strict",
+            eval_id="toy_predictions",
+            test=resolved_evaluation_dataset_pointer,
+            splits={"test_split": resolved_split_pointer},
+            metric_ids=("pearson_correlation",),
+            criteria=(
+                MetricCriterion(
+                    metric_id="pearson_correlation",
+                    comparison="ge",
+                    threshold=benchmark_threshold,
+                ),
+            ),
+        )
+        run = run.model_copy(update={"benchmark_id": benchmark.benchmark_id})
+    experiment = ExperimentSpec(
+        experiment_id="model_eval",
+        factors=(),
+        variant_ids=("baseline",),
+        replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+        metrics=(
+            metric_spec(
+                "pearson_correlation",
+                "evaluation",
+                required_data_role=evaluation_role,
+            ),
+        ),
+    )
+    variant = VariantSpec(
+        experiment_id="model_eval",
+        variant_id="baseline",
+        levels={},
+        stage_params=(
+            BuildVariantStageParams(
+                kind="build", stage_id="build", params=build.params
+            ),
+            TrainVariantStageParams(
+                kind="train", stage_id="train", params=train.params
+            ),
+            EvaluateVariantStageParams(
+                kind="evaluate",
+                stage_id="evaluate",
+                params=evaluate.params,
+            ),
+        ),
+    )
+    run_reference = add_plan_records(
+        store,
+        run=run,
+        stage_specs=stage_specs,
+        experiment=experiment,
+        variant=variant,
+        plan_commit=MAIN_PLAN_COMMIT,
+        benchmark=benchmark,
+    )
+
+    add_loader(store, MAIN_SOURCE_COMMIT, "prior_bundle", bundle=True)
+    add_loader(store, MAIN_SOURCE_COMMIT, "bytes_file")
+    add_loader(store, MAIN_SOURCE_COMMIT, "resume_state")
+    add_loader(store, MAIN_SOURCE_COMMIT, "json_file")
+    for parameter_kind in ("build", "train", "evaluate"):
+        add_source_file(
+            store,
+            MAIN_SOURCE_COMMIT,
+            parameter_model_ref(parameter_kind).path,
+            parameter_model_source(parameter_kind),
+        )
+    resolved_env = resolved_environment(store, MAIN_SOURCE_COMMIT)
+    build_source = add_source_file(
+        store,
+        MAIN_SOURCE_COMMIT,
+        str(build.implementation.path),
+        BUILD_SOURCE,
+    )
+    train_source = add_source_file(
+        store,
+        MAIN_SOURCE_COMMIT,
+        str(train.implementation.path),
+        TRAIN_SOURCE,
+    )
+    evaluate_source = add_source_file(
+        store,
+        MAIN_SOURCE_COMMIT,
+        str(evaluate.implementation.path),
+        EVALUATE_SOURCE,
+    )
+
+    build_commit = "9" * 40
+    prior_members = {
+        "adjacency.bin": b"adjacency",
+        "metadata.json": b'{"genes":2}\n',
+    }
+    prior_artifact = add_bundle_artifact(
+        store,
+        build_commit,
+        str(build.artifacts["prior"].path),
+        prior_members,
+    )
+    build_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="build",
+        stage=build,
+        input_paths={"dataset": "inputs/datasets/toy/current.bin"},
+        started_at=datetime(2026, 8, 20, 21, 1, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 9, tzinfo=UTC),
+        commit=MAIN_FILES_COMMIT,
+    )
+    resolved_build = ResolvedBuildSpec(
+        spec=build,
+        source=build_source,
+        environment=resolved_env,
+        execution_context=execution_context(),
+        startup=startup_receipt(run),
+        invocation=build_invocation,
+        command=("python", "-m", "viper._workers.stages"),
+        inputs={
+            "dataset": ResolvedStoredInputRef(
+                kind="stored", pointer=resolved_training_dataset_pointer
+            ),
+        },
+        artifacts={"prior": prior_artifact},
+        completed_at=datetime(2026, 8, 20, 21, 10, tzinfo=UTC),
+    )
+    build_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="build",
+        snapshot_commit=build_commit,
+        resolved_spec=resolved_build,
+    )
+
+    train_commit = "a" * 40
+    train_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="train",
+        stage=train,
+        input_paths={"prior": str(build.artifacts["prior"].path)},
+        started_at=datetime(2026, 8, 20, 21, 11, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 29, tzinfo=UTC),
+        commit=MAIN_FILES_COMMIT,
+    )
+    resolved_train = ResolvedTrainSpec(
+        spec=train,
+        source=train_source,
+        environment=resolved_env,
+        execution_context=execution_context(),
+        startup=startup_receipt(run),
+        invocation=train_invocation,
+        command=("python", "-m", "viper._workers.stages"),
+        inputs={"prior": ResolvedFutureInputRef(producer=build_stage)},
+        artifacts={
+            PARAMETERS: add_single_artifact(
+                store,
+                train_commit,
+                str(train.artifacts[PARAMETERS].path),
+                b"final model parameters",
+            ),
+            RESUME_STATE: add_single_artifact(
+                store,
+                train_commit,
+                str(train.artifacts[RESUME_STATE].path),
+                resume_state_bytes(),
+            ),
+        },
+        completed_at=datetime(2026, 8, 20, 21, 30, tzinfo=UTC),
+    )
+    train_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="train",
+        snapshot_commit=train_commit,
+        resolved_spec=resolved_train,
+    )
+
+    evaluate_commit = "b" * 40
+    evaluate_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="evaluate",
+        stage=evaluate,
+        input_paths={
+            "parameters": str(train.artifacts[PARAMETERS].path),
+            "evaluation_dataset": "inputs/datasets/toy/evaluation.bin",
+            "test_split": "inputs/benchmarks/toy/test_split.json",
+        },
+        started_at=datetime(2026, 8, 20, 21, 31, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 39, tzinfo=UTC),
+        commit=MAIN_FILES_COMMIT,
+    )
+    resolved_evaluate = ResolvedEvaluateSpec(
+        spec=evaluate,
+        source=evaluate_source,
+        environment=resolved_env,
+        execution_context=execution_context(),
+        startup=startup_receipt(run),
+        invocation=evaluate_invocation,
+        command=("python", "-m", "viper._workers.stages"),
+        inputs={
+            "parameters": ResolvedFutureInputRef(producer=train_stage),
+            "evaluation_dataset": ResolvedStoredInputRef(
+                kind="stored",
+                pointer=resolved_evaluation_dataset_pointer,
+            ),
+            "test_split": ResolvedStoredInputRef(
+                kind="stored", pointer=resolved_split_pointer
+            ),
+        },
+        artifacts={
+            "predictions": add_single_artifact(
+                store,
+                evaluate_commit,
+                str(evaluate.artifacts["predictions"].path),
+                b"fixed predictions",
+            )
+        },
+        completed_at=datetime(2026, 8, 20, 21, 40, tzinfo=UTC),
+    )
+    evaluate_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="evaluate",
+        snapshot_commit=evaluate_commit,
+        resolved_spec=resolved_evaluate,
+    )
+
+    measurement_raw = (
+        b'{"run_id":"01ARZ3NDEKTSV4RRFFQ69G5FAB",'
+        b'"attempt_id":1,"stage_id":"evaluate",'
+        b'"metric_id":"pearson_correlation","value":0.91,'
+        b'"measured_at":"2026-08-20T21:41:00Z"}\n'
+    )
+    measurement_location = hf_file(
+        MAIN_FILES_COMMIT,
+        f"{run_root}/attempts/1/measurements/evaluate.pearson_correlation.jsonl",
+    )
+    store.put(measurement_location, measurement_raw)
+    measurement_reference = ResolvedFileRef(
+        sha256=sha256(measurement_raw),
+        bytes=len(measurement_raw),
+        stored_at=measurement_location,
+    )
+    predictions = resolved_evaluate.artifacts["predictions"]
+    assert isinstance(predictions, ResolvedSingleFileArtifact)
+    metric_verification_reference = publish_metric_verification(
+        store,
+        run=run,
+        attempt_id=1,
+        stage_id="evaluate",
+        metric=experiment.metrics[0],
+        measurement_raw=measurement_raw,
+        stage_completed_at=resolved_evaluate.completed_at,
+        dependency_files=(
+            ResolvedFileRef(
+                sha256=predictions.file.sha256,
+                bytes=predictions.file.bytes,
+                stored_at=hf_file(evaluate_commit, str(predictions.file.path)),
+            ),
+        ),
+        commit=MAIN_FILES_COMMIT,
+    )
+    attempt = RunAttempt(
+        attempt_id=1,
+        purpose="run",
+        status="succeeded",
+        started_at=datetime(2026, 8, 20, 21, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 45, tzinfo=UTC),
+        resolved_stages=(build_stage, train_stage, evaluate_stage),
+        invocations=(build_invocation, train_invocation, evaluate_invocation),
+        journal=publish_attempt_journal(
+            store,
+            run_root_path=run_root,
+            attempt_id=1,
+            commit=MAIN_FILES_COMMIT,
+        ),
+        measurement_files=(measurement_reference,),
+        metric_verification_files=(metric_verification_reference,),
+        log_files=(),
+        failure=None,
+    )
+    resolved_run = ResolvedRun(
+        spec=run_reference,
+        status="succeeded",
+        attempts=(
+            publish_attempt(
+                store,
+                run_root_path=run_root,
+                attempt=attempt,
+                commit=MAIN_FILES_COMMIT,
+            ),
+        ),
+        successful_attempt_id=1,
+        completed_at=datetime(2026, 8, 20, 21, 46, tzinfo=UTC),
+    )
+    tamper_location = hf_file(
+        build_commit,
+        f"{build.artifacts['prior'].path}/adjacency.bin",
+    )
+    return resolved_run, store, tamper_location
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_verification_acceptance.py:build_benchmark_fixture -->
+```python contract-target
+def build_benchmark_fixture(
+    *,
+    threshold: float = 0.9,
+) -> tuple[
+    BenchmarkResult,
+    ResolvedRun,
+    DocumentStore,
+]:
+    """Publish a strict benchmark and its independent confirmation run."""
+    resolved_run, store, _ = build_complete_fixture(
+        benchmark_enabled=True,
+        benchmark_threshold=threshold,
+    )
+    selected_attempt = fetch_attempt(store, resolved_run.attempts[-1])
+    run_root = str(resolved_run.spec.stored_at.path).removesuffix("/spec.yaml")
+    run = RunSpec.model_validate(
+        yaml.safe_load(store.fetch(resolved_run.spec.stored_at))
+    )
+
+    original_build, original_train, original_evaluate = selected_attempt.resolved_stages
+    build_commit = "c" * 40
+    train_commit = "d" * 40
+    evaluate_commit = "e" * 40
+
+    copy_snapshot_files(store, original_build.snapshot.commit, build_commit)
+    resolved_build = ResolvedBuildSpec.model_validate(
+        yaml.safe_load(
+            store.fetch(
+                hf_file(
+                    original_build.snapshot.commit,
+                    str(original_build.resolved_spec.path),
+                )
+            )
+        )
+    )
+    build_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="build",
+        stage=resolved_build.spec,
+        input_paths={"dataset": "inputs/datasets/toy/current.bin"},
+        started_at=datetime(2026, 8, 20, 21, 1, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 9, tzinfo=UTC),
+        commit="f" * 40,
+        attempt_id=2,
+    )
+    resolved_build = resolved_build.model_copy(update={"invocation": build_invocation})
+    confirmation_build = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="build",
+        snapshot_commit=build_commit,
+        resolved_spec=resolved_build,
+    )
+
+    copy_snapshot_files(store, original_train.snapshot.commit, train_commit)
+    resolved_train = ResolvedTrainSpec.model_validate(
+        yaml.safe_load(
+            store.fetch(
+                hf_file(
+                    original_train.snapshot.commit,
+                    str(original_train.resolved_spec.path),
+                )
+            )
+        )
+    )
+    candidate_parameters = resolved_train.artifacts[PARAMETERS]
+    resolved_train = resolved_train.model_copy(
+        update={
+            "inputs": {"prior": ResolvedFutureInputRef(producer=confirmation_build)}
+        }
+    )
+    train_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="train",
+        stage=resolved_train.spec,
+        input_paths={"prior": str(resolved_build.spec.artifacts["prior"].path)},
+        started_at=datetime(2026, 8, 20, 21, 11, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 29, tzinfo=UTC),
+        commit="f" * 40,
+        attempt_id=2,
+    )
+    resolved_train = resolved_train.model_copy(update={"invocation": train_invocation})
+    confirmation_train = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="train",
+        snapshot_commit=train_commit,
+        resolved_spec=resolved_train,
+    )
+
+    copy_snapshot_files(store, original_evaluate.snapshot.commit, evaluate_commit)
+    resolved_evaluate = ResolvedEvaluateSpec.model_validate(
+        yaml.safe_load(
+            store.fetch(
+                hf_file(
+                    original_evaluate.snapshot.commit,
+                    str(original_evaluate.resolved_spec.path),
+                )
+            )
+        )
+    )
+    candidate_predictions = resolved_evaluate.artifacts[PREDICTIONS]
+    resolved_evaluate = resolved_evaluate.model_copy(
+        update={
+            "inputs": {
+                **resolved_evaluate.inputs,
+                "parameters": ResolvedFutureInputRef(producer=confirmation_train),
+            }
+        }
+    )
+    evaluate_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="evaluate",
+        stage=resolved_evaluate.spec,
+        input_paths={
+            "parameters": str(resolved_train.spec.artifacts[PARAMETERS].path),
+            "evaluation_dataset": "inputs/datasets/toy/evaluation.bin",
+            "test_split": "inputs/benchmarks/toy/test_split.json",
+        },
+        started_at=datetime(2026, 8, 20, 21, 31, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 39, tzinfo=UTC),
+        commit="f" * 40,
+        attempt_id=2,
+    )
+    resolved_evaluate = resolved_evaluate.model_copy(
+        update={"invocation": evaluate_invocation}
+    )
+    confirmation_evaluate = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="evaluate",
+        snapshot_commit=evaluate_commit,
+        resolved_spec=resolved_evaluate,
+    )
+
+    measurement_raw = (
+        b'{"run_id":"01ARZ3NDEKTSV4RRFFQ69G5FAB",'
+        b'"attempt_id":2,"stage_id":"evaluate",'
+        b'"metric_id":"pearson_correlation","value":0.91,'
+        b'"measured_at":"2026-08-20T21:41:00Z"}\n'
+    )
+    measurement_location = hf_file(
+        "f" * 40,
+        f"{run_root}/attempts/2/measurements/evaluate.pearson_correlation.jsonl",
+    )
+    store.put(measurement_location, measurement_raw)
+    experiment = ExperimentSpec.model_validate(
+        yaml.safe_load(
+            store.fetch(
+                git_file(
+                    MAIN_SOURCE_COMMIT,
+                    "experiments/model_eval/spec.yaml",
+                )
+            )
+        )
+    )
+    predictions = resolved_evaluate.artifacts["predictions"]
+    assert isinstance(predictions, ResolvedSingleFileArtifact)
+    metric_verification_reference = publish_metric_verification(
+        store,
+        run=run,
+        attempt_id=2,
+        stage_id="evaluate",
+        metric=experiment.metrics[0],
+        measurement_raw=measurement_raw,
+        stage_completed_at=resolved_evaluate.completed_at,
+        dependency_files=(
+            ResolvedFileRef(
+                sha256=predictions.file.sha256,
+                bytes=predictions.file.bytes,
+                stored_at=hf_file(evaluate_commit, str(predictions.file.path)),
+            ),
+        ),
+        commit="f" * 40,
+    )
+    confirmation = RunAttempt(
+        attempt_id=2,
+        purpose="benchmark_confirmation",
+        status="succeeded",
+        started_at=datetime(2026, 8, 20, 21, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 45, tzinfo=UTC),
+        resolved_stages=(
+            confirmation_build,
+            confirmation_train,
+            confirmation_evaluate,
+        ),
+        invocations=(build_invocation, train_invocation, evaluate_invocation),
+        journal=publish_attempt_journal(
+            store,
+            run_root_path=run_root,
+            attempt_id=2,
+            commit="f" * 40,
+        ),
+        measurement_files=(
+            ResolvedFileRef(
+                sha256=sha256(measurement_raw),
+                bytes=len(measurement_raw),
+                stored_at=measurement_location,
+            ),
+        ),
+        metric_verification_files=(metric_verification_reference,),
+        log_files=(),
+        failure=None,
+    )
+
+    resolved_run_raw = yaml_bytes(resolved_run)
+    resolved_run_location = hf_file("0" * 40, f"{run_root}/resolved.yaml")
+    store.put(resolved_run_location, resolved_run_raw)
+    run_reference = ResolvedRunRef(
+        sha256=sha256(resolved_run_raw),
+        bytes=len(resolved_run_raw),
+        stored_at=resolved_run_location,
+    )
+
+    benchmark_path = "benchmarks/toy_strict.spec.yaml"
+    benchmark_location = git_file(MAIN_SOURCE_COMMIT, benchmark_path)
+    benchmark_raw = store.fetch(benchmark_location)
+    benchmark_reference = ResolvedBenchmarkSpecRef(
+        sha256=sha256(benchmark_raw),
+        bytes=len(benchmark_raw),
+        stored_at=benchmark_location,
+    )
+    result = BenchmarkResult(
+        benchmark=benchmark_reference,
+        run=run_reference,
+        confirmation=publish_attempt(
+            store,
+            run_root_path=run_root,
+            attempt=confirmation,
+            commit="f" * 40,
+        ),
+        artifacts=(
+            ArtifactComparisonReceipt(
+                artifact=run.estimator,
+                candidate_stage=original_train,
+                confirmation_stage=confirmation_train,
+                candidate_digest=document_digest(candidate_parameters),
+                confirmation_digest=document_digest(
+                    resolved_train.artifacts[PARAMETERS]
+                ),
+                passed=True,
+            ),
+            ArtifactComparisonReceipt(
+                artifact=StageArtifactRef(
+                    stage_id="evaluate",
+                    artifact_name=PREDICTIONS,
+                ),
+                candidate_stage=original_evaluate,
+                confirmation_stage=confirmation_evaluate,
+                candidate_digest=document_digest(candidate_predictions),
+                confirmation_digest=document_digest(
+                    resolved_evaluate.artifacts[PREDICTIONS]
+                ),
+                passed=True,
+            ),
+        ),
+        metrics=(
+            BenchmarkMetricResult(
+                metric_id="pearson_correlation",
+                candidate_verification=selected_attempt.metric_verification_files[0],
+                confirmation_verification=metric_verification_reference,
+                candidate_value=0.91,
+                confirmation_value=0.91,
+                matched=True,
+                criterion=MetricCriterionResult(
+                    criterion=MetricCriterion(
+                        metric_id="pearson_correlation",
+                        comparison="ge",
+                        threshold=threshold,
+                    ),
+                    candidate_passed=0.91 >= threshold,
+                    confirmation_passed=0.91 >= threshold,
+                    passed=0.91 >= threshold,
+                ),
+            ),
+        ),
+        status="passed" if 0.91 >= threshold else "failed",
+        completed_at=datetime(2026, 8, 20, 21, 50, tzinfo=UTC),
+    )
+    return result, resolved_run, store
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_verification_acceptance.py:CompleteProvenanceAcceptanceTests.test_strict_benchmark_records_a_threshold_failure -->
+```python contract-target
+def test_strict_benchmark_records_a_threshold_failure(self) -> None:
+        """Accept a failed result when both recomputed values miss the threshold."""
+        result, _, store = build_benchmark_fixture(threshold=0.95)
+
+        verified = verify_benchmark_result(
+            result,
+            policy=POLICY,
+            fetcher=store.fetch,
+        )
+
+        self.assertEqual(verified.result.status, "failed")
+        criterion = verified.result.metrics[0].criterion
+        self.assertIsNotNone(criterion)
+        assert criterion is not None
+        self.assertFalse(criterion.passed)
 ```
