@@ -9,7 +9,7 @@ from pydantic import Field
 from viper._contract_traceability import RepoSymbolRef
 from viper._schema import SHA256, NonEmptyStr, ProtocolModel
 
-from .models import EdgeKind, OneHop, SourceEdge, SourceGraph
+from .models import EdgeKind, OneHop, PlanCheck, SourceEdge, SourceGraph
 
 DependencyState = Literal["unchanged", "added", "removed"]
 
@@ -189,4 +189,48 @@ def explain_one_hop(
     )
 
 
-__all__ = ["DependencyEvidence", "DependencyState", "explain_one_hop"]
+def explain_plan_check(
+    *,
+    check: PlanCheck,
+    baseline: SourceGraph,
+    realized: SourceGraph,
+    targets: tuple[str, ...] = (),
+) -> tuple[DependencyEvidence, ...]:
+    """Return verified one-hop evidence from one persisted plan check."""
+    if not check.receipts_valid:
+        raise ValueError("PlanCheck does not attest valid source-graph receipts")
+    if baseline.snapshot != check.baseline:
+        raise ValueError("baseline SourceGraph snapshot differs from PlanCheck")
+    if realized.snapshot != check.realized:
+        raise ValueError("realized SourceGraph snapshot differs from PlanCheck")
+
+    requested = set(targets)
+    if len(requested) != len(targets):
+        raise ValueError("requested targets contain duplicates")
+    selected = set(check.one_hop.targets)
+    missing = requested - selected
+    if missing:
+        raise ValueError(
+            f"requested targets are absent from PlanCheck.one_hop: {sorted(missing)!r}"
+        )
+
+    evidence = explain_one_hop(
+        baseline=baseline,
+        realized=realized,
+        one_hop=check.one_hop,
+    )
+    if not requested:
+        return evidence
+    return tuple(
+        item
+        for item in evidence
+        if f"{item.target.path}:{item.target.symbol}" in requested
+    )
+
+
+__all__ = [
+    "DependencyEvidence",
+    "DependencyState",
+    "explain_one_hop",
+    "explain_plan_check",
+]

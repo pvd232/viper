@@ -151,6 +151,7 @@ model, schema registry, handler registry, and JSON encoder.
 | `get_schema` | `SchemaRequest` | `SchemaSuccess` | `schema` |
 | `get_capabilities` | `CapabilitiesRequest` | `CapabilitiesSuccess` | `capabilities` |
 | `init_project` | `InitProjectRequest` | `InitProjectSuccess` | `init` |
+| `explain_impact` | `ExplainImpactRequest` | `ExplainImpactSuccess` | `impact-explain` |
 
 Python callers can invoke a concrete operation directly:
 
@@ -199,6 +200,7 @@ these fields:
 | `LineageRequest` | `path`, `root`, `trusted_source_repositories` | — |
 | `VerifyBenchmarkRequest` | `path`, `root`, `trusted_source_repositories` | — |
 | `VerifyPointerRequest` | `path`, `root`, `trusted_source_repositories` | — |
+| `ExplainImpactRequest` | `check`, `baseline_graph`, `realized_graph` | `targets` |
 
 Every success contains `status="ok"`, its operation name, and `warnings`.
 Execution successes add the canonical output paths and identities produced by
@@ -280,5 +282,16 @@ Public types and functions have one owner:
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval through the local store |
 
-The package root forwards no names. Import every public object from the module
-that owns its definition.
+The defining module owns every public object. Import each object from that
+module; the package root remains docstring-only.
+
+Agents can request compact, receipt-bound one-hop evidence through this
+command:
+
+```bash
+viper --json impact explain \
+  --check plan-check.json \
+  --baseline-graph baseline-source-graph.json \
+  --realized-graph realized-source-graph.json \
+  --target src/package/api.py:parse
+```

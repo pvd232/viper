@@ -61,6 +61,8 @@ from .stages import (
     verify_stage_implementation_bytes,
 )
 from .storage import LocalArtifactStore
+from .system_impact.explain import DependencyEvidence, explain_plan_check
+from .system_impact.models import PlanCheck, SourceGraph
 from .verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
@@ -92,6 +94,7 @@ OperationName = Literal[
     "get_schema",
     "get_capabilities",
     "init_project",
+    "explain_impact",
 ]
 FailureOrigin = Literal["request", "application", "cli", "internal"]
 ErrorCode = Literal[
@@ -482,6 +485,33 @@ class InitProjectSuccess(SuccessModel):
     files: tuple[Path, ...]
 
 
+class ExplainImpactRequest(APIModel):
+    """Select one plan check and its two source graphs for explanation."""
+
+    check: Path = Field(description="Path to the persisted PlanCheck document.")
+    baseline_graph: Path = Field(
+        description="Path to the baseline SourceGraph named by the PlanCheck."
+    )
+    realized_graph: Path = Field(
+        description="Path to the realized SourceGraph named by the PlanCheck."
+    )
+    targets: tuple[str, ...] = Field(
+        default=(),
+        description="Optional PATH:SYMBOL targets selected from PlanCheck.one_hop.",
+    )
+
+
+class ExplainImpactSuccess(SuccessModel):
+    """Return verified direct dependency evidence for agents and tools."""
+
+    operation: Literal["explain_impact"] = "explain_impact"  # pyright: ignore[reportIncompatibleVariableOverride]
+    evidence: tuple[DependencyEvidence, ...] = Field(
+        description=(
+            "Verified one-hop dependency occurrences joined to source locations."
+        )
+    )
+
+
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
@@ -491,6 +521,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "ExecuteStageSuccess": ExecuteStageSuccess,
     "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
     "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
+    "ExplainImpactRequest": ExplainImpactRequest,
+    "ExplainImpactSuccess": ExplainImpactSuccess,
     "FreezeRunRequest": FreezeRunRequest,
     "FreezeRunSuccess": FreezeRunSuccess,
     "InitProjectRequest": InitProjectRequest,
@@ -549,6 +581,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "get_schema",
     "get_capabilities",
     "init_project",
+    "explain_impact",
 )
 
 
@@ -1159,6 +1192,47 @@ def init_project(request: InitProjectRequest) -> InitProjectSuccess:
     )
 
 
+def explain_impact(request: ExplainImpactRequest) -> ExplainImpactSuccess:
+    """Load and explain one receipt-bound PlanCheck one-hop result."""
+    documents = (
+        (request.check, PlanCheck),
+        (request.baseline_graph, SourceGraph),
+        (request.realized_graph, SourceGraph),
+    )
+    loaded: list[BaseModel] = []
+    for path, model_type in documents:
+        try:
+            loaded.append(_load_model(path, model_type))
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            raise _document_error("explain_impact", path, exc) from exc
+    check, baseline, realized = loaded
+    assert isinstance(check, PlanCheck)
+    assert isinstance(baseline, SourceGraph)
+    assert isinstance(realized, SourceGraph)
+    try:
+        evidence = explain_plan_check(
+            check=check,
+            baseline=baseline,
+            realized=realized,
+            targets=request.targets,
+        )
+    except ValueError as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="explain_impact",
+                origin="application",
+                code="verification_failed",
+                message=str(exc),
+                details={
+                    "check": request.check.as_posix(),
+                    "baseline_graph": request.baseline_graph.as_posix(),
+                    "realized_graph": request.realized_graph.as_posix(),
+                },
+            )
+        ) from exc
+    return ExplainImpactSuccess(evidence=evidence)
+
+
 RequestType = type[APIModel]
 Handler = Callable[[Any], SuccessModel]
 
@@ -1182,6 +1256,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "get_schema": SchemaRequest,
     "get_capabilities": CapabilitiesRequest,
     "init_project": InitProjectRequest,
+    "explain_impact": ExplainImpactRequest,
 }
 
 HANDLER_REGISTRY: dict[OperationName, Handler] = {
@@ -1204,6 +1279,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "get_schema": get_schema,
     "get_capabilities": get_capabilities,
     "init_project": init_project,
+    "explain_impact": explain_impact,
 }
 
 
@@ -1408,6 +1484,8 @@ __all__ = [
     "ExecuteStageSuccess",
     "ExecuteBenchmarkRequest",
     "ExecuteBenchmarkSuccess",
+    "ExplainImpactRequest",
+    "ExplainImpactSuccess",
     "ErrorCode",
     "FailureOrigin",
     "FreezeRunRequest",
@@ -1449,6 +1527,7 @@ __all__ = [
     "dispatch",
     "execute_stage",
     "execute_benchmark",
+    "explain_impact",
     "freeze_run",
     "get_capabilities",
     "init_project",

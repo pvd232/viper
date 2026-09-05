@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from viper.system_impact.explain import explain_one_hop
-from viper.system_impact.models import OneHop, SourceEdge, SourceGraph, SourceNode
+from viper.system_impact.explain import explain_one_hop, explain_plan_check
+from viper.system_impact.models import (
+    OneHop,
+    PlanCheck,
+    SourceEdge,
+    SourceGraph,
+    SourceNode,
+    SourceSnapshot,
+)
 
 
 def _node(path: str, symbol: str, *, sha256: str = "1" * 64) -> SourceNode:
@@ -149,4 +156,82 @@ def test_explain_one_hop_rejects_an_absent_target() -> None:
             baseline=_graph((), ()),
             realized=_graph((), ()),
             one_hop=one_hop,
+        )
+
+
+def test_explain_plan_check_binds_graphs_and_filters_targets() -> None:
+    """Return requested evidence only after matching both checked snapshots."""
+    baseline_snapshot = SourceSnapshot(
+        base_revision="1" * 40,
+        source_sha256="2" * 64,
+        revision="1" * 40,
+    )
+    realized_snapshot = SourceSnapshot(
+        base_revision="1" * 40,
+        source_sha256="3" * 64,
+        revision=None,
+    )
+    first_target = _node("src/api.py", "parse")
+    second_target = _node("src/api.py", "render")
+    first_dependent = _node("src/command.py", "run")
+    second_dependent = _node("src/view.py", "show")
+    first_edge = _edge(
+        "4" * 64,
+        source=first_dependent,
+        target=first_target,
+        line=12,
+    )
+    second_edge = _edge(
+        "5" * 64,
+        source=second_dependent,
+        target=second_target,
+        line=18,
+    )
+    baseline = SourceGraph.model_construct(
+        snapshot=baseline_snapshot,
+        nodes=(first_target, second_target, first_dependent, second_dependent),
+        edges=(first_edge, second_edge),
+    )
+    realized = SourceGraph.model_construct(
+        snapshot=realized_snapshot,
+        nodes=(first_target, second_target, first_dependent, second_dependent),
+        edges=(first_edge, second_edge),
+    )
+    one_hop = OneHop(
+        targets=(first_target.node_id, second_target.node_id),
+        neighbors=(first_dependent.node_id, second_dependent.node_id),
+        changed=(),
+        before=(first_edge.edge_id, second_edge.edge_id),
+        after=(first_edge.edge_id, second_edge.edge_id),
+        removed=(),
+        added=(),
+    )
+    check = PlanCheck.model_construct(
+        baseline=baseline_snapshot,
+        realized=realized_snapshot,
+        one_hop=one_hop,
+        receipts_valid=True,
+    )
+
+    result = explain_plan_check(
+        check=check,
+        baseline=baseline,
+        realized=realized,
+        targets=(first_target.node_id,),
+    )
+
+    assert len(result) == 1
+    assert result[0].target.symbol == "parse"
+    assert result[0].dependent.symbol == "run"
+
+
+def test_explain_plan_check_rejects_unverified_receipts() -> None:
+    """Reject graph evidence when PlanCheck does not attest its receipts."""
+    check = PlanCheck.model_construct(receipts_valid=False)
+
+    with pytest.raises(ValueError, match="does not attest valid"):
+        explain_plan_check(
+            check=check,
+            baseline=_graph((), ()),
+            realized=_graph((), ()),
         )

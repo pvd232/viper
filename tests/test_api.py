@@ -36,10 +36,12 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "lineage" in capabilities.operations
     assert "status" in capabilities.operations
     assert "compare_runs" in capabilities.operations
+    assert "explain_impact" in capabilities.operations
     assert "RunSpec" in capabilities.schemas
     assert "CompareRunsRequest" in capabilities.schemas
     assert "ExecuteBenchmarkRequest" in capabilities.schemas
     assert "InitProjectRequest" in capabilities.schemas
+    assert "ExplainImpactRequest" in capabilities.schemas
     assert capabilities.execution_backends == ("trusted_local",)
 
 

@@ -166,6 +166,25 @@ def build_parser() -> ArgumentParser:
     )
     initialize.add_argument("path", type=Path)
     initialize.add_argument("--package", required=True)
+    impact = commands.add_parser(
+        "impact",
+        help="inspect verified source-impact evidence",
+    )
+    impact_commands = impact.add_subparsers(dest="impact_command", required=True)
+    explain = impact_commands.add_parser(
+        "explain",
+        help="join one PlanCheck one-hop result to source locations",
+    )
+    explain.add_argument("--check", type=Path, required=True)
+    explain.add_argument("--baseline-graph", type=Path, required=True)
+    explain.add_argument("--realized-graph", type=Path, required=True)
+    explain.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        default=[],
+        help="limit evidence to one PATH:SYMBOL target; repeat for several targets",
+    )
     return parser
 
 
@@ -176,6 +195,8 @@ def _operation_and_payload(
     values = vars(arguments).copy()
     command = values.pop("command")
     values.pop("json_output")
+    if command == "impact":
+        command = f"impact-{values.pop('impact_command')}"
     mapping: dict[str, OperationName] = {
         "validate-stage": "validate_stage",
         "validate-resolved-stage": "validate_resolved_stage",
@@ -196,6 +217,7 @@ def _operation_and_payload(
         "schema": "get_schema",
         "capabilities": "get_capabilities",
         "init": "init_project",
+        "impact-explain": "explain_impact",
     }
     operation = mapping[command]
     trusted = values.pop("trust_source", None)
@@ -274,6 +296,17 @@ def _human_success(result: SuccessModel) -> str:
         return result.model_dump_json(indent=2)
     if result.operation == "init_project":
         return f"created project at {getattr(result, 'project_root')}"
+    if result.operation == "explain_impact":
+        evidence = getattr(result, "evidence")
+        if not evidence:
+            return "no direct dependency evidence"
+        return "\n".join(
+            f"{item.state} {item.kind}: "
+            f"{item.dependent.path}:{item.dependent.symbol} -> "
+            f"{item.target.path}:{item.target.symbol} "
+            f"at {item.use_path}:{item.use_line}"
+            for item in evidence
+        )
     capabilities = getattr(result, "operations")
     return "\n".join(capabilities)
 

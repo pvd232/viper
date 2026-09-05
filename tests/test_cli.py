@@ -96,6 +96,32 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(result["operation"], "execute_benchmark")
         self.assertEqual(result["code"], "not_found")
 
+    def test_impact_explain_command_routes_to_application(self) -> None:
+        """Return one typed document failure for absent impact evidence."""
+        process = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "viper.cli",
+                "--json",
+                "impact",
+                "explain",
+                "--check",
+                "missing-check.json",
+                "--baseline-graph",
+                "missing-baseline.json",
+                "--realized-graph",
+                "missing-realized.json",
+            ],
+            check=False,
+            capture_output=True,
+        )
+
+        self.assertEqual(process.returncode, 1)
+        result = json.loads(process.stdout)
+        self.assertEqual(result["operation"], "explain_impact")
+        self.assertEqual(result["code"], "not_found")
+
     def test_status_command_reads_attempt_journal(self) -> None:
         """Return one attempt's latest durable state through the JSON command."""
         with tempfile.TemporaryDirectory() as directory:
@@ -196,6 +222,16 @@ class CommandLineTests(unittest.TestCase):
             ],
             "schema": ["schema", "MissingSchema"],
             "capabilities": ["capabilities"],
+            "impact-explain": [
+                "impact",
+                "explain",
+                "--check",
+                "missing-check.json",
+                "--baseline-graph",
+                "missing-baseline.json",
+                "--realized-graph",
+                "missing-realized.json",
+            ],
         }
         for name, arguments in cases.items():
             with self.subTest(command=name):
