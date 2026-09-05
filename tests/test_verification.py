@@ -1798,16 +1798,15 @@ class RunPlanRelationshipTests(unittest.TestCase):
         )
         benchmark = BenchmarkSpec(
             benchmark_id="replogle_strict",
-            evaluation_id="replogle_predictions",
-            evaluation_dataset=artifact_pointer(
-                "inputs/datasets/replogle_test/current.pointer.yaml"
-            ),
+            eval_id="replogle_predictions",
+            test=resolved_pointer("inputs/datasets/replogle_test/current.pointer.yaml"),
             splits={
-                "perturbation_split": artifact_pointer(
+                "perturbation_split": resolved_pointer(
                     "inputs/benchmarks/replogle/test_split.pointer.yaml"
                 )
             },
-            metrics=(
+            metric_ids=("pearson_correlation",),
+            criteria=(
                 MetricCriterion(
                     metric_id="pearson_correlation",
                     comparison="ge",

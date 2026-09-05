@@ -21,6 +21,7 @@ from viper.artifacts import (
     ArtifactLoaderRef,
     BundleArtifactDraft,
     SingleFileArtifactDraft,
+    StageArtifactRef,
     artifact,
 )
 from viper.authoring import (
@@ -40,6 +41,7 @@ from viper.authoring import (
     write_variant_spec,
 )
 from viper.authoring import input as external_input
+from viper.benchmark import RunArtifactDraft, at_least, benchmark
 from viper.experiments import (
     ExperimentSpec,
     FactorSpec,
@@ -49,6 +51,8 @@ from viper.experiments import (
 )
 from viper.http import CustomHttpDraft, HttpContext, HttpResult, http
 from viper.metrics import (
+    FloatComparator,
+    MetricDependency,
     MetricImplementationRef,
     MetricSpec,
     measure,
@@ -57,7 +61,7 @@ from viper.metrics import (
 )
 from viper.parameters import ParameterModelRef
 from viper.preflight import preflight_plan
-from viper.references import GitSource
+from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 from viper.runs import RunSpec
 from viper.runtime import EnvSpec, ReproducibilitySpec
 from viper.serialization import parse_yaml_bytes, serialize_document
@@ -680,3 +684,58 @@ def test_preflight_reads_the_published_plan(tmp_path: Path) -> None:
     )
 
     assert identity.status == "pass"
+
+
+def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
+    """Keep benchmark inputs, metrics, and optional criteria immutable."""
+
+    @metric(metric_id="accuracy", mode="recompute")
+    def accuracy(context) -> float:
+        return 0.95
+
+    selected_metric = measure(
+        accuracy,
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name="predictions",
+                required_data_role="benchmark",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+    prior = RunArtifactDraft(
+        run=ResolvedRunRef(
+            sha256="a" * 64,
+            bytes=1,
+            stored_at=LocalFileRef(commit="b" * 64, path="runs/prior/resolved.yaml"),
+        ),
+        artifact=StageArtifactRef(stage_id="eval", artifact_name="predictions"),
+        path="inputs/datasets/holdout/test.bin",
+        data_role="benchmark",
+    )
+    benchmark_draft = benchmark(
+        benchmark_id="holdout",
+        eval_id="eval",
+        test=prior,
+        splits={"holdout": prior},
+        metrics=(selected_metric,),
+        criteria=(at_least(selected_metric, 0.9),),
+    )
+    existing, _ = _immutable_plan()
+
+    selected = plan(
+        experiment=existing.experiment,
+        variant=existing.variant,
+        replicate=existing.replicate,
+        benchmark=benchmark_draft,
+        source=existing.source,
+        env=existing.env,
+        reproducibility=existing.reproducibility,
+    )
+
+    assert selected.benchmark is not None
+    assert selected.benchmark.benchmark_id == benchmark_draft.benchmark_id
+    assert selected.benchmark.criteria[0].threshold == 0.9
+    with pytest.raises(TypeError, match="frozen plan"):
+        selected.benchmark.splits["new"] = prior

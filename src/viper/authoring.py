@@ -31,7 +31,12 @@ from .artifacts import (
     SingleFileArtifactSpec,
     StageArtifactRef,
 )
-from .benchmark import BenchmarkSpec
+from .benchmark import (
+    BenchmarkDraft,
+    BenchmarkSpec,
+    MetricCriterion,
+    RunArtifactDraft,
+)
 from .experiments import (
     BuildVariantStageParams,
     EmbedVariantStageParams,
@@ -191,17 +196,6 @@ class ExternalInputDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    path: RepoRelPath
-    data_role: DataRole
-
-
-class RunArtifactDraft(BaseModel):
-    """Select one artifact from a completed run for later pointer freezing."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    run: ResolvedRunRef
-    artifact: StageArtifactRef
     path: RepoRelPath
     data_role: DataRole
 
@@ -373,6 +367,7 @@ class RunPlanDraft(BaseModel):
     experiment: ExperimentDraft
     variant: VariantId
     replicate: ReplicateId
+    benchmark: BenchmarkDraft | None = None
     source: GitSource
     env: EnvSpec
     reproducibility: ReproducibilitySpec
@@ -520,6 +515,7 @@ def plan(
     experiment: ExperimentDraft,
     variant: VariantId,
     replicate: ReplicateId,
+    benchmark: BenchmarkDraft | None = None,
     source: GitSource,
     env: EnvSpec,
     reproducibility: ReproducibilitySpec,
@@ -534,6 +530,7 @@ def plan(
         experiment=experiment,
         variant=variant,
         replicate=replicate,
+        benchmark=benchmark,
         source=source,
         env=env,
         reproducibility=reproducibility,
@@ -695,8 +692,12 @@ def _freeze_input(
     root: Path,
     stages: Mapping[StageId, StageDraft],
     draft: StageInputDraft,
+    cache: dict[int, InputRef] | None = None,
 ) -> InputRef:
     """Compile one input draft into its frozen reference."""
+    cached = None if cache is None else cache.get(id(draft))
+    if cached is not None:
+        return cached
     if isinstance(draft, ExternalInputDraft):
         path = resolve_path(root, draft.path, operation="read")
         return ExternalInputRef(
@@ -724,11 +725,14 @@ def _freeze_input(
         bytes=len(raw),
         stored_at=published.stored_at,
     )
-    return StoredInputRef(
+    stored = StoredInputRef(
         pointer=reference,
         path=draft.path,
         data_role=draft.data_role,
     )
+    if cache is not None:
+        cache[id(draft)] = stored
+    return stored
 
 
 def _freeze_stage(
@@ -736,6 +740,7 @@ def _freeze_stage(
     run_root: str,
     stages: Mapping[StageId, StageDraft],
     draft: StageSpecDraft,
+    input_cache: dict[int, InputRef] | None = None,
 ) -> Spec:
     """Freeze one Python stage draft into its protocol declaration."""
     artifacts: dict[ArtifactName, ArtifactSpec] = {
@@ -783,7 +788,7 @@ def _freeze_stage(
         "parameter_model": parameter,
         "params": draft.params,
         "inputs": {
-            name: _freeze_input(root, stages, value)
+            name: _freeze_input(root, stages, value, input_cache)
             for name, value in draft.inputs.items()
         },
         "metric_ids": tuple(
@@ -1035,13 +1040,17 @@ def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
         files[path] = serialize_document(variant_spec)
 
     stage_refs: list[RunStageRef] = []
+    stage_specs: dict[StageId, Spec] = {}
+    input_cache: dict[int, InputRef] = {}
     for stage_id, stage_draft in variant_draft.stages.items():
         stage_spec = _freeze_stage(
             project_root,
             run_root,
             variant_draft.stages,
             stage_draft.spec,
+            input_cache,
         )
+        stage_specs[stage_id] = stage_spec
         raw = serialize_document(stage_spec)
         path = f"{run_root}/stages/{stage_id}/spec.yaml"
         files[path] = raw
@@ -1063,12 +1072,88 @@ def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
     )
     if estimator_stage is None:
         raise ValueError("estimator producer is absent from the plan")
+    benchmark_spec: BenchmarkSpec | None = None
+    if draft.benchmark is not None:
+        benchmark_draft = draft.benchmark
+        test = _freeze_input(
+            project_root,
+            variant_draft.stages,
+            benchmark_draft.test,
+            input_cache,
+        )
+        splits = {
+            name: _freeze_input(
+                project_root,
+                variant_draft.stages,
+                split,
+                input_cache,
+            )
+            for name, split in benchmark_draft.splits.items()
+        }
+        if not isinstance(test, StoredInputRef) or not isinstance(
+            test.pointer, ResolvedArtifactPointerRef
+        ):
+            raise ValueError("benchmark inputs must select completed-run artifacts")
+        resolved_splits: dict[InputName, ResolvedArtifactPointerRef] = {}
+        for name, split in splits.items():
+            if not isinstance(split, StoredInputRef) or not isinstance(
+                split.pointer, ResolvedArtifactPointerRef
+            ):
+                raise ValueError("benchmark inputs must select completed-run artifacts")
+            resolved_splits[name] = split.pointer
+        eval_stages = [
+            stage for stage in stage_specs.values() if isinstance(stage, EvalSpec)
+        ]
+        if len(eval_stages) != 1:
+            raise ValueError("benchmark plans require exactly one eval stage")
+        eval_stage = eval_stages[0]
+        eval_test = eval_stage.inputs.get("eval_dataset")
+        if (
+            not isinstance(eval_test, StoredInputRef)
+            or eval_test.pointer != test.pointer
+        ):
+            raise ValueError("benchmark test must match the eval test input")
+        if set(eval_stage.split_inputs) != set(splits):
+            raise ValueError("benchmark splits must match the eval split inputs")
+        for name in splits:
+            eval_split = eval_stage.inputs.get(name)
+            if (
+                not isinstance(eval_split, StoredInputRef)
+                or eval_split.pointer != resolved_splits[name]
+            ):
+                raise ValueError(f"benchmark split {name!r} must match the eval input")
+        benchmark_spec = BenchmarkSpec(
+            benchmark_id=benchmark_draft.benchmark_id,
+            eval_id=benchmark_draft.eval_id,
+            test=test.pointer,
+            splits=resolved_splits,
+            metric_ids=tuple(
+                metric_definition(metric.implementation).metric_id
+                for metric in benchmark_draft.metrics
+            ),
+            criteria=tuple(
+                MetricCriterion(
+                    metric_id=metric_definition(
+                        criterion.metric.implementation
+                    ).metric_id,
+                    comparison=criterion.comparison,
+                    threshold=criterion.threshold,
+                )
+                for criterion in benchmark_draft.criteria
+            ),
+        )
+        if set(eval_stage.metric_ids) != set(benchmark_spec.metric_ids):
+            raise ValueError("benchmark metrics must match the eval metrics")
+        files[f"benchmarks/{benchmark_spec.benchmark_id}.spec.yaml"] = (
+            serialize_document(benchmark_spec)
+        )
+
     run = RunSpec(
         run_id=draft.run_id,
         experiment_id=experiment_draft.experiment_id,
         variant_id=draft.variant,
         replicate_id=draft.replicate,
-        benchmark_id=None,
+        benchmark_id=(None if benchmark_spec is None else benchmark_spec.benchmark_id),
         seed=replicate_draft.seed,
         source=draft.source,
         env=draft.env,

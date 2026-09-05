@@ -454,7 +454,7 @@ def verify_run_plan_relationships(
     dataset_input = eval.inputs["eval_dataset"]
     if not isinstance(dataset_input, StoredInputRef):
         raise VerificationError("benchmark eval dataset must be stored")
-    if dataset_input.pointer != benchmark.eval_dataset:
+    if dataset_input.pointer != benchmark.test:
         raise VerificationError(
             "eval dataset does not match the benchmark specification"
         )
@@ -472,15 +472,14 @@ def verify_run_plan_relationships(
                 f"eval split {split_name!r} does not match the benchmark"
             )
 
-    benchmark_metric_ids = {criterion.metric_id for criterion in benchmark.metrics}
+    benchmark_metric_ids = set(benchmark.metric_ids)
     if set(eval.metric_ids) != benchmark_metric_ids:
         raise VerificationError("eval metrics do not match the benchmark specification")
-    for criterion in benchmark.metrics:
-        metric = experiment_metrics[criterion.metric_id]
+    for metric_id in benchmark.metric_ids:
+        metric = experiment_metrics[metric_id]
         if metric.mode != "recompute":
             raise VerificationError(
-                f"benchmark criterion {criterion.metric_id!r} must select a "
-                "recomputed eval metric"
+                f"benchmark metric {metric_id!r} must select a recomputed eval metric"
             )
 
 

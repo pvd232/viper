@@ -29,7 +29,7 @@ from ..inputs import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
-from ..metrics import Measurement, MetricVerificationReceipt
+from ..metrics import Measurement, MetricVerificationReceipt, compare_metric_values
 from ..references import GitFileRef, ResolvedFileRef
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
@@ -798,14 +798,15 @@ def verify_benchmark_result(
 
     candidate_metric_receipts = metric_receipts(selected_attempt)
     confirmation_metric_receipts = metric_receipts(confirmation)
-    criteria = {criterion.metric_id: criterion for criterion in benchmark.metrics}
+    criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
     received_metrics = {receipt.metric_id: receipt for receipt in result.metrics}
-    if set(received_metrics) != set(criteria):
+    if set(received_metrics) != set(benchmark.metric_ids):
         raise VerificationError(
             "benchmark.metrics: result metric IDs differ from the benchmark"
         )
     criteria_pass = True
-    for metric_id, criterion in criteria.items():
+    metrics_match = True
+    for metric_id in benchmark.metric_ids:
         if (
             metric_id not in candidate_metric_receipts
             or metric_id not in confirmation_metric_receipts
@@ -815,14 +816,16 @@ def verify_benchmark_result(
             )
         candidate_ref, candidate_receipt = candidate_metric_receipts[metric_id]
         confirmation_ref, confirmation_receipt = confirmation_metric_receipts[metric_id]
-        values = (
-            candidate_receipt.recomputation.value,
-            confirmation_receipt.recomputation.value,
-        )
-        criterion_passed = (
-            all(value >= criterion.threshold for value in values)
-            if criterion.comparison == "ge"
-            else all(value <= criterion.threshold for value in values)
+        if candidate_receipt.comparator != confirmation_receipt.comparator:
+            raise VerificationError(
+                "benchmark.metrics: candidate and confirmation comparators differ"
+            )
+        candidate_value = candidate_receipt.recomputation.value
+        confirmation_value = confirmation_receipt.recomputation.value
+        matched = compare_metric_values(
+            candidate_value,
+            confirmation_value,
+            candidate_receipt.comparator,
         )
         receipt = received_metrics[metric_id]
         if (
@@ -830,17 +833,47 @@ def verify_benchmark_result(
             or not confirmation_receipt.passed
             or receipt.candidate_verification != candidate_ref
             or receipt.confirmation_verification != confirmation_ref
-            or receipt.comparison != criterion.comparison
-            or receipt.threshold != criterion.threshold
-            or receipt.passed != criterion_passed
+            or receipt.candidate_value != candidate_value
+            or receipt.confirmation_value != confirmation_value
+            or receipt.matched != matched
+        ):
+            raise VerificationError("benchmark.metrics: metric result differs")
+        metrics_match &= matched
+
+        criterion = criteria.get(metric_id)
+        if criterion is None:
+            if receipt.criterion is not None:
+                raise VerificationError(
+                    "benchmark.metrics: metric has an undeclared criterion result"
+                )
+            continue
+        candidate_passed = (
+            candidate_value >= criterion.threshold
+            if criterion.comparison == "ge"
+            else candidate_value <= criterion.threshold
+        )
+        confirmation_passed = (
+            confirmation_value >= criterion.threshold
+            if criterion.comparison == "ge"
+            else confirmation_value <= criterion.threshold
+        )
+        criterion_passed = candidate_passed and confirmation_passed
+        if (
+            receipt.criterion is None
+            or receipt.criterion.criterion != criterion
+            or receipt.criterion.candidate_passed != candidate_passed
+            or receipt.criterion.confirmation_passed != confirmation_passed
+            or receipt.criterion.passed != criterion_passed
         ):
             raise VerificationError(
-                "benchmark.metrics: metric criterion receipt differs"
+                "benchmark.metrics: metric criterion result differs"
             )
         criteria_pass &= criterion_passed
 
-    passed = estimator_parity and prediction_parity and criteria_pass
-    expected_status = "passed" if passed else "failed"
+    passed = estimator_parity and prediction_parity and metrics_match and criteria_pass
+    expected_status = (
+        "failed" if not passed else "verified" if not benchmark.criteria else "passed"
+    )
     if result.status != expected_status:
         raise VerificationError(
             "benchmark result status does not match parity and metric checks"

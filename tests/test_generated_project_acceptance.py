@@ -66,6 +66,7 @@ from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
     GitSource,
+    ResolvedArtifactPointerRef,
     ResolvedRunRef,
 )
 from viper.runs import ResolvedRun
@@ -240,6 +241,19 @@ def _child_environment(root: Path) -> dict[str, str]:
         (str(shadow_bin), environment.get("PATH", ""))
     )
     return environment
+
+
+def _resolved_pointer_ref(
+    root: Path,
+    pointer: ArtifactPointerRef,
+) -> ResolvedArtifactPointerRef:
+    """Bind a promoted pointer to the exact file bytes used by a benchmark."""
+    raw = (root / pointer.path).read_bytes()
+    return ResolvedArtifactPointerRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=pointer,
+    )
 
 
 def test_generated_project_uses_runner_owned_downloads(
@@ -460,10 +474,11 @@ def test_generated_project_uses_runner_owned_downloads(
         root,
         BenchmarkSpec(
             benchmark_id="starter",
-            evaluation_id="starter_eval",
-            evaluation_dataset=evaluation_pointer,
-            splits={"test_split": split_pointer},
-            metrics=(
+            eval_id="starter_eval",
+            test=_resolved_pointer_ref(root, evaluation_pointer),
+            splits={"test_split": _resolved_pointer_ref(root, split_pointer)},
+            metric_ids=("prediction_bytes",),
+            criteria=(
                 MetricCriterion(
                     metric_id="prediction_bytes",
                     comparison="ge",

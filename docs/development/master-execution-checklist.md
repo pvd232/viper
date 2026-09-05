@@ -1653,15 +1653,19 @@ implementation commit.
 **Outcome:** A benchmark records metric results under fixed data and split
 conditions. Thresholds remain optional.
 
-- [ ] Execute `P8-UMD-01` from the Unified metric drafting contract. It adds
+- [x] Execute `P8-UMD-01` from the Unified metric drafting contract. It adds
       immutable benchmark drafting, compiles fixed prior-run inputs once,
       records every selected metric, applies optional criteria, and verifies
       the resulting status. <!-- pair-block: P8-UMD-01 -->
       <!-- pair-block-contract: P8-UMD-01 contract=unified-metric-drafting.md -->
       <!-- implements: UMD-05 -->
       <!-- verifies: UMD-05 -->
-      <!-- contract-implementation: requirement=UMD-05 rule=benchmark.result.complete state=planned owner=src/viper/benchmark.py:benchmark -->
-      <!-- contract-verification: requirement=UMD-05 rule=benchmark.result.complete state=planned test=tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria -->
+      <!-- contract-implementation: requirement=UMD-05 rule=benchmark.result.complete state=implemented owner=src/viper/benchmark.py:benchmark -->
+      <!-- contract-verification: requirement=UMD-05 rule=benchmark.result.complete state=implemented test=tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria -->
+
+**Evidence:** Raw contract parity passed for every selected target. Ruff fixed
+the generated imports after parity. The candidate introduced no Pyright
+diagnostics, and all three `P8-UMD-01` acceptance tests passed.
 
 **Commit boundary:** `Record complete benchmark metric results`
 

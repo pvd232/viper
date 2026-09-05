@@ -54,10 +54,11 @@ from viper.artifacts import (
 )
 from viper.benchmark import (
     ArtifactComparisonReceipt,
+    BenchmarkMetricResult,
     BenchmarkResult,
     BenchmarkSpec,
     MetricCriterion,
-    MetricCriterionReceipt,
+    MetricCriterionResult,
 )
 from viper.experiments import (
     BuildVariantStageParams,
@@ -1340,10 +1341,11 @@ def build_complete_fixture(
     if benchmark_enabled:
         benchmark = BenchmarkSpec(
             benchmark_id="toy_strict",
-            evaluation_id="toy_predictions",
-            evaluation_dataset=resolved_evaluation_dataset_pointer.stored_at,
-            splits={"test_split": resolved_split_pointer.stored_at},
-            metrics=(
+            eval_id="toy_predictions",
+            test=resolved_evaluation_dataset_pointer,
+            splits={"test_split": resolved_split_pointer},
+            metric_ids=("pearson_correlation",),
+            criteria=(
                 MetricCriterion(
                     metric_id="pearson_correlation",
                     comparison="ge",
@@ -1916,13 +1918,23 @@ def build_benchmark_fixture(
             ),
         ),
         metrics=(
-            MetricCriterionReceipt(
+            BenchmarkMetricResult(
                 metric_id="pearson_correlation",
                 candidate_verification=selected_attempt.metric_verification_files[0],
                 confirmation_verification=metric_verification_reference,
-                comparison="ge",
-                threshold=threshold,
-                passed=0.91 >= threshold,
+                candidate_value=0.91,
+                confirmation_value=0.91,
+                matched=True,
+                criterion=MetricCriterionResult(
+                    criterion=MetricCriterion(
+                        metric_id="pearson_correlation",
+                        comparison="ge",
+                        threshold=threshold,
+                    ),
+                    candidate_passed=0.91 >= threshold,
+                    confirmation_passed=0.91 >= threshold,
+                    passed=0.91 >= threshold,
+                ),
             ),
         ),
         status="passed" if 0.91 >= threshold else "failed",
@@ -2315,7 +2327,10 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         )
 
         self.assertEqual(verified.result.status, "failed")
-        self.assertFalse(verified.result.metrics[0].passed)
+        criterion = verified.result.metrics[0].criterion
+        self.assertIsNotNone(criterion)
+        assert criterion is not None
+        self.assertFalse(criterion.passed)
 
     def test_strict_benchmark_rejects_an_artifact_receipt_mismatch(self) -> None:
         """Reject a comparison receipt whose digest differs from the artifact."""
