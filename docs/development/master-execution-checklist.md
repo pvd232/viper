@@ -1679,65 +1679,26 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 ## 17. Master Phase 10 — artifact restore
 
-<!-- contract-implementation: requirement=RSP-07 rule=storage.restore.atomic state=planned owner=src/viper/storage.py:restore -->
-<!-- contract-verification: requirement=RSP-07 rule=storage.restore.atomic state=planned test=tests/test_storage.py:test_restore_verifies_before_atomic_write -->
-<!-- contract-implementation: requirement=RSP-08 rule=storage.restore.public state=planned owner=src/viper/api.py:restore_artifacts -->
-<!-- contract-verification: requirement=RSP-08 rule=storage.restore.public state=planned test=tests/test_api.py:test_restore_result_matches_python_api_and_cli -->
-
 **Depends on:** Master Phase 9.
 
 **Contract:** [Direct Viper Cloud publication](remote-storage.md#104-restore)
 
 **Outcome:** The user can restore every artifact, one artifact, or a list.
 
-### 17.1 Restore engine
-
-- [ ] Add a parser for local terminal paths and immutable Viper Cloud run URIs.
-      Complete the retrieval, validation, and atomic-write sequence in Section
-      16.1. <!-- implements: RSP-07 -->
-- [ ] Publish local terminal `resolved.yaml` as a one-file revision.
-- [ ] For a local path, compute that deterministic revision, construct its
-      `ResolvedRunRef`, and fetch the matching `.viper/store` file.
-- [ ] Load and verify the resulting `ResolvedRunRef` before parsing
-      `ResolvedRun`.
-- [ ] Select the successful attempt.
-- [ ] Resolve selectors in `<stage-id>.<artifact-name>` form.
-- [ ] Expand bundle selectors to their members.
-- [ ] Validate all output paths before retrieval.
-- [ ] Fetch into temporary files.
-- [ ] Check SHA-256 digest and byte count.
-- [ ] Atomically move verified files into place.
-- [ ] Treat an existing exact file as already restored.
-- [ ] Reject an existing different file before writing any destination.
-
-### 17.2 Public interface
-
-- [ ] Add `ArtifactRestoreSelector`, `RestoredFile`, `RestoredArtifact`, and
-      `RestoreResult`. <!-- implements: RSP-08 -->
-- [ ] Add `LocalRunPath`, `ViperCloudRunReference`, and the discriminated
-      `RestoreRequestReference` union for the serialized typed API.
-- [ ] Add `viper.execution.restore()` and export its result type.
-- [ ] Add `viper restore <run-reference>` to `src/viper/cli.py`.
-- [ ] Parse `--artifacts` as one list of selectors.
-- [ ] Let `--output` name an exact file only for one single-file artifact.
-- [ ] Require `--output` to be a directory for all artifacts, a bundle, or a
-      list.
-- [ ] Add `RestoreRequest`, `RestoreSuccess`, the `restore` operation name, and
-      the matching registry entry and operation body in `src/viper/api.py`.
-- [ ] Route the Python function, typed handler, and CLI through one restore
-      engine and require equal `RestoreResult` file sets.
-
-### 17.3 Focused proof
-
-- [ ] Add local and cloud restore tests.
-- [ ] Cover all, one file, one bundle, and a list.
-- [ ] Cover exact existing output and conflicting output.
-- [ ] Cover a tampered remote object.
-- [ ] Run: <!-- verifies: RSP-07, RSP-08 -->
-
-```bash
-python -m pytest tests/test_storage.py tests/test_cli.py tests/test_api.py -q
-```
+- [ ] Execute `P10-RSP-01` from `remote-storage.md`.
+      <!-- pair-block: P10-RSP-01 -->
+      <!-- pair-block-contract: P10-RSP-01 contract=remote-storage.md -->
+      <!-- implements: RSP-07 -->
+      <!-- verifies: RSP-07 -->
+      <!-- contract-implementation: requirement=RSP-07 rule=storage.restore.atomic state=planned owner=src/viper/execution/_restore.py:restore -->
+      <!-- contract-verification: requirement=RSP-07 rule=storage.restore.atomic state=planned test=tests/test_storage.py:test_restore_verifies_before_atomic_write -->
+- [ ] Execute `P10-RSP-02` from `remote-storage.md`.
+      <!-- pair-block: P10-RSP-02 -->
+      <!-- pair-block-contract: P10-RSP-02 contract=remote-storage.md -->
+      <!-- implements: RSP-08 -->
+      <!-- verifies: RSP-08 -->
+      <!-- contract-implementation: requirement=RSP-08 rule=storage.restore.public state=planned owner=src/viper/api.py:restore_artifacts -->
+      <!-- contract-verification: requirement=RSP-08 rule=storage.restore.public state=planned test=tests/test_api.py:test_restore_result_matches_python_api_and_cli -->
 
 **Commit boundary:** `Restore complete runs and selected artifacts`
 

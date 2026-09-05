@@ -876,125 +876,19 @@ unexecuted.
 Restore starts from `ResolvedRunRef`; the terminal run and all reachable
 references carry their own storage locations.
 
-The Python and typed-operation interfaces use these exact models:
+`viper.restoration` owns `ArtifactRestoreSelector`, `RestoredFile`,
+`RestoredArtifact`, `RestoreResult`, `RestoreRunReference`, and the validated
+`ViperCloudRunUri`. `viper.api` owns the discriminated request variants
+`LocalRunPath`, `ViperCloudRunReference`, and `RestoreRequestReference`.
 
-```python
-ViperCloudRunUri = Annotated[
-    str,
-    AfterValidator(validate_viper_cloud_run_uri),
-]
+The CLI parses each `<stage-id>.<artifact-name>` value into an
+`ArtifactRestoreSelector`. Direct callers pass a local `Path`, a Viper Cloud
+URI, or a complete `ResolvedRunRef`. Serialized API callers select exactly one
+of those meanings through the request discriminator.
 
-
-class ArtifactRestoreSelector(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    stage_id: StageId
-    artifact_name: ArtifactName
-
-
-class RestoredFile(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    path: Path
-    status: Literal["restored", "already_present"]
-
-
-class RestoredArtifact(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    selector: ArtifactRestoreSelector
-    files: tuple[RestoredFile, ...] = Field(min_length=1)
-
-
-class RestoreResult(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    run: ResolvedRunRef
-    artifacts: tuple[RestoredArtifact, ...] = Field(min_length=1)
-
-
-RestoreRunReference = Path | ViperCloudRunUri | ResolvedRunRef
-
-
-class LocalRunPath(APIModel):
-    kind: Literal["local_path"] = "local_path"
-    path: Path
-
-
-class ViperCloudRunReference(APIModel):
-    kind: Literal["viper_cloud_uri"] = "viper_cloud_uri"
-    uri: ViperCloudRunUri
-
-
-RestoreRequestReference = Annotated[
-    LocalRunPath | ViperCloudRunReference | ResolvedRunRef,
-    Field(discriminator="kind"),
-]
-```
-
-`validate_viper_cloud_run_uri()` accepts only the
-`viper://<owner>/<project>@<revision>/<terminal-path>` form defined above. The
-CLI parses each `<stage-id>.<artifact-name>` value into
-`ArtifactRestoreSelector` before calling the restore engine. The direct Python
-function accepts ordinary `Path` and URI values. The serialized typed request
-uses `RestoreRequestReference` to give each JSON value exactly one local-path,
-cloud-URI, or resolved-reference meaning.
-
-The direct execution function is:
-
-```python
-def restore(
-    repository_root: Path,
-    run_reference: RestoreRunReference,
-    *,
-    artifacts: tuple[ArtifactRestoreSelector, ...] = (),
-    output: Path | None = None,
-) -> RestoreResult: ...
-```
-
-The typed operation uses the same values:
-
-```python
-OperationName = Literal[
-    "validate_stage",
-    "validate_resolved_stage",
-    "validate_run_spec",
-    "freeze_run",
-    "preflight",
-    "execute_stage",
-    "run",
-    "retry",
-    "execute_benchmark",
-    "restore",
-    "plan_diff",
-    "lineage",
-    "status",
-    "compare_runs",
-    "verify_run",
-    "verify_benchmark",
-    "verify_pointer",
-    "get_schema",
-    "get_capabilities",
-    "init_project",
-]
-
-
-class RestoreRequest(APIModel):
-    run_reference: RestoreRequestReference
-    repository_root: Path
-    artifacts: tuple[ArtifactRestoreSelector, ...] = ()
-    output: Path | None = None
-
-
-class RestoreSuccess(SuccessModel):
-    operation: Literal["restore"] = "restore"
-    result: RestoreResult
-```
-
-`restore` joins `OperationName`, `REQUEST_REGISTRY`, `HANDLER_REGISTRY`, and the
-CLI operation table. The typed handler converts `LocalRunPath` or
-`ViperCloudRunReference` to the corresponding direct-function value. The
-direct function, typed handler, and CLI then call one restore engine.
+`P10-RSP-01` contains the exact restore engine and public model declarations.
+`P10-RSP-02` contains the exact API, registry, and CLI declarations. The direct
+function, typed handler, and CLI all call the engine defined by `P10-RSP-01`.
 
 ## 11. Public workflow
 <!-- contract-worked-example: start -->
@@ -9488,6 +9382,1973 @@ class CompleteProvenanceAcceptanceTests:
             "does not identify the completed producer stage",
         ):
             verify_promoted_artifact(pointer, policy=POLICY, fetcher=store.fetch)
+```
+
+<!-- pair-block-definition: P10-RSP-01 -->
+```toml pair-block
+id = "P10-RSP-01"
+requirements = ["RSP-07"]
+targets = [
+    "src/viper/restoration.py:annotations",
+    "src/viper/restoration.py:re",
+    "src/viper/restoration.py:Path",
+    "src/viper/restoration.py:Annotated",
+    "src/viper/restoration.py:Literal",
+    "src/viper/restoration.py:AfterValidator",
+    "src/viper/restoration.py:Field",
+    "src/viper/restoration.py:ArtifactName",
+    "src/viper/restoration.py:ProtocolModel",
+    "src/viper/restoration.py:StageId",
+    "src/viper/restoration.py:ResolvedRunRef",
+    "src/viper/restoration.py:validate_viper_cloud_run_uri",
+    "src/viper/restoration.py:ViperCloudRunUri",
+    "src/viper/restoration.py:ArtifactRestoreSelector",
+    "src/viper/restoration.py:RestoredFile",
+    "src/viper/restoration.py:RestoredArtifact",
+    "src/viper/restoration.py:RestoreResult",
+    "src/viper/restoration.py:RestoreRunReference",
+    "src/viper/restoration.py:__all__",
+    "src/viper/execution/errors.py:RestoreError",
+    "src/viper/execution/errors.py:__all__",
+    "src/viper/execution/_restore.py:annotations",
+    "src/viper/execution/_restore.py:hashlib",
+    "src/viper/execution/_restore.py:os",
+    "src/viper/execution/_restore.py:tempfile",
+    "src/viper/execution/_restore.py:Path",
+    "src/viper/execution/_restore.py:Literal",
+    "src/viper/execution/_restore.py:BaseModel",
+    "src/viper/execution/_restore.py:ConfigDict",
+    "src/viper/execution/_restore.py:TypeAdapter",
+    "src/viper/execution/_restore.py:repo_file_paths_overlap",
+    "src/viper/execution/_restore.py:ResolvedBundleArtifact",
+    "src/viper/execution/_restore.py:ResolvedSingleFileArtifact",
+    "src/viper/execution/_restore.py:PathError",
+    "src/viper/execution/_restore.py:resolve_path",
+    "src/viper/execution/_restore.py:LocalFileRef",
+    "src/viper/execution/_restore.py:ResolvedFileRef",
+    "src/viper/execution/_restore.py:ResolvedRunRef",
+    "src/viper/execution/_restore.py:ViperCloudFileRef",
+    "src/viper/execution/_restore.py:resolve_snapshot_file_ref",
+    "src/viper/execution/_restore.py:ArtifactRestoreSelector",
+    "src/viper/execution/_restore.py:RestoreResult",
+    "src/viper/execution/_restore.py:RestoreRunReference",
+    "src/viper/execution/_restore.py:RestoredArtifact",
+    "src/viper/execution/_restore.py:RestoredFile",
+    "src/viper/execution/_restore.py:validate_viper_cloud_run_uri",
+    "src/viper/execution/_restore.py:ResolvedRun",
+    "src/viper/execution/_restore.py:RunAttempt",
+    "src/viper/execution/_restore.py:parse_yaml_bytes",
+    "src/viper/execution/_restore.py:ResolvedSpec",
+    "src/viper/execution/_restore.py:LocalArtifactStore",
+    "src/viper/execution/_restore.py:ViperCloudClient",
+    "src/viper/execution/_restore.py:content_revision",
+    "src/viper/execution/_restore.py:RunFetcher",
+    "src/viper/execution/_restore.py:RestoreError",
+    "src/viper/execution/_restore.py:_PlannedFile",
+    "src/viper/execution/_restore.py:_RESOLVED_SPEC",
+    "src/viper/execution/_restore.py:_verified_bytes",
+    "src/viper/execution/_restore.py:_local_run_reference",
+    "src/viper/execution/_restore.py:_cloud_run_reference",
+    "src/viper/execution/_restore.py:_run_reference",
+    "src/viper/execution/_restore.py:_successful_attempt",
+    "src/viper/execution/_restore.py:_stage_artifacts",
+    "src/viper/execution/_restore.py:_destination",
+    "src/viper/execution/_restore.py:_plan_files",
+    "src/viper/execution/_restore.py:_restore_files",
+    "src/viper/execution/_restore.py:restore",
+    "src/viper/storage.py:_content_commit",
+    "src/viper/storage.py:content_revision",
+    "src/viper/storage.py:LocalArtifactStore",
+    "tests/test_storage.py:_PlannedFile",
+    "tests/test_storage.py:_restore_files",
+    "tests/test_storage.py:RestoreError",
+    "tests/test_storage.py:LocalFileRef",
+    "tests/test_storage.py:LocalStageResultSnapshotRef",
+    "tests/test_storage.py:ResolvedFileRef",
+    "tests/test_storage.py:ResolvedRunSpecRef",
+    "tests/test_storage.py:SnapshotFileRef",
+    "tests/test_storage.py:ViperCloudFileRef",
+    "tests/test_storage.py:ViperCloudStageResultSnapshotRef",
+    "tests/test_storage.py:ArtifactRestoreSelector",
+    "tests/test_storage.py:test_restore_verifies_before_atomic_write",
+]
+tests = ["tests/test_storage.py:test_restore_verifies_before_atomic_write"]
+gate = "python -m pytest tests/test_storage.py -k restore_verifies_before_atomic_write -q"
+depends_on = ["P9-RSP-01"]
+```
+
+**Context:** Implement verified local and cloud restore before exposing another public route.
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:annotations -->
+```python contract-target
+from __future__ import annotations
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:re -->
+```python contract-target
+import re
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:Annotated -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:Literal -->
+```python contract-target
+from typing import Annotated, Literal
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:AfterValidator -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:Field -->
+```python contract-target
+from pydantic import AfterValidator, Field
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:ArtifactName -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:ProtocolModel -->
+```python contract-target
+from ._schema import ArtifactName, ProtocolModel
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:StageId -->
+```python contract-target
+from .ids import StageId
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:ResolvedRunRef -->
+```python contract-target
+from .references import ResolvedRunRef
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:validate_viper_cloud_run_uri -->
+```python contract-target
+def validate_viper_cloud_run_uri(value: str) -> str:
+    """Require one sealed Viper Cloud terminal-run URI."""
+    if (
+        re.fullmatch(
+            r"viper://[a-z][a-z0-9_]*/[a-z][a-z0-9_]*@[0-9a-f]{64}/[^?#]+",
+            value,
+        )
+        is None
+    ):
+        raise ValueError("Viper Cloud run URI is invalid")
+    return value
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:ViperCloudRunUri -->
+```python contract-target
+ViperCloudRunUri = Annotated[str, AfterValidator(validate_viper_cloud_run_uri)]
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:ArtifactRestoreSelector -->
+```python contract-target
+class ArtifactRestoreSelector(ProtocolModel):
+    """Select one artifact from one completed stage."""
+
+    stage_id: StageId = Field(description="Stage that produced the artifact.")
+    artifact_name: ArtifactName = Field(
+        description="Artifact name declared by the selected stage."
+    )
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:RestoredFile -->
+```python contract-target
+class RestoredFile(ProtocolModel):
+    """Record one restored or already-correct destination file."""
+
+    path: Path = Field(description="Final path of the verified file.")
+    status: Literal["restored", "already_present"] = Field(
+        description="Whether VIPER wrote the file or found matching bytes."
+    )
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:RestoredArtifact -->
+```python contract-target
+class RestoredArtifact(ProtocolModel):
+    """Record every file restored for one selected artifact."""
+
+    selector: ArtifactRestoreSelector = Field(
+        description="Stage artifact selected by the caller."
+    )
+    files: tuple[RestoredFile, ...] = Field(
+        min_length=1,
+        description="Verified files belonging to the selected artifact.",
+    )
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:RestoreResult -->
+```python contract-target
+class RestoreResult(ProtocolModel):
+    """Return the immutable run reference and restored artifact files."""
+
+    run: ResolvedRunRef = Field(
+        description="Immutable terminal run followed during restore."
+    )
+    artifacts: tuple[RestoredArtifact, ...] = Field(
+        min_length=1,
+        description="Artifacts restored from the successful attempt.",
+    )
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:RestoreRunReference -->
+```python contract-target
+RestoreRunReference = Path | ViperCloudRunUri | ResolvedRunRef
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/restoration.py:__all__ -->
+```python contract-target
+__all__ = [
+    "ArtifactRestoreSelector",
+    "RestoredArtifact",
+    "RestoredFile",
+    "RestoreResult",
+    "RestoreRunReference",
+    "ViperCloudRunUri",
+    "validate_viper_cloud_run_uri",
+]
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/errors.py:RestoreError -->
+```python contract-target
+class RestoreError(RuntimeError):
+    """Report an invalid restore reference, selection, or destination."""
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=src/viper/execution/errors.py:__all__ -->
+```python contract-target
+__all__ = ["BenchmarkExecutionError", "RestoreError", "RunError"]
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:annotations -->
+```python contract-target
+from __future__ import annotations
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:hashlib -->
+```python contract-target
+import hashlib
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:os -->
+```python contract-target
+import os
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:tempfile -->
+```python contract-target
+import tempfile
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:Literal -->
+```python contract-target
+from typing import Literal
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:BaseModel -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ConfigDict -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:TypeAdapter -->
+```python contract-target
+from pydantic import BaseModel, ConfigDict, TypeAdapter
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:repo_file_paths_overlap -->
+```python contract-target
+from .._schema import repo_file_paths_overlap
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ResolvedBundleArtifact -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ResolvedSingleFileArtifact -->
+```python contract-target
+from ..artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:PathError -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:resolve_path -->
+```python contract-target
+from ..project import PathError, resolve_path
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:LocalFileRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ResolvedFileRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ResolvedRunRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ViperCloudFileRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:resolve_snapshot_file_ref -->
+```python contract-target
+from ..references import (
+    LocalFileRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+    ViperCloudFileRef,
+    resolve_snapshot_file_ref,
+)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ArtifactRestoreSelector -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RestoreResult -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RestoreRunReference -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RestoredArtifact -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RestoredFile -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:validate_viper_cloud_run_uri -->
+```python contract-target
+from ..restoration import (
+    ArtifactRestoreSelector,
+    RestoredArtifact,
+    RestoredFile,
+    RestoreResult,
+    RestoreRunReference,
+    validate_viper_cloud_run_uri,
+)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ResolvedRun -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RunAttempt -->
+```python contract-target
+from ..runs import ResolvedRun, RunAttempt
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:parse_yaml_bytes -->
+```python contract-target
+from ..serialization import parse_yaml_bytes
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ResolvedSpec -->
+```python contract-target
+from ..stages import ResolvedSpec
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:LocalArtifactStore -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:ViperCloudClient -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:content_revision -->
+```python contract-target
+from ..storage import LocalArtifactStore, ViperCloudClient, content_revision
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RunFetcher -->
+```python contract-target
+from ._source import RunFetcher
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:RestoreError -->
+```python contract-target
+from .errors import RestoreError
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_PlannedFile -->
+```python contract-target
+class _PlannedFile(BaseModel):
+    """Hold one verified source reference and its final destination."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    selector: ArtifactRestoreSelector
+    reference: ResolvedFileRef
+    destination: Path
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_RESOLVED_SPEC -->
+```python contract-target
+_RESOLVED_SPEC = TypeAdapter(ResolvedSpec)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_verified_bytes -->
+```python contract-target
+def _verified_bytes(fetcher: RunFetcher, reference: ResolvedFileRef) -> bytes:
+    """Retrieve one file and require its recorded byte identity."""
+    try:
+        raw = fetcher(reference.stored_at)
+    except Exception as error:
+        raise RestoreError("restore source is unavailable") from error
+    if (
+        len(raw) != reference.bytes
+        or hashlib.sha256(raw).hexdigest() != reference.sha256
+    ):
+        raise RestoreError("restore source differs from its recorded identity")
+    return raw
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_local_run_reference -->
+```python contract-target
+def _local_run_reference(root: Path, path: Path) -> ResolvedRunRef:
+    """Reconstruct the immutable terminal reference selected by a local path."""
+    candidate = path if path.is_absolute() else root / path
+    try:
+        relative = candidate.resolve().relative_to(root).as_posix()
+        terminal = resolve_path(root, relative, operation="read")
+    except (OSError, ValueError, PathError) as error:
+        raise RestoreError("local terminal run path is invalid") from error
+    raw = terminal.read_bytes()
+    revision = content_revision({relative: raw})
+    return ResolvedRunRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=LocalFileRef(commit=revision, path=relative),
+    )
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_cloud_run_reference -->
+```python contract-target
+def _cloud_run_reference(
+    uri: str,
+    client: ViperCloudClient | None,
+) -> ResolvedRunRef:
+    """Resolve one cloud URI through its sealed manifest entry."""
+    validate_viper_cloud_run_uri(uri)
+    if client is None:
+        raise RestoreError("Viper Cloud restore requires a client")
+    address = uri.removeprefix("viper://")
+    owner, remainder = address.split("/", maxsplit=1)
+    project_revision, path = remainder.split("/", maxsplit=1)
+    project, revision = project_revision.split("@", maxsplit=1)
+    files = tuple(
+        file
+        for file in client.list_files(
+            owner=owner,
+            project=project,
+            revision=revision,
+        )
+        if file.path == path
+    )
+    if len(files) != 1:
+        raise RestoreError("Viper Cloud URI does not identify one terminal run")
+    file = files[0]
+    return ResolvedRunRef(
+        sha256=file.sha256,
+        bytes=file.bytes,
+        stored_at=ViperCloudFileRef(
+            owner=owner,
+            project=project,
+            revision=revision,
+            path=file.path,
+        ),
+    )
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_run_reference -->
+```python contract-target
+def _run_reference(
+    root: Path,
+    selected: RestoreRunReference,
+    client: ViperCloudClient | None,
+) -> ResolvedRunRef:
+    """Resolve one direct restore input to an immutable terminal reference."""
+    if isinstance(selected, ResolvedRunRef):
+        return selected
+    if isinstance(selected, Path):
+        return _local_run_reference(root, selected)
+    return _cloud_run_reference(selected, client)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_successful_attempt -->
+```python contract-target
+def _successful_attempt(
+    run: ResolvedRun,
+    fetcher: RunFetcher,
+) -> RunAttempt:
+    """Load the successful attempt named by a terminal run."""
+    if run.status != "succeeded" or run.successful_attempt_id is None:
+        raise RestoreError("restore requires a succeeded run")
+    for reference in run.attempts:
+        raw = _verified_bytes(fetcher, reference)
+        attempt = RunAttempt.model_validate(parse_yaml_bytes(raw))
+        if attempt.attempt_id == run.successful_attempt_id:
+            if attempt.status != "succeeded":
+                raise RestoreError("selected restore attempt did not succeed")
+            return attempt
+    raise RestoreError("successful attempt is absent from the terminal run")
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_stage_artifacts -->
+```python contract-target
+def _stage_artifacts(
+    attempt: RunAttempt,
+    fetcher: RunFetcher,
+) -> dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]]:
+    """Load each resolved stage and index its immutable artifact files."""
+    indexed: dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]] = {}
+    for stage in attempt.resolved_stages:
+        stage_reference = resolve_snapshot_file_ref(stage.snapshot, stage.resolved_spec)
+        stage_raw = _verified_bytes(fetcher, stage_reference)
+        resolved = _RESOLVED_SPEC.validate_python(parse_yaml_bytes(stage_raw))
+        for name, artifact in resolved.artifacts.items():
+            selector = ArtifactRestoreSelector(
+                stage_id=stage.stage_id,
+                artifact_name=name,
+            )
+            if isinstance(artifact, ResolvedSingleFileArtifact):
+                files = (artifact.file,)
+            else:
+                assert isinstance(artifact, ResolvedBundleArtifact)
+                files = tuple(member.file for member in artifact.members)
+            indexed[selector] = tuple(
+                resolve_snapshot_file_ref(stage.snapshot, file) for file in files
+            )
+    return indexed
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_destination -->
+```python contract-target
+def _destination(
+    *,
+    root: Path,
+    reference: ResolvedFileRef,
+    selector_count: int,
+    bundle: bool,
+    output: Path | None,
+) -> Path:
+    """Resolve one selected file to its final root-confined destination."""
+    if output is None:
+        candidate = root / reference.stored_at.path
+    elif selector_count == 1 and not bundle:
+        candidate = output if output.is_absolute() else root / output
+    else:
+        base = output if output.is_absolute() else root / output
+        candidate = base / reference.stored_at.path
+    try:
+        relative = candidate.resolve().relative_to(root).as_posix()
+        return resolve_path(root, relative, operation="write")
+    except (OSError, ValueError, PathError) as error:
+        raise RestoreError("restore destination is outside the project root") from error
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_plan_files -->
+```python contract-target
+def _plan_files(
+    *,
+    root: Path,
+    indexed: dict[ArtifactRestoreSelector, tuple[ResolvedFileRef, ...]],
+    selectors: tuple[ArtifactRestoreSelector, ...],
+    output: Path | None,
+) -> tuple[_PlannedFile, ...]:
+    """Resolve selections and reject conflicting destinations before retrieval."""
+    selected = selectors or tuple(
+        sorted(indexed, key=lambda item: (item.stage_id, item.artifact_name))
+    )
+    if len(set(selected)) != len(selected):
+        raise RestoreError("artifact selectors must be unique")
+    missing = tuple(selector for selector in selected if selector not in indexed)
+    if missing:
+        raise RestoreError("selected artifact is absent from the successful attempt")
+    planned: list[_PlannedFile] = []
+    for selector in selected:
+        references = indexed[selector]
+        bundle = len(references) > 1
+        for reference in references:
+            planned.append(
+                _PlannedFile(
+                    selector=selector,
+                    reference=reference,
+                    destination=_destination(
+                        root=root,
+                        reference=reference,
+                        selector_count=len(selected),
+                        bundle=bundle,
+                        output=output,
+                    ),
+                )
+            )
+    relative_paths = tuple(
+        item.destination.relative_to(root).as_posix() for item in planned
+    )
+    for index, path in enumerate(relative_paths):
+        if any(
+            repo_file_paths_overlap(path, prior) for prior in relative_paths[:index]
+        ):
+            raise RestoreError("restore destinations overlap")
+    return tuple(planned)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:_restore_files -->
+```python contract-target
+def _restore_files(
+    fetcher: RunFetcher,
+    planned: tuple[_PlannedFile, ...],
+) -> dict[ArtifactRestoreSelector, list[RestoredFile]]:
+    """Verify every source and destination before atomically replacing files."""
+    prepared: list[tuple[_PlannedFile, bytes]] = []
+    for item in planned:
+        raw = _verified_bytes(fetcher, item.reference)
+        if item.destination.exists():
+            if not item.destination.is_file() or item.destination.read_bytes() != raw:
+                raise RestoreError("restore destination contains different bytes")
+        prepared.append((item, raw))
+
+    restored: dict[ArtifactRestoreSelector, list[RestoredFile]] = {}
+    temporary: list[Path] = []
+    try:
+        for item, raw in prepared:
+            status: Literal["restored", "already_present"] = "already_present"
+            if not item.destination.exists():
+                item.destination.parent.mkdir(parents=True, exist_ok=True)
+                descriptor, name = tempfile.mkstemp(
+                    dir=item.destination.parent,
+                    prefix=f".{item.destination.name}.",
+                )
+                temporary_path = Path(name)
+                temporary.append(temporary_path)
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(raw)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                if temporary_path.read_bytes() != raw:
+                    raise RestoreError("temporary restore file changed before commit")
+                os.replace(temporary_path, item.destination)
+                temporary.remove(temporary_path)
+                status = "restored"
+            restored.setdefault(item.selector, []).append(
+                RestoredFile(path=item.destination, status=status)
+            )
+    finally:
+        for path in temporary:
+            path.unlink(missing_ok=True)
+    return restored
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/execution/_restore.py:restore -->
+```python contract-target
+def restore(
+    repository_root: Path,
+    run_reference: RestoreRunReference,
+    *,
+    artifacts: tuple[ArtifactRestoreSelector, ...] = (),
+    output: Path | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> RestoreResult:
+    """Restore selected verified artifacts from one successful immutable run."""
+    root = repository_root.resolve(strict=True)
+    reference = _run_reference(root, run_reference, cloud_client)
+    fetcher = RunFetcher(root, LocalArtifactStore(root), "", cloud_client)
+    terminal_raw = _verified_bytes(fetcher, reference)
+    run = ResolvedRun.model_validate(parse_yaml_bytes(terminal_raw))
+    attempt = _successful_attempt(run, fetcher)
+    indexed = _stage_artifacts(attempt, fetcher)
+    planned = _plan_files(
+        root=root,
+        indexed=indexed,
+        selectors=artifacts,
+        output=output,
+    )
+    files = _restore_files(fetcher, planned)
+    return RestoreResult(
+        run=reference,
+        artifacts=tuple(
+            RestoredArtifact(selector=selector, files=tuple(files[selector]))
+            for selector in (
+                artifacts
+                or tuple(
+                    sorted(files, key=lambda item: (item.stage_id, item.artifact_name))
+                )
+            )
+        ),
+    )
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=remove target=src/viper/storage.py:_content_commit -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=src/viper/storage.py:content_revision -->
+```python contract-target
+def content_revision(files: Mapping[RepoRelPath, bytes]) -> str:
+    """Derive one revision identity from ordered paths and file identities."""
+    digest = hashlib.sha256()
+    for path, raw in sorted(files.items()):
+        encoded_path = str(path).encode("utf-8")
+        digest.update(len(encoded_path).to_bytes(8, "big"))
+        digest.update(encoded_path)
+        digest.update(len(raw).to_bytes(8, "big"))
+        digest.update(hashlib.sha256(raw).digest())
+    return digest.hexdigest()
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=src/viper/storage.py:LocalArtifactStore -->
+```python contract-target
+class LocalArtifactStore:
+    """Manage content-addressed output revisions beneath one repository root."""
+
+    def __init__(self, project_root: Path, store: RepoRelPath = ".viper/store"):
+        """Bind the immutable store beneath one canonical project root."""
+        self.project_root = project_root.resolve(strict=True)
+        self.store = store
+        try:
+            self.store_root = resolve_path(self.project_root, store, operation="write")
+        except PathError as error:
+            raise LocalStoreError("local store escapes the project root") from error
+
+    def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
+        """Write one immutable revision and return its content-derived identity."""
+        if not files:
+            raise LocalStoreError("an immutable revision requires at least one file")
+        commit = content_revision(files)
+        revision_root = self.store_root / commit
+        for relative_path, raw in sorted(files.items()):
+            target = (revision_root / relative_path).resolve()
+            if not target.is_relative_to(revision_root):
+                raise LocalStoreError("published file escapes its immutable revision")
+            if target.exists():
+                if not target.is_file() or target.read_bytes() != raw:
+                    raise LocalStoreError("immutable revision contains different bytes")
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                dir=target.parent,
+                prefix=f".{target.name}.",
+            )
+            try:
+                with os.fdopen(file_descriptor, "wb") as temporary_file:
+                    temporary_file.write(raw)
+                    temporary_file.flush()
+                    os.fsync(temporary_file.fileno())
+                os.replace(temporary_name, target)
+            finally:
+                temporary_path = Path(temporary_name)
+                if temporary_path.exists():
+                    temporary_path.unlink()
+        return commit
+
+    def snapshot(
+        self,
+        files: Mapping[RepoRelPath, bytes],
+    ) -> LocalStageResultSnapshotRef:
+        """Publish one stage snapshot and return its immutable location."""
+        return LocalStageResultSnapshotRef(
+            store=self.store,
+            commit=self.publish(files),
+        )
+
+    def resolved_files(
+        self,
+        files: Mapping[RepoRelPath, bytes],
+    ) -> tuple[ResolvedFileRef, ...]:
+        """Publish related files and return exact references to each file."""
+        commit = self.publish(files)
+        return tuple(
+            ResolvedFileRef(
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+                stored_at=LocalFileRef(
+                    store=self.store,
+                    commit=commit,
+                    path=path,
+                ),
+            )
+            for path, raw in sorted(files.items())
+        )
+
+    def fetch(self, location: StorageModel) -> bytes:
+        """Retrieve one local-store file after validating its revision path."""
+        if not isinstance(location, LocalFileRef):
+            raise TypeError("LocalArtifactStore can retrieve only LocalFileRef")
+
+        if location.store != self.store:
+            raise LocalStoreError("local file belongs to a different store")
+
+        revision_root = (self.store_root / location.commit).resolve()
+        target = (revision_root / location.path).resolve()
+        if not target.is_relative_to(revision_root) or not target.is_file():
+            raise LocalStoreError("local immutable file is missing")
+
+        return target.read_bytes()
+
+    def list_snapshot_files(
+        self,
+        snapshot: LocalStageResultSnapshotRef,
+    ) -> tuple[RepoRelPath, ...]:
+        """List every regular file in one immutable local snapshot."""
+        if snapshot.store != self.store:
+            raise LocalStoreError("local snapshot belongs to a different store")
+
+        revision_root = (self.store_root / snapshot.commit).resolve()
+        if not revision_root.is_dir():
+            raise LocalStoreError("local snapshot revision is missing")
+
+        paths: list[RepoRelPath] = []
+        for path in sorted(revision_root.rglob("*")):
+            if path.is_symlink():
+                raise LocalStoreError("local snapshot contains a symlink")
+            if path.is_file():
+                paths.append(path.relative_to(revision_root).as_posix())
+        return tuple(paths)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=tests/test_storage.py:_PlannedFile -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=tests/test_storage.py:_restore_files -->
+```python contract-target
+from viper.execution._restore import (
+    _PlannedFile,
+    _restore_files,
+)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=tests/test_storage.py:RestoreError -->
+```python contract-target
+from viper.execution.errors import RestoreError
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=tests/test_storage.py:LocalFileRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=tests/test_storage.py:LocalStageResultSnapshotRef -->
+```python contract-target
+from viper.references import (
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=tests/test_storage.py:ResolvedFileRef -->
+```python contract-target
+from viper.references import (
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=tests/test_storage.py:ResolvedRunSpecRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=tests/test_storage.py:SnapshotFileRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=tests/test_storage.py:ViperCloudFileRef -->
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=update target=tests/test_storage.py:ViperCloudStageResultSnapshotRef -->
+```python contract-target
+from viper.references import (
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=tests/test_storage.py:ArtifactRestoreSelector -->
+```python contract-target
+from viper.restoration import ArtifactRestoreSelector
+```
+
+<!-- contract-target: requirements=RSP-07 block=P10-RSP-01 action=add target=tests/test_storage.py:test_restore_verifies_before_atomic_write -->
+```python contract-target
+def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
+    """Leave every destination untouched when one selected file conflicts."""
+    selector = ArtifactRestoreSelector(stage_id="train", artifact_name="model")
+    first = b"first"
+    second = b"second"
+    references = (
+        ResolvedFileRef(
+            sha256=hashlib.sha256(first).hexdigest(),
+            bytes=len(first),
+            stored_at=LocalFileRef(commit="a" * 64, path="artifacts/first.bin"),
+        ),
+        ResolvedFileRef(
+            sha256=hashlib.sha256(second).hexdigest(),
+            bytes=len(second),
+            stored_at=LocalFileRef(commit="a" * 64, path="artifacts/second.bin"),
+        ),
+    )
+    first_destination = tmp_path / "restored/first.bin"
+    second_destination = tmp_path / "restored/second.bin"
+    second_destination.parent.mkdir()
+    second_destination.write_bytes(b"occupied")
+    planned = tuple(
+        _PlannedFile(
+            selector=selector,
+            reference=reference,
+            destination=destination,
+        )
+        for reference, destination in zip(
+            references,
+            (first_destination, second_destination),
+            strict=True,
+        )
+    )
+    payloads = {
+        "artifacts/first.bin": first,
+        "artifacts/second.bin": second,
+    }
+
+    with pytest.raises(RestoreError, match="different bytes"):
+        _restore_files(
+            lambda location: payloads[location.path],
+            planned,
+        )
+
+    assert not first_destination.exists()
+    assert second_destination.read_bytes() == b"occupied"
+```
+
+<!-- pair-block-definition: P10-RSP-02 -->
+```toml pair-block
+id = "P10-RSP-02"
+requirements = ["RSP-08"]
+targets = [
+    "src/viper/execution/__init__.py:ArtifactRestoreSelector",
+    "src/viper/execution/__init__.py:RestoreResult",
+    "src/viper/execution/__init__.py:RestoreRunReference",
+    "src/viper/execution/__init__.py:RestoredArtifact",
+    "src/viper/execution/__init__.py:RestoredFile",
+    "src/viper/execution/__init__.py:restore",
+    "src/viper/execution/__init__.py:__all__",
+    "src/viper/api.py:Annotated",
+    "src/viper/api.py:Any",
+    "src/viper/api.py:Literal",
+    "src/viper/api.py:restore_run_artifacts",
+    "src/viper/api.py:BenchmarkExecutionError",
+    "src/viper/api.py:RestoreError",
+    "src/viper/api.py:RunError",
+    "src/viper/api.py:ResolvedRunRef",
+    "src/viper/api.py:ArtifactRestoreSelector",
+    "src/viper/api.py:RestoreResult",
+    "src/viper/api.py:ViperCloudRunUri",
+    "src/viper/api.py:OperationName",
+    "src/viper/api.py:LocalRunPath",
+    "src/viper/api.py:ViperCloudRunReference",
+    "src/viper/api.py:RestoreRequestReference",
+    "src/viper/api.py:RestoreRequest",
+    "src/viper/api.py:RestoreSuccess",
+    "src/viper/api.py:SCHEMA_REGISTRY",
+    "src/viper/api.py:OPERATIONS",
+    "src/viper/api.py:restore_artifacts",
+    "src/viper/api.py:REQUEST_REGISTRY",
+    "src/viper/api.py:HANDLER_REGISTRY",
+    "src/viper/api.py:__all__",
+    "src/viper/cli.py:parse_artifact_selector",
+    "src/viper/cli.py:build_parser",
+    "src/viper/cli.py:_operation_and_payload",
+    "src/viper/cli.py:_human_success",
+    "tests/test_api.py:pytest",
+    "tests/test_api.py:CapabilitiesRequest",
+    "tests/test_api.py:LocalRunPath",
+    "tests/test_api.py:RestoreRequest",
+    "tests/test_api.py:SchemaRequest",
+    "tests/test_api.py:StatusRequest",
+    "tests/test_api.py:ValidateStageRequest",
+    "tests/test_api.py:ViperFailure",
+    "tests/test_api.py:dispatch",
+    "tests/test_api.py:get_capabilities",
+    "tests/test_api.py:get_schema",
+    "tests/test_api.py:restore_artifacts",
+    "tests/test_api.py:result_json_bytes",
+    "tests/test_api.py:status",
+    "tests/test_api.py:validate_stage",
+    "tests/test_api.py:main",
+    "tests/test_api.py:LocalFileRef",
+    "tests/test_api.py:ResolvedRunRef",
+    "tests/test_api.py:ArtifactRestoreSelector",
+    "tests/test_api.py:RestoreResult",
+    "tests/test_api.py:RestoredArtifact",
+    "tests/test_api.py:RestoredFile",
+    "tests/test_api.py:test_restore_result_matches_python_api_and_cli",
+]
+tests = ["tests/test_api.py:test_restore_result_matches_python_api_and_cli"]
+gate = "python -m pytest tests/test_api.py -k restore_result_matches_python_api_and_cli -q"
+depends_on = ["P10-RSP-01"]
+```
+
+**Context:** Expose the verified restore engine through the Python API, typed operation registry, and CLI.
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:ArtifactRestoreSelector -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoreResult -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoreRunReference -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoredArtifact -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:RestoredFile -->
+```python contract-target
+from ..restoration import (
+    ArtifactRestoreSelector,
+    RestoredArtifact,
+    RestoredFile,
+    RestoreResult,
+    RestoreRunReference,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/execution/__init__.py:restore -->
+```python contract-target
+from ._restore import restore
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/execution/__init__.py:__all__ -->
+```python contract-target
+__all__ = [
+    "benchmark",
+    "ArtifactRestoreSelector",
+    "RestoreResult",
+    "RestoreRunReference",
+    "RestoredArtifact",
+    "RestoredFile",
+    "retry",
+    "restore",
+    "run",
+]
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:Annotated -->
+```python contract-target
+from typing import Annotated, Any, Literal
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:Any -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:Literal -->
+```python contract-target
+from typing import Annotated, Any, Literal
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:restore_run_artifacts -->
+```python contract-target
+from .execution._restore import restore as restore_run_artifacts
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:BenchmarkExecutionError -->
+```python contract-target
+from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:RestoreError -->
+```python contract-target
+from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:RunError -->
+```python contract-target
+from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:ResolvedRunRef -->
+```python contract-target
+from .references import ResolvedRunRef
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:ArtifactRestoreSelector -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:RestoreResult -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:ViperCloudRunUri -->
+```python contract-target
+from .restoration import (
+    ArtifactRestoreSelector,
+    RestoreResult,
+    ViperCloudRunUri,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:OperationName -->
+```python contract-target
+OperationName = Literal[
+    "validate_stage",
+    "validate_resolved_stage",
+    "validate_run_spec",
+    "freeze_run",
+    "preflight",
+    "execute_stage",
+    "run",
+    "retry",
+    "execute_benchmark",
+    "restore",
+    "plan_diff",
+    "lineage",
+    "status",
+    "compare_runs",
+    "verify_run",
+    "verify_benchmark",
+    "verify_pointer",
+    "get_schema",
+    "get_capabilities",
+    "init_project",
+    "explain_impact",
+    "analyze_impact",
+]
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:LocalRunPath -->
+```python contract-target
+class LocalRunPath(APIModel):
+    """Select a terminal run document beneath the project root."""
+
+    kind: Literal["local_path"] = "local_path"
+    path: Path
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:ViperCloudRunReference -->
+```python contract-target
+class ViperCloudRunReference(APIModel):
+    """Select a terminal run from one sealed Viper Cloud revision."""
+
+    kind: Literal["viper_cloud_uri"] = "viper_cloud_uri"
+    uri: ViperCloudRunUri
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:RestoreRequestReference -->
+```python contract-target
+RestoreRequestReference = Annotated[
+    LocalRunPath | ViperCloudRunReference | ResolvedRunRef,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:RestoreRequest -->
+```python contract-target
+class RestoreRequest(APIModel):
+    """Select a successful run and the artifacts to restore from it."""
+
+    run_reference: RestoreRequestReference
+    repository_root: Path
+    artifacts: tuple[ArtifactRestoreSelector, ...] = ()
+    output: Path | None = None
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:RestoreSuccess -->
+```python contract-target
+class RestoreSuccess(SuccessModel):
+    """Return the files restored from one immutable run."""
+
+    operation: Literal["restore"] = "restore"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: RestoreResult
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:SCHEMA_REGISTRY -->
+```python contract-target
+SCHEMA_REGISTRY: dict[str, Any] = {
+    "ArtifactPointer": ArtifactPointer,
+    "BenchmarkResult": BenchmarkResult,
+    "CapabilitiesRequest": CapabilitiesRequest,
+    "CapabilitiesSuccess": CapabilitiesSuccess,
+    "ExecuteStageRequest": ExecuteStageRequest,
+    "ExecuteStageSuccess": ExecuteStageSuccess,
+    "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
+    "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
+    "RestoreRequest": RestoreRequest,
+    "RestoreSuccess": RestoreSuccess,
+    "ExplainImpactRequest": ExplainImpactRequest,
+    "ExplainImpactSuccess": ExplainImpactSuccess,
+    "AnalyzeImpactRequest": AnalyzeImpactRequest,
+    "AnalyzeImpactSuccess": AnalyzeImpactSuccess,
+    "FreezeRunRequest": FreezeRunRequest,
+    "FreezeRunSuccess": FreezeRunSuccess,
+    "InitProjectRequest": InitProjectRequest,
+    "InitProjectSuccess": InitProjectSuccess,
+    "LineageRequest": LineageRequest,
+    "LineageSuccess": LineageSuccess,
+    "CompareRunsRequest": CompareRunsRequest,
+    "CompareRunsSuccess": CompareRunsSuccess,
+    "PlanDiffRequest": PlanDiffRequest,
+    "PlanDiffSuccess": PlanDiffSuccess,
+    "StatusRequest": StatusRequest,
+    "StatusSuccess": StatusSuccess,
+    "PreflightRequest": PreflightRequest,
+    "PreflightSuccess": PreflightSuccess,
+    "ResolvedRun": ResolvedRun,
+    "RunRequest": RunRequest,
+    "RunSuccess": RunSuccess,
+    "RetryRequest": RetryRequest,
+    "RetrySuccess": RetrySuccess,
+    "RunSpec": RunSpec,
+    "SchemaRequest": SchemaRequest,
+    "SchemaSuccess": SchemaSuccess,
+    "Spec": Spec,
+    "ValidateResolvedStageRequest": ValidateResolvedStageRequest,
+    "ValidateResolvedStageSuccess": ValidateResolvedStageSuccess,
+    "ValidateRunSpecRequest": ValidateRunSpecRequest,
+    "ValidateRunSpecSuccess": ValidateRunSpecSuccess,
+    "ValidateStageRequest": ValidateStageRequest,
+    "ValidateStageSuccess": ValidateStageSuccess,
+    "VerifyBenchmarkRequest": VerifyBenchmarkRequest,
+    "VerifyBenchmarkSuccess": VerifyBenchmarkSuccess,
+    "VerifyPointerRequest": VerifyPointerRequest,
+    "VerifyPointerSuccess": VerifyPointerSuccess,
+    "VerifyRunRequest": VerifyRunRequest,
+    "VerifyRunSuccess": VerifyRunSuccess,
+    "ViperFailure": ViperFailure,
+}
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:OPERATIONS -->
+```python contract-target
+OPERATIONS: tuple[OperationName, ...] = (
+    "validate_stage",
+    "validate_resolved_stage",
+    "validate_run_spec",
+    "freeze_run",
+    "preflight",
+    "execute_stage",
+    "run",
+    "retry",
+    "execute_benchmark",
+    "restore",
+    "plan_diff",
+    "lineage",
+    "status",
+    "compare_runs",
+    "verify_run",
+    "verify_benchmark",
+    "verify_pointer",
+    "get_schema",
+    "get_capabilities",
+    "init_project",
+    "explain_impact",
+    "analyze_impact",
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/api.py:restore_artifacts -->
+```python contract-target
+def restore_artifacts(request: RestoreRequest) -> RestoreSuccess:
+    """Restore selected artifacts through the shared execution engine."""
+    project_root = _root(request.repository_root, "restore")
+    selected = request.run_reference
+    if isinstance(selected, LocalRunPath):
+        run_reference = selected.path
+    elif isinstance(selected, ViperCloudRunReference):
+        run_reference = selected.uri
+    else:
+        run_reference = selected
+    try:
+        result = restore_run_artifacts(
+            project_root,
+            run_reference,
+            artifacts=request.artifacts,
+            output=request.output,
+        )
+    except RestoreError as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="restore",
+                origin="application",
+                code="verification_failed",
+                message="artifact restore failed",
+            )
+        ) from exc
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        path = selected.path if isinstance(selected, LocalRunPath) else project_root
+        raise _document_error("restore", path, exc) from exc
+    return RestoreSuccess(result=result)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:REQUEST_REGISTRY -->
+```python contract-target
+REQUEST_REGISTRY: dict[OperationName, RequestType] = {
+    "validate_stage": ValidateStageRequest,
+    "validate_resolved_stage": ValidateResolvedStageRequest,
+    "validate_run_spec": ValidateRunSpecRequest,
+    "freeze_run": FreezeRunRequest,
+    "preflight": PreflightRequest,
+    "execute_stage": ExecuteStageRequest,
+    "run": RunRequest,
+    "retry": RetryRequest,
+    "execute_benchmark": ExecuteBenchmarkRequest,
+    "restore": RestoreRequest,
+    "plan_diff": PlanDiffRequest,
+    "lineage": LineageRequest,
+    "status": StatusRequest,
+    "compare_runs": CompareRunsRequest,
+    "verify_run": VerifyRunRequest,
+    "verify_benchmark": VerifyBenchmarkRequest,
+    "verify_pointer": VerifyPointerRequest,
+    "get_schema": SchemaRequest,
+    "get_capabilities": CapabilitiesRequest,
+    "init_project": InitProjectRequest,
+    "explain_impact": ExplainImpactRequest,
+    "analyze_impact": AnalyzeImpactRequest,
+}
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:HANDLER_REGISTRY -->
+```python contract-target
+HANDLER_REGISTRY: dict[OperationName, Handler] = {
+    "validate_stage": validate_stage,
+    "validate_resolved_stage": validate_resolved_stage,
+    "validate_run_spec": validate_run_spec,
+    "freeze_run": freeze_run,
+    "preflight": preflight,
+    "execute_stage": execute_stage,
+    "run": run_request,
+    "retry": retry_request,
+    "execute_benchmark": execute_benchmark,
+    "restore": restore_artifacts,
+    "plan_diff": plan_diff,
+    "lineage": lineage,
+    "status": status,
+    "compare_runs": compare_runs,
+    "verify_run": verify_run,
+    "verify_benchmark": verify_benchmark,
+    "verify_pointer": verify_pointer,
+    "get_schema": get_schema,
+    "get_capabilities": get_capabilities,
+    "init_project": init_project,
+    "explain_impact": explain_impact,
+    "analyze_impact": analyze_impact,
+}
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/api.py:__all__ -->
+```python contract-target
+__all__ = [
+    "APIModel",
+    "AnalyzeImpactRequest",
+    "AnalyzeImpactSuccess",
+    "CapabilitiesRequest",
+    "CapabilitiesSuccess",
+    "CompareRunsRequest",
+    "CompareRunsSuccess",
+    "ExecuteStageRequest",
+    "ExecuteStageSuccess",
+    "ExecuteBenchmarkRequest",
+    "ExecuteBenchmarkSuccess",
+    "ExplainImpactRequest",
+    "ExplainImpactSuccess",
+    "ErrorCode",
+    "FailureOrigin",
+    "FreezeRunRequest",
+    "FreezeRunSuccess",
+    "InitProjectRequest",
+    "InitProjectSuccess",
+    "LineageRequest",
+    "LineageSuccess",
+    "OperationName",
+    "PythonRunError",
+    "PlanDiffRequest",
+    "PlanDiffSuccess",
+    "PreflightRequest",
+    "PreflightSuccess",
+    "RunRequest",
+    "RunSuccess",
+    "RetryRequest",
+    "RetrySuccess",
+    "RestoreRequest",
+    "RestoreRequestReference",
+    "RestoreSuccess",
+    "LocalRunPath",
+    "ViperCloudRunReference",
+    "SchemaRequest",
+    "SchemaSuccess",
+    "StatusRequest",
+    "StatusSuccess",
+    "SuccessModel",
+    "ValidateResolvedStageRequest",
+    "ValidateResolvedStageSuccess",
+    "ValidateRunSpecRequest",
+    "ValidateRunSpecSuccess",
+    "ValidateStageRequest",
+    "ValidateStageSuccess",
+    "VerifyBenchmarkRequest",
+    "VerifyBenchmarkSuccess",
+    "VerifyPointerRequest",
+    "VerifyPointerSuccess",
+    "VerifyRunRequest",
+    "VerifyRunSuccess",
+    "ViperError",
+    "ViperFailure",
+    "analyze_impact",
+    "compare_runs",
+    "dispatch",
+    "execute_stage",
+    "execute_benchmark",
+    "explain_impact",
+    "restore_artifacts",
+    "freeze_run",
+    "get_capabilities",
+    "init_project",
+    "get_schema",
+    "lineage",
+    "plan_diff",
+    "preflight",
+    "result_json_bytes",
+    "retry",
+    "run",
+    "status",
+    "validate_resolved_stage",
+    "validate_run_spec",
+    "validate_stage",
+    "verify_benchmark",
+    "verify_pointer",
+    "verify_run",
+]
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=src/viper/cli.py:parse_artifact_selector -->
+```python contract-target
+def parse_artifact_selector(value: str) -> tuple[str, str]:
+    """Split one STAGE.ARTIFACT selector for the typed restore request."""
+    if value.count(".") != 1:
+        raise argparse.ArgumentTypeError("artifact selector must use STAGE.ARTIFACT")
+    stage_id, artifact_name = value.split(".")
+    if not stage_id or not artifact_name:
+        raise argparse.ArgumentTypeError("artifact selector must use STAGE.ARTIFACT")
+    return stage_id, artifact_name
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/cli.py:build_parser -->
+```python contract-target
+def build_parser() -> ArgumentParser:
+    """Build the VIPER command parser and its API subcommands."""
+    parser = ViperArgumentParser(prog="viper")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="emit one machine-readable result document",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    for name, help_text in (
+        ("validate-stage", "validate one authored stage specification"),
+        ("validate-resolved-stage", "validate one resolved stage specification"),
+        ("validate-run", "validate one frozen run specification"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+
+    freeze = commands.add_parser(
+        "freeze-run",
+        help="write canonical stage specs and a hash-bound RunSpec",
+    )
+    freeze.add_argument("draft", type=Path)
+    add_root(freeze)
+
+    preflight = commands.add_parser(
+        "preflight",
+        help="inspect every applicable check before local execution",
+    )
+    preflight.add_argument("run_spec", type=Path)
+    add_root(preflight)
+
+    execute = commands.add_parser(
+        "execute-stage",
+        help="run one stage from a frozen local run plan",
+    )
+    execute.add_argument("run_spec", type=Path)
+    execute.add_argument("stage_id")
+    add_root(execute)
+    execute.add_argument("--timeout-seconds", type=float)
+
+    run_command = commands.add_parser(
+        "run",
+        help="execute and verify one complete run on this host",
+    )
+    run_command.add_argument("run_spec", type=Path)
+    add_root(run_command)
+    run_command.add_argument("--timeout-seconds", type=float)
+
+    retry_command = commands.add_parser(
+        "retry",
+        help="append one attempt to a failed frozen run",
+    )
+    retry_command.add_argument("run_spec", type=Path)
+    add_root(retry_command)
+    retry_command.add_argument("--timeout-seconds", type=float)
+
+    benchmark_command = commands.add_parser(
+        "execute-benchmark",
+        help="execute and verify one independent benchmark confirmation",
+    )
+    benchmark_command.add_argument("resolved_run", type=Path)
+    benchmark_command.add_argument("benchmark_spec", type=Path)
+    add_root(benchmark_command)
+    benchmark_command.add_argument("--timeout-seconds", type=float)
+
+    restore = commands.add_parser(
+        "restore",
+        help="restore verified artifacts from one successful run",
+    )
+    restore.add_argument("run_reference")
+    add_root(restore)
+    restore.add_argument(
+        "--artifacts",
+        nargs="+",
+        default=[],
+        type=parse_artifact_selector,
+        metavar="STAGE.ARTIFACT",
+    )
+    restore.add_argument("--output", type=Path)
+
+    plan_diff = commands.add_parser(
+        "plan-diff",
+        help="compare two complete frozen run plans",
+    )
+    plan_diff.add_argument("left_run_spec", type=Path)
+    plan_diff.add_argument("right_run_spec", type=Path)
+    add_root(plan_diff, "left_root")
+    add_root(plan_diff, "right_root")
+
+    status = commands.add_parser(
+        "status",
+        help="read the latest durable state of one local attempt",
+    )
+    status.add_argument("path", type=Path)
+
+    compare_runs = commands.add_parser(
+        "compare-runs",
+        help="compare all connected evidence from two verified runs",
+    )
+    compare_runs.add_argument("left_path", type=Path)
+    compare_runs.add_argument("right_path", type=Path)
+    add_root(compare_runs, "left_root")
+    add_root(compare_runs, "right_root")
+    compare_runs.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
+    for name, help_text in (
+        ("verify-run", "verify one terminal resolved run"),
+        ("verify-benchmark", "verify one benchmark result"),
+        ("verify-pointer", "verify one promoted artifact pointer"),
+        ("lineage", "return the verified upstream lineage of one run"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+        add_root(command)
+        command.add_argument(
+            "--trust-source",
+            action="append",
+            required=True,
+            help="source repository URL approved to supply executable loaders",
+        )
+
+    schema = commands.add_parser("schema", help="return one public JSON Schema")
+    schema.add_argument("name")
+    commands.add_parser("capabilities", help="list installed VIPER capabilities")
+    initialize = commands.add_parser(
+        "init",
+        help="create a five-stage starter project",
+    )
+    initialize.add_argument("path", type=Path)
+    initialize.add_argument("--package", required=True)
+    impact = commands.add_parser(
+        "impact",
+        help="inspect verified source-impact evidence",
+    )
+    impact_commands = impact.add_subparsers(dest="impact_command", required=True)
+    explain = impact_commands.add_parser(
+        "explain",
+        help="join one PlanCheck one-hop result to source locations",
+    )
+    explain.add_argument("--check", type=Path, required=True)
+    explain.add_argument("--baseline-graph", type=Path, required=True)
+    explain.add_argument("--realized-graph", type=Path, required=True)
+    explain.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        default=[],
+        help="limit evidence to one PATH:SYMBOL target; repeat for several targets",
+    )
+    analyze = impact_commands.add_parser(
+        "analyze",
+        help="compile direct impact from one Git baseline to the working tree",
+    )
+    add_root(analyze)
+    analyze.add_argument(
+        "--base",
+        default="HEAD",
+        help="baseline Git revision; defaults to HEAD",
+    )
+    analyze.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        required=True,
+        help="analyze one PATH:SYMBOL target; repeat for several targets",
+    )
+    analyze.add_argument("--artifact-root", type=Path)
+    analyze.add_argument("--cache-root", type=Path)
+    analyze.add_argument("--codeql-executable", type=Path)
+    analyze.add_argument("--query-pack", type=Path)
+    return parser
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/cli.py:_operation_and_payload -->
+```python contract-target
+def _operation_and_payload(
+    arguments: argparse.Namespace,
+) -> tuple[OperationName, dict[str, Any]]:
+    """Map parsed command arguments onto one API operation."""
+    values = vars(arguments).copy()
+    command = values.pop("command")
+    values.pop("json_output")
+    if command == "impact":
+        command = f"impact-{values.pop('impact_command')}"
+    mapping: dict[str, OperationName] = {
+        "validate-stage": "validate_stage",
+        "validate-resolved-stage": "validate_resolved_stage",
+        "validate-run": "validate_run_spec",
+        "freeze-run": "freeze_run",
+        "preflight": "preflight",
+        "execute-stage": "execute_stage",
+        "run": "run",
+        "retry": "retry",
+        "execute-benchmark": "execute_benchmark",
+        "restore": "restore",
+        "plan-diff": "plan_diff",
+        "lineage": "lineage",
+        "status": "status",
+        "compare-runs": "compare_runs",
+        "verify-run": "verify_run",
+        "verify-benchmark": "verify_benchmark",
+        "verify-pointer": "verify_pointer",
+        "schema": "get_schema",
+        "capabilities": "get_capabilities",
+        "init": "init_project",
+        "impact-explain": "explain_impact",
+        "impact-analyze": "analyze_impact",
+    }
+    operation = mapping[command]
+    if operation == "restore":
+        reference = values.pop("run_reference")
+        values["run_reference"] = (
+            {"kind": "viper_cloud_uri", "uri": reference}
+            if reference.startswith("viper://")
+            else {"kind": "local_path", "path": reference}
+        )
+        selectors = []
+        for stage_id, artifact_name in values.pop("artifacts"):
+            selectors.append({"stage_id": stage_id, "artifact_name": artifact_name})
+        values["artifacts"] = selectors
+        values["repository_root"] = values.pop("root")
+    trusted = values.pop("trust_source", None)
+    if trusted is not None:
+        values["trusted_source_repositories"] = trusted
+    return operation, values
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=src/viper/cli.py:_human_success -->
+```python contract-target
+def _human_success(result: SuccessModel) -> str:
+    """Render one concise human result for an API success."""
+    if result.operation == "validate_stage":
+        return f"valid {getattr(result, 'stage_kind')} stage"
+    if result.operation == "validate_resolved_stage":
+        return f"valid resolved {getattr(result, 'stage_kind')} stage"
+    if result.operation == "validate_run_spec":
+        return "valid run plan"
+    if result.operation == "freeze_run":
+        files = getattr(result, "files")
+        return f"froze run {getattr(result, 'run_id')} in {len(files)} files"
+    if result.operation == "preflight":
+        checks = getattr(result, "checks")
+        failures = sum(check.status == "failure" for check in checks)
+        return (
+            "preflight ready"
+            if failures == 0
+            else f"preflight found {failures} failures"
+        )
+    if result.operation == "execute_stage":
+        artifacts = getattr(result, "artifacts")
+        count = sum(
+            1 if artifact.kind == "file" else len(artifact.members)
+            for artifact in artifacts.values()
+        )
+        return (
+            f"executed stage {getattr(result, 'stage_id')} and identified {count} files"
+        )
+    if result.operation == "run":
+        return f"completed and verified run {getattr(result, 'run_id')}"
+    if result.operation == "retry":
+        return (
+            f"completed attempt {getattr(result, 'attempt_id')} for run "
+            f"{getattr(result, 'run_id')}"
+        )
+    if result.operation == "execute_benchmark":
+        benchmark = getattr(result, "result")
+        return (
+            f"benchmark {benchmark.status}: confirmation attempt "
+            f"{benchmark.confirmation.stored_at.path}"
+        )
+    if result.operation == "restore":
+        restored = getattr(result, "result")
+        file_count = sum(len(artifact.files) for artifact in restored.artifacts)
+        return f"restored {file_count} verified files"
+    if result.operation == "plan_diff":
+        changes = getattr(result, "changes")
+        if not changes:
+            return "plans are identical"
+        return "\n".join(f"{change.kind}: {change.path}" for change in changes)
+    if result.operation == "lineage":
+        return (
+            f"verified lineage with {len(getattr(result, 'nodes'))} nodes and "
+            f"{len(getattr(result, 'edges'))} edges"
+        )
+    if result.operation == "status":
+        state = getattr(result, "state")
+        entries = getattr(result, "entry_count")
+        return f"attempt state {state or 'empty'} after {entries} journal entries"
+    if result.operation == "compare_runs":
+        changes = getattr(result, "changes")
+        if not changes:
+            return "verified runs are identical"
+        return "\n".join(f"{change.kind}: {change.path}" for change in changes)
+    if result.operation == "verify_run":
+        return f"verified run {getattr(result, 'run_id')}"
+    if result.operation == "verify_benchmark":
+        return f"verified benchmark result {getattr(result, 'benchmark_status')}"
+    if result.operation == "verify_pointer":
+        return f"verified artifact with {getattr(result, 'file_count')} files"
+    if result.operation == "get_schema":
+        return result.model_dump_json(indent=2)
+    if result.operation == "init_project":
+        return f"created project at {getattr(result, 'project_root')}"
+    if result.operation == "explain_impact":
+        evidence = getattr(result, "evidence")
+        if not evidence:
+            return "no direct dependency evidence"
+        return "\n".join(
+            f"{item.state} {item.kind}: "
+            f"{item.dependent.path}:{item.dependent.symbol} -> "
+            f"{item.target.path}:{item.target.symbol} "
+            f"at {item.use_path}:{item.use_line}"
+            for item in evidence
+        )
+    if result.operation == "analyze_impact":
+        evidence = getattr(result, "evidence")
+        if not evidence:
+            return "no direct dependency evidence"
+        return "\n".join(
+            f"{item.state} {item.kind}: "
+            f"{item.dependent.path}:{item.dependent.symbol} -> "
+            f"{item.target.path}:{item.target.symbol} "
+            f"at {item.use_path}:{item.use_line}"
+            for item in evidence
+        )
+    capabilities = getattr(result, "operations")
+    return "\n".join(capabilities)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:pytest -->
+```python contract-target
+import pytest
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:CapabilitiesRequest -->
+```python contract-target
+from viper.api import (
+    CapabilitiesRequest,
+    LocalRunPath,
+    RestoreRequest,
+    SchemaRequest,
+    StatusRequest,
+    ValidateStageRequest,
+    ViperFailure,
+    dispatch,
+    get_capabilities,
+    get_schema,
+    restore_artifacts,
+    result_json_bytes,
+    status,
+    validate_stage,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:LocalRunPath -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:RestoreRequest -->
+```python contract-target
+from viper.api import (
+    CapabilitiesRequest,
+    LocalRunPath,
+    RestoreRequest,
+    SchemaRequest,
+    StatusRequest,
+    ValidateStageRequest,
+    ViperFailure,
+    dispatch,
+    get_capabilities,
+    get_schema,
+    restore_artifacts,
+    result_json_bytes,
+    status,
+    validate_stage,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:SchemaRequest -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:StatusRequest -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:ValidateStageRequest -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:ViperFailure -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:dispatch -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:get_capabilities -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:get_schema -->
+```python contract-target
+from viper.api import (
+    CapabilitiesRequest,
+    LocalRunPath,
+    RestoreRequest,
+    SchemaRequest,
+    StatusRequest,
+    ValidateStageRequest,
+    ViperFailure,
+    dispatch,
+    get_capabilities,
+    get_schema,
+    restore_artifacts,
+    result_json_bytes,
+    status,
+    validate_stage,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:restore_artifacts -->
+```python contract-target
+from viper.api import (
+    CapabilitiesRequest,
+    LocalRunPath,
+    RestoreRequest,
+    SchemaRequest,
+    StatusRequest,
+    ValidateStageRequest,
+    ViperFailure,
+    dispatch,
+    get_capabilities,
+    get_schema,
+    restore_artifacts,
+    result_json_bytes,
+    status,
+    validate_stage,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:result_json_bytes -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:status -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=update target=tests/test_api.py:validate_stage -->
+```python contract-target
+from viper.api import (
+    CapabilitiesRequest,
+    LocalRunPath,
+    RestoreRequest,
+    SchemaRequest,
+    StatusRequest,
+    ValidateStageRequest,
+    ViperFailure,
+    dispatch,
+    get_capabilities,
+    get_schema,
+    restore_artifacts,
+    result_json_bytes,
+    status,
+    validate_stage,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:main -->
+```python contract-target
+from viper.cli import main
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:LocalFileRef -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:ResolvedRunRef -->
+```python contract-target
+from viper.references import LocalFileRef, ResolvedRunRef
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:ArtifactRestoreSelector -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:RestoreResult -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:RestoredArtifact -->
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:RestoredFile -->
+```python contract-target
+from viper.restoration import (
+    ArtifactRestoreSelector,
+    RestoredArtifact,
+    RestoredFile,
+    RestoreResult,
+)
+```
+
+<!-- contract-target: requirements=RSP-08 block=P10-RSP-02 action=add target=tests/test_api.py:test_restore_result_matches_python_api_and_cli -->
+```python contract-target
+def test_restore_result_matches_python_api_and_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Route typed and command restore requests through one execution result."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    selector = ArtifactRestoreSelector(stage_id="train", artifact_name="model")
+    expected = RestoreResult(
+        run=ResolvedRunRef(
+            sha256="a" * 64,
+            bytes=12,
+            stored_at=LocalFileRef(
+                commit="b" * 64,
+                path="runs/example/resolved.yaml",
+            ),
+        ),
+        artifacts=(
+            RestoredArtifact(
+                selector=selector,
+                files=(
+                    RestoredFile(
+                        path=tmp_path / "model.bin",
+                        status="restored",
+                    ),
+                ),
+            ),
+        ),
+    )
+    calls = []
+
+    def fake_restore(
+        repository_root: Path,
+        run_reference: Path,
+        *,
+        artifacts: tuple[ArtifactRestoreSelector, ...],
+        output: Path | None,
+    ) -> RestoreResult:
+        """Record the normalized public arguments and return one result."""
+        calls.append((repository_root, run_reference, artifacts, output))
+        return expected
+
+    monkeypatch.setattr("viper.api.restore_run_artifacts", fake_restore)
+    monkeypatch.setattr("viper.api.resolve_root", lambda root: root.resolve())
+    request = RestoreRequest(
+        run_reference=LocalRunPath(path=Path("runs/example/resolved.yaml")),
+        repository_root=tmp_path,
+        artifacts=(selector,),
+        output=Path("model.bin"),
+    )
+
+    direct = restore_artifacts(request)
+    status = main(
+        [
+            "--json",
+            "restore",
+            "runs/example/resolved.yaml",
+            "--root",
+            str(tmp_path),
+            "--artifacts",
+            "train.model",
+            "--output",
+            "model.bin",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert json.loads(output) == json.loads(result_json_bytes(direct))
+    assert calls == [
+        (
+            tmp_path,
+            Path("runs/example/resolved.yaml"),
+            (selector,),
+            Path("model.bin"),
+        ),
+        (
+            tmp_path,
+            Path("runs/example/resolved.yaml"),
+            (selector,),
+            Path("model.bin"),
+        ),
+    ]
 ```
 
 ## Implementation sources
