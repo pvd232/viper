@@ -27,6 +27,7 @@ from viper.system_impact.rename import (
     check_rename_obligations,
     compile_rename_obligations,
     render_rename_check,
+    render_rename_plan,
 )
 
 from .codeql import (
@@ -69,6 +70,19 @@ class WorkingTreeRenameCheck:
     check_path: Path
     report: str
     check: RenameCheck
+
+
+@dataclass(frozen=True)
+class WorkingTreeRenamePlan:
+    """Return a frozen baseline rename worklist and its evidence."""
+
+    repository_root: Path
+    base_revision: str
+    artifact_root: Path
+    baseline_graph: Path
+    obligations_path: Path
+    report: str
+    obligations: RenameObligationSet
 
 
 def _git(root: Path, *arguments: str) -> bytes:
@@ -319,6 +333,101 @@ def analyze_working_tree_impact(
     )
 
 
+def plan_working_tree_rename(
+    root: Path,
+    *,
+    base: str,
+    old_target: RepoSymbolRef,
+    new_target: RepoSymbolRef,
+    edge_kinds: tuple[ReferenceKind, ...],
+    artifact_root: Path | None = None,
+    cache_root: Path | None = None,
+    codeql_executable: Path | None = None,
+    query_pack: Path | None = None,
+) -> WorkingTreeRenamePlan:
+    """Compile the exact baseline worklist before candidate editing begins."""
+    repository = _repository_root(root)
+    revision = _commit(repository, base)
+    executable_value = (
+        str(codeql_executable)
+        if codeql_executable is not None
+        else shutil.which("codeql")
+    )
+    if executable_value is None:
+        raise WorkingTreeImpactError("CodeQL executable is unavailable")
+    executable = Path(executable_value).resolve()
+    pack = (
+        query_pack.resolve()
+        if query_pack is not None
+        else Path(__file__).parents[3] / "tools/codeql/viper-python-impact"
+    )
+    cache = (
+        cache_root.resolve()
+        if cache_root is not None
+        else repository / ".viper/cache/codeql-source-analysis"
+    )
+    try:
+        spec = RenameSpec(
+            old_target=old_target,
+            new_target=new_target,
+            edge_kinds=edge_kinds,
+        )
+        extraction, query, graph_format = resolve_analysis_specs(
+            repository,
+            codeql_executable=executable,
+            query_pack=pack,
+            suite="rename-facts.qls",
+        )
+        with tempfile.TemporaryDirectory(prefix="viper-rename-plan.") as directory:
+            baseline_root = Path(directory) / "baseline"
+            _materialize_revision(repository, revision, baseline_root)
+            output = (
+                artifact_root.resolve()
+                if artifact_root is not None
+                else repository / ".viper/system-impact/rename-plan" / revision[:12]
+            )
+            output.mkdir(parents=True, exist_ok=True)
+            baseline = analyze_source(
+                baseline_root,
+                snapshot=SourceSnapshot(
+                    base_revision=revision,
+                    source_sha256=source_digest(baseline_root),
+                    revision=revision,
+                ),
+                extraction=extraction,
+                query=query,
+                format=graph_format,
+                codeql_executable=executable,
+                query_pack=pack,
+                cache_root=cache,
+                artifact_root=output / "baseline",
+                overlay_base=True,
+            )
+            obligations = compile_rename_obligations(
+                root=baseline_root,
+                graph=baseline,
+                spec=spec,
+            )
+    except (CodeQLAnalysisError, RenameAnalysisError, OSError, ValueError) as error:
+        raise WorkingTreeImpactError(str(error)) from error
+
+    baseline_path = output / "baseline-source-graph.json"
+    obligations_path = output / "rename-obligations.json"
+    report = render_rename_plan(obligations)
+    _write_graph(baseline_path, baseline)
+    _write_model(obligations_path, obligations)
+    (output / "rename-plan.txt").write_text(report + "\n", encoding="utf-8")
+    return WorkingTreeRenamePlan(
+        repository_root=repository,
+        base_revision=revision,
+        artifact_root=output,
+        baseline_graph=baseline_path,
+        obligations_path=obligations_path,
+        report=report,
+        obligations=obligations,
+    )
+
+
 def analyze_working_tree_rename(
     root: Path,
     *,
@@ -449,6 +558,8 @@ __all__ = [
     "WorkingTreeImpact",
     "WorkingTreeImpactError",
     "WorkingTreeRenameCheck",
+    "WorkingTreeRenamePlan",
     "analyze_working_tree_impact",
     "analyze_working_tree_rename",
+    "plan_working_tree_rename",
 ]

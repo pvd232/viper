@@ -252,6 +252,18 @@ class CommandLineTests(unittest.TestCase):
                 "--kind",
                 "calls",
             ],
+            "impact-rename-plan": [
+                "impact",
+                "rename-plan",
+                "--root",
+                "missing-repository",
+                "--old",
+                "src/example.py:old",
+                "--new",
+                "src/example.py:new",
+                "--kind",
+                "calls",
+            ],
         }
         for name, arguments in cases.items():
             with self.subTest(command=name):

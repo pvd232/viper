@@ -241,6 +241,28 @@ def build_parser() -> ArgumentParser:
     analyze.add_argument("--cache-root", type=Path)
     analyze.add_argument("--codeql-executable", type=Path)
     analyze.add_argument("--query-pack", type=Path)
+    rename_plan = impact_commands.add_parser(
+        "rename-plan",
+        help="compile the exact baseline reference worklist for a rename",
+    )
+    add_root(rename_plan)
+    rename_plan.add_argument("--base", default="HEAD")
+    rename_plan.add_argument(
+        "--old", dest="old_target", type=parse_source_target, required=True
+    )
+    rename_plan.add_argument(
+        "--new", dest="new_target", type=parse_source_target, required=True
+    )
+    rename_plan.add_argument(
+        "--kind",
+        action="append",
+        dest="edge_kinds",
+        choices=("imports", "calls", "reads", "writes"),
+    )
+    rename_plan.add_argument("--artifact-root", type=Path)
+    rename_plan.add_argument("--cache-root", type=Path)
+    rename_plan.add_argument("--codeql-executable", type=Path)
+    rename_plan.add_argument("--query-pack", type=Path)
     rename_check = impact_commands.add_parser(
         "rename-check",
         help="verify an exact old-to-new dependency transition",
@@ -303,6 +325,7 @@ def _operation_and_payload(
         "init": "init_project",
         "impact-explain": "explain_impact",
         "impact-analyze": "analyze_impact",
+        "impact-rename-plan": "plan_rename",
         "impact-rename-check": "check_rename",
     }
     operation = mapping[command]
@@ -321,7 +344,10 @@ def _operation_and_payload(
     trusted = values.pop("trust_source", None)
     if trusted is not None:
         values["trusted_source_repositories"] = trusted
-    if operation == "check_rename" and values.get("edge_kinds") is None:
+    if (
+        operation in {"plan_rename", "check_rename"}
+        and values.get("edge_kinds") is None
+    ):
         values.pop("edge_kinds")
     return operation, values
 
@@ -422,7 +448,7 @@ def _human_success(result: SuccessModel) -> str:
             f"at {item.use_path}:{item.use_line}"
             for item in evidence
         )
-    if result.operation == "check_rename":
+    if result.operation in {"plan_rename", "check_rename"}:
         return getattr(result, "report")
     capabilities = getattr(result, "operations")
     return "\n".join(capabilities)

@@ -165,6 +165,7 @@ model, schema registry, handler registry, and JSON encoder.
 | `init_project` | `InitProjectRequest` | `InitProjectSuccess` | `init` |
 | `explain_impact` | `ExplainImpactRequest` | `ExplainImpactSuccess` | `impact-explain` |
 | `analyze_impact` | `AnalyzeImpactRequest` | `AnalyzeImpactSuccess` | `impact-analyze` |
+| `plan_rename` | `RenamePlanRequest` | `RenamePlanSuccess` | `impact-rename-plan` |
 | `check_rename` | `RenameCheckRequest` | `RenameCheckSuccess` | `impact-rename-check` |
 
 Python callers can invoke a concrete operation directly:
@@ -333,7 +334,19 @@ traversal over the baseline graph. Each candidate includes the complete path
 from the selected target, every edge kind, and the exact source location that
 supports each step.
 
-Agents can turn a planned rename into an exact completion check:
+Agents can obtain the exact baseline worklist before editing:
+
+```bash
+viper impact rename-plan \
+  --root . \
+  --base HEAD \
+  --old src/package/tools.py:run \
+  --new src/package/tools.py:run_checked \
+  --kind calls
+```
+
+The plan reports each required path, line, column, operation, and containing
+declaration. After editing, agents can verify the same transformation:
 
 ```bash
 viper impact rename-check \

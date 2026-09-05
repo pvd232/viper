@@ -537,6 +537,32 @@ def render_rename_check(check: RenameCheck) -> str:
     return "\n".join(lines)
 
 
+def render_rename_plan(obligations: RenameObligationSet) -> str:
+    """Render the frozen baseline worklist before candidate editing begins."""
+    spec = obligations.spec
+    sites = sorted(
+        (
+            site
+            for obligation in obligations.obligations
+            for site in obligation.baseline_sites
+        ),
+        key=lambda site: (site.path, site.line, site.column, site.kind),
+    )
+    lines = [
+        (
+            f"Rename: {spec.old_target.path}:{spec.old_target.symbol} -> "
+            f"{spec.new_target.path}:{spec.new_target.symbol}"
+        ),
+        f"Required references: {len(sites)}",
+    ]
+    for index, site in enumerate(sites, start=1):
+        lines.append(
+            f"{index}. {site.path}:{site.line}:{site.column} "
+            f"{site.kind} in {site.dependent.symbol}"
+        )
+    return "\n".join(lines)
+
+
 __all__ = [
     "DependencyTransition",
     "ReferenceSite",
@@ -548,5 +574,6 @@ __all__ = [
     "check_rename_obligations",
     "compile_rename_obligations",
     "render_rename_check",
+    "render_rename_plan",
     "rename_checker_digest",
 ]

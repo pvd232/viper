@@ -29,6 +29,7 @@ from ._system_impact.workflow import (
     WorkingTreeImpactError,
     analyze_working_tree_impact,
     analyze_working_tree_rename,
+    plan_working_tree_rename,
 )
 from .artifacts import (
     ArtifactPointer,
@@ -80,7 +81,7 @@ from .system_impact.explain import (
     explain_plan_check,
 )
 from .system_impact.models import CommitId, PlanCheck, SourceGraph
-from .system_impact.rename import ReferenceKind, RenameCheck
+from .system_impact.rename import ReferenceKind, RenameCheck, RenameObligationSet
 from .verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
@@ -115,6 +116,7 @@ OperationName = Literal[
     "init_project",
     "explain_impact",
     "analyze_impact",
+    "plan_rename",
     "check_rename",
 ]
 FailureOrigin = Literal["request", "application", "cli", "internal"]
@@ -657,6 +659,10 @@ class RenameCheckRequest(APIModel):
     )
 
 
+class RenamePlanRequest(RenameCheckRequest):
+    """Select one rename whose baseline references form the agent worklist."""
+
+
 class RenameCheckSuccess(SuccessModel):
     """Return an exact rename verdict and its persisted evidence paths."""
 
@@ -681,6 +687,23 @@ class RenameCheckSuccess(SuccessModel):
     report: str = Field(description="Compact agent-facing rename decision.")
     check: RenameCheck = Field(
         description="Validated rename transitions and derived verdict."
+    )
+
+
+class RenamePlanSuccess(SuccessModel):
+    """Return the frozen baseline worklist before candidate editing."""
+
+    operation: Literal["plan_rename"] = "plan_rename"  # pyright: ignore[reportIncompatibleVariableOverride]
+    repository_root: Path = Field(
+        description="Git top level that supplied the baseline."
+    )
+    base_revision: CommitId = Field(description="Exact baseline commit analyzed.")
+    artifact_root: Path = Field(description="Directory containing plan evidence.")
+    baseline_graph: Path = Field(description="Receipt-bound baseline graph.")
+    obligations_path: Path = Field(description="Machine-readable frozen worklist.")
+    report: str = Field(description="Compact source-located worklist.")
+    obligations: RenameObligationSet = Field(
+        description="Validated baseline rename obligations."
     )
 
 
@@ -737,6 +760,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "AnalyzeImpactSuccess": AnalyzeImpactSuccess,
     "RenameCheckRequest": RenameCheckRequest,
     "RenameCheckSuccess": RenameCheckSuccess,
+    "RenamePlanRequest": RenamePlanRequest,
+    "RenamePlanSuccess": RenamePlanSuccess,
     "FreezeRunRequest": FreezeRunRequest,
     "FreezeRunSuccess": FreezeRunSuccess,
     "InitProjectRequest": InitProjectRequest,
@@ -798,6 +823,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "init_project",
     "explain_impact",
     "analyze_impact",
+    "plan_rename",
     "check_rename",
 )
 
@@ -1490,6 +1516,40 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
     )
 
 
+def plan_rename(request: RenamePlanRequest) -> RenamePlanSuccess:
+    """Compile one exact baseline rename worklist."""
+    try:
+        result = plan_working_tree_rename(
+            request.root,
+            base=request.base,
+            old_target=request.old_target,
+            new_target=request.new_target,
+            edge_kinds=request.edge_kinds,
+            artifact_root=request.artifact_root,
+            cache_root=request.cache_root,
+            codeql_executable=request.codeql_executable,
+            query_pack=request.query_pack,
+        )
+    except WorkingTreeImpactError as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="plan_rename",
+                origin="application",
+                code="execution_failed",
+                message=str(exc),
+            )
+        ) from exc
+    return RenamePlanSuccess(
+        repository_root=result.repository_root,
+        base_revision=result.base_revision,
+        artifact_root=result.artifact_root,
+        baseline_graph=result.baseline_graph,
+        obligations_path=result.obligations_path,
+        report=result.report,
+        obligations=result.obligations,
+    )
+
+
 def check_rename(request: RenameCheckRequest) -> RenameCheckSuccess:
     """Compile and verify one exact rename against the current working tree."""
     try:
@@ -1591,6 +1651,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "init_project": InitProjectRequest,
     "explain_impact": ExplainImpactRequest,
     "analyze_impact": AnalyzeImpactRequest,
+    "plan_rename": RenamePlanRequest,
     "check_rename": RenameCheckRequest,
 }
 
@@ -1617,6 +1678,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "init_project": init_project,
     "explain_impact": explain_impact,
     "analyze_impact": analyze_impact,
+    "plan_rename": plan_rename,
     "check_rename": check_rename,
 }
 
@@ -1818,6 +1880,8 @@ __all__ = [
     "AnalyzeImpactSuccess",
     "RenameCheckRequest",
     "RenameCheckSuccess",
+    "RenamePlanRequest",
+    "RenamePlanSuccess",
     "CapabilitiesRequest",
     "CapabilitiesSuccess",
     "CompareRunsRequest",
@@ -1884,6 +1948,7 @@ __all__ = [
     "get_schema",
     "lineage",
     "plan_diff",
+    "plan_rename",
     "preflight",
     "result_json_bytes",
     "retry",

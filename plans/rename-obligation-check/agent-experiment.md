@@ -58,3 +58,21 @@ The success estimate is tied at one success in each arm. Measuring marginal
 localization or repair value requires a larger fixture where lexical search
 yields competing aliases, generated references, or enough candidates to
 exhaust the agent's search budget.
+
+## Pre-edit worklist trial
+
+A later paired `gpt-5.4-mini` trial compared ordinary repository navigation
+with the baseline-only `rename-plan` command. Both arms began at the same
+commit, made the same four correct edits, ran a Python smoke test, and were
+instructed not to commit or push.
+
+| Arm | Correct references | Repository-wide reference searches | Tool commands | Wall time | Output tokens |
+|---|---:|---:|---:|---:|---:|
+| Ordinary search | 4/4 | 4 | 29 | 103 s | 4,493 |
+| Pre-edit worklist | 4/4 | 0 | 28 | 169 s | 6,827 |
+
+The worklist returned all four typed occurrences before editing and the agent
+used only those locations. It eliminated lexical reference searches but did
+not improve correctness, total commands, tokens, or elapsed time on this tiny
+fixture. CodeQL startup and unrelated agent procedure dominated the run. This
+is interface evidence, not evidence of an end-to-end performance gain.

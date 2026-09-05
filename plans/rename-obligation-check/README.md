@@ -4,6 +4,7 @@ This directory retains the reviewed source plan that produced the first exact
 rename-check implementation. Production behavior now belongs to
 [`system_impact/rename.py`](../../src/viper/system_impact/rename.py), the typed
 API, and `viper impact rename-check`.
+`viper impact rename-plan` publishes the frozen baseline worklist before edits.
 
 [`agent-experiment.md`](agent-experiment.md) records the paired coding-agent
 smoke test and its bounded conclusion.
