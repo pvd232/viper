@@ -1,0 +1,25 @@
+schema_version = 1
+id = "rename-obligation-check"
+contract = "docs/development/rename-obligation-check.md"
+baseline = "39d1b5b43894a9d02103fec2d39efce2af13cb45"
+
+[[blocks]]
+id = "P0-ROC-01"
+requirements = ["ROC-01", "ROC-02", "ROC-03", "ROC-04"]
+depends_on = []
+gate = "python -m pytest tests/test_rename_obligations.py -q"
+
+[[blocks.files]]
+action = "add"
+source = "add/src/viper/system_impact/rename.py"
+destination = "src/viper/system_impact/rename.py"
+
+[[blocks.files]]
+action = "add"
+source = "add/tests/test_rename_obligations.py"
+destination = "tests/test_rename_obligations.py"
+
+[[blocks.files]]
+action = "patch"
+source = "blocks/P0-ROC-01.patch"
+destinations = ["tests/conftest.py"]

@@ -281,6 +281,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, a two-graph one-hop preflight, and rejection of unplanned source changes |
 | [CodeQL Analysis](codeql-analysis.md) | Design approved; source plan validated | Exact graph semantics plus separate extraction, query, and graph-lowering keys, caches, and receipts |
+| [Rename Obligation Check](rename-obligation-check.md) | Source-backed implementation planned | Exact old-to-new dependency transitions for governed Python renames |
 | [CodeQL graph cache reuse](codeql-graph-cache-reuse.md) | Planned | Verified warm graph reuse without BQRS decoding unless a caller explicitly requests publication evidence |
 | [PairBlock scheduling](pair-block-scheduling.md) | Complete | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |
@@ -307,6 +308,7 @@ The contracts share models. One contract owns each shared decision:
 | Requirements, targets, rule edges, tests, gates, and dependency order form one closed implementation plan | Contract Traceability |
 | Pinned CodeQL observations report policy-selected direct dependents before and after a planned change; Pyright checks the materialized interfaces; and realized source changes must match the closed plan | System Impact Check |
 | Source extraction, query execution, and graph lowering have independent identities and receipts | CodeQL Analysis |
+| An accepted rename removes every governed old-target reference and adds the same number of binding-equivalent replacement references | Rename Obligation Check |
 | A valid graph-cache hit skips BQRS decoding unless the caller requests publication evidence | CodeQL graph cache reuse |
 | Explicit dependencies, planned source edges, and shared-file writes determine safe PairBlock execution waves | PairBlock scheduling |
 | Repository-owned child processes use the spawn-safe facade on macOS | Child-process launching |
