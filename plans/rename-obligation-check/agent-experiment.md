@@ -172,3 +172,65 @@ reduced wall time by 27 seconds (31%) relative to the recorded baseline and by
 effectively unchanged. This remains one synthetic, graph-favorable fixture;
 the result isolates the execution-interface mechanism rather than estimating a
 general repair-rate gain.
+
+## Five-PairBlock orchestration stress test
+
+The next paired trial used fixture commit
+`32a4cca2e48016989c49ff1297021ee8c208896a`. Five PairBlocks formed a strict
+dependency chain. Each block renamed one pipeline function, updated ten
+consumer modules in three binding forms, added an explicit keyword argument,
+updated two resource files, passed and recorded a phase gate, closed a contract
+and checklist item, and refreshed a SHA-256 manifest entry. The complete task
+contained 98 baseline CodeQL reference transitions and 65 tracked files that
+required edits. Five same-name decoy modules were excluded from the contract.
+
+Two `gpt-5.4-mini` agents received independent copies and a fixed 300-second
+budget. The ordinary arm used repository tools. The treatment had five
+baseline-only, precomputed rename worklists grouped by file and binding form.
+Offline index construction took approximately 33 seconds and was excluded from
+the interactive budget.
+
+| Arm | Phase gates passed | Final release gate | Governed consumers runnable | Exact transitions certified | Wall time |
+|---|---:|---|---:|---:|---:|
+| Ordinary search | 5/5 | Passed, falsely | 30/50 | 70/98 | 275 s |
+| Precomputed graph worklist | 2/5 | Incomplete at cutoff | 50/50 | 36/40 completed-stage transitions | 300 s cutoff |
+
+The ordinary agent reported completion after 23 commands, five repository
+searches, and one failed gate. Its completed-turn usage was 15,544 output
+tokens and 706,410 input tokens, of which 666,112 were cached. It edited all
+five code phases before PB-01 passed and ran two later phase gates
+concurrently, contrary to the declared dependency order.
+
+The ordinary patch also made one invalid transformation in four consumers per
+stage. It changed imports such as `from orbit import fetch as stage_module` to
+`from orbit import fetch_verified as stage_module`. The repository still
+contained `orbit/fetch.py`, and `orbit.__init__` did not export
+`fetch_verified`, so 20 consumer modules raised `ImportError`. The sparse
+unittest suite and original release validator never imported those modules and
+therefore accepted a broken candidate.
+
+The graph arm completed the first two phase gates in order. It preserved the
+module imports and changed the member calls instead, so all 50 consumers in its
+partially migrated tree remained runnable. It spent much of the budget reading
+five worklists and JSON schemas and then writing stage-specific edit scripts.
+The graph supplied exact locations, but the interface still required the agent
+to invent the transformation executor, update non-code obligations separately,
+and manage phase state.
+
+The exact checker found the ordinary patch's 20 broken module-alias
+transitions. It also rejected eight correct relative-import transitions: the
+candidate CodeQL output contained the renamed declarations but emitted no
+dependency rows for the downstream relative imports and calls. Consequently,
+70/98 is a conservative certification result, not the patch's actual semantic
+transition count. The graph arm had the same query gap on four correct
+downstream transitions and certified 36/40 completed-stage transitions.
+
+This trial supports three bounded conclusions. First, exact typed worklists can
+prevent a broad textual rename from changing a module identity when only its
+member should change. Second, precomputed evidence alone is not a fast editing
+interface: the treatment needs one operation that applies or stages grouped
+transition edits rather than asking the agent to interpret raw schemas. Third,
+neither sparse tests nor the current exact checker is yet a sufficient release
+oracle. Future generated fixtures import and execute every governed consumer,
+and the relative-import CodeQL omission remains an implementation blocker for
+authoritative acceptance.

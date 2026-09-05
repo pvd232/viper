@@ -11,7 +11,9 @@ without starting CodeQL. Compound checks accept explicit mappings for
 dependents that are themselves renamed.
 
 [`agent-experiment.md`](agent-experiment.md) records the original smoke tests
-and the staged paired trial of ordinary search against the precomputed index.
+and the staged paired trials of ordinary search against the precomputed index.
+[`build_pairblock_stress.py`](build_pairblock_stress.py) generates the locked
+five-PairBlock fixture used by the orchestration stress test.
 
 `plan.toml` takes the accepted `P0-ROC-01` commit as its baseline and binds
 `P0-ROC-02` to the query-derived checker and overlay optimization. `check.py`
