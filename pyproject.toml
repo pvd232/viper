@@ -50,6 +50,9 @@ release = [
 mcp = [
     "mcp>=2,<3",
 ]
+knowledge = [
+    "usearch>=2.26,<3",
+]
 
 [project.urls]
 Repository = "https://github.com/pvd232/viper"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import sqlite3
 import tempfile
@@ -12,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, Literal, TypeVar
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter
 
 from ._schema import (
     SHA256,
@@ -24,7 +25,40 @@ from ._schema import (
 from .benchmark import BenchmarkMetricResult
 from .ids import ExperimentId, MetricId, ReplicateId, RunId, StageId, VariantId
 from .inspection import RunLineage, lineage
+from .knowledge import (
+    AssertionQuery,
+    AssignmentQuery,
+    CatalogKnowledgeRecord,
+    CatalogPrimitive,
+    DeclaredPrimitiveAssignment,
+    DiagnosticQuery,
+    DiagnosticSignature,
+    EffectEstimate,
+    EffectQuery,
+    ImpactAssessment,
+    ImpactPolicy,
+    ImpactQuery,
+    InferredPrimitiveAssignment,
+    JournalAssertion,
+    KnowledgeManifest,
+    KnowledgePage,
+    KnowledgeRecordEnvelope,
+    KnowledgeVector,
+    Modulation,
+    ModulationQuery,
+    OntologySpec,
+    PrimitivePage,
+    PrimitiveQuery,
+    PrimitiveRef,
+    RetrievalJudgment,
+    RetrievalJudgmentQuery,
+    ReviewedPrimitiveAssignment,
+    SimilarityMatch,
+    SimilarityPage,
+    SimilarityQuery,
+)
 from .references import (
+    LocalFileRef,
     ResolvedBenchmarkResultRef,
     ResolvedFileRef,
     ResolvedRunRef,
@@ -33,8 +67,9 @@ from .references import (
 )
 from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
 from .runs import RunAttempt
-from .serialization import document_digest, serialize_document
+from .serialization import document_digest, parse_yaml_bytes, serialize_document
 from .stages import DownloadSpec, InternalSpec
+from .storage import LocalArtifactStore
 from .verification.models import VerifiedBenchmarkResult, VerifiedRunResult
 
 CatalogRunStatus = Literal["succeeded", "failed", "cancelled"]
@@ -298,6 +333,18 @@ CREATE TABLE stage_reuse_keys (
     payload_json TEXT NOT NULL,
     PRIMARY KEY (key_sha256, source_key)
 );
+CREATE TABLE knowledge_records (
+    reference_key TEXT PRIMARY KEY,
+    reference_json TEXT NOT NULL,
+    record_kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE TABLE knowledge_primitives (
+    ontology_key TEXT NOT NULL,
+    primitive_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (ontology_key, primitive_id)
+);
 """
 
 
@@ -515,6 +562,54 @@ def _validate_reuse_candidate(
         raise ValueError("reuse candidate stage is absent from its attempt")
 
 
+def _knowledge_bytes(root: Path, reference: ResolvedFileRef) -> bytes:
+    """Load one local immutable file and verify its recorded identity."""
+    if not isinstance(reference.stored_at, LocalFileRef):
+        raise ValueError("catalog knowledge refresh currently requires local files")
+    raw = LocalArtifactStore(root, reference.stored_at.store).fetch(reference.stored_at)
+    if len(raw) != reference.bytes:
+        raise ValueError("knowledge file byte count differs")
+    if hashlib.sha256(raw).hexdigest() != reference.sha256:
+        raise ValueError("knowledge file digest differs")
+    return raw
+
+
+def _knowledge_chain(
+    root: Path,
+    heads: tuple[ResolvedFileRef, ...],
+) -> tuple[CatalogKnowledgeRecord, ...]:
+    """Walk manifest heads and return each immutable record once."""
+    manifests: set[str] = set()
+    records: dict[str, CatalogKnowledgeRecord] = {}
+
+    def visit(manifest_ref: ResolvedFileRef, path: frozenset[str]) -> None:
+        """Walk one chain while distinguishing cycles from shared history."""
+        manifest_key = _reference_key(manifest_ref)
+        if manifest_key in path:
+            raise ValueError("knowledge manifest chain contains a cycle")
+        if manifest_key in manifests:
+            return
+        manifests.add(manifest_key)
+        manifest = KnowledgeManifest.model_validate(
+            parse_yaml_bytes(_knowledge_bytes(root, manifest_ref))
+        )
+        record_key = _reference_key(manifest.record)
+        if record_key not in records:
+            envelope = KnowledgeRecordEnvelope.model_validate(
+                parse_yaml_bytes(_knowledge_bytes(root, manifest.record))
+            )
+            records[record_key] = CatalogKnowledgeRecord(
+                reference=manifest.record,
+                record=envelope,
+            )
+        if manifest.previous is not None:
+            visit(manifest.previous, path | {manifest_key})
+
+    for head in heads:
+        visit(head, frozenset())
+    return tuple(records[key] for key in sorted(records))
+
+
 class Catalog:
     """Refresh and query one derived SQLite catalog."""
 
@@ -528,6 +623,7 @@ class Catalog:
         *,
         runs: tuple[CatalogRunSource, ...] = (),
         benchmarks: tuple[CatalogBenchmarkSource, ...] = (),
+        knowledge: tuple[ResolvedFileRef, ...] = (),
     ) -> CatalogRefreshResult:
         """Rebuild the complete catalog and atomically replace the old index."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -652,6 +748,43 @@ class Catalog:
                         "INSERT INTO benchmarks VALUES (?, ?)",
                         (key, _json(benchmark)),
                     )
+                heads = list(knowledge)
+                local_head = self.root / ".viper/knowledge/head.json"
+                if local_head.is_file():
+                    heads.append(
+                        TypeAdapter(ResolvedFileRef).validate_json(
+                            local_head.read_bytes()
+                        )
+                    )
+                for item in _knowledge_chain(self.root, tuple(heads)):
+                    key = _reference_key(item.reference)
+                    inserted = connection.execute(
+                        "INSERT OR IGNORE INTO knowledge_records VALUES (?, ?, ?, ?)",
+                        (
+                            key,
+                            _json(item.reference),
+                            item.record.record_kind,
+                            _json(item),
+                        ),
+                    ).rowcount
+                    accepted += inserted
+                    if isinstance(item.record.value, OntologySpec):
+                        ontology = item.record.value
+                        for primitive in ontology.primitives:
+                            row = CatalogPrimitive(
+                                ontology=item.reference,
+                                primitive=PrimitiveRef(
+                                    ontology_id=ontology.ontology_id,
+                                    ontology_version=ontology.version,
+                                    primitive_id=primitive.primitive_id,
+                                ),
+                                dimension=primitive.dimension,
+                                label=primitive.label,
+                            )
+                            connection.execute(
+                                "INSERT INTO knowledge_primitives VALUES (?, ?, ?)",
+                                (key, str(primitive.primitive_id), _json(row)),
+                            )
                 connection.commit()
             finally:
                 connection.close()
@@ -973,6 +1106,432 @@ class Catalog:
             raise ValueError("catalog reuse-key digest collision")
         return candidate
 
+    @property
+    def knowledge(self) -> KnowledgeCatalog:
+        """Open exact and similarity queries over indexed knowledge records."""
+        return KnowledgeCatalog(self.path)
+
+
+class KnowledgeCatalog:
+    """Query the immutable knowledge projection with exact filters first."""
+
+    def __init__(self, path: Path):
+        """Bind queries to one catalog database."""
+        self.path = path
+
+    def _records(self) -> tuple[CatalogKnowledgeRecord, ...]:
+        """Load every typed knowledge row in stable reference order."""
+        with sqlite3.connect(self.path) as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM knowledge_records ORDER BY reference_key"
+            ).fetchall()
+        return tuple(CatalogKnowledgeRecord.model_validate_json(row[0]) for row in rows)
+
+    def _index(self) -> dict[str, CatalogKnowledgeRecord]:
+        """Index knowledge rows by immutable reference identity."""
+        return {_reference_key(item.reference): item for item in self._records()}
+
+    @staticmethod
+    def _value(
+        index: dict[str, CatalogKnowledgeRecord],
+        reference: ResolvedFileRef,
+    ) -> BaseModel:
+        """Resolve one required knowledge reference from the current index."""
+        item = index.get(_reference_key(reference))
+        if item is None:
+            raise ValueError("knowledge reference is absent from the catalog")
+        return item.record.value
+
+    @classmethod
+    def _modulation_primitives(
+        cls,
+        index: dict[str, CatalogKnowledgeRecord],
+        modulation: Modulation,
+    ) -> set[str]:
+        """Resolve primitive IDs named by one modulation's assignments."""
+        identifiers: set[str] = set()
+        assignment_types = (
+            DeclaredPrimitiveAssignment,
+            InferredPrimitiveAssignment,
+            ReviewedPrimitiveAssignment,
+        )
+        for change in modulation.changes:
+            for reference in (
+                change.baseline_assignment,
+                change.candidate_assignment,
+            ):
+                if reference is None:
+                    continue
+                assignment = cls._value(index, reference)
+                if not isinstance(assignment, assignment_types):
+                    raise ValueError("modulation reference is not an assignment")
+                identifiers.add(str(assignment.primitive.primitive_id))
+        return identifiers
+
+    @staticmethod
+    def _page(
+        query: BaseModel,
+        values: tuple[CatalogKnowledgeRecord, ...],
+    ) -> KnowledgePage:
+        """Return one cursor-bound page from stable records."""
+        offset = _cursor_offset(query)
+        limit = getattr(query, "limit")
+        items = values[offset : offset + limit]
+        next_offset = offset + len(items)
+        cursor = _next_cursor(query, next_offset) if next_offset < len(values) else None
+        return KnowledgePage(items=items, next_cursor=cursor)
+
+    def primitives(self, query: PrimitiveQuery = PrimitiveQuery()) -> PrimitivePage:
+        """Return ontology primitives matching every exact filter."""
+        with sqlite3.connect(self.path) as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM knowledge_primitives"
+            ).fetchall()
+        primitives = tuple(
+            CatalogPrimitive.model_validate_json(row[0]) for row in rows
+        )
+        values = tuple(
+            sorted(
+                (
+                    item
+                    for item in primitives
+                    if (
+                        query.ontology_id is None
+                        or item.primitive.ontology_id == query.ontology_id
+                    )
+                ),
+                key=lambda item: (
+                    str(item.primitive.ontology_id),
+                    str(item.primitive.ontology_version),
+                    str(item.primitive.primitive_id),
+                    _reference_key(item.ontology),
+                ),
+            )
+        )
+        values = tuple(
+            item
+            for item in values
+            if (
+                not query.ontology_versions
+                or item.primitive.ontology_version in query.ontology_versions
+            )
+            and (not query.dimensions or item.dimension in query.dimensions)
+            and (
+                not query.primitive_ids
+                or item.primitive.primitive_id in query.primitive_ids
+            )
+            and (not query.labels or item.label in query.labels)
+        )
+        offset = _cursor_offset(query)
+        items = values[offset : offset + query.limit]
+        next_offset = offset + len(items)
+        cursor = _next_cursor(query, next_offset) if next_offset < len(values) else None
+        return PrimitivePage(items=items, next_cursor=cursor)
+
+    def assignments(self, query: AssignmentQuery = AssignmentQuery()) -> KnowledgePage:
+        """Return primitive assignments matching exact provenance fields."""
+        assignment_types = (
+            DeclaredPrimitiveAssignment,
+            InferredPrimitiveAssignment,
+            ReviewedPrimitiveAssignment,
+        )
+        values = tuple(
+            item
+            for item in self._records()
+            if isinstance(item.record.value, assignment_types)
+            and (not query.origins or item.record.value.origin in query.origins)
+            and (
+                not query.primitive_ids
+                or item.record.value.primitive.primitive_id in query.primitive_ids
+            )
+            and (query.run is None or item.record.value.target.run == query.run)
+            and (
+                not query.stage_ids
+                or getattr(item.record.value.target, "stage_id", None)
+                in query.stage_ids
+            )
+            and (
+                not query.decisions
+                or (
+                    isinstance(item.record.value, ReviewedPrimitiveAssignment)
+                    and item.record.value.decision in query.decisions
+                )
+            )
+        )
+        return self._page(query, values)
+
+    def modulations(self, query: ModulationQuery = ModulationQuery()) -> KnowledgePage:
+        """Return controlled comparisons matching exact run and context fields."""
+        index = self._index()
+        values = tuple(
+            item
+            for item in self._records()
+            if isinstance(item.record.value, Modulation)
+            and (
+                not query.baseline_runs
+                or item.record.value.baseline_run in query.baseline_runs
+            )
+            and (
+                not query.candidate_runs
+                or item.record.value.candidate_run in query.candidate_runs
+            )
+            and (
+                not query.dimensions
+                or set(query.dimensions)
+                <= {change.dimension for change in item.record.value.changes}
+            )
+            and (
+                query.context_sha256 is None
+                or document_digest(item.record.value.context) == query.context_sha256
+            )
+            and (
+                not query.primitive_ids
+                or set(query.primitive_ids)
+                <= self._modulation_primitives(index, item.record.value)
+            )
+        )
+        return self._page(query, values)
+
+    def effects(self, query: EffectQuery = EffectQuery()) -> KnowledgePage:
+        """Return paired effects matching exact metric and value filters."""
+        index = self._index()
+
+        def effect_contexts(effect: EffectEstimate) -> set[str]:
+            """Resolve context digests from every paired modulation."""
+            contexts: set[str] = set()
+            for pair in effect.pairs:
+                modulation = self._value(index, pair.modulation)
+                if not isinstance(modulation, Modulation):
+                    raise ValueError("effect pair does not reference a modulation")
+                contexts.add(document_digest(modulation.context))
+            return contexts
+
+        def effect_primitives(effect: EffectEstimate) -> set[str]:
+            """Resolve primitive IDs from every paired modulation."""
+            identifiers: set[str] = set()
+            for pair in effect.pairs:
+                modulation = self._value(index, pair.modulation)
+                if not isinstance(modulation, Modulation):
+                    raise ValueError("effect pair does not reference a modulation")
+                identifiers.update(self._modulation_primitives(index, modulation))
+            return identifiers
+
+        values = tuple(
+            item
+            for item in self._records()
+            if isinstance(item.record.value, EffectEstimate)
+            and (
+                not query.metric_ids
+                or item.record.value.metric_id in query.metric_ids
+            )
+            and (
+                not query.directions or item.record.value.direction in query.directions
+            )
+            and (
+                query.minimum_improvement is None
+                or item.record.value.mean_improvement >= query.minimum_improvement
+            )
+            and (
+                query.maximum_improvement is None
+                or item.record.value.mean_improvement <= query.maximum_improvement
+            )
+            and (
+                query.context_sha256 is None
+                or effect_contexts(item.record.value) == {query.context_sha256}
+            )
+            and (
+                not query.primitive_ids
+                or set(query.primitive_ids) <= effect_primitives(item.record.value)
+            )
+        )
+        return self._page(query, values)
+
+    def impacts(self, query: ImpactQuery = ImpactQuery()) -> KnowledgePage:
+        """Return impact assessments matching exact qualitative labels."""
+        index = self._index()
+
+        def related(
+            assessment: ImpactAssessment,
+        ) -> tuple[EffectEstimate, ImpactPolicy]:
+            """Resolve the effect and policy used by one assessment."""
+            effect = self._value(index, assessment.effect)
+            policy = self._value(index, assessment.policy)
+            if not isinstance(effect, EffectEstimate) or not isinstance(
+                policy, ImpactPolicy
+            ):
+                raise ValueError("impact references the wrong knowledge records")
+            return effect, policy
+
+        values = tuple(
+            item
+            for item in self._records()
+            if isinstance(item.record.value, ImpactAssessment)
+            and (not query.impacts or item.record.value.impact in query.impacts)
+            and (
+                not query.metric_ids
+                or related(item.record.value)[0].metric_id in query.metric_ids
+            )
+            and (
+                not query.policy_ids
+                or related(item.record.value)[1].policy_id in query.policy_ids
+            )
+            and (
+                query.context_sha256 is None
+                or related(item.record.value)[1].context_sha256
+                == query.context_sha256
+            )
+        )
+        return self._page(query, values)
+
+    def diagnostics(self, query: DiagnosticQuery = DiagnosticQuery()) -> KnowledgePage:
+        """Return diagnostic signatures matching exact run and metric fields."""
+        values = tuple(
+            item
+            for item in self._records()
+            if isinstance(item.record.value, DiagnosticSignature)
+            and (not query.runs or item.record.value.run in query.runs)
+            and (not query.stage_ids or item.record.value.stage_id in query.stage_ids)
+            and (
+                not query.metric_ids
+                or set(query.metric_ids)
+                <= {part.metric_id for part in item.record.value.components}
+            )
+        )
+        return self._page(query, values)
+
+    def assertions(self, query: AssertionQuery = AssertionQuery()) -> KnowledgePage:
+        """Return journal assertions matching exact review and evidence fields."""
+        index = self._index()
+
+        def primitives(assertion: JournalAssertion) -> set[str]:
+            """Resolve primitive IDs from cited assignment evidence."""
+            identifiers: set[str] = set()
+            for evidence in assertion.evidence:
+                if evidence.kind != "assignment":
+                    continue
+                assignment = self._value(index, evidence.reference)
+                if isinstance(
+                    assignment,
+                    (
+                        DeclaredPrimitiveAssignment,
+                        InferredPrimitiveAssignment,
+                        ReviewedPrimitiveAssignment,
+                    ),
+                ):
+                    identifiers.add(str(assignment.primitive.primitive_id))
+            return identifiers
+
+        values = tuple(
+            item
+            for item in self._records()
+            if isinstance(item.record.value, JournalAssertion)
+            and (not query.kinds or item.record.value.kind in query.kinds)
+            and (not query.statuses or item.record.value.status in query.statuses)
+            and (
+                not query.evidence_kinds
+                or set(query.evidence_kinds)
+                <= {evidence.kind for evidence in item.record.value.evidence}
+            )
+            and (
+                not query.primitive_ids
+                or set(query.primitive_ids) <= primitives(item.record.value)
+            )
+        )
+        return self._page(query, values)
+
+    def retrieval_judgments(
+        self,
+        query: RetrievalJudgmentQuery = RetrievalJudgmentQuery(),
+    ) -> KnowledgePage:
+        """Return reviewed vector judgments matching exact review fields."""
+        index = self._index()
+        values: list[CatalogKnowledgeRecord] = []
+        for item in self._records():
+            judgment = item.record.value
+            if not isinstance(judgment, RetrievalJudgment):
+                continue
+            vector = index.get(_reference_key(judgment.query_vector))
+            if vector is None or not isinstance(vector.record.value, KnowledgeVector):
+                continue
+            if (
+                query.view_ids
+                and vector.record.value.view.view_id not in query.view_ids
+            ):
+                continue
+            if query.aspects and not set(query.aspects) <= set(judgment.aspects):
+                continue
+            if (
+                query.minimum_relevance is not None
+                and judgment.relevance < query.minimum_relevance
+            ):
+                continue
+            if query.reviewers and judgment.reviewed_by not in query.reviewers:
+                continue
+            values.append(item)
+        return self._page(query, tuple(values))
+
+    def similar(self, query: SimilarityQuery) -> SimilarityPage:
+        """Rank vectors by exact cosine distance inside one declared view."""
+        index = self._index()
+        matches: list[SimilarityMatch] = []
+        query_norm = math.sqrt(sum(value * value for value in query.values))
+        if query_norm == 0:
+            raise ValueError("similarity query vector cannot be zero")
+        for item in self._records():
+            vector = item.record.value
+            if not isinstance(vector, KnowledgeVector):
+                continue
+            if (
+                vector.view.view_id != query.view_id
+                or vector.view.version != query.view_version
+            ):
+                continue
+            if len(vector.values) != len(query.values):
+                raise ValueError("similarity query width differs from its view")
+            source = index.get(_reference_key(vector.source))
+            if source is None:
+                raise ValueError("knowledge vector source is absent from the catalog")
+            source_value = source.record.value
+            if query.primitive_ids and not (
+                isinstance(
+                    source_value,
+                    (
+                        DeclaredPrimitiveAssignment,
+                        InferredPrimitiveAssignment,
+                        ReviewedPrimitiveAssignment,
+                    ),
+                )
+                and source_value.primitive.primitive_id in query.primitive_ids
+            ):
+                continue
+            if query.metric_ids and not (
+                isinstance(source_value, DiagnosticSignature)
+                and set(query.metric_ids)
+                <= {part.metric_id for part in source_value.components}
+            ):
+                continue
+            if query.assertion_statuses and not (
+                isinstance(source_value, JournalAssertion)
+                and source_value.status in query.assertion_statuses
+            ):
+                continue
+            vector_norm = math.sqrt(sum(value * value for value in vector.values))
+            if vector_norm == 0:
+                raise ValueError("stored knowledge vector cannot be zero")
+            similarity = sum(
+                left * right for left, right in zip(query.values, vector.values)
+            ) / (query_norm * vector_norm)
+            distance = max(0.0, 1.0 - similarity)
+            matches.append(
+                SimilarityMatch(
+                    source=source,
+                    vector=item.reference,
+                    distance=distance,
+                )
+            )
+        matches.sort(key=lambda item: (item.distance, _reference_key(item.vector)))
+        return SimilarityPage(items=tuple(matches[: query.limit]))
+
 
 def catalog(*, root: Path | None = None) -> Catalog:
     """Open the derived catalog beneath one project root."""
@@ -994,6 +1553,7 @@ __all__ = [
     "CatalogRefreshResult",
     "CatalogRun",
     "CatalogRunSource",
+    "KnowledgeCatalog",
     "MeasurementPage",
     "MeasurementQuery",
     "RunPage",

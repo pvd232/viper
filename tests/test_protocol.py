@@ -36,9 +36,12 @@ from viper.inputs import (
 )
 from viper.knowledge import (
     DeclaredPrimitiveAssignment,
+    DiagnosticVectorView,
+    KnowledgeVector,
     OntologySpec,
     PrimitiveRef,
     PrimitiveSpec,
+    RetrievalJudgment,
     RunKnowledgeTarget,
 )
 from viper.metrics import (
@@ -47,7 +50,12 @@ from viper.metrics import (
     MetricImplementationRef,
     MetricSpec,
 )
-from viper.references import LocalFileRef, ResolvedRunRef, SnapshotFileRef
+from viper.references import (
+    LocalFileRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+    SnapshotFileRef,
+)
 from viper.reuse import (
     ReusedStageFile,
     ReuseFileIdentity,
@@ -125,6 +133,59 @@ def test_knowledge_ontology_preserves_assignment_provenance() -> None:
                 ),
             ),
             created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+
+
+def test_knowledge_vectors_preserve_view_identity() -> None:
+    """Round-trip one fixed-width vector and reviewed relevance judgment."""
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    view = DiagnosticVectorView(
+        view_id="diagnostic-v1",
+        version="1",
+        metric_ids=("loss",),
+        dimensions=1,
+    )
+    source = ResolvedFileRef(
+        sha256=SHA_A,
+        bytes=10,
+        stored_at=LocalFileRef(commit=SHA_B, path="knowledge/signature.yaml"),
+    )
+    vector = KnowledgeVector(
+        view=view,
+        source=source,
+        values=(0.5,),
+        created_at=created,
+    )
+    first = ResolvedFileRef(
+        sha256="c" * 64,
+        bytes=10,
+        stored_at=LocalFileRef(commit="d" * 64, path="knowledge/vector-1.yaml"),
+    )
+    second = ResolvedFileRef(
+        sha256="e" * 64,
+        bytes=10,
+        stored_at=LocalFileRef(commit="f" * 64, path="knowledge/vector-2.yaml"),
+    )
+    judgment = RetrievalJudgment(
+        query_vector=first,
+        candidate_vector=second,
+        aspects=("diagnostic",),
+        relevance=3,
+        reviewed_by="reviewer",
+        reviewed_at=created,
+    )
+
+    assert KnowledgeVector.model_validate_json(vector.model_dump_json()) == vector
+    assert RetrievalJudgment.model_validate_json(
+        judgment.model_dump_json()
+    ) == judgment
+
+    with pytest.raises(ValueError, match="width differs"):
+        KnowledgeVector(
+            view=view,
+            source=source,
+            values=(0.5, 0.6),
+            created_at=created,
         )
 
 

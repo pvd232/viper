@@ -155,6 +155,69 @@ def build_parser() -> ArgumentParser:
             help="exact query model as one JSON object",
         )
 
+    knowledge = commands.add_parser(
+        "knowledge",
+        help="publish and search experiment knowledge",
+    )
+    knowledge_commands = knowledge.add_subparsers(
+        dest="knowledge_command",
+        required=True,
+    )
+    knowledge_refresh = knowledge_commands.add_parser(
+        "refresh",
+        help="rebuild the local knowledge projection",
+    )
+    add_root(knowledge_refresh)
+    knowledge_refresh.add_argument(
+        "--head",
+        action="append",
+        type=parse_query,
+        default=[],
+        help="immutable knowledge manifest reference as JSON",
+    )
+    knowledge_search = knowledge_commands.add_parser(
+        "search",
+        help="run one exact knowledge query",
+    )
+    add_root(knowledge_search)
+    knowledge_search.add_argument(
+        "kind",
+        choices=(
+            "search_assertions",
+            "search_assignments",
+            "search_diagnostics",
+            "search_effects",
+            "search_impacts",
+            "search_modulations",
+            "search_primitives",
+            "search_retrieval_judgments",
+            "search_similar",
+        ),
+    )
+    knowledge_search.add_argument("--query", type=parse_query, default={})
+    knowledge_publish = knowledge_commands.add_parser(
+        "publish",
+        help="publish one typed knowledge record",
+    )
+    add_root(knowledge_publish)
+    knowledge_publish.add_argument(
+        "kind",
+        choices=(
+            "publish_assertion",
+            "publish_assignment",
+            "publish_diagnostic",
+            "publish_effect",
+            "publish_impact",
+            "publish_impact_policy",
+            "publish_modulation",
+            "publish_ontology",
+            "publish_retrieval_judgment",
+            "publish_vector",
+        ),
+    )
+    knowledge_publish.add_argument("record", type=parse_query)
+    knowledge_publish.add_argument("--published-at")
+
     mcp = commands.add_parser(
         "mcp",
         help="serve the typed VIPER API over local MCP stdio",
@@ -301,6 +364,13 @@ def _operation_and_payload(
     values.pop("json_output")
     if command == "impact":
         command = f"impact-{values.pop('impact_command')}"
+    if command == "knowledge":
+        knowledge_command = values.pop("knowledge_command")
+        if knowledge_command == "refresh":
+            values["heads"] = values.pop("head")
+            command = "knowledge-refresh"
+        else:
+            command = values.pop("kind").replace("_", "-")
     mapping: dict[str, OperationName] = {
         "validate-stage": "validate_stage",
         "validate-resolved-stage": "validate_resolved_stage",
@@ -315,6 +385,26 @@ def _operation_and_payload(
         "search-artifacts": "search_artifacts",
         "search-measurements": "search_measurements",
         "search-benchmarks": "search_benchmarks",
+        "knowledge-refresh": "knowledge_refresh",
+        "search-primitives": "search_primitives",
+        "search-assignments": "search_assignments",
+        "search-modulations": "search_modulations",
+        "search-effects": "search_effects",
+        "search-impacts": "search_impacts",
+        "search-diagnostics": "search_diagnostics",
+        "search-assertions": "search_assertions",
+        "search-retrieval-judgments": "search_retrieval_judgments",
+        "search-similar": "search_similar",
+        "publish-ontology": "publish_ontology",
+        "publish-assignment": "publish_assignment",
+        "publish-modulation": "publish_modulation",
+        "publish-effect": "publish_effect",
+        "publish-impact-policy": "publish_impact_policy",
+        "publish-impact": "publish_impact",
+        "publish-diagnostic": "publish_diagnostic",
+        "publish-assertion": "publish_assertion",
+        "publish-vector": "publish_vector",
+        "publish-retrieval-judgment": "publish_retrieval_judgment",
         "retry": "retry",
         "execute-benchmark": "execute_benchmark",
         "restore": "restore",
@@ -387,9 +477,15 @@ def _human_success(result: SuccessModel) -> str:
     if result.operation == "catalog_refresh":
         refreshed = getattr(result, "result")
         return f"cataloged {refreshed.accepted} sources; rejected {refreshed.rejected}"
+    if result.operation == "knowledge_refresh":
+        refreshed = getattr(result, "result")
+        return f"cataloged {refreshed.accepted} knowledge records"
     if result.operation.startswith("search_"):
         page = getattr(result, "page")
         return f"returned {len(page.items)} catalog results"
+    if result.operation.startswith("publish_"):
+        publication = getattr(result, "publication")
+        return f"published knowledge record {publication.record.sha256}"
     if result.operation == "retry":
         return (
             f"completed attempt {getattr(result, 'attempt_id')} for run "

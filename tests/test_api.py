@@ -14,8 +14,11 @@ from viper.api import (
     REQUEST_REGISTRY,
     CapabilitiesRequest,
     CatalogRefreshRequest,
+    KnowledgeRefreshRequest,
+    KnowledgeSearchRequest,
     LocalRunPath,
     OperationName,
+    PublishKnowledgeRequest,
     RestoreRequest,
     RunManyRequest,
     SchemaRequest,
@@ -28,9 +31,12 @@ from viper.api import (
     dispatch,
     get_capabilities,
     get_schema,
+    knowledge_refresh,
+    publish_ontology,
     restore_artifacts,
     result_json_bytes,
     run_many,
+    search_primitives,
     search_runs,
     status,
     validate_stage,
@@ -39,6 +45,11 @@ from viper.catalog import Catalog, CatalogRefreshResult
 from viper.cli import main
 from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
 from viper.journal import DurableJournal
+from viper.knowledge import (
+    KnowledgeRecordEnvelope,
+    OntologySpec,
+    PrimitiveSpec,
+)
 from viper.mcp import (
     call_tool,
     prompt_registry,
@@ -118,6 +129,72 @@ def test_mcp_resources_are_stateless_inside_startup_root(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="escapes the MCP startup root"):
         call_tool(tmp_path, "read", "status", {"path": "../outside"})
+
+
+def test_knowledge_operations_match_python_cli_and_mcp(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route one exact knowledge query through every public surface."""
+    monkeypatch.setattr("viper.api.resolve_root", lambda root: root.resolve())
+    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    ontology = OntologySpec(
+        ontology_id="viper-core",
+        version="1",
+        primitives=(
+            PrimitiveSpec(
+                primitive_id="gated-recurrence",
+                dimension="model-family",
+                label="Gated recurrence",
+                definition="A recurrent state transition with learned gates.",
+            ),
+        ),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    published = publish_ontology(
+        PublishKnowledgeRequest(
+            root=tmp_path,
+            record=KnowledgeRecordEnvelope(
+                record_kind="ontology",
+                value=ontology,
+            ),
+        )
+    )
+    knowledge_refresh(KnowledgeRefreshRequest(root=tmp_path))
+    query = {"primitive_ids": ["gated-recurrence"]}
+    python_result = search_primitives(
+        KnowledgeSearchRequest(root=tmp_path, query=query)
+    )
+
+    assert main(
+        [
+            "--json",
+            "knowledge",
+            "search",
+            "search_primitives",
+            "--root",
+            str(tmp_path),
+            "--query",
+            json.dumps(query),
+        ]
+    ) == 0
+    cli_result = json.loads(capsys.readouterr().out)
+    mcp_result = call_tool(
+        tmp_path,
+        "read",
+        "search_primitives",
+        {"query": query},
+    )
+
+    assert published.publication.record.sha256
+    assert cli_result["page"] == python_result.page.model_dump(mode="json")
+    assert mcp_result.structured_content["page"] == cli_result["page"]
+    read_tools = {tool.name for tool in tool_registry("read")}
+    execute_tools = {tool.name for tool in tool_registry("execute")}
+    assert "search_primitives" in read_tools
+    assert "publish_ontology" not in read_tools
+    assert "publish_ontology" in execute_tools
 
 
 def test_api_schema_and_capability_discovery() -> None:

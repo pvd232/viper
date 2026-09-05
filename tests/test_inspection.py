@@ -22,10 +22,29 @@ from viper.inspection import (
     plan_diff,
 )
 from viper.journal import DurableJournal
+from viper.knowledge import (
+    AssignmentQuery,
+    DeclaredPrimitiveAssignment,
+    DiagnosticComponent,
+    DiagnosticSignature,
+    DiagnosticVectorView,
+    KnowledgeVector,
+    OntologySpec,
+    PrimitiveQuery,
+    PrimitiveRef,
+    PrimitiveSpec,
+    RetrievalJudgment,
+    RetrievalJudgmentQuery,
+    RunKnowledgeTarget,
+    SimilarityQuery,
+    diagnostic_component_sha256,
+    knowledge,
+)
 from viper.references import (
     GitFileRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
+    ResolvedFileRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageRef,
@@ -510,3 +529,157 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
 
     assert catalog.reuse_candidate(key) == candidate
     assert catalog.reuse_candidate(key.model_copy(update={"seed": 43})) is None
+
+
+def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
+    tmp_path: Path,
+) -> None:
+    """Filter exact records before ranking vectors inside one declared view."""
+    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    store = knowledge(root=tmp_path)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    ontology = OntologySpec(
+        ontology_id="viper-core",
+        version="1",
+        primitives=(
+            PrimitiveSpec(
+                primitive_id="gated-recurrence",
+                dimension="model-family",
+                label="Gated recurrence",
+                definition="A recurrent state transition with learned gates.",
+            ),
+        ),
+        created_at=created,
+    )
+    store.publish_ontology(ontology)
+    run = ResolvedRunRef(
+        sha256="a" * 64,
+        bytes=10,
+        stored_at=LocalFileRef(commit="b" * 64, path="runs/final.yaml"),
+    )
+    assignment = DeclaredPrimitiveAssignment(
+        target=RunKnowledgeTarget(run=run),
+        primitive=PrimitiveRef(
+            ontology_id=ontology.ontology_id,
+            ontology_version=ontology.version,
+            primitive_id=ontology.primitives[0].primitive_id,
+        ),
+        assigned_by="researcher",
+        assigned_at=created,
+    )
+    store.publish_assignment(assignment)
+    first_components = (
+        DiagnosticComponent(
+            metric_id="loss",
+            measurement=ResolvedFileRef(
+                sha256="c" * 64,
+                bytes=10,
+                stored_at=LocalFileRef(
+                    commit="d" * 64,
+                    path="measurements/first.json",
+                ),
+            ),
+            value=1.0,
+        ),
+    )
+    second_components = (
+        DiagnosticComponent(
+            metric_id="loss",
+            measurement=ResolvedFileRef(
+                sha256="e" * 64,
+                bytes=10,
+                stored_at=LocalFileRef(
+                    commit="f" * 64,
+                    path="measurements/second.json",
+                ),
+            ),
+            value=2.0,
+        ),
+    )
+    first_signature = store.publish_signature(
+        DiagnosticSignature(
+            run=run,
+            stage_id="train",
+            components=first_components,
+            component_sha256=diagnostic_component_sha256(first_components),
+            created_at=created,
+        )
+    )
+    second_signature = store.publish_signature(
+        DiagnosticSignature(
+            run=run,
+            stage_id="eval",
+            components=second_components,
+            component_sha256=diagnostic_component_sha256(second_components),
+            created_at=created,
+        )
+    )
+    view = DiagnosticVectorView(
+        view_id="diagnostic-v1",
+        version="1",
+        metric_ids=("loss",),
+        dimensions=1,
+    )
+    first = store.publish_vector(
+        KnowledgeVector(
+            view=view,
+            source=first_signature.record,
+            values=(1.0,),
+            created_at=created,
+        )
+    )
+    second = store.publish_vector(
+        KnowledgeVector(
+            view=view,
+            source=second_signature.record,
+            values=(-1.0,),
+            created_at=created,
+        )
+    )
+    store.publish_retrieval_judgment(
+        RetrievalJudgment(
+            query_vector=first.record,
+            candidate_vector=second.record,
+            aspects=("diagnostic",),
+            relevance=2,
+            reviewed_by="reviewer",
+            reviewed_at=created,
+        )
+    )
+
+    catalog = Catalog(tmp_path)
+    catalog.refresh()
+    records = catalog.knowledge
+    primitive_page = records.primitives(
+        PrimitiveQuery(primitive_ids=("gated-recurrence",))
+    )
+    assert tuple(item.label for item in primitive_page.items) == (
+        "Gated recurrence",
+    )
+    assert records.assignments(
+        AssignmentQuery(origins=("declared",))
+    ).items[0].record.value == assignment
+
+    similar = records.similar(
+        SimilarityQuery(
+            view_id=view.view_id,
+            view_version=view.version,
+            values=(1.0,),
+        )
+    )
+    assert similar.items[0].vector == first.record
+    assert similar.items[0].distance == 0.0
+    judgments = records.retrieval_judgments(
+        RetrievalJudgmentQuery(
+            view_ids=(view.view_id,),
+            minimum_relevance=2,
+        )
+    )
+    assert len(judgments.items) == 1
+    assert records.similar(
+        SimilarityQuery(
+            view_id="another-view",
+            view_version="1",
+            values=(1.0,),
+        )
+    ).items == ()

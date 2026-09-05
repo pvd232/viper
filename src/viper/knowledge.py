@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import tempfile
 from collections.abc import Iterator
@@ -24,12 +25,14 @@ from pydantic import (
 from ._schema import SHA256, ArtifactName, NonEmptyStr, ProtocolModel
 from .ids import MetricId, StageId
 from .references import (
+    LocalFileRef,
     ResolvedArtifactPointerRef,
     ResolvedFileRef,
     ResolvedRunRef,
 )
-from .serialization import serialize_document
+from .serialization import parse_yaml_bytes, serialize_document
 from .storage import (
+    LocalArtifactStore,
     StorageDestination,
     load_storage_settings,
     publish_resolved_files,
@@ -39,6 +42,7 @@ PrimitiveId = Annotated[str, StringConstraints(min_length=1)]
 OntologyId = Annotated[str, StringConstraints(min_length=1)]
 OntologyVersion = Annotated[str, StringConstraints(min_length=1)]
 AssertionId = Annotated[str, StringConstraints(min_length=1)]
+VectorViewId = Annotated[str, StringConstraints(min_length=1)]
 
 
 class PrimitiveRef(ProtocolModel):
@@ -444,6 +448,86 @@ class JournalAssertion(ProtocolModel):
         return self
 
 
+class DiagnosticVectorView(ProtocolModel):
+    """Define one ordered diagnostic vector space."""
+
+    kind: Literal["diagnostic"] = "diagnostic"
+    view_id: VectorViewId
+    version: NonEmptyStr
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    dimensions: int = Field(ge=1)
+    distance: Literal["cosine"] = "cosine"
+
+    @model_validator(mode="after")
+    def validate_metrics(self) -> Self:
+        """Require one stable metric order matching the vector width."""
+        if self.metric_ids != tuple(sorted(set(self.metric_ids))):
+            raise ValueError("diagnostic metrics must be unique and sorted")
+        if len(self.metric_ids) != self.dimensions:
+            raise ValueError("diagnostic metric count differs from dimensions")
+        return self
+
+
+class JournalVectorView(ProtocolModel):
+    """Define one journal embedding space and its immutable embedder."""
+
+    kind: Literal["journal"] = "journal"
+    view_id: VectorViewId
+    version: NonEmptyStr
+    embedder: ResolvedArtifactPointerRef
+    dimensions: int = Field(ge=1)
+    distance: Literal["cosine"] = "cosine"
+
+
+VectorViewSpec = Annotated[
+    DiagnosticVectorView | JournalVectorView,
+    Field(discriminator="kind"),
+]
+
+
+class KnowledgeVector(ProtocolModel):
+    """Bind finite values to one source record and vector view."""
+
+    schema_version: Literal[1] = 1
+    view: VectorViewSpec
+    source: ResolvedFileRef
+    values: tuple[float, ...] = Field(min_length=1)
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_values(self) -> Self:
+        """Require the exact declared width and finite values."""
+        if len(self.values) != self.view.dimensions:
+            raise ValueError("vector width differs from its view")
+        if not all(math.isfinite(value) for value in self.values):
+            raise ValueError("vector values must be finite")
+        return self
+
+
+RetrievalAspect = Literal["primitive", "diagnostic", "journal", "outcome"]
+
+
+class RetrievalJudgment(ProtocolModel):
+    """Store one reviewed relevance judgment between two vectors."""
+
+    schema_version: Literal[1] = 1
+    query_vector: ResolvedFileRef
+    candidate_vector: ResolvedFileRef
+    aspects: tuple[RetrievalAspect, ...] = Field(min_length=1)
+    relevance: int = Field(ge=0, le=3)
+    reviewed_by: NonEmptyStr
+    reviewed_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_judgment(self) -> Self:
+        """Reject self-comparisons and unstable aspect order."""
+        if self.query_vector == self.candidate_vector:
+            raise ValueError("retrieval judgment vectors must differ")
+        if self.aspects != tuple(sorted(set(self.aspects))):
+            raise ValueError("retrieval aspects must be unique and sorted")
+        return self
+
+
 KnowledgeRecordKind = Literal[
     "ontology",
     "assignment",
@@ -453,6 +537,8 @@ KnowledgeRecordKind = Literal[
     "impact",
     "diagnostic",
     "assertion",
+    "vector",
+    "retrieval_judgment",
 ]
 KnowledgeRecord = (
     OntologySpec
@@ -465,6 +551,8 @@ KnowledgeRecord = (
     | ImpactAssessment
     | DiagnosticSignature
     | JournalAssertion
+    | KnowledgeVector
+    | RetrievalJudgment
 )
 
 _RECORD_TYPES: dict[KnowledgeRecordKind, type[ProtocolModel]] = {
@@ -476,6 +564,8 @@ _RECORD_TYPES: dict[KnowledgeRecordKind, type[ProtocolModel]] = {
     "impact": ImpactAssessment,
     "diagnostic": DiagnosticSignature,
     "assertion": JournalAssertion,
+    "vector": KnowledgeVector,
+    "retrieval_judgment": RetrievalJudgment,
 }
 
 
@@ -523,6 +613,196 @@ class KnowledgePublicationResult(BaseModel):
     manifest: ResolvedFileRef
 
 
+class PrimitiveQuery(BaseModel):
+    """Filter ontology primitives by exact fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ontology_id: OntologyId | None = None
+    ontology_versions: tuple[OntologyVersion, ...] = ()
+    dimensions: tuple[NonEmptyStr, ...] = ()
+    primitive_ids: tuple[PrimitiveId, ...] = ()
+    labels: tuple[NonEmptyStr, ...] = ()
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class AssignmentQuery(BaseModel):
+    """Filter primitive assignments by exact provenance fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: ResolvedRunRef | None = None
+    stage_ids: tuple[StageId, ...] = ()
+    origins: tuple[Literal["declared", "inferred", "reviewed"], ...] = ()
+    primitive_ids: tuple[PrimitiveId, ...] = ()
+    decisions: tuple[Literal["accepted", "corrected"], ...] = ()
+    effective_only: bool = False
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class ModulationQuery(BaseModel):
+    """Filter controlled run comparisons by exact identities."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    baseline_runs: tuple[ResolvedRunRef, ...] = ()
+    candidate_runs: tuple[ResolvedRunRef, ...] = ()
+    dimensions: tuple[NonEmptyStr, ...] = ()
+    primitive_ids: tuple[PrimitiveId, ...] = ()
+    context_sha256: SHA256 | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class EffectQuery(BaseModel):
+    """Filter paired effect estimates by exact metric and context fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metric_ids: tuple[MetricId, ...] = ()
+    directions: tuple[Literal["min", "max"], ...] = ()
+    primitive_ids: tuple[PrimitiveId, ...] = ()
+    context_sha256: SHA256 | None = None
+    minimum_improvement: float | None = Field(default=None, allow_inf_nan=False)
+    maximum_improvement: float | None = Field(default=None, allow_inf_nan=False)
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class ImpactQuery(BaseModel):
+    """Filter qualitative impact assessments by exact fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metric_ids: tuple[MetricId, ...] = ()
+    impacts: tuple[Literal["negative", "none", "low", "medium", "high"], ...] = ()
+    policy_ids: tuple[NonEmptyStr, ...] = ()
+    context_sha256: SHA256 | None = None
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class DiagnosticQuery(BaseModel):
+    """Filter diagnostic signatures by run, stage, or metric."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    runs: tuple[ResolvedRunRef, ...] = ()
+    stage_ids: tuple[StageId, ...] = ()
+    metric_ids: tuple[MetricId, ...] = ()
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class AssertionQuery(BaseModel):
+    """Filter journal assertions by review and evidence fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kinds: tuple[
+        Literal["observation", "hypothesis", "decision", "exclusion"], ...
+    ] = ()
+    statuses: tuple[Literal["proposed", "reviewed", "rejected"], ...] = ()
+    evidence_kinds: tuple[JournalEvidenceKind, ...] = ()
+    primitive_ids: tuple[PrimitiveId, ...] = ()
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class RetrievalJudgmentQuery(BaseModel):
+    """Filter reviewed retrieval judgments by exact review fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    view_ids: tuple[VectorViewId, ...] = ()
+    aspects: tuple[RetrievalAspect, ...] = ()
+    minimum_relevance: int | None = Field(default=None, ge=0, le=3)
+    reviewers: tuple[NonEmptyStr, ...] = ()
+    limit: int = Field(default=50, ge=1, le=500)
+    cursor: str | None = None
+
+
+class SimilarityQuery(BaseModel):
+    """Rank vectors inside one exact view after exact filters."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    view_id: VectorViewId
+    view_version: NonEmptyStr
+    values: tuple[float, ...] = Field(min_length=1)
+    primitive_ids: tuple[PrimitiveId, ...] = ()
+    metric_ids: tuple[MetricId, ...] = ()
+    assertion_statuses: tuple[
+        Literal["proposed", "reviewed", "rejected"], ...
+    ] = ()
+    limit: int = Field(default=20, ge=1, le=500)
+
+    @model_validator(mode="after")
+    def validate_values(self) -> Self:
+        """Reject non-finite query vectors."""
+        if not all(math.isfinite(value) for value in self.values):
+            raise ValueError("similarity values must be finite")
+        return self
+
+
+class CatalogPrimitive(BaseModel):
+    """Return one primitive with its immutable ontology reference."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    ontology: ResolvedFileRef
+    primitive: PrimitiveRef
+    dimension: NonEmptyStr
+    label: NonEmptyStr
+
+
+class CatalogKnowledgeRecord(BaseModel):
+    """Return one immutable reference and its parsed knowledge record."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    reference: ResolvedFileRef
+    record: KnowledgeRecordEnvelope
+
+
+class SimilarityMatch(BaseModel):
+    """Return one exact-distance vector match and its source record."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: CatalogKnowledgeRecord
+    vector: ResolvedFileRef
+    distance: float = Field(ge=0.0, allow_inf_nan=False)
+
+
+class PrimitivePage(BaseModel):
+    """Return one deterministic page of ontology primitives."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: tuple[CatalogPrimitive, ...]
+    next_cursor: str | None = None
+
+
+class KnowledgePage(BaseModel):
+    """Return one deterministic page of knowledge records."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: tuple[CatalogKnowledgeRecord, ...]
+    next_cursor: str | None = None
+
+
+class SimilarityPage(BaseModel):
+    """Return one bounded exact-distance result."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: tuple[SimilarityMatch, ...]
+
+
 @contextmanager
 def _repository_lock(root: Path) -> Iterator[None]:
     """Reject concurrent knowledge-head writers with one exclusive lock file."""
@@ -553,6 +833,19 @@ class KnowledgeStore:
         if not self.head.is_file():
             return None
         return TypeAdapter(ResolvedFileRef).validate_json(self.head.read_bytes())
+
+    def _record(self, reference: ResolvedFileRef) -> KnowledgeRecordEnvelope:
+        """Load and verify one locally published knowledge record."""
+        if not isinstance(reference.stored_at, LocalFileRef):
+            raise ValueError("knowledge verification currently requires local files")
+        raw = LocalArtifactStore(self.root, reference.stored_at.store).fetch(
+            reference.stored_at
+        )
+        if len(raw) != reference.bytes:
+            raise ValueError("knowledge record byte count differs")
+        if hashlib.sha256(raw).hexdigest() != reference.sha256:
+            raise ValueError("knowledge record digest differs")
+        return KnowledgeRecordEnvelope.model_validate(parse_yaml_bytes(raw))
 
     def _replace_head(self, reference: ResolvedFileRef) -> None:
         """Atomically replace the local discovery pointer."""
@@ -647,6 +940,33 @@ class KnowledgeStore:
         """Publish one evidence-backed journal assertion."""
         return self._publish("assertion", value, value.created_at)
 
+    def publish_vector(self, value: KnowledgeVector) -> KnowledgePublicationResult:
+        """Publish one vector without changing its source record."""
+        source = self._record(value.source).value
+        expected = (
+            DiagnosticSignature
+            if isinstance(value.view, DiagnosticVectorView)
+            else JournalAssertion
+        )
+        if not isinstance(source, expected):
+            raise ValueError("knowledge vector source differs from its view")
+        return self._publish("vector", value, value.created_at)
+
+    def publish_retrieval_judgment(
+        self,
+        value: RetrievalJudgment,
+    ) -> KnowledgePublicationResult:
+        """Publish one reviewed retrieval judgment."""
+        query = self._record(value.query_vector).value
+        candidate = self._record(value.candidate_vector).value
+        if not isinstance(query, KnowledgeVector) or not isinstance(
+            candidate, KnowledgeVector
+        ):
+            raise ValueError("retrieval judgment requires vector records")
+        if query.view != candidate.view:
+            raise ValueError("retrieval judgment vector views differ")
+        return self._publish("retrieval_judgment", value, value.reviewed_at)
+
 
 def knowledge(
     *,
@@ -661,28 +981,40 @@ def knowledge(
 
 __all__ = [
     "ArtifactKnowledgeTarget",
+    "AssertionQuery",
     "AssertionId",
+    "AssignmentQuery",
+    "CatalogKnowledgeRecord",
+    "CatalogPrimitive",
     "ComparisonContext",
     "ComparisonField",
     "DeclaredPrimitiveAssignment",
     "DiagnosticComponent",
+    "DiagnosticQuery",
     "DiagnosticSignature",
+    "DiagnosticVectorView",
+    "EffectQuery",
     "EffectEstimate",
     "ImpactAssessment",
+    "ImpactQuery",
     "ImpactPolicy",
     "InferredPrimitiveAssignment",
     "JournalAssertion",
     "JournalEvidence",
     "JournalEvidenceKind",
+    "JournalVectorView",
     "KnowledgeManifest",
+    "KnowledgePage",
     "KnowledgePublicationResult",
     "KnowledgeRecord",
     "KnowledgeRecordEnvelope",
     "KnowledgeRecordKind",
     "KnowledgeStore",
     "KnowledgeTarget",
+    "KnowledgeVector",
     "MeasurementKnowledgeTarget",
     "Modulation",
+    "ModulationQuery",
     "OntologyId",
     "OntologySpec",
     "OntologyVersion",
@@ -690,12 +1022,22 @@ __all__ = [
     "PrimitiveAssignment",
     "PrimitiveChange",
     "PrimitiveId",
+    "PrimitivePage",
+    "PrimitiveQuery",
     "PrimitiveRef",
     "PrimitiveSpec",
+    "RetrievalAspect",
+    "RetrievalJudgment",
+    "RetrievalJudgmentQuery",
     "ReviewedPrimitiveAssignment",
     "RunComparisonIdentity",
     "RunKnowledgeTarget",
+    "SimilarityMatch",
+    "SimilarityPage",
+    "SimilarityQuery",
     "StageKnowledgeTarget",
+    "VectorViewId",
+    "VectorViewSpec",
     "diagnostic_component_sha256",
     "knowledge",
 ]

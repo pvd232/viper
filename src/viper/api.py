@@ -68,9 +68,38 @@ from .inspection import compare_runs as compare_verified_runs
 from .inspection import lineage as build_lineage
 from .inspection import plan_diff as compare_frozen_plans
 from .journal import AttemptState
+from .knowledge import (
+    AssertionQuery,
+    AssignmentQuery,
+    DeclaredPrimitiveAssignment,
+    DiagnosticQuery,
+    DiagnosticSignature,
+    EffectEstimate,
+    EffectQuery,
+    ImpactAssessment,
+    ImpactPolicy,
+    ImpactQuery,
+    InferredPrimitiveAssignment,
+    JournalAssertion,
+    KnowledgePage,
+    KnowledgePublicationResult,
+    KnowledgeRecordEnvelope,
+    KnowledgeVector,
+    Modulation,
+    ModulationQuery,
+    OntologySpec,
+    PrimitivePage,
+    PrimitiveQuery,
+    RetrievalJudgment,
+    RetrievalJudgmentQuery,
+    ReviewedPrimitiveAssignment,
+    SimilarityPage,
+    SimilarityQuery,
+)
+from .knowledge import knowledge as open_knowledge
 from .preflight import PreflightCheck, preflight_plan
 from .project import InitError, RootError, init, resolve_root
-from .references import LocalFileRef, ResolvedRunRef
+from .references import LocalFileRef, ResolvedFileRef, ResolvedRunRef
 from .restoration import (
     ArtifactRestoreSelector,
     RestoreResult,
@@ -135,6 +164,26 @@ OperationName = Literal[
     "search_artifacts",
     "search_measurements",
     "search_benchmarks",
+    "knowledge_refresh",
+    "search_primitives",
+    "search_assignments",
+    "search_modulations",
+    "search_effects",
+    "search_impacts",
+    "search_diagnostics",
+    "search_assertions",
+    "search_retrieval_judgments",
+    "search_similar",
+    "publish_ontology",
+    "publish_assignment",
+    "publish_modulation",
+    "publish_effect",
+    "publish_impact_policy",
+    "publish_impact",
+    "publish_diagnostic",
+    "publish_assertion",
+    "publish_vector",
+    "publish_retrieval_judgment",
 ]
 FailureOrigin = Literal["request", "application", "cli", "internal"]
 ErrorCode = Literal[
@@ -763,6 +812,47 @@ class SearchBenchmarksSuccess(SuccessModel):
     page: BenchmarkPage
 
 
+class KnowledgeRefreshRequest(APIModel):
+    """Select manifest heads for one complete knowledge projection."""
+
+    root: Path
+    heads: tuple[ResolvedFileRef, ...] = ()
+
+
+class KnowledgeRefreshSuccess(SuccessModel):
+    """Return the rebuilt catalog identity and source counts."""
+
+    operation: Literal["knowledge_refresh"] = "knowledge_refresh"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: CatalogRefreshResult
+
+
+class KnowledgeSearchRequest(APIModel):
+    """Select one project and one exact knowledge query payload."""
+
+    root: Path
+    query: dict[str, Any] = Field(default_factory=dict)
+
+
+class KnowledgeSearchSuccess(SuccessModel):
+    """Return one typed exact or similarity-search result."""
+
+    page: PrimitivePage | KnowledgePage | SimilarityPage
+
+
+class PublishKnowledgeRequest(APIModel):
+    """Select one project and one typed knowledge record."""
+
+    root: Path
+    record: KnowledgeRecordEnvelope
+    published_at: datetime | None = None
+
+
+class PublishKnowledgeSuccess(SuccessModel):
+    """Return immutable record and manifest references."""
+
+    publication: KnowledgePublicationResult
+
+
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
@@ -770,6 +860,12 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "CapabilitiesSuccess": CapabilitiesSuccess,
     "CatalogRefreshRequest": CatalogRefreshRequest,
     "CatalogRefreshSuccess": CatalogRefreshSuccess,
+    "KnowledgeRefreshRequest": KnowledgeRefreshRequest,
+    "KnowledgeRefreshSuccess": KnowledgeRefreshSuccess,
+    "KnowledgeSearchRequest": KnowledgeSearchRequest,
+    "KnowledgeSearchSuccess": KnowledgeSearchSuccess,
+    "PublishKnowledgeRequest": PublishKnowledgeRequest,
+    "PublishKnowledgeSuccess": PublishKnowledgeSuccess,
     "ExecuteStageRequest": ExecuteStageRequest,
     "ExecuteStageSuccess": ExecuteStageSuccess,
     "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
@@ -857,6 +953,26 @@ OPERATIONS: tuple[OperationName, ...] = (
     "search_artifacts",
     "search_measurements",
     "search_benchmarks",
+    "knowledge_refresh",
+    "search_primitives",
+    "search_assignments",
+    "search_modulations",
+    "search_effects",
+    "search_impacts",
+    "search_diagnostics",
+    "search_assertions",
+    "search_retrieval_judgments",
+    "search_similar",
+    "publish_ontology",
+    "publish_assignment",
+    "publish_modulation",
+    "publish_effect",
+    "publish_impact_policy",
+    "publish_impact",
+    "publish_diagnostic",
+    "publish_assertion",
+    "publish_vector",
+    "publish_retrieval_judgment",
 )
 
 
@@ -1710,6 +1826,190 @@ def search_benchmarks(
     )
 
 
+def knowledge_refresh(request: KnowledgeRefreshRequest) -> KnowledgeRefreshSuccess:
+    """Rebuild the knowledge projection from local and supplied manifest heads."""
+    project_root = _root(request.root, "knowledge_refresh")
+    result = catalog(root=project_root).refresh(knowledge=request.heads)
+    return KnowledgeRefreshSuccess(result=result)
+
+
+def search_primitives(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Return ontology primitives matching one exact query."""
+    project_root = _root(request.root, "search_primitives")
+    query = PrimitiveQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.primitives(query)
+    return KnowledgeSearchSuccess(operation="search_primitives", page=page)
+
+
+def search_assignments(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Return primitive assignments matching one exact query."""
+    project_root = _root(request.root, "search_assignments")
+    query = AssignmentQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.assignments(query)
+    return KnowledgeSearchSuccess(operation="search_assignments", page=page)
+
+
+def search_modulations(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Return controlled modulations matching one exact query."""
+    project_root = _root(request.root, "search_modulations")
+    query = ModulationQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.modulations(query)
+    return KnowledgeSearchSuccess(operation="search_modulations", page=page)
+
+
+def search_effects(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Return effect estimates matching one exact query."""
+    project_root = _root(request.root, "search_effects")
+    query = EffectQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.effects(query)
+    return KnowledgeSearchSuccess(operation="search_effects", page=page)
+
+
+def search_impacts(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Return impact assessments matching one exact query."""
+    project_root = _root(request.root, "search_impacts")
+    query = ImpactQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.impacts(query)
+    return KnowledgeSearchSuccess(operation="search_impacts", page=page)
+
+
+def search_diagnostics(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Return diagnostic signatures matching one exact query."""
+    project_root = _root(request.root, "search_diagnostics")
+    query = DiagnosticQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.diagnostics(query)
+    return KnowledgeSearchSuccess(operation="search_diagnostics", page=page)
+
+
+def search_assertions(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Return journal assertions matching one exact query."""
+    project_root = _root(request.root, "search_assertions")
+    query = AssertionQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.assertions(query)
+    return KnowledgeSearchSuccess(operation="search_assertions", page=page)
+
+
+def search_retrieval_judgments(
+    request: KnowledgeSearchRequest,
+) -> KnowledgeSearchSuccess:
+    """Return retrieval judgments matching one exact query."""
+    project_root = _root(request.root, "search_retrieval_judgments")
+    query = RetrievalJudgmentQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.retrieval_judgments(query)
+    return KnowledgeSearchSuccess(
+        operation="search_retrieval_judgments",
+        page=page,
+    )
+
+
+def search_similar(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
+    """Rank vectors inside one exact view."""
+    project_root = _root(request.root, "search_similar")
+    query = SimilarityQuery.model_validate(request.query)
+    page = catalog(root=project_root).knowledge.similar(query)
+    return KnowledgeSearchSuccess(operation="search_similar", page=page)
+
+
+def _publish_knowledge(
+    operation: OperationName,
+    request: PublishKnowledgeRequest,
+) -> PublishKnowledgeSuccess:
+    """Route one typed envelope through its matching store method."""
+    project_root = _root(request.root, operation)
+    store = open_knowledge(root=project_root)
+    value = request.record.value
+    if operation == "publish_ontology" and isinstance(value, OntologySpec):
+        result = store.publish_ontology(value)
+    elif operation == "publish_assignment" and isinstance(
+        value,
+        (
+            DeclaredPrimitiveAssignment,
+            InferredPrimitiveAssignment,
+            ReviewedPrimitiveAssignment,
+        ),
+    ):
+        result = store.publish_assignment(value)
+    elif operation == "publish_modulation" and isinstance(value, Modulation):
+        result = store.publish_modulation(value)
+    elif operation == "publish_effect" and isinstance(value, EffectEstimate):
+        result = store.publish_effect(value)
+    elif operation == "publish_impact_policy" and isinstance(value, ImpactPolicy):
+        if request.published_at is None:
+            raise ValueError("impact policy publication requires published_at")
+        result = store.publish_impact_policy(value, published_at=request.published_at)
+    elif operation == "publish_impact" and isinstance(value, ImpactAssessment):
+        result = store.publish_impact(value)
+    elif operation == "publish_diagnostic" and isinstance(
+        value, DiagnosticSignature
+    ):
+        result = store.publish_signature(value)
+    elif operation == "publish_assertion" and isinstance(value, JournalAssertion):
+        result = store.publish_assertion(value)
+    elif operation == "publish_vector" and isinstance(value, KnowledgeVector):
+        result = store.publish_vector(value)
+    elif operation == "publish_retrieval_judgment" and isinstance(
+        value, RetrievalJudgment
+    ):
+        result = store.publish_retrieval_judgment(value)
+    else:
+        raise ValueError("knowledge record kind differs from the operation")
+    return PublishKnowledgeSuccess(operation=operation, publication=result)
+
+
+def publish_ontology(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one ontology record."""
+    return _publish_knowledge("publish_ontology", request)
+
+
+def publish_assignment(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one primitive assignment record."""
+    return _publish_knowledge("publish_assignment", request)
+
+
+def publish_modulation(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one controlled modulation record."""
+    return _publish_knowledge("publish_modulation", request)
+
+
+def publish_effect(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one effect estimate record."""
+    return _publish_knowledge("publish_effect", request)
+
+
+def publish_impact_policy(
+    request: PublishKnowledgeRequest,
+) -> PublishKnowledgeSuccess:
+    """Publish one impact policy record."""
+    return _publish_knowledge("publish_impact_policy", request)
+
+
+def publish_impact(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one impact assessment record."""
+    return _publish_knowledge("publish_impact", request)
+
+
+def publish_diagnostic(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one diagnostic signature record."""
+    return _publish_knowledge("publish_diagnostic", request)
+
+
+def publish_assertion(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one journal assertion record."""
+    return _publish_knowledge("publish_assertion", request)
+
+
+def publish_vector(request: PublishKnowledgeRequest) -> PublishKnowledgeSuccess:
+    """Publish one knowledge vector record."""
+    return _publish_knowledge("publish_vector", request)
+
+
+def publish_retrieval_judgment(
+    request: PublishKnowledgeRequest,
+) -> PublishKnowledgeSuccess:
+    """Publish one reviewed retrieval judgment record."""
+    return _publish_knowledge("publish_retrieval_judgment", request)
+
+
 REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "validate_stage": ValidateStageRequest,
     "validate_resolved_stage": ValidateResolvedStageRequest,
@@ -1739,6 +2039,26 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "search_artifacts": SearchArtifactsRequest,
     "search_measurements": SearchMeasurementsRequest,
     "search_benchmarks": SearchBenchmarksRequest,
+    "knowledge_refresh": KnowledgeRefreshRequest,
+    "search_primitives": KnowledgeSearchRequest,
+    "search_assignments": KnowledgeSearchRequest,
+    "search_modulations": KnowledgeSearchRequest,
+    "search_effects": KnowledgeSearchRequest,
+    "search_impacts": KnowledgeSearchRequest,
+    "search_diagnostics": KnowledgeSearchRequest,
+    "search_assertions": KnowledgeSearchRequest,
+    "search_retrieval_judgments": KnowledgeSearchRequest,
+    "search_similar": KnowledgeSearchRequest,
+    "publish_ontology": PublishKnowledgeRequest,
+    "publish_assignment": PublishKnowledgeRequest,
+    "publish_modulation": PublishKnowledgeRequest,
+    "publish_effect": PublishKnowledgeRequest,
+    "publish_impact_policy": PublishKnowledgeRequest,
+    "publish_impact": PublishKnowledgeRequest,
+    "publish_diagnostic": PublishKnowledgeRequest,
+    "publish_assertion": PublishKnowledgeRequest,
+    "publish_vector": PublishKnowledgeRequest,
+    "publish_retrieval_judgment": PublishKnowledgeRequest,
 }
 
 HANDLER_REGISTRY: dict[OperationName, Handler] = {
@@ -1770,6 +2090,26 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "search_artifacts": search_artifacts,
     "search_measurements": search_measurements,
     "search_benchmarks": search_benchmarks,
+    "knowledge_refresh": knowledge_refresh,
+    "search_primitives": search_primitives,
+    "search_assignments": search_assignments,
+    "search_modulations": search_modulations,
+    "search_effects": search_effects,
+    "search_impacts": search_impacts,
+    "search_diagnostics": search_diagnostics,
+    "search_assertions": search_assertions,
+    "search_retrieval_judgments": search_retrieval_judgments,
+    "search_similar": search_similar,
+    "publish_ontology": publish_ontology,
+    "publish_assignment": publish_assignment,
+    "publish_modulation": publish_modulation,
+    "publish_effect": publish_effect,
+    "publish_impact_policy": publish_impact_policy,
+    "publish_impact": publish_impact,
+    "publish_diagnostic": publish_diagnostic,
+    "publish_assertion": publish_assertion,
+    "publish_vector": publish_vector,
+    "publish_retrieval_judgment": publish_retrieval_judgment,
 }
 
 
@@ -1988,12 +2328,18 @@ __all__ = [
     "InitProjectSuccess",
     "LineageRequest",
     "LineageSuccess",
+    "KnowledgeRefreshRequest",
+    "KnowledgeRefreshSuccess",
+    "KnowledgeSearchRequest",
+    "KnowledgeSearchSuccess",
     "OperationName",
     "PythonRunError",
     "PlanDiffRequest",
     "PlanDiffSuccess",
     "PreflightRequest",
     "PreflightSuccess",
+    "PublishKnowledgeRequest",
+    "PublishKnowledgeSuccess",
     "RunRequest",
     "RunSuccess",
     "RunManyRequest",
@@ -2044,17 +2390,36 @@ __all__ = [
     "get_capabilities",
     "init_project",
     "get_schema",
+    "knowledge_refresh",
     "lineage",
     "plan_diff",
     "preflight",
+    "publish_assertion",
+    "publish_assignment",
+    "publish_diagnostic",
+    "publish_effect",
+    "publish_impact",
+    "publish_modulation",
+    "publish_ontology",
+    "publish_retrieval_judgment",
+    "publish_vector",
     "result_json_bytes",
     "retry",
     "run",
     "run_many",
     "search_artifacts",
+    "search_assertions",
+    "search_assignments",
     "search_benchmarks",
+    "search_diagnostics",
+    "search_effects",
+    "search_impacts",
     "search_measurements",
+    "search_modulations",
+    "search_primitives",
+    "search_retrieval_judgments",
     "search_runs",
+    "search_similar",
     "status",
     "validate_resolved_stage",
     "validate_run_spec",
