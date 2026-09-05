@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ from viper.system_impact.models import (
     SourceGraph,
     SourceGraphFormat,
     SourceNode,
+    SourceReference,
     SourceSnapshot,
     stage_key,
 )
@@ -135,10 +137,77 @@ def _graph(
                 query="viper/python-impact/dependencies",
                 path="tests/test_use.py",
                 line=caller_node.start_line + 1,
+                column=4,
             ),
         )
     else:
         edges = ()
+    source_text = (root / "tests/test_use.py").read_text(encoding="utf-8")
+    reference_rows: list[SourceReference] = []
+    alias_match = re.search(
+        r"from viper import _subprocess as ([A-Za-z_]\w*)", source_text
+    )
+    module_alias = alias_match.group(1) if alias_match is not None else "subprocess"
+    selected = next(
+        (
+            name
+            for name in ("run_checked", "run")
+            if f"{module_alias}.{name}" in source_text
+        ),
+        None,
+    )
+    if selected is not None:
+        assignment_line = next(
+            (
+                index
+                for index, value in enumerate(source_text.splitlines(), start=1)
+                if f"{module_alias} = object()" in value
+            ),
+            None,
+        )
+        resolution = (
+            "unresolved"
+            if assignment_line is not None
+            and caller_node.start_line <= assignment_line <= caller_node.end_line
+            else "resolved"
+        )
+        binding_form = (
+            "alias_rebinding" if resolution == "unresolved" else "module_alias"
+        )
+        for line, value in enumerate(source_text.splitlines(), start=1):
+            expression = f"{module_alias}.{selected}"
+            if expression not in value:
+                continue
+            column = value.index(module_alias)
+            reference_payload = json.dumps(
+                [
+                    caller_node.node_id,
+                    "viper._subprocess",
+                    selected if resolution == "resolved" else "*",
+                    "calls" if resolution == "resolved" else "reads",
+                    "tests/test_use.py",
+                    line,
+                    column,
+                    binding_form,
+                    resolution,
+                ],
+                separators=(",", ":"),
+            ).encode()
+            reference_rows.append(
+                SourceReference(
+                    reference_id=hashlib.sha256(reference_payload).hexdigest(),
+                    source=caller_node.node_id,
+                    target_module="viper._subprocess",
+                    target_symbol=selected if resolution == "resolved" else "*",
+                    kind="calls" if resolution == "resolved" else "reads",
+                    path="tests/test_use.py",
+                    line=line,
+                    column=column,
+                    binding_form=binding_form,
+                    resolution=resolution,
+                )
+            )
+    references = tuple(reference_rows)
     snapshot = SourceSnapshot(
         base_revision=_REVISION,
         source_sha256=source_digest(root),
@@ -167,6 +236,7 @@ def _graph(
         {
             "nodes": [item.model_dump(mode="json") for item in nodes],
             "edges": [item.model_dump(mode="json") for item in edges],
+            "references": [item.model_dump(mode="json") for item in references],
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -184,6 +254,7 @@ def _graph(
         snapshot=snapshot,
         nodes=nodes,
         edges=edges,
+        references=references,
         receipt=CodeQLAnalysisReceipt(
             database=database,
             query=query,
@@ -209,7 +280,7 @@ def _baseline(root: Path) -> SourceGraph:
     return _graph(root, target="run", include_edge=True, committed=True)
 
 
-def _candidate(root: Path, call: str) -> SourceGraph:
+def _candidate(root: Path, call: str, *, repetitions: int = 1) -> SourceGraph:
     """Write and graph one candidate with a new declaration."""
     _write(
         root,
@@ -221,7 +292,7 @@ def _candidate(root: Path, call: str) -> SourceGraph:
         "tests/test_use.py",
         "from viper import _subprocess as subprocess\n\n"
         "def call() -> None:\n"
-        f"    subprocess.{call}()\n",
+        + "".join(f"    subprocess.{call}()\n" for _ in range(repetitions)),
     )
     return _graph(
         root,
@@ -255,6 +326,28 @@ def test_complete_rename_satisfies_every_compiled_obligation(tmp_path: Path) -> 
     assert [transition.status for transition in check.transitions] == ["satisfied"]
     assert "Satisfied: 1/1 references" in render_rename_check(check)
     assert "Completion: accepted" in render_rename_check(check)
+
+
+@pytest.mark.unit
+@pytest.mark.domain_protocol
+def test_complete_rename_allows_additional_replacement_uses(tmp_path: Path) -> None:
+    """Accept new uses after every governed old occurrence is replaced."""
+    baseline_root = tmp_path / "baseline"
+    candidate_root = tmp_path / "candidate"
+    obligations = compile_rename_obligations(
+        root=baseline_root,
+        graph=_baseline(baseline_root),
+        spec=_SPEC,
+    )
+
+    check = check_rename_obligations(
+        root=candidate_root,
+        graph=_candidate(candidate_root, "run_checked", repetitions=2),
+        obligations=obligations,
+    )
+
+    assert check.passed
+    assert len(check.transitions[0].candidate_new_sites) == 2
 
 
 @pytest.mark.unit
@@ -368,7 +461,7 @@ def test_alias_rebinding_fails_closed(tmp_path: Path) -> None:
 
     assert not check.passed
     assert check.transitions[0].status == "analysis_unresolved"
-    assert "target alias 'subprocess' rebound" in check.unresolved[0]
+    assert "alias_rebinding" in check.unresolved[0]
 
 
 @pytest.mark.unit

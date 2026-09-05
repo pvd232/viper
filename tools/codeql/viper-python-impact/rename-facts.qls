@@ -1,0 +1,3 @@
+- query: Declarations.ql
+- query: Dependencies.ql
+- query: RenameTransitions.ql

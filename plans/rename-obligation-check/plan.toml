@@ -1,25 +1,28 @@
 schema_version = 1
-id = "rename-obligation-check"
+id = "rename-obligation-check-v2"
 contract = "docs/development/rename-obligation-check.md"
-baseline = "39d1b5b43894a9d02103fec2d39efce2af13cb45"
+baseline = "d541e31df9f88af3bdaac36bd245dcf7960408c4"
 
 [[blocks]]
-id = "P0-ROC-01"
-requirements = ["ROC-01", "ROC-02", "ROC-03", "ROC-04"]
+id = "P0-ROC-02"
+requirements = ["ROC-05", "ROC-06", "ROC-07"]
 depends_on = []
-gate = "python -m pytest tests/test_rename_obligations.py -q"
-
-[[blocks.files]]
-action = "add"
-source = "add/src/viper/system_impact/rename.py"
-destination = "src/viper/system_impact/rename.py"
-
-[[blocks.files]]
-action = "add"
-source = "add/tests/test_rename_obligations.py"
-destination = "tests/test_rename_obligations.py"
+gate = "python -m pytest tests/test_rename_obligations.py tests/test_codeql_analysis.py tests/test_system_impact.py -q"
 
 [[blocks.files]]
 action = "patch"
-source = "blocks/P0-ROC-01.patch"
-destinations = ["tests/conftest.py"]
+source = "blocks/P0-ROC-02.patch"
+destinations = [
+  "docs/development/rename-obligation-check.md",
+  "src/viper/_system_impact/codeql.py",
+  "src/viper/_system_impact/workflow.py",
+  "src/viper/system_impact/models.py",
+  "src/viper/system_impact/rename.py",
+  "tests/test_codeql_analysis.py",
+  "tests/test_rename_obligations.py",
+  "tests/test_system_impact.py",
+  "tools/codeql/viper-python-impact/Dependencies.ql",
+  "tools/codeql/viper-python-impact/RenameTransitions.ql",
+  "tools/codeql/viper-python-impact/qlpack.yml",
+  "tools/codeql/viper-python-impact/rename-facts.qls",
+]

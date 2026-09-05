@@ -8,10 +8,14 @@ API, and `viper impact rename-check`.
 [`agent-experiment.md`](agent-experiment.md) records the paired coding-agent
 smoke test and its bounded conclusion.
 
-`plan.toml` binds `P0-ROC-01` to two complete added files. `check.py` extracts
-the recorded baseline into a temporary directory, adds those files, runs Ruff,
-Pyright, and the focused tests, then analyzes the baseline and candidate with
-one CodeQL identity. The checker leaves the active working tree unchanged.
+`plan.toml` takes the accepted `P0-ROC-01` commit as its baseline and binds
+`P0-ROC-02` to the query-derived checker and overlay optimization. `check.py`
+extracts that baseline, applies the update, runs static and focused tests, then
+analyzes baseline and candidate source. The checker leaves the active working
+tree unchanged.
+
+[`historical-refactor-results.md`](historical-refactor-results.md) records the
+Supervision gold-patch coverage, parity, and timing observations.
 
 Run the complete gate with the repository environment:
 

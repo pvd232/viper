@@ -32,6 +32,7 @@ from viper.system_impact.rename import (
 from .codeql import (
     IGNORED_PARTS,
     CodeQLAnalysisError,
+    analyze_overlay_source,
     analyze_source,
     resolve_analysis_specs,
     source_digest,
@@ -361,6 +362,7 @@ def analyze_working_tree_rename(
             repository,
             codeql_executable=executable,
             query_pack=pack,
+            suite="rename-facts.qls",
         )
         with tempfile.TemporaryDirectory(prefix="viper-rename-analysis.") as directory:
             temporary_root = Path(directory)
@@ -392,10 +394,13 @@ def analyze_working_tree_rename(
                     revision=revision,
                 ),
                 artifact_root=output / "baseline",
+                overlay_base=True,
                 **common,
             )
-            realized = analyze_source(
+            realized = analyze_overlay_source(
                 realized_root,
+                baseline_root=baseline_root,
+                baseline_graph=baseline,
                 snapshot=SourceSnapshot(
                     base_revision=revision,
                     source_sha256=candidate_sha256,

@@ -1,0 +1,2430 @@
+diff --git a/docs/development/rename-obligation-check.md b/docs/development/rename-obligation-check.md
+index 1090964..5078621 100644
+--- a/docs/development/rename-obligation-check.md
++++ b/docs/development/rename-obligation-check.md
+@@ -4,363 +4,213 @@
+ 
+ **Contract status:** Implemented and validated on branch.
+ 
+-`P0-ROC-01` passes its isolated Ruff, Pyright, unit-test, and same-identity CodeQL gate. The
+-`viper impact rename-check` operation also passes a live rejected-then-accepted
+-rename experiment. Checklist activation awaits source-backed `ContractTarget`
+-ingestion.
++`P0-ROC-01` introduced the rename protocol. `P0-ROC-02` replaces the
++authoritative Python AST scan with receipt-bound CodeQL relations and restricts
++candidate overlays to the rename workflow. Checklist activation still awaits
++source-backed `ContractTarget` ingestion.
+ 
+ | ID | Implementation obligation |
+ |---|---|
+-| ROC-01 <!-- contract-requirement: ROC-01 phase=0 test=tests/test_rename_obligations.py --> | Compile every selected baseline dependency on the old declaration into an exact, source-located obligation. |
+-| ROC-02 <!-- contract-requirement: ROC-02 phase=0 test=tests/test_rename_obligations.py --> | Check old and replacement references by import binding, dependent declaration, operation, line, and column. |
+-| ROC-03 <!-- contract-requirement: ROC-03 phase=0 test=tests/test_rename_obligations.py --> | Accept only a complete replacement under the baseline analysis identity and the loaded checker digest. |
+-| ROC-04 <!-- contract-requirement: ROC-04 phase=0 test=tests/test_rename_obligations.py --> | Return a compact report that names every unresolved dependent and its exact failure. |
++| ROC-01 <!-- contract-requirement: ROC-01 phase=0 test=tests/test_rename_obligations.py --> | Compile every governed baseline occurrence into one source-located obligation. |
++| ROC-02 <!-- contract-requirement: ROC-02 phase=0 test=tests/test_rename_obligations.py --> | Compare references by imported module, symbol, dependent, operation, line, and column. |
++| ROC-03 <!-- contract-requirement: ROC-03 phase=0 test=tests/test_rename_obligations.py --> | Accept only complete replacement under the frozen analysis and checker identities. |
++| ROC-04 <!-- contract-requirement: ROC-04 phase=0 test=tests/test_rename_obligations.py --> | Report every unresolved dependent and failure. |
++| ROC-05 <!-- contract-requirement: ROC-05 phase=0 test=tests/test_codeql_analysis.py --> | Persist exact dependency and import-bound reference relations in the receipt-bound graph. |
++| ROC-06 <!-- contract-requirement: ROC-06 phase=0 test=tests/test_codeql_analysis.py --> | Bind an overlay candidate to its overlay-base receipt and exact changed-path manifest. |
++| ROC-07 <!-- contract-requirement: ROC-07 phase=0 test=tests/test_rename_obligations.py --> | Permit added replacement uses while requiring zero old uses and at least the baseline replacement count per dependent. |
+ 
+ ## 2. Required claim
+ 
+-VIPER guarantees that an accepted `RenameCheck` replaces every governed
+-baseline reference to one repository declaration with a binding-equivalent
+-reference to its declared replacement.
++For `RenameSpec` $\rho=(o,n,K)$, baseline graph $G_0$, and candidate graph
++$G_1$, VIPER accepts exactly when:
+ 
+ ```math
+ \begin{aligned}
+-O &= \operatorname{CompileRename}(\rho, G_0, S_0), \\
+-T &= \operatorname{CheckRename}(O, G_1, S_1, C), \\
+-\operatorname{Accept}(T)
+-&\iff I(G_0)=I(G_1) \\
+-&\quad \land H(C)=O.\mathrm{checker\_sha256} \\
+-&\quad \land o\in V_0 \land o\notin V_1 \land n\in V_1 \\
+-&\quad \land T.\mathrm{unresolved}=\varnothing \\
+-&\quad \land \forall q\in O:\;
+-  |\operatorname{OldSites}(q,S_1)|=0 \\
+-&\quad \land |\operatorname{NewSites}(q,S_1)|
+-  =|q.\operatorname{baseline\_sites}|.
++O &= \operatorname{CompileRename}(\rho,G_0), \\
++T &= \operatorname{CheckRename}(O,G_1), \\
++\operatorname{Accept}(T) \iff{}& I(G_0)=I(G_1) \\
++&\land H(C)=O.\mathrm{checker\_sha256} \\
++&\land o\in V_0 \land o\notin V_1 \land n\in V_1 \\
++&\land T.\mathrm{unresolved}=\varnothing \\
++&\land \forall q\in O:\
++ |\operatorname{OldSites}(q,G_1)|=0 \\
++&\qquad\land |\operatorname{NewSites}(q,G_1)|
++ \ge |q.\operatorname{baseline\_sites}|.
+ \end{aligned}
+ ```
+ 
+-where:
+-
+-- $\rho=(o,n,K)$ is the `RenameSpec`; $o$ is `old_target`, $n$ is
+-  `new_target`, and $K$ is the nonempty set of governed `edge_kinds`;
+-- $S_0$ and $S_1$ are the baseline and candidate Python source bytes;
+-- $G_0=(V_0,E_0)$ and $G_1=(V_1,E_1)$ are receipt-valid baseline and
+-  candidate `SourceGraph` values;
+-- $I(G)$ is the graph's `CodeQLExtractionSpec`, `CodeQLQuerySpec`, and
+-  `SourceGraphFormat` tuple;
+-- $O$ is the `RenameObligationSet` compiled from the incoming edges in $E_0$;
+-- $C$ is the loaded `system_impact/rename.py` implementation, and $H$ is
+-  SHA-256; and
+-- $T$ is the `RenameCheck` containing one `DependencyTransition` for every
+-  obligation $q$.
+-
+-A changed comment leaves this predicate false. The candidate must remove the old
+-binding, create the new declaration, and replace the governed references. The
+-checker treats every dynamic or ambiguous binding as an unresolved obligation.
++`I(G)` is the extraction, query-pack, and lowering identity. `C` is the loaded
++checker. An overlay candidate also requires a valid overlay-base receipt and
++the digest of the exact changed Python paths. The lower bound permits valid new
++uses of the replacement without weakening the zero-old-reference requirement.
+ 
+ ## 3. Current gap
+ 
+-### Inspected path
++Before `P0-ROC-02`, CodeQL selected baseline dependents, but Python AST code
++rescanned source to decide whether the candidate contained the old or new
++binding. That duplicated language semantics and left the decisive rows outside
++the CodeQL query receipt. Candidate analysis also rebuilt a complete database.
+ 
+-The current [`_one_hop()`](../../src/viper/system_impact/check.py) selects
+-incoming baseline and candidate `SourceEdge` records. It fills
+-`OneHop.changed` by comparing the containing declaration's SHA-256 digest.
+-[`explain_one_hop()`](../../src/viper/system_impact/explain.py) joins those edge
+-IDs to symbols and use lines for inspection.
+-
+-That path answers which direct dependents changed. Establishing whether each
+-dependent replaced the old relationship requires occurrence-level evidence. A
+-comment edit changes the declaration digest. A removed target may also make a
+-stale expression disappear from CodeQL's semantic edge set because the
+-expression loses its connection to the deleted declaration.
+-
+-The fixed scenario is
+-`src/viper/_subprocess.py:run` to
+-`src/viper/_subprocess.py:run_checked`. The repository contains both
+-`import viper._subprocess as subprocess` and
+-`from viper import _subprocess as subprocess` bindings. Genuine
+-`import subprocess` references to Python's standard-library module remain
+-outside this rename.
++The historical Supervision 0.27 refactor exposed two further requirements:
++import nodes change identity during a rename, so imports need a file-level
++obligation; and count equality rejects valid patches that add replacement uses.
+ 
+ ### Current DAG
+ 
+ ```mermaid
+ flowchart LR
+-    Spec["Planned rename<br/>run to run_checked"]
+-    G0["Baseline SourceGraph"]
+-    G1["Candidate SourceGraph"]
+-    Hop["_one_hop()"]
+-    Changed["OneHop.changed<br/>declaration digest changed"]
+-    Gap["Unsupported claim<br/>old call was replaced"]
+-
+-    Spec -->|"selected target"| Hop
+-    G0 -->|"baseline edges and hashes"| Hop
+-    G1 -->|"candidate edges and hashes"| Hop
+-    Hop -->|"hash comparison"| Changed
+-    Changed -->|"cannot prove"| Gap
+-
+-    class Spec current
+-    class G0,G1,Hop,Changed evidence
+-    class Gap gap
+-    classDef current fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+-    classDef evidence fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+-    classDef gap fill:#7f1d1d,stroke:#fca5a5,color:#ffffff,stroke-width:2px
+-    linkStyle default stroke:#94a3b8,stroke-width:2px
++    G0["Baseline CodeQL graph"] -->|"select dependents"| AST0["Python AST baseline scan"]
++    G1["Full candidate CodeQL graph"] -->|"select declarations"| AST1["Python AST candidate scan"]
++    AST0 -->|"sites outside query receipt"| Join["Python transition join"]
++    AST1 -->|"old and new sites"| Join
++    Join -->|"count equality"| Verdict["RenameCheck"]
+ ```
+ 
+-### Missing connector
+-
+-The first missing connector is a transformation-specific comparison between
+-the baseline dependency sites and the candidate dependency sites.
+-`OneHop.changed` records changed bytes. The required old-to-new edge transition
+-needs a separate record.
+-
+-`SourceEdge` currently stores only the use line. Two calls on one line can
+-therefore collapse to one edge ID. `P0-ROC-01` keeps CodeQL as the
+-authority that selects governed dependents and uses a binding-aware Python AST
+-scan to produce exact line-and-column sites inside those declarations.
+-
+ ### Proposed-change DAG
+ 
+ ```mermaid
+-flowchart TB
+-    R["RenameSpec<br/>old target · new target · kinds"]
+-    Compile["compile_rename_obligations()<br/>proposed"]
+-    O["RenameObligationSet<br/>proposed"]
+-    Scan["binding-aware site scan<br/>proposed"]
+-    Transition["DependencyTransition[]<br/>proposed"]
+-    Check["RenameCheck<br/>proposed output"]
+-    Report["render_rename_check()<br/>implemented output"]
+-
+-    R -->|"rename contract"| Compile
+-    Compile -->|"baseline sites"| O
+-    O -->|"mandatory duties"| Scan
+-    Scan -->|"old and new sites"| Transition
+-    Transition -->|"complete statuses"| Check
+-    Check -->|"compact state"| Report
+-
+-    class R,Compile,Scan proposed
+-    class O,Transition,Check,Report output
+-    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+-    classDef output fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+-    linkStyle default stroke:#94a3b8,stroke-width:2px
++flowchart LR
++    Q0["Dependencies.ql<br/>resolved baseline occurrences"] --> O["RenameObligationSet"]
++    R0["RenameTransitions.ql<br/>import-bound baseline occurrences"] --> O
++    R1["RenameTransitions.ql<br/>candidate old, new, unresolved"] --> J["keyed comparison"]
++    O --> J
++    J -->|"old = 0; new >= baseline"| V["RenameCheck"]
+ ```
+ 
+ ### Integrated DAG
+ 
+ ```mermaid
+ flowchart TB
+-    Rename["RenameSpec"]
+-    Baseline["Baseline source S0"]
+-    Analyze0["analyze_source()"]
+-    G0["SourceGraph G0"]
+-    Compile["compile_rename_obligations()<br/>proposed"]
+-    Duties["RenameObligationSet<br/>proposed"]
+-    Candidate["Candidate source S1"]
+-    Analyze1["analyze_source()"]
+-    G1["SourceGraph G1"]
+-    Scan["binding-aware site scan<br/>proposed"]
+-    Verify["check_rename_obligations()<br/>proposed"]
+-    Result["RenameCheck<br/>proposed output"]
+-    Gate["test_rename_obligations.py<br/>P0-ROC-01 gate"]
+-
+-    Baseline -->|"source bytes"| Analyze0
+-    Analyze0 -->|"nodes · edges · receipts"| G0
+-    Rename -->|"old target · kinds"| Compile
+-    G0 -->|"incoming edges"| Compile
+-    Baseline -->|"exact sites"| Compile
+-    Compile -->|"mandatory replacements"| Duties
+-    Candidate -->|"source bytes"| Analyze1
+-    Analyze1 -->|"same analysis identity"| G1
+-    Candidate -->|"import bindings · locations"| Scan
+-    Duties -->|"baseline counts"| Verify
+-    G1 -->|"candidate declarations · receipt"| Verify
+-    Scan -->|"old sites · new sites · unresolved"| Verify
+-    Verify -->|"complete transition verdict"| Result
+-    Result -->|"accept or reject"| Gate
+-
+-    class Rename,Baseline,Candidate contract
+-    class Analyze0,G0,Analyze1,G1 implementation
+-    class Compile,Duties,Scan,Verify,Result proposed
+-    class Gate checklist
+-    classDef contract fill:#1e3a8a,stroke:#60a5fa,color:#ffffff,stroke-width:2px
+-    classDef implementation fill:#115e59,stroke:#5eead4,color:#ffffff,stroke-width:2px
+-    classDef proposed fill:#581c87,stroke:#d8b4fe,color:#ffffff,stroke-width:2px
+-    classDef checklist fill:#713f12,stroke:#fbbf24,color:#ffffff,stroke-width:2px
+-    linkStyle default stroke:#94a3b8,stroke-width:2px
++    S0["Baseline source"] --> B["overlay-base extraction"]
++    B --> Q0["CodeQL query suite"]
++    Q0 --> G0["SourceGraph<br/>nodes, edges, references, receipts"]
++    S1["Candidate source"] --> D["exact changed-path manifest"]
++    B --> OVL["candidate overlay extraction"]
++    D --> OVL
++    OVL --> Q1["same CodeQL query suite"]
++    Q1 --> G1["Candidate SourceGraph"]
++    G0 --> C["compile_rename_obligations()"]
++    G1 --> K["check_rename_obligations()"]
++    C --> K
++    K --> R["accepted or rejected report"]
+ ```
+ 
+ ## 4. Models
+ 
+-The complete proposed declarations live in the planned
+-[`system_impact/rename.py`](../../src/viper/system_impact/rename.py).
+-
+ | Model | Role |
+ |---|---|
+-| `RenameSpec` | Authored old target, replacement target, and governed operations |
+-| `ReferenceSite` | One binding-aware dependent, operation, path, line, and column |
+-| `RenameObligation` | All baseline sites for one dependent and operation |
+-| `RenameObligationSet` | Obligations plus baseline graph, analysis, and checker identities |
+-| `DependencyTransition` | Candidate old sites, new sites, status, and reason for one obligation |
+-| `RenameCheck` | Complete candidate snapshot, graph digest, transitions, unresolved bindings, and acceptance decision |
+-
+-`RenameSpec` initially accepts top-level same-module Python renames and the
+-`imports`, `calls`, `reads`, and `writes` edge kinds. The checker rejects a
+-cross-file move, nested symbol, star import, dynamic target attribute lookup,
+-or relevant alias rebinding as unsupported analysis.
++| `SourceEdge` | Resolved dependency occurrence with exact line and column |
++| `SourceReference` | Import-bound occurrence retained when its target is absent |
++| `DatabaseReceipt` | Full, overlay-base, or overlay extraction provenance |
++| `RenameSpec` | Old target, replacement target, and governed operations |
++| `ReferenceSite` | One exact governed occurrence |
++| `RenameObligation` | Baseline sites for one dependent and operation |
++| `RenameObligationSet` | Frozen duties plus graph and checker identities |
++| `DependencyTransition` | Candidate sites, status, and reason |
++| `RenameCheck` | Complete derived decision |
++
++An import obligation uses `<module imports>` and its source path. Calls, reads,
++and writes retain their containing declaration.
+ 
+ ## 5. Execution
+ 
+-1. `compile_rename_obligations()` recomputes `source_digest(baseline_root)` and
+-   requires equality with `G0.snapshot.source_sha256`.
+-2. The compiler resolves `RenameSpec.old_target` once and selects incoming
+-   CodeQL edges whose kinds belong to `RenameSpec.edge_kinds`.
+-3. The binding-aware scanner resolves imports within each selected dependent's
+-   declaration span and records exact `ReferenceSite` values.
+-4. The compiler stores the baseline graph digest, three CodeQL stage
+-   specifications, and `rename_checker_digest()` in `RenameObligationSet`.
+-5. `check_rename_obligations()` recomputes the candidate source digest,
+-   requires the same CodeQL stage specifications and checker digest, requires
+-   the old declaration absent and new declaration present, and scans the same
+-   dependents for old and replacement sites.
+-6. A hash-map join keyed by `(dependent.path, dependent.symbol, kind)` creates
+-   one `DependencyTransition` per obligation in linear time over the selected
+-   edges and sites.
+-7. `RenameCheck.passed` is true only when every transition is `satisfied` and
+-   the unresolved set is empty. `render_rename_check()` then presents the
+-   presents the remaining failures while preserving that verdict.
++1. `Dependencies.ql` emits resolved baseline occurrences and evidence columns.
++2. The rename-only `rename-facts.qls` suite adds `RenameTransitions.ql`, which
++   emits imported module, symbol, operation, owner, location, binding form, and
++   resolution state. The default `source-facts.qls` suite remains unchanged so
++   normal impact analysis does not pay for this relation.
++3. Lowering validates every row, converts columns to UTF-8 byte offsets, hashes
++   records, and includes references in the graph digest.
++4. `compile_rename_obligations()` unions both relations and deduplicates by
++   `(path, line, column)`.
++5. `check_rename_obligations()` joins candidate rows by dependent, operation,
++   imported module, and symbol. Star imports, dynamic lookup, and relevant
++   alias rebinding fail closed.
++6. Rename orchestration builds an overlay base, computes changed Python paths
++   from byte digests, builds the overlay, and records its base and manifest.
++7. Ordinary impact analysis retains full databases because the tested overlay
++   preserved rename-reference tuples but not the broader dependency relation.
++
++The Python joins use hash maps and are linear in selected occurrences. CodeQL
++performs the language-aware relation evaluation.
+ 
+ ## 6. Persisted evidence
+ 
+-| Record or path | Exact evidence |
++| Evidence | Contents |
+ |---|---|
+-| `RenameObligationSet` | `RenameSpec`, baseline `SourceSnapshot`, graph digest, CodeQL stage specifications, checker digest, and exact baseline sites |
+-| `RenameCheck` | Candidate `SourceSnapshot`, graph digest, one transition per obligation, unresolved binding reasons, and derived `passed` value |
+-| `plans/rename-obligation-check/result.json` output | Static commands, focused test result, baseline and candidate graph digests, shared analysis identity, and graph-observed implementation targets |
+-
+-The plan checker writes `result.json` beneath its caller-selected result
+-directory. Acceptance and publication begin after the source-backed
+-`ContractTarget` ingestion prerequisite closes.
++| `SourceGraph.references` | Import-bound rows, including unresolved forms |
++| `GraphReceipt.sha256` | Digest of nodes, edges, and nonempty references |
++| overlay `DatabaseReceipt` | Snapshot, base key and digest, changes digest, command, and result digest |
++| `RenameObligationSet` | Baseline sites and frozen identities |
++| `RenameCheck` | Candidate snapshot, graph digest, transitions, unresolved rows, and verdict |
+ 
+ ## 7. Verification
+ 
+ | Rule | Executable condition |
+ |---|---|
+-| `rename.obligation.compiled` | Every selected incoming CodeQL edge resolves to at least one exact baseline `ReferenceSite`; unresolved baseline analysis raises `RenameAnalysisError`. |
+-| `rename.analysis.bound` | Both scanned roots equal their graph snapshots; the CodeQL stage specifications and checker digest equal the values stored in `RenameObligationSet`. |
+-| `rename.transition.complete` | The old declaration and old sites are absent, the new declaration exists, and every obligation has exactly the baseline number of replacement sites. |
+-| `rename.analysis.closed` | Star imports, dynamic target lookups, and relevant alias rebinding populate `unresolved` and reject completion. |
+-| `rename.report.derived` | `RenameCheck` covers each obligation once, derives `passed` from its transitions, and `render_rename_check()` reports the same decision. |
+-| `rename.plan.source` | The plan materializes the exact baseline outside the worktree, applies each action once, runs Ruff, Pyright, six focused tests, and same-identity baseline/candidate CodeQL analysis. |
+-
+-The accepted and rejected tests are in the planned
+-[`test_rename_obligations.py`](../../plans/rename-obligation-check/add/tests/test_rename_obligations.py).
++| `rename.query.compiled` | All QL queries compile under the checked-in pack. |
++| `rename.rows.bound` | Malformed rows, missing owners, duplicate IDs, and digest drift are rejected. |
++| `rename.transition.complete` | Old declaration absent, new declaration present, old sites empty, replacement count at least baseline. |
++| `rename.analysis.closed` | Relevant star imports, dynamic attributes, and alias rebinding reject completion. |
++| `rename.overlay.bound` | Overlay receipt names a valid base and exact changes digest. |
++| `rename.overlay.parity` | Historical and toy cases produce identical rename-reference tuples under overlay and full extraction. |
++| `rename.scope.boundary` | Ordinary impact does not consume overlays until dependency-edge parity is established. |
+ 
+ ## 8. Propagation
+ 
+-| Surface | Required change |
++| Surface | Change |
+ |---|---|
+-| Type | Add the six complete rename records and `RenameTransitionStatus` in `system_impact/rename.py`. |
+-| Authoring | Construct `RenameSpec` with one old target, one replacement target, and selected operations. |
+-| Runtime | Add the compiler, binding-aware scanner, exact checker, and compact renderer in `system_impact/rename.py`. |
+-| Orchestration | Add `analyze_working_tree_rename()` to materialize and analyze the baseline and current tree under one CodeQL identity. |
+-| Agent interface | Add the typed `check_rename` API operation and `viper impact rename-check` command. |
+-| Persistence | Serialize `RenameObligationSet` before editing and `RenameCheck` after candidate analysis. |
+-| Verification | Derive acceptance from complete dependency transitions, shared analysis identities, source digests, and the checker digest. |
+-| Test | Add the accepted rename, stale old call, standard-library separation, alias ambiguity, unrelated local alias, and stale graph cases. |
+-| Test infrastructure | Register `test_rename_obligations.py` as a unit, protocol-domain test module. |
+-| Documentation | Add this contract and one planned Master Phase 0 checklist block. |
+-| Legacy cleanup | Keep `OneHop.changed` as descriptive evidence; remove it from any future transformation-completion decision. |
+-
+-This change adds `system_impact/rename.py` as a new owner. Existing `OneHop`,
+-`explain_one_hop()`, and ranked impact paths remain valid advisory interfaces.
+-
+-## 9. Acceptance case
+-
+-### Success
+-
+-The baseline defines `viper._subprocess.run`. A dependent imports
+-`viper._subprocess` as `subprocess` and calls `subprocess.run()` once. CodeQL
+-selects that dependent. The candidate defines `run_checked`, removes `run`, and
+-calls `subprocess.run_checked()` once. The checker records one satisfied
+-transition, an empty unresolved-binding set, and `passed=True`.
+-
+-The candidate may also contain `import subprocess` followed by the real
+-standard-library `subprocess.run(...)`. Import identity keeps that call outside
+-the VIPER rename.
+-
+-### Rejection
+-
+-The candidate removes the `run` declaration and leaves `subprocess.run()` in
+-the governed dependent. CodeQL loses the ability to resolve that
+-expression to the removed declaration, so the candidate graph may omit the old
+-edge. The binding-aware scan still resolves the import to
+-`viper._subprocess`, records the old site, and returns
+-`still_uses_old_target`. Rule `rename.transition.complete` rejects the
+-candidate, and `render_rename_check()` prints `Completion: rejected`.
++| Query pack | Add `RenameTransitions.ql`, evidence columns, and a new version. |
++| Graph protocol | Add `SourceReference`, edge columns, and digest coverage. |
++| Checker | Compile and verify query relations; support cross-module top-level replacements. |
++| Database protocol | Add full, overlay-base, and overlay receipt modes. |
++| Orchestration | Use overlays only in `analyze_working_tree_rename()`. |
++| Tests | Cover lowering, provenance, reuse, stale uses, ambiguity, and completion. |
++| Evidence | Retain toy timing/parity and historical Supervision results. |
+ 
+-## 10. Implementation order
++## 9. Acceptance cases
+ 
+-1. Use the active staged CodeQL identity and receipt protocol.
+-2. Apply `P0-ROC-01`, run the focused tests and live rejected-then-accepted
+-   CodeQL experiment, and retain the resulting rename evidence.
+-3. Add source-backed `ContractTarget` ingestion so the CTG can compile file
+-   actions directly from `plan.toml`.
+-4. Register this contract in `contract-baselines.json`, close the checklist
+-   block, run the contract-documentation and checklist validators, and publish
+-   the accepted System Impact evidence.
++### Complete rename
+ 
+-## 11. Contract-owned PairBlocks
++The candidate has no `sample.tools.run`, has at least the baseline number of
++`sample.tools.run_checked` uses in each governed dependent, and has no
++unresolved matching binding. The candidate is accepted.
+ 
+-[`plan.toml`](../../plans/rename-obligation-check/plan.toml) owns
+-`P0-ROC-01`. The block adds the exact checker and its focused tests, then makes
+-the bounded test-classification edit. Its gate is
+-`python -m pytest tests/test_rename_obligations.py -q`; the plan checker adds
+-Ruff, Pyright, and same-identity CodeQL validation before the block becomes
+-execution-ready.
++### Stale use after deletion
+ 
+-**Context:** The current graph reports changed dependent declarations. Proving
+-the required old-to-new reference transition needs additional evidence.
+-`P0-ROC-01` adds one
+-receipt-bound obligation set and a fail-closed checker that decides that exact
+-transition.
++The old declaration disappears, so its semantic edge may disappear. The
++import-bound relation still emits `sample.tools.run`; the checker rejects it.
+ 
+-## 12. ContractTarget
++### Valid added use
+ 
+-The production modules now own runtime behavior. The retained source plan
+-records the reviewed input that produced the first implementation. `add`
+-requires an absent destination and copies one complete reviewed file. `patch`
+-requires the patch's changed paths to equal its declared destination set before
+-application.
++The candidate replaces every old decorator use and adds another use of the new
++decorator. The new count exceeds baseline and the candidate remains valid.
+ 
+-The plan compiles these targets after source-backed ingestion is available:
++## 10. Implementation order
+ 
+-| Action | Planned target | Requirements |
+-|---|---|---|
+-| `add` | [`system_impact/rename.py`](../../plans/rename-obligation-check/add/src/viper/system_impact/rename.py): complete module | ROC-01, ROC-02, ROC-03, ROC-04 |
+-| `add` | [`test_rename_obligations.py`](../../plans/rename-obligation-check/add/tests/test_rename_obligations.py): six test functions | ROC-01, ROC-02, ROC-03, ROC-04 |
+-| `patch` | [`P0-ROC-01.patch`](../../plans/rename-obligation-check/blocks/P0-ROC-01.patch): `tests/conftest.py` test classifications | ROC-03 |
++1. Add query relations and graph rows.
++2. Move compilation and verification onto those rows.
++3. Add overlay receipts, exact changes manifests, and parallel extraction.
++4. Restrict overlays to rename verification and test full-result parity.
++5. Run a historical refactor and repair measured false rejections.
+ 
+-Each declaration difference must compile to one `ContractTarget` in
+-`P0-ROC-01`. Checklist closure remains blocked until the CTG enforces that
+-one-to-one mapping for source-backed plans.
++## 11. Contract-owned PairBlocks
+ 
+-## Future work
++- `P0-ROC-01` owns the initial protocol and agent operation.
++- `P0-ROC-02` depends on it and owns ROC-05 through ROC-07: CodeQL transition
++  rows, overlay provenance, query-derived checking, and historical validation.
+ 
+-`RenameCheck.transitions` can later feed a proposed `NodeSignalSet` containing
+-graph distance, semantic similarity, co-change history, churn, test evidence,
+-and a hub penalty. A bounded best-first traversal can rank unresolved
+-obligations with a heap, and reciprocal-rank fusion can combine independent
+-signals while preserving the completion predicate.
++## 12. ContractTarget
+ 
+-The active contract closes independently because ranking decides presentation
+-order, while `RenameCheck` decides mandatory completion. Promotion requires a
+-localization fixture set that measures recall, irrelevant candidates, tokens,
+-and elapsed time. A separate ranking contract would own the signals, cache
+-identity, benchmark, MCP surface, and acceptance thresholds.
++`P0-ROC-02` changes the query pack, graph and database receipts, checker,
++orchestration, tests, and this contract. Its source plan names each destination.
++Registration in `contract-baselines.json` remains blocked by the existing
++source-backed `ContractTarget` ingestion prerequisite.
+ 
+-## Sources
++## 13. External constraints
+ 
+-- [System Impact Check](system-impact-compiler.md) defines the current
+-  `SourceGraph`, one-hop comparison, plan check, and acceptance boundary.
+-- [CodeQL Analysis](codeql-analysis.md) defines the staged extraction, query,
+-  and graph-lowering identities consumed by this plan.
++CodeQL incremental analysis requires an overlay-base database, a changes file,
++`build-mode=none` for Python, and a sufficiently recent CLI. See GitHub's
++[incremental analysis documentation](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/scan-from-the-command-line/incremental-analysis).
++The suite runs through `database run-queries`, which stores BQRS results in the
++database copy; see the [CodeQL CLI manual](https://docs.github.com/en/enterprise-server@3.19/code-security/reference/code-scanning/codeql/codeql-cli-manual/database-run-queries).
+diff --git a/src/viper/_system_impact/codeql.py b/src/viper/_system_impact/codeql.py
+index c1e54b8..15da719 100644
+--- a/src/viper/_system_impact/codeql.py
++++ b/src/viper/_system_impact/codeql.py
+@@ -11,7 +11,7 @@ import tempfile
+ from collections.abc import Iterable, Sequence
+ from dataclasses import dataclass
+ from pathlib import Path
+-from typing import Any, cast
++from typing import Any, Literal, cast
+ 
+ import yaml
+ 
+@@ -30,6 +30,7 @@ from ..system_impact.models import (
+     SourceGraphFormat,
+     SourceNode,
+     SourceNodeKind,
++    SourceReference,
+     SourceSnapshot,
+     stage_key,
+ )
+@@ -620,7 +621,7 @@ def _load_edges(
+     sources: dict[str, bytes] = {}
+     edges: dict[str, SourceEdge] = {}
+     for row in rows:
+-        if len(row) != 9:
++        if len(row) != 10:
+             raise CodeQLAnalysisError("CodeQL emitted a malformed dependency row")
+ 
+         source_path = str(row[0])
+@@ -655,7 +656,14 @@ def _load_edges(
+         if kind not in _EDGE_KINDS:
+             raise CodeQLAnalysisError(f"CodeQL emitted an unknown edge kind: {kind}")
+         payload = json.dumps(
+-            [source.node_id, kind, target.node_id, str(row[7]), int(row[8])],
++            [
++                source.node_id,
++                kind,
++                target.node_id,
++                str(row[7]),
++                int(row[8]),
++                int(row[9]),
++            ],
+             separators=(",", ":"),
+         ).encode()
+         edge_id = hashlib.sha256(payload).hexdigest()
+@@ -667,10 +675,89 @@ def _load_edges(
+             query="viper/python-impact/dependencies",
+             path=str(row[7]),
+             line=int(row[8]),
++            column=_codeql_byte_col(
++                sources.setdefault(str(row[7]), (root / str(row[7])).read_bytes()),
++                int(row[8]),
++                int(row[9]),
++            ),
+         )
+     return tuple(sorted(edges.values(), key=lambda edge: edge.edge_id))
+ 
+ 
++def _load_references(
++    root: Path,
++    rows: list[list[Any]],
++    nodes: tuple[SourceNode, ...],
++) -> tuple[SourceReference, ...]:
++    """Join import-bound reference rows to their containing declarations."""
++    index = {
++        (node.path, node.binding_start_line, node.binding_start_col): node
++        for node in nodes
++    }
++    sources: dict[str, bytes] = {}
++    references: dict[str, SourceReference] = {}
++    for row in rows:
++        if len(row) != 11:
++            raise CodeQLAnalysisError("CodeQL emitted a malformed reference row")
++        source_path = str(row[0])
++        evidence_path = str(row[6])
++        if any(
++            part in IGNORED_PARTS
++            for path in (source_path, evidence_path)
++            for part in Path(path).parts
++        ):
++            continue
++        owner = _edge_node(
++            root,
++            index,
++            sources,
++            source_path,
++            int(row[1]),
++            int(row[2]),
++        )
++        kind = str(row[5])
++        if kind not in _EDGE_KINDS:
++            raise CodeQLAnalysisError(
++                f"CodeQL emitted an unknown reference kind: {kind}"
++            )
++        if evidence_path not in sources:
++            path = root / evidence_path
++            if not path.is_file() or path.suffix != ".py":
++                raise CodeQLAnalysisError(
++                    f"CodeQL reference path is absent: {evidence_path}"
++                )
++            sources[evidence_path] = path.read_bytes()
++        column = _codeql_byte_col(sources[evidence_path], int(row[7]), int(row[8]))
++        payload = json.dumps(
++            [
++                owner.node_id,
++                str(row[3]),
++                str(row[4]),
++                kind,
++                evidence_path,
++                int(row[7]),
++                column,
++                str(row[9]),
++                str(row[10]),
++            ],
++            separators=(",", ":"),
++        ).encode()
++        reference_id = hashlib.sha256(payload).hexdigest()
++        references[reference_id] = SourceReference(
++            reference_id=reference_id,
++            source=owner.node_id,
++            target_module=str(row[3]),
++            target_symbol=str(row[4]),
++            kind=cast(EdgeKind, kind),
++            path=evidence_path,
++            line=int(row[7]),
++            column=column,
++            binding_form=str(row[9]),
++            resolution=cast(Literal["resolved", "unresolved"], str(row[10])),
++        )
++    return tuple(sorted(references.values(), key=lambda item: item.reference_id))
++
++
+ def _check_extraction(
+     root: Path,
+     executable: Path,
+@@ -735,10 +822,16 @@ def _extract_database(
+     extraction: CodeQLExtractionSpec,
+     executable: Path,
+     cache_root: Path,
++    overlay_base: bool = False,
+ ) -> _DatabaseStage:
+     """Create or reuse the database selected by the source and extraction spec."""
+     commands, stderr_parts = _check_extraction(root, executable, extraction)
+-    key = stage_key(snapshot, extraction)
++    mode = "overlay_base" if overlay_base else "full"
++    key = (
++        stage_key(snapshot, extraction, mode)
++        if overlay_base
++        else stage_key(snapshot, extraction)
++    )
+     stage_root = cache_root / "databases" / key
+     database = stage_root / "database"
+     receipt_path = stage_root / "receipt.json"
+@@ -753,6 +846,7 @@ def _extract_database(
+         receipt is not None
+         and receipt.snapshot == snapshot
+         and receipt.extraction == extraction
++        and receipt.mode == mode
+         and receipt.key == key
+         and receipt.exit_code == 0
+         and receipt.sha256 == cached_sha256
+@@ -770,6 +864,8 @@ def _extract_database(
+         f"--language={extraction.language}",
+         f"--build-mode={extraction.build_mode}",
+         f"--source-root={root}",
++        "--threads=0",
++        *(("--overlay-base",) if overlay_base else ()),
+         "--overwrite",
+     )
+     _, create_stderr = _run(create_command, cwd=root)
+@@ -778,6 +874,112 @@ def _extract_database(
+         extraction=extraction,
+         key=key,
+         sha256=_database_digest(database),
++        mode=mode,
++        commands=(*commands, create_command),
++        exit_code=0,
++        stderr_sha256=_hash_parts((*stderr_parts, b"database-create", create_stderr)),
++    )
++    _write_receipt(receipt_path, receipt)
++    return _DatabaseStage(path=database, receipt=receipt)
++
++
++def _source_manifest(root: Path) -> dict[str, str]:
++    """Map each analyzed Python path to its exact content digest."""
++    return {
++        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
++        for path in _python_files(root)
++    }
++
++
++def _extract_overlay_database(
++    root: Path,
++    *,
++    baseline_root: Path,
++    baseline: DatabaseReceipt,
++    snapshot: SourceSnapshot,
++    extraction: CodeQLExtractionSpec,
++    executable: Path,
++    cache_root: Path,
++) -> _DatabaseStage:
++    """Create or reuse a candidate overlay over a verified baseline database."""
++    commands, stderr_parts = _check_extraction(root, executable, extraction)
++    if baseline.mode != "overlay_base" or baseline.extraction != extraction:
++        raise CodeQLAnalysisError("overlay requires a matching overlay-base receipt")
++    base_path = cache_root / "databases" / baseline.key / "database"
++    if not base_path.is_dir() or _database_digest(base_path) != baseline.sha256:
++        raise CodeQLAnalysisError("overlay-base database is absent or corrupted")
++    before = _source_manifest(baseline_root)
++    after = _source_manifest(root)
++    changes = tuple(
++        sorted(
++            path
++            for path in before.keys() | after.keys()
++            if before.get(path) != after.get(path)
++        )
++    )
++    changes_bytes = json.dumps(
++        {"changes": changes}, sort_keys=True, separators=(",", ":")
++    ).encode()
++    changes_sha256 = hashlib.sha256(changes_bytes).hexdigest()
++    key = stage_key(
++        snapshot,
++        extraction,
++        "overlay",
++        baseline.key,
++        baseline.sha256,
++        changes_sha256,
++    )
++    stage_root = cache_root / "databases" / key
++    database = stage_root / "database"
++    receipt_path = stage_root / "receipt.json"
++    receipt = _load_database_receipt(receipt_path)
++    cached_sha256 = None
++    if database.is_dir():
++        try:
++            cached_sha256 = _database_digest(database)
++        except CodeQLAnalysisError:
++            pass
++    if (
++        receipt is not None
++        and receipt.snapshot == snapshot
++        and receipt.extraction == extraction
++        and receipt.mode == "overlay"
++        and receipt.base_database_key == baseline.key
++        and receipt.base_database_sha256 == baseline.sha256
++        and receipt.changes_sha256 == changes_sha256
++        and receipt.key == key
++        and receipt.sha256 == cached_sha256
++    ):
++        return _DatabaseStage(path=database, receipt=receipt)
++
++    if stage_root.exists():
++        shutil.rmtree(stage_root)
++    stage_root.mkdir(parents=True)
++    shutil.copytree(base_path, database)
++    changes_path = stage_root / "changes.json"
++    changes_path.write_bytes(changes_bytes)
++    create_command = (
++        str(executable),
++        "database",
++        "create",
++        str(database),
++        f"--language={extraction.language}",
++        f"--build-mode={extraction.build_mode}",
++        f"--source-root={root}",
++        f"--overlay-changes={changes_path}",
++        "--threads=0",
++        "--quiet",
++    )
++    _, create_stderr = _run(create_command, cwd=root)
++    receipt = DatabaseReceipt(
++        snapshot=snapshot,
++        extraction=extraction,
++        key=key,
++        sha256=_database_digest(database),
++        mode="overlay",
++        base_database_key=baseline.key,
++        base_database_sha256=baseline.sha256,
++        changes_sha256=changes_sha256,
+         commands=(*commands, create_command),
+         exit_code=0,
+         stderr_sha256=_hash_parts((*stderr_parts, b"database-create", create_stderr)),
+@@ -966,6 +1168,7 @@ def _lower_graph(
+     try:
+         declaration_rows = decoded["Declarations"]
+         dependency_rows = decoded["Dependencies"]
++        reference_rows = decoded.get("RenameTransitions", [])
+     except KeyError as error:
+         raise CodeQLAnalysisError(
+             "query suite must produce Declarations and Dependencies results"
+@@ -973,12 +1176,16 @@ def _lower_graph(
+ 
+     nodes = _load_nodes(root, declaration_rows)
+     edges = _load_edges(root, dependency_rows, nodes)
++    references = _load_references(root, reference_rows, nodes)
++    graph_rows = {
++        "nodes": [node.model_dump(mode="json") for node in nodes],
++        "edges": [edge.model_dump(mode="json") for edge in edges],
++    }
++    if references:
++        graph_rows["references"] = [item.model_dump(mode="json") for item in references]
+     graph_sha256 = hashlib.sha256(
+         json.dumps(
+-            {
+-                "nodes": [node.model_dump(mode="json") for node in nodes],
+-                "edges": [edge.model_dump(mode="json") for edge in edges],
+-            },
++            graph_rows,
+             sort_keys=True,
+             separators=(",", ":"),
+         ).encode()
+@@ -997,6 +1204,7 @@ def _lower_graph(
+         snapshot=snapshot,
+         nodes=nodes,
+         edges=edges,
++        references=references,
+         receipt=CodeQLAnalysisReceipt(
+             database=database,
+             query=results.receipt,
+@@ -1021,6 +1229,7 @@ def analyze_source(
+     query_pack: Path,
+     cache_root: Path,
+     artifact_root: Path | None = None,
++    overlay_base: bool = False,
+ ) -> SourceGraph:
+     """Extract, query, and lower one exact Python source tree."""
+     root = snapshot_root.resolve()
+@@ -1045,6 +1254,72 @@ def analyze_source(
+         extraction=extraction,
+         executable=codeql_executable,
+         cache_root=resolved_cache,
++        overlay_base=overlay_base,
++    )
++    results = _run_query_suite(
++        root,
++        database=database,
++        query=query,
++        suite=suite,
++        executable=codeql_executable,
++        cache_root=resolved_cache,
++    )
++    return _lower_graph(
++        root,
++        snapshot=snapshot,
++        extraction=extraction,
++        query=query,
++        format=format,
++        database=database.receipt,
++        results=results,
++        executable=codeql_executable,
++        cache_root=resolved_cache,
++        artifact_root=resolved_artifacts,
++    )
++
++
++def analyze_overlay_source(
++    snapshot_root: Path,
++    *,
++    baseline_root: Path,
++    baseline_graph: SourceGraph,
++    snapshot: SourceSnapshot,
++    extraction: CodeQLExtractionSpec,
++    query: CodeQLQuerySpec,
++    format: SourceGraphFormat,
++    codeql_executable: Path,
++    query_pack: Path,
++    cache_root: Path,
++    artifact_root: Path | None = None,
++) -> SourceGraph:
++    """Analyze a candidate by extracting only files changed from its baseline."""
++    root = snapshot_root.resolve()
++    base_root = baseline_root.resolve()
++    resolved_cache = cache_root.resolve()
++    resolved_artifacts = None if artifact_root is None else artifact_root.resolve()
++    if source_digest(root) != snapshot.source_sha256:
++        raise CodeQLAnalysisError(
++            "SourceSnapshot.source_sha256 does not match source bytes"
++        )
++    if source_digest(base_root) != baseline_graph.snapshot.source_sha256:
++        raise CodeQLAnalysisError("overlay baseline graph differs from source bytes")
++    if format.lowering_sha256 != lowering_digest():
++        raise CodeQLAnalysisError(
++            "SourceGraphFormat lowering digest differs from loaded assets"
++        )
++    if resolved_cache.is_relative_to(root) or resolved_cache.is_relative_to(base_root):
++        raise CodeQLAnalysisError("CodeQL cache must be outside the source trees")
++    if resolved_artifacts is not None and resolved_artifacts.is_relative_to(root):
++        raise CodeQLAnalysisError("CodeQL artifacts must be outside the source tree")
++    suite = _check_query_pack(query_pack, query)
++    database = _extract_overlay_database(
++        root,
++        baseline_root=base_root,
++        baseline=baseline_graph.receipt.database,
++        snapshot=snapshot,
++        extraction=extraction,
++        executable=codeql_executable,
++        cache_root=resolved_cache,
+     )
+     results = _run_query_suite(
+         root,
+@@ -1072,6 +1347,7 @@ __all__ = [
+     "CodeQLAnalysisError",
+     "IGNORED_PARTS",
+     "analyze_source",
++    "analyze_overlay_source",
+     "lowering_digest",
+     "resolve_analysis_specs",
+     "source_digest",
+diff --git a/src/viper/_system_impact/workflow.py b/src/viper/_system_impact/workflow.py
+index abb8253..c51dc7b 100644
+--- a/src/viper/_system_impact/workflow.py
++++ b/src/viper/_system_impact/workflow.py
+@@ -32,6 +32,7 @@ from viper.system_impact.rename import (
+ from .codeql import (
+     IGNORED_PARTS,
+     CodeQLAnalysisError,
++    analyze_overlay_source,
+     analyze_source,
+     resolve_analysis_specs,
+     source_digest,
+@@ -361,6 +362,7 @@ def analyze_working_tree_rename(
+             repository,
+             codeql_executable=executable,
+             query_pack=pack,
++            suite="rename-facts.qls",
+         )
+         with tempfile.TemporaryDirectory(prefix="viper-rename-analysis.") as directory:
+             temporary_root = Path(directory)
+@@ -392,10 +394,13 @@ def analyze_working_tree_rename(
+                     revision=revision,
+                 ),
+                 artifact_root=output / "baseline",
++                overlay_base=True,
+                 **common,
+             )
+-            realized = analyze_source(
++            realized = analyze_overlay_source(
+                 realized_root,
++                baseline_root=baseline_root,
++                baseline_graph=baseline,
+                 snapshot=SourceSnapshot(
+                     base_revision=revision,
+                     source_sha256=candidate_sha256,
+diff --git a/src/viper/system_impact/models.py b/src/viper/system_impact/models.py
+index fee650b..e7bdd8e 100644
+--- a/src/viper/system_impact/models.py
++++ b/src/viper/system_impact/models.py
+@@ -112,6 +112,22 @@ class DatabaseReceipt(ProtocolModel):
+     extraction: CodeQLExtractionSpec = Field(description="Extraction settings used.")
+     key: SHA256 = Field(description="Digest of the snapshot and extraction settings.")
+     sha256: SHA256 = Field(description="Digest of the extracted database facts.")
++    mode: Literal["full", "overlay_base", "overlay"] = Field(
++        default="full",
++        description="Extraction strategy used to create these facts.",
++    )
++    base_database_key: SHA256 | None = Field(
++        default=None,
++        description="Overlay-base database key, present only for an overlay.",
++    )
++    base_database_sha256: SHA256 | None = Field(
++        default=None,
++        description="Overlay-base fact digest, present only for an overlay.",
++    )
++    changes_sha256: SHA256 | None = Field(
++        default=None,
++        description="Digest of the exact overlay changes manifest.",
++    )
+     commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
+         min_length=1,
+         description="Commands executed to create the database.",
+@@ -125,7 +141,40 @@ class DatabaseReceipt(ProtocolModel):
+     @model_validator(mode="after")
+     def validate_key(self) -> DatabaseReceipt:
+         """Require the key derived from this receipt's stage inputs."""
+-        if self.key != stage_key(self.snapshot, self.extraction):
++        if self.mode == "full":
++            expected = stage_key(self.snapshot, self.extraction)
++            valid_links = (
++                self.base_database_key is None
++                and self.base_database_sha256 is None
++                and self.changes_sha256 is None
++            )
++        elif self.mode == "overlay_base":
++            expected = stage_key(self.snapshot, self.extraction, self.mode)
++            valid_links = (
++                self.base_database_key is None
++                and self.base_database_sha256 is None
++                and self.changes_sha256 is None
++            )
++        else:
++            expected = stage_key(
++                self.snapshot,
++                self.extraction,
++                self.mode,
++                self.base_database_key,
++                self.base_database_sha256,
++                self.changes_sha256,
++            )
++            valid_links = all(
++                value is not None
++                for value in (
++                    self.base_database_key,
++                    self.base_database_sha256,
++                    self.changes_sha256,
++                )
++            )
++        if not valid_links:
++            raise ValueError("DatabaseReceipt overlay provenance is incomplete")
++        if self.key != expected:
+             raise ValueError("DatabaseReceipt key differs from its stage inputs")
+         return self
+ 
+@@ -285,6 +334,30 @@ class SourceEdge(ProtocolModel):
+         ge=1,
+         description="One-based source line containing the use.",
+     )
++    column: int = Field(
++        default=0,
++        ge=0,
++        description="Zero-based UTF-8 source column containing the use.",
++    )
++
++
++class SourceReference(ProtocolModel):
++    """Record one import-bound reference without requiring a target declaration."""
++
++    reference_id: SHA256 = Field(description="Digest of the complete reference row.")
++    source: NodeId = Field(description="Declaration containing the reference.")
++    target_module: NonEmptyStr = Field(description="Imported Python module identity.")
++    target_symbol: NonEmptyStr = Field(
++        description="Selected symbol, or an asterisk when selection is dynamic."
++    )
++    kind: EdgeKind = Field(description="Operation performed through the binding.")
++    path: RepoRelPath = Field(description="Source file containing the reference.")
++    line: int = Field(ge=1, description="One-based source line.")
++    column: int = Field(ge=0, description="Zero-based UTF-8 source column.")
++    binding_form: NonEmptyStr = Field(description="Import syntax that bound the name.")
++    resolution: Literal["resolved", "unresolved"] = Field(
++        description="Whether the selected symbol is statically known."
++    )
+ 
+ 
+ class SourceGraph(ProtocolModel):
+@@ -303,6 +376,13 @@ class SourceGraph(ProtocolModel):
+     edges: tuple[SourceEdge, ...] = Field(
+         description="Edges sorted by stable identifier."
+     )
++    references: tuple[SourceReference, ...] = Field(
++        default=(),
++        description=(
++            "Import-bound references retained even when their target declaration "
++            "is absent."
++        ),
++    )
+     receipt: CodeQLAnalysisReceipt = Field(
+         description="Evidence for extraction, query execution, and graph conversion."
+     )
+@@ -319,6 +399,14 @@ class SourceGraph(ProtocolModel):
+         """Order edges by their stable identifiers before serialization."""
+         return tuple(sorted(edges, key=lambda edge: edge.edge_id))
+ 
++    @field_validator("references")
++    @classmethod
++    def order_references(
++        cls, references: tuple[SourceReference, ...]
++    ) -> tuple[SourceReference, ...]:
++        """Order references by stable identifier before serialization."""
++        return tuple(sorted(references, key=lambda item: item.reference_id))
++
+     @model_validator(mode="after")
+     def validate_graph(self) -> SourceGraph:
+         """Reject duplicate identities, dangling edges, and receipt drift."""
+@@ -335,6 +423,7 @@ class SourceGraph(ProtocolModel):
+             for node in self.nodes
+         )
+         edge_ids = tuple(edge.edge_id for edge in self.edges)
++        reference_ids = tuple(item.reference_id for item in self.references)
+         if len(node_ids) != len(set(node_ids)):
+             raise ValueError("SourceGraph contains duplicate node IDs")
+         if len(target_keys) != len(set(target_keys)):
+@@ -343,11 +432,15 @@ class SourceGraph(ProtocolModel):
+             raise ValueError("SourceGraph contains a duplicate binding occurrence")
+         if len(edge_ids) != len(set(edge_ids)):
+             raise ValueError("SourceGraph contains duplicate edge IDs")
++        if len(reference_ids) != len(set(reference_ids)):
++            raise ValueError("SourceGraph contains duplicate reference IDs")
+         known = set(node_ids)
+         if any(
+             edge.source not in known or edge.target not in known for edge in self.edges
+         ):
+             raise ValueError("SourceGraph contains an edge with an unknown endpoint")
++        if any(item.source not in known for item in self.references):
++            raise ValueError("SourceGraph contains a reference with an unknown owner")
+         database = self.receipt.database
+         query = self.receipt.query
+         graph = self.receipt.graph
+@@ -369,11 +462,16 @@ class SourceGraph(ProtocolModel):
+             raise ValueError(
+                 "SourceGraphFormat schema version differs from SourceGraph"
+             )
++        rows = {
++            "nodes": [node.model_dump(mode="json") for node in self.nodes],
++            "edges": [edge.model_dump(mode="json") for edge in self.edges],
++        }
++        if self.references:
++            rows["references"] = [
++                item.model_dump(mode="json") for item in self.references
++            ]
+         result_payload = json.dumps(
+-            {
+-                "nodes": [node.model_dump(mode="json") for node in self.nodes],
+-                "edges": [edge.model_dump(mode="json") for edge in self.edges],
+-            },
++            rows,
+             sort_keys=True,
+             separators=(",", ":"),
+         ).encode()
+@@ -617,6 +715,7 @@ __all__ = [
+     "SourceGraphFormat",
+     "SourceNode",
+     "SourceNodeKind",
++    "SourceReference",
+     "SourceSnapshot",
+     "TargetCheck",
+     "stage_key",
+diff --git a/src/viper/system_impact/rename.py b/src/viper/system_impact/rename.py
+index 102c372..21bbfe6 100644
+--- a/src/viper/system_impact/rename.py
++++ b/src/viper/system_impact/rename.py
+@@ -2,10 +2,9 @@
+ 
+ from __future__ import annotations
+ 
+-import ast
+ import hashlib
+ from pathlib import Path, PurePosixPath
+-from typing import Literal, Protocol
++from typing import Literal
+ 
+ from pydantic import Field, field_validator, model_validator
+ 
+@@ -31,19 +30,13 @@ RenameTransitionStatus = Literal[
+ ]
+ ReferenceKind = Literal["imports", "calls", "reads", "writes"]
+ _SUPPORTED_EDGE_KINDS = frozenset({"imports", "calls", "reads", "writes"})
++_MODULE_IMPORTS_SYMBOL = "<module imports>"
+ 
+ 
+ class RenameAnalysisError(ValueError):
+     """Report an input that cannot support an exact rename decision."""
+ 
+ 
+-class _Located(Protocol):
+-    """Expose the source coordinates shared by reference-bearing AST nodes."""
+-
+-    lineno: int
+-    col_offset: int
+-
+-
+ class RenameSpec(ProtocolModel):
+     """Declare one repository symbol rename and its governed edge kinds."""
+ 
+@@ -66,11 +59,9 @@ class RenameSpec(ProtocolModel):
+ 
+     @model_validator(mode="after")
+     def validate_targets(self) -> RenameSpec:
+-        """Require a top-level rename within one Python module."""
++        """Require two distinct top-level Python declarations."""
+         if self.old_target == self.new_target:
+             raise ValueError("RenameSpec targets must differ")
+-        if self.old_target.path != self.new_target.path:
+-            raise ValueError("RenameSpec targets must share one source path")
+         if "." in self.old_target.symbol or "." in self.new_target.symbol:
+             raise ValueError("RenameSpec supports top-level declarations")
+         return self
+@@ -205,20 +196,6 @@ class RenameCheck(ProtocolModel):
+         return self
+ 
+ 
+-class _Bindings(ProtocolModel):
+-    """Store import bindings used by one parsed Python module."""
+-
+-    module_aliases: dict[str, str] = Field(
+-        description="Local names bound to target-relevant module identities."
+-    )
+-    symbol_aliases: dict[str, tuple[str, str]] = Field(
+-        description="Local names bound to target-relevant module symbols."
+-    )
+-    unresolved: tuple[str, ...] = Field(
+-        description="Target-relevant bindings whose meaning remains ambiguous."
+-    )
+-
+-
+ def rename_checker_digest() -> str:
+     """Hash the loaded implementation that compiles and checks obligations."""
+     return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+@@ -240,207 +217,6 @@ def _module_name(path: str) -> str:
+     return ".".join(parts)
+ 
+ 
+-def _resolve_from_module(path: str, module: str | None, level: int) -> str:
+-    """Resolve one absolute or relative ``from`` import."""
+-    if level == 0:
+-        return module or ""
+-    current = _module_name(path).split(".")[:-1]
+-    keep = len(current) - (level - 1)
+-    if keep < 0:
+-        return ""
+-    prefix = current[:keep]
+-    if module:
+-        prefix.extend(module.split("."))
+-    return ".".join(prefix)
+-
+-
+-def _bindings(
+-    tree: ast.Module,
+-    path: str,
+-    target_modules: frozenset[str],
+-    owner: SourceNode,
+-) -> _Bindings:
+-    """Collect target-relevant bindings and conservative unresolved constructs."""
+-    module_aliases: dict[str, str] = {}
+-    symbol_aliases: dict[str, tuple[str, str]] = {}
+-    unresolved: list[str] = []
+-    parents = {
+-        child: parent
+-        for parent in ast.walk(tree)
+-        for child in ast.iter_child_nodes(parent)
+-    }
+-
+-    def affects_owner(node: ast.AST) -> bool:
+-        if _inside(node, owner):
+-            return True
+-        current = node
+-        while current in parents:
+-            current = parents[current]
+-            if isinstance(
+-                current,
+-                (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
+-            ):
+-                return False
+-        return True
+-
+-    for node in tree.body:
+-        if isinstance(node, ast.Import):
+-            for alias in node.names:
+-                local = alias.asname or alias.name.split(".")[0]
+-                if alias.name in target_modules:
+-                    module_aliases[local] = alias.name
+-        elif isinstance(node, ast.ImportFrom):
+-            origin = _resolve_from_module(path, node.module, node.level)
+-            for alias in node.names:
+-                if alias.name == "*" and origin in target_modules:
+-                    unresolved.append(
+-                        f"{path}:{node.lineno}: target module star import"
+-                    )
+-                    continue
+-                local = alias.asname or alias.name
+-                imported_module = f"{origin}.{alias.name}" if origin else alias.name
+-                if imported_module in target_modules:
+-                    module_aliases[local] = imported_module
+-                if origin in target_modules:
+-                    symbol_aliases[local] = (origin, alias.name)
+-    bound = set(module_aliases) | set(symbol_aliases)
+-    for node in ast.walk(tree):
+-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+-            if node.func.id == "getattr" and len(node.args) >= 2:
+-                base = node.args[0]
+-                name = node.args[1]
+-                if (
+-                    isinstance(base, ast.Name)
+-                    and base.id in module_aliases
+-                    and isinstance(name, ast.Constant)
+-                    and isinstance(name.value, str)
+-                    and affects_owner(node)
+-                ):
+-                    unresolved.append(
+-                        f"{path}:{node.lineno}: dynamic target attribute lookup"
+-                    )
+-        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+-            targets: list[ast.AST]
+-            if isinstance(node, ast.Assign):
+-                targets = list(node.targets)
+-            else:
+-                targets = [node.target]
+-            names = {
+-                child.id
+-                for target in targets
+-                for child in ast.walk(target)
+-                if isinstance(child, ast.Name)
+-            }
+-            for name in sorted(names & bound):
+-                if affects_owner(node):
+-                    unresolved.append(
+-                        f"{path}:{node.lineno}: target alias {name!r} rebound"
+-                    )
+-    return _Bindings(
+-        module_aliases=module_aliases,
+-        symbol_aliases=symbol_aliases,
+-        unresolved=tuple(sorted(set(unresolved))),
+-    )
+-
+-
+-def _inside(node: object, owner: SourceNode) -> bool:
+-    """Return whether one AST node begins inside a SourceNode declaration."""
+-    line = getattr(node, "lineno", 0)
+-    column = getattr(node, "col_offset", -1)
+-    return (
+-        (owner.start_line, owner.start_col)
+-        <= (line, column)
+-        < (
+-            owner.end_line,
+-            owner.end_col,
+-        )
+-    )
+-
+-
+-def _site(
+-    *, dependent: RepoSymbolRef, kind: ReferenceKind, path: str, node: _Located
+-) -> ReferenceSite:
+-    """Convert one AST occurrence into a stable reference site."""
+-    return ReferenceSite(
+-        dependent=dependent,
+-        kind=kind,
+-        path=path,
+-        line=node.lineno,
+-        column=node.col_offset,
+-    )
+-
+-
+-def _scan_dependent(
+-    *,
+-    root: Path,
+-    owner: SourceNode,
+-    target: RepoSymbolRef,
+-    target_modules: frozenset[str],
+-) -> tuple[tuple[ReferenceSite, ...], tuple[str, ...]]:
+-    """Find target references inside one represented declaration."""
+-    path = str(owner.path)
+-    source = (root / path).read_text(encoding="utf-8")
+-    tree = ast.parse(source, filename=path, type_comments=True)
+-    bindings = _bindings(tree, path, target_modules, owner)
+-    parents = {
+-        child: parent
+-        for parent in ast.walk(tree)
+-        for child in ast.iter_child_nodes(parent)
+-    }
+-    target_module = _module_name(str(target.path))
+-    dependent = RepoSymbolRef(path=owner.path, symbol=owner.symbol)
+-    sites: dict[tuple[str, int, int], ReferenceSite] = {}
+-
+-    def record(kind: ReferenceKind, node: _Located) -> None:
+-        if _inside(node, owner):
+-            site = _site(dependent=dependent, kind=kind, path=path, node=node)
+-            sites[(kind, site.line, site.column)] = site
+-
+-    for node in ast.walk(tree):
+-        if isinstance(node, ast.ImportFrom):
+-            origin = _resolve_from_module(path, node.module, node.level)
+-            if origin == target_module:
+-                for alias in node.names:
+-                    if alias.name == target.symbol:
+-                        record("imports", alias)
+-            elif target_module == f"{origin}.{target.symbol}":
+-                for alias in node.names:
+-                    if alias.name == target.symbol:
+-                        record("imports", alias)
+-            continue
+-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+-            if (
+-                bindings.module_aliases.get(node.value.id) == target_module
+-                and node.attr == target.symbol
+-            ):
+-                parent = parents.get(node)
+-                parent_is_call = isinstance(parent, ast.Call) and parent.func is node
+-                if parent_is_call:
+-                    record("calls", node)
+-                elif isinstance(node.ctx, ast.Store):
+-                    record("writes", node)
+-                else:
+-                    record("reads", node)
+-        elif isinstance(node, ast.Name):
+-            imported = bindings.symbol_aliases.get(node.id)
+-            if imported != (target_module, target.symbol):
+-                continue
+-            parent = parents.get(node)
+-            parent_is_call = isinstance(parent, ast.Call) and parent.func is node
+-            if parent_is_call:
+-                record("calls", node)
+-            elif isinstance(node.ctx, ast.Store):
+-                record("writes", node)
+-            elif isinstance(node.ctx, ast.Load):
+-                record("reads", node)
+-    return (
+-        tuple(
+-            sorted(sites.values(), key=lambda item: (item.kind, item.line, item.column))
+-        ),
+-        bindings.unresolved,
+-    )
+-
+-
+ def _node_index(graph: SourceGraph) -> dict[str, SourceNode]:
+     """Index graph declarations by stable node identifier."""
+     return {node.node_id: node for node in graph.nodes}
+@@ -474,47 +250,98 @@ def compile_rename_obligations(
+     if old_node is None:
+         raise RenameAnalysisError("baseline graph does not contain the old target")
+     nodes = _node_index(graph)
+-    selected: dict[tuple[str, ReferenceKind], SourceNode] = {}
++    selected: dict[
++        tuple[RepoSymbolRef, ReferenceKind],
++        dict[tuple[str, int, int], ReferenceSite],
++    ] = {}
++
++    def add_site(
++        dependent: RepoSymbolRef, kind: ReferenceKind, site: ReferenceSite
++    ) -> None:
++        """Add one exact occurrence without duplicating overlapping queries."""
++        selected.setdefault((dependent, kind), {})[
++            (str(site.path), site.line, site.column)
++        ] = site
++
+     for edge in graph.edges:
+         if edge.target != old_node.node_id or edge.kind not in spec.edge_kinds:
+             continue
+         if edge.kind not in _SUPPORTED_EDGE_KINDS:
+             raise RenameAnalysisError(f"unsupported rename edge kind: {edge.kind}")
+-        selected[(edge.source, edge.kind)] = nodes[edge.source]
++        owner = nodes[edge.source]
++        reference_kind = edge.kind
++        dependent = (
++            RepoSymbolRef(path=edge.path, symbol=_MODULE_IMPORTS_SYMBOL)
++            if reference_kind == "imports"
++            else RepoSymbolRef(path=owner.path, symbol=owner.symbol)
++        )
++        site = ReferenceSite(
++            dependent=dependent,
++            kind=reference_kind,
++            path=edge.path,
++            line=edge.line,
++            column=edge.column,
++        )
++        add_site(dependent, reference_kind, site)
++    old_module = _module_name(str(spec.old_target.path))
++    unresolved = [
++        item
++        for item in graph.references
++        if item.resolution == "unresolved" and item.target_module == old_module
++    ]
++    if unresolved:
++        rendered = "; ".join(
++            f"{item.path}:{item.line}: {item.binding_form}" for item in unresolved
++        )
++        raise RenameAnalysisError(
++            f"baseline binding analysis is unresolved: {rendered}"
++        )
++    for reference in graph.references:
++        if (
++            reference.resolution != "resolved"
++            or reference.target_module != old_module
++            or reference.target_symbol != spec.old_target.symbol
++            or reference.kind not in spec.edge_kinds
++            or reference.kind not in _SUPPORTED_EDGE_KINDS
++        ):
++            continue
++        owner = nodes[reference.source]
++        kind = reference.kind
++        dependent = (
++            RepoSymbolRef(path=reference.path, symbol=_MODULE_IMPORTS_SYMBOL)
++            if kind == "imports"
++            else RepoSymbolRef(path=owner.path, symbol=owner.symbol)
++        )
++        add_site(
++            dependent,
++            kind,
++            ReferenceSite(
++                dependent=dependent,
++                kind=kind,
++                path=reference.path,
++                line=reference.line,
++                column=reference.column,
++            ),
++        )
+     if not selected:
+         raise RenameAnalysisError("baseline graph contains no governed references")
+ 
+-    target_modules = frozenset({_module_name(str(spec.old_target.path))})
+     obligations: list[RenameObligation] = []
+-    unresolved: list[str] = []
+-    scans: dict[str, tuple[tuple[ReferenceSite, ...], tuple[str, ...]]] = {}
+-    for (_node_id, kind), owner in sorted(
+-        selected.items(), key=lambda item: (item[1].path, item[1].symbol, item[0][1])
++    for (dependent, kind), sites in sorted(
++        selected.items(),
++        key=lambda item: (
++            item[0][0].path,
++            item[0][0].symbol,
++            item[0][1],
++        ),
+     ):
+-        if owner.node_id not in scans:
+-            scans[owner.node_id] = _scan_dependent(
+-                root=root,
+-                owner=owner,
+-                target=spec.old_target,
+-                target_modules=target_modules,
+-            )
+-        sites, failures = scans[owner.node_id]
+-        unresolved.extend(failures)
+-        matching = tuple(site for site in sites if site.kind == kind)
+-        if not matching:
+-            unresolved.append(
+-                f"{owner.path}:{owner.symbol}: CodeQL {kind} edge has no exact site"
+-            )
+-            continue
+         obligations.append(
+             RenameObligation(
+-                dependent=RepoSymbolRef(path=owner.path, symbol=owner.symbol),
++                dependent=dependent,
+                 kind=kind,
+-                baseline_sites=matching,
++                baseline_sites=tuple(sites.values()),
+             )
+         )
+-    if unresolved:
+-        raise RenameAnalysisError("; ".join(sorted(set(unresolved))))
+     receipt = graph.receipt
+     return RenameObligationSet(
+         spec=spec,
+@@ -548,15 +375,12 @@ def _transition(
+             f"candidate has {len(new_sites)} replacement(s); "
+             f"baseline requires {len(obligation.baseline_sites)}"
+         )
+-    elif len(new_sites) != len(obligation.baseline_sites):
+-        status = "occurrence_mismatch"
+-        message = (
+-            f"candidate has {len(new_sites)} replacement(s); "
+-            f"baseline requires {len(obligation.baseline_sites)}"
+-        )
+     else:
+         status = "satisfied"
+-        message = f"candidate replaces all {len(new_sites)} governed reference(s)"
++        message = (
++            f"candidate has {len(new_sites)} replacement(s) for "
++            f"{len(obligation.baseline_sites)} governed reference(s)"
++        )
+     return DependencyTransition(
+         obligation=obligation,
+         candidate_old_sites=old_sites,
+@@ -589,20 +413,14 @@ def check_rename_obligations(
+         )
+ 
+     nodes = {(node.path, node.symbol): node for node in graph.nodes}
+-    target_modules = frozenset({_module_name(str(obligations.spec.old_target.path))})
+-    scans: dict[
+-        tuple[str, str],
+-        tuple[tuple[ReferenceSite, ...], tuple[ReferenceSite, ...], tuple[str, ...]],
+-    ] = {}
++    old_module = _module_name(str(obligations.spec.old_target.path))
++    new_module = _module_name(str(obligations.spec.new_target.path))
+     all_unresolved: list[str] = []
+     transitions: list[DependencyTransition] = []
+     for obligation in obligations.obligations:
+-        key = (
+-            str(obligation.dependent.path),
+-            obligation.dependent.symbol,
+-        )
++        module_imports = obligation.dependent.symbol == _MODULE_IMPORTS_SYMBOL
+         owner = nodes.get((obligation.dependent.path, obligation.dependent.symbol))
+-        if owner is None:
++        if owner is None and not module_imports:
+             transitions.append(
+                 _transition(
+                     obligation,
+@@ -612,32 +430,59 @@ def check_rename_obligations(
+                 )
+             )
+             continue
+-        if key not in scans:
+-            old_sites, old_unresolved = _scan_dependent(
+-                root=root,
+-                owner=owner,
+-                target=obligations.spec.old_target,
+-                target_modules=target_modules,
++        relevant = [
++            item
++            for item in graph.references
++            if (
++                item.path == obligation.dependent.path
++                if module_imports
++                else owner is not None and item.source == owner.node_id
+             )
+-            new_sites, new_unresolved = _scan_dependent(
+-                root=root,
+-                owner=owner,
+-                target=obligations.spec.new_target,
+-                target_modules=target_modules,
++        ]
++        failures = tuple(
++            sorted(
++                {
++                    f"{item.path}:{item.line}: {item.binding_form}"
++                    for item in relevant
++                    if item.resolution == "unresolved"
++                    and item.target_module in {old_module, new_module}
++                }
++            )
++        )
++        old_sites = tuple(
++            ReferenceSite(
++                dependent=obligation.dependent,
++                kind=obligation.kind,
++                path=item.path,
++                line=item.line,
++                column=item.column,
+             )
+-            failures = tuple(sorted(set((*old_unresolved, *new_unresolved))))
+-            scans[key] = (old_sites, new_sites, failures)
+-        old_sites, new_sites, failures = scans[key]
++            for item in relevant
++            if item.resolution == "resolved"
++            and item.target_module == old_module
++            and item.target_symbol == obligations.spec.old_target.symbol
++            and item.kind == obligation.kind
++        )
++        new_sites = tuple(
++            ReferenceSite(
++                dependent=obligation.dependent,
++                kind=obligation.kind,
++                path=item.path,
++                line=item.line,
++                column=item.column,
++            )
++            for item in relevant
++            if item.resolution == "resolved"
++            and item.target_module == new_module
++            and item.target_symbol == obligations.spec.new_target.symbol
++            and item.kind == obligation.kind
++        )
+         all_unresolved.extend(failures)
+         transitions.append(
+             _transition(
+                 obligation,
+-                old_sites=tuple(
+-                    site for site in old_sites if site.kind == obligation.kind
+-                ),
+-                new_sites=tuple(
+-                    site for site in new_sites if site.kind == obligation.kind
+-                ),
++                old_sites=old_sites,
++                new_sites=new_sites,
+                 unresolved=bool(failures),
+             )
+         )
+diff --git a/tests/test_codeql_analysis.py b/tests/test_codeql_analysis.py
+index 2087178..6756303 100644
+--- a/tests/test_codeql_analysis.py
++++ b/tests/test_codeql_analysis.py
+@@ -19,6 +19,7 @@ from tools.plan import check as preflight
+ from viper._system_impact.codeql import (
+     CodeQLAnalysisError,
+     _tree_digest,
++    analyze_overlay_source,
+     analyze_source,
+     lowering_digest,
+     source_digest,
+@@ -63,16 +64,20 @@ elif args[:2] == ["resolve", "languages"]:
+     print(json.dumps({{"python": [{str(extractor)!r}]}}))
+ elif args[:2] == ["database", "create"]:
+     database = Path(args[2])
+-    facts = database / "db-python/default"
+-    facts.mkdir(parents=True)
+-    (facts / "facts.rel").write_text("facts", encoding="utf-8")
+-    (database / "src.zip").write_bytes(b"source")
++    if not any(value.startswith("--overlay-changes=") for value in args):
++        facts = database / "db-python/default"
++        facts.mkdir(parents=True)
++        (facts / "facts.rel").write_text("facts", encoding="utf-8")
++        (database / "src.zip").write_bytes(b"source")
+ elif args[:2] == ["database", "run-queries"]:
+     database = Path(args[3])
+     results = database / "results/viper/python-impact"
+     results.mkdir(parents=True)
+     (results / "Declarations.bqrs").write_text("Declarations", encoding="utf-8")
+     (results / "Dependencies.bqrs").write_text("Dependencies", encoding="utf-8")
++    (results / "RenameTransitions.bqrs").write_text(
++        "RenameTransitions", encoding="utf-8"
++    )
+     cache = database / "db-python/default/cache"
+     cache.mkdir()
+     (cache / "query.cache").write_text("mutable", encoding="utf-8")
+@@ -85,7 +90,9 @@ elif args[:2] == ["bqrs", "decode"]:
+         ]
+         if query == "Declarations"
+         else [["src/example.py", 4, 1, "src/example.py", 1, 1,
+-               "calls", "src/example.py", 5]]
++               "calls", "src/example.py", 5, 12]]
++        if query == "Dependencies"
++        else []
+     )
+     Path(option("--output=")).write_text(
+         json.dumps({{"#select": {{"tuples": rows}}}}),
+@@ -127,7 +134,7 @@ def _specs(
+             extractor_sha256=_tree_digest(extractor),
+         ),
+         CodeQLQuerySpec(
+-            pack="viper/python-impact@1.1.0",
++            pack="viper/python-impact@1.2.0",
+             pack_sha256=_tree_digest(query_pack),
+             suite="source-facts.qls",
+         ),
+@@ -207,6 +214,79 @@ def test_analysis_uses_three_keys_and_runs_the_suite_once(tmp_path: Path) -> Non
+     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
+ 
+ 
++def test_overlay_binds_base_and_exact_changes_and_reuses_candidate(
++    tmp_path: Path,
++) -> None:
++    """Bind an overlay to its baseline receipt and changed-path manifest."""
++    baseline_root = tmp_path / "baseline"
++    candidate_root = tmp_path / "candidate"
++    _write_source(baseline_root)
++    shutil.copytree(baseline_root, candidate_root)
++    (candidate_root / "src/example.py").write_text(
++        "def dependency() -> int:\n"
++        "    return 2\n\n"
++        "def dependent() -> int:\n"
++        "    return dependency()\n",
++        encoding="utf-8",
++    )
++    query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
++    calls = tmp_path / "calls.jsonl"
++    extractor = tmp_path / "extractor"
++    executable = _write_fake_codeql(tmp_path / "codeql", extractor, calls)
++    extraction, query, format = _specs(executable, extractor, query_pack)
++    baseline_snapshot = SourceSnapshot(
++        base_revision=_REVISION,
++        source_sha256=source_digest(baseline_root),
++        revision=_REVISION,
++    )
++    cache = tmp_path / "cache"
++    baseline = analyze_source(
++        baseline_root,
++        snapshot=baseline_snapshot,
++        extraction=extraction,
++        query=query,
++        format=format,
++        codeql_executable=executable,
++        query_pack=query_pack,
++        cache_root=cache,
++        overlay_base=True,
++    )
++    candidate_snapshot = SourceSnapshot(
++        base_revision=_REVISION,
++        source_sha256=source_digest(candidate_root),
++        revision=None,
++    )
++    arguments = {
++        "snapshot_root": candidate_root,
++        "baseline_root": baseline_root,
++        "baseline_graph": baseline,
++        "snapshot": candidate_snapshot,
++        "extraction": extraction,
++        "query": query,
++        "format": format,
++        "codeql_executable": executable,
++        "query_pack": query_pack,
++        "cache_root": cache,
++    }
++
++    first = analyze_overlay_source(**arguments)
++    second = analyze_overlay_source(**arguments)
++
++    assert first == second
++    assert baseline.receipt.database.mode == "overlay_base"
++    assert first.receipt.database.mode == "overlay"
++    assert first.receipt.database.base_database_key == baseline.receipt.database.key
++    assert first.receipt.database.base_database_sha256 == (
++        baseline.receipt.database.sha256
++    )
++    assert first.receipt.database.changes_sha256 is not None
++    commands = [json.loads(line) for line in calls.read_text().splitlines()]
++    creates = [command for command in commands if command[:2] == ["database", "create"]]
++    assert len(creates) == 2
++    assert "--overlay-base" in creates[0]
++    assert any(value.startswith("--overlay-changes=") for value in creates[1])
++
++
+ def test_analysis_rejects_outputs_inside_source_tree(tmp_path: Path) -> None:
+     """Prevent CodeQL from analyzing its own cached databases and artifacts."""
+     root = tmp_path / "source"
+@@ -394,7 +474,7 @@ def test_format_change_reuses_database_and_bqrs(
+     commands = [json.loads(line) for line in calls.read_text().splitlines()]
+     assert sum(command[:2] == ["database", "create"] for command in commands) == 1
+     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
+-    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 4
++    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 6
+ 
+ 
+ def test_tampered_graph_cache_rebuilds(tmp_path: Path) -> None:
+@@ -440,7 +520,7 @@ def test_tampered_graph_cache_rebuilds(tmp_path: Path) -> None:
+     commands = [json.loads(line) for line in calls.read_text().splitlines()]
+     assert sum(command[:2] == ["database", "create"] for command in commands) == 1
+     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
+-    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 4
++    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 6
+ 
+ 
+ def test_lowering_digest_must_match_loaded_assets(tmp_path: Path) -> None:
+@@ -540,20 +620,22 @@ def test_cached_graph_reuse_decodes_only_requested_artifacts(tmp_path: Path) ->
+     after_reuse = [json.loads(line) for line in calls.read_text().splitlines()]
+ 
+     assert first == second
+-    assert sum(command[:2] == ["bqrs", "decode"] for command in after_miss) == 2
+-    assert sum(command[:2] == ["bqrs", "decode"] for command in after_reuse) == 2
++    assert sum(command[:2] == ["bqrs", "decode"] for command in after_miss) == 3
++    assert sum(command[:2] == ["bqrs", "decode"] for command in after_reuse) == 3
+ 
+     artifact_root = tmp_path / "artifacts"
+     third = analyze_source(**arguments, artifact_root=artifact_root)
+     after_evidence = [json.loads(line) for line in calls.read_text().splitlines()]
+ 
+     assert third == first
+-    assert sum(command[:2] == ["bqrs", "decode"] for command in after_evidence) == 4
++    assert sum(command[:2] == ["bqrs", "decode"] for command in after_evidence) == 6
+     assert {path.name for path in artifact_root.iterdir()} == {
+         "Declarations.bqrs",
+         "Declarations.json",
+         "Dependencies.bqrs",
+         "Dependencies.json",
++        "RenameTransitions.bqrs",
++        "RenameTransitions.json",
+     }
+ 
+ 
+diff --git a/tests/test_rename_obligations.py b/tests/test_rename_obligations.py
+index 31a9cb9..0ce9c75 100644
+--- a/tests/test_rename_obligations.py
++++ b/tests/test_rename_obligations.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ import ast
+ import hashlib
+ import json
++import re
+ from pathlib import Path
+ 
+ import pytest
+@@ -22,6 +23,7 @@ from viper.system_impact.models import (
+     SourceGraph,
+     SourceGraphFormat,
+     SourceNode,
++    SourceReference,
+     SourceSnapshot,
+     stage_key,
+ )
+@@ -135,10 +137,77 @@ def _graph(
+                 query="viper/python-impact/dependencies",
+                 path="tests/test_use.py",
+                 line=caller_node.start_line + 1,
++                column=4,
+             ),
+         )
+     else:
+         edges = ()
++    source_text = (root / "tests/test_use.py").read_text(encoding="utf-8")
++    reference_rows: list[SourceReference] = []
++    alias_match = re.search(
++        r"from viper import _subprocess as ([A-Za-z_]\w*)", source_text
++    )
++    module_alias = alias_match.group(1) if alias_match is not None else "subprocess"
++    selected = next(
++        (
++            name
++            for name in ("run_checked", "run")
++            if f"{module_alias}.{name}" in source_text
++        ),
++        None,
++    )
++    if selected is not None:
++        assignment_line = next(
++            (
++                index
++                for index, value in enumerate(source_text.splitlines(), start=1)
++                if f"{module_alias} = object()" in value
++            ),
++            None,
++        )
++        resolution = (
++            "unresolved"
++            if assignment_line is not None
++            and caller_node.start_line <= assignment_line <= caller_node.end_line
++            else "resolved"
++        )
++        binding_form = (
++            "alias_rebinding" if resolution == "unresolved" else "module_alias"
++        )
++        for line, value in enumerate(source_text.splitlines(), start=1):
++            expression = f"{module_alias}.{selected}"
++            if expression not in value:
++                continue
++            column = value.index(module_alias)
++            reference_payload = json.dumps(
++                [
++                    caller_node.node_id,
++                    "viper._subprocess",
++                    selected if resolution == "resolved" else "*",
++                    "calls" if resolution == "resolved" else "reads",
++                    "tests/test_use.py",
++                    line,
++                    column,
++                    binding_form,
++                    resolution,
++                ],
++                separators=(",", ":"),
++            ).encode()
++            reference_rows.append(
++                SourceReference(
++                    reference_id=hashlib.sha256(reference_payload).hexdigest(),
++                    source=caller_node.node_id,
++                    target_module="viper._subprocess",
++                    target_symbol=selected if resolution == "resolved" else "*",
++                    kind="calls" if resolution == "resolved" else "reads",
++                    path="tests/test_use.py",
++                    line=line,
++                    column=column,
++                    binding_form=binding_form,
++                    resolution=resolution,
++                )
++            )
++    references = tuple(reference_rows)
+     snapshot = SourceSnapshot(
+         base_revision=_REVISION,
+         source_sha256=source_digest(root),
+@@ -167,6 +236,7 @@ def _graph(
+         {
+             "nodes": [item.model_dump(mode="json") for item in nodes],
+             "edges": [item.model_dump(mode="json") for item in edges],
++            "references": [item.model_dump(mode="json") for item in references],
+         },
+         sort_keys=True,
+         separators=(",", ":"),
+@@ -184,6 +254,7 @@ def _graph(
+         snapshot=snapshot,
+         nodes=nodes,
+         edges=edges,
++        references=references,
+         receipt=CodeQLAnalysisReceipt(
+             database=database,
+             query=query,
+@@ -209,7 +280,7 @@ def _baseline(root: Path) -> SourceGraph:
+     return _graph(root, target="run", include_edge=True, committed=True)
+ 
+ 
+-def _candidate(root: Path, call: str) -> SourceGraph:
++def _candidate(root: Path, call: str, *, repetitions: int = 1) -> SourceGraph:
+     """Write and graph one candidate with a new declaration."""
+     _write(
+         root,
+@@ -221,7 +292,7 @@ def _candidate(root: Path, call: str) -> SourceGraph:
+         "tests/test_use.py",
+         "from viper import _subprocess as subprocess\n\n"
+         "def call() -> None:\n"
+-        f"    subprocess.{call}()\n",
++        + "".join(f"    subprocess.{call}()\n" for _ in range(repetitions)),
+     )
+     return _graph(
+         root,
+@@ -257,6 +328,28 @@ def test_complete_rename_satisfies_every_compiled_obligation(tmp_path: Path) ->
+     assert "Completion: accepted" in render_rename_check(check)
+ 
+ 
++@pytest.mark.unit
++@pytest.mark.domain_protocol
++def test_complete_rename_allows_additional_replacement_uses(tmp_path: Path) -> None:
++    """Accept new uses after every governed old occurrence is replaced."""
++    baseline_root = tmp_path / "baseline"
++    candidate_root = tmp_path / "candidate"
++    obligations = compile_rename_obligations(
++        root=baseline_root,
++        graph=_baseline(baseline_root),
++        spec=_SPEC,
++    )
++
++    check = check_rename_obligations(
++        root=candidate_root,
++        graph=_candidate(candidate_root, "run_checked", repetitions=2),
++        obligations=obligations,
++    )
++
++    assert check.passed
++    assert len(check.transitions[0].candidate_new_sites) == 2
++
++
+ @pytest.mark.unit
+ @pytest.mark.domain_protocol
+ def test_stale_old_call_is_rejected_after_old_declaration_disappears(
+@@ -368,7 +461,7 @@ def test_alias_rebinding_fails_closed(tmp_path: Path) -> None:
+ 
+     assert not check.passed
+     assert check.transitions[0].status == "analysis_unresolved"
+-    assert "target alias 'subprocess' rebound" in check.unresolved[0]
++    assert "alias_rebinding" in check.unresolved[0]
+ 
+ 
+ @pytest.mark.unit
+diff --git a/tests/test_system_impact.py b/tests/test_system_impact.py
+index 1f961f2..1fe7233 100644
+--- a/tests/test_system_impact.py
++++ b/tests/test_system_impact.py
+@@ -1885,6 +1885,9 @@ elif args[:2] == ["database", "run-queries"]:
+     results.mkdir(parents=True)
+     (results / "Declarations.bqrs").write_text("Declarations", encoding="utf-8")
+     (results / "Dependencies.bqrs").write_text("Dependencies", encoding="utf-8")
++    (results / "RenameTransitions.bqrs").write_text(
++        "RenameTransitions", encoding="utf-8"
++    )
+ elif args[:2] == ["bqrs", "decode"]:
+     query = Path(args[2]).read_text(encoding="utf-8")
+     if query == "Declarations":
+@@ -1892,9 +1895,11 @@ elif args[:2] == ["bqrs", "decode"]:
+             ["src/example.py", "dependency", "function", 1, 1],
+             ["src/example.py", "dependent", "function", 4, 1],
+         ]
+-    else:
++    elif query == "Dependencies":
+         rows = [["src/example.py", 4, 1, "src/example.py", 1, 1,
+-                 "calls", "src/example.py", 5]]
++                 "calls", "src/example.py", 5, 12]]
++    else:
++        rows = []
+     Path(option("--output=")).write_text(
+         json.dumps({{"#select": {{"tuples": rows}}}}),
+         encoding="utf-8",
+@@ -1969,7 +1974,7 @@ def test_load_edges_uses_exact_binding_locations(tmp_path: Path) -> None:
+             ["imports.py", "C", "import", 1, 18],
+         ],
+     )
+-    rows = [["imports.py", 1, 15, "imports.py", 1, 18, "reads", "use.py", 4]]
++    rows = [["imports.py", 1, 15, "imports.py", 1, 18, "reads", "imports.py", 1, 1]]
+ 
+     edges = _load_edges(tmp_path, rows, nodes)
+ 
+@@ -1996,7 +2001,7 @@ def _sig02_specs(
+             extractor_sha256=_tree_digest(extractor),
+         ),
+         CodeQLQuerySpec(
+-            pack="viper/python-impact@1.1.0",
++            pack="viper/python-impact@1.2.0",
+             pack_sha256=_tree_digest(query_pack),
+             suite="source-facts.qls",
+         ),
+diff --git a/tools/codeql/viper-python-impact/Dependencies.ql b/tools/codeql/viper-python-impact/Dependencies.ql
+index 33eaed0..36bb6ec 100644
+--- a/tools/codeql/viper-python-impact/Dependencies.ql
++++ b/tools/codeql/viper-python-impact/Dependencies.ql
+@@ -283,4 +283,4 @@ select source.getLocation().getFile().getRelativePath(),
+   target.getLocation().getFile().getRelativePath(),
+   targetBinding.getLocation().getStartLine(), targetBinding.getLocation().getStartColumn(),
+   kind, evidence.getLocation().getFile().getRelativePath(),
+-  evidence.getLocation().getStartLine()
++  evidence.getLocation().getStartLine(), evidence.getLocation().getStartColumn()
+diff --git a/tools/codeql/viper-python-impact/RenameTransitions.ql b/tools/codeql/viper-python-impact/RenameTransitions.ql
+new file mode 100644
+index 0000000..97cf053
+--- /dev/null
++++ b/tools/codeql/viper-python-impact/RenameTransitions.ql
+@@ -0,0 +1,333 @@
++/**
++ * @name VIPER Python rename transitions
++ * @description Emits import-bound reference syntax even when a target declaration is absent.
++ * @kind table
++ * @id viper/python-impact/rename-transitions
++ */
++
++import python
++import Nodes
++
++/** Find the nearest represented declaration containing one reference. */
++private predicate referenceOwner(
++  AstNode evidence,
++  AstNode source,
++  AstNode sourceBinding
++) {
++  source.contains(evidence) and
++  exists(string kind, string name |
++    declaration(source, sourceBinding, kind, name)
++  ) and
++  not exists(AstNode nearer, AstNode nearerBinding, string kind, string name |
++    nearer.contains(evidence) and
++    source.contains(nearer) and
++    source != nearer and
++    declaration(nearer, nearerBinding, kind, name)
++  )
++}
++
++/** Classify the operation performed through one imported reference. */
++private string referenceKind(Expr reference) {
++  exists(Call call | call.getFunc() = reference) and result = "calls"
++  or
++  not exists(Call call | call.getFunc() = reference) and
++  exists(Attribute attribute |
++    attribute = reference and
++    attribute.getCtx() instanceof Store
++  ) and result = "writes"
++  or
++  not exists(Call call | call.getFunc() = reference) and
++  exists(Attribute attribute |
++    attribute = reference and
++    attribute.getCtx() instanceof AugStore
++  ) and result = "writes"
++  or
++  not exists(Call call | call.getFunc() = reference) and
++  exists(Name name | name = reference and name.isDefinition()) and
++  result = "writes"
++  or
++  not exists(Call call | call.getFunc() = reference) and
++  not exists(Attribute attribute |
++    attribute = reference and
++    (attribute.getCtx() instanceof Store or attribute.getCtx() instanceof AugStore)
++  ) and
++  not exists(Name name | name = reference and name.isDefinition()) and
++  result = "reads"
++}
++
++/** Match `import module as alias; alias.symbol`. */
++private predicate moduleAttributeReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(Alias imported, ImportExpr importExpr, Name aliasName, Name use, Attribute attribute |
++    imported.getValue() = importExpr and
++    aliasName = imported.getAsname() and
++    use.getVariable() = aliasName.getVariable() and
++    attribute.getObject() = use and
++    evidence = attribute and
++    targetModule = importExpr.getImportedModuleName() and
++    targetSymbol = attribute.getName() and
++    kind = referenceKind(attribute) and
++    bindingForm = "module_alias" and
++    resolution = "resolved"
++  )
++}
++
++/** Match `from package import module as alias; alias.symbol`. */
++private predicate memberModuleAttributeReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(
++    Alias imported, ImportMember member, Name aliasName, Name use,
++    Attribute attribute, string packageName
++  |
++    imported.getValue() = member and
++    aliasName = imported.getAsname() and
++    use.getVariable() = aliasName.getVariable() and
++    attribute.getObject() = use and
++    evidence = attribute and
++    packageName = member.getModule().(ImportExpr).getImportedModuleName() and
++    targetModule = packageName + "." + member.getName() and
++    targetSymbol = attribute.getName() and
++    kind = referenceKind(attribute) and
++    bindingForm = "member_module_alias" and
++    resolution = "resolved"
++  )
++}
++
++/** Match `from module import symbol as alias` at the import site. */
++private predicate directImportReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(Alias imported, ImportMember member |
++    imported.getValue() = member and
++    evidence = member and
++    targetModule = member.getModule().(ImportExpr).getImportedModuleName() and
++    targetSymbol = member.getName() and
++    kind = "imports" and
++    bindingForm = "symbol_import" and
++    resolution = "resolved"
++  )
++}
++
++/** Match a use of `from module import symbol as alias`. */
++private predicate directSymbolReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(Alias imported, ImportMember member, Name aliasName, Name use |
++    imported.getValue() = member and
++    aliasName = imported.getAsname() and
++    use.getVariable() = aliasName.getVariable() and
++    use != aliasName and
++    evidence = use and
++    targetModule = member.getModule().(ImportExpr).getImportedModuleName() and
++    targetSymbol = member.getName() and
++    kind = referenceKind(use) and
++    bindingForm = "symbol_alias" and
++    resolution = "resolved"
++  )
++}
++
++/** Match a target-module star import, whose selected symbol is unknown. */
++private predicate starImportReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(ImportStar star |
++    evidence = star.getModuleExpr() and
++    targetModule = star.getModuleExpr().getImportedModuleName() and
++    targetSymbol = "*" and
++    kind = "reads" and
++    bindingForm = "star_import" and
++    resolution = "unresolved"
++  )
++}
++
++/** Match `getattr(module_alias, value)`, whose selected symbol is dynamic. */
++private predicate dynamicAttributeReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(
++    Alias imported, ImportExpr importExpr, Name aliasName, Name use,
++    Call call, Name getattrName
++  |
++    imported.getValue() = importExpr and
++    aliasName = imported.getAsname() and
++    use.getVariable() = aliasName.getVariable() and
++    call.getFunc() = getattrName and
++    getattrName.getId() = "getattr" and
++    call.getPositionalArg(0) = use and
++    evidence = call and
++    targetModule = importExpr.getImportedModuleName() and
++    targetSymbol = "*" and
++    kind = "reads" and
++    bindingForm = "dynamic_attribute" and
++    resolution = "unresolved"
++  )
++}
++
++/** Match dynamic lookup through `from package import module as alias`. */
++private predicate dynamicMemberAttributeReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(
++    Alias imported, ImportMember member, Name aliasName, Name use,
++    Call call, Name getattrName, string packageName
++  |
++    imported.getValue() = member and
++    aliasName = imported.getAsname() and
++    use.getVariable() = aliasName.getVariable() and
++    call.getFunc() = getattrName and
++    getattrName.getId() = "getattr" and
++    call.getPositionalArg(0) = use and
++    evidence = call and
++    packageName = member.getModule().(ImportExpr).getImportedModuleName() and
++    targetModule = packageName + "." + member.getName() and
++    targetSymbol = "*" and
++    kind = "reads" and
++    bindingForm = "dynamic_member_attribute" and
++    resolution = "unresolved"
++  )
++}
++
++/** Match a write that changes the meaning of an imported module alias. */
++private predicate moduleAliasRebindingReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(Alias imported, ImportExpr importExpr, Name aliasName, Name definition |
++    imported.getValue() = importExpr and
++    aliasName = imported.getAsname() and
++    definition.getVariable() = aliasName.getVariable() and
++    definition != aliasName and
++    definition.isDefinition() and
++    evidence = definition and
++    targetModule = importExpr.getImportedModuleName() and
++    targetSymbol = "*" and
++    kind = "writes" and
++    bindingForm = "alias_rebinding" and
++    resolution = "unresolved"
++  )
++}
++
++/** Match a write that changes the meaning of a directly imported symbol. */
++private predicate symbolAliasRebindingReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  exists(Alias imported, ImportMember member, Name aliasName, Name definition |
++    imported.getValue() = member and
++    aliasName = imported.getAsname() and
++    definition.getVariable() = aliasName.getVariable() and
++    definition != aliasName and
++    definition.isDefinition() and
++    evidence = definition and
++    targetModule = member.getModule().(ImportExpr).getImportedModuleName() and
++    targetSymbol = member.getName() and
++    kind = "writes" and
++    bindingForm = "alias_rebinding" and
++    resolution = "unresolved"
++  )
++}
++
++private predicate transitionReference(
++  Expr evidence,
++  string targetModule,
++  string targetSymbol,
++  string kind,
++  string bindingForm,
++  string resolution
++) {
++  moduleAttributeReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  memberModuleAttributeReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  directImportReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  directSymbolReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  starImportReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  dynamicAttributeReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  dynamicMemberAttributeReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  moduleAliasRebindingReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++  or
++  symbolAliasRebindingReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  )
++}
++
++from AstNode source, AstNode sourceBinding, Expr evidence,
++  string targetModule, string targetSymbol, string kind,
++  string bindingForm, string resolution
++where
++  transitionReference(
++    evidence, targetModule, targetSymbol, kind, bindingForm, resolution
++  ) and
++  referenceOwner(evidence, source, sourceBinding)
++select source.getLocation().getFile().getRelativePath(),
++  sourceBinding.getLocation().getStartLine(), sourceBinding.getLocation().getStartColumn(),
++  targetModule, targetSymbol, kind,
++  evidence.getLocation().getFile().getRelativePath(),
++  evidence.getLocation().getStartLine(), evidence.getLocation().getStartColumn(),
++  bindingForm, resolution
+diff --git a/tools/codeql/viper-python-impact/qlpack.yml b/tools/codeql/viper-python-impact/qlpack.yml
+index 0a022f8..dab539d 100644
+--- a/tools/codeql/viper-python-impact/qlpack.yml
++++ b/tools/codeql/viper-python-impact/qlpack.yml
+@@ -1,4 +1,4 @@
+ name: viper/python-impact
+-version: 1.1.0
++version: 1.2.0
+ dependencies:
+   codeql/python-all: 7.2.4
+diff --git a/tools/codeql/viper-python-impact/rename-facts.qls b/tools/codeql/viper-python-impact/rename-facts.qls
+new file mode 100644
+index 0000000..b12ab83
+--- /dev/null
++++ b/tools/codeql/viper-python-impact/rename-facts.qls
+@@ -0,0 +1,3 @@
++- query: Declarations.ql
++- query: Dependencies.ql
++- query: RenameTransitions.ql

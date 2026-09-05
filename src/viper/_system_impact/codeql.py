@@ -11,7 +11,7 @@ import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -30,6 +30,7 @@ from ..system_impact.models import (
     SourceGraphFormat,
     SourceNode,
     SourceNodeKind,
+    SourceReference,
     SourceSnapshot,
     stage_key,
 )
@@ -620,7 +621,7 @@ def _load_edges(
     sources: dict[str, bytes] = {}
     edges: dict[str, SourceEdge] = {}
     for row in rows:
-        if len(row) != 9:
+        if len(row) != 10:
             raise CodeQLAnalysisError("CodeQL emitted a malformed dependency row")
 
         source_path = str(row[0])
@@ -655,7 +656,14 @@ def _load_edges(
         if kind not in _EDGE_KINDS:
             raise CodeQLAnalysisError(f"CodeQL emitted an unknown edge kind: {kind}")
         payload = json.dumps(
-            [source.node_id, kind, target.node_id, str(row[7]), int(row[8])],
+            [
+                source.node_id,
+                kind,
+                target.node_id,
+                str(row[7]),
+                int(row[8]),
+                int(row[9]),
+            ],
             separators=(",", ":"),
         ).encode()
         edge_id = hashlib.sha256(payload).hexdigest()
@@ -667,8 +675,87 @@ def _load_edges(
             query="viper/python-impact/dependencies",
             path=str(row[7]),
             line=int(row[8]),
+            column=_codeql_byte_col(
+                sources.setdefault(str(row[7]), (root / str(row[7])).read_bytes()),
+                int(row[8]),
+                int(row[9]),
+            ),
         )
     return tuple(sorted(edges.values(), key=lambda edge: edge.edge_id))
+
+
+def _load_references(
+    root: Path,
+    rows: list[list[Any]],
+    nodes: tuple[SourceNode, ...],
+) -> tuple[SourceReference, ...]:
+    """Join import-bound reference rows to their containing declarations."""
+    index = {
+        (node.path, node.binding_start_line, node.binding_start_col): node
+        for node in nodes
+    }
+    sources: dict[str, bytes] = {}
+    references: dict[str, SourceReference] = {}
+    for row in rows:
+        if len(row) != 11:
+            raise CodeQLAnalysisError("CodeQL emitted a malformed reference row")
+        source_path = str(row[0])
+        evidence_path = str(row[6])
+        if any(
+            part in IGNORED_PARTS
+            for path in (source_path, evidence_path)
+            for part in Path(path).parts
+        ):
+            continue
+        owner = _edge_node(
+            root,
+            index,
+            sources,
+            source_path,
+            int(row[1]),
+            int(row[2]),
+        )
+        kind = str(row[5])
+        if kind not in _EDGE_KINDS:
+            raise CodeQLAnalysisError(
+                f"CodeQL emitted an unknown reference kind: {kind}"
+            )
+        if evidence_path not in sources:
+            path = root / evidence_path
+            if not path.is_file() or path.suffix != ".py":
+                raise CodeQLAnalysisError(
+                    f"CodeQL reference path is absent: {evidence_path}"
+                )
+            sources[evidence_path] = path.read_bytes()
+        column = _codeql_byte_col(sources[evidence_path], int(row[7]), int(row[8]))
+        payload = json.dumps(
+            [
+                owner.node_id,
+                str(row[3]),
+                str(row[4]),
+                kind,
+                evidence_path,
+                int(row[7]),
+                column,
+                str(row[9]),
+                str(row[10]),
+            ],
+            separators=(",", ":"),
+        ).encode()
+        reference_id = hashlib.sha256(payload).hexdigest()
+        references[reference_id] = SourceReference(
+            reference_id=reference_id,
+            source=owner.node_id,
+            target_module=str(row[3]),
+            target_symbol=str(row[4]),
+            kind=cast(EdgeKind, kind),
+            path=evidence_path,
+            line=int(row[7]),
+            column=column,
+            binding_form=str(row[9]),
+            resolution=cast(Literal["resolved", "unresolved"], str(row[10])),
+        )
+    return tuple(sorted(references.values(), key=lambda item: item.reference_id))
 
 
 def _check_extraction(
@@ -735,10 +822,16 @@ def _extract_database(
     extraction: CodeQLExtractionSpec,
     executable: Path,
     cache_root: Path,
+    overlay_base: bool = False,
 ) -> _DatabaseStage:
     """Create or reuse the database selected by the source and extraction spec."""
     commands, stderr_parts = _check_extraction(root, executable, extraction)
-    key = stage_key(snapshot, extraction)
+    mode = "overlay_base" if overlay_base else "full"
+    key = (
+        stage_key(snapshot, extraction, mode)
+        if overlay_base
+        else stage_key(snapshot, extraction)
+    )
     stage_root = cache_root / "databases" / key
     database = stage_root / "database"
     receipt_path = stage_root / "receipt.json"
@@ -753,6 +846,7 @@ def _extract_database(
         receipt is not None
         and receipt.snapshot == snapshot
         and receipt.extraction == extraction
+        and receipt.mode == mode
         and receipt.key == key
         and receipt.exit_code == 0
         and receipt.sha256 == cached_sha256
@@ -770,6 +864,8 @@ def _extract_database(
         f"--language={extraction.language}",
         f"--build-mode={extraction.build_mode}",
         f"--source-root={root}",
+        "--threads=0",
+        *(("--overlay-base",) if overlay_base else ()),
         "--overwrite",
     )
     _, create_stderr = _run(create_command, cwd=root)
@@ -778,6 +874,112 @@ def _extract_database(
         extraction=extraction,
         key=key,
         sha256=_database_digest(database),
+        mode=mode,
+        commands=(*commands, create_command),
+        exit_code=0,
+        stderr_sha256=_hash_parts((*stderr_parts, b"database-create", create_stderr)),
+    )
+    _write_receipt(receipt_path, receipt)
+    return _DatabaseStage(path=database, receipt=receipt)
+
+
+def _source_manifest(root: Path) -> dict[str, str]:
+    """Map each analyzed Python path to its exact content digest."""
+    return {
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in _python_files(root)
+    }
+
+
+def _extract_overlay_database(
+    root: Path,
+    *,
+    baseline_root: Path,
+    baseline: DatabaseReceipt,
+    snapshot: SourceSnapshot,
+    extraction: CodeQLExtractionSpec,
+    executable: Path,
+    cache_root: Path,
+) -> _DatabaseStage:
+    """Create or reuse a candidate overlay over a verified baseline database."""
+    commands, stderr_parts = _check_extraction(root, executable, extraction)
+    if baseline.mode != "overlay_base" or baseline.extraction != extraction:
+        raise CodeQLAnalysisError("overlay requires a matching overlay-base receipt")
+    base_path = cache_root / "databases" / baseline.key / "database"
+    if not base_path.is_dir() or _database_digest(base_path) != baseline.sha256:
+        raise CodeQLAnalysisError("overlay-base database is absent or corrupted")
+    before = _source_manifest(baseline_root)
+    after = _source_manifest(root)
+    changes = tuple(
+        sorted(
+            path
+            for path in before.keys() | after.keys()
+            if before.get(path) != after.get(path)
+        )
+    )
+    changes_bytes = json.dumps(
+        {"changes": changes}, sort_keys=True, separators=(",", ":")
+    ).encode()
+    changes_sha256 = hashlib.sha256(changes_bytes).hexdigest()
+    key = stage_key(
+        snapshot,
+        extraction,
+        "overlay",
+        baseline.key,
+        baseline.sha256,
+        changes_sha256,
+    )
+    stage_root = cache_root / "databases" / key
+    database = stage_root / "database"
+    receipt_path = stage_root / "receipt.json"
+    receipt = _load_database_receipt(receipt_path)
+    cached_sha256 = None
+    if database.is_dir():
+        try:
+            cached_sha256 = _database_digest(database)
+        except CodeQLAnalysisError:
+            pass
+    if (
+        receipt is not None
+        and receipt.snapshot == snapshot
+        and receipt.extraction == extraction
+        and receipt.mode == "overlay"
+        and receipt.base_database_key == baseline.key
+        and receipt.base_database_sha256 == baseline.sha256
+        and receipt.changes_sha256 == changes_sha256
+        and receipt.key == key
+        and receipt.sha256 == cached_sha256
+    ):
+        return _DatabaseStage(path=database, receipt=receipt)
+
+    if stage_root.exists():
+        shutil.rmtree(stage_root)
+    stage_root.mkdir(parents=True)
+    shutil.copytree(base_path, database)
+    changes_path = stage_root / "changes.json"
+    changes_path.write_bytes(changes_bytes)
+    create_command = (
+        str(executable),
+        "database",
+        "create",
+        str(database),
+        f"--language={extraction.language}",
+        f"--build-mode={extraction.build_mode}",
+        f"--source-root={root}",
+        f"--overlay-changes={changes_path}",
+        "--threads=0",
+        "--quiet",
+    )
+    _, create_stderr = _run(create_command, cwd=root)
+    receipt = DatabaseReceipt(
+        snapshot=snapshot,
+        extraction=extraction,
+        key=key,
+        sha256=_database_digest(database),
+        mode="overlay",
+        base_database_key=baseline.key,
+        base_database_sha256=baseline.sha256,
+        changes_sha256=changes_sha256,
         commands=(*commands, create_command),
         exit_code=0,
         stderr_sha256=_hash_parts((*stderr_parts, b"database-create", create_stderr)),
@@ -966,6 +1168,7 @@ def _lower_graph(
     try:
         declaration_rows = decoded["Declarations"]
         dependency_rows = decoded["Dependencies"]
+        reference_rows = decoded.get("RenameTransitions", [])
     except KeyError as error:
         raise CodeQLAnalysisError(
             "query suite must produce Declarations and Dependencies results"
@@ -973,12 +1176,16 @@ def _lower_graph(
 
     nodes = _load_nodes(root, declaration_rows)
     edges = _load_edges(root, dependency_rows, nodes)
+    references = _load_references(root, reference_rows, nodes)
+    graph_rows = {
+        "nodes": [node.model_dump(mode="json") for node in nodes],
+        "edges": [edge.model_dump(mode="json") for edge in edges],
+    }
+    if references:
+        graph_rows["references"] = [item.model_dump(mode="json") for item in references]
     graph_sha256 = hashlib.sha256(
         json.dumps(
-            {
-                "nodes": [node.model_dump(mode="json") for node in nodes],
-                "edges": [edge.model_dump(mode="json") for edge in edges],
-            },
+            graph_rows,
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
@@ -997,6 +1204,7 @@ def _lower_graph(
         snapshot=snapshot,
         nodes=nodes,
         edges=edges,
+        references=references,
         receipt=CodeQLAnalysisReceipt(
             database=database,
             query=results.receipt,
@@ -1021,6 +1229,7 @@ def analyze_source(
     query_pack: Path,
     cache_root: Path,
     artifact_root: Path | None = None,
+    overlay_base: bool = False,
 ) -> SourceGraph:
     """Extract, query, and lower one exact Python source tree."""
     root = snapshot_root.resolve()
@@ -1041,6 +1250,72 @@ def analyze_source(
     suite = _check_query_pack(query_pack, query)
     database = _extract_database(
         root,
+        snapshot=snapshot,
+        extraction=extraction,
+        executable=codeql_executable,
+        cache_root=resolved_cache,
+        overlay_base=overlay_base,
+    )
+    results = _run_query_suite(
+        root,
+        database=database,
+        query=query,
+        suite=suite,
+        executable=codeql_executable,
+        cache_root=resolved_cache,
+    )
+    return _lower_graph(
+        root,
+        snapshot=snapshot,
+        extraction=extraction,
+        query=query,
+        format=format,
+        database=database.receipt,
+        results=results,
+        executable=codeql_executable,
+        cache_root=resolved_cache,
+        artifact_root=resolved_artifacts,
+    )
+
+
+def analyze_overlay_source(
+    snapshot_root: Path,
+    *,
+    baseline_root: Path,
+    baseline_graph: SourceGraph,
+    snapshot: SourceSnapshot,
+    extraction: CodeQLExtractionSpec,
+    query: CodeQLQuerySpec,
+    format: SourceGraphFormat,
+    codeql_executable: Path,
+    query_pack: Path,
+    cache_root: Path,
+    artifact_root: Path | None = None,
+) -> SourceGraph:
+    """Analyze a candidate by extracting only files changed from its baseline."""
+    root = snapshot_root.resolve()
+    base_root = baseline_root.resolve()
+    resolved_cache = cache_root.resolve()
+    resolved_artifacts = None if artifact_root is None else artifact_root.resolve()
+    if source_digest(root) != snapshot.source_sha256:
+        raise CodeQLAnalysisError(
+            "SourceSnapshot.source_sha256 does not match source bytes"
+        )
+    if source_digest(base_root) != baseline_graph.snapshot.source_sha256:
+        raise CodeQLAnalysisError("overlay baseline graph differs from source bytes")
+    if format.lowering_sha256 != lowering_digest():
+        raise CodeQLAnalysisError(
+            "SourceGraphFormat lowering digest differs from loaded assets"
+        )
+    if resolved_cache.is_relative_to(root) or resolved_cache.is_relative_to(base_root):
+        raise CodeQLAnalysisError("CodeQL cache must be outside the source trees")
+    if resolved_artifacts is not None and resolved_artifacts.is_relative_to(root):
+        raise CodeQLAnalysisError("CodeQL artifacts must be outside the source tree")
+    suite = _check_query_pack(query_pack, query)
+    database = _extract_overlay_database(
+        root,
+        baseline_root=base_root,
+        baseline=baseline_graph.receipt.database,
         snapshot=snapshot,
         extraction=extraction,
         executable=codeql_executable,
@@ -1072,6 +1347,7 @@ __all__ = [
     "CodeQLAnalysisError",
     "IGNORED_PARTS",
     "analyze_source",
+    "analyze_overlay_source",
     "lowering_digest",
     "resolve_analysis_specs",
     "source_digest",

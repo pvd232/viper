@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import ast
 import hashlib
 from pathlib import Path, PurePosixPath
-from typing import Literal, Protocol
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -31,17 +30,11 @@ RenameTransitionStatus = Literal[
 ]
 ReferenceKind = Literal["imports", "calls", "reads", "writes"]
 _SUPPORTED_EDGE_KINDS = frozenset({"imports", "calls", "reads", "writes"})
+_MODULE_IMPORTS_SYMBOL = "<module imports>"
 
 
 class RenameAnalysisError(ValueError):
     """Report an input that cannot support an exact rename decision."""
-
-
-class _Located(Protocol):
-    """Expose the source coordinates shared by reference-bearing AST nodes."""
-
-    lineno: int
-    col_offset: int
 
 
 class RenameSpec(ProtocolModel):
@@ -66,11 +59,9 @@ class RenameSpec(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_targets(self) -> RenameSpec:
-        """Require a top-level rename within one Python module."""
+        """Require two distinct top-level Python declarations."""
         if self.old_target == self.new_target:
             raise ValueError("RenameSpec targets must differ")
-        if self.old_target.path != self.new_target.path:
-            raise ValueError("RenameSpec targets must share one source path")
         if "." in self.old_target.symbol or "." in self.new_target.symbol:
             raise ValueError("RenameSpec supports top-level declarations")
         return self
@@ -205,20 +196,6 @@ class RenameCheck(ProtocolModel):
         return self
 
 
-class _Bindings(ProtocolModel):
-    """Store import bindings used by one parsed Python module."""
-
-    module_aliases: dict[str, str] = Field(
-        description="Local names bound to target-relevant module identities."
-    )
-    symbol_aliases: dict[str, tuple[str, str]] = Field(
-        description="Local names bound to target-relevant module symbols."
-    )
-    unresolved: tuple[str, ...] = Field(
-        description="Target-relevant bindings whose meaning remains ambiguous."
-    )
-
-
 def rename_checker_digest() -> str:
     """Hash the loaded implementation that compiles and checks obligations."""
     return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -238,207 +215,6 @@ def _module_name(path: str) -> str:
     if not parts:
         raise RenameAnalysisError(f"rename target has no importable module: {path}")
     return ".".join(parts)
-
-
-def _resolve_from_module(path: str, module: str | None, level: int) -> str:
-    """Resolve one absolute or relative ``from`` import."""
-    if level == 0:
-        return module or ""
-    current = _module_name(path).split(".")[:-1]
-    keep = len(current) - (level - 1)
-    if keep < 0:
-        return ""
-    prefix = current[:keep]
-    if module:
-        prefix.extend(module.split("."))
-    return ".".join(prefix)
-
-
-def _bindings(
-    tree: ast.Module,
-    path: str,
-    target_modules: frozenset[str],
-    owner: SourceNode,
-) -> _Bindings:
-    """Collect target-relevant bindings and conservative unresolved constructs."""
-    module_aliases: dict[str, str] = {}
-    symbol_aliases: dict[str, tuple[str, str]] = {}
-    unresolved: list[str] = []
-    parents = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
-
-    def affects_owner(node: ast.AST) -> bool:
-        if _inside(node, owner):
-            return True
-        current = node
-        while current in parents:
-            current = parents[current]
-            if isinstance(
-                current,
-                (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
-            ):
-                return False
-        return True
-
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                local = alias.asname or alias.name.split(".")[0]
-                if alias.name in target_modules:
-                    module_aliases[local] = alias.name
-        elif isinstance(node, ast.ImportFrom):
-            origin = _resolve_from_module(path, node.module, node.level)
-            for alias in node.names:
-                if alias.name == "*" and origin in target_modules:
-                    unresolved.append(
-                        f"{path}:{node.lineno}: target module star import"
-                    )
-                    continue
-                local = alias.asname or alias.name
-                imported_module = f"{origin}.{alias.name}" if origin else alias.name
-                if imported_module in target_modules:
-                    module_aliases[local] = imported_module
-                if origin in target_modules:
-                    symbol_aliases[local] = (origin, alias.name)
-    bound = set(module_aliases) | set(symbol_aliases)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.func.id == "getattr" and len(node.args) >= 2:
-                base = node.args[0]
-                name = node.args[1]
-                if (
-                    isinstance(base, ast.Name)
-                    and base.id in module_aliases
-                    and isinstance(name, ast.Constant)
-                    and isinstance(name.value, str)
-                    and affects_owner(node)
-                ):
-                    unresolved.append(
-                        f"{path}:{node.lineno}: dynamic target attribute lookup"
-                    )
-        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
-            targets: list[ast.AST]
-            if isinstance(node, ast.Assign):
-                targets = list(node.targets)
-            else:
-                targets = [node.target]
-            names = {
-                child.id
-                for target in targets
-                for child in ast.walk(target)
-                if isinstance(child, ast.Name)
-            }
-            for name in sorted(names & bound):
-                if affects_owner(node):
-                    unresolved.append(
-                        f"{path}:{node.lineno}: target alias {name!r} rebound"
-                    )
-    return _Bindings(
-        module_aliases=module_aliases,
-        symbol_aliases=symbol_aliases,
-        unresolved=tuple(sorted(set(unresolved))),
-    )
-
-
-def _inside(node: object, owner: SourceNode) -> bool:
-    """Return whether one AST node begins inside a SourceNode declaration."""
-    line = getattr(node, "lineno", 0)
-    column = getattr(node, "col_offset", -1)
-    return (
-        (owner.start_line, owner.start_col)
-        <= (line, column)
-        < (
-            owner.end_line,
-            owner.end_col,
-        )
-    )
-
-
-def _site(
-    *, dependent: RepoSymbolRef, kind: ReferenceKind, path: str, node: _Located
-) -> ReferenceSite:
-    """Convert one AST occurrence into a stable reference site."""
-    return ReferenceSite(
-        dependent=dependent,
-        kind=kind,
-        path=path,
-        line=node.lineno,
-        column=node.col_offset,
-    )
-
-
-def _scan_dependent(
-    *,
-    root: Path,
-    owner: SourceNode,
-    target: RepoSymbolRef,
-    target_modules: frozenset[str],
-) -> tuple[tuple[ReferenceSite, ...], tuple[str, ...]]:
-    """Find target references inside one represented declaration."""
-    path = str(owner.path)
-    source = (root / path).read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=path, type_comments=True)
-    bindings = _bindings(tree, path, target_modules, owner)
-    parents = {
-        child: parent
-        for parent in ast.walk(tree)
-        for child in ast.iter_child_nodes(parent)
-    }
-    target_module = _module_name(str(target.path))
-    dependent = RepoSymbolRef(path=owner.path, symbol=owner.symbol)
-    sites: dict[tuple[str, int, int], ReferenceSite] = {}
-
-    def record(kind: ReferenceKind, node: _Located) -> None:
-        if _inside(node, owner):
-            site = _site(dependent=dependent, kind=kind, path=path, node=node)
-            sites[(kind, site.line, site.column)] = site
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            origin = _resolve_from_module(path, node.module, node.level)
-            if origin == target_module:
-                for alias in node.names:
-                    if alias.name == target.symbol:
-                        record("imports", alias)
-            elif target_module == f"{origin}.{target.symbol}":
-                for alias in node.names:
-                    if alias.name == target.symbol:
-                        record("imports", alias)
-            continue
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            if (
-                bindings.module_aliases.get(node.value.id) == target_module
-                and node.attr == target.symbol
-            ):
-                parent = parents.get(node)
-                parent_is_call = isinstance(parent, ast.Call) and parent.func is node
-                if parent_is_call:
-                    record("calls", node)
-                elif isinstance(node.ctx, ast.Store):
-                    record("writes", node)
-                else:
-                    record("reads", node)
-        elif isinstance(node, ast.Name):
-            imported = bindings.symbol_aliases.get(node.id)
-            if imported != (target_module, target.symbol):
-                continue
-            parent = parents.get(node)
-            parent_is_call = isinstance(parent, ast.Call) and parent.func is node
-            if parent_is_call:
-                record("calls", node)
-            elif isinstance(node.ctx, ast.Store):
-                record("writes", node)
-            elif isinstance(node.ctx, ast.Load):
-                record("reads", node)
-    return (
-        tuple(
-            sorted(sites.values(), key=lambda item: (item.kind, item.line, item.column))
-        ),
-        bindings.unresolved,
-    )
 
 
 def _node_index(graph: SourceGraph) -> dict[str, SourceNode]:
@@ -474,47 +250,98 @@ def compile_rename_obligations(
     if old_node is None:
         raise RenameAnalysisError("baseline graph does not contain the old target")
     nodes = _node_index(graph)
-    selected: dict[tuple[str, ReferenceKind], SourceNode] = {}
+    selected: dict[
+        tuple[RepoSymbolRef, ReferenceKind],
+        dict[tuple[str, int, int], ReferenceSite],
+    ] = {}
+
+    def add_site(
+        dependent: RepoSymbolRef, kind: ReferenceKind, site: ReferenceSite
+    ) -> None:
+        """Add one exact occurrence without duplicating overlapping queries."""
+        selected.setdefault((dependent, kind), {})[
+            (str(site.path), site.line, site.column)
+        ] = site
+
     for edge in graph.edges:
         if edge.target != old_node.node_id or edge.kind not in spec.edge_kinds:
             continue
         if edge.kind not in _SUPPORTED_EDGE_KINDS:
             raise RenameAnalysisError(f"unsupported rename edge kind: {edge.kind}")
-        selected[(edge.source, edge.kind)] = nodes[edge.source]
+        owner = nodes[edge.source]
+        reference_kind = edge.kind
+        dependent = (
+            RepoSymbolRef(path=edge.path, symbol=_MODULE_IMPORTS_SYMBOL)
+            if reference_kind == "imports"
+            else RepoSymbolRef(path=owner.path, symbol=owner.symbol)
+        )
+        site = ReferenceSite(
+            dependent=dependent,
+            kind=reference_kind,
+            path=edge.path,
+            line=edge.line,
+            column=edge.column,
+        )
+        add_site(dependent, reference_kind, site)
+    old_module = _module_name(str(spec.old_target.path))
+    unresolved = [
+        item
+        for item in graph.references
+        if item.resolution == "unresolved" and item.target_module == old_module
+    ]
+    if unresolved:
+        rendered = "; ".join(
+            f"{item.path}:{item.line}: {item.binding_form}" for item in unresolved
+        )
+        raise RenameAnalysisError(
+            f"baseline binding analysis is unresolved: {rendered}"
+        )
+    for reference in graph.references:
+        if (
+            reference.resolution != "resolved"
+            or reference.target_module != old_module
+            or reference.target_symbol != spec.old_target.symbol
+            or reference.kind not in spec.edge_kinds
+            or reference.kind not in _SUPPORTED_EDGE_KINDS
+        ):
+            continue
+        owner = nodes[reference.source]
+        kind = reference.kind
+        dependent = (
+            RepoSymbolRef(path=reference.path, symbol=_MODULE_IMPORTS_SYMBOL)
+            if kind == "imports"
+            else RepoSymbolRef(path=owner.path, symbol=owner.symbol)
+        )
+        add_site(
+            dependent,
+            kind,
+            ReferenceSite(
+                dependent=dependent,
+                kind=kind,
+                path=reference.path,
+                line=reference.line,
+                column=reference.column,
+            ),
+        )
     if not selected:
         raise RenameAnalysisError("baseline graph contains no governed references")
 
-    target_modules = frozenset({_module_name(str(spec.old_target.path))})
     obligations: list[RenameObligation] = []
-    unresolved: list[str] = []
-    scans: dict[str, tuple[tuple[ReferenceSite, ...], tuple[str, ...]]] = {}
-    for (_node_id, kind), owner in sorted(
-        selected.items(), key=lambda item: (item[1].path, item[1].symbol, item[0][1])
+    for (dependent, kind), sites in sorted(
+        selected.items(),
+        key=lambda item: (
+            item[0][0].path,
+            item[0][0].symbol,
+            item[0][1],
+        ),
     ):
-        if owner.node_id not in scans:
-            scans[owner.node_id] = _scan_dependent(
-                root=root,
-                owner=owner,
-                target=spec.old_target,
-                target_modules=target_modules,
-            )
-        sites, failures = scans[owner.node_id]
-        unresolved.extend(failures)
-        matching = tuple(site for site in sites if site.kind == kind)
-        if not matching:
-            unresolved.append(
-                f"{owner.path}:{owner.symbol}: CodeQL {kind} edge has no exact site"
-            )
-            continue
         obligations.append(
             RenameObligation(
-                dependent=RepoSymbolRef(path=owner.path, symbol=owner.symbol),
+                dependent=dependent,
                 kind=kind,
-                baseline_sites=matching,
+                baseline_sites=tuple(sites.values()),
             )
         )
-    if unresolved:
-        raise RenameAnalysisError("; ".join(sorted(set(unresolved))))
     receipt = graph.receipt
     return RenameObligationSet(
         spec=spec,
@@ -548,15 +375,12 @@ def _transition(
             f"candidate has {len(new_sites)} replacement(s); "
             f"baseline requires {len(obligation.baseline_sites)}"
         )
-    elif len(new_sites) != len(obligation.baseline_sites):
-        status = "occurrence_mismatch"
-        message = (
-            f"candidate has {len(new_sites)} replacement(s); "
-            f"baseline requires {len(obligation.baseline_sites)}"
-        )
     else:
         status = "satisfied"
-        message = f"candidate replaces all {len(new_sites)} governed reference(s)"
+        message = (
+            f"candidate has {len(new_sites)} replacement(s) for "
+            f"{len(obligation.baseline_sites)} governed reference(s)"
+        )
     return DependencyTransition(
         obligation=obligation,
         candidate_old_sites=old_sites,
@@ -589,20 +413,14 @@ def check_rename_obligations(
         )
 
     nodes = {(node.path, node.symbol): node for node in graph.nodes}
-    target_modules = frozenset({_module_name(str(obligations.spec.old_target.path))})
-    scans: dict[
-        tuple[str, str],
-        tuple[tuple[ReferenceSite, ...], tuple[ReferenceSite, ...], tuple[str, ...]],
-    ] = {}
+    old_module = _module_name(str(obligations.spec.old_target.path))
+    new_module = _module_name(str(obligations.spec.new_target.path))
     all_unresolved: list[str] = []
     transitions: list[DependencyTransition] = []
     for obligation in obligations.obligations:
-        key = (
-            str(obligation.dependent.path),
-            obligation.dependent.symbol,
-        )
+        module_imports = obligation.dependent.symbol == _MODULE_IMPORTS_SYMBOL
         owner = nodes.get((obligation.dependent.path, obligation.dependent.symbol))
-        if owner is None:
+        if owner is None and not module_imports:
             transitions.append(
                 _transition(
                     obligation,
@@ -612,32 +430,59 @@ def check_rename_obligations(
                 )
             )
             continue
-        if key not in scans:
-            old_sites, old_unresolved = _scan_dependent(
-                root=root,
-                owner=owner,
-                target=obligations.spec.old_target,
-                target_modules=target_modules,
+        relevant = [
+            item
+            for item in graph.references
+            if (
+                item.path == obligation.dependent.path
+                if module_imports
+                else owner is not None and item.source == owner.node_id
             )
-            new_sites, new_unresolved = _scan_dependent(
-                root=root,
-                owner=owner,
-                target=obligations.spec.new_target,
-                target_modules=target_modules,
+        ]
+        failures = tuple(
+            sorted(
+                {
+                    f"{item.path}:{item.line}: {item.binding_form}"
+                    for item in relevant
+                    if item.resolution == "unresolved"
+                    and item.target_module in {old_module, new_module}
+                }
             )
-            failures = tuple(sorted(set((*old_unresolved, *new_unresolved))))
-            scans[key] = (old_sites, new_sites, failures)
-        old_sites, new_sites, failures = scans[key]
+        )
+        old_sites = tuple(
+            ReferenceSite(
+                dependent=obligation.dependent,
+                kind=obligation.kind,
+                path=item.path,
+                line=item.line,
+                column=item.column,
+            )
+            for item in relevant
+            if item.resolution == "resolved"
+            and item.target_module == old_module
+            and item.target_symbol == obligations.spec.old_target.symbol
+            and item.kind == obligation.kind
+        )
+        new_sites = tuple(
+            ReferenceSite(
+                dependent=obligation.dependent,
+                kind=obligation.kind,
+                path=item.path,
+                line=item.line,
+                column=item.column,
+            )
+            for item in relevant
+            if item.resolution == "resolved"
+            and item.target_module == new_module
+            and item.target_symbol == obligations.spec.new_target.symbol
+            and item.kind == obligation.kind
+        )
         all_unresolved.extend(failures)
         transitions.append(
             _transition(
                 obligation,
-                old_sites=tuple(
-                    site for site in old_sites if site.kind == obligation.kind
-                ),
-                new_sites=tuple(
-                    site for site in new_sites if site.kind == obligation.kind
-                ),
+                old_sites=old_sites,
+                new_sites=new_sites,
                 unresolved=bool(failures),
             )
         )

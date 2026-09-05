@@ -1885,6 +1885,9 @@ elif args[:2] == ["database", "run-queries"]:
     results.mkdir(parents=True)
     (results / "Declarations.bqrs").write_text("Declarations", encoding="utf-8")
     (results / "Dependencies.bqrs").write_text("Dependencies", encoding="utf-8")
+    (results / "RenameTransitions.bqrs").write_text(
+        "RenameTransitions", encoding="utf-8"
+    )
 elif args[:2] == ["bqrs", "decode"]:
     query = Path(args[2]).read_text(encoding="utf-8")
     if query == "Declarations":
@@ -1892,9 +1895,11 @@ elif args[:2] == ["bqrs", "decode"]:
             ["src/example.py", "dependency", "function", 1, 1],
             ["src/example.py", "dependent", "function", 4, 1],
         ]
-    else:
+    elif query == "Dependencies":
         rows = [["src/example.py", 4, 1, "src/example.py", 1, 1,
-                 "calls", "src/example.py", 5]]
+                 "calls", "src/example.py", 5, 12]]
+    else:
+        rows = []
     Path(option("--output=")).write_text(
         json.dumps({{"#select": {{"tuples": rows}}}}),
         encoding="utf-8",
@@ -1969,7 +1974,7 @@ def test_load_edges_uses_exact_binding_locations(tmp_path: Path) -> None:
             ["imports.py", "C", "import", 1, 18],
         ],
     )
-    rows = [["imports.py", 1, 15, "imports.py", 1, 18, "reads", "use.py", 4]]
+    rows = [["imports.py", 1, 15, "imports.py", 1, 18, "reads", "imports.py", 1, 1]]
 
     edges = _load_edges(tmp_path, rows, nodes)
 
@@ -1996,7 +2001,7 @@ def _sig02_specs(
             extractor_sha256=_tree_digest(extractor),
         ),
         CodeQLQuerySpec(
-            pack="viper/python-impact@1.1.0",
+            pack="viper/python-impact@1.2.0",
             pack_sha256=_tree_digest(query_pack),
             suite="source-facts.qls",
         ),

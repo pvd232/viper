@@ -112,6 +112,22 @@ class DatabaseReceipt(ProtocolModel):
     extraction: CodeQLExtractionSpec = Field(description="Extraction settings used.")
     key: SHA256 = Field(description="Digest of the snapshot and extraction settings.")
     sha256: SHA256 = Field(description="Digest of the extracted database facts.")
+    mode: Literal["full", "overlay_base", "overlay"] = Field(
+        default="full",
+        description="Extraction strategy used to create these facts.",
+    )
+    base_database_key: SHA256 | None = Field(
+        default=None,
+        description="Overlay-base database key, present only for an overlay.",
+    )
+    base_database_sha256: SHA256 | None = Field(
+        default=None,
+        description="Overlay-base fact digest, present only for an overlay.",
+    )
+    changes_sha256: SHA256 | None = Field(
+        default=None,
+        description="Digest of the exact overlay changes manifest.",
+    )
     commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
         min_length=1,
         description="Commands executed to create the database.",
@@ -125,7 +141,40 @@ class DatabaseReceipt(ProtocolModel):
     @model_validator(mode="after")
     def validate_key(self) -> DatabaseReceipt:
         """Require the key derived from this receipt's stage inputs."""
-        if self.key != stage_key(self.snapshot, self.extraction):
+        if self.mode == "full":
+            expected = stage_key(self.snapshot, self.extraction)
+            valid_links = (
+                self.base_database_key is None
+                and self.base_database_sha256 is None
+                and self.changes_sha256 is None
+            )
+        elif self.mode == "overlay_base":
+            expected = stage_key(self.snapshot, self.extraction, self.mode)
+            valid_links = (
+                self.base_database_key is None
+                and self.base_database_sha256 is None
+                and self.changes_sha256 is None
+            )
+        else:
+            expected = stage_key(
+                self.snapshot,
+                self.extraction,
+                self.mode,
+                self.base_database_key,
+                self.base_database_sha256,
+                self.changes_sha256,
+            )
+            valid_links = all(
+                value is not None
+                for value in (
+                    self.base_database_key,
+                    self.base_database_sha256,
+                    self.changes_sha256,
+                )
+            )
+        if not valid_links:
+            raise ValueError("DatabaseReceipt overlay provenance is incomplete")
+        if self.key != expected:
             raise ValueError("DatabaseReceipt key differs from its stage inputs")
         return self
 
@@ -285,6 +334,30 @@ class SourceEdge(ProtocolModel):
         ge=1,
         description="One-based source line containing the use.",
     )
+    column: int = Field(
+        default=0,
+        ge=0,
+        description="Zero-based UTF-8 source column containing the use.",
+    )
+
+
+class SourceReference(ProtocolModel):
+    """Record one import-bound reference without requiring a target declaration."""
+
+    reference_id: SHA256 = Field(description="Digest of the complete reference row.")
+    source: NodeId = Field(description="Declaration containing the reference.")
+    target_module: NonEmptyStr = Field(description="Imported Python module identity.")
+    target_symbol: NonEmptyStr = Field(
+        description="Selected symbol, or an asterisk when selection is dynamic."
+    )
+    kind: EdgeKind = Field(description="Operation performed through the binding.")
+    path: RepoRelPath = Field(description="Source file containing the reference.")
+    line: int = Field(ge=1, description="One-based source line.")
+    column: int = Field(ge=0, description="Zero-based UTF-8 source column.")
+    binding_form: NonEmptyStr = Field(description="Import syntax that bound the name.")
+    resolution: Literal["resolved", "unresolved"] = Field(
+        description="Whether the selected symbol is statically known."
+    )
 
 
 class SourceGraph(ProtocolModel):
@@ -303,6 +376,13 @@ class SourceGraph(ProtocolModel):
     edges: tuple[SourceEdge, ...] = Field(
         description="Edges sorted by stable identifier."
     )
+    references: tuple[SourceReference, ...] = Field(
+        default=(),
+        description=(
+            "Import-bound references retained even when their target declaration "
+            "is absent."
+        ),
+    )
     receipt: CodeQLAnalysisReceipt = Field(
         description="Evidence for extraction, query execution, and graph conversion."
     )
@@ -318,6 +398,14 @@ class SourceGraph(ProtocolModel):
     def order_edges(cls, edges: tuple[SourceEdge, ...]) -> tuple[SourceEdge, ...]:
         """Order edges by their stable identifiers before serialization."""
         return tuple(sorted(edges, key=lambda edge: edge.edge_id))
+
+    @field_validator("references")
+    @classmethod
+    def order_references(
+        cls, references: tuple[SourceReference, ...]
+    ) -> tuple[SourceReference, ...]:
+        """Order references by stable identifier before serialization."""
+        return tuple(sorted(references, key=lambda item: item.reference_id))
 
     @model_validator(mode="after")
     def validate_graph(self) -> SourceGraph:
@@ -335,6 +423,7 @@ class SourceGraph(ProtocolModel):
             for node in self.nodes
         )
         edge_ids = tuple(edge.edge_id for edge in self.edges)
+        reference_ids = tuple(item.reference_id for item in self.references)
         if len(node_ids) != len(set(node_ids)):
             raise ValueError("SourceGraph contains duplicate node IDs")
         if len(target_keys) != len(set(target_keys)):
@@ -343,11 +432,15 @@ class SourceGraph(ProtocolModel):
             raise ValueError("SourceGraph contains a duplicate binding occurrence")
         if len(edge_ids) != len(set(edge_ids)):
             raise ValueError("SourceGraph contains duplicate edge IDs")
+        if len(reference_ids) != len(set(reference_ids)):
+            raise ValueError("SourceGraph contains duplicate reference IDs")
         known = set(node_ids)
         if any(
             edge.source not in known or edge.target not in known for edge in self.edges
         ):
             raise ValueError("SourceGraph contains an edge with an unknown endpoint")
+        if any(item.source not in known for item in self.references):
+            raise ValueError("SourceGraph contains a reference with an unknown owner")
         database = self.receipt.database
         query = self.receipt.query
         graph = self.receipt.graph
@@ -369,11 +462,16 @@ class SourceGraph(ProtocolModel):
             raise ValueError(
                 "SourceGraphFormat schema version differs from SourceGraph"
             )
+        rows = {
+            "nodes": [node.model_dump(mode="json") for node in self.nodes],
+            "edges": [edge.model_dump(mode="json") for edge in self.edges],
+        }
+        if self.references:
+            rows["references"] = [
+                item.model_dump(mode="json") for item in self.references
+            ]
         result_payload = json.dumps(
-            {
-                "nodes": [node.model_dump(mode="json") for node in self.nodes],
-                "edges": [edge.model_dump(mode="json") for edge in self.edges],
-            },
+            rows,
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
@@ -617,6 +715,7 @@ __all__ = [
     "SourceGraphFormat",
     "SourceNode",
     "SourceNodeKind",
+    "SourceReference",
     "SourceSnapshot",
     "TargetCheck",
     "stage_key",

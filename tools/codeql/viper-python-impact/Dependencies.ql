@@ -283,4 +283,4 @@ select source.getLocation().getFile().getRelativePath(),
   target.getLocation().getFile().getRelativePath(),
   targetBinding.getLocation().getStartLine(), targetBinding.getLocation().getStartColumn(),
   kind, evidence.getLocation().getFile().getRelativePath(),
-  evidence.getLocation().getStartLine()
+  evidence.getLocation().getStartLine(), evidence.getLocation().getStartColumn()

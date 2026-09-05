@@ -19,6 +19,7 @@ from tools.plan import check as preflight
 from viper._system_impact.codeql import (
     CodeQLAnalysisError,
     _tree_digest,
+    analyze_overlay_source,
     analyze_source,
     lowering_digest,
     source_digest,
@@ -63,16 +64,20 @@ elif args[:2] == ["resolve", "languages"]:
     print(json.dumps({{"python": [{str(extractor)!r}]}}))
 elif args[:2] == ["database", "create"]:
     database = Path(args[2])
-    facts = database / "db-python/default"
-    facts.mkdir(parents=True)
-    (facts / "facts.rel").write_text("facts", encoding="utf-8")
-    (database / "src.zip").write_bytes(b"source")
+    if not any(value.startswith("--overlay-changes=") for value in args):
+        facts = database / "db-python/default"
+        facts.mkdir(parents=True)
+        (facts / "facts.rel").write_text("facts", encoding="utf-8")
+        (database / "src.zip").write_bytes(b"source")
 elif args[:2] == ["database", "run-queries"]:
     database = Path(args[3])
     results = database / "results/viper/python-impact"
     results.mkdir(parents=True)
     (results / "Declarations.bqrs").write_text("Declarations", encoding="utf-8")
     (results / "Dependencies.bqrs").write_text("Dependencies", encoding="utf-8")
+    (results / "RenameTransitions.bqrs").write_text(
+        "RenameTransitions", encoding="utf-8"
+    )
     cache = database / "db-python/default/cache"
     cache.mkdir()
     (cache / "query.cache").write_text("mutable", encoding="utf-8")
@@ -85,7 +90,9 @@ elif args[:2] == ["bqrs", "decode"]:
         ]
         if query == "Declarations"
         else [["src/example.py", 4, 1, "src/example.py", 1, 1,
-               "calls", "src/example.py", 5]]
+               "calls", "src/example.py", 5, 12]]
+        if query == "Dependencies"
+        else []
     )
     Path(option("--output=")).write_text(
         json.dumps({{"#select": {{"tuples": rows}}}}),
@@ -127,7 +134,7 @@ def _specs(
             extractor_sha256=_tree_digest(extractor),
         ),
         CodeQLQuerySpec(
-            pack="viper/python-impact@1.1.0",
+            pack="viper/python-impact@1.2.0",
             pack_sha256=_tree_digest(query_pack),
             suite="source-facts.qls",
         ),
@@ -205,6 +212,79 @@ def test_analysis_uses_three_keys_and_runs_the_suite_once(tmp_path: Path) -> Non
     commands = [json.loads(line) for line in calls.read_text().splitlines()]
     assert sum(command[:2] == ["database", "create"] for command in commands) == 1
     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
+
+
+def test_overlay_binds_base_and_exact_changes_and_reuses_candidate(
+    tmp_path: Path,
+) -> None:
+    """Bind an overlay to its baseline receipt and changed-path manifest."""
+    baseline_root = tmp_path / "baseline"
+    candidate_root = tmp_path / "candidate"
+    _write_source(baseline_root)
+    shutil.copytree(baseline_root, candidate_root)
+    (candidate_root / "src/example.py").write_text(
+        "def dependency() -> int:\n"
+        "    return 2\n\n"
+        "def dependent() -> int:\n"
+        "    return dependency()\n",
+        encoding="utf-8",
+    )
+    query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
+    calls = tmp_path / "calls.jsonl"
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor, calls)
+    extraction, query, format = _specs(executable, extractor, query_pack)
+    baseline_snapshot = SourceSnapshot(
+        base_revision=_REVISION,
+        source_sha256=source_digest(baseline_root),
+        revision=_REVISION,
+    )
+    cache = tmp_path / "cache"
+    baseline = analyze_source(
+        baseline_root,
+        snapshot=baseline_snapshot,
+        extraction=extraction,
+        query=query,
+        format=format,
+        codeql_executable=executable,
+        query_pack=query_pack,
+        cache_root=cache,
+        overlay_base=True,
+    )
+    candidate_snapshot = SourceSnapshot(
+        base_revision=_REVISION,
+        source_sha256=source_digest(candidate_root),
+        revision=None,
+    )
+    arguments = {
+        "snapshot_root": candidate_root,
+        "baseline_root": baseline_root,
+        "baseline_graph": baseline,
+        "snapshot": candidate_snapshot,
+        "extraction": extraction,
+        "query": query,
+        "format": format,
+        "codeql_executable": executable,
+        "query_pack": query_pack,
+        "cache_root": cache,
+    }
+
+    first = analyze_overlay_source(**arguments)
+    second = analyze_overlay_source(**arguments)
+
+    assert first == second
+    assert baseline.receipt.database.mode == "overlay_base"
+    assert first.receipt.database.mode == "overlay"
+    assert first.receipt.database.base_database_key == baseline.receipt.database.key
+    assert first.receipt.database.base_database_sha256 == (
+        baseline.receipt.database.sha256
+    )
+    assert first.receipt.database.changes_sha256 is not None
+    commands = [json.loads(line) for line in calls.read_text().splitlines()]
+    creates = [command for command in commands if command[:2] == ["database", "create"]]
+    assert len(creates) == 2
+    assert "--overlay-base" in creates[0]
+    assert any(value.startswith("--overlay-changes=") for value in creates[1])
 
 
 def test_analysis_rejects_outputs_inside_source_tree(tmp_path: Path) -> None:
@@ -394,7 +474,7 @@ def test_format_change_reuses_database_and_bqrs(
     commands = [json.loads(line) for line in calls.read_text().splitlines()]
     assert sum(command[:2] == ["database", "create"] for command in commands) == 1
     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
-    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 4
+    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 6
 
 
 def test_tampered_graph_cache_rebuilds(tmp_path: Path) -> None:
@@ -440,7 +520,7 @@ def test_tampered_graph_cache_rebuilds(tmp_path: Path) -> None:
     commands = [json.loads(line) for line in calls.read_text().splitlines()]
     assert sum(command[:2] == ["database", "create"] for command in commands) == 1
     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
-    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 4
+    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 6
 
 
 def test_lowering_digest_must_match_loaded_assets(tmp_path: Path) -> None:
@@ -540,20 +620,22 @@ def test_cached_graph_reuse_decodes_only_requested_artifacts(tmp_path: Path) -> 
     after_reuse = [json.loads(line) for line in calls.read_text().splitlines()]
 
     assert first == second
-    assert sum(command[:2] == ["bqrs", "decode"] for command in after_miss) == 2
-    assert sum(command[:2] == ["bqrs", "decode"] for command in after_reuse) == 2
+    assert sum(command[:2] == ["bqrs", "decode"] for command in after_miss) == 3
+    assert sum(command[:2] == ["bqrs", "decode"] for command in after_reuse) == 3
 
     artifact_root = tmp_path / "artifacts"
     third = analyze_source(**arguments, artifact_root=artifact_root)
     after_evidence = [json.loads(line) for line in calls.read_text().splitlines()]
 
     assert third == first
-    assert sum(command[:2] == ["bqrs", "decode"] for command in after_evidence) == 4
+    assert sum(command[:2] == ["bqrs", "decode"] for command in after_evidence) == 6
     assert {path.name for path in artifact_root.iterdir()} == {
         "Declarations.bqrs",
         "Declarations.json",
         "Dependencies.bqrs",
         "Dependencies.json",
+        "RenameTransitions.bqrs",
+        "RenameTransitions.json",
     }
 
 
