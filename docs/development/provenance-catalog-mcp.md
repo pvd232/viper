@@ -1012,12 +1012,12 @@ from .catalog import (
 
 <!-- contract-target: requirements=PCM-02 block=P13-PCM-02 action=add target=src/viper/api.py:LocalFileRef -->
 ```python contract-target
-from .references import LocalFileRef, ResolvedRunRef
+from .references import LocalFileRef
 ```
 
 <!-- contract-target: requirements=PCM-02 block=P13-PCM-02 action=add target=src/viper/api.py:content_revision -->
 ```python contract-target
-from .storage import LocalArtifactStore, content_revision
+from .storage import content_revision
 ```
 
 <!-- contract-target: requirements=PCM-02 block=P13-PCM-02 action=update target=src/viper/api.py:OperationName -->
