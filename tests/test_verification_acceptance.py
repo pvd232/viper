@@ -83,6 +83,16 @@ from viper.inputs import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
+from viper.knowledge import (
+    DeclaredPrimitiveAssignment,
+    KnowledgeManifest,
+    KnowledgeRecordEnvelope,
+    OntologySpec,
+    PrimitiveRef,
+    PrimitiveSpec,
+    RunKnowledgeTarget,
+    knowledge,
+)
 from viper.metrics import (
     FloatComparator,
     Measurement,
@@ -156,7 +166,7 @@ from viper.runtime import (
 )
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 from viper.runtime import ResolvedGCEEnv as ResolvedGCEEnvironment
-from viper.serialization import document_digest
+from viper.serialization import document_digest, parse_yaml_bytes
 from viper.stages import (
     BaseSpec,
     BuildSpec,
@@ -171,6 +181,7 @@ from viper.stages import (
 )
 from viper.stages import EvalSpec as EvaluateSpec
 from viper.stages import ResolvedEvalSpec as ResolvedEvaluateSpec
+from viper.storage import LocalArtifactStore
 from viper.verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
@@ -3012,3 +3023,57 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
             receipt.model_copy(update={"metrics": (severed_metric,)}),
             **arguments,
         )
+
+
+def test_knowledge_records_preserve_immutable_evidence(tmp_path: Path) -> None:
+    """Publish records and an immutable manifest chain before advancing the head."""
+    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    store = knowledge(root=tmp_path)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    ontology = OntologySpec(
+        ontology_id="viper-core",
+        version="1",
+        primitives=(
+            PrimitiveSpec(
+                primitive_id="gated-recurrence",
+                dimension="model-family",
+                label="Gated recurrence",
+                definition="A recurrent state transition with learned gates.",
+            ),
+        ),
+        created_at=created,
+    )
+    first = store.publish_ontology(ontology)
+    run = ResolvedRunRef(
+        sha256="a" * 64,
+        bytes=10,
+        stored_at=LocalFileRef(commit="b" * 64, path="runs/final.yaml"),
+    )
+    assignment = DeclaredPrimitiveAssignment(
+        target=RunKnowledgeTarget(run=run),
+        primitive=PrimitiveRef(
+            ontology_id=ontology.ontology_id,
+            ontology_version=ontology.version,
+            primitive_id=ontology.primitives[0].primitive_id,
+        ),
+        assigned_by="researcher",
+        assigned_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    second = store.publish_assignment(assignment)
+
+    local = LocalArtifactStore(tmp_path)
+    first_record = KnowledgeRecordEnvelope.model_validate(
+        parse_yaml_bytes(local.fetch(first.record.stored_at))
+    )
+    second_manifest = KnowledgeManifest.model_validate(
+        parse_yaml_bytes(local.fetch(second.manifest.stored_at))
+    )
+    assert first_record.record_kind == "ontology"
+    assert first_record.value == ontology
+    assert second_manifest.record == second.record
+    assert second_manifest.previous == first.manifest
+    stored_head = ResolvedFileRef.model_validate_json(store.head.read_bytes())
+    assert stored_head == second.manifest
+
+    with pytest.raises(ValueError, match="kind differs"):
+        KnowledgeRecordEnvelope(record_kind="impact", value=ontology)

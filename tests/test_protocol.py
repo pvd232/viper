@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -33,13 +34,20 @@ from viper.inputs import (
     LocalSource,
     ResolvedExternalInputRef,
 )
+from viper.knowledge import (
+    DeclaredPrimitiveAssignment,
+    OntologySpec,
+    PrimitiveRef,
+    PrimitiveSpec,
+    RunKnowledgeTarget,
+)
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
     MetricImplementationRef,
     MetricSpec,
 )
-from viper.references import SnapshotFileRef
+from viper.references import LocalFileRef, ResolvedRunRef, SnapshotFileRef
 from viper.reuse import (
     ReusedStageFile,
     ReuseFileIdentity,
@@ -63,6 +71,61 @@ GIT_COMMIT = "a" * 40
 REPOSITORY = "https://github.com/example/viper-project"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/e001_strand/runs/baseline/{RUN_ID}"
+
+
+def test_knowledge_ontology_preserves_assignment_provenance() -> None:
+    """Keep each assignment bound to one ontology version and immutable run."""
+    ontology = OntologySpec(
+        ontology_id="viper-core",
+        version="1",
+        primitives=(
+            PrimitiveSpec(
+                primitive_id="gated-recurrence",
+                dimension="model-family",
+                label="Gated recurrence",
+                definition="A recurrent state transition with learned gates.",
+            ),
+        ),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    run = ResolvedRunRef(
+        sha256=SHA_A,
+        bytes=10,
+        stored_at=LocalFileRef(commit=SHA_B, path="runs/final.yaml"),
+    )
+    assignment = DeclaredPrimitiveAssignment(
+        target=RunKnowledgeTarget(run=run),
+        primitive=PrimitiveRef(
+            ontology_id=ontology.ontology_id,
+            ontology_version=ontology.version,
+            primitive_id=ontology.primitives[0].primitive_id,
+        ),
+        assigned_by="researcher",
+        assigned_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+
+    restored = DeclaredPrimitiveAssignment.model_validate_json(
+        assignment.model_dump_json()
+    )
+    assert restored == assignment
+    assert restored.target.run == run
+    assert restored.primitive.ontology_version == ontology.version
+
+    with pytest.raises(ValueError, match="parent is undefined"):
+        OntologySpec(
+            ontology_id="viper-core",
+            version="broken",
+            primitives=(
+                PrimitiveSpec(
+                    primitive_id="child",
+                    dimension="model-family",
+                    label="Child",
+                    definition="Broken parent reference.",
+                    parents=("missing",),
+                ),
+            ),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
 
 
 def git_file(path: str) -> dict:
