@@ -22,7 +22,7 @@ from viper._system_impact.codeql import (
     resolve_analysis_specs,
     source_digest,
 )
-from viper.api import VerifyRunRequest, verify_run
+from viper.api import VerifyRunRequest, VerifyRunSuccess, verify_run
 from viper.artifacts import artifact
 from viper.authoring import (
     experiment,
@@ -33,6 +33,7 @@ from viper.authoring import (
     stage,
     variant,
 )
+from viper.execution._source import RunFetcher
 from viper.metrics import max, measure
 from viper.params import Train
 from viper.references import GitFileRef, GitSource
@@ -46,6 +47,9 @@ from viper.runtime import (
     TorchPrecisionSpec,
     observe_python_env,
 )
+from viper.serialization import load_stage_spec
+from viper.stages import ParameterizedSpec
+from viper.storage import LocalArtifactStore
 from viper.system_impact.models import SourceSnapshot
 from viper.system_impact.rename import RenameSpec, compile_rename_obligations
 
@@ -306,10 +310,61 @@ def _reproducibility() -> ReproducibilitySpec:
     )
 
 
+def _verified_run(
+    project: Path,
+    path: Path,
+    fetcher: RunFetcher,
+) -> VerifyRunSuccess:
+    return verify_run(
+        VerifyRunRequest(
+            path=path,
+            root=project,
+            trusted_source_repositories=frozenset({SOURCE_REPOSITORY}),
+        ),
+        fetcher=fetcher,
+    )
+
+
+def _matching_existing_run(
+    project: Path,
+    *,
+    arm: str,
+    model: str,
+    timeout_seconds: int,
+    fetcher: RunFetcher,
+) -> tuple[Path, VerifyRunSuccess] | None:
+    root = project / "experiments/agent_graph_memory/runs" / arm
+    for path in sorted(root.glob("*/resolved.yaml"), reverse=True):
+        verified = _verified_run(project, path, fetcher)
+        if verified.run_status != "succeeded":
+            continue
+        stage = load_stage_spec(path.parent / "stages/agent_trial/spec.yaml")
+        if not isinstance(stage, ParameterizedSpec):
+            continue
+        values = stage.params.model_extra or {}
+        if (
+            values.get("arm") == arm
+            and values.get("model") == model
+            and values.get("timeout_seconds") == timeout_seconds
+        ):
+            return path, verified
+    return None
+
+
 def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
     """Freeze and execute one verified VIPER run per arm."""
-    commit = prepare_project(project)
+    if project.exists():
+        if not (project / "viper.toml").is_file():
+            raise ValueError("existing experiment root is not a VIPER project")
+        commit = _git(project, "rev-parse", "HEAD")
+    else:
+        commit = prepare_project(project)
     trial = _load_trial(project)
+    fetcher = RunFetcher(
+        project,
+        LocalArtifactStore(project),
+        SOURCE_REPOSITORY,
+    )
     fixtures = {
         "fixture": input("inputs/fixture.tar.gz", data_role="validation"),
         "graph_evidence": input(
@@ -393,28 +448,34 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
     )
     results: dict[str, object] = {}
     for arm in ARMS:
-        draft = plan(
-            experiment=study,
-            variant=arm,
-            replicate="replicate_01",
-            source=source,
-            env=environment,
-            reproducibility=_reproducibility(),
-        )
-        print(f"{arm}: starting VIPER run", flush=True)
-        result = execution.run(
+        existing = _matching_existing_run(
             project,
-            draft,
-            timeout_seconds=timeout_seconds + 180,
+            arm=arm,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            fetcher=fetcher,
         )
-        verified = verify_run(
-            VerifyRunRequest(
-                path=result.resolved_run_path,
-                root=project,
-                trusted_source_repositories=frozenset({SOURCE_REPOSITORY}),
+        if existing is not None:
+            resolved_run_path, verified = existing
+            print(f"{arm}: reusing verified VIPER run", flush=True)
+        else:
+            draft = plan(
+                experiment=study,
+                variant=arm,
+                replicate="replicate_01",
+                source=source,
+                env=environment,
+                reproducibility=_reproducibility(),
             )
-        )
-        run_root = result.resolved_run_path.parent
+            print(f"{arm}: starting VIPER run", flush=True)
+            result = execution.run(
+                project,
+                draft,
+                timeout_seconds=timeout_seconds + 180,
+            )
+            resolved_run_path = result.resolved_run_path
+            verified = _verified_run(project, resolved_run_path, fetcher)
+        run_root = resolved_run_path.parent
         verdict = json.loads(
             (run_root / "artifacts/models/agent_trial/verdict.json").read_text()
         )
@@ -428,7 +489,7 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
         )
         results[arm] = {
             "run_id": verified.run_id,
-            "resolved_run": result.resolved_run_path.relative_to(project).as_posix(),
+            "resolved_run": resolved_run_path.relative_to(project).as_posix(),
             "verification": verification_path.relative_to(project).as_posix(),
             "verification_sha256": _sha256(verification_path),
             "verdict": verdict,

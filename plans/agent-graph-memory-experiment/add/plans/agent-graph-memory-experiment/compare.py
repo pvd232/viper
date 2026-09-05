@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 
 from viper.api import VerifyRunRequest, verify_run
+from viper.execution._source import RunFetcher
+from viper.storage import LocalArtifactStore
 
 SOURCE_REPOSITORY = "https://example.invalid/viper-agent-graph-memory"
 ARMS = ("ordinary", "static_graph", "graph_predicate")
@@ -21,6 +23,11 @@ def compare(project: Path) -> dict[str, object]:
     if not isinstance(arms, dict) or set(arms) != set(ARMS):
         raise ValueError("summary does not contain exactly the required arms")
     rows = []
+    fetcher = RunFetcher(
+        project,
+        LocalArtifactStore(project),
+        SOURCE_REPOSITORY,
+    )
     for arm in ARMS:
         record = arms[arm]
         verification_path = project / record["verification"]
@@ -33,7 +40,8 @@ def compare(project: Path) -> dict[str, object]:
                 path=resolved,
                 root=project,
                 trusted_source_repositories=frozenset({SOURCE_REPOSITORY}),
-            )
+            ),
+            fetcher=fetcher,
         )
         if verified.run_status != "succeeded":
             raise ValueError(f"{arm} run is not successful")
