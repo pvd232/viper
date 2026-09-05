@@ -1834,11 +1834,6 @@ The immutable evidence manifest is stored at Hugging Face commit
 
 ## 20. Master Phase 13 — searchable provenance catalog
 
-<!-- contract-implementation: requirement=PCM-01 rule=catalog.refresh.atomic state=planned owner=src/viper/catalog.py:refresh -->
-<!-- contract-verification: requirement=PCM-01 rule=catalog.refresh.atomic state=planned test=tests/test_inspection.py:test_catalog_refresh_is_atomic_and_rebuildable -->
-<!-- contract-implementation: requirement=PCM-02 rule=catalog.search.evidenced state=planned owner=src/viper/catalog.py:Catalog -->
-<!-- contract-verification: requirement=PCM-02 rule=catalog.search.evidenced state=planned test=tests/test_verification_acceptance.py:test_catalog_results_retain_immutable_sources -->
-
 **Depends on:** Master Phase 12.
 
 **Contract:** [Provenance catalog and MCP](provenance-catalog-mcp.md)
@@ -1846,82 +1841,19 @@ The immutable evidence manifest is stored at Hugging Face commit
 **Outcome:** VIPER rebuilds one searchable local database from immutable run
 evidence and returns exact references with every result.
 
-Phase 13 uses Python's `sqlite3` module to build a disposable derived index.
-CodeQL remains exclusive to the System Impact Check's source analysis.
+- [ ] Build and expose the source-linked SQLite catalog.
+      <!-- pair-block: P13-PCM-01 -->
+      <!-- pair-block-contract: P13-PCM-01 contract=provenance-catalog-mcp.md -->
+      <!-- contract-implementation: requirement=PCM-01 rule=catalog.refresh.atomic state=planned owner=src/viper/catalog.py:Catalog -->
+      <!-- contract-verification: requirement=PCM-01 rule=catalog.refresh.atomic state=planned test=tests/test_inspection.py:test_catalog_refresh_is_atomic_and_rebuildable -->
+      <!-- contract-implementation: requirement=PCM-02 rule=catalog.search.evidenced state=planned owner=src/viper/catalog.py:Catalog -->
+      <!-- contract-verification: requirement=PCM-02 rule=catalog.search.evidenced state=planned test=tests/test_inspection.py:test_catalog_results_retain_immutable_sources -->
+      <!-- implements: PCM-01, PCM-02 -->
 
-### 20.1 Catalog schema and extraction
-
-- [ ] Add `src/viper/catalog.py` with `CatalogRun`, `CatalogFile`,
-      `CatalogArtifact`, `CatalogMeasurement`, `CatalogBenchmark`, and
-      `CatalogEdge`.
-- [ ] Add `RunQuery`, `ArtifactQuery`, `MeasurementQuery`, `BenchmarkQuery`,
-      their page models, and `CatalogRefreshResult`.
-- [ ] Create schema-version 1 tables for sources, runs, stages, inputs,
-      artifacts, files, measurements, benchmarks, and edges.
-- [ ] Implement the database with Python's standard-library `sqlite3` module;
-      `sqlite3` supplies the complete database dependency.
-- [ ] Extract normalized rows from one `VerifiedRunResult`.
-- [ ] Share lineage-node and edge extraction with `src/viper/inspection.py`.
-- [ ] Resolve discovered local terminal paths to immutable terminal references
-      before parsing their contents.
-- [ ] Record an invalid source and exclude its derived rows.
-- [ ] Build the replacement database under `.viper/`, fsync it, and atomically
-      replace `.viper/catalog.sqlite3`. <!-- implements: PCM-01 -->
-- [ ] Hold a reader open during replacement and prove every query sees the
-      complete old database or the complete new database.
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Keep SQLite rows flat. Store the immutable reference JSON and the
-columns used by exact filters. Rebuild richer Pydantic results at the query
-boundary.
-
-**Hint 2:** Build the complete replacement in one transaction. Readers should
-see the old catalog or the new catalog.
-
-**Hint 3:** The catalog is disposable. Keep catalog identifiers inside catalog
-storage and out of protocol records.
-
-</details>
-
-### 20.2 Exact queries
-
-- [ ] Add `Catalog.runs()`, `Catalog.artifacts()`,
-      `Catalog.measurements()`, and `Catalog.benchmarks()` with every contract
-      filter.
+- [ ] Expose catalog refresh and exact search through the typed Python API and CLI.
+      <!-- pair-block: P13-PCM-02 -->
+      <!-- pair-block-contract: P13-PCM-02 contract=provenance-catalog-mcp.md -->
       <!-- implements: PCM-02 -->
-- [ ] Add stable sort keys, a maximum page size of 500, and opaque cursors that
-      bind the query and last sort key.
-- [ ] Add `Catalog.lineage()` through the existing verified lineage builder.
-- [ ] Add `catalog(root=...)` and export the public query and page models.
-      <!-- phase-produces: viper.catalog -->
-- [ ] Put numeric epoch and step values before null summaries and include the
-      immutable measurement reference as the final tie breaker.
-- [ ] Add typed `catalog_refresh`, `search_runs`, `search_artifacts`,
-      `search_measurements`, and `search_benchmarks` operations and matching
-      CLI commands.
-
-### 20.3 Focused proof
-
-- [ ] Add database deletion and rebuild equality to
-      `tests/test_inspection.py`.
-- [ ] Add deterministic order, null ordering, pagination, every exact filter,
-      and cursor-query mismatch cases.
-- [ ] Add same-dataset cross-run and lowest-metric query fixtures.
-- [ ] Query artifacts by source commit, measurements by input and environment,
-      and benchmark results by evaluated artifact digest.
-- [ ] Add invalid-source exclusion and immutable-reference assertions to
-      `tests/test_verification_acceptance.py`.
-- [ ] Run: <!-- verifies: PCM-01, PCM-02 -->
-
-```bash
-python -m pytest \
-  tests/test_inspection.py \
-  tests/test_verification_acceptance.py \
-  tests/test_api.py \
-  tests/test_cli.py -q
-```
 
 **Commit boundary:** `Index and search verified provenance`
 
