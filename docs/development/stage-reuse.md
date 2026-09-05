@@ -576,142 +576,142 @@ requirements = [
     "SRU-04",
 ]
 targets = [
-    "src/viper/api.py:_catalog_run_source",
     "src/viper/api.py:catalog_reuse_candidates",
-    "src/viper/authoring.py:ParameterizedSpecDraft",
+    "src/viper/api.py:_catalog_run_source",
     "src/viper/authoring.py:StageReuseMode",
+    "src/viper/authoring.py:ParameterizedSpecDraft",
     "src/viper/authoring.py:_freeze_stage",
     "src/viper/authoring.py:stage",
-    "src/viper/catalog.py:Catalog",
-    "src/viper/catalog.py:CatalogRunSource",
     "src/viper/catalog.py:StageReuseCandidate",
     "src/viper/catalog.py:StageReuseKey",
+    "src/viper/catalog.py:stage_reuse_key_sha256",
+    "src/viper/catalog.py:CatalogRunSource",
     "src/viper/catalog.py:_SCHEMA",
     "src/viper/catalog.py:_validate_reuse_candidate",
-    "src/viper/catalog.py:stage_reuse_key_sha256",
-    "src/viper/inspection.py:LineageEdge",
-    "src/viper/inspection.py:LineageNode",
+    "src/viper/catalog.py:Catalog",
     "src/viper/inspection.py:Mapping",
-    "src/viper/inspection.py:RunId",
     "src/viper/inspection.py:SHA256",
+    "src/viper/inspection.py:RunId",
     "src/viper/inspection.py:StageId",
     "src/viper/inspection.py:StageReuseReceipt",
-    "src/viper/inspection.py:_verified_run_document",
-    "src/viper/inspection.py:compare_runs",
     "src/viper/inspection.py:document_digest",
-    "src/viper/inspection.py:lineage",
     "src/viper/inspection.py:load_stage_spec",
     "src/viper/inspection.py:parse_yaml_bytes",
+    "src/viper/inspection.py:LineageNode",
+    "src/viper/inspection.py:LineageEdge",
+    "src/viper/inspection.py:_verified_run_document",
+    "src/viper/inspection.py:compare_runs",
+    "src/viper/inspection.py:lineage",
     "src/viper/params.py:ParameterSet",
+    "src/viper/reuse.py:annotations",
+    "src/viper/reuse.py:hashlib",
+    "src/viper/reuse.py:json",
+    "src/viper/reuse.py:Mapping",
+    "src/viper/reuse.py:Sequence",
+    "src/viper/reuse.py:Path",
+    "src/viper/reuse.py:TYPE_CHECKING",
     "src/viper/reuse.py:Annotated",
-    "src/viper/reuse.py:ArtifactName",
+    "src/viper/reuse.py:Literal",
+    "src/viper/reuse.py:Self",
+    "src/viper/reuse.py:cast",
     "src/viper/reuse.py:AwareDatetime",
     "src/viper/reuse.py:BaseModel",
-    "src/viper/reuse.py:DataRole",
-    "src/viper/reuse.py:EnvSpec",
-    "src/viper/reuse.py:ExecutedStageCompletion",
-    "src/viper/reuse.py:ExecutionContext",
     "src/viper/reuse.py:Field",
-    "src/viper/reuse.py:InputName",
-    "src/viper/reuse.py:Literal",
-    "src/viper/reuse.py:Mapping",
-    "src/viper/reuse.py:MetricId",
-    "src/viper/reuse.py:MetricSpec",
-    "src/viper/reuse.py:Path",
-    "src/viper/reuse.py:ProcessStartupReceipt",
+    "src/viper/reuse.py:model_validator",
+    "src/viper/reuse.py:SHA256",
+    "src/viper/reuse.py:ArtifactName",
+    "src/viper/reuse.py:DataRole",
     "src/viper/reuse.py:ProtocolModel",
-    "src/viper/reuse.py:RNGSeed",
     "src/viper/reuse.py:RepoRelPath",
-    "src/viper/reuse.py:ReproducibilitySpec",
-    "src/viper/reuse.py:ResolvedAttemptRef",
-    "src/viper/reuse.py:ResolvedEnv",
+    "src/viper/reuse.py:RNGSeed",
+    "src/viper/reuse.py:InputName",
+    "src/viper/reuse.py:MetricId",
+    "src/viper/reuse.py:StageId",
+    "src/viper/reuse.py:MetricSpec",
     "src/viper/reuse.py:ResolvedFileRef",
     "src/viper/reuse.py:ResolvedGitFileRef",
     "src/viper/reuse.py:ResolvedRunRef",
     "src/viper/reuse.py:ResolvedStageInvocationRef",
     "src/viper/reuse.py:ResolvedStageRef",
-    "src/viper/reuse.py:ResolvedStageReuseRef",
+    "src/viper/reuse.py:SnapshotFileRef",
+    "src/viper/reuse.py:ResolvedAttemptRef",
+    "src/viper/reuse.py:EnvSpec",
+    "src/viper/reuse.py:ExecutionContext",
+    "src/viper/reuse.py:ProcessStartupReceipt",
+    "src/viper/reuse.py:ReproducibilitySpec",
+    "src/viper/reuse.py:ResolvedEnv",
+    "src/viper/reuse.py:StageReuseMode",
     "src/viper/reuse.py:ReuseFileIdentity",
     "src/viper/reuse.py:ReuseInputIdentity",
-    "src/viper/reuse.py:ReusedMetricEvidence",
-    "src/viper/reuse.py:ReusedStageCompletion",
-    "src/viper/reuse.py:ReusedStageFile",
-    "src/viper/reuse.py:SHA256",
-    "src/viper/reuse.py:Self",
-    "src/viper/reuse.py:Sequence",
-    "src/viper/reuse.py:SnapshotFileRef",
-    "src/viper/reuse.py:StageCompletion",
-    "src/viper/reuse.py:StageId",
-    "src/viper/reuse.py:StageReuseCandidate",
     "src/viper/reuse.py:StageReuseKey",
-    "src/viper/reuse.py:StageReuseMode",
+    "src/viper/reuse.py:ReusedStageFile",
+    "src/viper/reuse.py:ReusedMetricEvidence",
     "src/viper/reuse.py:StageReuseReceipt",
-    "src/viper/reuse.py:TYPE_CHECKING",
-    "src/viper/reuse.py:__all__",
+    "src/viper/reuse.py:ResolvedStageReuseRef",
+    "src/viper/reuse.py:ExecutedStageCompletion",
+    "src/viper/reuse.py:ReusedStageCompletion",
+    "src/viper/reuse.py:StageCompletion",
+    "src/viper/reuse.py:StageReuseCandidate",
     "src/viper/reuse.py:_canonical_sha256",
     "src/viper/reuse.py:_normalized_stage",
-    "src/viper/reuse.py:annotations",
-    "src/viper/reuse.py:build_stage_reuse_key",
-    "src/viper/reuse.py:cast",
-    "src/viper/reuse.py:catalog_reuse_candidates",
-    "src/viper/reuse.py:hashlib",
     "src/viper/reuse.py:input_identity",
-    "src/viper/reuse.py:json",
-    "src/viper/reuse.py:model_validator",
-    "src/viper/reuse.py:stage_reuse_key_sha256",
     "src/viper/reuse.py:verified_input_identity",
+    "src/viper/reuse.py:build_stage_reuse_key",
+    "src/viper/reuse.py:stage_reuse_key_sha256",
+    "src/viper/reuse.py:catalog_reuse_candidates",
+    "src/viper/reuse.py:__all__",
+    "src/viper/stages.py:StageCompletion",
+    "src/viper/stages.py:StageReuseMode",
     "src/viper/stages.py:EnvSpec",
     "src/viper/stages.py:ExecutionContext",
     "src/viper/stages.py:GCEEnvSpec",
     "src/viper/stages.py:GCEHostContext",
+    "src/viper/stages.py:ResolvedEnv",
+    "src/viper/stages.py:ResolvedGCEEnv",
     "src/viper/stages.py:ParameterizedSpec",
     "src/viper/stages.py:ResolvedBaseSpec",
-    "src/viper/stages.py:ResolvedDownloadSpec",
-    "src/viper/stages.py:ResolvedEnv",
     "src/viper/stages.py:ResolvedExecutedSpec",
-    "src/viper/stages.py:ResolvedGCEEnv",
+    "src/viper/stages.py:ResolvedDownloadSpec",
     "src/viper/stages.py:ResolvedParameterizedSpec",
-    "src/viper/stages.py:StageCompletion",
-    "src/viper/stages.py:StageReuseMode",
     "src/viper/stages.py:validate_stage_definition",
     "src/viper/stages.py:ProcessStartupReceipt",
     "src/viper/stages.py:ResolvedGitFileRef",
     "src/viper/stages.py:ResolvedStageInvocationRef",
+    "src/viper/verification/models.py:dataclass",
+    "src/viper/verification/models.py:field",
     "src/viper/verification/models.py:InputName",
     "src/viper/verification/models.py:StageId",
     "src/viper/verification/models.py:StageReuseReceipt",
     "src/viper/verification/models.py:VerifiedRunResult",
-    "src/viper/verification/models.py:dataclass",
-    "src/viper/verification/models.py:field",
     "tests/test_inspection.py:GitFileRef",
     "tests/test_inspection.py:LocalFileRef",
     "tests/test_inspection.py:LocalStageResultSnapshotRef",
-    "tests/test_inspection.py:ResolvedAttemptRef",
-    "tests/test_inspection.py:ResolvedRun",
     "tests/test_inspection.py:ResolvedRunRef",
     "tests/test_inspection.py:ResolvedRunSpecRef",
     "tests/test_inspection.py:ResolvedStageRef",
-    "tests/test_inspection.py:ReusedStageFile",
-    "tests/test_inspection.py:RunSpec",
     "tests/test_inspection.py:SnapshotFileRef",
+    "tests/test_inspection.py:ReusedStageFile",
     "tests/test_inspection.py:StageReuseCandidate",
     "tests/test_inspection.py:StageReuseKey",
     "tests/test_inspection.py:StageReuseReceipt",
-    "tests/test_inspection.py:_reuse_receipt",
+    "tests/test_inspection.py:stage_reuse_key_sha256",
+    "tests/test_inspection.py:ResolvedAttemptRef",
+    "tests/test_inspection.py:ResolvedRun",
+    "tests/test_inspection.py:RunSpec",
     "tests/test_inspection.py:document_digest",
     "tests/test_inspection.py:load_stage_spec",
     "tests/test_inspection.py:parse_yaml_bytes",
     "tests/test_inspection.py:serialize_document",
-    "tests/test_inspection.py:stage_reuse_key_sha256",
-    "tests/test_inspection.py:test_catalog_returns_an_exact_stage_reuse_candidate",
+    "tests/test_inspection.py:_reuse_receipt",
     "tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces",
-    "tests/test_protocol.py:CUDABackendContext",
-    "tests/test_protocol.py:ReproducibilitySpec",
+    "tests/test_inspection.py:test_catalog_returns_an_exact_stage_reuse_candidate",
+    "tests/test_protocol.py:ReusedStageFile",
     "tests/test_protocol.py:ReuseFileIdentity",
     "tests/test_protocol.py:ReuseInputIdentity",
-    "tests/test_protocol.py:ReusedStageFile",
     "tests/test_protocol.py:build_stage_reuse_key",
     "tests/test_protocol.py:stage_reuse_key_sha256",
+    "tests/test_protocol.py:CUDABackendContext",
+    "tests/test_protocol.py:ReproducibilitySpec",
     "tests/test_protocol.py:test_stage_reuse_models_form_valid_completion_union",
 ]
 tests = [
@@ -734,133 +734,133 @@ requirements = [
     "SRU-02",
 ]
 targets = [
-    "src/viper/_parameter/validation.py:_installed_parameter_model",
-    "src/viper/_parameter/validation.py:instantiate_parameters",
     "src/viper/_parameter/validation.py:validate_parameters",
+    "src/viper/_parameter/validation.py:instantiate_parameters",
+    "src/viper/_parameter/validation.py:_installed_parameter_model",
     "src/viper/_verification/plan.py:Path",
     "src/viper/_verification/plan.py:params",
     "src/viper/_verification/plan.py:verify_parameter_model_references",
     "src/viper/_workers/parameters.py:ParameterValidationContext",
-    "src/viper/_workers/parameters.py:main",
     "src/viper/_workers/parameters.py:parameter_model_path",
     "src/viper/_workers/parameters.py:validate_parameters",
+    "src/viper/_workers/parameters.py:main",
     "src/viper/_workers/stages.py:main",
     "src/viper/execution/_attempt.py:Catalog",
     "src/viper/execution/_attempt.py:ExternalInputRef",
     "src/viper/execution/_attempt.py:FutureInputRef",
     "src/viper/execution/_attempt.py:ResolvedInputRef",
-    "src/viper/execution/_attempt.py:ReuseInputIdentity",
     "src/viper/execution/_attempt.py:StoredInputRef",
-    "src/viper/execution/_attempt.py:_reuse_input_identities",
+    "src/viper/execution/_attempt.py:ReuseInputIdentity",
     "src/viper/execution/_attempt.py:build_stage_reuse_key",
-    "src/viper/execution/_attempt.py:execute_attempt",
     "src/viper/execution/_attempt.py:input_identity",
     "src/viper/execution/_attempt.py:reuse_stage",
+    "src/viper/execution/_attempt.py:_reuse_input_identities",
+    "src/viper/execution/_attempt.py:execute_attempt",
     "src/viper/execution/_resolution.py:ExecutedStageCompletion",
     "src/viper/execution/_resolution.py:resolve_stage",
-    "src/viper/execution/_reuse.py:ArtifactName",
-    "src/viper/execution/_reuse.py:Catalog",
-    "src/viper/execution/_reuse.py:ExecutedStageCompletion",
-    "src/viper/execution/_reuse.py:InputName",
-    "src/viper/execution/_reuse.py:Measurement",
-    "src/viper/execution/_reuse.py:MetricId",
-    "src/viper/execution/_reuse.py:MetricSpec",
-    "src/viper/execution/_reuse.py:ParameterizedSpec",
+    "src/viper/execution/_reuse.py:annotations",
+    "src/viper/execution/_reuse.py:json",
+    "src/viper/execution/_reuse.py:dataclass",
+    "src/viper/execution/_reuse.py:UTC",
+    "src/viper/execution/_reuse.py:datetime",
     "src/viper/execution/_reuse.py:Path",
+    "src/viper/execution/_reuse.py:cast",
+    "src/viper/execution/_reuse.py:yaml",
+    "src/viper/execution/_reuse.py:ArtifactName",
     "src/viper/execution/_reuse.py:RepoRelPath",
+    "src/viper/execution/_reuse.py:read_snapshot_file",
     "src/viper/execution/_reuse.py:ResolvedArtifact",
-    "src/viper/execution/_reuse.py:ResolvedBuildSpec",
     "src/viper/execution/_reuse.py:ResolvedBundleArtifact",
     "src/viper/execution/_reuse.py:ResolvedBundleMember",
-    "src/viper/execution/_reuse.py:ResolvedEmbedSpec",
-    "src/viper/execution/_reuse.py:ResolvedEvalSpec",
-    "src/viper/execution/_reuse.py:ResolvedFileRef",
-    "src/viper/execution/_reuse.py:ResolvedInputRef",
-    "src/viper/execution/_reuse.py:ResolvedInternalSpec",
-    "src/viper/execution/_reuse.py:ResolvedParameterizedSpec",
-    "src/viper/execution/_reuse.py:ResolvedRun",
     "src/viper/execution/_reuse.py:ResolvedSingleFileArtifact",
+    "src/viper/execution/_reuse.py:Catalog",
+    "src/viper/execution/_reuse.py:InputName",
+    "src/viper/execution/_reuse.py:MetricId",
+    "src/viper/execution/_reuse.py:StageId",
+    "src/viper/execution/_reuse.py:ResolvedInputRef",
+    "src/viper/execution/_reuse.py:Measurement",
+    "src/viper/execution/_reuse.py:MetricSpec",
+    "src/viper/execution/_reuse.py:ResolvedFileRef",
+    "src/viper/execution/_reuse.py:SnapshotFileRef",
+    "src/viper/execution/_reuse.py:StageResultSnapshot",
+    "src/viper/execution/_reuse.py:StorageModel",
+    "src/viper/execution/_reuse.py:ExecutedStageCompletion",
     "src/viper/execution/_reuse.py:ResolvedStageReuseRef",
-    "src/viper/execution/_reuse.py:ResolvedTrainSpec",
-    "src/viper/execution/_reuse.py:ReuseStageResult",
     "src/viper/execution/_reuse.py:ReusedMetricEvidence",
     "src/viper/execution/_reuse.py:ReusedStageCompletion",
     "src/viper/execution/_reuse.py:ReusedStageFile",
-    "src/viper/execution/_reuse.py:SnapshotFileRef",
-    "src/viper/execution/_reuse.py:SnapshotPublisher",
-    "src/viper/execution/_reuse.py:StageId",
-    "src/viper/execution/_reuse.py:StageResultSnapshot",
     "src/viper/execution/_reuse.py:StageReuseKey",
     "src/viper/execution/_reuse.py:StageReuseReceipt",
-    "src/viper/execution/_reuse.py:StorageDestination",
-    "src/viper/execution/_reuse.py:StorageFetcher",
-    "src/viper/execution/_reuse.py:StorageModel",
-    "src/viper/execution/_reuse.py:UTC",
-    "src/viper/execution/_reuse.py:VerificationPolicy",
-    "src/viper/execution/_reuse.py:ViperCloudClient",
-    "src/viper/execution/_reuse.py:_metric_evidence",
-    "src/viper/execution/_reuse.py:_remap_artifacts",
-    "src/viper/execution/_reuse.py:_resolved_stage",
-    "src/viper/execution/_reuse.py:annotations",
-    "src/viper/execution/_reuse.py:cast",
     "src/viper/execution/_reuse.py:catalog_reuse_candidates",
-    "src/viper/execution/_reuse.py:dataclass",
-    "src/viper/execution/_reuse.py:datetime",
-    "src/viper/execution/_reuse.py:json",
+    "src/viper/execution/_reuse.py:ResolvedRun",
     "src/viper/execution/_reuse.py:parse_yaml_bytes",
-    "src/viper/execution/_reuse.py:publish_resolved_files",
-    "src/viper/execution/_reuse.py:read_snapshot_file",
-    "src/viper/execution/_reuse.py:reuse_stage",
     "src/viper/execution/_reuse.py:serialize_document",
+    "src/viper/execution/_reuse.py:ParameterizedSpec",
+    "src/viper/execution/_reuse.py:ResolvedBuildSpec",
+    "src/viper/execution/_reuse.py:ResolvedEmbedSpec",
+    "src/viper/execution/_reuse.py:ResolvedEvalSpec",
+    "src/viper/execution/_reuse.py:ResolvedInternalSpec",
+    "src/viper/execution/_reuse.py:ResolvedParameterizedSpec",
+    "src/viper/execution/_reuse.py:ResolvedTrainSpec",
+    "src/viper/execution/_reuse.py:SnapshotPublisher",
+    "src/viper/execution/_reuse.py:StorageDestination",
+    "src/viper/execution/_reuse.py:ViperCloudClient",
+    "src/viper/execution/_reuse.py:publish_resolved_files",
     "src/viper/execution/_reuse.py:snapshot_file",
     "src/viper/execution/_reuse.py:verify_run_result",
-    "src/viper/execution/_reuse.py:yaml",
+    "src/viper/execution/_reuse.py:StorageFetcher",
+    "src/viper/execution/_reuse.py:VerificationPolicy",
+    "src/viper/execution/_reuse.py:ReuseStageResult",
+    "src/viper/execution/_reuse.py:_remap_artifacts",
+    "src/viper/execution/_reuse.py:_metric_evidence",
+    "src/viper/execution/_reuse.py:_resolved_stage",
+    "src/viper/execution/_reuse.py:reuse_stage",
     "src/viper/preflight.py:ParameterValidationError",
     "src/viper/preflight.py:parameter_model_path",
-    "src/viper/preflight.py:preflight_plan",
     "src/viper/preflight.py:validate_stage_parameters",
     "src/viper/preflight.py:verify_parameter_model_bytes",
-    "src/viper/storage.py:LocalSnapshotPublisher",
+    "src/viper/preflight.py:preflight_plan",
     "src/viper/storage.py:SnapshotPublisher",
+    "src/viper/storage.py:LocalSnapshotPublisher",
     "src/viper/storage.py:ViperCloudClient",
-    "src/viper/storage.py:ViperCloudSnapshotPublisher",
-    "src/viper/storage.py:_cloud_publish",
-    "src/viper/storage.py:_cloud_seal",
-    "src/viper/storage.py:_cloud_upload_file",
     "src/viper/storage.py:_verify_reuse_source",
+    "src/viper/storage.py:_cloud_upload_file",
+    "src/viper/storage.py:_cloud_seal",
+    "src/viper/storage.py:_cloud_publish",
+    "src/viper/storage.py:ViperCloudSnapshotPublisher",
+    "tests/test_run_execution.py:importlib.util",
+    "tests/test_run_execution.py:current_params",
     "tests/test_run_execution.py:ArtifactLoaderRef",
-    "tests/test_run_execution.py:CUDAComputeSpec",
+    "tests/test_run_execution.py:SingleFileArtifactSpec",
+    "tests/test_run_execution.py:StageArtifactRef",
+    "tests/test_run_execution.py:artifact",
+    "tests/test_run_execution.py:RunPlanDraft",
+    "tests/test_run_execution.py:StageDraft",
+    "tests/test_run_execution.py:experiment",
+    "tests/test_run_execution.py:freeze_run_plan",
+    "tests/test_run_execution.py:plan",
+    "tests/test_run_execution.py:replicate",
+    "tests/test_run_execution.py:stage",
+    "tests/test_run_execution.py:variant",
+    "tests/test_run_execution.py:external_input",
     "tests/test_run_execution.py:Catalog",
     "tests/test_run_execution.py:CatalogRunSource",
     "tests/test_run_execution.py:FloatComparator",
-    "tests/test_run_execution.py:LocalEnvSpec",
     "tests/test_run_execution.py:Measurement",
     "tests/test_run_execution.py:MetricDependency",
     "tests/test_run_execution.py:MetricImplementationRef",
     "tests/test_run_execution.py:MetricSpec",
-    "tests/test_run_execution.py:ReusedStageCompletion",
-    "tests/test_run_execution.py:RunPlanDraft",
-    "tests/test_run_execution.py:SingleFileArtifactSpec",
-    "tests/test_run_execution.py:StageArtifactRef",
-    "tests/test_run_execution.py:StageDraft",
-    "tests/test_run_execution.py:artifact",
-    "tests/test_run_execution.py:catalog_reuse_candidates",
-    "tests/test_run_execution.py:current_params",
-    "tests/test_run_execution.py:experiment",
-    "tests/test_run_execution.py:external_input",
-    "tests/test_run_execution.py:freeze_run_plan",
-    "tests/test_run_execution.py:importlib.util",
     "tests/test_run_execution.py:measure",
     "tests/test_run_execution.py:minimize",
+    "tests/test_run_execution.py:ReusedStageCompletion",
+    "tests/test_run_execution.py:catalog_reuse_candidates",
+    "tests/test_run_execution.py:CUDAComputeSpec",
+    "tests/test_run_execution.py:LocalEnvSpec",
     "tests/test_run_execution.py:observe_gce_provisioning",
-    "tests/test_run_execution.py:plan",
-    "tests/test_run_execution.py:replicate",
-    "tests/test_run_execution.py:stage",
     "tests/test_run_execution.py:test_verified_reuse_skips_stage_process",
-    "tests/test_run_execution.py:variant",
     "tests/test_storage.py:InMemoryViperCloudClient",
-    "tests/test_storage.py:test_cloud_snapshot_reuse_copies_existing_payload",
     "tests/test_storage.py:test_local_snapshot_reuse_remaps_source_files",
+    "tests/test_storage.py:test_cloud_snapshot_reuse_copies_existing_payload",
 ]
 tests = [
     "tests/test_run_execution.py:test_verified_reuse_skips_stage_process",
@@ -882,8 +882,8 @@ requirements = [
     "SRU-03",
 ]
 targets = [
-    "src/viper/_verification/attempt.py:ExecutedStageCompletion",
     "src/viper/_verification/attempt.py:ResolvedSingleFileArtifact",
+    "src/viper/_verification/attempt.py:ExecutedStageCompletion",
     "src/viper/_verification/attempt.py:VerificationError",
     "src/viper/_verification/attempt.py:VerificationPolicy",
     "src/viper/_verification/attempt.py:VerifiedInput",
@@ -894,34 +894,38 @@ targets = [
     "src/viper/_verification/attempt.py:verify_external_inputs",
     "src/viper/_verification/metrics.py:ReusedStageCompletion",
     "src/viper/_verification/metrics.py:verify_recomputed_metrics",
+    "src/viper/verification/__init__.py:Mapping",
+    "src/viper/verification/__init__.py:Sequence",
     "src/viper/verification/__init__.py:ArtifactPointer",
-    "src/viper/verification/__init__.py:EvalSpec",
-    "src/viper/verification/__init__.py:GitFileRef",
+    "src/viper/verification/__init__.py:ResolvedBundleArtifact",
+    "src/viper/verification/__init__.py:ResolvedSingleFileArtifact",
+    "src/viper/verification/__init__.py:StageArtifactRef",
     "src/viper/verification/__init__.py:InputName",
-    "src/viper/verification/__init__.py:InternalSpec",
+    "src/viper/verification/__init__.py:MetricId",
+    "src/viper/verification/__init__.py:StageId",
+    "src/viper/verification/__init__.py:GitFileRef",
     "src/viper/verification/__init__.py:LocalFileRef",
     "src/viper/verification/__init__.py:LocalStageResultSnapshotRef",
-    "src/viper/verification/__init__.py:Mapping",
-    "src/viper/verification/__init__.py:MetricId",
-    "src/viper/verification/__init__.py:ParameterizedSpec",
-    "src/viper/verification/__init__.py:ResolvedBaseSpec",
-    "src/viper/verification/__init__.py:ResolvedBundleArtifact",
     "src/viper/verification/__init__.py:ResolvedFileRef",
-    "src/viper/verification/__init__.py:ResolvedInternalSpec",
-    "src/viper/verification/__init__.py:ResolvedParameterizedSpec",
     "src/viper/verification/__init__.py:ResolvedRunRef",
-    "src/viper/verification/__init__.py:ResolvedSingleFileArtifact",
     "src/viper/verification/__init__.py:ResolvedStageRef",
-    "src/viper/verification/__init__.py:ReuseInputIdentity",
-    "src/viper/verification/__init__.py:ReusedStageCompletion",
-    "src/viper/verification/__init__.py:Sequence",
     "src/viper/verification/__init__.py:SnapshotFileRef",
-    "src/viper/verification/__init__.py:StageArtifactRef",
-    "src/viper/verification/__init__.py:StageId",
+    "src/viper/verification/__init__.py:ViperCloudFileRef",
+    "src/viper/verification/__init__.py:ViperCloudStageResultSnapshotRef",
+    "src/viper/verification/__init__.py:ReusedStageCompletion",
+    "src/viper/verification/__init__.py:ReuseInputIdentity",
     "src/viper/verification/__init__.py:StageReuseKey",
     "src/viper/verification/__init__.py:StageReuseReceipt",
-    "src/viper/verification/__init__.py:StorageFetcher",
+    "src/viper/verification/__init__.py:build_stage_reuse_key",
+    "src/viper/verification/__init__.py:verified_input_identity",
+    "src/viper/verification/__init__.py:EvalSpec",
+    "src/viper/verification/__init__.py:InternalSpec",
+    "src/viper/verification/__init__.py:ParameterizedSpec",
+    "src/viper/verification/__init__.py:ResolvedBaseSpec",
+    "src/viper/verification/__init__.py:ResolvedInternalSpec",
+    "src/viper/verification/__init__.py:ResolvedParameterizedSpec",
     "src/viper/verification/__init__.py:TrainSpec",
+    "src/viper/verification/__init__.py:StorageFetcher",
     "src/viper/verification/__init__.py:VerificationError",
     "src/viper/verification/__init__.py:VerificationPolicy",
     "src/viper/verification/__init__.py:VerifiedArtifact",
@@ -929,103 +933,99 @@ targets = [
     "src/viper/verification/__init__.py:VerifiedInput",
     "src/viper/verification/__init__.py:VerifiedRunPlan",
     "src/viper/verification/__init__.py:VerifiedRunResult",
-    "src/viper/verification/__init__.py:ViperCloudFileRef",
-    "src/viper/verification/__init__.py:ViperCloudStageResultSnapshotRef",
     "src/viper/verification/__init__.py:__all__",
+    "src/viper/verification/__init__.py:_stage_artifact_files",
     "src/viper/verification/__init__.py:_artifact_relative_path",
     "src/viper/verification/__init__.py:_expected_reused_files",
-    "src/viper/verification/__init__.py:_input_identities",
-    "src/viper/verification/__init__.py:_merge_stage_inputs",
     "src/viper/verification/__init__.py:_metric_references",
     "src/viper/verification/__init__.py:_rebuilt_reuse_key",
-    "src/viper/verification/__init__.py:_stage_artifact_files",
-    "src/viper/verification/__init__.py:_verify_reused_stages",
-    "src/viper/verification/__init__.py:_verify_run_result",
-    "src/viper/verification/__init__.py:build_stage_reuse_key",
-    "src/viper/verification/__init__.py:verified_input_identity",
-    "src/viper/verification/__init__.py:verify_run_result",
     "src/viper/verification/__init__.py:verify_stage_reuse",
-    "tests/test_verification_acceptance.py:ArtifactPointerRef",
-    "tests/test_verification_acceptance.py:BaseSpec",
-    "tests/test_verification_acceptance.py:BuildSpec",
+    "src/viper/verification/__init__.py:_merge_stage_inputs",
+    "src/viper/verification/__init__.py:_input_identities",
+    "src/viper/verification/__init__.py:_verify_reused_stages",
+    "src/viper/verification/__init__.py:verify_run_result",
+    "src/viper/verification/__init__.py:_verify_run_result",
+    "tests/test_verification_acceptance.py:current_params",
     "tests/test_verification_acceptance.py:BuildVariantStageParams",
-    "tests/test_verification_acceptance.py:CPUBackendContext",
-    "tests/test_verification_acceptance.py:CPUComputeSpec",
-    "tests/test_verification_acceptance.py:CPUContext",
-    "tests/test_verification_acceptance.py:CurrentParameterModelRef",
-    "tests/test_verification_acceptance.py:DownloadSpec",
-    "tests/test_verification_acceptance.py:EvaluateSpec",
-    "tests/test_verification_acceptance.py:EvaluateVariantStageParams",
-    "tests/test_verification_acceptance.py:ExecutionContext",
     "tests/test_verification_acceptance.py:ExperimentSpec",
+    "tests/test_verification_acceptance.py:ReplicateSpec",
+    "tests/test_verification_acceptance.py:TrainVariantStageParams",
+    "tests/test_verification_acceptance.py:VariantSpec",
+    "tests/test_verification_acceptance.py:EvaluateVariantStageParams",
     "tests/test_verification_acceptance.py:FloatComparator",
-    "tests/test_verification_acceptance.py:GCEBootImageRef",
-    "tests/test_verification_acceptance.py:GCEEnvironmentSpec",
-    "tests/test_verification_acceptance.py:GCEHostContext",
-    "tests/test_verification_acceptance.py:GeneratorInitializationReceipt",
-    "tests/test_verification_acceptance.py:GitFileRef",
-    "tests/test_verification_acceptance.py:GitSource",
-    "tests/test_verification_acceptance.py:HuggingFaceFileRef",
-    "tests/test_verification_acceptance.py:HuggingFaceStageResultSnapshotRef",
-    "tests/test_verification_acceptance.py:LocalFileRef",
-    "tests/test_verification_acceptance.py:LocalStageResultSnapshotRef",
     "tests/test_verification_acceptance.py:Measurement",
     "tests/test_verification_acceptance.py:MetricExecutionReceipt",
     "tests/test_verification_acceptance.py:MetricImplementationRef",
     "tests/test_verification_acceptance.py:MetricObjectiveSpec",
     "tests/test_verification_acceptance.py:MetricSpec",
     "tests/test_verification_acceptance.py:MetricVerificationReceipt",
-    "tests/test_verification_acceptance.py:NativeLibraryContext",
-    "tests/test_verification_acceptance.py:NativeThreadPoolContext",
-    "tests/test_verification_acceptance.py:NumPyRandomnessSpec",
-    "tests/test_verification_acceptance.py:NumericalRuntimeContext",
-    "tests/test_verification_acceptance.py:ParallelismSpec",
-    "tests/test_verification_acceptance.py:ParameterizedStageSpec",
-    "tests/test_verification_acceptance.py:ProcessStartupReceipt",
-    "tests/test_verification_acceptance.py:ReplicateSpec",
-    "tests/test_verification_acceptance.py:ReproducibilitySpec",
+    "tests/test_verification_acceptance.py:ResolvedMetricDependency",
+    "tests/test_verification_acceptance.py:CurrentParameterModelRef",
+    "tests/test_verification_acceptance.py:ArtifactPointerRef",
+    "tests/test_verification_acceptance.py:GitFileRef",
+    "tests/test_verification_acceptance.py:GitSource",
+    "tests/test_verification_acceptance.py:HuggingFaceFileRef",
+    "tests/test_verification_acceptance.py:HuggingFaceStageResultSnapshotRef",
+    "tests/test_verification_acceptance.py:LocalFileRef",
+    "tests/test_verification_acceptance.py:LocalStageResultSnapshotRef",
     "tests/test_verification_acceptance.py:ResolvedArtifactPointerRef",
     "tests/test_verification_acceptance.py:ResolvedBenchmarkSpecRef",
-    "tests/test_verification_acceptance.py:ResolvedBuildSpec",
-    "tests/test_verification_acceptance.py:ResolvedDownloadSpec",
-    "tests/test_verification_acceptance.py:ResolvedEvaluateSpec",
     "tests/test_verification_acceptance.py:ResolvedFileRef",
-    "tests/test_verification_acceptance.py:ResolvedGCEEnvironment",
     "tests/test_verification_acceptance.py:ResolvedGitFileRef",
-    "tests/test_verification_acceptance.py:ResolvedMetricDependency",
     "tests/test_verification_acceptance.py:ResolvedRunRef",
     "tests/test_verification_acceptance.py:ResolvedRunSpecRef",
     "tests/test_verification_acceptance.py:ResolvedStageInvocationRef",
     "tests/test_verification_acceptance.py:ResolvedStageRef",
-    "tests/test_verification_acceptance.py:ResolvedTrainSpec",
-    "tests/test_verification_acceptance.py:ReuseFileIdentity",
-    "tests/test_verification_acceptance.py:ReuseInputIdentity",
-    "tests/test_verification_acceptance.py:ReusedMetricEvidence",
-    "tests/test_verification_acceptance.py:ReusedStageFile",
     "tests/test_verification_acceptance.py:SnapshotFileRef",
-    "tests/test_verification_acceptance.py:StageContextBinding",
-    "tests/test_verification_acceptance.py:StageInvocationReceipt",
     "tests/test_verification_acceptance.py:StageResultSnapshot",
-    "tests/test_verification_acceptance.py:StageReuseReceipt",
     "tests/test_verification_acceptance.py:StorageModel",
-    "tests/test_verification_acceptance.py:TorchDeterminismSpec",
-    "tests/test_verification_acceptance.py:TorchPrecisionSpec",
-    "tests/test_verification_acceptance.py:TrainSpec",
-    "tests/test_verification_acceptance.py:TrainVariantStageParams",
-    "tests/test_verification_acceptance.py:VariantSpec",
-    "tests/test_verification_acceptance.py:VerificationError",
-    "tests/test_verification_acceptance.py:VerifiedRunPlan",
-    "tests/test_verification_acceptance.py:VerifiedRunResult",
     "tests/test_verification_acceptance.py:ViperCloudFileRef",
     "tests/test_verification_acceptance.py:ViperCloudStageResultSnapshotRef",
+    "tests/test_verification_acceptance.py:ReusedMetricEvidence",
+    "tests/test_verification_acceptance.py:ReusedStageFile",
+    "tests/test_verification_acceptance.py:ReuseFileIdentity",
+    "tests/test_verification_acceptance.py:ReuseInputIdentity",
+    "tests/test_verification_acceptance.py:StageReuseReceipt",
     "tests/test_verification_acceptance.py:build_stage_reuse_key",
-    "tests/test_verification_acceptance.py:current_params",
+    "tests/test_verification_acceptance.py:CPUBackendContext",
+    "tests/test_verification_acceptance.py:CPUComputeSpec",
+    "tests/test_verification_acceptance.py:CPUContext",
+    "tests/test_verification_acceptance.py:ExecutionContext",
+    "tests/test_verification_acceptance.py:GCEBootImageRef",
+    "tests/test_verification_acceptance.py:GCEHostContext",
+    "tests/test_verification_acceptance.py:GeneratorInitializationReceipt",
+    "tests/test_verification_acceptance.py:NativeLibraryContext",
+    "tests/test_verification_acceptance.py:NativeThreadPoolContext",
+    "tests/test_verification_acceptance.py:NumericalRuntimeContext",
+    "tests/test_verification_acceptance.py:NumPyRandomnessSpec",
+    "tests/test_verification_acceptance.py:ParallelismSpec",
+    "tests/test_verification_acceptance.py:ProcessStartupReceipt",
+    "tests/test_verification_acceptance.py:ReproducibilitySpec",
+    "tests/test_verification_acceptance.py:TorchDeterminismSpec",
+    "tests/test_verification_acceptance.py:TorchPrecisionSpec",
     "tests/test_verification_acceptance.py:process_environment",
-    "tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship",
+    "tests/test_verification_acceptance.py:GCEEnvironmentSpec",
+    "tests/test_verification_acceptance.py:ResolvedGCEEnvironment",
+    "tests/test_verification_acceptance.py:BaseSpec",
+    "tests/test_verification_acceptance.py:BuildSpec",
+    "tests/test_verification_acceptance.py:DownloadSpec",
+    "tests/test_verification_acceptance.py:ParameterizedStageSpec",
+    "tests/test_verification_acceptance.py:ResolvedBuildSpec",
+    "tests/test_verification_acceptance.py:ResolvedDownloadSpec",
+    "tests/test_verification_acceptance.py:ResolvedTrainSpec",
+    "tests/test_verification_acceptance.py:StageContextBinding",
+    "tests/test_verification_acceptance.py:StageInvocationReceipt",
+    "tests/test_verification_acceptance.py:TrainSpec",
+    "tests/test_verification_acceptance.py:EvaluateSpec",
+    "tests/test_verification_acceptance.py:ResolvedEvaluateSpec",
     "tests/test_verification_acceptance.py:verify_benchmark_result",
     "tests/test_verification_acceptance.py:verify_promoted_artifact",
     "tests/test_verification_acceptance.py:verify_run_result",
     "tests/test_verification_acceptance.py:verify_stage_reuse",
+    "tests/test_verification_acceptance.py:VerificationError",
+    "tests/test_verification_acceptance.py:VerifiedRunPlan",
+    "tests/test_verification_acceptance.py:VerifiedRunResult",
+    "tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship",
 ]
 tests = [
     "tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship",
@@ -1039,6 +1039,11 @@ depends_on = [
 **Context:** This block verifies the source run, rebuilt key, completion, files, inputs, and metric evidence, then rejects every severed relationship.
 
 ## 15. ContractTarget
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/api.py:catalog_reuse_candidates -->
+```python contract-target
+from .reuse import catalog_reuse_candidates
+```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/api.py:_catalog_run_source -->
 ```python contract-target
@@ -1077,9 +1082,9 @@ def _catalog_run_source(
     )
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/api.py:catalog_reuse_candidates -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/authoring.py:StageReuseMode -->
 ```python contract-target
-from .reuse import catalog_reuse_candidates
+from .reuse import StageReuseMode
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/authoring.py:ParameterizedSpecDraft -->
@@ -1091,11 +1096,6 @@ class ParameterizedSpecDraft(BaseSpecDraft):
     params: params.ParameterSet
     metrics: tuple[MetricDraft[Any], ...] = ()
     reuse: StageReuseMode = "never"
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/authoring.py:StageReuseMode -->
-```python contract-target
-from .reuse import StageReuseMode
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/authoring.py:_freeze_stage -->
@@ -1241,6 +1241,100 @@ def stage(
     else:
         raise ValueError(f"unsupported stage kind: {definition.kind}")
     return StageDraft(spec=spec)
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:StageReuseCandidate -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:StageReuseKey -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:stage_reuse_key_sha256 -->
+```python contract-target
+from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/catalog.py:CatalogRunSource -->
+```python contract-target
+@dataclass(frozen=True)
+class CatalogRunSource:
+    """Pair one immutable terminal reference with its verified contents."""
+
+    reference: ResolvedRunRef
+    verified: VerifiedRunResult
+    reuse_candidates: tuple[StageReuseCandidate, ...] = ()
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/catalog.py:_SCHEMA -->
+```python contract-target
+_SCHEMA = """
+PRAGMA user_version = 1;
+CREATE TABLE sources (
+    source_key TEXT PRIMARY KEY,
+    reference_json TEXT NOT NULL,
+    accepted INTEGER NOT NULL,
+    error TEXT
+);
+CREATE TABLE runs (
+    source_key TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    lineage_json TEXT NOT NULL
+);
+CREATE TABLE stages (source_key TEXT NOT NULL, stage_id TEXT NOT NULL);
+CREATE TABLE inputs (source_key TEXT NOT NULL, sha256 TEXT NOT NULL);
+CREATE TABLE artifacts (
+    source_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE TABLE files (
+    source_key TEXT NOT NULL,
+    artifact_name TEXT NOT NULL,
+    sha256 TEXT NOT NULL
+);
+CREATE TABLE measurements (
+    source_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE TABLE benchmarks (
+    source_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE TABLE edges (
+    source_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE TABLE stage_reuse_keys (
+    key_sha256 TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    attempt_id INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (key_sha256, source_key)
+);
+"""
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:_validate_reuse_candidate -->
+```python contract-target
+def _validate_reuse_candidate(
+    source: CatalogRunSource,
+    candidate: StageReuseCandidate,
+) -> None:
+    """Keep every indexed candidate inside its verified successful attempt."""
+    if candidate.source_run != source.reference:
+        raise ValueError("reuse candidate belongs to another run")
+    successful_id = source.verified.result.successful_attempt_id
+    if candidate.source_attempt not in source.verified.result.attempts:
+        raise ValueError("reuse candidate attempt is absent from its run")
+    attempt = next(
+        (
+            item
+            for item in source.verified.attempts
+            if item.attempt_id == candidate.attempt_id
+        ),
+        None,
+    )
+    if attempt is None or attempt.attempt_id != successful_id:
+        raise ValueError("reuse candidate does not use the successful attempt")
+    if candidate.source_stage not in attempt.resolved_stages:
+        raise ValueError("reuse candidate stage is absent from its attempt")
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/catalog.py:Catalog -->
@@ -1704,110 +1798,40 @@ class Catalog:
         return candidate
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/catalog.py:CatalogRunSource -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:Mapping -->
 ```python contract-target
-@dataclass(frozen=True)
-class CatalogRunSource:
-    """Pair one immutable terminal reference with its verified contents."""
-
-    reference: ResolvedRunRef
-    verified: VerifiedRunResult
-    reuse_candidates: tuple[StageReuseCandidate, ...] = ()
+from collections.abc import Mapping
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:StageReuseCandidate -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:StageReuseKey -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:stage_reuse_key_sha256 -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:SHA256 -->
 ```python contract-target
-from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
+from ._schema import SHA256
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/catalog.py:_SCHEMA -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:RunId -->
 ```python contract-target
-_SCHEMA = """
-PRAGMA user_version = 1;
-CREATE TABLE sources (
-    source_key TEXT PRIMARY KEY,
-    reference_json TEXT NOT NULL,
-    accepted INTEGER NOT NULL,
-    error TEXT
-);
-CREATE TABLE runs (
-    source_key TEXT PRIMARY KEY,
-    payload_json TEXT NOT NULL,
-    lineage_json TEXT NOT NULL
-);
-CREATE TABLE stages (source_key TEXT NOT NULL, stage_id TEXT NOT NULL);
-CREATE TABLE inputs (source_key TEXT NOT NULL, sha256 TEXT NOT NULL);
-CREATE TABLE artifacts (
-    source_key TEXT NOT NULL,
-    payload_json TEXT NOT NULL
-);
-CREATE TABLE files (
-    source_key TEXT NOT NULL,
-    artifact_name TEXT NOT NULL,
-    sha256 TEXT NOT NULL
-);
-CREATE TABLE measurements (
-    source_key TEXT NOT NULL,
-    payload_json TEXT NOT NULL
-);
-CREATE TABLE benchmarks (
-    source_key TEXT NOT NULL,
-    payload_json TEXT NOT NULL
-);
-CREATE TABLE edges (
-    source_key TEXT NOT NULL,
-    payload_json TEXT NOT NULL
-);
-CREATE TABLE stage_reuse_keys (
-    key_sha256 TEXT NOT NULL,
-    source_key TEXT NOT NULL,
-    completed_at TEXT NOT NULL,
-    run_id TEXT NOT NULL,
-    attempt_id INTEGER NOT NULL,
-    payload_json TEXT NOT NULL,
-    PRIMARY KEY (key_sha256, source_key)
-);
-"""
+from .ids import RunId, StageId
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/catalog.py:_validate_reuse_candidate -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:StageId -->
 ```python contract-target
-def _validate_reuse_candidate(
-    source: CatalogRunSource,
-    candidate: StageReuseCandidate,
-) -> None:
-    """Keep every indexed candidate inside its verified successful attempt."""
-    if candidate.source_run != source.reference:
-        raise ValueError("reuse candidate belongs to another run")
-    successful_id = source.verified.result.successful_attempt_id
-    if candidate.source_attempt not in source.verified.result.attempts:
-        raise ValueError("reuse candidate attempt is absent from its run")
-    attempt = next(
-        (
-            item
-            for item in source.verified.attempts
-            if item.attempt_id == candidate.attempt_id
-        ),
-        None,
-    )
-    if attempt is None or attempt.attempt_id != successful_id:
-        raise ValueError("reuse candidate does not use the successful attempt")
-    if candidate.source_stage not in attempt.resolved_stages:
-        raise ValueError("reuse candidate stage is absent from its attempt")
+from .ids import RunId, StageId
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:LineageEdge -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:StageReuseReceipt -->
 ```python contract-target
-class LineageEdge(BaseModel):
-    """Describe one directed production, selection, or consumption relation."""
+from .reuse import StageReuseReceipt
+```
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:document_digest -->
+```python contract-target
+from .serialization import document_digest, load_stage_spec, parse_yaml_bytes
+```
 
-    source: str
-    target: str
-    relation: Literal["produces", "selects", "consumes", "reuses"]
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:load_stage_spec -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:parse_yaml_bytes -->
+```python contract-target
+from .serialization import document_digest, load_stage_spec, parse_yaml_bytes
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:LineageNode -->
@@ -1830,29 +1854,16 @@ class LineageNode(BaseModel):
     reuse_key_sha256: SHA256 | None = None
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:Mapping -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:LineageEdge -->
 ```python contract-target
-from collections.abc import Mapping
-```
+class LineageEdge(BaseModel):
+    """Describe one directed production, selection, or consumption relation."""
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:RunId -->
-```python contract-target
-from .ids import RunId, StageId
-```
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:SHA256 -->
-```python contract-target
-from ._schema import SHA256
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:StageId -->
-```python contract-target
-from .ids import RunId, StageId
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:StageReuseReceipt -->
-```python contract-target
-from .reuse import StageReuseReceipt
+    source: str
+    target: str
+    relation: Literal["produces", "selects", "consumes", "reuses"]
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:_verified_run_document -->
@@ -1934,11 +1945,6 @@ def compare_runs(
         identical=not changes,
         changes=tuple(changes),
     )
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/inspection.py:document_digest -->
-```python contract-target
-from .serialization import document_digest, load_stage_spec, parse_yaml_bytes
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:lineage -->
@@ -2056,12 +2062,6 @@ def lineage(
     )
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:load_stage_spec -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/inspection.py:parse_yaml_bytes -->
-```python contract-target
-from .serialization import document_digest, load_stage_spec, parse_yaml_bytes
-```
-
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/params.py:ParameterSet -->
 ```python contract-target
 class ParameterSet(BaseModel):
@@ -2076,21 +2076,55 @@ class ParameterSet(BaseModel):
     schema_version: Literal[1] = 1
 ```
 
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:annotations -->
+```python contract-target
+from __future__ import annotations
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:hashlib -->
+```python contract-target
+import hashlib
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:json -->
+```python contract-target
+import json
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Mapping -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Sequence -->
+```python contract-target
+from collections.abc import Mapping, Sequence
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:TYPE_CHECKING -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Annotated -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Literal -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Self -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:TYPE_CHECKING -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:cast -->
 ```python contract-target
 from typing import TYPE_CHECKING, Annotated, Literal, Self, cast
 ```
 
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:AwareDatetime -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:BaseModel -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Field -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:model_validator -->
+```python contract-target
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:SHA256 -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ArtifactName -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:DataRole -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ProtocolModel -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:RNGSeed -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:RepoRelPath -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:SHA256 -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:RNGSeed -->
 ```python contract-target
 from ._schema import (
     SHA256,
@@ -2102,43 +2136,6 @@ from ._schema import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:AwareDatetime -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:BaseModel -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Field -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:model_validator -->
-```python contract-target
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:EnvSpec -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ExecutionContext -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ProcessStartupReceipt -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReproducibilitySpec -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ResolvedEnv -->
-```python contract-target
-from .runtime import (
-    EnvSpec,
-    ExecutionContext,
-    ProcessStartupReceipt,
-    ReproducibilitySpec,
-    ResolvedEnv,
-)
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ExecutedStageCompletion -->
-```python contract-target
-class ExecutedStageCompletion(ProtocolModel):
-    """Record evidence created by an actual project stage process."""
-
-    kind: Literal["executed"] = "executed"
-    source: ResolvedGitFileRef
-    env: ResolvedEnv
-    execution_context: ExecutionContext
-    startup: ProcessStartupReceipt
-    invocation: ResolvedStageInvocationRef
-    command: tuple[str, ...] = Field(min_length=1)
-```
-
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:InputName -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:MetricId -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageId -->
@@ -2146,25 +2143,9 @@ class ExecutedStageCompletion(ProtocolModel):
 from .ids import InputName, MetricId, StageId
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Mapping -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Sequence -->
-```python contract-target
-from collections.abc import Mapping, Sequence
-```
-
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:MetricSpec -->
 ```python contract-target
 from .metrics import MetricSpec
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:Path -->
-```python contract-target
-from pathlib import Path
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ResolvedAttemptRef -->
-```python contract-target
-from .runs import ResolvedAttemptRef
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ResolvedFileRef -->
@@ -2184,12 +2165,29 @@ from .references import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ResolvedStageReuseRef -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ResolvedAttemptRef -->
 ```python contract-target
-class ResolvedStageReuseRef(ResolvedFileRef):
-    """Identify one immutable stage-reuse receipt."""
+from .runs import ResolvedAttemptRef
+```
 
-    kind: Literal["stage_reuse"] = "stage_reuse"
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:EnvSpec -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ExecutionContext -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ProcessStartupReceipt -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReproducibilitySpec -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ResolvedEnv -->
+```python contract-target
+from .runtime import (
+    EnvSpec,
+    ExecutionContext,
+    ProcessStartupReceipt,
+    ReproducibilitySpec,
+    ResolvedEnv,
+)
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageReuseMode -->
+```python contract-target
+StageReuseMode = Literal["never", "verified"]
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReuseFileIdentity -->
@@ -2212,23 +2210,19 @@ class ReuseInputIdentity(ProtocolModel):
     files: tuple[ReuseFileIdentity, ...] = Field(min_length=1)
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReusedMetricEvidence -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageReuseKey -->
 ```python contract-target
-class ReusedMetricEvidence(ProtocolModel):
-    """Link one reused metric to its original measurement evidence."""
+class StageReuseKey(ProtocolModel):
+    """Describe every recorded value allowed to affect a reusable stage."""
 
-    metric_id: MetricId
-    measurement: ResolvedFileRef
-    verification: ResolvedFileRef | None = None
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReusedStageCompletion -->
-```python contract-target
-class ReusedStageCompletion(ProtocolModel):
-    """Record that a project stage selected verified prior output."""
-
-    kind: Literal["reused"] = "reused"
-    receipt: ResolvedStageReuseRef
+    schema_version: Literal[1] = 1
+    stage_id: StageId
+    stage_sha256: SHA256
+    inputs: tuple[ReuseInputIdentity, ...]
+    seed: RNGSeed
+    env_sha256: SHA256
+    reproducibility_sha256: SHA256
+    metric_sha256s: tuple[SHA256, ...]
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReusedStageFile -->
@@ -2250,6 +2244,63 @@ class ReusedStageFile(ProtocolModel):
         return self
 ```
 
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReusedMetricEvidence -->
+```python contract-target
+class ReusedMetricEvidence(ProtocolModel):
+    """Link one reused metric to its original measurement evidence."""
+
+    metric_id: MetricId
+    measurement: ResolvedFileRef
+    verification: ResolvedFileRef | None = None
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageReuseReceipt -->
+```python contract-target
+class StageReuseReceipt(ProtocolModel):
+    """Record the verified source and remapping for one reused stage."""
+
+    schema_version: Literal[1] = 1
+    stage_id: StageId
+    key: StageReuseKey
+    source_run: ResolvedRunRef
+    source_attempt: ResolvedAttemptRef
+    source_stage: ResolvedStageRef
+    files: tuple[ReusedStageFile, ...] = Field(min_length=1)
+    metrics: tuple[ReusedMetricEvidence, ...]
+    completed_at: AwareDatetime
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ResolvedStageReuseRef -->
+```python contract-target
+class ResolvedStageReuseRef(ResolvedFileRef):
+    """Identify one immutable stage-reuse receipt."""
+
+    kind: Literal["stage_reuse"] = "stage_reuse"
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ExecutedStageCompletion -->
+```python contract-target
+class ExecutedStageCompletion(ProtocolModel):
+    """Record evidence created by an actual project stage process."""
+
+    kind: Literal["executed"] = "executed"
+    source: ResolvedGitFileRef
+    env: ResolvedEnv
+    execution_context: ExecutionContext
+    startup: ProcessStartupReceipt
+    invocation: ResolvedStageInvocationRef
+    command: tuple[str, ...] = Field(min_length=1)
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:ReusedStageCompletion -->
+```python contract-target
+class ReusedStageCompletion(ProtocolModel):
+    """Record that a project stage selected verified prior output."""
+
+    kind: Literal["reused"] = "reused"
+    receipt: ResolvedStageReuseRef
+```
+
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageCompletion -->
 ```python contract-target
 StageCompletion = Annotated[
@@ -2269,65 +2320,6 @@ class StageReuseCandidate(ProtocolModel):
     attempt_id: int = Field(ge=1)
     source_stage: ResolvedStageRef
     completed_at: AwareDatetime
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageReuseKey -->
-```python contract-target
-class StageReuseKey(ProtocolModel):
-    """Describe every recorded value allowed to affect a reusable stage."""
-
-    schema_version: Literal[1] = 1
-    stage_id: StageId
-    stage_sha256: SHA256
-    inputs: tuple[ReuseInputIdentity, ...]
-    seed: RNGSeed
-    env_sha256: SHA256
-    reproducibility_sha256: SHA256
-    metric_sha256s: tuple[SHA256, ...]
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageReuseMode -->
-```python contract-target
-StageReuseMode = Literal["never", "verified"]
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:StageReuseReceipt -->
-```python contract-target
-class StageReuseReceipt(ProtocolModel):
-    """Record the verified source and remapping for one reused stage."""
-
-    schema_version: Literal[1] = 1
-    stage_id: StageId
-    key: StageReuseKey
-    source_run: ResolvedRunRef
-    source_attempt: ResolvedAttemptRef
-    source_stage: ResolvedStageRef
-    files: tuple[ReusedStageFile, ...] = Field(min_length=1)
-    metrics: tuple[ReusedMetricEvidence, ...]
-    completed_at: AwareDatetime
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:__all__ -->
-```python contract-target
-__all__ = [
-    "ExecutedStageCompletion",
-    "ResolvedStageReuseRef",
-    "ReuseFileIdentity",
-    "ReuseInputIdentity",
-    "ReusedMetricEvidence",
-    "ReusedStageCompletion",
-    "ReusedStageFile",
-    "StageCompletion",
-    "StageReuseCandidate",
-    "StageReuseKey",
-    "StageReuseMode",
-    "StageReuseReceipt",
-    "build_stage_reuse_key",
-    "catalog_reuse_candidates",
-    "input_identity",
-    "stage_reuse_key_sha256",
-    "verified_input_identity",
-]
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:_canonical_sha256 -->
@@ -2359,9 +2351,69 @@ def _normalized_stage(stage: ParameterizedSpec) -> dict[str, object]:
     return payload
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:annotations -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:input_identity -->
 ```python contract-target
-from __future__ import annotations
+def input_identity(
+    input_name: InputName,
+    data_role: DataRole,
+    root: Path,
+) -> ReuseInputIdentity:
+    """Hash one materialized input file or directory in stable path order."""
+    selected = root.resolve(strict=True)
+    paths = (selected,) if selected.is_file() else tuple(sorted(selected.rglob("*")))
+    files = []
+    for path in paths:
+        if not path.is_file() or path.is_symlink():
+            continue
+        raw = path.read_bytes()
+        relative = (
+            path.name
+            if selected.is_file()
+            else path.relative_to(selected).as_posix()
+        )
+        files.append(
+            ReuseFileIdentity(
+                relative_path=relative,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    if not files:
+        raise ValueError(f"stage input {input_name!r} has no regular files")
+    return ReuseInputIdentity(
+        input_name=input_name,
+        data_role=data_role,
+        files=tuple(files),
+    )
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:verified_input_identity -->
+```python contract-target
+def verified_input_identity(
+    input_name: InputName,
+    value: VerifiedInput,
+) -> ReuseInputIdentity:
+    """Build one reuse identity from input bytes already accepted by verification."""
+    files = []
+    for file in value.files:
+        path = Path(file.reference.path)
+        root = Path(value.path)
+        try:
+            relative = path.relative_to(root).as_posix()
+        except ValueError:
+            relative = path.name
+        files.append(
+            ReuseFileIdentity(
+                relative_path=relative,
+                sha256=file.reference.sha256,
+                bytes=file.reference.bytes,
+            )
+        )
+    return ReuseInputIdentity(
+        input_name=input_name,
+        data_role=value.data_role,
+        files=tuple(sorted(files, key=lambda item: item.relative_path)),
+    )
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:build_stage_reuse_key -->
@@ -2387,6 +2439,13 @@ def build_stage_reuse_key(
         reproducibility_sha256=_canonical_sha256(reproducibility),
         metric_sha256s=tuple(_canonical_sha256(metric) for metric in selected_metrics),
     )
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:stage_reuse_key_sha256 -->
+```python contract-target
+def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:
+    """Return the catalog identity for one complete reuse key."""
+    return _canonical_sha256(key)
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:catalog_reuse_candidates -->
@@ -2451,86 +2510,33 @@ def catalog_reuse_candidates(
     return tuple(candidates)
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:hashlib -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:__all__ -->
 ```python contract-target
-import hashlib
+__all__ = [
+    "ExecutedStageCompletion",
+    "ResolvedStageReuseRef",
+    "ReuseFileIdentity",
+    "ReuseInputIdentity",
+    "ReusedMetricEvidence",
+    "ReusedStageCompletion",
+    "ReusedStageFile",
+    "StageCompletion",
+    "StageReuseCandidate",
+    "StageReuseKey",
+    "StageReuseMode",
+    "StageReuseReceipt",
+    "build_stage_reuse_key",
+    "catalog_reuse_candidates",
+    "input_identity",
+    "stage_reuse_key_sha256",
+    "verified_input_identity",
+]
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:input_identity -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/stages.py:StageCompletion -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/stages.py:StageReuseMode -->
 ```python contract-target
-def input_identity(
-    input_name: InputName,
-    data_role: DataRole,
-    root: Path,
-) -> ReuseInputIdentity:
-    """Hash one materialized input file or directory in stable path order."""
-    selected = root.resolve(strict=True)
-    paths = (selected,) if selected.is_file() else tuple(sorted(selected.rglob("*")))
-    files = []
-    for path in paths:
-        if not path.is_file() or path.is_symlink():
-            continue
-        raw = path.read_bytes()
-        relative = (
-            path.name
-            if selected.is_file()
-            else path.relative_to(selected).as_posix()
-        )
-        files.append(
-            ReuseFileIdentity(
-                relative_path=relative,
-                sha256=hashlib.sha256(raw).hexdigest(),
-                bytes=len(raw),
-            )
-        )
-    if not files:
-        raise ValueError(f"stage input {input_name!r} has no regular files")
-    return ReuseInputIdentity(
-        input_name=input_name,
-        data_role=data_role,
-        files=tuple(files),
-    )
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:json -->
-```python contract-target
-import json
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:stage_reuse_key_sha256 -->
-```python contract-target
-def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:
-    """Return the catalog identity for one complete reuse key."""
-    return _canonical_sha256(key)
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/reuse.py:verified_input_identity -->
-```python contract-target
-def verified_input_identity(
-    input_name: InputName,
-    value: VerifiedInput,
-) -> ReuseInputIdentity:
-    """Build one reuse identity from input bytes already accepted by verification."""
-    files = []
-    for file in value.files:
-        path = Path(file.reference.path)
-        root = Path(value.path)
-        try:
-            relative = path.relative_to(root).as_posix()
-        except ValueError:
-            relative = path.name
-        files.append(
-            ReuseFileIdentity(
-                relative_path=relative,
-                sha256=file.reference.sha256,
-                bytes=file.reference.bytes,
-            )
-        )
-    return ReuseInputIdentity(
-        input_name=input_name,
-        data_role=value.data_role,
-        files=tuple(sorted(files, key=lambda item: item.relative_path)),
-    )
+from .reuse import StageCompletion, StageReuseMode
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/stages.py:EnvSpec -->
@@ -2620,42 +2626,6 @@ class ResolvedBaseSpec(ProtocolModel):
         return self
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/stages.py:ResolvedDownloadSpec -->
-```python contract-target
-class ResolvedDownloadSpec(ResolvedExecutedSpec):
-    """Bind every frozen HTTP input to its completed retrieval evidence."""
-
-    kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
-    spec: DownloadSpec  # pyright: ignore[reportIncompatibleVariableOverride]
-
-    retrievals: dict[InputName, ResolvedHttpRetrieval]
-
-    @model_validator(mode="after")
-    def validate_download_retrievals(self) -> ResolvedDownloadSpec:
-        """Match each retrieval to its request, HTTP implementation, and timing."""
-        if set(self.retrievals) != set(self.spec.inputs):
-            raise ValueError("resolved retrieval names must match download inputs")
-        if set(self.artifacts) != set(self.retrievals):
-            raise ValueError("resolved download artifacts must match retrievals")
-        for input_name, retrieval in self.retrievals.items():
-            if retrieval.input_name != input_name:
-                raise ValueError("resolved retrieval input name differs from its key")
-            if retrieval.request != self.spec.inputs[input_name]:
-                raise ValueError(
-                    "resolved retrieval request differs from download input"
-                )
-            if retrieval.http.spec != self.spec.http:
-                raise ValueError("resolved HTTP implementation differs from stage spec")
-            artifact = self.artifacts[input_name]
-            if not isinstance(artifact, ResolvedSingleFileArtifact):
-                raise ValueError("resolved download artifacts must be single files")
-            if retrieval.body != artifact.file:
-                raise ValueError("retrieval body must equal its resolved artifact file")
-            if retrieval.completed_at > self.completed_at:
-                raise ValueError("download retrieval cannot follow stage completion")
-        return self
-```
-
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/stages.py:ResolvedExecutedSpec -->
 ```python contract-target
 class ResolvedExecutedSpec(ResolvedBaseSpec):
@@ -2739,6 +2709,42 @@ class ResolvedExecutedSpec(ResolvedBaseSpec):
         return self
 ```
 
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/stages.py:ResolvedDownloadSpec -->
+```python contract-target
+class ResolvedDownloadSpec(ResolvedExecutedSpec):
+    """Bind every frozen HTTP input to its completed retrieval evidence."""
+
+    kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
+    spec: DownloadSpec  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    retrievals: dict[InputName, ResolvedHttpRetrieval]
+
+    @model_validator(mode="after")
+    def validate_download_retrievals(self) -> ResolvedDownloadSpec:
+        """Match each retrieval to its request, HTTP implementation, and timing."""
+        if set(self.retrievals) != set(self.spec.inputs):
+            raise ValueError("resolved retrieval names must match download inputs")
+        if set(self.artifacts) != set(self.retrievals):
+            raise ValueError("resolved download artifacts must match retrievals")
+        for input_name, retrieval in self.retrievals.items():
+            if retrieval.input_name != input_name:
+                raise ValueError("resolved retrieval input name differs from its key")
+            if retrieval.request != self.spec.inputs[input_name]:
+                raise ValueError(
+                    "resolved retrieval request differs from download input"
+                )
+            if retrieval.http.spec != self.spec.http:
+                raise ValueError("resolved HTTP implementation differs from stage spec")
+            artifact = self.artifacts[input_name]
+            if not isinstance(artifact, ResolvedSingleFileArtifact):
+                raise ValueError("resolved download artifacts must be single files")
+            if retrieval.body != artifact.file:
+                raise ValueError("retrieval body must equal its resolved artifact file")
+            if retrieval.completed_at > self.completed_at:
+                raise ValueError("download retrieval cannot follow stage completion")
+        return self
+```
+
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/stages.py:ResolvedParameterizedSpec -->
 ```python contract-target
 class ResolvedParameterizedSpec(ResolvedBaseSpec):
@@ -2782,12 +2788,6 @@ class ResolvedParameterizedSpec(ResolvedBaseSpec):
         return self
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/stages.py:StageCompletion -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/stages.py:StageReuseMode -->
-```python contract-target
-from .reuse import StageCompletion, StageReuseMode
-```
-
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/stages.py:validate_stage_definition -->
 ```python contract-target
 def validate_stage_definition(
@@ -2829,6 +2829,16 @@ def validate_stage_definition(
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=remove target=src/viper/stages.py:ResolvedStageInvocationRef -->
 <!-- contract-remove -->
 
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/verification/models.py:dataclass -->
+```python contract-target
+from dataclasses import dataclass, field
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/verification/models.py:field -->
+```python contract-target
+from dataclasses import dataclass, field
+```
+
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/verification/models.py:InputName -->
 ```python contract-target
 from ..ids import InputName, StageId
@@ -2857,16 +2867,6 @@ class VerifiedRunResult:
     measurements: tuple[Measurement, ...]
     inputs: dict[StageId, dict[InputName, VerifiedInput]] = field(default_factory=dict)
     reuse: dict[StageId, StageReuseReceipt] = field(default_factory=dict)
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=src/viper/verification/models.py:dataclass -->
-```python contract-target
-from dataclasses import dataclass, field
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=src/viper/verification/models.py:field -->
-```python contract-target
-from dataclasses import dataclass, field
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_inspection.py:GitFileRef -->
@@ -2900,6 +2900,21 @@ from viper.references import (
 )
 ```
 
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:ReusedStageFile -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:StageReuseCandidate -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:StageReuseKey -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:StageReuseReceipt -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:stage_reuse_key_sha256 -->
+```python contract-target
+from viper.reuse import (
+    ReusedStageFile,
+    StageReuseCandidate,
+    StageReuseKey,
+    StageReuseReceipt,
+    stage_reuse_key_sha256,
+)
+```
+
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:ResolvedAttemptRef -->
 ```python contract-target
 from viper.runs import (
@@ -2919,18 +2934,25 @@ from viper.runs import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:ReusedStageFile -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:StageReuseCandidate -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:StageReuseKey -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:StageReuseReceipt -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:stage_reuse_key_sha256 -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:document_digest -->
 ```python contract-target
-from viper.reuse import (
-    ReusedStageFile,
-    StageReuseCandidate,
-    StageReuseKey,
-    StageReuseReceipt,
-    stage_reuse_key_sha256,
+from viper.serialization import (
+    document_digest,
+    load_stage_spec,
+    parse_yaml_bytes,
+    serialize_document,
+)
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_inspection.py:load_stage_spec -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_inspection.py:parse_yaml_bytes -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_inspection.py:serialize_document -->
+```python contract-target
+from viper.serialization import (
+    document_digest,
+    load_stage_spec,
+    parse_yaml_bytes,
+    serialize_document,
 )
 ```
 
@@ -2991,26 +3013,30 @@ def _reuse_receipt() -> StageReuseReceipt:
     )
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:document_digest -->
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
 ```python contract-target
-from viper.serialization import (
-    document_digest,
-    load_stage_spec,
-    parse_yaml_bytes,
-    serialize_document,
-)
-```
+def test_reuse_identity_appears_in_inspection_surfaces(tmp_path: Path) -> None:
+    """Expose one verified reuse receipt in lineage and run comparison."""
+    run_path = _write_plan(tmp_path, seed=42)
+    verified = _verified_result(tmp_path, run_path)
+    receipt = _reuse_receipt()
+    reuse = {receipt.stage_id: receipt}
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_inspection.py:load_stage_spec -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_inspection.py:parse_yaml_bytes -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_inspection.py:serialize_document -->
-```python contract-target
-from viper.serialization import (
-    document_digest,
-    load_stage_spec,
-    parse_yaml_bytes,
-    serialize_document,
-)
+    result = lineage(verified, reuse=reuse)
+    key_sha256 = document_digest(receipt.key)
+    stage = next(node for node in result.nodes if node.node_id == "stage:download")
+    source = next(node for node in result.nodes if node.kind == "source_run")
+    assert stage.reuse_key_sha256 == key_sha256
+    assert source.node_id == f"source-run:{receipt.source_run.sha256}"
+    assert any(edge.relation == "reuses" for edge in result.edges)
+
+    comparison = compare_runs(verified, verified, right_reuse=reuse)
+    assert comparison.identical is False
+    assert all(
+        change.path == "stage_reuse"
+        or change.path.startswith("stage_reuse.download")
+        for change in comparison.changes
+    )
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:test_catalog_returns_an_exact_stage_reuse_candidate -->
@@ -3069,45 +3095,9 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
     assert catalog.reuse_candidate(key.model_copy(update={"seed": 43})) is None
 ```
 
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
-```python contract-target
-def test_reuse_identity_appears_in_inspection_surfaces(tmp_path: Path) -> None:
-    """Expose one verified reuse receipt in lineage and run comparison."""
-    run_path = _write_plan(tmp_path, seed=42)
-    verified = _verified_result(tmp_path, run_path)
-    receipt = _reuse_receipt()
-    reuse = {receipt.stage_id: receipt}
-
-    result = lineage(verified, reuse=reuse)
-    key_sha256 = document_digest(receipt.key)
-    stage = next(node for node in result.nodes if node.node_id == "stage:download")
-    source = next(node for node in result.nodes if node.kind == "source_run")
-    assert stage.reuse_key_sha256 == key_sha256
-    assert source.node_id == f"source-run:{receipt.source_run.sha256}"
-    assert any(edge.relation == "reuses" for edge in result.edges)
-
-    comparison = compare_runs(verified, verified, right_reuse=reuse)
-    assert comparison.identical is False
-    assert all(
-        change.path == "stage_reuse"
-        or change.path.startswith("stage_reuse.download")
-        for change in comparison.changes
-    )
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_protocol.py:CUDABackendContext -->
-```python contract-target
-from viper.runtime import CUDABackendContext, ReproducibilitySpec
-```
-
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReproducibilitySpec -->
-```python contract-target
-from viper.runtime import CUDABackendContext, ReproducibilitySpec
-```
-
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReusedStageFile -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReuseFileIdentity -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReuseInputIdentity -->
-<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReusedStageFile -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:build_stage_reuse_key -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:stage_reuse_key_sha256 -->
 ```python contract-target
@@ -3118,6 +3108,16 @@ from viper.reuse import (
     build_stage_reuse_key,
     stage_reuse_key_sha256,
 )
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=update target=tests/test_protocol.py:CUDABackendContext -->
+```python contract-target
+from viper.runtime import CUDABackendContext, ReproducibilitySpec
+```
+
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReproducibilitySpec -->
+```python contract-target
+from viper.runtime import CUDABackendContext, ReproducibilitySpec
 ```
 
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:test_stage_reuse_models_form_valid_completion_union -->
@@ -3187,19 +3187,30 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
         )
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/_parameter/validation.py:_installed_parameter_model -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/_parameter/validation.py:validate_parameters -->
 ```python contract-target
-def _installed_parameter_model(
-    symbol: str,
+def validate_parameters(
+    path: Path,
+    reference: ParameterModelRef,
+    params: params.ParameterSet,
     expected_base: type[params.ParameterSet],
-) -> type[params.ParameterSet]:
-    """Resolve a built-in parameter model from the installed VIPER package."""
-    value = getattr(params, symbol, None)
-    if not isinstance(value, type) or not issubclass(value, expected_base):
+) -> dict[str, JsonValue]:
+    """Validate one frozen parameter mapping with its selected project class."""
+    raw = path.read_bytes()
+    verify_parameter_model_bytes(reference, raw)
+    model = (
+        load_parameter_model(path, reference.symbol, expected_base)
+        if reference.owner == "project"
+        else _installed_parameter_model(reference.symbol, expected_base)
+    )
+    frozen = cast(dict[str, JsonValue], params.model_dump(mode="json"))
+    validated = model.model_validate(frozen, strict=True)
+    effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
+    if effective != frozen:
         raise ParameterValidationError(
-            f"parameter model must subclass {expected_base.__name__}"
+            "frozen parameters must contain every effective project-model value"
         )
-    return cast(type[params.ParameterSet], value)
+    return effective
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/_parameter/validation.py:instantiate_parameters -->
@@ -3228,30 +3239,19 @@ def instantiate_parameters(
     return validated
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/_parameter/validation.py:validate_parameters -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/_parameter/validation.py:_installed_parameter_model -->
 ```python contract-target
-def validate_parameters(
-    path: Path,
-    reference: ParameterModelRef,
-    params: params.ParameterSet,
+def _installed_parameter_model(
+    symbol: str,
     expected_base: type[params.ParameterSet],
-) -> dict[str, JsonValue]:
-    """Validate one frozen parameter mapping with its selected project class."""
-    raw = path.read_bytes()
-    verify_parameter_model_bytes(reference, raw)
-    model = (
-        load_parameter_model(path, reference.symbol, expected_base)
-        if reference.owner == "project"
-        else _installed_parameter_model(reference.symbol, expected_base)
-    )
-    frozen = cast(dict[str, JsonValue], params.model_dump(mode="json"))
-    validated = model.model_validate(frozen, strict=True)
-    effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
-    if effective != frozen:
+) -> type[params.ParameterSet]:
+    """Resolve a built-in parameter model from the installed VIPER package."""
+    value = getattr(params, symbol, None)
+    if not isinstance(value, type) or not issubclass(value, expected_base):
         raise ParameterValidationError(
-            "frozen parameters must contain every effective project-model value"
+            f"parameter model must subclass {expected_base.__name__}"
         )
-    return effective
+    return cast(type[params.ParameterSet], value)
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/_verification/plan.py:Path -->
@@ -3310,6 +3310,15 @@ from .._parameter.validation import (
 )
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/_workers/parameters.py:parameter_model_path -->
+```python contract-target
+from .._parameter.validation import (
+    ParameterValidationContext,
+    parameter_model_path,
+    validate_parameters,
+)
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/_workers/parameters.py:main -->
 ```python contract-target
 def main() -> int:
@@ -3335,15 +3344,6 @@ def main() -> int:
         encoding="utf-8",
     )
     return 0
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/_workers/parameters.py:parameter_model_path -->
-```python contract-target
-from .._parameter.validation import (
-    ParameterValidationContext,
-    parameter_model_path,
-    validate_parameters,
-)
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/_workers/stages.py:main -->
@@ -3522,6 +3522,11 @@ from ..inputs import ExternalInputRef, FutureInputRef, ResolvedInputRef, StoredI
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_attempt.py:input_identity -->
 ```python contract-target
 from ..reuse import ReuseInputIdentity, build_stage_reuse_key, input_identity
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_attempt.py:reuse_stage -->
+```python contract-target
+from ._reuse import reuse_stage
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_attempt.py:_reuse_input_identities -->
@@ -4215,11 +4220,6 @@ def execute_attempt(
         run_lock.release()
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_attempt.py:reuse_stage -->
-```python contract-target
-from ._reuse import reuse_stage
-```
-
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_resolution.py:ExecutedStageCompletion -->
 ```python contract-target
 from ..reuse import ExecutedStageCompletion
@@ -4262,15 +4262,100 @@ def resolve_stage(
     return ResolvedEvalSpec(**common, inputs=inputs)
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:annotations -->
+```python contract-target
+from __future__ import annotations
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:json -->
+```python contract-target
+import json
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:dataclass -->
+```python contract-target
+from dataclasses import dataclass
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:UTC -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:datetime -->
+```python contract-target
+from datetime import UTC, datetime
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:cast -->
+```python contract-target
+from typing import cast
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:yaml -->
+```python contract-target
+import yaml
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ArtifactName -->
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:RepoRelPath -->
 ```python contract-target
 from .._schema import ArtifactName, RepoRelPath
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:read_snapshot_file -->
+```python contract-target
+from .._verification.storage import read_snapshot_file
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedArtifact -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedBundleArtifact -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedBundleMember -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedSingleFileArtifact -->
+```python contract-target
+from ..artifacts import (
+    ResolvedArtifact,
+    ResolvedBundleArtifact,
+    ResolvedBundleMember,
+    ResolvedSingleFileArtifact,
+)
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:Catalog -->
 ```python contract-target
 from ..catalog import Catalog
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:InputName -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:MetricId -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StageId -->
+```python contract-target
+from ..ids import InputName, MetricId, StageId
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedInputRef -->
+```python contract-target
+from ..inputs import ResolvedInputRef
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:Measurement -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:MetricSpec -->
+```python contract-target
+from ..metrics import Measurement, MetricSpec
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedFileRef -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:SnapshotFileRef -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StageResultSnapshot -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StorageModel -->
+```python contract-target
+from ..references import (
+    ResolvedFileRef,
+    SnapshotFileRef,
+    StageResultSnapshot,
+    StorageModel,
+)
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ExecutedStageCompletion -->
@@ -4294,17 +4379,15 @@ from ..reuse import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:InputName -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:MetricId -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StageId -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedRun -->
 ```python contract-target
-from ..ids import InputName, MetricId, StageId
+from ..runs import ResolvedRun
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:Measurement -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:MetricSpec -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:parse_yaml_bytes -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:serialize_document -->
 ```python contract-target
-from ..metrics import Measurement, MetricSpec
+from ..serialization import parse_yaml_bytes, serialize_document
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ParameterizedSpec -->
@@ -4326,58 +4409,6 @@ from ..stages import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:Path -->
-```python contract-target
-from pathlib import Path
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedArtifact -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedBundleArtifact -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedBundleMember -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedSingleFileArtifact -->
-```python contract-target
-from ..artifacts import (
-    ResolvedArtifact,
-    ResolvedBundleArtifact,
-    ResolvedBundleMember,
-    ResolvedSingleFileArtifact,
-)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedFileRef -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:SnapshotFileRef -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StageResultSnapshot -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StorageModel -->
-```python contract-target
-from ..references import (
-    ResolvedFileRef,
-    SnapshotFileRef,
-    StageResultSnapshot,
-    StorageModel,
-)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedInputRef -->
-```python contract-target
-from ..inputs import ResolvedInputRef
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ResolvedRun -->
-```python contract-target
-from ..runs import ResolvedRun
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ReuseStageResult -->
-```python contract-target
-@dataclass(frozen=True)
-class ReuseStageResult:
-    """Return the resolved target stage and its source-file mapping."""
-
-    resolved: ResolvedInternalSpec
-    snapshot: StageResultSnapshot
-    files: dict[RepoRelPath, SnapshotFileRef]
-```
-
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:SnapshotPublisher -->
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StorageDestination -->
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ViperCloudClient -->
@@ -4393,65 +4424,26 @@ from ..storage import (
 )
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:verify_run_result -->
+```python contract-target
+from ..verification import verify_run_result
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:StorageFetcher -->
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:VerificationPolicy -->
 ```python contract-target
 from ..verification.models import StorageFetcher, VerificationPolicy
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:UTC -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:datetime -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:ReuseStageResult -->
 ```python contract-target
-from datetime import UTC, datetime
-```
+@dataclass(frozen=True)
+class ReuseStageResult:
+    """Return the resolved target stage and its source-file mapping."""
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:_metric_evidence -->
-```python contract-target
-def _metric_evidence(
-    stage_id: StageId,
-    metrics: dict[MetricId, MetricSpec],
-    measurement_files: tuple[ResolvedFileRef, ...],
-    verification_files: tuple[ResolvedFileRef, ...],
-    fetcher: StorageFetcher,
-) -> tuple[ReusedMetricEvidence, ...]:
-    """Link each selected source metric to the file containing its measurement."""
-    found: dict[MetricId, ResolvedFileRef] = {}
-    for reference in measurement_files:
-        raw = fetcher(cast(StorageModel, reference.stored_at))
-        for line in raw.decode("utf-8").splitlines():
-            if not line.strip():
-                continue
-            measurement = Measurement.model_validate(json.loads(line))
-            if measurement.stage_id == stage_id and measurement.metric_id in metrics:
-                found.setdefault(measurement.metric_id, reference)
-    missing = set(metrics) - set(found)
-    if missing:
-        raise ValueError("reuse source is missing selected metric evidence")
-    verifications: dict[MetricId, ResolvedFileRef] = {}
-    prefix = f"/metric_verification/{stage_id}."
-    for reference in verification_files:
-        path = str(reference.stored_at.path)
-        if prefix in path and path.endswith(".yaml"):
-            metric_id = path.split(prefix, 1)[1].removesuffix(".yaml")
-            if metric_id in metrics:
-                verifications[metric_id] = reference
-    if any(
-        metric.mode == "recompute" and metric_id not in verifications
-        for metric_id, metric in metrics.items()
-    ):
-        raise ValueError("reuse source is missing metric verification evidence")
-    return tuple(
-        ReusedMetricEvidence(
-            metric_id=metric_id,
-            measurement=found[metric_id],
-            verification=(
-                verifications.get(metric_id)
-                if metrics[metric_id].mode == "recompute"
-                else None
-            ),
-        )
-        for metric_id in metrics
-    )
+    resolved: ResolvedInternalSpec
+    snapshot: StageResultSnapshot
+    files: dict[RepoRelPath, SnapshotFileRef]
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:_remap_artifacts -->
@@ -4513,6 +4505,55 @@ def _remap_artifacts(
     return artifacts, tuple(receipt_files), publication_files
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:_metric_evidence -->
+```python contract-target
+def _metric_evidence(
+    stage_id: StageId,
+    metrics: dict[MetricId, MetricSpec],
+    measurement_files: tuple[ResolvedFileRef, ...],
+    verification_files: tuple[ResolvedFileRef, ...],
+    fetcher: StorageFetcher,
+) -> tuple[ReusedMetricEvidence, ...]:
+    """Link each selected source metric to the file containing its measurement."""
+    found: dict[MetricId, ResolvedFileRef] = {}
+    for reference in measurement_files:
+        raw = fetcher(cast(StorageModel, reference.stored_at))
+        for line in raw.decode("utf-8").splitlines():
+            if not line.strip():
+                continue
+            measurement = Measurement.model_validate(json.loads(line))
+            if measurement.stage_id == stage_id and measurement.metric_id in metrics:
+                found.setdefault(measurement.metric_id, reference)
+    missing = set(metrics) - set(found)
+    if missing:
+        raise ValueError("reuse source is missing selected metric evidence")
+    verifications: dict[MetricId, ResolvedFileRef] = {}
+    prefix = f"/metric_verification/{stage_id}."
+    for reference in verification_files:
+        path = str(reference.stored_at.path)
+        if prefix in path and path.endswith(".yaml"):
+            metric_id = path.split(prefix, 1)[1].removesuffix(".yaml")
+            if metric_id in metrics:
+                verifications[metric_id] = reference
+    if any(
+        metric.mode == "recompute" and metric_id not in verifications
+        for metric_id, metric in metrics.items()
+    ):
+        raise ValueError("reuse source is missing metric verification evidence")
+    return tuple(
+        ReusedMetricEvidence(
+            metric_id=metric_id,
+            measurement=found[metric_id],
+            verification=(
+                verifications.get(metric_id)
+                if metrics[metric_id].mode == "recompute"
+                else None
+            ),
+        )
+        for metric_id in metrics
+    )
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:_resolved_stage -->
 ```python contract-target
 def _resolved_stage(
@@ -4538,37 +4579,6 @@ def _resolved_stage(
     if stage.kind == "train":
         return ResolvedTrainSpec(**values)
     return ResolvedEvalSpec(**values)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:annotations -->
-```python contract-target
-from __future__ import annotations
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:cast -->
-```python contract-target
-from typing import cast
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:dataclass -->
-```python contract-target
-from dataclasses import dataclass
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:json -->
-```python contract-target
-import json
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:parse_yaml_bytes -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:serialize_document -->
-```python contract-target
-from ..serialization import parse_yaml_bytes, serialize_document
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:read_snapshot_file -->
-```python contract-target
-from .._verification.storage import read_snapshot_file
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:reuse_stage -->
@@ -4690,16 +4700,6 @@ def reuse_stage(
         snapshot=snapshot,
         files=publication_files,
     )
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:verify_run_result -->
-```python contract-target
-from ..verification import verify_run_result
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/execution/_reuse.py:yaml -->
-```python contract-target
-import yaml
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/preflight.py:ParameterValidationError -->
@@ -5168,6 +5168,34 @@ def preflight_plan(
     return PreflightReport(run_id=run.run_id, checks=tuple(checks))
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/storage.py:SnapshotPublisher -->
+```python contract-target
+class SnapshotPublisher(Protocol):
+    """Publish one completed stage snapshot to a selected destination."""
+
+    def publish(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        files: Mapping[RepoRelPath, Path],
+    ) -> StageResultSnapshot:
+        """Publish one resolved stage document and its existing member files."""
+        ...
+
+    def publish_reuse(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        source_snapshot: StageResultSnapshot,
+        files: Mapping[RepoRelPath, SnapshotFileRef],
+        source_bytes: Mapping[RepoRelPath, bytes],
+    ) -> StageResultSnapshot:
+        """Publish a target stage document and remapped source snapshot files."""
+        ...
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/storage.py:LocalSnapshotPublisher -->
 ```python contract-target
 class LocalSnapshotPublisher:
@@ -5209,34 +5237,6 @@ class LocalSnapshotPublisher:
             _verify_reuse_source(source_file, raw)
             payload[target_path] = raw
         return self.store.snapshot(payload)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/storage.py:SnapshotPublisher -->
-```python contract-target
-class SnapshotPublisher(Protocol):
-    """Publish one completed stage snapshot to a selected destination."""
-
-    def publish(
-        self,
-        *,
-        resolved_stage_path: RepoRelPath,
-        resolved_stage: bytes,
-        files: Mapping[RepoRelPath, Path],
-    ) -> StageResultSnapshot:
-        """Publish one resolved stage document and its existing member files."""
-        ...
-
-    def publish_reuse(
-        self,
-        *,
-        resolved_stage_path: RepoRelPath,
-        resolved_stage: bytes,
-        source_snapshot: StageResultSnapshot,
-        files: Mapping[RepoRelPath, SnapshotFileRef],
-        source_bytes: Mapping[RepoRelPath, bytes],
-    ) -> StageResultSnapshot:
-        """Publish a target stage document and remapped source snapshot files."""
-        ...
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/storage.py:ViperCloudClient -->
@@ -5300,6 +5300,109 @@ class ViperCloudClient(Protocol):
     ) -> tuple[SnapshotFileRef, ...]:
         """List every verified file in a sealed revision."""
         ...
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/storage.py:_verify_reuse_source -->
+```python contract-target
+def _verify_reuse_source(source: SnapshotFileRef, raw: bytes) -> None:
+    """Reject source bytes that do not match their snapshot identity."""
+    if len(raw) != source.bytes or hashlib.sha256(raw).hexdigest() != source.sha256:
+        raise StorageConfigurationError("reused snapshot file identity changed")
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/storage.py:_cloud_upload_file -->
+```python contract-target
+def _cloud_upload_file(
+    *,
+    destination: ViperCloudDestination,
+    client: ViperCloudClient,
+    revision: SHA256,
+    path: RepoRelPath,
+    source: PublicationSource,
+    identity: SnapshotFileRef,
+    attempts: int,
+) -> None:
+    """Upload one cloud file with the configured retry limit."""
+    for attempt in range(attempts):
+        try:
+            client.upload(
+                owner=destination.owner,
+                project=destination.project,
+                revision=revision,
+                path=path,
+                source=source,
+                sha256=identity.sha256,
+                bytes=identity.bytes,
+            )
+            return
+        except Exception as error:
+            if attempt + 1 == attempts:
+                raise StorageConfigurationError("storage_upload_failed") from error
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/storage.py:_cloud_seal -->
+```python contract-target
+def _cloud_seal(
+    *,
+    destination: ViperCloudDestination,
+    client: ViperCloudClient,
+    revision: SHA256,
+    files: tuple[SnapshotFileRef, ...],
+    attempts: int,
+) -> None:
+    """Seal one cloud revision with the configured retry limit."""
+    for attempt in range(attempts):
+        try:
+            client.seal(
+                owner=destination.owner,
+                project=destination.project,
+                revision=revision,
+                files=files,
+            )
+            return
+        except Exception as error:
+            if attempt + 1 == attempts:
+                raise StorageConfigurationError("storage_seal_failed") from error
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/storage.py:_cloud_publish -->
+```python contract-target
+def _cloud_publish(
+    *,
+    root: Path,
+    destination: ViperCloudDestination,
+    client: ViperCloudClient,
+    sources: Mapping[RepoRelPath, PublicationSource],
+    attempts: int,
+) -> tuple[SHA256, tuple[SnapshotFileRef, ...]]:
+    """Upload and seal one deterministic revision with bounded retries."""
+    if attempts < 1:
+        raise ValueError("attempts must be positive")
+    files = tuple(
+        _source_file(root, path, source) for path, source in sorted(sources.items())
+    )
+    revision = _manifest_revision(files)
+    identities = {file.path: file for file in files}
+
+    for path, source in sorted(sources.items()):
+        _cloud_upload_file(
+            destination=destination,
+            client=client,
+            revision=revision,
+            path=path,
+            source=source,
+            identity=identities[path],
+            attempts=attempts,
+        )
+
+    _cloud_seal(
+        destination=destination,
+        client=client,
+        revision=revision,
+        files=files,
+        attempts=attempts,
+    )
+    return revision, files
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/storage.py:ViperCloudSnapshotPublisher -->
@@ -5451,107 +5554,14 @@ class ViperCloudSnapshotPublisher:
         )
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=src/viper/storage.py:_cloud_publish -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:importlib.util -->
 ```python contract-target
-def _cloud_publish(
-    *,
-    root: Path,
-    destination: ViperCloudDestination,
-    client: ViperCloudClient,
-    sources: Mapping[RepoRelPath, PublicationSource],
-    attempts: int,
-) -> tuple[SHA256, tuple[SnapshotFileRef, ...]]:
-    """Upload and seal one deterministic revision with bounded retries."""
-    if attempts < 1:
-        raise ValueError("attempts must be positive")
-    files = tuple(
-        _source_file(root, path, source) for path, source in sorted(sources.items())
-    )
-    revision = _manifest_revision(files)
-    identities = {file.path: file for file in files}
-
-    for path, source in sorted(sources.items()):
-        _cloud_upload_file(
-            destination=destination,
-            client=client,
-            revision=revision,
-            path=path,
-            source=source,
-            identity=identities[path],
-            attempts=attempts,
-        )
-
-    _cloud_seal(
-        destination=destination,
-        client=client,
-        revision=revision,
-        files=files,
-        attempts=attempts,
-    )
-    return revision, files
+import importlib.util
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/storage.py:_cloud_seal -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:current_params -->
 ```python contract-target
-def _cloud_seal(
-    *,
-    destination: ViperCloudDestination,
-    client: ViperCloudClient,
-    revision: SHA256,
-    files: tuple[SnapshotFileRef, ...],
-    attempts: int,
-) -> None:
-    """Seal one cloud revision with the configured retry limit."""
-    for attempt in range(attempts):
-        try:
-            client.seal(
-                owner=destination.owner,
-                project=destination.project,
-                revision=revision,
-                files=files,
-            )
-            return
-        except Exception as error:
-            if attempt + 1 == attempts:
-                raise StorageConfigurationError("storage_seal_failed") from error
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/storage.py:_cloud_upload_file -->
-```python contract-target
-def _cloud_upload_file(
-    *,
-    destination: ViperCloudDestination,
-    client: ViperCloudClient,
-    revision: SHA256,
-    path: RepoRelPath,
-    source: PublicationSource,
-    identity: SnapshotFileRef,
-    attempts: int,
-) -> None:
-    """Upload one cloud file with the configured retry limit."""
-    for attempt in range(attempts):
-        try:
-            client.upload(
-                owner=destination.owner,
-                project=destination.project,
-                revision=revision,
-                path=path,
-                source=source,
-                sha256=identity.sha256,
-                bytes=identity.bytes,
-            )
-            return
-        except Exception as error:
-            if attempt + 1 == attempts:
-                raise StorageConfigurationError("storage_upload_failed") from error
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=src/viper/storage.py:_verify_reuse_source -->
-```python contract-target
-def _verify_reuse_source(source: SnapshotFileRef, raw: bytes) -> None:
-    """Reject source bytes that do not match their snapshot identity."""
-    if len(raw) != source.bytes or hashlib.sha256(raw).hexdigest() != source.sha256:
-        raise StorageConfigurationError("reused snapshot file identity changed")
+import viper.params as current_params
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:ArtifactLoaderRef -->
@@ -5566,53 +5576,13 @@ from viper.artifacts import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:CUDAComputeSpec -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:observe_gce_provisioning -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:artifact -->
 ```python contract-target
-from viper.runtime import (
-    CUDAComputeSpec,
-    LocalEnvSpec,
-    observe_gce_provisioning,
-)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:Catalog -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:CatalogRunSource -->
-```python contract-target
-from viper.catalog import Catalog, CatalogRunSource
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:FloatComparator -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:Measurement -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:MetricDependency -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:MetricImplementationRef -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:MetricSpec -->
-```python contract-target
-from viper.metrics import (
-    FloatComparator,
-    Measurement,
-    MetricDependency,
-    MetricImplementationRef,
-    MetricSpec,
-    measure,
-)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:LocalEnvSpec -->
-```python contract-target
-from viper.runtime import (
-    CUDAComputeSpec,
-    LocalEnvSpec,
-    observe_gce_provisioning,
-)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:ReusedStageCompletion -->
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:catalog_reuse_candidates -->
-```python contract-target
-from viper.reuse import (
-    ReusedStageCompletion,
-    catalog_reuse_candidates,
+from viper.artifacts import (
+    ArtifactLoaderRef,
+    SingleFileArtifactSpec,
+    StageArtifactRef,
+    artifact,
 )
 ```
 
@@ -5630,21 +5600,6 @@ from viper.authoring import (
     stage,
     variant,
 )
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:artifact -->
-```python contract-target
-from viper.artifacts import (
-    ArtifactLoaderRef,
-    SingleFileArtifactSpec,
-    StageArtifactRef,
-    artifact,
-)
-```
-
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:current_params -->
-```python contract-target
-import viper.params as current_params
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:experiment -->
@@ -5670,9 +5625,26 @@ from viper.authoring import (
 from viper.authoring import input as external_input
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:importlib.util -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:Catalog -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:CatalogRunSource -->
 ```python contract-target
-import importlib.util
+from viper.catalog import Catalog, CatalogRunSource
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:FloatComparator -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:Measurement -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:MetricDependency -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:MetricImplementationRef -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:MetricSpec -->
+```python contract-target
+from viper.metrics import (
+    FloatComparator,
+    Measurement,
+    MetricDependency,
+    MetricImplementationRef,
+    MetricSpec,
+    measure,
+)
 ```
 
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:measure -->
@@ -5691,6 +5663,34 @@ from viper.metrics import (
 ```python contract-target
 from viper.metrics import (
     min as minimize,
+)
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:ReusedStageCompletion -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:catalog_reuse_candidates -->
+```python contract-target
+from viper.reuse import (
+    ReusedStageCompletion,
+    catalog_reuse_candidates,
+)
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:CUDAComputeSpec -->
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_run_execution.py:observe_gce_provisioning -->
+```python contract-target
+from viper.runtime import (
+    CUDAComputeSpec,
+    LocalEnvSpec,
+    observe_gce_provisioning,
+)
+```
+
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:LocalEnvSpec -->
+```python contract-target
+from viper.runtime import (
+    CUDAComputeSpec,
+    LocalEnvSpec,
+    observe_gce_provisioning,
 )
 ```
 
@@ -5945,6 +5945,49 @@ class InMemoryViperCloudClient(ViperCloudClient):
         return self.sealed[(owner, project, revision)]
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_storage.py:test_local_snapshot_reuse_remaps_source_files -->
+```python contract-target
+def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
+    """Publish verified local bytes under the target run's artifact paths."""
+    source_artifact = tmp_path / "source" / "model.bin"
+    source_artifact.parent.mkdir()
+    source_artifact.write_bytes(b"parameters")
+    publisher = LocalSnapshotPublisher(tmp_path)
+    source_snapshot = publisher.publish(
+        resolved_stage_path="runs/source/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\n",
+        files={"runs/source/artifacts/model.bin": source_artifact},
+    )
+    source_file = SnapshotFileRef(
+        path="runs/source/artifacts/model.bin",
+        sha256=hashlib.sha256(b"parameters").hexdigest(),
+        bytes=len(b"parameters"),
+    )
+
+    target_snapshot = publisher.publish_reuse(
+        resolved_stage_path="runs/target/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\ncompletion: reused\n",
+        source_snapshot=source_snapshot,
+        files={"runs/target/artifacts/model.bin": source_file},
+        source_bytes={"runs/target/artifacts/model.bin": b"parameters"},
+    )
+
+    store = LocalArtifactStore(tmp_path)
+    assert store.list_snapshot_files(target_snapshot) == (
+        "runs/target/artifacts/model.bin",
+        "runs/target/stages/train/resolved.yaml",
+    )
+    assert (
+        store.fetch(
+            LocalFileRef(
+                commit=target_snapshot.commit,
+                path="runs/target/artifacts/model.bin",
+            )
+        )
+        == b"parameters"
+    )
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_storage.py:test_cloud_snapshot_reuse_copies_existing_payload -->
 ```python contract-target
 def test_cloud_snapshot_reuse_copies_existing_payload(tmp_path: Path) -> None:
@@ -5998,57 +6041,14 @@ def test_cloud_snapshot_reuse_copies_existing_payload(tmp_path: Path) -> None:
     )
 ```
 
-<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_storage.py:test_local_snapshot_reuse_remaps_source_files -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/_verification/attempt.py:ResolvedSingleFileArtifact -->
 ```python contract-target
-def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
-    """Publish verified local bytes under the target run's artifact paths."""
-    source_artifact = tmp_path / "source" / "model.bin"
-    source_artifact.parent.mkdir()
-    source_artifact.write_bytes(b"parameters")
-    publisher = LocalSnapshotPublisher(tmp_path)
-    source_snapshot = publisher.publish(
-        resolved_stage_path="runs/source/stages/train/resolved.yaml",
-        resolved_stage=b"stage_id: train\n",
-        files={"runs/source/artifacts/model.bin": source_artifact},
-    )
-    source_file = SnapshotFileRef(
-        path="runs/source/artifacts/model.bin",
-        sha256=hashlib.sha256(b"parameters").hexdigest(),
-        bytes=len(b"parameters"),
-    )
-
-    target_snapshot = publisher.publish_reuse(
-        resolved_stage_path="runs/target/stages/train/resolved.yaml",
-        resolved_stage=b"stage_id: train\ncompletion: reused\n",
-        source_snapshot=source_snapshot,
-        files={"runs/target/artifacts/model.bin": source_file},
-        source_bytes={"runs/target/artifacts/model.bin": b"parameters"},
-    )
-
-    store = LocalArtifactStore(tmp_path)
-    assert store.list_snapshot_files(target_snapshot) == (
-        "runs/target/artifacts/model.bin",
-        "runs/target/stages/train/resolved.yaml",
-    )
-    assert (
-        store.fetch(
-            LocalFileRef(
-                commit=target_snapshot.commit,
-                path="runs/target/artifacts/model.bin",
-            )
-        )
-        == b"parameters"
-    )
+from ..artifacts import ResolvedSingleFileArtifact
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/_verification/attempt.py:ExecutedStageCompletion -->
 ```python contract-target
 from ..reuse import ExecutedStageCompletion
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/_verification/attempt.py:ResolvedSingleFileArtifact -->
-```python contract-target
-from ..artifacts import ResolvedSingleFileArtifact
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/_verification/attempt.py:VerificationError -->
@@ -6736,6 +6736,16 @@ def verify_recomputed_metrics(
                 )
 ```
 
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:Mapping -->
+```python contract-target
+from collections.abc import Mapping, Sequence
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:Sequence -->
+```python contract-target
+from collections.abc import Mapping, Sequence
+```
+
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:ArtifactPointer -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:StageArtifactRef -->
 ```python contract-target
@@ -6747,21 +6757,26 @@ from ..artifacts import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:EvalSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:InternalSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:ResolvedBaseSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:ResolvedInternalSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:TrainSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedBundleArtifact -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedSingleFileArtifact -->
 ```python contract-target
-from ..stages import (
-    EvalSpec,
-    InternalSpec,
-    ParameterizedSpec,
-    ResolvedBaseSpec,
-    ResolvedInternalSpec,
-    ResolvedParameterizedSpec,
-    TrainSpec,
+from ..artifacts import (
+    ArtifactPointer,
+    ResolvedBundleArtifact,
+    ResolvedSingleFileArtifact,
+    StageArtifactRef,
 )
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:InputName -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:StageId -->
+```python contract-target
+from ..ids import InputName, MetricId, StageId
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:MetricId -->
+```python contract-target
+from ..ids import InputName, MetricId, StageId
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:GitFileRef -->
@@ -6784,47 +6799,6 @@ from ..references import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:InputName -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:StageId -->
-```python contract-target
-from ..ids import InputName, MetricId, StageId
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:Mapping -->
-```python contract-target
-from collections.abc import Mapping, Sequence
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:MetricId -->
-```python contract-target
-from ..ids import InputName, MetricId, StageId
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ParameterizedSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedParameterizedSpec -->
-```python contract-target
-from ..stages import (
-    EvalSpec,
-    InternalSpec,
-    ParameterizedSpec,
-    ResolvedBaseSpec,
-    ResolvedInternalSpec,
-    ResolvedParameterizedSpec,
-    TrainSpec,
-)
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedBundleArtifact -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedSingleFileArtifact -->
-```python contract-target
-from ..artifacts import (
-    ArtifactPointer,
-    ResolvedBundleArtifact,
-    ResolvedSingleFileArtifact,
-    StageArtifactRef,
-)
-```
-
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedRunRef -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedStageRef -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:SnapshotFileRef -->
@@ -6842,8 +6816,8 @@ from ..references import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ReuseInputIdentity -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ReusedStageCompletion -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ReuseInputIdentity -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:StageReuseKey -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:StageReuseReceipt -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:build_stage_reuse_key -->
@@ -6859,9 +6833,35 @@ from ..reuse import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:Sequence -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:EvalSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:InternalSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:ResolvedBaseSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:ResolvedInternalSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:TrainSpec -->
 ```python contract-target
-from collections.abc import Mapping, Sequence
+from ..stages import (
+    EvalSpec,
+    InternalSpec,
+    ParameterizedSpec,
+    ResolvedBaseSpec,
+    ResolvedInternalSpec,
+    ResolvedParameterizedSpec,
+    TrainSpec,
+)
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ParameterizedSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:ResolvedParameterizedSpec -->
+```python contract-target
+from ..stages import (
+    EvalSpec,
+    InternalSpec,
+    ParameterizedSpec,
+    ResolvedBaseSpec,
+    ResolvedInternalSpec,
+    ResolvedParameterizedSpec,
+    TrainSpec,
+)
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:StorageFetcher -->
@@ -6911,6 +6911,21 @@ __all__ = [
 ]
 ```
 
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_stage_artifact_files -->
+```python contract-target
+def _stage_artifact_files(
+    stage: ResolvedBaseSpec,
+) -> dict[str, tuple[SnapshotFileRef, ...]]:
+    """Index every resolved artifact file by artifact name."""
+    files: dict[str, tuple[SnapshotFileRef, ...]] = {}
+    for artifact_name, artifact in stage.artifacts.items():
+        if isinstance(artifact, ResolvedSingleFileArtifact):
+            files[artifact_name] = (artifact.file,)
+        elif isinstance(artifact, ResolvedBundleArtifact):
+            files[artifact_name] = tuple(member.file for member in artifact.members)
+    return files
+```
+
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_artifact_relative_path -->
 ```python contract-target
 def _artifact_relative_path(path: str) -> str:
@@ -6950,35 +6965,6 @@ def _expected_reused_files(
             for path in sorted(source_by_path)
         )
     return tuple(pairs)
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_input_identities -->
-```python contract-target
-def _input_identities(
-    inputs: Mapping[InputName, VerifiedInput],
-) -> tuple[ReuseInputIdentity, ...]:
-    """Convert verified input bytes into the stable identity used by reuse."""
-    return tuple(
-        verified_input_identity(input_name, value)
-        for input_name, value in sorted(inputs.items())
-    )
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_merge_stage_inputs -->
-```python contract-target
-def _merge_stage_inputs(
-    *groups: Mapping[StageId, Mapping[InputName, VerifiedInput]],
-) -> dict[StageId, dict[InputName, VerifiedInput]]:
-    """Combine independently verified input kinds without overwriting a name."""
-    merged: dict[StageId, dict[InputName, VerifiedInput]] = {}
-    for group in groups:
-        for stage_id, inputs in group.items():
-            stage_inputs = merged.setdefault(stage_id, {})
-            duplicate = set(stage_inputs) & set(inputs)
-            if duplicate:
-                raise VerificationError("verified stage input appears more than once")
-            stage_inputs.update(inputs)
-    return merged
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_metric_references -->
@@ -7030,19 +7016,141 @@ def _rebuilt_reuse_key(
         raise VerificationError("stage reuse key cannot be rebuilt") from exc
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_stage_artifact_files -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:verify_stage_reuse -->
 ```python contract-target
-def _stage_artifact_files(
-    stage: ResolvedBaseSpec,
-) -> dict[str, tuple[SnapshotFileRef, ...]]:
-    """Index every resolved artifact file by artifact name."""
-    files: dict[str, tuple[SnapshotFileRef, ...]] = {}
-    for artifact_name, artifact in stage.artifacts.items():
-        if isinstance(artifact, ResolvedSingleFileArtifact):
-            files[artifact_name] = (artifact.file,)
-        elif isinstance(artifact, ResolvedBundleArtifact):
-            files[artifact_name] = tuple(member.file for member in artifact.members)
-    return files
+def verify_stage_reuse(
+    receipt: StageReuseReceipt,
+    *,
+    source_reference: ResolvedRunRef,
+    source: VerifiedRunResult,
+    source_inputs: Sequence[ReuseInputIdentity],
+    target_plan: VerifiedRunPlan,
+    target_stage: ResolvedStageRef,
+    target_result: ResolvedBaseSpec,
+    target_inputs: Sequence[ReuseInputIdentity],
+) -> StageReuseReceipt:
+    """Verify one reuse receipt across its source, key, files, and metrics."""
+    if receipt.stage_id != target_stage.stage_id:
+        raise VerificationError("reuse receipt and target stage IDs differ")
+    if receipt.source_run != source_reference:
+        raise VerificationError("reuse receipt selects a different source run")
+    if source.result.status != "succeeded":
+        raise VerificationError("reused source run did not succeed")
+    expected_source_path = f"{_paths.run_root(source.plan.run)}/resolved.yaml"
+    if source_reference.stored_at.path != expected_source_path:
+        raise VerificationError("reuse receipt source run path differs")
+
+    try:
+        attempt_index = next(
+            index
+            for index, attempt in enumerate(source.attempts)
+            if attempt.attempt_id == source.result.successful_attempt_id
+        )
+    except StopIteration as exc:
+        raise VerificationError("reused source run has no successful attempt") from exc
+    source_attempt = source.attempts[attempt_index]
+    if receipt.source_attempt != source.result.attempts[attempt_index]:
+        raise VerificationError("reuse receipt selects a different source attempt")
+
+    source_stage = next(
+        (
+            stage
+            for stage in source_attempt.resolved_stages
+            if stage.stage_id == receipt.stage_id
+        ),
+        None,
+    )
+    if source_stage is None or receipt.source_stage != source_stage:
+        raise VerificationError("reuse receipt selects a different source stage")
+    source_result = source.resolved_stages.get(receipt.stage_id)
+    if source_result is None:
+        raise VerificationError("reused source stage has no verified result")
+    if isinstance(getattr(source_result, "completion", None), ReusedStageCompletion):
+        raise VerificationError("a reused stage cannot be another reuse source")
+
+    source_key = _rebuilt_reuse_key(source.plan, receipt.stage_id, source_inputs)
+    target_key = _rebuilt_reuse_key(target_plan, receipt.stage_id, target_inputs)
+    if target_result.spec != target_plan.stages.get(receipt.stage_id):
+        raise VerificationError("reuse target result differs from its plan")
+    if receipt.key != source_key or receipt.key != target_key:
+        raise VerificationError("reuse receipt key differs from source or target")
+
+    expected_files = _expected_reused_files(source_result, target_result)
+    received_files = tuple(
+        (file.artifact_name, file.source, file.target) for file in receipt.files
+    )
+    if received_files != expected_files:
+        raise VerificationError("reuse receipt file remapping differs")
+
+    expected_metric_ids = tuple(target_result.spec.metric_ids)
+    received_metric_ids = tuple(metric.metric_id for metric in receipt.metrics)
+    if received_metric_ids != expected_metric_ids:
+        raise VerificationError("reuse receipt metric coverage differs")
+    measurements = _metric_references(
+        source_attempt.measurement_files,
+        stage_id=receipt.stage_id,
+        directory="measurements",
+    )
+    verifications = _metric_references(
+        source_attempt.metric_verification_files,
+        stage_id=receipt.stage_id,
+        directory="metric_verification",
+    )
+    source_metrics = {
+        metric.metric_id: metric for metric in source.plan.experiment.metrics
+    }
+    for evidence in receipt.metrics:
+        if measurements.get(evidence.metric_id) != evidence.measurement:
+            raise VerificationError("reuse receipt measurement differs")
+        metric = source_metrics.get(evidence.metric_id)
+        if metric is None:
+            raise VerificationError("reuse receipt metric is absent from source plan")
+        expected_verification = (
+            verifications.get(evidence.metric_id)
+            if metric.mode == "recompute"
+            else None
+        )
+        if metric.mode == "recompute" and expected_verification is None:
+            raise VerificationError("reused metric has no verification evidence")
+        if evidence.verification != expected_verification:
+            raise VerificationError("reuse receipt metric verification differs")
+        if not any(
+            measurement.attempt_id == source_attempt.attempt_id
+            and measurement.stage_id == receipt.stage_id
+            and measurement.metric_id == evidence.metric_id
+            for measurement in source.measurements
+        ):
+            raise VerificationError("reuse receipt metric has no verified measurement")
+    return receipt
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_merge_stage_inputs -->
+```python contract-target
+def _merge_stage_inputs(
+    *groups: Mapping[StageId, Mapping[InputName, VerifiedInput]],
+) -> dict[StageId, dict[InputName, VerifiedInput]]:
+    """Combine independently verified input kinds without overwriting a name."""
+    merged: dict[StageId, dict[InputName, VerifiedInput]] = {}
+    for group in groups:
+        for stage_id, inputs in group.items():
+            stage_inputs = merged.setdefault(stage_id, {})
+            duplicate = set(stage_inputs) & set(inputs)
+            if duplicate:
+                raise VerificationError("verified stage input appears more than once")
+            stage_inputs.update(inputs)
+    return merged
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_input_identities -->
+```python contract-target
+def _input_identities(
+    inputs: Mapping[InputName, VerifiedInput],
+) -> tuple[ReuseInputIdentity, ...]:
+    """Convert verified input bytes into the stable identity used by reuse."""
+    return tuple(
+        verified_input_identity(input_name, value)
+        for input_name, value in sorted(inputs.items())
+    )
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_verify_reused_stages -->
@@ -7106,6 +7214,23 @@ def _verify_reused_stages(
         )
         receipts[stage_reference.stage_id] = receipt
     return receipts
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:verify_run_result -->
+```python contract-target
+def verify_run_result(
+    resolved_run: ResolvedRun,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedRunResult:
+    """Verify a terminal run from its RunSpec through every completed attempt."""
+    return _verify_run_result(
+        resolved_run,
+        policy=policy,
+        fetcher=fetcher,
+        ancestors=frozenset(),
+    )
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:_verify_run_result -->
@@ -7264,129 +7389,68 @@ def _verify_run_result(
     )
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=src/viper/verification/__init__.py:verify_run_result -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:current_params -->
 ```python contract-target
-def verify_run_result(
-    resolved_run: ResolvedRun,
-    *,
-    policy: VerificationPolicy,
-    fetcher: StorageFetcher | None = None,
-) -> VerifiedRunResult:
-    """Verify a terminal run from its RunSpec through every completed attempt."""
-    return _verify_run_result(
-        resolved_run,
-        policy=policy,
-        fetcher=fetcher,
-        ancestors=frozenset(),
-    )
+from viper import params as current_params
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=src/viper/verification/__init__.py:verify_stage_reuse -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:BuildVariantStageParams -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ExperimentSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ReplicateSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:TrainVariantStageParams -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:VariantSpec -->
 ```python contract-target
-def verify_stage_reuse(
-    receipt: StageReuseReceipt,
-    *,
-    source_reference: ResolvedRunRef,
-    source: VerifiedRunResult,
-    source_inputs: Sequence[ReuseInputIdentity],
-    target_plan: VerifiedRunPlan,
-    target_stage: ResolvedStageRef,
-    target_result: ResolvedBaseSpec,
-    target_inputs: Sequence[ReuseInputIdentity],
-) -> StageReuseReceipt:
-    """Verify one reuse receipt across its source, key, files, and metrics."""
-    if receipt.stage_id != target_stage.stage_id:
-        raise VerificationError("reuse receipt and target stage IDs differ")
-    if receipt.source_run != source_reference:
-        raise VerificationError("reuse receipt selects a different source run")
-    if source.result.status != "succeeded":
-        raise VerificationError("reused source run did not succeed")
-    expected_source_path = f"{_paths.run_root(source.plan.run)}/resolved.yaml"
-    if source_reference.stored_at.path != expected_source_path:
-        raise VerificationError("reuse receipt source run path differs")
+from viper.experiments import (
+    BuildVariantStageParams,
+    ExperimentSpec,
+    ReplicateSpec,
+    TrainVariantStageParams,
+    VariantSpec,
+)
+```
 
-    try:
-        attempt_index = next(
-            index
-            for index, attempt in enumerate(source.attempts)
-            if attempt.attempt_id == source.result.successful_attempt_id
-        )
-    except StopIteration as exc:
-        raise VerificationError("reused source run has no successful attempt") from exc
-    source_attempt = source.attempts[attempt_index]
-    if receipt.source_attempt != source.result.attempts[attempt_index]:
-        raise VerificationError("reuse receipt selects a different source attempt")
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:EvaluateVariantStageParams -->
+```python contract-target
+from viper.experiments import EvalVariantStageParams as EvaluateVariantStageParams
+```
 
-    source_stage = next(
-        (
-            stage
-            for stage in source_attempt.resolved_stages
-            if stage.stage_id == receipt.stage_id
-        ),
-        None,
-    )
-    if source_stage is None or receipt.source_stage != source_stage:
-        raise VerificationError("reuse receipt selects a different source stage")
-    source_result = source.resolved_stages.get(receipt.stage_id)
-    if source_result is None:
-        raise VerificationError("reused source stage has no verified result")
-    if isinstance(getattr(source_result, "completion", None), ReusedStageCompletion):
-        raise VerificationError("a reused stage cannot be another reuse source")
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:FloatComparator -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:MetricImplementationRef -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:MetricObjectiveSpec -->
+```python contract-target
+from viper.metrics import (
+    FloatComparator,
+    Measurement,
+    MetricExecutionReceipt,
+    MetricImplementationRef,
+    MetricObjectiveSpec,
+    MetricSpec,
+    MetricVerificationReceipt,
+    ResolvedMetricDependency,
+)
+```
 
-    source_key = _rebuilt_reuse_key(source.plan, receipt.stage_id, source_inputs)
-    target_key = _rebuilt_reuse_key(target_plan, receipt.stage_id, target_inputs)
-    if target_result.spec != target_plan.stages.get(receipt.stage_id):
-        raise VerificationError("reuse target result differs from its plan")
-    if receipt.key != source_key or receipt.key != target_key:
-        raise VerificationError("reuse receipt key differs from source or target")
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:Measurement -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:MetricExecutionReceipt -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:MetricSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:MetricVerificationReceipt -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedMetricDependency -->
+```python contract-target
+from viper.metrics import (
+    FloatComparator,
+    Measurement,
+    MetricExecutionReceipt,
+    MetricImplementationRef,
+    MetricObjectiveSpec,
+    MetricSpec,
+    MetricVerificationReceipt,
+    ResolvedMetricDependency,
+)
+```
 
-    expected_files = _expected_reused_files(source_result, target_result)
-    received_files = tuple(
-        (file.artifact_name, file.source, file.target) for file in receipt.files
-    )
-    if received_files != expected_files:
-        raise VerificationError("reuse receipt file remapping differs")
-
-    expected_metric_ids = tuple(target_result.spec.metric_ids)
-    received_metric_ids = tuple(metric.metric_id for metric in receipt.metrics)
-    if received_metric_ids != expected_metric_ids:
-        raise VerificationError("reuse receipt metric coverage differs")
-    measurements = _metric_references(
-        source_attempt.measurement_files,
-        stage_id=receipt.stage_id,
-        directory="measurements",
-    )
-    verifications = _metric_references(
-        source_attempt.metric_verification_files,
-        stage_id=receipt.stage_id,
-        directory="metric_verification",
-    )
-    source_metrics = {
-        metric.metric_id: metric for metric in source.plan.experiment.metrics
-    }
-    for evidence in receipt.metrics:
-        if measurements.get(evidence.metric_id) != evidence.measurement:
-            raise VerificationError("reuse receipt measurement differs")
-        metric = source_metrics.get(evidence.metric_id)
-        if metric is None:
-            raise VerificationError("reuse receipt metric is absent from source plan")
-        expected_verification = (
-            verifications.get(evidence.metric_id)
-            if metric.mode == "recompute"
-            else None
-        )
-        if metric.mode == "recompute" and expected_verification is None:
-            raise VerificationError("reused metric has no verification evidence")
-        if evidence.verification != expected_verification:
-            raise VerificationError("reuse receipt metric verification differs")
-        if not any(
-            measurement.attempt_id == source_attempt.attempt_id
-            and measurement.stage_id == receipt.stage_id
-            and measurement.metric_id == evidence.metric_id
-            for measurement in source.measurements
-        ):
-            raise VerificationError("reuse receipt metric has no verified measurement")
-    return receipt
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:CurrentParameterModelRef -->
+```python contract-target
+from viper.params import ParameterModelRef as CurrentParameterModelRef
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ArtifactPointerRef -->
@@ -7434,43 +7498,20 @@ from viper.references import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:BaseSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:BuildSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:DownloadSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ParameterizedStageSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedBuildSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedDownloadSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedTrainSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:StageContextBinding -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:StageInvocationReceipt -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:TrainSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReusedMetricEvidence -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReusedStageFile -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReuseFileIdentity -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReuseInputIdentity -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:StageReuseReceipt -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:build_stage_reuse_key -->
 ```python contract-target
-from viper.stages import (
-    BaseSpec,
-    BuildSpec,
-    DownloadSpec,
-    ParameterizedStageSpec,
-    ResolvedBuildSpec,
-    ResolvedDownloadSpec,
-    ResolvedTrainSpec,
-    StageContextBinding,
-    StageInvocationReceipt,
-    TrainSpec,
-)
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:BuildVariantStageParams -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ExperimentSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ReplicateSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:TrainVariantStageParams -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:VariantSpec -->
-```python contract-target
-from viper.experiments import (
-    BuildVariantStageParams,
-    ExperimentSpec,
-    ReplicateSpec,
-    TrainVariantStageParams,
-    VariantSpec,
+from viper.reuse import (
+    ReusedMetricEvidence,
+    ReusedStageFile,
+    ReuseFileIdentity,
+    ReuseInputIdentity,
+    StageReuseReceipt,
+    build_stage_reuse_key,
 )
 ```
 
@@ -7483,8 +7524,8 @@ from viper.experiments import (
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:GeneratorInitializationReceipt -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:NativeLibraryContext -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:NativeThreadPoolContext -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:NumPyRandomnessSpec -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:NumericalRuntimeContext -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:NumPyRandomnessSpec -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ParallelismSpec -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ProcessStartupReceipt -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ReproducibilitySpec -->
@@ -7513,63 +7554,9 @@ from viper.runtime import (
 )
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:CurrentParameterModelRef -->
-```python contract-target
-from viper.params import ParameterModelRef as CurrentParameterModelRef
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:EvaluateSpec -->
-```python contract-target
-from viper.stages import EvalSpec as EvaluateSpec
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:EvaluateVariantStageParams -->
-```python contract-target
-from viper.experiments import EvalVariantStageParams as EvaluateVariantStageParams
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:FloatComparator -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:MetricImplementationRef -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:MetricObjectiveSpec -->
-```python contract-target
-from viper.metrics import (
-    FloatComparator,
-    Measurement,
-    MetricExecutionReceipt,
-    MetricImplementationRef,
-    MetricObjectiveSpec,
-    MetricSpec,
-    MetricVerificationReceipt,
-    ResolvedMetricDependency,
-)
-```
-
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:GCEEnvironmentSpec -->
 ```python contract-target
 from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:Measurement -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:MetricExecutionReceipt -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:MetricSpec -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:MetricVerificationReceipt -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedMetricDependency -->
-```python contract-target
-from viper.metrics import (
-    FloatComparator,
-    Measurement,
-    MetricExecutionReceipt,
-    MetricImplementationRef,
-    MetricObjectiveSpec,
-    MetricSpec,
-    MetricVerificationReceipt,
-    ResolvedMetricDependency,
-)
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedEvaluateSpec -->
-```python contract-target
-from viper.stages import ResolvedEvalSpec as ResolvedEvaluateSpec
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedGCEEnvironment -->
@@ -7577,20 +7564,60 @@ from viper.stages import ResolvedEvalSpec as ResolvedEvaluateSpec
 from viper.runtime import ResolvedGCEEnv as ResolvedGCEEnvironment
 ```
 
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReuseFileIdentity -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReuseInputIdentity -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReusedMetricEvidence -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReusedStageFile -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:StageReuseReceipt -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:build_stage_reuse_key -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:BaseSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:BuildSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:DownloadSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ParameterizedStageSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedBuildSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedDownloadSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedTrainSpec -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:StageContextBinding -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:StageInvocationReceipt -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:TrainSpec -->
 ```python contract-target
-from viper.reuse import (
-    ReusedMetricEvidence,
-    ReusedStageFile,
-    ReuseFileIdentity,
-    ReuseInputIdentity,
-    StageReuseReceipt,
-    build_stage_reuse_key,
+from viper.stages import (
+    BaseSpec,
+    BuildSpec,
+    DownloadSpec,
+    ParameterizedStageSpec,
+    ResolvedBuildSpec,
+    ResolvedDownloadSpec,
+    ResolvedTrainSpec,
+    StageContextBinding,
+    StageInvocationReceipt,
+    TrainSpec,
+)
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:EvaluateSpec -->
+```python contract-target
+from viper.stages import EvalSpec as EvaluateSpec
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:ResolvedEvaluateSpec -->
+```python contract-target
+from viper.stages import ResolvedEvalSpec as ResolvedEvaluateSpec
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:verify_benchmark_result -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:verify_promoted_artifact -->
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:verify_run_result -->
+```python contract-target
+from viper.verification import (
+    verify_benchmark_result,
+    verify_promoted_artifact,
+    verify_run_result,
+    verify_stage_reuse,
+)
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:verify_stage_reuse -->
+```python contract-target
+from viper.verification import (
+    verify_benchmark_result,
+    verify_promoted_artifact,
+    verify_run_result,
+    verify_stage_reuse,
 )
 ```
 
@@ -7611,11 +7638,6 @@ from viper.verification.models import (
     VerifiedRunPlan,
     VerifiedRunResult,
 )
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:current_params -->
-```python contract-target
-from viper import params as current_params
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
@@ -7868,26 +7890,4 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
             receipt.model_copy(update={"metrics": (severed_metric,)}),
             **arguments,
         )
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:verify_benchmark_result -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:verify_promoted_artifact -->
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:verify_run_result -->
-```python contract-target
-from viper.verification import (
-    verify_benchmark_result,
-    verify_promoted_artifact,
-    verify_run_result,
-    verify_stage_reuse,
-)
-```
-
-<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:verify_stage_reuse -->
-```python contract-target
-from viper.verification import (
-    verify_benchmark_result,
-    verify_promoted_artifact,
-    verify_run_result,
-    verify_stage_reuse,
-)
 ```
