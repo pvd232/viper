@@ -207,6 +207,40 @@ def test_analysis_uses_three_keys_and_runs_the_suite_once(tmp_path: Path) -> Non
     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
 
 
+def test_analysis_rejects_outputs_inside_source_tree(tmp_path: Path) -> None:
+    """Prevent CodeQL from analyzing its own cached databases and artifacts."""
+    root = tmp_path / "source"
+    _write_source(root)
+    query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
+    calls = tmp_path / "calls.jsonl"
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor, calls)
+    extraction, query, format = _specs(executable, extractor, query_pack)
+    snapshot = SourceSnapshot(
+        base_revision=_REVISION,
+        source_sha256=source_digest(root),
+        revision=None,
+    )
+    arguments = {
+        "snapshot_root": root,
+        "snapshot": snapshot,
+        "extraction": extraction,
+        "query": query,
+        "format": format,
+        "codeql_executable": executable,
+        "query_pack": query_pack,
+    }
+
+    with pytest.raises(CodeQLAnalysisError, match="cache must be outside"):
+        analyze_source(**arguments, cache_root=root / ".cache")
+    with pytest.raises(CodeQLAnalysisError, match="artifacts must be outside"):
+        analyze_source(
+            **arguments,
+            cache_root=tmp_path / "cache",
+            artifact_root=root / "artifacts",
+        )
+
+
 def test_analysis_rejects_each_stage_identity_drift(tmp_path: Path) -> None:
     """Reject source, extractor, and query-pack bytes outside the plan."""
     root = tmp_path / "source"

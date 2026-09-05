@@ -1024,6 +1024,12 @@ def analyze_source(
 ) -> SourceGraph:
     """Extract, query, and lower one exact Python source tree."""
     root = snapshot_root.resolve()
+    resolved_cache = cache_root.resolve()
+    resolved_artifacts = None if artifact_root is None else artifact_root.resolve()
+    if resolved_cache.is_relative_to(root):
+        raise CodeQLAnalysisError("CodeQL cache must be outside the source tree")
+    if resolved_artifacts is not None and resolved_artifacts.is_relative_to(root):
+        raise CodeQLAnalysisError("CodeQL artifacts must be outside the source tree")
     if source_digest(root) != snapshot.source_sha256:
         raise CodeQLAnalysisError(
             "SourceSnapshot.source_sha256 does not match source bytes"
@@ -1038,7 +1044,7 @@ def analyze_source(
         snapshot=snapshot,
         extraction=extraction,
         executable=codeql_executable,
-        cache_root=cache_root.resolve(),
+        cache_root=resolved_cache,
     )
     results = _run_query_suite(
         root,
@@ -1046,7 +1052,7 @@ def analyze_source(
         query=query,
         suite=suite,
         executable=codeql_executable,
-        cache_root=cache_root.resolve(),
+        cache_root=resolved_cache,
     )
     return _lower_graph(
         root,
@@ -1057,8 +1063,8 @@ def analyze_source(
         database=database.receipt,
         results=results,
         executable=codeql_executable,
-        cache_root=cache_root.resolve(),
-        artifact_root=None if artifact_root is None else artifact_root.resolve(),
+        cache_root=resolved_cache,
+        artifact_root=resolved_artifacts,
     )
 
 
