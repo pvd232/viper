@@ -708,6 +708,7 @@ targets = [
     "tests/test_inspection.py:_reuse_receipt",
     "tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces",
     "tests/test_inspection.py:test_catalog_returns_an_exact_stage_reuse_candidate",
+    "tests/test_protocol.py:current_params",
     "tests/test_protocol.py:ReusedStageFile",
     "tests/test_protocol.py:ReuseFileIdentity",
     "tests/test_protocol.py:ReuseInputIdentity",
@@ -831,6 +832,7 @@ targets = [
     "src/viper/storage.py:_cloud_seal",
     "src/viper/storage.py:_cloud_publish",
     "src/viper/storage.py:ViperCloudSnapshotPublisher",
+    "tests/test_execution_signals.py:test_live_l4_stage_records_requested_backend",
     "tests/test_run_execution.py:importlib.util",
     "tests/test_run_execution.py:current_params",
     "tests/test_run_execution.py:ArtifactLoaderRef",
@@ -948,6 +950,10 @@ targets = [
     "src/viper/verification/__init__.py:_verify_reused_stages",
     "src/viper/verification/__init__.py:verify_run_result",
     "src/viper/verification/__init__.py:_verify_run_result",
+    "tests/test_verification.py:ExecutedStageCompletion",
+    "tests/test_verification.py:RunAndStageVerificationTests",
+    "tests/test_verification.py:RunPlanRelationshipTests",
+    "tests/test_verification.py:FutureInputVerificationTests",
     "tests/test_verification_acceptance.py:current_params",
     "tests/test_verification_acceptance.py:BuildVariantStageParams",
     "tests/test_verification_acceptance.py:ExperimentSpec",
@@ -984,6 +990,7 @@ targets = [
     "tests/test_verification_acceptance.py:StorageModel",
     "tests/test_verification_acceptance.py:ViperCloudFileRef",
     "tests/test_verification_acceptance.py:ViperCloudStageResultSnapshotRef",
+    "tests/test_verification_acceptance.py:ExecutedStageCompletion",
     "tests/test_verification_acceptance.py:ReusedMetricEvidence",
     "tests/test_verification_acceptance.py:ReusedStageFile",
     "tests/test_verification_acceptance.py:ReuseFileIdentity",
@@ -1028,6 +1035,11 @@ targets = [
     "tests/test_verification_acceptance.py:VerificationError",
     "tests/test_verification_acceptance.py:VerifiedRunPlan",
     "tests/test_verification_acceptance.py:VerifiedRunResult",
+    "tests/test_verification_acceptance.py:environment",
+    "tests/test_verification_acceptance.py:publish_metric_verification",
+    "tests/test_verification_acceptance.py:resolved_environment",
+    "tests/test_verification_acceptance.py:publish_producer_run",
+    "tests/test_verification_acceptance.py:build_complete_fixture",
     "tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship",
 ]
 tests = [
@@ -3107,6 +3119,11 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
     assert catalog.reuse_candidate(key.model_copy(update={"seed": 43})) is None
 ```
 
+<!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:current_params -->
+```python contract-target
+from viper import params as current_params
+```
+
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReusedStageFile -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReuseFileIdentity -->
 <!-- contract-target: requirements=SRU-01,SRU-04 block=P14-SRU-01 action=add target=tests/test_protocol.py:ReuseInputIdentity -->
@@ -3156,7 +3173,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
     )
     source = b"def compute(context):\n    return 0.0\n"
     metric = MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric).model_dump(mode="json"),
+        parameter_model=current_params.model_ref(current_params.Metric),
         metric_id="loss",
         implementation=MetricImplementationRef(
             path="analysis/loss.py",
@@ -3164,7 +3181,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             sha256=hashlib.sha256(source).hexdigest(),
             bytes=len(source),
         ),
-        params=parameters.Metric().model_dump(mode="json"),
+        params=current_params.Metric(),
         mode="live",
     )
     env_payload = environment()
@@ -5566,6 +5583,79 @@ class ViperCloudSnapshotPublisher:
         )
 ```
 
+<!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=update target=tests/test_execution_signals.py:test_live_l4_stage_records_requested_backend -->
+```python contract-target
+@pytest.mark.live_cuda
+@pytest.mark.skipif(
+    os.environ.get("VIPER_LIVE_CUDA") != "1",
+    reason="set VIPER_LIVE_CUDA=1 to run live CUDA acceptance",
+)
+@pytest.mark.parametrize(
+    ("compute", "expected_backend_type", "expected_artifact"),
+    (
+        (CPUComputeSpec(), CPUBackendContext, b"cpu:13.0"),
+        (
+            CUDAComputeSpec(model="NVIDIA L4", count=1),
+            CUDABackendContext,
+            b"cuda:13.0",
+        ),
+    ),
+    ids=("cpu-on-l4-host", "cuda-on-l4"),
+)
+def test_live_l4_stage_records_requested_backend(
+    tmp_path: Path,
+    signal_http_source: tuple[str, int],
+    compute: CPUComputeSpec | CUDAComputeSpec,
+    expected_backend_type: type[CPUBackendContext] | type[CUDABackendContext],
+    expected_artifact: bytes,
+) -> None:
+    """Execute and verify separate CPU and CUDA plans on the L4 host."""
+    assert torch.cuda.is_available()
+
+    root = tmp_path / compute.kind
+    root.mkdir()
+    _git(root, "init", "--quiet")
+    _git(root, "config", "user.email", "viper@example.com")
+    _git(root, "config", "user.name", "VIPER Test")
+    _git(root, "remote", "add", "origin", REPOSITORY)
+
+    source_files = _write_source_files(root, blocking=False)
+    run_path = _freeze_signal_plan(
+        root,
+        source_files,
+        *signal_http_source,
+        compute=compute,
+    )
+
+    result = execute_run(root, run_path)
+    store = LocalArtifactStore(root)
+    fetcher = RunFetcher(root, store, REPOSITORY)
+    verified = verify_run_result(
+        result.resolved_run,
+        policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
+        fetcher=fetcher,
+    )
+
+    train_result = verified.resolved_stages["train"]
+    assert isinstance(train_result, ResolvedTrainSpec)
+    assert train_result.completion.kind == "executed"
+    backend = train_result.completion.execution_context.backend
+
+    assert result.resolved_run.status == "succeeded"
+    assert verified.attempts[-1].status == "succeeded"
+    assert isinstance(backend, expected_backend_type)
+    assert train_result.completion.startup.environment["CUDA_VISIBLE_DEVICES"] == (
+        "" if compute.kind == "cpu" else "0"
+    )
+
+    if isinstance(backend, CUDABackendContext):
+        assert len(backend.gpu_devices) == 1
+        assert backend.gpu_devices[0].model == "NVIDIA L4"
+
+    parameters_path = root / RUN_ROOT / "artifacts/models/tiny/parameters.bin"
+    assert parameters_path.read_bytes() == expected_artifact
+```
+
 <!-- contract-target: requirements=SRU-02 block=P14-SRU-02 action=add target=tests/test_run_execution.py:importlib.util -->
 ```python contract-target
 import importlib.util
@@ -5798,7 +5888,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     )
     environment = LocalEnvSpec(
         lockfile=GitFileRef(
-            repository=REPOSITORY,
+            repository=source_ref.repository,
             commit=source_commit,
             path="environment.yml",
         ),
@@ -5861,7 +5951,9 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         policy=policy,
         fetcher=fetcher,
     )
-    completion = second_verified.resolved_stages["train"].completion
+    reused_train = second_verified.resolved_stages["train"]
+    assert isinstance(reused_train, ResolvedTrainSpec)
+    completion = reused_train.completion
 
     assert isinstance(completion, ReusedStageCompletion)
     assert second_verified.attempts[-1].invocations == ()
@@ -7401,6 +7493,1130 @@ def _verify_run_result(
     )
 ```
 
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification.py:ExecutedStageCompletion -->
+```python contract-target
+from viper.reuse import ExecutedStageCompletion
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification.py:RunAndStageVerificationTests -->
+```python contract-target
+class RunAndStageVerificationTests(unittest.TestCase):
+    """Verify resolved run, stage, attempt, measurement, and log relationships."""
+
+    def test_resolved_run_spec_is_loaded_from_its_reference(self) -> None:
+        """Verify that resolved run spec is loaded from its reference."""
+        spec = train_spec()
+        run, _ = run_spec([("train", spec)])
+        raw = yaml_bytes(run)
+        run_reference = ResolvedRunSpecRef(
+            sha256=sha256(raw),
+            bytes=len(raw),
+            stored_at=git_file(f"{RUN_ROOT}/spec.yaml"),
+        )
+        record = ResolvedRun.model_construct(spec=run_reference)
+
+        self.assertEqual(
+            verify_run_spec(record, fetcher=lambda _: raw),
+            run,
+        )
+
+        duplicate_raw = raw + b"seed: 43\n"
+        duplicate_record = record.model_copy(
+            update={
+                "spec": run_reference.model_copy(
+                    update={
+                        "sha256": sha256(duplicate_raw),
+                        "bytes": len(duplicate_raw),
+                    }
+                )
+            }
+        )
+        with self.assertRaisesRegex(VerificationError, "not a valid RunSpec"):
+            verify_run_spec(duplicate_record, fetcher=lambda _: duplicate_raw)
+
+    def test_resolved_run_spec_uses_the_source_repository(self) -> None:
+        """Verify that resolved run spec uses the source repository."""
+        spec = train_spec()
+        run, _ = run_spec([("train", spec)])
+        raw = yaml_bytes(run)
+        location = git_file(f"{RUN_ROOT}/spec.yaml").model_copy(
+            update={"repository": "https://github.com/example/other"}
+        )
+        record = ResolvedRun.model_construct(
+            spec=ResolvedRunSpecRef(
+                sha256=sha256(raw),
+                bytes=len(raw),
+                stored_at=location,
+            )
+        )
+
+        with self.assertRaisesRegex(VerificationError, "one Git repository"):
+            verify_run_spec(record, fetcher=lambda _: raw)
+
+    def test_stage_plan_loads_named_future_artifact(self) -> None:
+        """Verify that stage plan loads named future artifact."""
+        build = build_spec()
+        train = train_spec(future_prior=True)
+        run, documents = run_spec([("build", build), ("train", train)])
+        run_reference = ResolvedRunSpecRef(
+            sha256="f" * 64,
+            bytes=1,
+            stored_at=git_file(f"{RUN_ROOT}/spec.yaml"),
+        )
+
+        loaded = verify_stage_plan(
+            run,
+            run_reference,
+            fetcher=lambda location: documents[location.path],
+        )
+
+        self.assertEqual(set(loaded), {"build", "train"})
+        self.assertIn("prior", loaded["build"].artifacts)
+
+        outside_ref = run.stages[0].model_copy(
+            update={"spec": "stages/build/spec.yaml"}
+        )
+        outside_run = run.model_copy(update={"stages": (outside_ref, *run.stages[1:])})
+        with self.assertRaisesRegex(VerificationError, "canonical run path"):
+            verify_stage_plan(
+                outside_run,
+                run_reference,
+                fetcher=lambda location: documents[location.path],
+            )
+
+    def test_distinct_stage_snapshots_may_reuse_artifact_paths(self) -> None:
+        """Verify that distinct stage snapshots may reuse artifact paths."""
+        first = train_spec()
+        second = train_spec()
+        run, documents = run_spec([("train", first), ("train_02", second)])
+        run_reference = ResolvedRunSpecRef(
+            sha256="f" * 64,
+            bytes=1,
+            stored_at=git_file(f"{RUN_ROOT}/spec.yaml"),
+        )
+
+        loaded = verify_stage_plan(
+            run,
+            run_reference,
+            fetcher=lambda location: documents[location.path],
+        )
+
+        self.assertEqual(set(loaded), {"train", "train_02"})
+
+    def test_consumer_rejects_colliding_same_run_input_paths(self) -> None:
+        """Verify that consumer rejects colliding same run input paths."""
+        first = train_spec()
+        second = train_spec()
+        consumer_payload = build_spec().model_dump(mode="python")
+        consumer_payload["inputs"] = {
+            "first_model": {
+                "kind": "future",
+                "producer_stage_id": "train",
+                "name": PARAMETERS,
+            },
+            "second_model": {
+                "kind": "future",
+                "producer_stage_id": "train_02",
+                "name": PARAMETERS,
+            },
+        }
+        consumer = BuildSpec.model_validate(consumer_payload)
+        run, documents = run_spec(
+            [("train", first), ("train_02", second), ("build", consumer)]
+        )
+        run_reference = ResolvedRunSpecRef(
+            sha256="f" * 64,
+            bytes=1,
+            stored_at=git_file(f"{RUN_ROOT}/spec.yaml"),
+        )
+
+        with self.assertRaisesRegex(VerificationError, "future input paths"):
+            verify_stage_plan(
+                run,
+                run_reference,
+                fetcher=lambda location: documents[location.path],
+            )
+
+    def test_resolved_stage_checks_run_controls_and_snapshot_files(self) -> None:
+        """Verify that resolved stage checks run controls and snapshot files."""
+        spec = train_spec()
+        run, _ = run_spec([("train", spec)])
+        source_raw = b"def fit(context):\n    pass\n"
+        lock_raw = b"lockfile"
+        model_raw = b"model parameters"
+        resume_raw = b"optimizer rng sampler"
+
+        resume_value = resume_state().model_dump(mode="python")
+        loader_raw = (
+            "def load(path):\n"
+            "    if path.name == 'resume_state.pt':\n"
+            f"        return {resume_value!r}\n"
+            "    return path.read_bytes()\n"
+        ).encode()
+        artifacts = dict(spec.artifacts)
+        artifacts[PARAMETERS] = artifacts[PARAMETERS].model_copy(
+            update={"loader": loader_ref("parameters", loader_raw)}
+        )
+        artifacts[RESUME_STATE] = artifacts[RESUME_STATE].model_copy(
+            update={"loader": loader_ref("resume_state", loader_raw)}
+        )
+        spec = spec.model_copy(update={"artifacts": artifacts})
+        run, _ = run_spec([("train", spec)])
+
+        invocation, invocation_raw = invocation_evidence(
+            run,
+            "train",
+            spec,
+            inputs={"training_dataset": "inputs/datasets/replogle/dataset.h5ad"},
+            started_at=datetime(2026, 8, 21, 12, 5, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 21, 12, 25, tzinfo=UTC),
+        )
+        resolved = ResolvedTrainSpec(
+            spec=spec,
+            completion=ExecutedStageCompletion(
+                source=resolved_git(source_raw, str(spec.implementation.path)),
+                env=resolved_environment(lock_raw),
+                execution_context=execution_context(),
+                startup=startup_receipt(run),
+                invocation=invocation,
+                command=("python", "-m", "viper._workers.stages"),
+            ),
+            inputs={
+                "training_dataset": ResolvedStoredInputRef(
+                    kind="stored",
+                    pointer=resolved_pointer(
+                        "inputs/datasets/replogle/current.pointer.yaml"
+                    ),
+                )
+            },
+            artifacts={
+                PARAMETERS: ResolvedSingleFileArtifact(
+                    kind="file",
+                    file=SnapshotFileRef(
+                        path=f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors",
+                        sha256=sha256(model_raw),
+                        bytes=len(model_raw),
+                    ),
+                ),
+                RESUME_STATE: ResolvedSingleFileArtifact(
+                    kind="file",
+                    file=SnapshotFileRef(
+                        path=f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt",
+                        sha256=sha256(resume_raw),
+                        bytes=len(resume_raw),
+                    ),
+                ),
+            },
+            completed_at=datetime(2026, 8, 21, 12, 30, tzinfo=UTC),
+        )
+        resolved_raw = yaml_bytes(resolved)
+        stage = ResolvedStageRef(
+            stage_id="train",
+            snapshot=snapshot(),
+            resolved_spec=SnapshotFileRef(
+                path=f"{RUN_ROOT}/stages/train/resolved.yaml",
+                sha256=sha256(resolved_raw),
+                bytes=len(resolved_raw),
+            ),
+        )
+        attempt = RunAttempt(
+            attempt_id=1,
+            purpose="run",
+            status="succeeded",
+            started_at=datetime(2026, 8, 21, 12, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 21, 13, tzinfo=UTC),
+            resolved_stages=(stage,),
+            invocations=(invocation,),
+            journal=attempt_journal(1),
+            measurement_files=(),
+            log_files=(),
+            failure=None,
+        )
+        attempt_ref, attempt_raw = attempt_reference(attempt)
+        documents = {
+            f"{RUN_ROOT}/stages/train/resolved.yaml": resolved_raw,
+            str(spec.implementation.path): source_raw,
+            invocation.stored_at.path: invocation_raw,
+            "uv.lock": lock_raw,
+            (f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors"): model_raw,
+            (f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt"): resume_raw,
+            "project/loaders/parameters.py": loader_raw,
+            "project/loaders/resume_state.py": loader_raw,
+            attempt_ref.stored_at.path: attempt_raw,
+        }
+
+        changed_precision = run.reproducibility.precision.model_copy(
+            update={"float32_matmul_precision": "high"}
+        )
+        changed_controls = run.reproducibility.model_copy(
+            update={"precision": changed_precision}
+        )
+        completion = resolved.completion
+        assert isinstance(completion, ExecutedStageCompletion)
+        changed_resolved = resolved.model_copy(
+            update={
+                "completion": completion.model_copy(
+                    update={
+                        "startup": completion.startup.model_copy(
+                            update={"reproducibility": changed_controls}
+                        )
+                    }
+                )
+            }
+        )
+        changed_resolved_raw = yaml_bytes(changed_resolved)
+        changed_stage = stage.model_copy(
+            update={
+                "resolved_spec": stage.resolved_spec.model_copy(
+                    update={
+                        "sha256": sha256(changed_resolved_raw),
+                        "bytes": len(changed_resolved_raw),
+                    }
+                )
+            }
+        )
+        changed_attempt = attempt.model_copy(
+            update={"resolved_stages": (changed_stage,)}
+        )
+        changed_attempt_ref, changed_attempt_raw = attempt_reference(changed_attempt)
+        changed_documents = dict(documents)
+        changed_documents[f"{RUN_ROOT}/stages/train/resolved.yaml"] = (
+            changed_resolved_raw
+        )
+        changed_documents[changed_attempt_ref.stored_at.path] = changed_attempt_raw
+
+    def test_attempt_measurements_and_logs_are_verified(self) -> None:
+        """Verify that attempt measurements and logs are verified."""
+        spec = train_spec().model_copy(update={"metric_ids": ("training_loss",)})
+        run, _ = run_spec([("train", spec)])
+        measured_at = datetime(2026, 8, 21, 12, 30, tzinfo=UTC)
+        measurement_raw = (
+            '{"run_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV",'
+            '"attempt_id":1,"stage_id":"train",'
+            '"metric_id":"training_loss","value":0.1,'
+            f'"measured_at":"{measured_at.isoformat()}"}}\n'
+        ).encode()
+        log_raw = b"training complete\n"
+        stage = ResolvedStageRef(
+            stage_id="train",
+            snapshot=snapshot(),
+            resolved_spec=SnapshotFileRef(
+                path=f"{RUN_ROOT}/stages/train/resolved.yaml",
+                sha256="e" * 64,
+                bytes=10,
+            ),
+        )
+        attempt = RunAttempt(
+            attempt_id=1,
+            purpose="run",
+            status="succeeded",
+            started_at=datetime(2026, 8, 21, 12, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 21, 13, tzinfo=UTC),
+            resolved_stages=(stage,),
+            invocations=(),
+            journal=attempt_journal(1),
+            measurement_files=(
+                ResolvedFileRef(
+                    sha256=sha256(measurement_raw),
+                    bytes=len(measurement_raw),
+                    stored_at=HuggingFaceFileRef(
+                        repository=HF_REPOSITORY,
+                        commit=SNAPSHOT_COMMIT,
+                        path=(
+                            f"{RUN_ROOT}/attempts/1/measurements/"
+                            "train.training_loss.jsonl"
+                        ),
+                        repo_type="dataset",
+                    ),
+                ),
+            ),
+            log_files=(
+                ResolvedFileRef(
+                    sha256=sha256(log_raw),
+                    bytes=len(log_raw),
+                    stored_at=HuggingFaceFileRef(
+                        repository=HF_REPOSITORY,
+                        commit=SNAPSHOT_COMMIT,
+                        path=f"{RUN_ROOT}/attempts/1/logs/train.stdout.log",
+                        repo_type="dataset",
+                    ),
+                ),
+            ),
+            failure=None,
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(metric_spec("training_loss", "training"),),
+        )
+        documents = {
+            f"{RUN_ROOT}/attempts/1/measurements/"
+            "train.training_loss.jsonl": measurement_raw,
+            f"{RUN_ROOT}/attempts/1/logs/train.stdout.log": log_raw,
+        }
+
+        measurements = verify_attempt_files(
+            attempt,
+            run,
+            experiment,
+            {"train": spec},
+            fetcher=lambda location: documents[location.path],
+        )
+
+        self.assertEqual(len(measurements), 1)
+        self.assertEqual(measurements[0].value, 0.1)
+
+        split_snapshot = attempt.model_copy(
+            update={
+                "log_files": (
+                    attempt.log_files[0].model_copy(
+                        update={
+                            "stored_at": attempt.log_files[0].stored_at.model_copy(
+                                update={"commit": "d" * 40}
+                            )
+                        }
+                    ),
+                )
+            }
+        )
+        with self.assertRaisesRegex(VerificationError, "one immutable snapshot"):
+            verify_attempt_files(
+                split_snapshot,
+                run,
+                experiment,
+                {"train": spec},
+                fetcher=lambda location: documents[location.path],
+            )
+
+    def test_failed_attempt_may_retain_log_for_interrupted_stage(self) -> None:
+        """Verify that failed attempt may retain log for interrupted stage."""
+        spec = train_spec().model_copy(update={"metric_ids": ("training_loss",)})
+        run, _ = run_spec([("train", spec)])
+        log_raw = b"training failed\n"
+        attempt = RunAttempt(
+            attempt_id=1,
+            purpose="run",
+            status="failed",
+            started_at=datetime(2026, 8, 21, 12, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 21, 13, tzinfo=UTC),
+            resolved_stages=(),
+            invocations=(),
+            journal=attempt_journal(1),
+            measurement_files=(),
+            log_files=(
+                ResolvedFileRef(
+                    sha256=sha256(log_raw),
+                    bytes=len(log_raw),
+                    stored_at=HuggingFaceFileRef(
+                        repository=HF_REPOSITORY,
+                        commit=SNAPSHOT_COMMIT,
+                        path=f"{RUN_ROOT}/attempts/1/logs/train.stderr.log",
+                        repo_type="dataset",
+                    ),
+                ),
+            ),
+            failure=AttemptFailure(
+                code="execution_failed",
+                stage_id="train",
+                message="training process exited with status 1",
+                occurred_at=datetime(2026, 8, 21, 12, 30, tzinfo=UTC),
+            ),
+        )
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(metric_spec("training_loss", "training"),),
+        )
+
+        measurements = verify_attempt_files(
+            attempt,
+            run,
+            experiment,
+            {"train": spec},
+            fetcher=lambda _: log_raw,
+        )
+
+        self.assertEqual(measurements, ())
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification.py:RunPlanRelationshipTests -->
+```python contract-target
+class RunPlanRelationshipTests(unittest.TestCase):
+    """Verify relationships among experiments, variants, stages, and benchmarks."""
+
+    def test_training_accepts_validation_inputs_and_preserves_the_role(self) -> None:
+        """Allow validation-guided training when every output stays validation."""
+        train = train_spec()
+        training_dataset = train.inputs["training_dataset"]
+        if not isinstance(training_dataset, StoredInputRef):
+            self.fail("training_dataset must be a stored input")
+        train = train.model_copy(
+            update={
+                "inputs": {
+                    "training_dataset": training_dataset,
+                    "validation_dataset": StoredInputRef(
+                        kind="stored",
+                        pointer=artifact_pointer(
+                            "inputs/datasets/replogle_validation/current.pointer.yaml"
+                        ),
+                        path=("inputs/datasets/replogle_validation/dataset.h5ad"),
+                        data_role="validation",
+                    ),
+                },
+                "artifacts": {
+                    name: artifact.model_copy(update={"data_role": "validation"})
+                    for name, artifact in train.artifacts.items()
+                },
+            }
+        )
+        run, _ = run_spec([("train", train)])
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(
+                    kind="train", stage_id="train", params=train.params
+                ),
+            ),
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            None,
+            {"train": train},
+        )
+
+    def test_training_rejects_evaluation_inputs(self) -> None:
+        """Reject evaluation data supplied to a training stage."""
+        train = train_spec()
+        training_dataset = train.inputs["training_dataset"]
+        if not isinstance(training_dataset, StoredInputRef):
+            self.fail("training_dataset must be a stored input")
+        train = train.model_copy(
+            update={
+                "inputs": {
+                    "training_dataset": training_dataset.model_copy(
+                        update={"data_role": "evaluation"}
+                    )
+                }
+            }
+        )
+        run, _ = run_spec([("train", train)])
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(
+                    kind="train", stage_id="train", params=train.params
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(VerificationError, "cannot consume evaluation"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                None,
+                {"train": train},
+            )
+
+    def test_training_inherits_a_future_artifact_data_role(self) -> None:
+        """Reject a restricted future artifact supplied to a training stage."""
+        build = build_spec()
+        prior = build.artifacts["prior"]
+        build = build.model_copy(
+            update={
+                "artifacts": {
+                    "prior": prior.model_copy(update={"data_role": "evaluation"})
+                }
+            }
+        )
+        train = train_spec(future_prior=True)
+        run, _ = run_spec([("build", build), ("train", train)])
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                BuildVariantStageParams(
+                    kind="build", stage_id="build", params=build.params
+                ),
+                TrainVariantStageParams(
+                    kind="train", stage_id="train", params=train.params
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(VerificationError, "cannot consume evaluation"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                None,
+                {"build": build, "train": train},
+            )
+
+    def test_artifact_role_cannot_downgrade_an_input_role(self) -> None:
+        """Reject an output whose role is weaker than one of its inputs."""
+        build = build_spec()
+        depmap = build.inputs["depmap"]
+        if not isinstance(depmap, StoredInputRef):
+            self.fail("depmap must be a stored input")
+        build = build.model_copy(
+            update={
+                "inputs": {
+                    "depmap": depmap.model_copy(update={"data_role": "evaluation"})
+                }
+            }
+        )
+        train = train_spec(future_prior=True)
+        run, _ = run_spec([("build", build), ("train", train)])
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                BuildVariantStageParams(
+                    kind="build", stage_id="build", params=build.params
+                ),
+                TrainVariantStageParams(
+                    kind="train", stage_id="train", params=train.params
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(VerificationError, "less restricted"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                None,
+                {"build": build, "train": train},
+            )
+
+    def test_variant_parameters_match_the_loaded_training_stage(self) -> None:
+        """Verify that variant parameters match the loaded training stage."""
+        train = train_spec()
+        run, _ = run_spec([("train", train)])
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(metric_spec("pearson_correlation", "evaluation"),),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(
+                    kind="train",
+                    stage_id="train",
+                    params=train.params,
+                ),
+            ),
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            None,
+            {"train": train},
+        )
+
+        mismatched_variant = variant.model_copy(
+            update={
+                "stage_params": (
+                    variant.stage_params[0].model_copy(
+                        update={
+                            "params": train.params.model_copy(update={"epochs": 11})
+                        }
+                    ),
+                )
+            }
+        )
+        with self.assertRaisesRegex(VerificationError, "parameters do not match"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                mismatched_variant,
+                None,
+                {"train": train},
+            )
+
+    def test_environment_lockfiles_belong_to_the_source_snapshot(self) -> None:
+        """Bind environment lockfiles to the implementation source snapshot."""
+        train = train_spec()
+        run, _ = run_spec([("train", train)])
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(metric_spec("pearson_correlation", "evaluation"),),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(
+                    kind="train", stage_id="train", params=train.params
+                ),
+            ),
+        )
+
+        wrong_lockfile = run.model_copy(
+            update={
+                "environment": run.environment.model_copy(
+                    update={
+                        "lockfile": run.environment.lockfile.model_copy(
+                            update={"commit": "d" * 40}
+                        )
+                    }
+                )
+            }
+        )
+        with self.assertRaisesRegex(VerificationError, "source snapshot"):
+            verify_run_plan_relationships(
+                wrong_lockfile,
+                experiment,
+                variant,
+                None,
+                {"train": train},
+            )
+
+    def test_stored_pointer_may_precede_the_source_snapshot(self) -> None:
+        """Select a promoted pointer from its own earlier immutable commit."""
+        train = train_spec()
+        run, _ = run_spec([("train", train)])
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(metric_spec("pearson_correlation", "evaluation"),),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(
+                    kind="train",
+                    stage_id="train",
+                    params=train.params,
+                ),
+            ),
+        )
+        input_ref = train.inputs["training_dataset"]
+        if not isinstance(input_ref, StoredInputRef):
+            self.fail("training_dataset must be a stored input")
+        earlier_input = input_ref.model_copy(
+            update={
+                "pointer": input_ref.pointer.model_copy(update={"commit": "d" * 40})
+            }
+        )
+        selected_train = train.model_copy(
+            update={"inputs": {"training_dataset": earlier_input}}
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            None,
+            {"train": selected_train},
+        )
+
+    def test_benchmark_matches_evaluation_inputs_splits_and_metrics(self) -> None:
+        """Verify that benchmark matches evaluation inputs splits and metrics."""
+        train = train_spec()
+        evaluation = EvaluateSpec(
+            implementation=stage_implementation_ref(
+                "analysis/predict.py",
+                b"def predict(context):\n    pass\n",
+                symbol="predict",
+            ),
+        parameter_model=parameter_model_ref("evaluate"),
+            evaluation_id="replogle_predictions",
+            metric_ids=("pearson_correlation",),
+            split_inputs=("perturbation_split",),
+            inputs={
+                "parameters": FutureInputRef(
+                    kind="future",
+                    producer_stage_id="train",
+                    name=PARAMETERS,
+                ),
+                "evaluation_dataset": StoredInputRef(
+                    kind="stored",
+                    pointer=artifact_pointer(
+                        "inputs/datasets/replogle_test/current.pointer.yaml"
+                    ),
+                    path="inputs/datasets/replogle_test/dataset.h5ad",
+                    data_role="benchmark",
+                ),
+                "perturbation_split": StoredInputRef(
+                    kind="stored",
+                    pointer=artifact_pointer(
+                        "inputs/benchmarks/replogle/test_split.pointer.yaml"
+                    ),
+                    path="inputs/benchmarks/replogle/test_split.json",
+                    data_role="benchmark",
+                ),
+            },
+            params=parameters.Evaluate(),
+            artifacts={
+                "predictions": SingleFileArtifactSpec(
+                    kind="file",
+                    path=(
+                        f"{RUN_ROOT}/artifacts/evaluations/"
+                        "replogle_predictions/predictions.json"
+                    ),
+                    loader=loader_ref("json_file"),
+                    data_role="benchmark",
+                )
+            },
+        )
+
+        run, _ = run_spec([("train", train), ("evaluate", evaluation)])
+        run = run.model_copy(update={"benchmark_id": "replogle_strict"})
+        experiment = ExperimentSpec(
+            experiment_id="e001_strand",
+            factors=(),
+            variant_ids=("baseline",),
+            replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+            metrics=(
+                metric_spec(
+                    "pearson_correlation",
+                    "evaluation",
+                    required_data_role="benchmark",
+                ),
+            ),
+        )
+        variant = VariantSpec(
+            experiment_id="e001_strand",
+            variant_id="baseline",
+            levels={},
+            stage_params=(
+                TrainVariantStageParams(
+                    kind="train", stage_id="train", params=train.params
+                ),
+                EvaluateVariantStageParams(
+                    kind="evaluate", stage_id="evaluate", params=evaluation.params
+                ),
+            ),
+        )
+        benchmark = BenchmarkSpec(
+            benchmark_id="replogle_strict",
+            eval_id="replogle_predictions",
+            test=resolved_pointer("inputs/datasets/replogle_test/current.pointer.yaml"),
+            splits={
+                "perturbation_split": resolved_pointer(
+                    "inputs/benchmarks/replogle/test_split.pointer.yaml"
+                )
+            },
+            metric_ids=("pearson_correlation",),
+            criteria=(
+                MetricCriterion(
+                    metric_id="pearson_correlation",
+                    comparison="ge",
+                    threshold=0.8,
+                ),
+            ),
+        )
+
+        verify_run_plan_relationships(
+            run,
+            experiment,
+            variant,
+            benchmark,
+            {"train": train, "evaluate": evaluation},
+        )
+
+        selected_metric = experiment.metrics[0]
+        missing_dependency = selected_metric.dependencies[0].model_copy(
+            update={"name": "missing_predictions"}
+        )
+        invalid_experiment = experiment.model_copy(
+            update={
+                "metrics": (
+                    selected_metric.model_copy(
+                        update={"dependencies": (missing_dependency,)}
+                    ),
+                )
+            }
+        )
+        with self.assertRaisesRegex(VerificationError, "selects absent artifact"):
+            verify_run_plan_relationships(
+                run,
+                invalid_experiment,
+                variant,
+                benchmark,
+                {"train": train, "evaluate": evaluation},
+            )
+
+        ordinary_payload = evaluation.model_dump(mode="python")
+        ordinary_payload["inputs"]["evaluation_dataset"]["data_role"] = "evaluation"
+        ordinary_payload["inputs"]["perturbation_split"]["data_role"] = "evaluation"
+        ordinary_payload["artifacts"]["predictions"]["data_role"] = "evaluation"
+        ordinary_evaluation = EvaluateSpec.model_validate(ordinary_payload)
+        with self.assertRaisesRegex(VerificationError, "must use 'benchmark'"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                benchmark,
+                {"train": train, "evaluate": ordinary_evaluation},
+            )
+
+        wrong_benchmark = benchmark.model_copy(
+            update={"evaluation_id": "other_evaluation"}
+        )
+        with self.assertRaisesRegex(VerificationError, "evaluation ID"):
+            verify_run_plan_relationships(
+                run,
+                experiment,
+                variant,
+                wrong_benchmark,
+                {"train": train, "evaluate": evaluation},
+            )
+
+        other_train = train_spec()
+        wrong_evaluation_payload = evaluation.model_dump(mode="python")
+        wrong_evaluation_payload["inputs"]["parameters"]["producer_stage_id"] = (
+            "other_train"
+        )
+        wrong_evaluation = EvaluateSpec.model_validate(wrong_evaluation_payload)
+        wrong_run, _ = run_spec(
+            [
+                ("train", train),
+                ("other_train", other_train),
+                ("evaluate", wrong_evaluation),
+            ]
+        )
+        wrong_run = wrong_run.model_copy(update={"benchmark_id": "replogle_strict"})
+        wrong_variant_payload = variant.model_dump(mode="python")
+        wrong_variant_payload["stage_params"] = (
+            *wrong_variant_payload["stage_params"],
+            {
+                "kind": "train",
+                "stage_id": "other_train",
+                "params": other_train.params,
+            },
+        )
+        wrong_variant = VariantSpec.model_validate(wrong_variant_payload)
+        with self.assertRaisesRegex(VerificationError, "run estimator"):
+            verify_run_plan_relationships(
+                wrong_run,
+                experiment,
+                wrong_variant,
+                benchmark,
+                {
+                    "train": train,
+                    "other_train": other_train,
+                    "evaluate": wrong_evaluation,
+                },
+            )
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification.py:FutureInputVerificationTests -->
+```python contract-target
+class FutureInputVerificationTests(unittest.TestCase):
+    """Verify same-run artifact selections from completed producer stages."""
+
+    def test_future_input_selects_named_artifact_from_recorded_producer(self) -> None:
+        """Verify that future input selects named artifact from recorded producer."""
+        build = build_spec()
+        train = train_spec(future_prior=True)
+        run, _ = run_spec([("build", build), ("train", train)])
+        lock_raw = b"lockfile"
+        prior_raw = b"prior tensor"
+        build_source_raw = b"def build_prior(context):\n    pass\n"
+        train_source_raw = b"def fit(context):\n    pass\n"
+
+        producer_stage = ResolvedStageRef(
+            stage_id="build",
+            snapshot=snapshot(),
+            resolved_spec=SnapshotFileRef(
+                path=f"{RUN_ROOT}/stages/build/resolved.yaml",
+                sha256="e" * 64,
+                bytes=100,
+            ),
+        )
+        consumer_stage = ResolvedStageRef(
+            stage_id="train",
+            snapshot=snapshot(commit="d" * 40),
+            resolved_spec=SnapshotFileRef(
+                path=f"{RUN_ROOT}/stages/train/resolved.yaml",
+                sha256="f" * 64,
+                bytes=100,
+            ),
+        )
+
+        build_invocation, build_invocation_raw = invocation_evidence(
+            run,
+            "build",
+            build,
+            inputs={"depmap": "inputs/priors/depmap/prior.parquet"},
+            started_at=datetime(2026, 8, 21, 12, 5, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 21, 12, 15, tzinfo=UTC),
+        )
+        train_invocation, train_invocation_raw = invocation_evidence(
+            run,
+            "train",
+            train,
+            inputs={"prior": f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt"},
+            started_at=datetime(2026, 8, 21, 12, 25, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 21, 12, 35, tzinfo=UTC),
+        )
+        resolved_build = ResolvedBuildSpec(
+            spec=build,
+            completion=ExecutedStageCompletion(
+                source=resolved_git(
+                    build_source_raw,
+                    str(build.implementation.path),
+                ),
+                env=resolved_environment(lock_raw),
+                execution_context=execution_context(),
+                startup=startup_receipt(run),
+                invocation=build_invocation,
+                command=("python", "-m", "viper._workers.stages"),
+            ),
+            inputs={
+                "depmap": ResolvedStoredInputRef(
+                    kind="stored",
+                    pointer=resolved_pointer(
+                        "inputs/priors/depmap/current.pointer.yaml"
+                    ),
+                )
+            },
+            artifacts={
+                "prior": ResolvedSingleFileArtifact(
+                    kind="file",
+                    file=SnapshotFileRef(
+                        path=f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt",
+                        sha256=sha256(prior_raw),
+                        bytes=len(prior_raw),
+                    ),
+                )
+            },
+            completed_at=datetime(2026, 8, 21, 12, 20, tzinfo=UTC),
+        )
+        resolved_train = ResolvedTrainSpec(
+            spec=train,
+            completion=ExecutedStageCompletion(
+                source=resolved_git(
+                    train_source_raw,
+                    str(train.implementation.path),
+                ),
+                env=resolved_environment(lock_raw),
+                execution_context=execution_context(),
+                startup=startup_receipt(run),
+                invocation=train_invocation,
+                command=("python", "-m", "viper._workers.stages"),
+            ),
+            inputs={
+                "prior": ResolvedFutureInputRef(producer=producer_stage),
+            },
+            artifacts={
+                PARAMETERS: ResolvedSingleFileArtifact(
+                    kind="file",
+                    file=SnapshotFileRef(
+                        path=f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors",
+                        sha256="1" * 64,
+                        bytes=1,
+                    ),
+                ),
+                RESUME_STATE: ResolvedSingleFileArtifact(
+                    kind="file",
+                    file=SnapshotFileRef(
+                        path=f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt",
+                        sha256="2" * 64,
+                        bytes=1,
+                    ),
+                ),
+            },
+            completed_at=datetime(2026, 8, 21, 12, 40, tzinfo=UTC),
+        )
+        attempt = RunAttempt(
+            attempt_id=1,
+            purpose="run",
+            status="succeeded",
+            started_at=datetime(2026, 8, 21, 12, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 21, 13, tzinfo=UTC),
+            resolved_stages=(producer_stage, consumer_stage),
+            invocations=(build_invocation, train_invocation),
+            journal=attempt_journal(1),
+            measurement_files=(),
+            log_files=(),
+            failure=None,
+        )
+
+        failed_attempt = attempt.model_copy(
+            update={
+                "status": "failed",
+                "failure": AttemptFailure(
+                    code="execution_failed",
+                    stage_id=None,
+                    message="later stage failed",
+                    occurred_at=datetime(2026, 8, 21, 12, 59, tzinfo=UTC),
+                ),
+            }
+        )
+        failed_verified = verify_attempt_future_inputs(
+            failed_attempt,
+            run,
+            {"build": resolved_build, "train": resolved_train},
+            fetcher=lambda location: {
+                f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt": prior_raw
+            }[location.path],
+        )
+        self.assertEqual(
+            failed_verified["train"]["prior"].files[0].content,
+            prior_raw,
+        )
+```
+
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:current_params -->
 ```python contract-target
 from viper import params as current_params
@@ -7510,6 +8726,7 @@ from viper.references import (
 )
 ```
 
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ExecutedStageCompletion -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReusedMetricEvidence -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReusedStageFile -->
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:ReuseFileIdentity -->
@@ -7518,6 +8735,7 @@ from viper.references import (
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:build_stage_reuse_key -->
 ```python contract-target
 from viper.reuse import (
+    ExecutedStageCompletion,
     ReusedMetricEvidence,
     ReusedStageFile,
     ReuseFileIdentity,
@@ -7650,6 +8868,892 @@ from viper.verification.models import (
     VerifiedRunPlan,
     VerifiedRunResult,
 )
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:environment -->
+```python contract-target
+def environment(source_commit: str) -> GCEEnvironmentSpec:
+    """Build the shared requested execution environment."""
+    return GCEEnvironmentSpec(
+        kind="gce",
+        provisioning=GCEBootImageRef(
+            project="viper-project",
+            name="viper-image",
+            id="123456789",
+        ),
+        machine_type="n2-standard-8",
+        compute=CPUComputeSpec(kind="cpu"),
+        lockfile=git_file(source_commit, "environment.yml"),
+        python_env=python_environment(),
+    )
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:publish_metric_verification -->
+```python contract-target
+def publish_metric_verification(
+    store: DocumentStore,
+    *,
+    run: RunSpec,
+    attempt_id: int,
+    stage_id: str,
+    metric: MetricSpec,
+    measurement_raw: bytes,
+    stage_completed_at: datetime,
+    dependency_files: tuple[ResolvedFileRef, ...],
+    commit: str,
+) -> ResolvedFileRef:
+    """Publish one complete synthetic metric-verification receipt."""
+    measurement = Measurement.model_validate_json(measurement_raw)
+    assert metric.comparator is not None
+    dependencies = tuple(
+        ResolvedMetricDependency(
+            dependency=dependency,
+            files=dependency_files,
+        )
+        for dependency in metric.dependencies
+    )
+    production = MetricExecutionReceipt(
+        run_id=run.run_id,
+        attempt_id=attempt_id,
+        metric_id=metric.metric_id,
+        stage_id=stage_id,
+        purpose="measurement",
+        implementation=metric.implementation,
+        parameter_model=metric.parameter_model,
+        params=metric.params,
+        dependencies=dependencies,
+        startup=startup_receipt(run),
+        execution_context=execution_context(),
+        python_env=python_environment(),
+        value=measurement.value,
+        started_at=stage_completed_at + timedelta(seconds=10),
+        completed_at=stage_completed_at + timedelta(seconds=20),
+    )
+    recomputation = production.model_copy(
+        update={
+            "purpose": "verification",
+            "started_at": measurement.measured_at + timedelta(seconds=10),
+            "completed_at": measurement.measured_at + timedelta(seconds=20),
+        }
+    )
+    receipt = MetricVerificationReceipt(
+        metric_id=metric.metric_id,
+        stage_id=stage_id,
+        measurement=measurement,
+        production=production,
+        recomputation=recomputation,
+        comparator=metric.comparator,
+        passed=True,
+        completed_at=measurement.measured_at + timedelta(seconds=30),
+    )
+    path = (
+        f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}/"
+        f"attempts/{attempt_id}/metric_verification/"
+        f"{stage_id}.{metric.metric_id}.yaml"
+    )
+    raw = yaml_bytes(receipt)
+    location = hf_file(commit, path)
+    store.put(location, raw)
+    return ResolvedFileRef(
+        sha256=sha256(raw),
+        bytes=len(raw),
+        stored_at=location,
+    )
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:resolved_environment -->
+```python contract-target
+def resolved_environment(
+    store: DocumentStore,
+    source_commit: str,
+) -> ResolvedGCEEnvironment:
+    """Bind the requested environment to resolved image and lockfile identities."""
+    lock_raw = b"name: mantra\n"
+    lockfile = add_source_file(store, source_commit, "environment.yml", lock_raw)
+    return ResolvedGCEEnvironment(
+        kind="gce",
+        provisioning=GCEBootImageRef(
+            project="viper-project",
+            name="viper-image",
+            id="123456789",
+        ),
+        machine_type="n2-standard-8",
+        compute=CPUComputeSpec(kind="cpu"),
+        lockfile=lockfile,
+        python_env=python_environment(),
+    )
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:publish_producer_run -->
+```python contract-target
+def publish_producer_run(
+    store: DocumentStore,
+    *,
+    evaluation_role: DataRole = "evaluation",
+) -> tuple[ResolvedRunRef, dict[str, Any]]:
+    """Publish a complete upstream run for stored-input verification."""
+    run_root = "experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA"
+    training_dataset_raw = b"fixed training dataset bytes"
+    evaluation_dataset_raw = b"fixed evaluation dataset bytes"
+    split_raw = b'{"test":[0,1]}\n'
+    download = DownloadSpec(
+        inputs={
+            "dataset": http_request(
+                url="https://example.com/toy-v1.tar.gz",
+                body=training_dataset_raw,
+            ),
+            "evaluation_dataset": http_request(
+                url="https://example.com/toy-evaluation-v1.bin",
+                body=evaluation_dataset_raw,
+            ),
+            "split": http_request(
+                url="https://example.com/toy-split-v1.json",
+                body=split_raw,
+            ),
+        },
+        http=builtin_http(),
+        policy=http_policy(),
+        artifacts={
+            "dataset": SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/datasets/toy/dataset.bin",
+                loader=loader_ref("bytes_file"),
+                data_role="training",
+            ),
+            "evaluation_dataset": SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/datasets/toy/evaluation.bin",
+                loader=loader_ref("bytes_file"),
+                data_role=evaluation_role,
+            ),
+            "split": SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/datasets/toy/split.json",
+                loader=loader_ref("bytes_file"),
+                data_role=evaluation_role,
+            ),
+        },
+    )
+    train = TrainSpec(
+        implementation=stage_implementation_ref(
+            "training/fit.py",
+            TRAIN_SOURCE,
+            symbol="fit",
+        ),
+        parameter_model=parameter_model_ref("train"),
+        inputs={
+            "training_dataset": FutureInputRef(
+                kind="future",
+                producer_stage_id="download",
+                name="dataset",
+            )
+        },
+        params=parameters.Train.model_validate(
+            {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
+        ),
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/models/toy/parameters.bin",
+                loader=loader_ref("bytes_file"),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/models/toy/resume_state.bin",
+                loader=loader_ref("resume_state"),
+                data_role="training",
+            ),
+        },
+    )
+    stage_specs: list[tuple[str, BaseSpec]] = [
+        ("download", download),
+        ("train", train),
+    ]
+    run = make_run(
+        experiment_id="source_data",
+        run_id="01ARZ3NDEKTSV4RRFFQ69G5FAA",
+        source_commit=PRODUCER_SOURCE_COMMIT,
+        plan_commit=PRODUCER_PLAN_COMMIT,
+        stage_specs=stage_specs,
+        estimator_stage_id="train",
+    )
+    experiment = ExperimentSpec(
+        experiment_id="source_data",
+        factors=(),
+        variant_ids=("baseline",),
+        replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+        metrics=(),
+    )
+    variant = VariantSpec(
+        experiment_id="source_data",
+        variant_id="baseline",
+        levels={},
+        stage_params=(
+            TrainVariantStageParams(
+                kind="train", stage_id="train", params=train.params
+            ),
+        ),
+    )
+    run_reference = add_plan_records(
+        store,
+        run=run,
+        stage_specs=stage_specs,
+        experiment=experiment,
+        variant=variant,
+        plan_commit=PRODUCER_PLAN_COMMIT,
+    )
+
+    add_loader(store, PRODUCER_SOURCE_COMMIT, "bytes_file")
+    add_loader(store, PRODUCER_SOURCE_COMMIT, "resume_state")
+    add_source_file(
+        store,
+        PRODUCER_SOURCE_COMMIT,
+        parameter_model_ref("train").path,
+        parameter_model_source("train"),
+    )
+    resolved_env = resolved_environment(store, PRODUCER_SOURCE_COMMIT)
+    train_source = add_source_file(
+        store,
+        PRODUCER_SOURCE_COMMIT,
+        str(train.implementation.path),
+        TRAIN_SOURCE,
+    )
+
+    download_commit = "7" * 40
+    resolved_download_artifacts = {
+        "dataset": add_single_artifact(
+            store,
+            download_commit,
+            str(download.artifacts["dataset"].path),
+            training_dataset_raw,
+        ),
+        "evaluation_dataset": add_single_artifact(
+            store,
+            download_commit,
+            str(download.artifacts["evaluation_dataset"].path),
+            evaluation_dataset_raw,
+        ),
+        "split": add_single_artifact(
+            store,
+            download_commit,
+            str(download.artifacts["split"].path),
+            split_raw,
+        ),
+    }
+    retrievals = {
+        name: ResolvedHttpRetrieval(
+            input_name=name,
+            request=download.inputs[name],
+            http=ResolvedHttpImplementation(spec=download.http),
+            response=ObservedHttpResponse(
+                response_url=download.inputs[name].url,
+                status=200,
+                response_headers={"content-length": str(artifact.file.bytes)},
+            ),
+            body=artifact.file,
+            started_at=datetime(2026, 8, 20, 20, 2, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 20, 20, 5, tzinfo=UTC),
+        )
+        for name, artifact in resolved_download_artifacts.items()
+    }
+    resolved_download = ResolvedDownloadSpec(
+        spec=download,
+        env=resolved_env,
+        execution_context=execution_context(),
+        retrievals=retrievals,
+        artifacts=cast(dict[str, ResolvedArtifact], resolved_download_artifacts),
+        completed_at=datetime(2026, 8, 20, 20, 10, tzinfo=UTC),
+    )
+    download_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="download",
+        snapshot_commit=download_commit,
+        resolved_spec=resolved_download,
+    )
+
+    train_commit = "8" * 40
+    train_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="train",
+        stage=train,
+        input_paths={
+            "training_dataset": str(download.artifacts["dataset"].path),
+        },
+        started_at=datetime(2026, 8, 20, 20, 11, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 20, 29, tzinfo=UTC),
+        commit=PRODUCER_RESULT_COMMIT,
+    )
+    resolved_train = ResolvedTrainSpec(
+        spec=train,
+        completion=ExecutedStageCompletion(
+            source=train_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=train_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
+        inputs={
+            "training_dataset": ResolvedFutureInputRef(producer=download_stage),
+        },
+        artifacts={
+            PARAMETERS: add_single_artifact(
+                store,
+                train_commit,
+                str(train.artifacts[PARAMETERS].path),
+                b"producer model",
+            ),
+            RESUME_STATE: add_single_artifact(
+                store,
+                train_commit,
+                str(train.artifacts[RESUME_STATE].path),
+                resume_state_bytes(),
+            ),
+        },
+        completed_at=datetime(2026, 8, 20, 20, 30, tzinfo=UTC),
+    )
+    train_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="train",
+        snapshot_commit=train_commit,
+        resolved_spec=resolved_train,
+    )
+    attempt = RunAttempt(
+        attempt_id=1,
+        purpose="run",
+        status="succeeded",
+        started_at=datetime(2026, 8, 20, 20, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 20, 35, tzinfo=UTC),
+        resolved_stages=(download_stage, train_stage),
+        invocations=(train_invocation,),
+        journal=publish_attempt_journal(
+            store,
+            run_root_path=run_root,
+            attempt_id=1,
+            commit=PRODUCER_RESULT_COMMIT,
+        ),
+        measurement_files=(),
+        log_files=(),
+        failure=None,
+    )
+    resolved_run = ResolvedRun(
+        spec=run_reference,
+        status="succeeded",
+        attempts=(
+            publish_attempt(
+                store,
+                run_root_path=run_root,
+                attempt=attempt,
+                commit=PRODUCER_RESULT_COMMIT,
+            ),
+        ),
+        successful_attempt_id=1,
+        completed_at=datetime(2026, 8, 20, 20, 36, tzinfo=UTC),
+    )
+    resolved_run_raw = yaml_bytes(resolved_run)
+    resolved_run_location = hf_file(
+        PRODUCER_RESULT_COMMIT,
+        f"{run_root}/resolved.yaml",
+    )
+    store.put(resolved_run_location, resolved_run_raw)
+    reference = ResolvedRunRef(
+        sha256=sha256(resolved_run_raw),
+        bytes=len(resolved_run_raw),
+        stored_at=resolved_run_location,
+    )
+    return reference, {
+        "dataset": training_dataset_raw,
+        "dataset_ref": download_stage,
+        "run": resolved_run,
+    }
+```
+
+<!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=update target=tests/test_verification_acceptance.py:build_complete_fixture -->
+```python contract-target
+def build_complete_fixture(
+    *,
+    benchmark_enabled: bool = False,
+    benchmark_threshold: float = 0.9,
+    producer_evaluation_role: DataRole | None = None,
+) -> tuple[
+    ResolvedRun,
+    DocumentStore,
+    HuggingFaceFileRef,
+]:
+    """Publish one complete valid provenance chain and return its roots."""
+    store = DocumentStore()
+    evaluation_role = "benchmark" if benchmark_enabled else "evaluation"
+    producer_run_ref, _ = publish_producer_run(
+        store,
+        evaluation_role=producer_evaluation_role or evaluation_role,
+    )
+
+    training_dataset_pointer = ArtifactPointer(
+        run=producer_run_ref,
+        artifact=StageArtifactRef(stage_id="download", artifact_name="dataset"),
+    )
+    evaluation_dataset_pointer = ArtifactPointer(
+        run=producer_run_ref,
+        artifact=StageArtifactRef(
+            stage_id="download",
+            artifact_name="evaluation_dataset",
+        ),
+    )
+    split_pointer = ArtifactPointer(
+        run=producer_run_ref,
+        artifact=StageArtifactRef(stage_id="download", artifact_name="split"),
+    )
+    training_dataset_pointer_path = "inputs/datasets/toy/training.pointer.yaml"
+    evaluation_dataset_pointer_path = "inputs/datasets/toy/evaluation.pointer.yaml"
+    split_pointer_path = "inputs/benchmarks/toy/test_split.pointer.yaml"
+    resolved_training_dataset_pointer = resolved_pointer(
+        store,
+        MAIN_SOURCE_COMMIT,
+        training_dataset_pointer_path,
+        training_dataset_pointer,
+    )
+    resolved_evaluation_dataset_pointer = resolved_pointer(
+        store,
+        MAIN_SOURCE_COMMIT,
+        evaluation_dataset_pointer_path,
+        evaluation_dataset_pointer,
+    )
+    resolved_split_pointer = resolved_pointer(
+        store,
+        MAIN_SOURCE_COMMIT,
+        split_pointer_path,
+        split_pointer,
+    )
+
+    run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
+    run_root = f"experiments/model_eval/runs/baseline/{run_id}"
+    build = BuildSpec(
+        implementation=stage_implementation_ref(
+            "features/build_prior.py",
+            BUILD_SOURCE,
+            symbol="build_prior",
+        ),
+        parameter_model=parameter_model_ref("build"),
+        inputs={
+            "dataset": StoredInputRef(
+                kind="stored",
+                pointer=resolved_training_dataset_pointer,
+                path="inputs/datasets/toy/current.bin",
+                data_role="training",
+            )
+        },
+        params=parameters.Build(),
+        artifacts={
+            "prior": BundleArtifactSpec(
+                kind="bundle",
+                path=f"{run_root}/artifacts/priors/toy",
+                loader=loader_ref("prior_bundle", bundle=True),
+                data_role="training",
+            )
+        },
+    )
+    train = TrainSpec(
+        implementation=stage_implementation_ref(
+            "training/fit.py",
+            TRAIN_SOURCE,
+            symbol="fit",
+        ),
+        parameter_model=parameter_model_ref("train"),
+        inputs={
+            "prior": FutureInputRef(
+                kind="future",
+                producer_stage_id="build",
+                name="prior",
+            )
+        },
+        params=parameters.Train.model_validate(
+            {"epochs": 2, "batch_size": 2, "learning_rate": 0.01}
+        ),
+        artifacts={
+            PARAMETERS: SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/models/toy/parameters.bin",
+                loader=loader_ref("bytes_file"),
+                data_role="training",
+            ),
+            RESUME_STATE: SingleFileArtifactSpec(
+                kind="file",
+                path=f"{run_root}/artifacts/models/toy/resume_state.bin",
+                loader=loader_ref("resume_state"),
+                data_role="training",
+            ),
+        },
+    )
+    evaluate = EvaluateSpec(
+        implementation=stage_implementation_ref(
+            "evaluation/predict.py",
+            EVALUATE_SOURCE,
+            symbol="predict",
+        ),
+        parameter_model=current_params.model_ref(current_params.Eval),
+        eval_id="toy_predictions",
+        metric_ids=("pearson_correlation",),
+        objective=MetricObjectiveSpec(
+            metric_id="pearson_correlation",
+            direction="max",
+        ),
+        split_inputs=("test_split",),
+        inputs={
+            "parameters": FutureInputRef(
+                kind="future",
+                producer_stage_id="train",
+                name=PARAMETERS,
+            ),
+            "evaluation_dataset": StoredInputRef(
+                kind="stored",
+                pointer=resolved_evaluation_dataset_pointer,
+                path="inputs/datasets/toy/evaluation.bin",
+                data_role=evaluation_role,
+            ),
+            "test_split": StoredInputRef(
+                kind="stored",
+                pointer=resolved_split_pointer,
+                path="inputs/benchmarks/toy/test_split.json",
+                data_role=evaluation_role,
+            ),
+        },
+        params=current_params.Eval(),
+        artifacts={
+            "predictions": SingleFileArtifactSpec(
+                kind="file",
+                path=(
+                    f"{run_root}/artifacts/evaluations/toy_predictions/predictions.json"
+                ),
+                loader=loader_ref("json_file"),
+                data_role=evaluation_role,
+            )
+        },
+    )
+    stage_specs: list[tuple[str, BaseSpec]] = [
+        ("build", build),
+        ("train", train),
+        ("evaluate", evaluate),
+    ]
+    run = make_run(
+        experiment_id="model_eval",
+        run_id=run_id,
+        source_commit=MAIN_SOURCE_COMMIT,
+        plan_commit=MAIN_PLAN_COMMIT,
+        stage_specs=stage_specs,
+        estimator_stage_id="train",
+    )
+    benchmark = None
+    if benchmark_enabled:
+        benchmark = BenchmarkSpec(
+            benchmark_id="toy_strict",
+            eval_id="toy_predictions",
+            test=resolved_evaluation_dataset_pointer,
+            splits={"test_split": resolved_split_pointer},
+            metric_ids=("pearson_correlation",),
+            criteria=(
+                MetricCriterion(
+                    metric_id="pearson_correlation",
+                    comparison="ge",
+                    threshold=benchmark_threshold,
+                ),
+            ),
+        )
+        run = run.model_copy(update={"benchmark_id": benchmark.benchmark_id})
+    experiment = ExperimentSpec(
+        experiment_id="model_eval",
+        factors=(),
+        variant_ids=("baseline",),
+        replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
+        metrics=(
+            metric_spec(
+                "pearson_correlation",
+                "evaluation",
+                required_data_role=evaluation_role,
+            ),
+        ),
+    )
+    variant = VariantSpec(
+        experiment_id="model_eval",
+        variant_id="baseline",
+        levels={},
+        stage_params=(
+            BuildVariantStageParams(
+                kind="build", stage_id="build", params=build.params
+            ),
+            TrainVariantStageParams(
+                kind="train", stage_id="train", params=train.params
+            ),
+            EvaluateVariantStageParams(
+                kind="eval",
+                stage_id="evaluate",
+                params=evaluate.params,
+            ),
+        ),
+    )
+    run_reference = add_plan_records(
+        store,
+        run=run,
+        stage_specs=stage_specs,
+        experiment=experiment,
+        variant=variant,
+        plan_commit=MAIN_PLAN_COMMIT,
+        benchmark=benchmark,
+    )
+
+    add_loader(store, MAIN_SOURCE_COMMIT, "prior_bundle", bundle=True)
+    add_loader(store, MAIN_SOURCE_COMMIT, "bytes_file")
+    add_loader(store, MAIN_SOURCE_COMMIT, "resume_state")
+    add_loader(store, MAIN_SOURCE_COMMIT, "json_file")
+    for parameter_kind in ("build", "train", "evaluate"):
+        add_source_file(
+            store,
+            MAIN_SOURCE_COMMIT,
+            parameter_model_ref(parameter_kind).path,
+            parameter_model_source(parameter_kind),
+        )
+    resolved_env = resolved_environment(store, MAIN_SOURCE_COMMIT)
+    build_source = add_source_file(
+        store,
+        MAIN_SOURCE_COMMIT,
+        str(build.implementation.path),
+        BUILD_SOURCE,
+    )
+    train_source = add_source_file(
+        store,
+        MAIN_SOURCE_COMMIT,
+        str(train.implementation.path),
+        TRAIN_SOURCE,
+    )
+    evaluate_source = add_source_file(
+        store,
+        MAIN_SOURCE_COMMIT,
+        str(evaluate.implementation.path),
+        EVALUATE_SOURCE,
+    )
+
+    build_commit = "9" * 40
+    prior_members = {
+        "adjacency.bin": b"adjacency",
+        "metadata.json": b'{"genes":2}\n',
+    }
+    prior_artifact = add_bundle_artifact(
+        store,
+        build_commit,
+        str(build.artifacts["prior"].path),
+        prior_members,
+    )
+    build_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="build",
+        stage=build,
+        input_paths={"dataset": "inputs/datasets/toy/current.bin"},
+        started_at=datetime(2026, 8, 20, 21, 1, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 9, tzinfo=UTC),
+        commit=MAIN_FILES_COMMIT,
+    )
+    resolved_build = ResolvedBuildSpec(
+        spec=build,
+        completion=ExecutedStageCompletion(
+            source=build_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=build_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
+        inputs={
+            "dataset": ResolvedStoredInputRef(
+                kind="stored", pointer=resolved_training_dataset_pointer
+            ),
+        },
+        artifacts={"prior": prior_artifact},
+        completed_at=datetime(2026, 8, 20, 21, 10, tzinfo=UTC),
+    )
+    build_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="build",
+        snapshot_commit=build_commit,
+        resolved_spec=resolved_build,
+    )
+
+    train_commit = "a" * 40
+    train_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="train",
+        stage=train,
+        input_paths={"prior": str(build.artifacts["prior"].path)},
+        started_at=datetime(2026, 8, 20, 21, 11, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 29, tzinfo=UTC),
+        commit=MAIN_FILES_COMMIT,
+    )
+    resolved_train = ResolvedTrainSpec(
+        spec=train,
+        completion=ExecutedStageCompletion(
+            source=train_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=train_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
+        inputs={"prior": ResolvedFutureInputRef(producer=build_stage)},
+        artifacts={
+            PARAMETERS: add_single_artifact(
+                store,
+                train_commit,
+                str(train.artifacts[PARAMETERS].path),
+                b"final model parameters",
+            ),
+            RESUME_STATE: add_single_artifact(
+                store,
+                train_commit,
+                str(train.artifacts[RESUME_STATE].path),
+                resume_state_bytes(),
+            ),
+        },
+        completed_at=datetime(2026, 8, 20, 21, 30, tzinfo=UTC),
+    )
+    train_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="train",
+        snapshot_commit=train_commit,
+        resolved_spec=resolved_train,
+    )
+
+    evaluate_commit = "b" * 40
+    evaluate_invocation = publish_invocation(
+        store,
+        run=run,
+        stage_id="evaluate",
+        stage=evaluate,
+        input_paths={
+            "parameters": str(train.artifacts[PARAMETERS].path),
+            "evaluation_dataset": "inputs/datasets/toy/evaluation.bin",
+            "test_split": "inputs/benchmarks/toy/test_split.json",
+        },
+        started_at=datetime(2026, 8, 20, 21, 31, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 39, tzinfo=UTC),
+        commit=MAIN_FILES_COMMIT,
+    )
+    resolved_evaluate = ResolvedEvaluateSpec(
+        spec=evaluate,
+        completion=ExecutedStageCompletion(
+            source=evaluate_source,
+            env=resolved_env,
+            execution_context=execution_context(),
+            startup=startup_receipt(run),
+            invocation=evaluate_invocation,
+            command=("python", "-m", "viper._workers.stages"),
+        ),
+        inputs={
+            "parameters": ResolvedFutureInputRef(producer=train_stage),
+            "evaluation_dataset": ResolvedStoredInputRef(
+                kind="stored",
+                pointer=resolved_evaluation_dataset_pointer,
+            ),
+            "test_split": ResolvedStoredInputRef(
+                kind="stored", pointer=resolved_split_pointer
+            ),
+        },
+        artifacts={
+            "predictions": add_single_artifact(
+                store,
+                evaluate_commit,
+                str(evaluate.artifacts["predictions"].path),
+                b"fixed predictions",
+            )
+        },
+        completed_at=datetime(2026, 8, 20, 21, 40, tzinfo=UTC),
+    )
+    evaluate_stage = publish_resolved_stage(
+        store,
+        run_root_path=run_root,
+        stage_id="evaluate",
+        snapshot_commit=evaluate_commit,
+        resolved_spec=resolved_evaluate,
+    )
+
+    measurement_raw = (
+        b'{"run_id":"01ARZ3NDEKTSV4RRFFQ69G5FAB",'
+        b'"attempt_id":1,"stage_id":"evaluate",'
+        b'"metric_id":"pearson_correlation","value":0.91,'
+        b'"measured_at":"2026-08-20T21:41:00Z"}\n'
+    )
+    measurement_location = hf_file(
+        MAIN_FILES_COMMIT,
+        f"{run_root}/attempts/1/measurements/evaluate.pearson_correlation.jsonl",
+    )
+    store.put(measurement_location, measurement_raw)
+    measurement_reference = ResolvedFileRef(
+        sha256=sha256(measurement_raw),
+        bytes=len(measurement_raw),
+        stored_at=measurement_location,
+    )
+    predictions = resolved_evaluate.artifacts["predictions"]
+    assert isinstance(predictions, ResolvedSingleFileArtifact)
+    metric_verification_reference = publish_metric_verification(
+        store,
+        run=run,
+        attempt_id=1,
+        stage_id="evaluate",
+        metric=experiment.metrics[0],
+        measurement_raw=measurement_raw,
+        stage_completed_at=resolved_evaluate.completed_at,
+        dependency_files=(
+            ResolvedFileRef(
+                sha256=predictions.file.sha256,
+                bytes=predictions.file.bytes,
+                stored_at=hf_file(evaluate_commit, str(predictions.file.path)),
+            ),
+        ),
+        commit=MAIN_FILES_COMMIT,
+    )
+    attempt = RunAttempt(
+        attempt_id=1,
+        purpose="run",
+        status="succeeded",
+        started_at=datetime(2026, 8, 20, 21, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 20, 21, 45, tzinfo=UTC),
+        resolved_stages=(build_stage, train_stage, evaluate_stage),
+        invocations=(build_invocation, train_invocation, evaluate_invocation),
+        journal=publish_attempt_journal(
+            store,
+            run_root_path=run_root,
+            attempt_id=1,
+            commit=MAIN_FILES_COMMIT,
+        ),
+        measurement_files=(measurement_reference,),
+        metric_verification_files=(metric_verification_reference,),
+        log_files=(),
+        failure=None,
+    )
+    resolved_run = ResolvedRun(
+        spec=run_reference,
+        status="succeeded",
+        attempts=(
+            publish_attempt(
+                store,
+                run_root_path=run_root,
+                attempt=attempt,
+                commit=MAIN_FILES_COMMIT,
+            ),
+        ),
+        successful_attempt_id=1,
+        completed_at=datetime(2026, 8, 20, 21, 46, tzinfo=UTC),
+    )
+    tamper_location = hf_file(
+        build_commit,
+        f"{build.artifacts['prior'].path}/adjacency.bin",
+    )
+    return resolved_run, store, tamper_location
 ```
 
 <!-- contract-target: requirements=SRU-03 block=P14-SRU-03 action=add target=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
