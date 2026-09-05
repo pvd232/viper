@@ -738,7 +738,7 @@ def _extract_database(
 ) -> _DatabaseStage:
     """Create or reuse the database selected by the source and extraction spec."""
     commands, stderr_parts = _check_extraction(root, executable, extraction)
-    key = stage_key(snapshot, extraction)
+    key = stage_key(snapshot.source_sha256, extraction)
     stage_root = cache_root / "databases" / key
     database = stage_root / "database"
     receipt_path = stage_root / "receipt.json"
@@ -751,13 +751,16 @@ def _extract_database(
             pass
     if (
         receipt is not None
-        and receipt.snapshot == snapshot
+        and receipt.snapshot.source_sha256 == snapshot.source_sha256
         and receipt.extraction == extraction
         and receipt.key == key
         and receipt.exit_code == 0
         and receipt.sha256 == cached_sha256
     ):
-        return _DatabaseStage(path=database, receipt=receipt)
+        # The database is reusable across commits with the same analyzed bytes,
+        # but the returned evidence still names this analysis's exact revision.
+        current_receipt = receipt.model_copy(update={"snapshot": snapshot})
+        return _DatabaseStage(path=database, receipt=current_receipt)
 
     if stage_root.exists():
         shutil.rmtree(stage_root)
@@ -943,7 +946,11 @@ def _lower_graph(
             graph = None
         if (
             graph is not None
-            and graph.receipt.database == database
+            and graph.receipt.database.key == database.key
+            and graph.receipt.database.sha256 == database.sha256
+            and graph.receipt.database.extraction == database.extraction
+            and graph.receipt.database.snapshot.source_sha256
+            == database.snapshot.source_sha256
             and graph.receipt.query == results.receipt
             and graph.receipt.graph.key == key
             and graph.receipt.graph.format == format
@@ -955,7 +962,16 @@ def _lower_graph(
                     executable=executable,
                     artifact_root=artifact_root,
                 )
-            return graph
+            return SourceGraph(
+                snapshot=snapshot,
+                nodes=graph.nodes,
+                edges=graph.edges,
+                receipt=CodeQLAnalysisReceipt(
+                    database=database,
+                    query=results.receipt,
+                    graph=graph.receipt.graph,
+                ),
+            )
 
     decoded, commands, stderr_sha256 = _decode_query_results(
         root,

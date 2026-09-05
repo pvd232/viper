@@ -26,7 +26,7 @@ G = \operatorname{Lower}(R,F)
 
 where:
 
-- \(S\) is the immutable source snapshot;
+- \(S\) is the digest of the complete analyzed Python source;
 - \(E\) identifies the CodeQL executable, Python extractor, language, and
   build mode;
 - \(Q\) identifies the query pack and suite;
@@ -48,6 +48,9 @@ k_G = H(k_R, H(R), F)
 
 Changing \(Q\) reuses \(D\). Changing \(F\) reuses \(D\) and \(R\). A
 `SourceGraph` is accepted only when its three receipts form this exact chain.
+Changing only the repository revision also reuses all three stages when \(S\)
+is unchanged. The returned `SourceSnapshot` and `DatabaseReceipt` still record
+the exact revision requested by that analysis.
 The lowering digest is recomputed from an explicit manifest of
 repository-relative paths and the loaded file bytes. A caller-supplied digest
 cannot select another lowerer.
@@ -205,6 +208,7 @@ relations, database schema files, and `src.zip`.
 |---|---|
 | `codeql.analysis.stages` | `DatabaseReceipt`, `QueryReceipt`, and `GraphReceipt` form one uninterrupted key-and-digest chain. |
 | `codeql.database.reuse` | A second identical analysis runs neither `database create` nor `database run-queries`. |
+| `codeql.database.content_identity` | A revision-only change with the same source digest reuses extraction, query results, and graph rows while returning receipts for the requested revision. |
 | `codeql.query.suite` | One `database run-queries` command executes `source-facts.qls`; no `_QUERY_FILES` list remains. |
 | `codeql.graph.semantics` | Read-only attributes emit only `reads`; stores emit only `writes`; `+=` emits exactly one of each; conditional declarations, dotted imports, and added-target neighbors retain their identity. |
 | `codeql.cache.boundaries` | Query-only changes reuse extraction; format-only changes reuse extraction and BQRS; corrupt cached graphs rebuild or fail closed. |

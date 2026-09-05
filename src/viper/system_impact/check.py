@@ -380,9 +380,15 @@ def _receipt_pair_is_valid(baseline: SourceGraph, realized: SourceGraph) -> bool
         baseline_database.snapshot == baseline.snapshot
         and realized_database.snapshot == realized.snapshot
         and baseline_database.key
-        == stage_key(baseline.snapshot, baseline_database.extraction)
+        == stage_key(
+            baseline.snapshot.source_sha256,
+            baseline_database.extraction,
+        )
         and realized_database.key
-        == stage_key(realized.snapshot, realized_database.extraction)
+        == stage_key(
+            realized.snapshot.source_sha256,
+            realized_database.extraction,
+        )
         and baseline_query.key
         == stage_key(
             baseline_database.key,

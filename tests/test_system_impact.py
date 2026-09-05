@@ -1223,7 +1223,7 @@ def _source_graph(
     database = DatabaseReceipt(
         snapshot=snapshot,
         extraction=extraction,
-        key=stage_key(snapshot, extraction),
+        key=stage_key(snapshot.source_sha256, extraction),
         sha256="6" * 64,
         commands=(("codeql", "database", "create"),),
         exit_code=0,

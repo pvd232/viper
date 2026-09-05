@@ -110,7 +110,9 @@ class DatabaseReceipt(ProtocolModel):
 
     snapshot: SourceSnapshot = Field(description="Source extracted by CodeQL.")
     extraction: CodeQLExtractionSpec = Field(description="Extraction settings used.")
-    key: SHA256 = Field(description="Digest of the snapshot and extraction settings.")
+    key: SHA256 = Field(
+        description="Digest of the analyzed source bytes and extraction settings."
+    )
     sha256: SHA256 = Field(description="Digest of the extracted database facts.")
     commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
         min_length=1,
@@ -125,7 +127,7 @@ class DatabaseReceipt(ProtocolModel):
     @model_validator(mode="after")
     def validate_key(self) -> DatabaseReceipt:
         """Require the key derived from this receipt's stage inputs."""
-        if self.key != stage_key(self.snapshot, self.extraction):
+        if self.key != stage_key(self.snapshot.source_sha256, self.extraction):
             raise ValueError("DatabaseReceipt key differs from its stage inputs")
         return self
 

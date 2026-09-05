@@ -173,7 +173,10 @@ def test_analysis_uses_three_keys_and_runs_the_suite_once(tmp_path: Path) -> Non
     )
 
     assert first == second
-    assert first.receipt.database.key == stage_key(snapshot, extraction)
+    assert first.receipt.database.key == stage_key(
+        snapshot.source_sha256,
+        extraction,
+    )
     assert first.receipt.query.key == stage_key(
         first.receipt.database.key,
         first.receipt.database.sha256,
@@ -205,6 +208,53 @@ def test_analysis_uses_three_keys_and_runs_the_suite_once(tmp_path: Path) -> Non
     commands = [json.loads(line) for line in calls.read_text().splitlines()]
     assert sum(command[:2] == ["database", "create"] for command in commands) == 1
     assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
+
+
+def test_revision_only_change_reuses_all_analysis_stages(tmp_path: Path) -> None:
+    """Reuse CodeQL results when a commit changes no analyzed Python bytes."""
+    root = tmp_path / "source"
+    _write_source(root)
+    query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
+    calls = tmp_path / "calls.jsonl"
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor, calls)
+    extraction, query, format = _specs(executable, extractor, query_pack)
+    source_sha256 = source_digest(root)
+    first_snapshot = SourceSnapshot(
+        base_revision="1" * 40,
+        source_sha256=source_sha256,
+        revision="1" * 40,
+    )
+    second_snapshot = SourceSnapshot(
+        base_revision="2" * 40,
+        source_sha256=source_sha256,
+        revision="2" * 40,
+    )
+    common = {
+        "snapshot_root": root,
+        "extraction": extraction,
+        "query": query,
+        "format": format,
+        "codeql_executable": executable,
+        "query_pack": query_pack,
+        "cache_root": tmp_path / "cache",
+    }
+
+    first = analyze_source(**common, snapshot=first_snapshot)
+    second = analyze_source(**common, snapshot=second_snapshot)
+
+    assert first.snapshot == first_snapshot
+    assert second.snapshot == second_snapshot
+    assert second.receipt.database.snapshot == second_snapshot
+    assert first.nodes == second.nodes
+    assert first.edges == second.edges
+    assert first.receipt.database.key == second.receipt.database.key
+    assert first.receipt.query == second.receipt.query
+    assert first.receipt.graph == second.receipt.graph
+    commands = [json.loads(line) for line in calls.read_text().splitlines()]
+    assert sum(command[:2] == ["database", "create"] for command in commands) == 1
+    assert sum(command[:2] == ["database", "run-queries"] for command in commands) == 1
+    assert sum(command[:2] == ["bqrs", "decode"] for command in commands) == 2
 
 
 def test_analysis_rejects_outputs_inside_source_tree(tmp_path: Path) -> None:
