@@ -102,56 +102,47 @@ That ingestion gap must close before `P0-CQA-01` becomes active work.
 ### Proposed-change DAG
 
 ```mermaid
-flowchart LR
-    S[SourceSnapshot] --> E[CodeQLExtractionSpec]
-    E --> KD[Database key]
-    KD --> D[DatabaseReceipt]
-    D --> Q[CodeQLQuerySpec]
-    Q --> KR[Query key]
-    KR --> R[QueryReceipt]
-    R --> F[SourceGraphFormat]
-    F --> KG[Graph key]
-    KG --> G[GraphReceipt]
-
-    M[Source plan] --> P[Source-backed target ingestion]
-    P --> S
+flowchart TB
+    Plan["Source plan"] --> Ingest["ContractTarget ingestion"]
+    Ingest --> Source["Candidate SourceSnapshot"]
+    Extraction["CodeQLExtractionSpec"] -->|"database key"| Database["CodeQL database<br/>DatabaseReceipt"]
+    Source -->|"source bytes"| Database
+    Query["CodeQLQuerySpec<br/>source-facts.qls"] -->|"query key"| Results["BQRS results<br/>QueryReceipt"]
+    Database -->|"extracted facts"| Results
+    Format["SourceGraphFormat"] -->|"graph key"| Graph["SourceGraph<br/>GraphReceipt"]
+    Results -->|"decoded rows"| Graph
 
     classDef authored fill:#2563eb,stroke:#93c5fd,color:#ffffff,stroke-width:2px;
     classDef proposed fill:#7e22ce,stroke:#d8b4fe,color:#ffffff,stroke-width:2px;
-    classDef gap fill:#b91c1c,stroke:#fca5a5,color:#ffffff,stroke-width:2px;
-    class S,E,Q,F,M authored;
-    class KD,D,KR,R,KG,G proposed;
-    class P gap;
+    class Plan,Extraction,Query,Format authored;
+    class Ingest,Source,Database,Results,Graph proposed;
     linkStyle default stroke:#94a3b8,stroke-width:2px;
 ```
 
 ### Integrated DAG
 
 ```mermaid
-flowchart LR
-    C[Contract] --> M[plan.toml]
-    M --> P[Reviewed Python files]
-    P --> V[Plan gate]
-
-    S[SourceSnapshot] --> E[CodeQLExtractionSpec]
-    E --> D[DatabaseReceipt]
-    D --> Q[CodeQLQuerySpec]
-    Q --> R[QueryReceipt]
-    R --> F[SourceGraphFormat]
-    F --> G[SourceGraph + GraphReceipt]
-    G --> X[check_plan]
-
-    V --> S
-    X --> A[PlanCheck]
+flowchart TB
+    Contract["Contract"] --> Plan["Source plan + PairBlocks"]
+    Plan --> Candidate["Materialized candidate"]
+    Baseline["Baseline source"] --> Analyze["Staged CodeQL analysis"]
+    Candidate --> Analyze
+    Specs["Extraction · query · graph specs"] --> Analyze
+    Analyze --> Evidence["G0 + G*<br/>receipts"]
+    Candidate --> Gates["Pyright + PairBlock gates"]
+    Plan --> Gates
+    Evidence --> Check["check_plan"]
+    Gates --> Check
+    Plan --> Check
+    Check --> Result["PlanCheck"]
 
     classDef authored fill:#2563eb,stroke:#93c5fd,color:#ffffff,stroke-width:2px;
     classDef implementation fill:#0f766e,stroke:#5eead4,color:#ffffff,stroke-width:2px;
     classDef output fill:#7e22ce,stroke:#d8b4fe,color:#ffffff,stroke-width:2px;
     classDef checklist fill:#b45309,stroke:#fcd34d,color:#ffffff,stroke-width:2px;
-    class C,M,P authored;
-    class E,D,Q,R,F,G,X implementation;
-    class S,A output;
-    class V checklist;
+    class Contract,Plan,Specs authored;
+    class Analyze,Gates,Check implementation;
+    class Baseline,Candidate,Evidence,Result output;
     linkStyle default stroke:#94a3b8,stroke-width:2px;
 ```
 
