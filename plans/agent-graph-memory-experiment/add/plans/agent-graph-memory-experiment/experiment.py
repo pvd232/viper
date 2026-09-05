@@ -34,7 +34,7 @@ from viper.authoring import (
     variant,
 )
 from viper.metrics import max, measure
-from viper.params import Metric, Train
+from viper.params import Train
 from viper.references import GitFileRef, GitSource
 from viper.resume import DataLoaderConfiguration
 from viper.runtime import (
@@ -349,7 +349,10 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
                 "evaluator_output": "hidden-evaluator.txt",
             }.items()
         }
-        acceptance = measure(trial.candidate_acceptance, params=Metric())
+        acceptance = measure(
+            trial.candidate_acceptance,
+            params=trial.AcceptanceMetricParameters(),
+        )
         trial_stage = stage(
             trial.run_agent_trial,
             params=params,

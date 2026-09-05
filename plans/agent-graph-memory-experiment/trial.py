@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic import Field
 
 from viper.metrics import MetricContext, metric
-from viper.params import Train
+from viper.params import Metric, Train
 from viper.stages import Context, train
 
 
@@ -30,6 +30,10 @@ class AgentTrialParameters(Train):
     graph_evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     prompt_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     evaluator_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class AcceptanceMetricParameters(Metric):
+    """Keep live acceptance-metric parameters project-loadable."""
 
 
 def load_bytes(path: Path) -> bytes:
@@ -277,6 +281,7 @@ def run_agent_trial(context: Context[AgentTrialParameters]) -> None:
 
 __all__ = [
     "AgentTrialParameters",
+    "AcceptanceMetricParameters",
     "candidate_acceptance",
     "load_bytes",
     "run_agent_trial",
