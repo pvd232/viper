@@ -12,10 +12,9 @@ from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import StageId
 from ..metrics import Measurement
 from ..references import (
-    LocalStageResultSnapshotRef,
     ResolvedFileRef,
     SnapshotFileRef,
-    StageResultSnapshotRef,
+    StageResultSnapshot,
     StorageModel,
 )
 from ..runs import ResolvedRun, RunAttempt, RunSpec
@@ -103,7 +102,7 @@ class VerifiedBenchmarkResult:
 
 
 StorageFetcher = Callable[[StorageModel], bytes]
-StageSnapshot = StageResultSnapshotRef | LocalStageResultSnapshotRef
+StageSnapshot = StageResultSnapshot
 
 
 __all__ = [

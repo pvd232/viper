@@ -189,6 +189,7 @@ def test_api_returns_the_verified_benchmark_result(
         "viper.api.execute_benchmark_run",
         lambda *args, **kwargs: BenchmarkExecutionResult(
             result=result,
+            result_ref=ResolvedBenchmarkResultRef.model_construct(),
             result_path=result_path,
         ),
     )

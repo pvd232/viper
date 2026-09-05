@@ -5,6 +5,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from ..benchmark import BenchmarkResult
+from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
 
 
@@ -14,6 +15,7 @@ class RunResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     resolved_run: ResolvedRun
+    resolved_run_ref: ResolvedRunRef
     resolved_run_path: Path
     journal_path: Path
 
@@ -35,6 +37,7 @@ class BenchmarkExecutionResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     result: BenchmarkResult
+    result_ref: ResolvedBenchmarkResultRef
     result_path: Path
 
 

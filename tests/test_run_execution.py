@@ -28,7 +28,7 @@ from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
 )
-from viper._verification.storage import read_attempt_reference
+from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
 from viper.api import compare_runs as compare_runs_application
 from viper.api import run as run_stage
@@ -599,10 +599,12 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert confirmation.attempt_path.is_file()
     assert result.resolved_run_path.read_bytes() == candidate_run_raw
     candidate_snapshots = {
-        stage.snapshot.commit for stage in successful_attempt.resolved_stages
+        snapshot_identity(stage.snapshot)
+        for stage in successful_attempt.resolved_stages
     }
     confirmation_snapshots = {
-        stage.snapshot.commit for stage in confirmation.attempt.resolved_stages
+        snapshot_identity(stage.snapshot)
+        for stage in confirmation.attempt.resolved_stages
     }
     assert candidate_snapshots.isdisjoint(confirmation_snapshots)
 

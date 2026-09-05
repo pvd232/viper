@@ -94,6 +94,7 @@ from viper.references import (
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
@@ -104,8 +105,10 @@ from viper.references import (
     ResolvedRunSpecRef,
     ResolvedStageRef,
     SnapshotFileRef,
-    StageResultSnapshotRef,
+    StageResultSnapshot,
     StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
 )
 from viper.resume import DataLoaderConfiguration
 from viper.runs import (
@@ -252,6 +255,14 @@ class DocumentStore:
                 str(location.path),
                 "",
             )
+        if isinstance(location, ViperCloudFileRef):
+            return (
+                location.kind,
+                f"{location.owner}/{location.project}",
+                location.revision,
+                str(location.path),
+                "",
+            )
         repo_type = getattr(location, "repo_type", "")
         return (
             location.kind,
@@ -271,7 +282,7 @@ class DocumentStore:
 
     def list_snapshot_files(
         self,
-        snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
+        snapshot: HuggingFaceStageResultSnapshotRef | LocalStageResultSnapshotRef,
     ) -> tuple[str, ...]:
         """List every file stored in one simulated immutable snapshot."""
         if isinstance(snapshot, LocalStageResultSnapshotRef):
@@ -304,9 +315,9 @@ def hf_file(commit: str, path: str) -> HuggingFaceFileRef:
     )
 
 
-def snapshot(commit: str) -> StageResultSnapshotRef:
+def snapshot(commit: str) -> HuggingFaceStageResultSnapshotRef:
     """Build one immutable stage-result snapshot reference."""
-    return StageResultSnapshotRef(
+    return HuggingFaceStageResultSnapshotRef(
         repository=ARTIFACT_REPOSITORY,
         commit=commit,
         repo_type="dataset",
@@ -1658,6 +1669,13 @@ def copy_snapshot_files(
             store.put(hf_file(target_commit, path), raw)
 
 
+def snapshot_revision(snapshot: StageResultSnapshot) -> str:
+    """Return the revision field used by a snapshot's storage backend."""
+    if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+        return snapshot.revision
+    return snapshot.commit
+
+
 def build_benchmark_fixture(
     *,
     threshold: float = 0.9,
@@ -1682,12 +1700,12 @@ def build_benchmark_fixture(
     train_commit = "d" * 40
     evaluate_commit = "e" * 40
 
-    copy_snapshot_files(store, original_build.snapshot.commit, build_commit)
+    copy_snapshot_files(store, snapshot_revision(original_build.snapshot), build_commit)
     resolved_build = ResolvedBuildSpec.model_validate(
         yaml.safe_load(
             store.fetch(
                 hf_file(
-                    original_build.snapshot.commit,
+                    snapshot_revision(original_build.snapshot),
                     str(original_build.resolved_spec.path),
                 )
             )
@@ -1713,12 +1731,12 @@ def build_benchmark_fixture(
         resolved_spec=resolved_build,
     )
 
-    copy_snapshot_files(store, original_train.snapshot.commit, train_commit)
+    copy_snapshot_files(store, snapshot_revision(original_train.snapshot), train_commit)
     resolved_train = ResolvedTrainSpec.model_validate(
         yaml.safe_load(
             store.fetch(
                 hf_file(
-                    original_train.snapshot.commit,
+                    snapshot_revision(original_train.snapshot),
                     str(original_train.resolved_spec.path),
                 )
             )
@@ -1750,12 +1768,14 @@ def build_benchmark_fixture(
         resolved_spec=resolved_train,
     )
 
-    copy_snapshot_files(store, original_evaluate.snapshot.commit, evaluate_commit)
+    copy_snapshot_files(
+        store, snapshot_revision(original_evaluate.snapshot), evaluate_commit
+    )
     resolved_evaluate = ResolvedEvaluateSpec.model_validate(
         yaml.safe_load(
             store.fetch(
                 hf_file(
-                    original_evaluate.snapshot.commit,
+                    snapshot_revision(original_evaluate.snapshot),
                     str(original_evaluate.resolved_spec.path),
                 )
             )
@@ -2144,7 +2164,9 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             "experiments/model_eval/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAB/"
             "artifacts/priors/toy/unrecorded.bin"
         )
-        store.put(hf_file(build_stage.snapshot.commit, extra_path), b"extra")
+        store.put(
+            hf_file(snapshot_revision(build_stage.snapshot), extra_path), b"extra"
+        )
 
         with self.assertRaisesRegex(VerificationError, "artifact.bundle"):
             verify_run_result(resolved_run, policy=POLICY, fetcher=store.fetch)
@@ -2158,7 +2180,9 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             "artifacts/priors/toy/metadata.json"
         )
         del store.documents[
-            DocumentStore.key(hf_file(build_stage.snapshot.commit, missing_path))
+            DocumentStore.key(
+                hf_file(snapshot_revision(build_stage.snapshot), missing_path)
+            )
         ]
 
         with self.assertRaisesRegex(
@@ -2288,7 +2312,9 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         reused_snapshot_measurement = measurement.model_copy(
             update={
                 "stored_at": measurement.stored_at.model_copy(
-                    update={"commit": attempt.resolved_stages[0].snapshot.commit}
+                    update={
+                        "commit": snapshot_revision(attempt.resolved_stages[0].snapshot)
+                    }
                 )
             }
         )
@@ -2461,7 +2487,11 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         reused_snapshot_measurement = measurement.model_copy(
             update={
                 "stored_at": measurement.stored_at.model_copy(
-                    update={"commit": confirmation.resolved_stages[0].snapshot.commit}
+                    update={
+                        "commit": snapshot_revision(
+                            confirmation.resolved_stages[0].snapshot
+                        )
+                    }
                 )
             }
         )
@@ -2495,7 +2525,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             yaml.safe_load(
                 store.fetch(
                     hf_file(
-                        confirmation_train.snapshot.commit,
+                        snapshot_revision(confirmation_train.snapshot),
                         str(confirmation_train.resolved_spec.path),
                     )
                 )
@@ -2509,7 +2539,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             store,
             run_root_path=str(result.run.stored_at.path).removesuffix("/resolved.yaml"),
             stage_id="train",
-            snapshot_commit=confirmation_train.snapshot.commit,
+            snapshot_commit=snapshot_revision(confirmation_train.snapshot),
             resolved_spec=resolved_train,
         )
 
@@ -2517,7 +2547,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             yaml.safe_load(
                 store.fetch(
                     hf_file(
-                        confirmation_evaluate.snapshot.commit,
+                        snapshot_revision(confirmation_evaluate.snapshot),
                         str(confirmation_evaluate.resolved_spec.path),
                     )
                 )
@@ -2535,7 +2565,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             store,
             run_root_path=str(result.run.stored_at.path).removesuffix("/resolved.yaml"),
             stage_id="evaluate",
-            snapshot_commit=confirmation_evaluate.snapshot.commit,
+            snapshot_commit=snapshot_revision(confirmation_evaluate.snapshot),
             resolved_spec=resolved_evaluate,
         )
         confirmation = confirmation.model_copy(
@@ -2569,7 +2599,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             yaml.safe_load(
                 store.fetch(
                     hf_file(
-                        confirmation_evaluate.snapshot.commit,
+                        snapshot_revision(confirmation_evaluate.snapshot),
                         str(confirmation_evaluate.resolved_spec.path),
                     )
                 )
@@ -2597,7 +2627,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             store,
             run_root_path=str(result.run.stored_at.path).removesuffix("/resolved.yaml"),
             stage_id="evaluate",
-            snapshot_commit=confirmation_evaluate.snapshot.commit,
+            snapshot_commit=snapshot_revision(confirmation_evaluate.snapshot),
             resolved_spec=tampered_evaluate_spec,
         )
         confirmation = confirmation.model_copy(
@@ -2628,7 +2658,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             yaml.safe_load(
                 store.fetch(
                     hf_file(
-                        train_stage.snapshot.commit,
+                        snapshot_revision(train_stage.snapshot),
                         str(train_stage.resolved_spec.path),
                     )
                 )
@@ -2646,7 +2676,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
                 "/resolved.yaml"
             ),
             stage_id="train",
-            snapshot_commit=train_stage.snapshot.commit,
+            snapshot_commit=snapshot_revision(train_stage.snapshot),
             resolved_spec=resolved_train,
         )
         tampered_attempt = attempt.model_copy(

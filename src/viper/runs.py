@@ -19,12 +19,11 @@ from .artifacts import StageArtifactRef
 from .ids import ExperimentId, ReplicateId, RunId, StageId, VariantId
 from .references import (
     GitSource,
-    LocalStageResultSnapshotRef,
     ResolvedFileRef,
     ResolvedRunSpecRef,
     ResolvedStageInvocationRef,
     ResolvedStageRef,
-    StageResultSnapshotRef,
+    StageResultSnapshot,
 )
 from .runtime import EnvSpec, ReproducibilitySpec
 
@@ -127,7 +126,7 @@ class RunAttempt(ProtocolModel):
             raise ValueError("attempt completion must be after attempt start")
 
         unique = set()
-        snapshots: set[StageResultSnapshotRef | LocalStageResultSnapshotRef] = set()
+        snapshots: set[StageResultSnapshot] = set()
         for stage in self.resolved_stages:
             if stage.stage_id in unique:
                 raise ValueError("resolved stage IDs must be unique")

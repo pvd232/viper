@@ -18,10 +18,12 @@ from ..preflight import preflight_plan
 from ..references import (
     GitFileRef,
     ResolvedFileRef,
+    ResolvedRunRef,
     ResolvedRunSpecRef,
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    ViperCloudFileRef,
     storage_file,
 )
 from ..runs import (
@@ -42,9 +44,11 @@ from ..stages import (
 )
 from ..storage import (
     LocalArtifactStore,
+    ViperCloudClient,
     bind_run_destination,
     create_snapshot_publisher,
     load_storage_settings,
+    publish_resolved_files,
     snapshot_file,
 )
 from ..verification import verify_run_result
@@ -88,6 +92,7 @@ def execute_attempt(
     timeout_seconds: float | None = None,
     retry: bool = False,
     purpose: AttemptPurpose = "run",
+    cloud_client: ViperCloudClient | None = None,
 ) -> RunResult | ConfirmationRunResult:
     """Execute one ordinary or benchmark-confirmation attempt."""
     root = repository_root.resolve()
@@ -95,7 +100,12 @@ def execute_attempt(
     run_raw = run_path.read_bytes()
     run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
     store = LocalArtifactStore(root)
-    fetcher = RunFetcher(root, store, str(run.source.repository))
+    fetcher = RunFetcher(
+        root,
+        store,
+        str(run.source.repository),
+        cloud_client=cloud_client,
+    )
     origin = run_git(root, "remote", "get-url", "origin").decode().strip()
     if origin != str(run.source.repository):
         raise RunError("Git origin differs from RunSpec.source.repository")
@@ -115,13 +125,22 @@ def execute_attempt(
         if fetcher(plan.stored_at) != run_raw:
             raise RunError("RunSpec bytes differ from the immutable plan")
         plan_location = plan.stored_at
+    plan_revision = (
+        plan_location.revision
+        if isinstance(plan_location, ViperCloudFileRef)
+        else plan_location.commit
+    )
 
     destination = bind_run_destination(
         root,
         run.run_id,
         load_storage_settings(root).destination,
     )
-    snapshot_publisher = create_snapshot_publisher(root, destination)
+    snapshot_publisher = create_snapshot_publisher(
+        root,
+        destination,
+        cloud_client=cloud_client,
+    )
     policy = VerificationPolicy(
         trusted_source_repositories=frozenset({str(run.source.repository)})
     )
@@ -219,7 +238,7 @@ def execute_attempt(
             "preflight completed and immutable plan located",
             recorded_at=datetime.now(UTC),
             details={
-                "plan_commit": plan_location.commit,
+                "plan_commit": plan_revision,
                 "report": preflight_path.relative_to(workspace.root).as_posix(),
             },
         )
@@ -330,6 +349,7 @@ def execute_attempt(
                                 destination,
                                 invocation_path,
                                 exc.invocation,
+                                cloud_client=cloud_client,
                             )
                         )
                     raise
@@ -342,6 +362,7 @@ def execute_attempt(
                     destination,
                     invocation_path,
                     process.invocation,
+                    cloud_client=cloud_client,
                 )
                 invocation_refs.append(invocation_ref)
                 stage_completed = datetime.now(UTC)
@@ -478,6 +499,7 @@ def execute_attempt(
             log_files,
             measurement_paths,
             metric_verification_paths,
+            cloud_client=cloud_client,
         )
         attempt_completed = datetime.now(UTC)
         attempt = RunAttempt(
@@ -499,6 +521,7 @@ def execute_attempt(
             run_root,
             attempt,
             destination,
+            cloud_client=cloud_client,
         )
         if purpose == "benchmark_confirmation":
             return ConfirmationRunResult(
@@ -510,7 +533,13 @@ def execute_attempt(
                 journal_path=journal.path,
             )
         attempt_references = tuple(
-            write_attempt_document(root, run_root, value, destination)
+            write_attempt_document(
+                root,
+                run_root,
+                value,
+                destination,
+                cloud_client=cloud_client,
+            )
             for value in previous_attempts
         ) + (attempt_reference,)
         resolved_run = ResolvedRun(
@@ -528,8 +557,19 @@ def execute_attempt(
         verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
         replace_synchronized(terminal_path, terminal_raw)
         write_synchronized(workspace.terminal, terminal_raw)
+        terminal_reference = publish_resolved_files(
+            root,
+            destination,
+            {terminal_path.relative_to(root).as_posix(): terminal_raw},
+            cloud_client=cloud_client,
+        )[terminal_path.relative_to(root).as_posix()]
         return RunResult(
             resolved_run=resolved_run,
+            resolved_run_ref=ResolvedRunRef(
+                sha256=terminal_reference.sha256,
+                bytes=terminal_reference.bytes,
+                stored_at=terminal_reference.stored_at,
+            ),
             resolved_run_path=terminal_path,
             journal_path=journal.path,
         )
@@ -584,6 +624,7 @@ def execute_attempt(
             log_files,
             measurement_paths,
             metric_verification_paths,
+            cloud_client=cloud_client,
         )
         completed_at = datetime.now(UTC)
         failed_attempt = RunAttempt(
@@ -610,6 +651,7 @@ def execute_attempt(
             run_root,
             failed_attempt,
             destination,
+            cloud_client=cloud_client,
         )
         if purpose == "benchmark_confirmation":
             failed_attempt_path = (
@@ -620,7 +662,13 @@ def execute_attempt(
                 f"written to {failed_attempt_path}"
             ) from exc
         attempt_references = tuple(
-            write_attempt_document(root, run_root, value, destination)
+            write_attempt_document(
+                root,
+                run_root,
+                value,
+                destination,
+                cloud_client=cloud_client,
+            )
             for value in previous_attempts
         ) + (failed_attempt_reference,)
         failed_run = ResolvedRun(

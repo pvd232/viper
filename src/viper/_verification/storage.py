@@ -31,13 +31,15 @@ from ..artifacts import (
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
     LocalFileRef,
     LocalStageResultSnapshotRef,
     ResolvedFileRef,
     ResolvedStageRef,
     SnapshotFileRef,
-    StageResultSnapshotRef,
+    StageResultSnapshot,
     StorageModel,
+    ViperCloudFileRef,
     resolve_snapshot_file_ref,
 )
 from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
@@ -157,11 +159,13 @@ def fetch_storage_bytes(location: StorageModel) -> bytes:
         return fetch_huggingface_file_bytes(location)
     if isinstance(location, LocalFileRef):
         return fetch_local_file_bytes(location)
+    if isinstance(location, ViperCloudFileRef):
+        raise VerificationError("Viper Cloud retrieval requires a client")
     raise TypeError(f"unsupported storage reference: {type(location).__name__}")
 
 
 def list_huggingface_snapshot_files(
-    snapshot: StageResultSnapshotRef,
+    snapshot: HuggingFaceStageResultSnapshotRef,
 ) -> tuple[RepoRelPath, ...]:
     """List every regular file in one immutable Hugging Face snapshot."""
     repo_type = None if snapshot.repo_type == "model" else snapshot.repo_type
@@ -214,9 +218,11 @@ def list_snapshot_files(
             raise VerificationError(
                 "artifact.bundle: custom snapshot listing failed"
             ) from exc
-    if isinstance(snapshot, StageResultSnapshotRef):
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
         return list_huggingface_snapshot_files(snapshot)
-    return list_local_snapshot_files(snapshot)
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        return list_local_snapshot_files(snapshot)
+    raise VerificationError("Viper Cloud snapshot listing requires a client")
 
 
 def verify_resolved_file_bytes(
@@ -342,24 +348,31 @@ def verify_run_attempt_references(
 
 
 def read_snapshot_file(
-    snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
+    snapshot: StageResultSnapshot,
     reference: SnapshotFileRef,
     *,
     fetcher: StorageFetcher | None = None,
 ) -> bytes:
     """Retrieve and verify one file from a stage-result snapshot."""
     retrieve = fetch_storage_bytes if fetcher is None else fetcher
-    if isinstance(snapshot, StageResultSnapshotRef):
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
         location: StorageModel = HuggingFaceFileRef(
             repository=snapshot.repository,
             commit=snapshot.commit,
             path=reference.path,
             repo_type=snapshot.repo_type,
         )
-    else:
+    elif isinstance(snapshot, LocalStageResultSnapshotRef):
         location = LocalFileRef(
             store=snapshot.store,
             commit=snapshot.commit,
+            path=reference.path,
+        )
+    else:
+        location = ViperCloudFileRef(
+            owner=snapshot.owner,
+            project=snapshot.project,
+            revision=snapshot.revision,
             path=reference.path,
         )
     try:
@@ -378,17 +391,19 @@ def read_snapshot_file(
 
 
 def snapshot_identity(
-    snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
+    snapshot: StageResultSnapshot,
 ) -> tuple[str, ...]:
     """Return a backend-qualified identity for one immutable stage snapshot."""
-    if isinstance(snapshot, StageResultSnapshotRef):
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
         return (
             snapshot.kind,
             snapshot.repository,
             snapshot.commit,
             snapshot.repo_type,
         )
-    return (snapshot.kind, snapshot.store, snapshot.commit)
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        return (snapshot.kind, snapshot.store, snapshot.commit)
+    return (snapshot.kind, snapshot.owner, snapshot.project, snapshot.revision)
 
 
 def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None:
@@ -402,6 +417,13 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
         )
     if isinstance(location, LocalFileRef):
         return (location.kind, location.store, location.commit)
+    if isinstance(location, ViperCloudFileRef):
+        return (
+            location.kind,
+            location.owner,
+            location.project,
+            location.revision,
+        )
     return None
 
 

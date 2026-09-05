@@ -78,6 +78,7 @@ from viper.references import (
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
     ResolvedArtifactPointerRef,
     ResolvedFileRef,
     ResolvedGitFileRef,
@@ -86,7 +87,6 @@ from viper.references import (
     ResolvedStageInvocationRef,
     ResolvedStageRef,
     SnapshotFileRef,
-    StageResultSnapshotRef,
 )
 from viper.resume import DataLoaderConfiguration
 from viper.runs import (
@@ -340,9 +340,9 @@ def resolved_pointer(path: str) -> ResolvedArtifactPointerRef:
     )
 
 
-def snapshot(*, commit: str = SNAPSHOT_COMMIT) -> StageResultSnapshotRef:
+def snapshot(*, commit: str = SNAPSHOT_COMMIT) -> HuggingFaceStageResultSnapshotRef:
     """Build one immutable stage-result snapshot reference."""
-    return StageResultSnapshotRef(
+    return HuggingFaceStageResultSnapshotRef(
         repository=HF_REPOSITORY,
         commit=commit,
         repo_type="dataset",

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..references import ResolvedRunSpecRef
+from ..storage import ViperCloudClient
 from ._attempt import execute_attempt
 from .results import ConfirmationRunResult, RunResult
 
@@ -16,6 +17,7 @@ def run(
     plan: ResolvedRunSpecRef | None = None,
     timeout_seconds: float | None = None,
     retry: bool = False,
+    cloud_client: ViperCloudClient | None = None,
 ) -> RunResult:
     """Execute one frozen plan and verify its terminal resolved run."""
     result = execute_attempt(
@@ -25,6 +27,7 @@ def run(
         timeout_seconds=timeout_seconds,
         retry=retry,
         purpose="run",
+        cloud_client=cloud_client,
     )
     assert isinstance(result, RunResult)
     return result
@@ -36,6 +39,7 @@ def retry(
     *,
     plan: ResolvedRunSpecRef | None = None,
     timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
 ) -> RunResult:
     """Append one attempt to a failed frozen run and verify its result."""
     return run(
@@ -44,6 +48,7 @@ def retry(
         plan=plan,
         timeout_seconds=timeout_seconds,
         retry=True,
+        cloud_client=cloud_client,
     )
 
 
@@ -52,6 +57,7 @@ def execute_benchmark_confirmation(
     run_spec_path: Path,
     *,
     timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
 ) -> ConfirmationRunResult:
     """Execute one independent confirmation of a successful frozen run."""
     result = execute_attempt(
@@ -59,6 +65,7 @@ def execute_benchmark_confirmation(
         run_spec_path,
         timeout_seconds=timeout_seconds,
         purpose="benchmark_confirmation",
+        cloud_client=cloud_client,
     )
     assert isinstance(result, ConfirmationRunResult)
     return result

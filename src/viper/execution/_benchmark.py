@@ -24,6 +24,7 @@ from ..metrics import MetricVerificationReceipt, compare_metric_values
 from ..references import (
     GitFileRef,
     LocalFileRef,
+    ResolvedBenchmarkResultRef,
     ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
     ResolvedRunRef,
@@ -31,7 +32,13 @@ from ..references import (
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes, serialize_document
 from ..stages import EvalSpec
-from ..storage import LocalArtifactStore
+from ..storage import (
+    LocalArtifactStore,
+    ViperCloudClient,
+    bind_run_destination,
+    load_storage_settings,
+    publish_resolved_files,
+)
 from ..verification import verify_benchmark_result, verify_run_result
 from ..verification.models import VerificationPolicy
 from ._run import execute_benchmark_confirmation
@@ -63,14 +70,14 @@ def _write_new(path: Path, raw: bytes) -> None:
 
 def _metric_receipts(
     attempt: RunAttempt,
-    store: LocalArtifactStore,
+    fetcher: RunFetcher,
     eval_stage_id: str,
 ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
     """Load the recomputation receipt for each eval metric."""
     receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
     for reference in attempt.metric_verification_files:
         receipt = MetricVerificationReceipt.model_validate(
-            parse_yaml_bytes(store.fetch(reference.stored_at))
+            parse_yaml_bytes(fetcher(reference.stored_at))
         )
         if receipt.stage_id == eval_stage_id:
             receipts[receipt.metric_id] = (reference, receipt)
@@ -158,6 +165,7 @@ def benchmark(
     benchmark_spec_path: Path,
     *,
     timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
 ) -> BenchmarkExecutionResult:
     """Execute, assemble, verify, and publish one benchmark confirmation."""
     root = repository_root.resolve()
@@ -181,7 +189,12 @@ def benchmark(
         source_repository = str(
             RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
         )
-    fetcher = RunFetcher(root, store, source_repository)
+    fetcher = RunFetcher(
+        root,
+        store,
+        source_repository,
+        cloud_client=cloud_client,
+    )
     policy = VerificationPolicy(
         trusted_source_repositories=frozenset({source_repository})
     )
@@ -191,6 +204,11 @@ def benchmark(
         fetcher=fetcher,
     )
     plan = verified_candidate.plan
+    destination = bind_run_destination(
+        root,
+        plan.run.run_id,
+        load_storage_settings(root).destination,
+    )
     if plan.benchmark is None or plan.run.benchmark_id is None:
         raise BenchmarkExecutionError("candidate run has no benchmark specification")
 
@@ -219,6 +237,7 @@ def benchmark(
         root,
         run_spec_path,
         timeout_seconds=timeout_seconds,
+        cloud_client=cloud_client,
     )
     confirmation = confirmation_result.attempt
     confirmation_stages = verify_attempt_stages(
@@ -277,10 +296,10 @@ def benchmark(
             )
         )
 
-    candidate_metrics = _metric_receipts(selected_attempt, store, eval_stage_id)
+    candidate_metrics = _metric_receipts(selected_attempt, fetcher, eval_stage_id)
     confirmation_metrics = _metric_receipts(
         confirmation,
-        store,
+        fetcher,
         eval_stage_id,
     )
     metric_receipts = _benchmark_metric_results(
@@ -289,9 +308,13 @@ def benchmark(
         confirmation_metrics,
     )
 
-    candidate_reference = store.resolved_files(
-        {candidate_path.relative_to(root).as_posix(): candidate_raw}
-    )[0]
+    candidate_relative_path = candidate_path.relative_to(root).as_posix()
+    candidate_reference = publish_resolved_files(
+        root,
+        destination,
+        {candidate_relative_path: candidate_raw},
+        cloud_client=cloud_client,
+    )[candidate_relative_path]
     result = BenchmarkResult(
         benchmark=ResolvedBenchmarkSpecRef(
             sha256=hashlib.sha256(benchmark_raw).hexdigest(),
@@ -310,5 +333,21 @@ def benchmark(
         completed_at=datetime.now(UTC),
     )
     verify_benchmark_result(result, policy=policy, fetcher=fetcher)
-    _write_new(result_path, serialize_document(result))
-    return BenchmarkExecutionResult(result=result, result_path=result_path)
+    result_raw = serialize_document(result)
+    _write_new(result_path, result_raw)
+    result_relative_path = result_path.relative_to(root).as_posix()
+    result_reference = publish_resolved_files(
+        root,
+        destination,
+        {result_relative_path: result_raw},
+        cloud_client=cloud_client,
+    )[result_relative_path]
+    return BenchmarkExecutionResult(
+        result=result,
+        result_ref=ResolvedBenchmarkResultRef(
+            sha256=result_reference.sha256,
+            bytes=result_reference.bytes,
+            stored_at=result_reference.stored_at,
+        ),
+        result_path=result_path,
+    )

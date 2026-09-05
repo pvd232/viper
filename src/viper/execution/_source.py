@@ -16,12 +16,14 @@ from .._verification.storage import (
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
-    LocalStageResultSnapshotRef,
+    HuggingFaceStageResultSnapshotRef,
     ResolvedGitFileRef,
-    StageResultSnapshotRef,
+    StageResultSnapshot,
     StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
 )
-from ..storage import LocalArtifactStore
+from ..storage import LocalArtifactStore, ViperCloudClient
 from .errors import RunError
 
 
@@ -45,11 +47,13 @@ class RunFetcher:
         repository_root: Path,
         store: LocalArtifactStore,
         source_repository: str,
+        cloud_client: ViperCloudClient | None = None,
     ) -> None:
         """Bind retrieval to one local Git checkout and output store."""
         self.repository_root = repository_root.resolve()
         self.store = store
         self.source_repository = source_repository
+        self.cloud_client = cloud_client
 
     def __call__(self, location: StorageModel) -> bytes:
         """Retrieve one file from its declared immutable backend."""
@@ -63,15 +67,35 @@ class RunFetcher:
             )
         if isinstance(location, HuggingFaceFileRef):
             return fetch_huggingface_file_bytes(location)
+        if isinstance(location, ViperCloudFileRef):
+            if self.cloud_client is None:
+                raise RunError("Viper Cloud retrieval requires a client")
+            return self.cloud_client.fetch(
+                owner=location.owner,
+                project=location.project,
+                revision=location.revision,
+                path=location.path,
+            )
         return self.store.fetch(location)
 
     def list_snapshot_files(
         self,
-        snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
+        snapshot: StageResultSnapshot,
     ) -> tuple[RepoRelPath, ...]:
         """List every regular file in one immutable stage snapshot."""
-        if isinstance(snapshot, StageResultSnapshotRef):
+        if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
             return list_huggingface_snapshot_files(snapshot)
+        if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+            if self.cloud_client is None:
+                raise RunError("Viper Cloud snapshot listing requires a client")
+            return tuple(
+                file.path
+                for file in self.cloud_client.list_files(
+                    owner=snapshot.owner,
+                    project=snapshot.project,
+                    revision=snapshot.revision,
+                )
+            )
         return self.store.list_snapshot_files(snapshot)
 
 

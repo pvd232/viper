@@ -12,7 +12,7 @@ from ..references import ResolvedFileRef, ResolvedStageInvocationRef
 from ..runs import AttemptJournalRef, ResolvedAttemptRef, RunAttempt
 from ..serialization import serialize_document
 from ..stages import StageInvocationReceipt
-from ..storage import StorageDestination, publish_resolved_files
+from ..storage import StorageDestination, ViperCloudClient, publish_resolved_files
 from .errors import RunError
 
 
@@ -65,6 +65,7 @@ def publish_attempt_files(
     log_files: Mapping[str, bytes],
     measurement_paths: list[Path],
     metric_verification_paths: list[Path],
+    cloud_client: ViperCloudClient | None = None,
 ) -> tuple[
     AttemptJournalRef,
     tuple[ResolvedFileRef, ...],
@@ -77,7 +78,12 @@ def publish_attempt_files(
         files[path.relative_to(root).as_posix()] = path.read_bytes()
     journal_path = f"{run_root}/attempts/{attempt_id}/journal.jsonl"
     files[journal_path] = journal.path.read_bytes()
-    references = publish_resolved_files(root, destination, files)
+    references = publish_resolved_files(
+        root,
+        destination,
+        files,
+        cloud_client=cloud_client,
+    )
     journal_file = references[journal_path]
     return (
         AttemptJournalRef(
@@ -104,6 +110,7 @@ def write_attempt_document(
     run_root: str,
     attempt: RunAttempt,
     destination: StorageDestination,
+    cloud_client: ViperCloudClient | None = None,
 ) -> ResolvedAttemptRef:
     """Publish one canonical attempt document and return its immutable reference."""
     path = root / run_root / "attempts" / str(attempt.attempt_id) / "resolved.yaml"
@@ -114,6 +121,7 @@ def write_attempt_document(
         root,
         destination,
         {relative_path: raw},
+        cloud_client=cloud_client,
     )[relative_path]
     return ResolvedAttemptRef(
         sha256=reference.sha256,
@@ -127,10 +135,16 @@ def publish_invocation_receipt(
     destination: StorageDestination,
     path: str,
     receipt: StageInvocationReceipt,
+    cloud_client: ViperCloudClient | None = None,
 ) -> ResolvedStageInvocationRef:
     """Publish one stage invocation receipt at its canonical attempt path."""
     raw = serialize_document(receipt)
-    reference = publish_resolved_files(root, destination, {path: raw})[path]
+    reference = publish_resolved_files(
+        root,
+        destination,
+        {path: raw},
+        cloud_client=cloud_client,
+    )[path]
     return ResolvedStageInvocationRef(
         sha256=reference.sha256,
         bytes=reference.bytes,

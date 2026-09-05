@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import yaml
+from pydantic import BaseModel
 
 from .._schema import (
     PARAMETERS,
@@ -30,7 +31,14 @@ from ..inputs import (
     StoredInputRef,
 )
 from ..metrics import Measurement, MetricVerificationReceipt, compare_metric_values
-from ..references import GitFileRef, ResolvedFileRef
+from ..references import (
+    GitFileRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
@@ -67,6 +75,7 @@ def verify_run_result(
     fetcher: StorageFetcher | None = None,
 ) -> VerifiedRunResult:
     """Verify a terminal run from its RunSpec through every completed attempt."""
+    _verify_cloud_graph(resolved_run)
     plan = _plan.verify_run_plan(resolved_run, fetcher=fetcher)
     attempts = _storage.verify_run_attempt_references(
         resolved_run,
@@ -886,3 +895,49 @@ def verify_benchmark_result(
         confirmation_stages=confirmation_stages,
         confirmation_measurements=confirmation_measurements,
     )
+
+
+def _stored_locations(value: object) -> tuple[object, ...]:
+    """Collect storage references from one nested protocol record."""
+    if isinstance(
+        value,
+        (
+            GitFileRef,
+            LocalFileRef,
+            LocalStageResultSnapshotRef,
+            ViperCloudFileRef,
+            ViperCloudStageResultSnapshotRef,
+        ),
+    ):
+        return (value,)
+    if isinstance(value, BaseModel):
+        return tuple(
+            location
+            for field in value.__dict__.values()
+            for location in _stored_locations(field)
+        )
+    if isinstance(value, Mapping):
+        return tuple(
+            location for item in value.values() for location in _stored_locations(item)
+        )
+    if isinstance(value, (tuple, list)):
+        return tuple(location for item in value for location in _stored_locations(item))
+    return ()
+
+
+def _verify_cloud_graph(resolved_run: ResolvedRun) -> None:
+    """Reject local immutable references in a cloud-backed terminal run."""
+    locations = _stored_locations(resolved_run)
+    cloud = any(
+        isinstance(
+            location,
+            (ViperCloudFileRef, ViperCloudStageResultSnapshotRef),
+        )
+        for location in locations
+    )
+    local = any(
+        isinstance(location, (LocalFileRef, LocalStageResultSnapshotRef))
+        for location in locations
+    )
+    if cloud and local:
+        raise VerificationError("storage_graph_unreachable")

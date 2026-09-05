@@ -16,6 +16,7 @@ from tests.release_index import (
     require_identical_files,
 )
 from tools.plan import publish as publication
+from viper.references import HuggingFaceFileRef
 from viper.system_impact.models import Acceptance, PlanCheck
 
 
@@ -196,6 +197,7 @@ def test_publish_binds_compact_evidence_to_one_hugging_face_commit(
     assert f"{prefix}/contracts/docs/plan.md" in paths
     assert f"{prefix}/codeql/baseline/Declarations.json" in paths
     assert f"{prefix}/codeql/planned/Dependencies.bqrs" in paths
+    assert isinstance(reference.stored_at, HuggingFaceFileRef)
     assert reference.stored_at.repository == "pvd232/viper-plan-evidence"
     assert reference.stored_at.commit == "a" * 40
     assert reference.stored_at.path == f"{prefix}/manifest.json"

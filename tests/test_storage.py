@@ -1,23 +1,41 @@
 """Tests for repository-local immutable output publication."""
 
+import hashlib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from viper.references import LocalFileRef, LocalStageResultSnapshotRef
+from viper._schema import SHA256, RepoRelPath
+from viper.execution._source import RunFetcher
+from viper.ids import HumanId
+from viper.references import (
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+from viper.runs import ResolvedAttemptRef, ResolvedRun
 from viper.storage import (
     LocalArtifactStore,
     LocalSnapshotPublisher,
     LocalStorageDestination,
     LocalStoreError,
+    PublicationSource,
     StorageConfigurationError,
     StorageSettings,
+    ViperCloudClient,
     ViperCloudDestination,
+    ViperCloudSnapshotPublisher,
     bind_run_destination,
     create_snapshot_publisher,
     load_storage_settings,
     publish_resolved_files,
 )
+from viper.verification import verify_run_result
+from viper.verification.models import VerificationError, VerificationPolicy
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
@@ -47,6 +65,192 @@ def test_storage_publishes_and_retrieves_one_content_revision(
     )
 
 
+class InMemoryViperCloudClient(ViperCloudClient):
+    """Hold unsealed uploads separately from retrievable revisions."""
+
+    def __init__(self, *, rejected_seals: int = 0) -> None:
+        """Configure how many seal calls fail before the revision appears."""
+        self.uploads: dict[tuple[str, str, str, str], bytes] = {}
+        self.sealed: dict[tuple[str, str, str], tuple[SnapshotFileRef, ...]] = {}
+        self.rejected_seals = rejected_seals
+        self.seal_calls = 0
+
+    def upload(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        source: PublicationSource,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Save an upload without making it retrievable."""
+        raw = source.read_bytes() if isinstance(source, Path) else source
+        assert len(raw) == bytes
+        assert hashlib.sha256(raw).hexdigest() == sha256
+        key = (owner, project, revision, path)
+        existing = self.uploads.setdefault(key, raw)
+        assert existing == raw
+
+    def seal(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        files: tuple[SnapshotFileRef, ...],
+    ) -> None:
+        """Expose all uploaded files after the configured failures."""
+        self.seal_calls += 1
+        if self.seal_calls <= self.rejected_seals:
+            raise RuntimeError("seal unavailable")
+        self.sealed[(owner, project, revision)] = files
+
+    def fetch(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+    ) -> bytes:
+        """Read a file only when its revision is sealed."""
+        if (owner, project, revision) not in self.sealed:
+            raise FileNotFoundError("revision is not sealed")
+        return self.uploads[(owner, project, revision, path)]
+
+    def list_files(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+    ) -> tuple[SnapshotFileRef, ...]:
+        """List the files exposed by a sealed revision."""
+        return self.sealed[(owner, project, revision)]
+
+
+def test_cloud_publication_is_atomic_and_retryable(tmp_path: Path) -> None:
+    """Expose cloud files only after sealing one deterministic revision."""
+    artifact = tmp_path / "artifacts" / "model.bin"
+    artifact.parent.mkdir()
+    artifact.write_bytes(b"parameters")
+    destination = ViperCloudDestination(owner="machina", project="weekend_models")
+    client = InMemoryViperCloudClient(rejected_seals=1)
+
+    publisher = create_snapshot_publisher(
+        tmp_path,
+        destination,
+        cloud_client=client,
+    )
+    assert isinstance(publisher, ViperCloudSnapshotPublisher)
+    snapshot = publisher.publish(
+        resolved_stage_path="runs/example/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\n",
+        files={"artifacts/model.bin": artifact},
+    )
+
+    assert isinstance(snapshot, ViperCloudStageResultSnapshotRef)
+    assert client.seal_calls == 2
+    listed = client.list_files(
+        owner=snapshot.owner,
+        project=snapshot.project,
+        revision=snapshot.revision,
+    )
+    assert tuple(file.path for file in listed) == (
+        "artifacts/model.bin",
+        "runs/example/stages/train/resolved.yaml",
+    )
+    assert listed[0].sha256 == hashlib.sha256(b"parameters").hexdigest()
+    assert listed[0].bytes == len(b"parameters")
+
+    references = publish_resolved_files(
+        tmp_path,
+        destination,
+        {"runs/example/journal.jsonl": b'{"state":"terminal"}\n'},
+        cloud_client=client,
+    )
+    location = references["runs/example/journal.jsonl"].stored_at
+    assert isinstance(location, ViperCloudFileRef)
+    assert (
+        client.fetch(
+            owner=location.owner,
+            project=location.project,
+            revision=location.revision,
+            path=location.path,
+        )
+        == b'{"state":"terminal"}\n'
+    )
+
+
+def test_cloud_fetcher_retrieves_the_selected_sealed_file(tmp_path: Path) -> None:
+    """Retrieve a cloud file through the same fetcher used by verification."""
+    client = InMemoryViperCloudClient()
+    raw = b"evidence"
+    location = ViperCloudFileRef(
+        owner="machina",
+        project="weekend_models",
+        revision="0" * 64,
+        path="runs/example/evidence.yaml",
+    )
+    client.upload(
+        owner=location.owner,
+        project=location.project,
+        revision=location.revision,
+        path=location.path,
+        source=raw,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+    client.seal(
+        owner=location.owner,
+        project=location.project,
+        revision=location.revision,
+        files=(),
+    )
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        "https://example.com/source.git",
+        cloud_client=client,
+    )
+
+    assert fetcher(location) == raw
+
+
+def test_cloud_verification_rejects_local_references() -> None:
+    """Reject a cloud terminal graph that still reaches local evidence."""
+    resolved_run = ResolvedRun.model_construct(
+        spec=ResolvedRunSpecRef.model_construct(
+            stored_at=ViperCloudFileRef(
+                owner="machina",
+                project="weekend_models",
+                revision="0" * 64,
+                path="runs/example/spec.yaml",
+            )
+        ),
+        status="succeeded",
+        attempts=(
+            ResolvedAttemptRef.model_construct(
+                stored_at=LocalFileRef(
+                    commit="1" * 64,
+                    path="runs/example/attempt.yaml",
+                )
+            ),
+        ),
+        successful_attempt_id=1,
+        completed_at=datetime.now(UTC),
+    )
+
+    with pytest.raises(VerificationError, match="storage_graph_unreachable"):
+        verify_run_result(
+            resolved_run,
+            policy=VerificationPolicy(trusted_source_repositories=frozenset()),
+        )
+
+
 def test_storage_resolved_files_share_one_revision(tmp_path: Path) -> None:
     """Verify a related publication yields exact references in one revision."""
     store = LocalArtifactStore(tmp_path)
@@ -57,7 +261,12 @@ def test_storage_resolved_files_share_one_revision(tmp_path: Path) -> None:
         }
     )
 
-    commits = {reference.stored_at.commit for reference in references}
+    locations = tuple(reference.stored_at for reference in references)
+    local_locations = tuple(
+        location for location in locations if isinstance(location, LocalFileRef)
+    )
+    assert len(local_locations) == len(locations)
+    commits = {location.commit for location in local_locations}
     assert len(commits) == 1
     assert all(store.fetch(reference.stored_at) for reference in references)
 

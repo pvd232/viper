@@ -109,7 +109,16 @@ from .stages import (
     TrainSpec,
     stage_definition,
 )
-from .storage import LocalArtifactStore
+from .storage import (
+    LocalArtifactStore,
+    LocalStorageDestination,
+    StorageDestination,
+    ViperCloudClient,
+    ViperCloudDestination,
+    bind_run_destination,
+    load_storage_settings,
+    publish_resolved_files,
+)
 
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 UrlValue = str | int | float | bool
@@ -693,8 +702,12 @@ def _freeze_input(
     stages: Mapping[StageId, StageDraft],
     draft: StageInputDraft,
     cache: dict[int, InputRef] | None = None,
+    *,
+    destination: StorageDestination | None = None,
+    cloud_client: ViperCloudClient | None = None,
 ) -> InputRef:
     """Compile one input draft into its frozen reference."""
+    selected_destination = destination or LocalStorageDestination()
     cached = None if cache is None else cache.get(id(draft))
     if cached is not None:
         return cached
@@ -712,6 +725,11 @@ def _freeze_input(
             producer_stage_id=owners[0],
             name=draft.artifact_name,
         )
+    if isinstance(selected_destination, ViperCloudDestination) and isinstance(
+        draft.run.stored_at,
+        LocalFileRef,
+    ):
+        raise ValueError("storage_graph_unreachable")
     pointer = ArtifactPointer(run=draft.run, artifact=draft.artifact)
     raw = serialize_document(pointer)
     parts = draft.path.split("/")
@@ -719,7 +737,12 @@ def _freeze_input(
         raise ValueError("prior-run input path must include category and entity")
     selection = f"{draft.artifact.artifact_name}_{draft.run.sha256}"
     pointer_path = "/".join((*parts[:3], f"{selection}.pointer.yaml"))
-    published = LocalArtifactStore(root).resolved_files({pointer_path: raw})[0]
+    published = publish_resolved_files(
+        root,
+        selected_destination,
+        {pointer_path: raw},
+        cloud_client=cloud_client,
+    )[pointer_path]
     reference = ResolvedArtifactPointerRef(
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
@@ -741,6 +764,9 @@ def _freeze_stage(
     stages: Mapping[StageId, StageDraft],
     draft: StageSpecDraft,
     input_cache: dict[int, InputRef] | None = None,
+    *,
+    destination: StorageDestination | None = None,
+    cloud_client: ViperCloudClient | None = None,
 ) -> Spec:
     """Freeze one Python stage draft into its protocol declaration."""
     artifacts: dict[ArtifactName, ArtifactSpec] = {
@@ -788,7 +814,14 @@ def _freeze_stage(
         "parameter_model": parameter,
         "params": draft.params,
         "inputs": {
-            name: _freeze_input(root, stages, value, input_cache)
+            name: _freeze_input(
+                root,
+                stages,
+                value,
+                input_cache,
+                destination=destination,
+                cloud_client=cloud_client,
+            )
             for name, value in draft.inputs.items()
         },
         "metric_ids": tuple(
@@ -999,7 +1032,13 @@ def _compile_variant(
     )
 
 
-def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
+def _compile_plan(
+    root: Path,
+    draft: RunPlanDraft,
+    *,
+    destination: StorageDestination | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> _CompiledPlan:
     """Compile one immutable draft into a complete in-memory protocol graph."""
     project_root = resolve_root(root)
     experiment_draft = draft.experiment
@@ -1049,6 +1088,8 @@ def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
             variant_draft.stages,
             stage_draft.spec,
             input_cache,
+            destination=destination,
+            cloud_client=cloud_client,
         )
         stage_specs[stage_id] = stage_spec
         raw = serialize_document(stage_spec)
@@ -1080,6 +1121,8 @@ def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
             variant_draft.stages,
             benchmark_draft.test,
             input_cache,
+            destination=destination,
+            cloud_client=cloud_client,
         )
         splits = {
             name: _freeze_input(
@@ -1087,6 +1130,8 @@ def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
                 variant_draft.stages,
                 split,
                 input_cache,
+                destination=destination,
+                cloud_client=cloud_client,
             )
             for name, split in benchmark_draft.splits.items()
         }
@@ -1169,10 +1214,25 @@ def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
     return _CompiledPlan(run=run, run_path=run_path, files=files)
 
 
-def freeze_run_plan(root: Path, draft: RunPlanDraft) -> FrozenPlanFiles:
+def freeze_run_plan(
+    root: Path,
+    draft: RunPlanDraft,
+    *,
+    cloud_client: ViperCloudClient | None = None,
+) -> FrozenPlanFiles:
     """Publish one compiled plan and materialize its working files."""
     project_root = resolve_root(root)
-    compiled = _compile_plan(project_root, draft)
+    destination = bind_run_destination(
+        project_root,
+        draft.run_id,
+        load_storage_settings(project_root).destination,
+    )
+    compiled = _compile_plan(
+        project_root,
+        draft,
+        destination=destination,
+        cloud_client=cloud_client,
+    )
     commit = LocalArtifactStore(project_root).publish(compiled.files)
     paths = tuple(_target_path(project_root, path) for path in compiled.files)
     for path, raw in zip(paths, compiled.files.values(), strict=True):

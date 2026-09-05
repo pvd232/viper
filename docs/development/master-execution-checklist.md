@@ -1678,17 +1678,21 @@ diagnostics, and all three `P8-UMD-01` acceptance tests passed.
 **Outcome:** Cloud-backed runs publish every immutable payload directly. Local
 publication remains the default.
 
-- [ ] Execute `P9-RSP-01` from `remote-storage.md`.
+- [x] Execute `P9-RSP-01` from `remote-storage.md`.
       <!-- pair-block: P9-RSP-01 -->
       <!-- pair-block-contract: P9-RSP-01 contract=remote-storage.md -->
       <!-- implements: RSP-04, RSP-05, RSP-06 -->
       <!-- verifies: RSP-04, RSP-05, RSP-06 -->
-      <!-- contract-implementation: requirement=RSP-04 rule=storage.cloud.atomic state=planned owner=src/viper/storage.py:ViperCloudClient -->
-      <!-- contract-verification: requirement=RSP-04 rule=storage.cloud.atomic state=planned test=tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable -->
-      <!-- contract-implementation: requirement=RSP-05 rule=storage.cloud.publish state=planned owner=src/viper/storage.py:publish_resolved_files -->
-      <!-- contract-verification: requirement=RSP-05 rule=storage.cloud.publish state=planned test=tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination -->
-      <!-- contract-implementation: requirement=RSP-06 rule=storage.cloud.verify state=planned owner=src/viper/verification/__init__.py:verify_run_result -->
-      <!-- contract-verification: requirement=RSP-06 rule=storage.cloud.verify state=planned test=tests/test_storage.py:test_cloud_verification_rejects_local_references -->
+      <!-- contract-implementation: requirement=RSP-04 rule=storage.cloud.atomic state=implemented owner=src/viper/storage.py:ViperCloudClient -->
+      <!-- contract-verification: requirement=RSP-04 rule=storage.cloud.atomic state=implemented test=tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable -->
+      <!-- contract-implementation: requirement=RSP-05 rule=storage.cloud.publish state=implemented owner=src/viper/storage.py:publish_resolved_files -->
+      <!-- contract-verification: requirement=RSP-05 rule=storage.cloud.publish state=implemented test=tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination -->
+      <!-- contract-implementation: requirement=RSP-06 rule=storage.cloud.verify state=implemented owner=src/viper/verification/__init__.py:verify_run_result -->
+      <!-- contract-verification: requirement=RSP-06 rule=storage.cloud.verify state=implemented test=tests/test_storage.py:test_cloud_verification_rejects_local_references -->
+
+**Evidence:** Raw contract parity passed for every selected target. Batched
+imports passed, Ruff cleaned the generated files after parity, the candidate
+introduced no Pyright diagnostics, and all 20 `P9-RSP-01` tests passed.
 
 **External owner action:** Define the production Viper Cloud endpoint,
 authentication exchange, error mapping, and service-side seal semantics.

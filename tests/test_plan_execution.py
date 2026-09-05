@@ -57,6 +57,7 @@ def test_source_and_plan_revisions_are_independent(tmp_path: Path) -> None:
         stored_at=LocalFileRef(commit="c" * 64, path=compiled.run_path),
     )
 
+    assert isinstance(plan.stored_at, LocalFileRef)
     assert draft.source.commit != plan.stored_at.commit
     assert plan.stored_at.path == compiled.run_path
 
@@ -71,6 +72,8 @@ def test_plan_documents_share_one_storage_revision() -> None:
 
     stage = storage_file(run.stored_at, "runs/stages/train.yaml")
 
+    assert isinstance(run.stored_at, LocalFileRef)
+    assert isinstance(stage, LocalFileRef)
     assert stage.commit == run.stored_at.commit
     assert stage.path == "runs/stages/train.yaml"
 

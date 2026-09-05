@@ -33,9 +33,8 @@ from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
     LocalFileRef,
-    LocalStageResultSnapshotRef,
     ResolvedStageInvocationRef,
-    StageResultSnapshotRef,
+    StageResultSnapshot,
 )
 from ..runs import RunAttempt, RunSpec
 from ..runtime import (
@@ -423,7 +422,7 @@ def _verify_download_retrievals(
     run: RunSpec,
     stage_id: StageId,
     resolved: ResolvedDownloadSpec,
-    snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
+    snapshot: StageResultSnapshot,
     *,
     fetcher: StorageFetcher | None,
 ) -> None:
@@ -933,7 +932,7 @@ def verify_external_inputs(
     run: RunSpec,
     stage_id: StageId,
     resolved: ResolvedInternalSpec,
-    snapshot: StageResultSnapshotRef | LocalStageResultSnapshotRef,
+    snapshot: StageResultSnapshot,
     *,
     fetcher: StorageFetcher | None,
 ) -> None:

@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field, HttpUrl, model_validator
 
 from ._schema import SHA256, GitCommit, NonEmptyStr, ProtocolModel, RepoRelPath
-from .ids import StageId
+from .ids import HumanId, StageId
 
 
 class GitSource(ProtocolModel):
@@ -80,7 +80,7 @@ class LocalStageResultSnapshotRef(ProtocolModel):
     commit: SHA256
 
 
-class StageResultSnapshotRef(ProtocolModel):
+class HuggingFaceStageResultSnapshotRef(ProtocolModel):
     """The immutable repository revision containing one completed stage."""
 
     kind: Literal["huggingface"] = "huggingface"
@@ -89,12 +89,33 @@ class StageResultSnapshotRef(ProtocolModel):
     repo_type: Literal["model", "dataset", "space"]
 
 
+class ViperCloudFileRef(ProtocolModel):
+    """A file in one sealed Viper Cloud revision."""
+
+    kind: Literal["viper_cloud"] = "viper_cloud"
+    owner: HumanId
+    project: HumanId
+    revision: SHA256
+    path: RepoRelPath
+
+
+class ViperCloudStageResultSnapshotRef(ProtocolModel):
+    """One sealed stage snapshot in Viper Cloud."""
+
+    kind: Literal["viper_cloud"] = "viper_cloud"
+    owner: HumanId
+    project: HumanId
+    revision: SHA256
+
+
 StageResultSnapshot = Annotated[
-    StageResultSnapshotRef | LocalStageResultSnapshotRef,
+    HuggingFaceStageResultSnapshotRef
+    | LocalStageResultSnapshotRef
+    | ViperCloudStageResultSnapshotRef,
     Field(discriminator="kind"),
 ]
 
-StorageModel = GitFileRef | HuggingFaceFileRef | LocalFileRef
+StorageModel = GitFileRef | HuggingFaceFileRef | LocalFileRef | ViperCloudFileRef
 
 StorageRef = Annotated[
     StorageModel,
@@ -179,6 +200,7 @@ __all__ = [
     "GitFileRef",
     "GitSource",
     "HuggingFaceFileRef",
+    "HuggingFaceStageResultSnapshotRef",
     "LocalFileRef",
     "LocalStageResultSnapshotRef",
     "ResolvedStageRef",
@@ -192,9 +214,10 @@ __all__ = [
     "ResolvedRunSpecRef",
     "SnapshotFileRef",
     "StageResultSnapshot",
-    "StageResultSnapshotRef",
     "StorageModel",
     "StorageRef",
+    "ViperCloudFileRef",
+    "ViperCloudStageResultSnapshotRef",
     "storage_file",
 ]
 
@@ -218,12 +241,19 @@ def resolve_snapshot_file_ref(
             commit=snapshot.commit,
             path=file.path,
         )
-    else:
+    elif isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
         stored_at = HuggingFaceFileRef(
             repository=snapshot.repository,
             commit=snapshot.commit,
             path=file.path,
             repo_type=snapshot.repo_type,
+        )
+    else:
+        stored_at = ViperCloudFileRef(
+            owner=snapshot.owner,
+            project=snapshot.project,
+            revision=snapshot.revision,
+            path=file.path,
         )
     return ResolvedFileRef(
         sha256=file.sha256,
