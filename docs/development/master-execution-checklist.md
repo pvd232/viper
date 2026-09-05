@@ -1653,13 +1653,6 @@ conditions. Thresholds remain optional.
 
 ## 16. Master Phase 9 — direct Viper Cloud publication
 
-<!-- contract-implementation: requirement=RSP-04 rule=storage.cloud.atomic state=planned owner=src/viper/storage.py:ViperCloudClient -->
-<!-- contract-verification: requirement=RSP-04 rule=storage.cloud.atomic state=planned test=tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable -->
-<!-- contract-implementation: requirement=RSP-05 rule=storage.cloud.publish state=planned owner=src/viper/storage.py:publish_resolved_files -->
-<!-- contract-verification: requirement=RSP-05 rule=storage.cloud.publish state=planned test=tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination -->
-<!-- contract-implementation: requirement=RSP-06 rule=storage.cloud.verify state=planned owner=src/viper/verification/__init__.py:verify_run_result -->
-<!-- contract-verification: requirement=RSP-06 rule=storage.cloud.verify state=planned test=tests/test_verification_acceptance.py:test_cloud_verification_rejects_local_references -->
-
 **Depends on:** Master Phase 8.
 
 **Contract:** [Direct Viper Cloud publication](remote-storage.md)
@@ -1667,87 +1660,17 @@ conditions. Thresholds remain optional.
 **Outcome:** Cloud-backed runs publish every immutable payload directly. Local
 publication remains the default.
 
-### 16.1 Client and publisher
-
-- [ ] Parse `[storage].destination`; an absent table selects local publication.
-- [ ] Add `ViperCloudFileRef` and `ViperCloudStageResultSnapshotRef`.
-- [ ] Rename `StageResultSnapshotRef` to
-      `HuggingFaceStageResultSnapshotRef`.
-- [ ] Expand `StorageRef` and `StageResultSnapshot` unions.
-- [ ] Add the `ViperCloudClient` protocol with `upload`, `seal`, `fetch`, and
-      `list_files`. <!-- implements: RSP-04 -->
-- [ ] Add an in-memory client for contract tests.
-- [ ] Add `ViperCloudSnapshotPublisher`.
-- [ ] Compute the existing deterministic revision from paths, digests, and
-      sizes.
-- [ ] Upload each unique path once.
-- [ ] Seal the complete manifest before returning a reference.
-- [ ] Add bounded transfer and seal retries against the same revision.
-- [ ] Create references only after seal succeeds.
-
-### 16.2 Route every immutable file
-
-- [ ] Stage invocation receipts.
-- [ ] Generated artifact pointers.
-- [ ] Attempt journal.
-- [ ] Measurements.
-- [ ] Metric verification receipts.
-- [ ] Logs.
-- [ ] Attempt documents.
-- [ ] Terminal resolved run.
-- [ ] Benchmark result.
-- [ ] Stage snapshots containing resolved stage documents, artifacts, HTTP
-      bodies, and captured local inputs. <!-- implements: RSP-05 -->
-
-Metric dependency resolution stays outside this publication list. It derives
-`ResolvedFileRef` values from the stage snapshots above and uploads zero bytes.
-
-### 16.3 Retrieval and graph checks
-
-- [ ] Extend `RunFetcher` for `ViperCloudFileRef` and cloud stage snapshots.
-- [ ] Extend `_verification/storage.py` fetch and list dispatch.
-- [ ] Apply digest and byte-count checks after every cloud fetch.
-- [ ] Route cloud freezing and execution through the Master Phase 1 run-level
-      destination binding under `.viper/workspaces/<run-id>/`.
-- [ ] Reject a destination change before pointer publication or stage work.
-- [ ] Walk the terminal graph before cloud terminal publication.
-- [ ] Reject every reachable local immutable reference.
-      <!-- implements: RSP-06 -->
-- [ ] Add `resolved_run_ref` to `RunResult`.
-- [ ] Add `result_ref` to `BenchmarkExecutionResult`.
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** First make the in-memory cloud client pass all storage tests. The
-production HTTP adapter depends on the external service API.
-
-**Hint 2:** A working artifact may remain local. Every persisted immutable
-reference inside a cloud terminal graph must use cloud, Hugging Face, or Git
-storage.
-
-**Hint 3:** `ResolvedStageRef` appears after a successful seal. The active
-publisher may retry a failed seal. A later process may rerun the stage;
-cross-process stage resumption belongs to a future contract.
-
-</details>
-
-### 16.4 Focused proof
-
-- [ ] Add cloud references and fake-service cases to `tests/test_storage.py`.
-- [ ] Add direct-cloud run cases to `tests/test_execution_acceptance.py`.
-- [ ] Add standalone evidence coverage.
-- [ ] Add graph reachability and destination-change rejection cases.
-- [ ] Run: <!-- verifies: RSP-04, RSP-05, RSP-06 -->
-
-```bash
-python -m pytest \
-  tests/test_storage.py \
-  tests/test_execution_acceptance.py \
-  tests/test_execution_signals.py \
-  tests/test_verification_acceptance.py \
-  tests/test_benchmark_execution.py -q
-```
+- [ ] Execute `P9-RSP-01` from `remote-storage.md`.
+      <!-- pair-block: P9-RSP-01 -->
+      <!-- pair-block-contract: P9-RSP-01 contract=remote-storage.md -->
+      <!-- implements: RSP-04, RSP-05, RSP-06 -->
+      <!-- verifies: RSP-04, RSP-05, RSP-06 -->
+      <!-- contract-implementation: requirement=RSP-04 rule=storage.cloud.atomic state=planned owner=src/viper/storage.py:ViperCloudClient -->
+      <!-- contract-verification: requirement=RSP-04 rule=storage.cloud.atomic state=planned test=tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable -->
+      <!-- contract-implementation: requirement=RSP-05 rule=storage.cloud.publish state=planned owner=src/viper/storage.py:publish_resolved_files -->
+      <!-- contract-verification: requirement=RSP-05 rule=storage.cloud.publish state=planned test=tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination -->
+      <!-- contract-implementation: requirement=RSP-06 rule=storage.cloud.verify state=planned owner=src/viper/verification/__init__.py:verify_run_result -->
+      <!-- contract-verification: requirement=RSP-06 rule=storage.cloud.verify state=planned test=tests/test_storage.py:test_cloud_verification_rejects_local_references -->
 
 **External owner action:** Define the production Viper Cloud endpoint,
 authentication exchange, error mapping, and service-side seal semantics.

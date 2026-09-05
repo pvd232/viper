@@ -25,7 +25,7 @@ These requirements bind the contract to the master checklist:
 | RSP-03 <!-- contract-requirement: RSP-03 phase=4 test=tests/test_metric_provenance.py --> | Derive metric dependency references from existing stage snapshots and publish zero duplicate payloads. |
 | RSP-04 <!-- contract-requirement: RSP-04 phase=9 test=tests/test_storage.py --> | Add Viper Cloud references, the cloud client, atomic sealing, and retry behavior. |
 | RSP-05 <!-- contract-requirement: RSP-05 phase=9 test=tests/test_execution_acceptance.py --> | Publish every stage snapshot and standalone evidence file directly to the selected destination. |
-| RSP-06 <!-- contract-requirement: RSP-06 phase=9 test=tests/test_verification_acceptance.py --> | Retrieve cloud evidence, verify byte identity, reject local references in cloud graphs, and return terminal handles. |
+| RSP-06 <!-- contract-requirement: RSP-06 phase=9 test=tests/test_storage.py --> | Retrieve cloud evidence, verify byte identity, reject local references in cloud graphs, and return terminal handles. |
 | RSP-07 <!-- contract-requirement: RSP-07 phase=10 test=tests/test_storage.py --> | Restore all or selected artifacts through verified temporary files and atomic final writes. |
 | RSP-08 <!-- contract-requirement: RSP-08 phase=10 test=tests/test_api.py --> | Expose one restore result through Python, typed API, and CLI surfaces. |
 | RSP-09 <!-- contract-requirement: RSP-09 phase=11 test=tests/test_documentation.py --> | Remove retired sync and mirroring concepts and publish the final storage workflow. |
@@ -267,16 +267,8 @@ VIPER reads cloud credentials from the active CLI session.
 
 ### 5.1 File stored outside a stage snapshot
 
-`ViperCloudFileRef` points to one cloud file:
-
-```python
-class ViperCloudFileRef(ProtocolModel):
-    kind: Literal["viper_cloud"] = "viper_cloud"
-    owner: HumanId
-    project: HumanId
-    revision: SHA256
-    path: RepoRelPath
-```
+`ViperCloudFileRef` identifies one cloud file by owner, project, sealed
+revision, and path. Its authoritative declaration is in `P9-RSP-01`.
 
 `ResolvedFileRef` adds the expected digest and size:
 
@@ -380,43 +372,15 @@ ResolvedStageRef.snapshot
 
 ### 5.2 Cloud stage snapshot
 
-`ViperCloudStageResultSnapshotRef` points to one sealed stage snapshot:
-
-```python
-class ViperCloudStageResultSnapshotRef(ProtocolModel):
-    kind: Literal["viper_cloud"] = "viper_cloud"
-    owner: HumanId
-    project: HumanId
-    revision: SHA256
-```
-
-The stage snapshot union becomes:
-
-```python
-StageResultSnapshot = Annotated[
-    LocalStageResultSnapshotRef
-    | HuggingFaceStageResultSnapshotRef
-    | ViperCloudStageResultSnapshotRef,
-    Field(discriminator="kind"),
-]
-```
+`ViperCloudStageResultSnapshotRef` identifies one sealed stage snapshot by
+owner, project, and revision. `P9-RSP-01` adds it to `StageResultSnapshot`.
 
 `StageResultSnapshotRef` is currently misnamed. It contains Hugging Face fields
 and uses `kind="huggingface"`. Rename the Python class to
 `HuggingFaceStageResultSnapshotRef`. Keep the YAML fields and `kind` value the
 same.
 
-The general storage union becomes:
-
-```python
-StorageRef = Annotated[
-    GitFileRef
-    | HuggingFaceFileRef
-    | LocalFileRef
-    | ViperCloudFileRef,
-    Field(discriminator="kind"),
-]
-```
+`P9-RSP-01` also adds `ViperCloudFileRef` to the general `StorageRef` union.
 
 ### 5.3 Snapshot-scoped file identity
 
@@ -450,17 +414,8 @@ class ResolvedRunRef(ResolvedFileRef):
     kind: Literal["resolved_run"] = "resolved_run"
 ```
 
-`RunResult` returns that handle with the local control paths:
-
-```python
-class RunResult(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    resolved_run: ResolvedRun
-    resolved_run_ref: ResolvedRunRef
-    resolved_run_path: Path
-    journal_path: Path
-```
+`RunResult` returns that handle as `resolved_run_ref` beside the parsed run and
+its local control paths. `P9-RSP-01` owns the exact model declaration.
 
 In cloud mode, `resolved_run_ref.stored_at` is a `ViperCloudFileRef`. The CLI
 uses that reference to print a restore URI. The terminal run contains the
@@ -476,17 +431,9 @@ class ResolvedBenchmarkResultRef(ResolvedFileRef):
     kind: Literal["benchmark_result"] = "benchmark_result"
 ```
 
-`BenchmarkExecutionResult` returns the reference with the parsed result and its
-local control path:
-
-```python
-class BenchmarkExecutionResult(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    result: BenchmarkResult
-    result_ref: ResolvedBenchmarkResultRef
-    result_path: Path
-```
+`BenchmarkExecutionResult` returns the reference as `result_ref` beside the
+parsed result and its local control path. `P9-RSP-01` owns the exact model
+declaration.
 
 An `ArtifactPointer` for a benchmarked estimator copies this exact reference
 into `benchmark_result`. The pointer therefore reaches the same immutable
@@ -510,48 +457,10 @@ Every source is paired with its repository-relative destination path. Before
 publication, VIPER checks that each `Path` remains beneath the repository
 root, names a regular file, and matches its resolved digest and byte count.
 
-The storage layer depends on this provider-neutral cloud client boundary:
-
-```python
-class ViperCloudClient(Protocol):
-    def upload(
-        self,
-        *,
-        owner: HumanId,
-        project: HumanId,
-        revision: SHA256,
-        path: RepoRelPath,
-        source: PublicationSource,
-        sha256: SHA256,
-        bytes: int,
-    ) -> None: ...
-
-    def seal(
-        self,
-        *,
-        owner: HumanId,
-        project: HumanId,
-        revision: SHA256,
-        files: tuple[SnapshotFileRef, ...],
-    ) -> None: ...
-
-    def fetch(
-        self,
-        *,
-        owner: HumanId,
-        project: HumanId,
-        revision: SHA256,
-        path: RepoRelPath,
-    ) -> bytes: ...
-
-    def list_files(
-        self,
-        *,
-        owner: HumanId,
-        project: HumanId,
-        revision: SHA256,
-    ) -> tuple[RepoRelPath, ...]: ...
-```
+The storage layer uses the provider-neutral `ViperCloudClient` boundary owned
+by `P9-RSP-01`. It has four operations: upload a checked file, seal one complete
+manifest, fetch one file, and list the `SnapshotFileRef` records in a sealed
+revision.
 
 The client receives credentials when VIPER creates it from the active CLI
 session. The repository can implement and test publication against an in-memory
@@ -4773,6 +4682,3354 @@ The first three blocks define and verify the destination boundary. The fourth
 block routes the existing local executor through that boundary. `P4-RSP-01`
 then reuses those immutable stage references for metric dependencies. Master
 Phases 9, 10, and 11 retain the remaining requirements in this contract.
+
+### P9-RSP-01 — direct cloud publication
+
+<!-- pair-block-definition: P9-RSP-01 -->
+```toml pair-block
+id = "P9-RSP-01"
+requirements = ["RSP-04", "RSP-05", "RSP-06"]
+targets = [
+    "src/viper/references.py:HumanId",
+    "src/viper/references.py:HuggingFaceStageResultSnapshotRef",
+    "src/viper/references.py:StageResultSnapshotRef",
+    "src/viper/references.py:ViperCloudFileRef",
+    "src/viper/references.py:ViperCloudStageResultSnapshotRef",
+    "src/viper/references.py:StageResultSnapshot",
+    "src/viper/references.py:StorageModel",
+    "src/viper/references.py:__all__",
+    "src/viper/references.py:resolve_snapshot_file_ref",
+    "src/viper/storage.py:SHA256",
+    "src/viper/storage.py:ViperCloudFileRef",
+    "src/viper/storage.py:ViperCloudStageResultSnapshotRef",
+    "src/viper/storage.py:ViperCloudClient",
+    "src/viper/storage.py:_manifest_revision",
+    "src/viper/storage.py:_source_file",
+    "src/viper/storage.py:_cloud_publish",
+    "src/viper/storage.py:ViperCloudSnapshotPublisher",
+    "src/viper/storage.py:create_snapshot_publisher",
+    "src/viper/storage.py:publish_resolved_files",
+    "src/viper/execution/_source.py:HuggingFaceStageResultSnapshotRef",
+    "src/viper/execution/_source.py:LocalStageResultSnapshotRef",
+    "src/viper/execution/_source.py:StageResultSnapshot",
+    "src/viper/execution/_source.py:StageResultSnapshotRef",
+    "src/viper/execution/_source.py:ViperCloudFileRef",
+    "src/viper/execution/_source.py:ViperCloudStageResultSnapshotRef",
+    "src/viper/execution/_source.py:ViperCloudClient",
+    "src/viper/execution/_source.py:RunFetcher",
+    "src/viper/verification/models.py:LocalStageResultSnapshotRef",
+    "src/viper/verification/models.py:StageResultSnapshot",
+    "src/viper/verification/models.py:StageResultSnapshotRef",
+    "src/viper/verification/models.py:StageSnapshot",
+    "src/viper/runs.py:LocalStageResultSnapshotRef",
+    "src/viper/runs.py:StageResultSnapshot",
+    "src/viper/runs.py:StageResultSnapshotRef",
+    "src/viper/runs.py:RunAttempt",
+    "src/viper/verification/__init__.py:BaseModel",
+    "src/viper/verification/__init__.py:LocalFileRef",
+    "src/viper/verification/__init__.py:LocalStageResultSnapshotRef",
+    "src/viper/verification/__init__.py:ViperCloudFileRef",
+    "src/viper/verification/__init__.py:ViperCloudStageResultSnapshotRef",
+    "src/viper/verification/__init__.py:verify_run_result",
+    "src/viper/verification/__init__.py:_stored_locations",
+    "src/viper/verification/__init__.py:_verify_cloud_graph",
+    "src/viper/_verification/storage.py:HuggingFaceStageResultSnapshotRef",
+    "src/viper/_verification/storage.py:StageResultSnapshot",
+    "src/viper/_verification/storage.py:StageResultSnapshotRef",
+    "src/viper/_verification/storage.py:ViperCloudFileRef",
+    "src/viper/_verification/storage.py:fetch_storage_bytes",
+    "src/viper/_verification/storage.py:list_huggingface_snapshot_files",
+    "src/viper/_verification/storage.py:list_snapshot_files",
+    "src/viper/_verification/storage.py:read_snapshot_file",
+    "src/viper/_verification/storage.py:snapshot_identity",
+    "src/viper/_verification/storage.py:artifact_revision_identity",
+    "src/viper/execution/results.py:ResolvedBenchmarkResultRef",
+    "src/viper/execution/results.py:ResolvedRunRef",
+    "src/viper/execution/results.py:RunResult",
+    "src/viper/execution/results.py:BenchmarkExecutionResult",
+    "src/viper/execution/_publication.py:ViperCloudClient",
+    "src/viper/execution/_publication.py:publish_attempt_files",
+    "src/viper/execution/_publication.py:write_attempt_document",
+    "src/viper/execution/_publication.py:publish_invocation_receipt",
+    "src/viper/execution/_attempt.py:ResolvedRunRef",
+    "src/viper/execution/_attempt.py:ViperCloudFileRef",
+    "src/viper/execution/_attempt.py:ViperCloudClient",
+    "src/viper/execution/_attempt.py:publish_resolved_files",
+    "src/viper/execution/_attempt.py:execute_attempt",
+    "src/viper/execution/_run.py:ViperCloudClient",
+    "src/viper/execution/_run.py:run",
+    "src/viper/execution/_run.py:retry",
+    "src/viper/execution/_run.py:execute_benchmark_confirmation",
+    "src/viper/execution/__init__.py:ViperCloudClient",
+    "src/viper/execution/__init__.py:run",
+    "src/viper/execution/__init__.py:retry",
+    "src/viper/execution/__init__.py:benchmark",
+    "src/viper/execution/_benchmark.py:ResolvedBenchmarkResultRef",
+    "src/viper/execution/_benchmark.py:ViperCloudClient",
+    "src/viper/execution/_benchmark.py:bind_run_destination",
+    "src/viper/execution/_benchmark.py:load_storage_settings",
+    "src/viper/execution/_benchmark.py:publish_resolved_files",
+    "src/viper/execution/_benchmark.py:_metric_receipts",
+    "src/viper/execution/_benchmark.py:benchmark",
+    "src/viper/authoring.py:LocalStorageDestination",
+    "src/viper/authoring.py:StorageDestination",
+    "src/viper/authoring.py:ViperCloudClient",
+    "src/viper/authoring.py:ViperCloudDestination",
+    "src/viper/authoring.py:bind_run_destination",
+    "src/viper/authoring.py:load_storage_settings",
+    "src/viper/authoring.py:publish_resolved_files",
+    "src/viper/authoring.py:_freeze_input",
+    "src/viper/authoring.py:_freeze_stage",
+    "src/viper/authoring.py:_compile_plan",
+    "src/viper/authoring.py:freeze_run_plan",
+    "tests/test_storage.py:hashlib",
+    "tests/test_storage.py:UTC",
+    "tests/test_storage.py:datetime",
+    "tests/test_storage.py:RepoRelPath",
+    "tests/test_storage.py:SHA256",
+    "tests/test_storage.py:RunFetcher",
+    "tests/test_storage.py:HumanId",
+    "tests/test_storage.py:ResolvedRunSpecRef",
+    "tests/test_storage.py:SnapshotFileRef",
+    "tests/test_storage.py:ViperCloudFileRef",
+    "tests/test_storage.py:ViperCloudStageResultSnapshotRef",
+    "tests/test_storage.py:ResolvedAttemptRef",
+    "tests/test_storage.py:ResolvedRun",
+    "tests/test_storage.py:PublicationSource",
+    "tests/test_storage.py:ViperCloudClient",
+    "tests/test_storage.py:ViperCloudSnapshotPublisher",
+    "tests/test_storage.py:verify_run_result",
+    "tests/test_storage.py:VerificationError",
+    "tests/test_storage.py:VerificationPolicy",
+    "tests/test_storage.py:InMemoryViperCloudClient",
+    "tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable",
+    "tests/test_storage.py:test_cloud_fetcher_retrieves_the_selected_sealed_file",
+    "tests/test_storage.py:test_cloud_verification_rejects_local_references",
+    "tests/test_prior_run_inputs.py:pytest",
+    "tests/test_prior_run_inputs.py:InMemoryViperCloudClient",
+    "tests/test_prior_run_inputs.py:ViperCloudFileRef",
+    "tests/test_prior_run_inputs.py:ViperCloudDestination",
+    "tests/test_prior_run_inputs.py:test_prior_run_pointer_uses_the_selected_cloud_destination",
+    "tests/test_prior_run_inputs.py:test_cloud_pointer_rejects_a_local_producer",
+    "tests/test_benchmark_execution.py:test_api_returns_the_verified_benchmark_result",
+    "tests/test_execution_acceptance.py:InMemoryViperCloudClient",
+    "tests/test_execution_acceptance.py:publish_attempt_files",
+    "tests/test_execution_acceptance.py:DurableJournal",
+    "tests/test_execution_acceptance.py:ViperCloudFileRef",
+    "tests/test_execution_acceptance.py:ViperCloudDestination",
+    "tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination",
+    "tests/test_verification.py:HuggingFaceStageResultSnapshotRef",
+    "tests/test_verification.py:StageResultSnapshotRef",
+    "tests/test_verification.py:snapshot",
+    "tests/test_verification_acceptance.py:HuggingFaceStageResultSnapshotRef",
+    "tests/test_verification_acceptance.py:StageResultSnapshotRef",
+    "tests/test_verification_acceptance.py:DocumentStore",
+    "tests/test_verification_acceptance.py:snapshot",
+]
+tests = [
+    "tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable",
+    "tests/test_storage.py:test_cloud_fetcher_retrieves_the_selected_sealed_file",
+    "tests/test_storage.py:test_cloud_verification_rejects_local_references",
+    "tests/test_prior_run_inputs.py:test_prior_run_pointer_uses_the_selected_cloud_destination",
+    "tests/test_prior_run_inputs.py:test_cloud_pointer_rejects_a_local_producer",
+    "tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination",
+    "tests/test_benchmark_execution.py:test_api_returns_the_verified_benchmark_result",
+]
+gate = "python -m pytest tests/test_storage.py tests/test_prior_run_inputs.py tests/test_execution_acceptance.py tests/test_benchmark_execution.py -q"
+depends_on = ["P8-UMD-01"]
+```
+
+**Context:** Phase 1 bound each run to one storage destination. This block
+adds the cloud references and client, routes immutable run evidence to that
+destination, and rejects a cloud result that still reaches local storage.
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/references.py:HumanId -->
+```python contract-target
+from .ids import HumanId, StageId
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/references.py:HuggingFaceStageResultSnapshotRef -->
+```python contract-target
+class HuggingFaceStageResultSnapshotRef(ProtocolModel):
+    """The immutable repository revision containing one completed stage."""
+
+    kind: Literal["huggingface"] = "huggingface"
+    repository: NonEmptyStr
+    commit: GitCommit
+    repo_type: Literal["model", "dataset", "space"]
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=remove target=src/viper/references.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/references.py:ViperCloudFileRef -->
+```python contract-target
+class ViperCloudFileRef(ProtocolModel):
+    """A file in one sealed Viper Cloud revision."""
+
+    kind: Literal["viper_cloud"] = "viper_cloud"
+    owner: HumanId
+    project: HumanId
+    revision: SHA256
+    path: RepoRelPath
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/references.py:ViperCloudStageResultSnapshotRef -->
+```python contract-target
+class ViperCloudStageResultSnapshotRef(ProtocolModel):
+    """One sealed stage snapshot in Viper Cloud."""
+
+    kind: Literal["viper_cloud"] = "viper_cloud"
+    owner: HumanId
+    project: HumanId
+    revision: SHA256
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=update target=src/viper/references.py:StageResultSnapshot -->
+```python contract-target
+StageResultSnapshot = Annotated[
+    HuggingFaceStageResultSnapshotRef
+    | LocalStageResultSnapshotRef
+    | ViperCloudStageResultSnapshotRef,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=update target=src/viper/references.py:StorageModel -->
+```python contract-target
+StorageModel = GitFileRef | HuggingFaceFileRef | LocalFileRef | ViperCloudFileRef
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=update target=src/viper/references.py:__all__ -->
+```python contract-target
+__all__ = [
+    "ArtifactPointerRef",
+    "GitFileRef",
+    "GitSource",
+    "HuggingFaceFileRef",
+    "HuggingFaceStageResultSnapshotRef",
+    "LocalFileRef",
+    "LocalStageResultSnapshotRef",
+    "ResolvedStageRef",
+    "ResolvedStageInvocationRef",
+    "ResolvedArtifactPointerRef",
+    "ResolvedBenchmarkResultRef",
+    "ResolvedBenchmarkSpecRef",
+    "ResolvedFileRef",
+    "ResolvedGitFileRef",
+    "ResolvedRunRef",
+    "ResolvedRunSpecRef",
+    "SnapshotFileRef",
+    "StageResultSnapshot",
+    "StorageModel",
+    "StorageRef",
+    "ViperCloudFileRef",
+    "ViperCloudStageResultSnapshotRef",
+    "storage_file",
+]
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=update target=src/viper/references.py:resolve_snapshot_file_ref -->
+```python contract-target
+def resolve_snapshot_file_ref(
+    snapshot: StageResultSnapshot,
+    file: SnapshotFileRef,
+) -> ResolvedFileRef:
+    """Address one snapshot member without reading or republishing its bytes."""
+    stored_at: StorageModel
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        stored_at = LocalFileRef(
+            store=snapshot.store,
+            commit=snapshot.commit,
+            path=file.path,
+        )
+    elif isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+        stored_at = HuggingFaceFileRef(
+            repository=snapshot.repository,
+            commit=snapshot.commit,
+            path=file.path,
+            repo_type=snapshot.repo_type,
+        )
+    else:
+        stored_at = ViperCloudFileRef(
+            owner=snapshot.owner,
+            project=snapshot.project,
+            revision=snapshot.revision,
+            path=file.path,
+        )
+    return ResolvedFileRef(
+        sha256=file.sha256,
+        bytes=file.bytes,
+        stored_at=stored_at,
+    )
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:SHA256 -->
+```python contract-target
+from ._schema import SHA256, ProtocolModel, RepoRelPath
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:ViperCloudFileRef -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:ViperCloudStageResultSnapshotRef -->
+```python contract-target
+from .references import (
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    SnapshotFileRef,
+    StageResultSnapshot,
+    StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:ViperCloudClient -->
+```python contract-target
+class ViperCloudClient(Protocol):
+    """Transfer files and seal immutable Viper Cloud revisions."""
+
+    def upload(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        source: PublicationSource,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Upload one file without exposing the revision."""
+        ...
+
+    def seal(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        files: tuple[SnapshotFileRef, ...],
+    ) -> None:
+        """Expose one complete immutable revision."""
+        ...
+
+    def fetch(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+    ) -> bytes:
+        """Retrieve one file from a sealed revision."""
+        ...
+
+    def list_files(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+    ) -> tuple[SnapshotFileRef, ...]:
+        """List every verified file in a sealed revision."""
+        ...
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:_manifest_revision -->
+```python contract-target
+def _manifest_revision(files: tuple[SnapshotFileRef, ...]) -> SHA256:
+    """Derive the shared local and cloud revision from file identities."""
+    digest = hashlib.sha256()
+    for file in sorted(files, key=lambda item: item.path):
+        encoded_path = str(file.path).encode("utf-8")
+        digest.update(len(encoded_path).to_bytes(8, "big"))
+        digest.update(encoded_path)
+        digest.update(file.bytes.to_bytes(8, "big"))
+        digest.update(bytes.fromhex(file.sha256))
+    return digest.hexdigest()
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:_source_file -->
+```python contract-target
+def _source_file(
+    root: Path, path: RepoRelPath, source: PublicationSource
+) -> SnapshotFileRef:
+    """Read one source and record the identity sent to the cloud client."""
+    raw = _read_publication_source(root, source)
+    return SnapshotFileRef(
+        path=path,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:_cloud_publish -->
+```python contract-target
+def _cloud_publish(
+    *,
+    root: Path,
+    destination: ViperCloudDestination,
+    client: ViperCloudClient,
+    sources: Mapping[RepoRelPath, PublicationSource],
+    attempts: int,
+) -> tuple[SHA256, tuple[SnapshotFileRef, ...]]:
+    """Upload and seal one deterministic revision with bounded retries."""
+    if attempts < 1:
+        raise ValueError("attempts must be positive")
+    files = tuple(
+        _source_file(root, path, source) for path, source in sorted(sources.items())
+    )
+    revision = _manifest_revision(files)
+    identities = {file.path: file for file in files}
+
+    for path, source in sorted(sources.items()):
+        identity = identities[path]
+        for attempt in range(attempts):
+            try:
+                client.upload(
+                    owner=destination.owner,
+                    project=destination.project,
+                    revision=revision,
+                    path=path,
+                    source=source,
+                    sha256=identity.sha256,
+                    bytes=identity.bytes,
+                )
+                break
+            except Exception as error:
+                if attempt + 1 == attempts:
+                    raise StorageConfigurationError("storage_upload_failed") from error
+
+    for attempt in range(attempts):
+        try:
+            client.seal(
+                owner=destination.owner,
+                project=destination.project,
+                revision=revision,
+                files=files,
+            )
+            break
+        except Exception as error:
+            if attempt + 1 == attempts:
+                raise StorageConfigurationError("storage_seal_failed") from error
+    return revision, files
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=src/viper/storage.py:ViperCloudSnapshotPublisher -->
+```python contract-target
+class ViperCloudSnapshotPublisher:
+    """Publish stage snapshots directly to one Viper Cloud project."""
+
+    def __init__(
+        self,
+        root: Path,
+        destination: ViperCloudDestination,
+        client: ViperCloudClient,
+        *,
+        attempts: int = 3,
+    ) -> None:
+        """Bind publication to one root, destination, and cloud client."""
+        self.root = root.resolve(strict=True)
+        self.destination = destination
+        self.client = client
+        self.attempts = attempts
+
+    def publish(
+        self,
+        *,
+        resolved_stage_path: RepoRelPath,
+        resolved_stage: bytes,
+        files: Mapping[RepoRelPath, Path],
+    ) -> ViperCloudStageResultSnapshotRef:
+        """Upload one stage and return a reference only after sealing it."""
+        sources: dict[RepoRelPath, PublicationSource] = {
+            resolved_stage_path: resolved_stage,
+            **files,
+        }
+        revision, _ = _cloud_publish(
+            root=self.root,
+            destination=self.destination,
+            client=self.client,
+            sources=sources,
+            attempts=self.attempts,
+        )
+        return ViperCloudStageResultSnapshotRef(
+            owner=self.destination.owner,
+            project=self.destination.project,
+            revision=revision,
+        )
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=update target=src/viper/storage.py:create_snapshot_publisher -->
+```python contract-target
+def create_snapshot_publisher(
+    root: Path,
+    destination: StorageDestination,
+    *,
+    cloud_client: ViperCloudClient | None = None,
+) -> SnapshotPublisher:
+    """Create the stage publisher for one implemented storage destination."""
+    if isinstance(destination, LocalStorageDestination):
+        return LocalSnapshotPublisher(root)
+    if cloud_client is None:
+        raise StorageConfigurationError("viper_cloud client is required")
+    return ViperCloudSnapshotPublisher(root, destination, cloud_client)
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=update target=src/viper/storage.py:publish_resolved_files -->
+```python contract-target
+def publish_resolved_files(
+    root: Path,
+    destination: StorageDestination,
+    files: Mapping[RepoRelPath, PublicationSource],
+    *,
+    cloud_client: ViperCloudClient | None = None,
+) -> dict[RepoRelPath, ResolvedFileRef]:
+    """Publish standalone files and return references keyed by requested path."""
+    if isinstance(destination, LocalStorageDestination):
+        payload = {
+            path: _read_publication_source(root, source)
+            for path, source in files.items()
+        }
+        references = LocalArtifactStore(root).resolved_files(payload)
+        return {
+            reference.stored_at.path: reference
+            for reference in references
+            if isinstance(reference.stored_at, LocalFileRef)
+        }
+    if cloud_client is None:
+        raise StorageConfigurationError("viper_cloud client is required")
+    revision, identities = _cloud_publish(
+        root=root,
+        destination=destination,
+        client=cloud_client,
+        sources=files,
+        attempts=3,
+    )
+    return {
+        identity.path: ResolvedFileRef(
+            sha256=identity.sha256,
+            bytes=identity.bytes,
+            stored_at=ViperCloudFileRef(
+                owner=destination.owner,
+                project=destination.project,
+                revision=revision,
+                path=identity.path,
+            ),
+        )
+        for identity in identities
+    }
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/execution/_source.py:HuggingFaceStageResultSnapshotRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    ResolvedGitFileRef,
+    StageResultSnapshot,
+    StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/execution/_source.py:LocalStageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/execution/_source.py:StageResultSnapshot -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    ResolvedGitFileRef,
+    StageResultSnapshot,
+    StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/execution/_source.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/execution/_source.py:ViperCloudFileRef -->
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/execution/_source.py:ViperCloudStageResultSnapshotRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    ResolvedGitFileRef,
+    StageResultSnapshot,
+    StorageModel,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/execution/_source.py:ViperCloudClient -->
+```python contract-target
+from ..storage import LocalArtifactStore, ViperCloudClient
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/execution/_source.py:RunFetcher -->
+```python contract-target
+class RunFetcher:
+    """Retrieve frozen Git source and repository-local immutable outputs."""
+
+    def __init__(
+        self,
+        repository_root: Path,
+        store: LocalArtifactStore,
+        source_repository: str,
+        cloud_client: ViperCloudClient | None = None,
+    ) -> None:
+        """Bind retrieval to one local Git checkout and output store."""
+        self.repository_root = repository_root.resolve()
+        self.store = store
+        self.source_repository = source_repository
+        self.cloud_client = cloud_client
+
+    def __call__(self, location: StorageModel) -> bytes:
+        """Retrieve one file from its declared immutable backend."""
+        if isinstance(location, GitFileRef):
+            if str(location.repository) != self.source_repository:
+                return fetch_git_file_bytes(location)
+            return run_git(
+                self.repository_root,
+                "show",
+                f"{location.commit}:{location.path}",
+            )
+        if isinstance(location, HuggingFaceFileRef):
+            return fetch_huggingface_file_bytes(location)
+        if isinstance(location, ViperCloudFileRef):
+            if self.cloud_client is None:
+                raise RunError("Viper Cloud retrieval requires a client")
+            return self.cloud_client.fetch(
+                owner=location.owner,
+                project=location.project,
+                revision=location.revision,
+                path=location.path,
+            )
+        return self.store.fetch(location)
+
+    def list_snapshot_files(
+        self,
+        snapshot: StageResultSnapshot,
+    ) -> tuple[RepoRelPath, ...]:
+        """List every regular file in one immutable stage snapshot."""
+        if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+            return list_huggingface_snapshot_files(snapshot)
+        if isinstance(snapshot, ViperCloudStageResultSnapshotRef):
+            if self.cloud_client is None:
+                raise RunError("Viper Cloud snapshot listing requires a client")
+            return tuple(
+                file.path
+                for file in self.cloud_client.list_files(
+                    owner=snapshot.owner,
+                    project=snapshot.project,
+                    revision=snapshot.revision,
+                )
+            )
+        return self.store.list_snapshot_files(snapshot)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/verification/models.py:LocalStageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/models.py:StageResultSnapshot -->
+```python contract-target
+from ..references import (
+    ResolvedFileRef,
+    SnapshotFileRef,
+    StageResultSnapshot,
+    StorageModel,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/verification/models.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/verification/models.py:StageSnapshot -->
+```python contract-target
+StageSnapshot = StageResultSnapshot
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/runs.py:LocalStageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/runs.py:StageResultSnapshot -->
+```python contract-target
+from .references import (
+    GitSource,
+    ResolvedFileRef,
+    ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
+    StageResultSnapshot,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/runs.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/runs.py:RunAttempt -->
+```python contract-target
+class RunAttempt(ProtocolModel):
+    """Record the status and published files of one run attempt."""
+
+    schema_version: Literal[1] = 1
+    attempt_id: int = Field(ge=1)
+    purpose: AttemptPurpose
+    status: AttemptStatus
+
+    started_at: AwareDatetime
+    completed_at: AwareDatetime
+
+    resolved_stages: tuple[ResolvedStageRef, ...]
+    invocations: tuple[ResolvedStageInvocationRef, ...]
+    journal: AttemptJournalRef
+    measurement_files: tuple[ResolvedFileRef, ...]
+    metric_verification_files: tuple[ResolvedFileRef, ...] = ()
+    log_files: tuple[ResolvedFileRef, ...]
+
+    failure: AttemptFailure | None
+
+    @model_validator(mode="after")
+    def validate_common_invariants(self) -> RunAttempt:
+        """Enforce attempt outcome, timing, stage, and file invariants."""
+        if self.status == "succeeded" and self.failure is not None:
+            raise ValueError("successful attempts must not have failure evidence")
+
+        if self.status == "succeeded" and not self.resolved_stages:
+            raise ValueError("successful attempts must contain a completed stage")
+
+        if self.status != "succeeded" and self.failure is None:
+            raise ValueError(
+                "failed, preempted, and cancelled attempts require failure evidence"
+            )
+
+        if self.failure is not None:
+            if self.failure.occurred_at > self.completed_at:
+                raise ValueError("attempt failure cannot follow attempt completion")
+            if self.failure.occurred_at < self.started_at:
+                raise ValueError("attempt failure cannot precede attempt start")
+            expected_code = {
+                "failed": {
+                    "preflight_failed",
+                    "execution_failed",
+                    "verification_failed",
+                    "publication_failed",
+                    "coordinator_lost",
+                    "internal_error",
+                },
+                "cancelled": {"cancelled"},
+                "preempted": {"preempted"},
+            }
+            if (
+                self.status != "succeeded"
+                and self.failure.code not in expected_code[self.status]
+            ):
+                raise ValueError("attempt failure code differs from terminal status")
+
+        if self.completed_at <= self.started_at:
+            raise ValueError("attempt completion must be after attempt start")
+
+        unique = set()
+        snapshots: set[StageResultSnapshot] = set()
+        for stage in self.resolved_stages:
+            if stage.stage_id in unique:
+                raise ValueError("resolved stage IDs must be unique")
+            unique.add(stage.stage_id)
+
+            if stage.snapshot in snapshots:
+                raise ValueError("resolved stages must use distinct snapshots")
+            snapshots.add(stage.snapshot)
+
+        measurement_locations = tuple(
+            reference.stored_at for reference in self.measurement_files
+        )
+        if len(set(measurement_locations)) != len(measurement_locations):
+            raise ValueError("measurement file storage locations must be unique")
+
+        log_locations = tuple(reference.stored_at for reference in self.log_files)
+        if len(set(log_locations)) != len(log_locations):
+            raise ValueError("log file storage locations must be unique")
+
+        if set(measurement_locations) & set(log_locations):
+            raise ValueError("measurement and log storage locations must be disjoint")
+
+        metric_locations = tuple(
+            reference.stored_at for reference in self.metric_verification_files
+        )
+        if len(set(metric_locations)) != len(metric_locations):
+            raise ValueError("metric verification file locations must be unique")
+        if set(metric_locations) & (set(measurement_locations) | set(log_locations)):
+            raise ValueError(
+                "metric verification, measurement, and log locations must be disjoint"
+            )
+
+        journal_location = self.journal.stored_at
+        if journal_location in (
+            set(measurement_locations) | set(log_locations) | set(metric_locations)
+        ):
+            raise ValueError("attempt journal location must be distinct")
+
+        invocation_locations = tuple(
+            reference.stored_at for reference in self.invocations
+        )
+        if len(set(invocation_locations)) != len(invocation_locations):
+            raise ValueError("invocation receipt storage locations must be unique")
+
+        return self
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/__init__.py:BaseModel -->
+```python contract-target
+from pydantic import BaseModel
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/__init__.py:LocalFileRef -->
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/__init__.py:LocalStageResultSnapshotRef -->
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/__init__.py:ViperCloudFileRef -->
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/__init__.py:ViperCloudStageResultSnapshotRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/verification/__init__.py:verify_run_result -->
+```python contract-target
+def verify_run_result(
+    resolved_run: ResolvedRun,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedRunResult:
+    """Verify a terminal run from its RunSpec through every completed attempt."""
+    _verify_cloud_graph(resolved_run)
+    plan = _plan.verify_run_plan(resolved_run, fetcher=fetcher)
+    attempts = _storage.verify_run_attempt_references(
+        resolved_run,
+        plan.run,
+        fetcher=fetcher,
+    )
+    all_measurements: list[Measurement] = []
+    successful_stages: dict[StageId, ResolvedBaseSpec] = {}
+    stage_result_snapshots: set[tuple[str, ...]] = set()
+    attempt_file_snapshots: set[tuple[str, ...]] = set()
+
+    for attempt in attempts:
+        current_stage_result_snapshots = {
+            _storage.snapshot_identity(stage.snapshot)
+            for stage in attempt.resolved_stages
+        }
+        if stage_result_snapshots & current_stage_result_snapshots:
+            raise VerificationError(
+                "run attempts must use distinct stage-result snapshots"
+            )
+        stage_result_snapshots.update(current_stage_result_snapshots)
+
+        current_attempt_file_snapshots = {
+            identity
+            for reference in (
+                attempt.journal,
+                *attempt.measurement_files,
+                *attempt.metric_verification_files,
+                *attempt.log_files,
+            )
+            if (identity := _storage.artifact_revision_identity(reference.stored_at))
+            is not None
+        }
+        if attempt_file_snapshots & current_attempt_file_snapshots:
+            raise VerificationError(
+                "run attempts must use distinct measurement and log snapshots"
+            )
+        attempt_file_snapshots.update(current_attempt_file_snapshots)
+
+    if stage_result_snapshots & attempt_file_snapshots:
+        raise VerificationError(
+            "stage-result and attempt-file snapshots must be distinct"
+        )
+
+    for attempt in attempts:
+        complete = attempt.status == "succeeded"
+        _attempt.verify_attempt_journal(attempt, plan.run, fetcher=fetcher)
+        verified_stages = _attempt.verify_attempt_stages(
+            attempt,
+            plan.run,
+            plan.stages,
+            require_complete=complete,
+            policy=policy,
+            fetcher=fetcher,
+        )
+        stored_inputs = verify_stored_inputs(
+            verified_stages,
+            policy=policy,
+            fetcher=fetcher,
+        )
+        future_inputs = verify_attempt_future_inputs(
+            attempt,
+            plan.run,
+            verified_stages,
+            fetcher=fetcher,
+        )
+        attempt_measurements = _attempt.verify_attempt_files(
+            attempt,
+            plan.run,
+            plan.experiment,
+            plan.stages,
+            fetcher=fetcher,
+        )
+        _attempt.verify_measurement_stage_times(
+            verified_stages,
+            attempt_measurements,
+            plan.experiment,
+        )
+        _metrics.verify_recomputed_metrics(
+            attempt,
+            plan,
+            verified_stages,
+            attempt_measurements,
+            stored_inputs,
+            future_inputs,
+            policy=policy,
+            fetcher=fetcher,
+        )
+        all_measurements.extend(attempt_measurements)
+        if attempt.attempt_id == resolved_run.successful_attempt_id:
+            successful_stages = verified_stages
+
+    if resolved_run.status == "succeeded":
+        estimator_stage = successful_stages.get(plan.run.estimator.stage_id)
+        if estimator_stage is None:
+            raise VerificationError("successful run has no estimator-producing stage")
+        if plan.run.estimator.artifact_name not in estimator_stage.artifacts:
+            raise VerificationError("successful run has no selected estimator artifact")
+
+    return VerifiedRunResult(
+        result=resolved_run,
+        plan=plan,
+        attempts=attempts,
+        resolved_stages=successful_stages,
+        measurements=tuple(all_measurements),
+    )
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/__init__.py:_stored_locations -->
+```python contract-target
+def _stored_locations(value: object) -> tuple[object, ...]:
+    """Collect storage references from one nested protocol record."""
+    if isinstance(
+        value,
+        (
+            GitFileRef,
+            LocalFileRef,
+            LocalStageResultSnapshotRef,
+            ViperCloudFileRef,
+            ViperCloudStageResultSnapshotRef,
+        ),
+    ):
+        return (value,)
+    if isinstance(value, BaseModel):
+        return tuple(
+            location
+            for field in value.__dict__.values()
+            for location in _stored_locations(field)
+        )
+    if isinstance(value, Mapping):
+        return tuple(
+            location for item in value.values() for location in _stored_locations(item)
+        )
+    if isinstance(value, (tuple, list)):
+        return tuple(location for item in value for location in _stored_locations(item))
+    return ()
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/verification/__init__.py:_verify_cloud_graph -->
+```python contract-target
+def _verify_cloud_graph(resolved_run: ResolvedRun) -> None:
+    """Reject local immutable references in a cloud-backed terminal run."""
+    locations = _stored_locations(resolved_run)
+    cloud = any(
+        isinstance(
+            location,
+            (ViperCloudFileRef, ViperCloudStageResultSnapshotRef),
+        )
+        for location in locations
+    )
+    local = any(
+        isinstance(location, (LocalFileRef, LocalStageResultSnapshotRef))
+        for location in locations
+    )
+    if cloud and local:
+        raise VerificationError("storage_graph_unreachable")
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/_verification/storage.py:HuggingFaceStageResultSnapshotRef -->
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/_verification/storage.py:StageResultSnapshot -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    StageResultSnapshot,
+    StorageModel,
+    ViperCloudFileRef,
+    resolve_snapshot_file_ref,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=src/viper/_verification/storage.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=src/viper/_verification/storage.py:ViperCloudFileRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedFileRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    StageResultSnapshot,
+    StorageModel,
+    ViperCloudFileRef,
+    resolve_snapshot_file_ref,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/storage.py:fetch_storage_bytes -->
+```python contract-target
+def fetch_storage_bytes(location: StorageModel) -> bytes:
+    """Dispatch an immutable storage reference to its retrieval backend."""
+    if isinstance(location, GitFileRef):
+        return fetch_git_file_bytes(location)
+    if isinstance(location, HuggingFaceFileRef):
+        return fetch_huggingface_file_bytes(location)
+    if isinstance(location, LocalFileRef):
+        return fetch_local_file_bytes(location)
+    if isinstance(location, ViperCloudFileRef):
+        raise VerificationError("Viper Cloud retrieval requires a client")
+    raise TypeError(f"unsupported storage reference: {type(location).__name__}")
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/storage.py:list_huggingface_snapshot_files -->
+```python contract-target
+def list_huggingface_snapshot_files(
+    snapshot: HuggingFaceStageResultSnapshotRef,
+) -> tuple[RepoRelPath, ...]:
+    """List every regular file in one immutable Hugging Face snapshot."""
+    repo_type = None if snapshot.repo_type == "model" else snapshot.repo_type
+    try:
+        entries = HfApi().list_repo_tree(
+            repo_id=snapshot.repository,
+            recursive=True,
+            revision=snapshot.commit,
+            repo_type=repo_type,
+        )
+        return tuple(
+            sorted(entry.path for entry in entries if isinstance(entry, RepoFile))
+        )
+    except (OSError, ValueError) as exc:
+        raise VerificationError("artifact.bundle: snapshot listing failed") from exc
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/storage.py:list_snapshot_files -->
+```python contract-target
+def list_snapshot_files(
+    snapshot: StageSnapshot,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> tuple[RepoRelPath, ...]:
+    """List one snapshot through its custom or installed storage backend."""
+    owner = None if fetcher is None else getattr(fetcher, "__self__", fetcher)
+    custom = None if owner is None else getattr(owner, "list_snapshot_files", None)
+    if callable(custom):
+        try:
+            custom_listing = cast(
+                Callable[[StageSnapshot], tuple[RepoRelPath, ...]],
+                custom,
+            )
+            return tuple(custom_listing(snapshot))
+        except Exception as exc:
+            raise VerificationError(
+                "artifact.bundle: custom snapshot listing failed"
+            ) from exc
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+        return list_huggingface_snapshot_files(snapshot)
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        return list_local_snapshot_files(snapshot)
+    raise VerificationError("Viper Cloud snapshot listing requires a client")
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/storage.py:read_snapshot_file -->
+```python contract-target
+def read_snapshot_file(
+    snapshot: StageResultSnapshot,
+    reference: SnapshotFileRef,
+    *,
+    fetcher: StorageFetcher | None = None,
+) -> bytes:
+    """Retrieve and verify one file from a stage-result snapshot."""
+    retrieve = fetch_storage_bytes if fetcher is None else fetcher
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+        location: StorageModel = HuggingFaceFileRef(
+            repository=snapshot.repository,
+            commit=snapshot.commit,
+            path=reference.path,
+            repo_type=snapshot.repo_type,
+        )
+    elif isinstance(snapshot, LocalStageResultSnapshotRef):
+        location = LocalFileRef(
+            store=snapshot.store,
+            commit=snapshot.commit,
+            path=reference.path,
+        )
+    else:
+        location = ViperCloudFileRef(
+            owner=snapshot.owner,
+            project=snapshot.project,
+            revision=snapshot.revision,
+            path=reference.path,
+        )
+    try:
+        raw = retrieve(location)
+    except Exception as exc:
+        raise VerificationError(
+            f"artifact.representation: snapshot file is unavailable: {reference.path}"
+        ) from exc
+
+    resolved_reference = ResolvedFileRef(
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+        stored_at=location,
+    )
+    return verify_resolved_file_bytes(resolved_reference, raw)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/storage.py:snapshot_identity -->
+```python contract-target
+def snapshot_identity(
+    snapshot: StageResultSnapshot,
+) -> tuple[str, ...]:
+    """Return a backend-qualified identity for one immutable stage snapshot."""
+    if isinstance(snapshot, HuggingFaceStageResultSnapshotRef):
+        return (
+            snapshot.kind,
+            snapshot.repository,
+            snapshot.commit,
+            snapshot.repo_type,
+        )
+    if isinstance(snapshot, LocalStageResultSnapshotRef):
+        return (snapshot.kind, snapshot.store, snapshot.commit)
+    return (snapshot.kind, snapshot.owner, snapshot.project, snapshot.revision)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=src/viper/_verification/storage.py:artifact_revision_identity -->
+```python contract-target
+def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None:
+    """Return the immutable output revision containing one stored file."""
+    if isinstance(location, HuggingFaceFileRef):
+        return (
+            location.kind,
+            location.repository,
+            location.commit,
+            location.repo_type,
+        )
+    if isinstance(location, LocalFileRef):
+        return (location.kind, location.store, location.commit)
+    if isinstance(location, ViperCloudFileRef):
+        return (
+            location.kind,
+            location.owner,
+            location.project,
+            location.revision,
+        )
+    return None
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/results.py:ResolvedBenchmarkResultRef -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/results.py:ResolvedRunRef -->
+```python contract-target
+from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/results.py:RunResult -->
+```python contract-target
+class RunResult(BaseModel):
+    """Return one verified terminal run and its local output path."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    resolved_run: ResolvedRun
+    resolved_run_ref: ResolvedRunRef
+    resolved_run_path: Path
+    journal_path: Path
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/results.py:BenchmarkExecutionResult -->
+```python contract-target
+class BenchmarkExecutionResult(BaseModel):
+    """Return one verified benchmark result and its canonical local path."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    result: BenchmarkResult
+    result_ref: ResolvedBenchmarkResultRef
+    result_path: Path
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_publication.py:ViperCloudClient -->
+```python contract-target
+from ..storage import StorageDestination, ViperCloudClient, publish_resolved_files
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_publication.py:publish_attempt_files -->
+```python contract-target
+def publish_attempt_files(
+    root: Path,
+    destination: StorageDestination,
+    run_root: str,
+    attempt_id: int,
+    journal: DurableJournal,
+    log_files: Mapping[str, bytes],
+    measurement_paths: list[Path],
+    metric_verification_paths: list[Path],
+    cloud_client: ViperCloudClient | None = None,
+) -> tuple[
+    AttemptJournalRef,
+    tuple[ResolvedFileRef, ...],
+    tuple[ResolvedFileRef, ...],
+    tuple[ResolvedFileRef, ...],
+]:
+    """Publish one terminal journal and every available attempt-owned file."""
+    files = dict(log_files)
+    for path in (*measurement_paths, *metric_verification_paths):
+        files[path.relative_to(root).as_posix()] = path.read_bytes()
+    journal_path = f"{run_root}/attempts/{attempt_id}/journal.jsonl"
+    files[journal_path] = journal.path.read_bytes()
+    references = publish_resolved_files(
+        root,
+        destination,
+        files,
+        cloud_client=cloud_client,
+    )
+    journal_file = references[journal_path]
+    return (
+        AttemptJournalRef(
+            sha256=journal_file.sha256,
+            bytes=journal_file.bytes,
+            stored_at=journal_file.stored_at,
+        ),
+        tuple(
+            reference
+            for path, reference in references.items()
+            if "/measurements/" in path
+        ),
+        tuple(
+            reference
+            for path, reference in references.items()
+            if "/metric_verification/" in path
+        ),
+        tuple(reference for path, reference in references.items() if "/logs/" in path),
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_publication.py:write_attempt_document -->
+```python contract-target
+def write_attempt_document(
+    root: Path,
+    run_root: str,
+    attempt: RunAttempt,
+    destination: StorageDestination,
+    cloud_client: ViperCloudClient | None = None,
+) -> ResolvedAttemptRef:
+    """Publish one canonical attempt document and return its immutable reference."""
+    path = root / run_root / "attempts" / str(attempt.attempt_id) / "resolved.yaml"
+    raw = serialize_document(attempt)
+    write_synchronized(path, raw)
+    relative_path = path.relative_to(root).as_posix()
+    reference = publish_resolved_files(
+        root,
+        destination,
+        {relative_path: raw},
+        cloud_client=cloud_client,
+    )[relative_path]
+    return ResolvedAttemptRef(
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+        stored_at=reference.stored_at,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_publication.py:publish_invocation_receipt -->
+```python contract-target
+def publish_invocation_receipt(
+    root: Path,
+    destination: StorageDestination,
+    path: str,
+    receipt: StageInvocationReceipt,
+    cloud_client: ViperCloudClient | None = None,
+) -> ResolvedStageInvocationRef:
+    """Publish one stage invocation receipt at its canonical attempt path."""
+    raw = serialize_document(receipt)
+    reference = publish_resolved_files(
+        root,
+        destination,
+        {path: raw},
+        cloud_client=cloud_client,
+    )[path]
+    return ResolvedStageInvocationRef(
+        sha256=reference.sha256,
+        bytes=reference.bytes,
+        stored_at=reference.stored_at,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_attempt.py:ResolvedRunRef -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_attempt.py:ViperCloudFileRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+    ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    ViperCloudFileRef,
+    storage_file,
+)
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_attempt.py:ViperCloudClient -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_attempt.py:publish_resolved_files -->
+```python contract-target
+from ..storage import (
+    LocalArtifactStore,
+    ViperCloudClient,
+    bind_run_destination,
+    create_snapshot_publisher,
+    load_storage_settings,
+    publish_resolved_files,
+    snapshot_file,
+)
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_attempt.py:execute_attempt -->
+```python contract-target
+def execute_attempt(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+    timeout_seconds: float | None = None,
+    retry: bool = False,
+    purpose: AttemptPurpose = "run",
+    cloud_client: ViperCloudClient | None = None,
+) -> RunResult | ConfirmationRunResult:
+    """Execute one ordinary or benchmark-confirmation attempt."""
+    root = repository_root.resolve()
+    run_path = run_spec_path.resolve()
+    run_raw = run_path.read_bytes()
+    run = RunSpec.model_validate(parse_yaml_bytes(run_raw))
+    store = LocalArtifactStore(root)
+    fetcher = RunFetcher(
+        root,
+        store,
+        str(run.source.repository),
+        cloud_client=cloud_client,
+    )
+    origin = run_git(root, "remote", "get-url", "origin").decode().strip()
+    if origin != str(run.source.repository):
+        raise RunError("Git origin differs from RunSpec.source.repository")
+    relative_run_path = run_path.relative_to(root).as_posix()
+    if plan is None:
+        plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
+        if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
+            raise RunError("RunSpec bytes are absent from the current Git commit")
+        plan_location = GitFileRef(
+            repository=run.source.repository,
+            commit=plan_commit,
+            path=relative_run_path,
+        )
+    else:
+        if plan.stored_at.path != relative_run_path:
+            raise RunError("run path differs from the immutable plan reference")
+        if fetcher(plan.stored_at) != run_raw:
+            raise RunError("RunSpec bytes differ from the immutable plan")
+        plan_location = plan.stored_at
+    plan_revision = (
+        plan_location.revision
+        if isinstance(plan_location, ViperCloudFileRef)
+        else plan_location.commit
+    )
+
+    destination = bind_run_destination(
+        root,
+        run.run_id,
+        load_storage_settings(root).destination,
+    )
+    snapshot_publisher = create_snapshot_publisher(
+        root,
+        destination,
+        cloud_client=cloud_client,
+    )
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({str(run.source.repository)})
+    )
+    experiment = ExperimentSpec.model_validate(
+        parse_yaml_bytes(
+            fetcher(
+                storage_file(
+                    plan_location,
+                    f"experiments/{run.experiment_id}/spec.yaml",
+                )
+            )
+        )
+    )
+    run_root = f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+
+    workspace_root = root / ".viper" / "workspaces"
+    run_lock = RunWorkspaceLock.for_run(workspace_root, run.run_id)
+    run_lock.acquire()
+    terminal_path = run_path.parent / "resolved.yaml"
+    previous_run: ResolvedRun | None = None
+    if terminal_path.is_file():
+        previous_run = ResolvedRun.model_validate(
+            parse_yaml_bytes(terminal_path.read_bytes())
+        )
+        if purpose == "run" and not retry:
+            run_lock.release()
+            raise RunError("run already has terminal attempt history; use retry")
+        if purpose == "run" and previous_run.status == "succeeded":
+            run_lock.release()
+            raise RunError("a successful run cannot be retried")
+    elif purpose == "benchmark_confirmation":
+        run_lock.release()
+        raise RunError("benchmark confirmation requires a terminal candidate run")
+    if purpose == "benchmark_confirmation" and previous_run is not None:
+        if previous_run.status != "succeeded":
+            run_lock.release()
+            raise RunError("benchmark confirmation requires a successful candidate run")
+    known_attempts = (
+        ()
+        if previous_run is None
+        else tuple(
+            read_attempt_reference(reference, run, fetcher=fetcher)
+            for reference in previous_run.attempts
+        )
+    )
+    previous_attempts = reconcile_abandoned_attempts(
+        root,
+        workspace_root,
+        run,
+        run_root,
+        destination,
+        known_attempts,
+    )
+    attempt_id = max(
+        next_attempt_id(workspace_root, run.run_id),
+        max((attempt.attempt_id for attempt in previous_attempts), default=0) + 1,
+    )
+    workspace = AttemptWorkspace.create(workspace_root, run.run_id, attempt_id)
+    journal = DurableJournal(workspace.control / "journal.jsonl")
+    attempt_started = datetime.now(UTC)
+    resolved_stage_refs: list[ResolvedStageRef] = []
+    invocation_refs: list[ResolvedStageInvocationRef] = []
+    completed: dict[StageId, ResolvedStageRef] = {}
+    completed_results: dict[StageId, ResolvedBaseSpec] = {}
+    loaded_stages: dict[StageId, BaseSpec] = {}
+    measurement_paths: list[Path] = []
+    metric_verification_paths: list[Path] = []
+    log_files: dict[str, bytes] = {}
+    active_stage_id: StageId | None = None
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def cancel_attempt(signum: int, frame: object) -> None:
+        """Convert an interrupt request into a durable cancellation outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("cancelled")
+
+    def preempt_attempt(signum: int, frame: object) -> None:
+        """Convert host termination into a durable preemption outcome."""
+        del signum, frame
+        raise StageProcessInterrupted("preempted")
+
+    signal.signal(signal.SIGINT, cancel_attempt)
+    signal.signal(signal.SIGTERM, preempt_attempt)
+    try:
+        journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
+        preflight = preflight_plan(root, run_path, plan=plan)
+        preflight_path = workspace.control / "preflight.json"
+        write_synchronized(
+            preflight_path,
+            f"{preflight.model_dump_json()}\n".encode(),
+        )
+        journal.append(
+            "preflighting",
+            "preflight completed and immutable plan located",
+            recorded_at=datetime.now(UTC),
+            details={
+                "plan_commit": plan_revision,
+                "report": preflight_path.relative_to(workspace.root).as_posix(),
+            },
+        )
+        if not preflight.ready:
+            failed_codes = ", ".join(
+                check.code for check in preflight.checks if check.status == "failure"
+            )
+            raise RunError(f"plan preflight failed: {failed_codes}")
+        for stage_reference in run.stages:
+            active_stage_id = stage_reference.stage_id
+            stage = load_stage_spec(root / stage_reference.spec)
+            loaded_stages[stage_reference.stage_id] = stage
+            effective_environment = stage.env or run.env
+            resolved_inputs: dict[InputName, ResolvedInputRef] | None = None
+            resolved_retrievals: dict[InputName, ResolvedHttpRetrieval] | None = None
+            captured_inputs: dict[InputName, SnapshotFileRef] = {}
+            stored_input_references: dict[InputName, tuple[ResolvedFileRef, ...]] = {}
+            input_paths: dict[str, Path] = {}
+            process = None
+            journal.append(
+                "running_stage",
+                "stage execution started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+
+            if isinstance(stage, DownloadSpec):
+                runner_environment, execution_context = resolve_runner_env(
+                    fetcher,
+                    effective_environment,
+                )
+                (
+                    resolved_retrievals,
+                    resolved_artifacts,
+                    input_paths,
+                ) = retrieve_download_inputs(
+                    root,
+                    workspace,
+                    stage_reference.stage_id,
+                    stage,
+                )
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_download_stage(
+                    stage,
+                    env=runner_environment,
+                    execution_context=execution_context,
+                    artifacts=resolved_artifacts,
+                    retrievals=resolved_retrievals,
+                    completed_at=stage_completed,
+                )
+            else:
+                if not isinstance(stage, ParameterizedSpec):
+                    raise RunError("project stage lacks its parameterized contract")
+                source_location = GitFileRef(
+                    repository=run.source.repository,
+                    commit=run.source.commit,
+                    path=stage.implementation.path,
+                )
+                source = resolve_git_file(fetcher, source_location)
+                if (root / stage.implementation.path).read_bytes() != fetcher(
+                    source_location
+                ):
+                    raise RunError("stage source differs from the frozen source")
+                if isinstance(stage, InternalSpec):
+                    (
+                        resolved_inputs,
+                        input_paths,
+                        captured_inputs,
+                        stored_input_references,
+                    ) = resolve_inputs(
+                        root,
+                        workspace,
+                        run.run_id,
+                        attempt_id,
+                        stage_reference.stage_id,
+                        stage,
+                        completed,
+                        loaded_stages,
+                        fetcher,
+                        policy,
+                    )
+                try:
+                    process = execute_stage_process(
+                        root,
+                        run,
+                        stage_reference,
+                        stage,
+                        attempt_id=attempt_id,
+                        input_paths=input_paths,
+                        timeout_seconds=timeout_seconds,
+                    )
+                except (StageExecutionError, StageProcessInterrupted) as exc:
+                    run_log_root = f"{run_root}/attempts/{attempt_id}/logs"
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stdout.log"
+                    ] = exc.stdout
+                    log_files[
+                        f"{run_log_root}/{stage_reference.stage_id}.stderr.log"
+                    ] = exc.stderr
+                    if exc.invocation is not None:
+                        invocation_path = (
+                            f"{run_root}/attempts/{attempt_id}/invocations/"
+                            f"{stage_reference.stage_id}.yaml"
+                        )
+                        invocation_refs.append(
+                            publish_invocation_receipt(
+                                root,
+                                destination,
+                                invocation_path,
+                                exc.invocation,
+                                cloud_client=cloud_client,
+                            )
+                        )
+                    raise
+                invocation_path = (
+                    f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                    f"/attempts/{attempt_id}/invocations/{stage_reference.stage_id}.yaml"
+                )
+                invocation_ref = publish_invocation_receipt(
+                    root,
+                    destination,
+                    invocation_path,
+                    process.invocation,
+                    cloud_client=cloud_client,
+                )
+                invocation_refs.append(invocation_ref)
+                stage_completed = datetime.now(UTC)
+                resolved = resolve_stage(
+                    stage,
+                    source=source,
+                    env=resolve_env(
+                        fetcher,
+                        effective_environment,
+                        process,
+                    ),
+                    process=process,
+                    invocation=invocation_ref,
+                    inputs=resolved_inputs,
+                    completed_at=stage_completed,
+                )
+                resolved_artifacts = process.artifacts
+                metric_specs = {
+                    metric.metric_id: metric for metric in experiment.metrics
+                }
+                for metric_id in stage.metric_ids:
+                    if metric_specs[metric_id].mode != "live":
+                        continue
+                    live_path = (
+                        root
+                        / (
+                            f"experiments/{run.experiment_id}/runs/"
+                            f"{run.variant_id}/{run.run_id}"
+                        )
+                        / f"attempts/{attempt_id}/measurements"
+                        / f"{stage_reference.stage_id}.{metric_id}.jsonl"
+                    )
+                    if live_path.is_file() and live_path not in measurement_paths:
+                        measurement_paths.append(live_path)
+            resolved_path = (
+                f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
+                f"/stages/{stage_reference.stage_id}/resolved.yaml"
+            )
+            resolved_raw = serialize_document(resolved)
+            verify_captured_inputs(root, captured_inputs)
+            snapshot_paths: dict[str, Path] = {
+                reference.path: root / reference.path
+                for reference in captured_inputs.values()
+            }
+            if resolved_retrievals is not None:
+                for retrieval in resolved_retrievals.values():
+                    retrieval_path = retrieval.body.path
+                    snapshot_paths[retrieval_path] = root / retrieval_path
+            for artifact in resolved_artifacts.values():
+                artifact_references: tuple[SnapshotFileRef, ...]
+                if artifact.kind == "file":
+                    artifact_references = (artifact.file,)
+                else:
+                    artifact_references = tuple(
+                        member.file for member in artifact.members
+                    )
+                for reference in artifact_references:
+                    snapshot_paths[reference.path] = root / reference.path
+            journal.append(
+                "publishing_stage",
+                "stage snapshot publication started",
+                recorded_at=datetime.now(UTC),
+                details={"stage_id": stage_reference.stage_id},
+            )
+            snapshot = snapshot_publisher.publish(
+                resolved_stage_path=resolved_path,
+                resolved_stage=resolved_raw,
+                files=snapshot_paths,
+            )
+            resolved_stage_ref = ResolvedStageRef(
+                stage_id=stage_reference.stage_id,
+                snapshot=snapshot,
+                resolved_spec=snapshot_file(resolved_path, resolved_raw),
+            )
+            resolved_stage_refs.append(resolved_stage_ref)
+            completed[stage_reference.stage_id] = resolved_stage_ref
+            completed_results[stage_reference.stage_id] = resolved
+            if isinstance(stage, InternalSpec):
+                resolved_internal = ResolvedInternalSpec.model_validate(resolved)
+                run_after_stage_metrics(
+                    root,
+                    run,
+                    stage_reference.stage_id,
+                    stage,
+                    resolved_internal,
+                    resolved_stage_ref,
+                    completed_results,
+                    stored_input_references,
+                    experiment,
+                    input_paths,
+                    measurement_paths,
+                    metric_verification_paths,
+                    timeout_seconds,
+                    attempt_id,
+                )
+            if process is not None:
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stdout.log"
+                ] = process.stdout
+                log_files[
+                    f"{run_root}/attempts/{attempt_id}/logs/"
+                    f"{stage_reference.stage_id}.stderr.log"
+                ] = process.stderr
+            active_stage_id = None
+
+        journal.append(
+            "closing_attempt",
+            "all planned stages completed",
+            recorded_at=datetime.now(UTC),
+        )
+        journal.append(
+            "publishing_attempt_files",
+            "attempt evidence publication started",
+            recorded_at=datetime.now(UTC),
+            details={},
+        )
+        journal.append(
+            "terminal",
+            "attempt succeeded",
+            recorded_at=datetime.now(UTC),
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+            cloud_client=cloud_client,
+        )
+        attempt_completed = datetime.now(UTC)
+        attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status="succeeded",
+            started_at=attempt_started,
+            completed_at=attempt_completed,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=None,
+        )
+        attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            attempt,
+            destination,
+            cloud_client=cloud_client,
+        )
+        if purpose == "benchmark_confirmation":
+            return ConfirmationRunResult(
+                attempt=attempt,
+                attempt_reference=attempt_reference,
+                attempt_path=(
+                    root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+                ),
+                journal_path=journal.path,
+            )
+        attempt_references = tuple(
+            write_attempt_document(
+                root,
+                run_root,
+                value,
+                destination,
+                cloud_client=cloud_client,
+            )
+            for value in previous_attempts
+        ) + (attempt_reference,)
+        resolved_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=plan_location,
+            ),
+            status="succeeded",
+            attempts=attempt_references,
+            successful_attempt_id=attempt_id,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(resolved_run)
+        verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+        replace_synchronized(terminal_path, terminal_raw)
+        write_synchronized(workspace.terminal, terminal_raw)
+        terminal_reference = publish_resolved_files(
+            root,
+            destination,
+            {terminal_path.relative_to(root).as_posix(): terminal_raw},
+            cloud_client=cloud_client,
+        )[terminal_path.relative_to(root).as_posix()]
+        return RunResult(
+            resolved_run=resolved_run,
+            resolved_run_ref=ResolvedRunRef(
+                sha256=terminal_reference.sha256,
+                bytes=terminal_reference.bytes,
+                stored_at=terminal_reference.stored_at,
+            ),
+            resolved_run_path=terminal_path,
+            journal_path=journal.path,
+        )
+    except (Exception, KeyboardInterrupt) as exc:
+        failed_at = datetime.now(UTC)
+        status: Literal["failed", "cancelled", "preempted"]
+        if isinstance(exc, StageProcessInterrupted):
+            status = exc.outcome
+        elif isinstance(exc, KeyboardInterrupt):
+            status = "cancelled"
+        else:
+            status = "failed"
+        latest = journal.latest()
+        if latest is not None and latest.state != "terminal":
+            journal.append(
+                "terminal",
+                f"attempt {status}",
+                recorded_at=failed_at,
+                details={
+                    "stage_id": active_stage_id,
+                    "exception": type(exc).__name__,
+                },
+            )
+        code = (
+            "cancelled"
+            if status == "cancelled"
+            else "preempted"
+            if status == "preempted"
+            else "preflight_failed"
+            if isinstance(exc, RunError)
+            and str(exc).startswith("plan preflight failed")
+            else "verification_failed"
+            if isinstance(exc, VerificationError)
+            else "execution_failed"
+            if isinstance(
+                exc,
+                (StageExecutionError, MetricExecutionError, HttpRetrievalError),
+            )
+            else "internal_error"
+        )
+        (
+            journal_reference,
+            measurement_references,
+            metric_verification_references,
+            log_references,
+        ) = publish_attempt_files(
+            root,
+            destination,
+            run_root,
+            attempt_id,
+            journal,
+            log_files,
+            measurement_paths,
+            metric_verification_paths,
+            cloud_client=cloud_client,
+        )
+        completed_at = datetime.now(UTC)
+        failed_attempt = RunAttempt(
+            attempt_id=attempt_id,
+            purpose=purpose,
+            status=status,
+            started_at=attempt_started,
+            completed_at=completed_at,
+            resolved_stages=tuple(resolved_stage_refs),
+            invocations=tuple(invocation_refs),
+            journal=journal_reference,
+            measurement_files=measurement_references,
+            metric_verification_files=metric_verification_references,
+            log_files=log_references,
+            failure=AttemptFailure(
+                code=code,
+                stage_id=active_stage_id,
+                message=str(exc) or type(exc).__name__,
+                occurred_at=failed_at,
+            ),
+        )
+        failed_attempt_reference = write_attempt_document(
+            root,
+            run_root,
+            failed_attempt,
+            destination,
+            cloud_client=cloud_client,
+        )
+        if purpose == "benchmark_confirmation":
+            failed_attempt_path = (
+                root / run_root / "attempts" / str(attempt_id) / "resolved.yaml"
+            )
+            raise RunError(
+                f"benchmark confirmation attempt {attempt_id} failed; evidence "
+                f"written to {failed_attempt_path}"
+            ) from exc
+        attempt_references = tuple(
+            write_attempt_document(
+                root,
+                run_root,
+                value,
+                destination,
+                cloud_client=cloud_client,
+            )
+            for value in previous_attempts
+        ) + (failed_attempt_reference,)
+        failed_run = ResolvedRun(
+            spec=ResolvedRunSpecRef(
+                sha256=hashlib.sha256(run_raw).hexdigest(),
+                bytes=len(run_raw),
+                stored_at=plan_location,
+            ),
+            status="cancelled" if status == "cancelled" else "failed",
+            attempts=attempt_references,
+            successful_attempt_id=None,
+            completed_at=datetime.now(UTC),
+        )
+        terminal_raw = serialize_document(failed_run)
+        replace_synchronized(terminal_path, terminal_raw)
+        replace_synchronized(workspace.terminal, terminal_raw)
+        raise RunError(
+            f"attempt {attempt_id} failed; evidence written to {terminal_path}"
+        ) from exc
+    finally:
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
+        run_lock.release()
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_run.py:ViperCloudClient -->
+```python contract-target
+from ..storage import ViperCloudClient
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_run.py:run -->
+```python contract-target
+def run(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+    timeout_seconds: float | None = None,
+    retry: bool = False,
+    cloud_client: ViperCloudClient | None = None,
+) -> RunResult:
+    """Execute one frozen plan and verify its terminal resolved run."""
+    result = execute_attempt(
+        repository_root,
+        run_spec_path,
+        plan=plan,
+        timeout_seconds=timeout_seconds,
+        retry=retry,
+        purpose="run",
+        cloud_client=cloud_client,
+    )
+    assert isinstance(result, RunResult)
+    return result
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_run.py:retry -->
+```python contract-target
+def retry(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    plan: ResolvedRunSpecRef | None = None,
+    timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> RunResult:
+    """Append one attempt to a failed frozen run and verify its result."""
+    return run(
+        repository_root,
+        run_spec_path,
+        plan=plan,
+        timeout_seconds=timeout_seconds,
+        retry=True,
+        cloud_client=cloud_client,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_run.py:execute_benchmark_confirmation -->
+```python contract-target
+def execute_benchmark_confirmation(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> ConfirmationRunResult:
+    """Execute one independent confirmation of a successful frozen run."""
+    result = execute_attempt(
+        repository_root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+        purpose="benchmark_confirmation",
+        cloud_client=cloud_client,
+    )
+    assert isinstance(result, ConfirmationRunResult)
+    return result
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/__init__.py:ViperCloudClient -->
+```python contract-target
+from ..storage import ViperCloudClient
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/__init__.py:run -->
+```python contract-target
+def run(
+    repository_root: Path,
+    plan: RunPlanDraft | Path,
+    *,
+    timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> RunResult:
+    """Compile one authored plan, then execute its immutable files."""
+    if isinstance(plan, Path):
+        return _run(
+            repository_root,
+            plan,
+            timeout_seconds=timeout_seconds,
+            cloud_client=cloud_client,
+        )
+    frozen = freeze_run_plan(
+        repository_root,
+        plan,
+        cloud_client=cloud_client,
+    )
+    run_path = repository_root.resolve() / frozen.reference.stored_at.path
+    return _run(
+        repository_root,
+        run_path,
+        plan=frozen.reference,
+        timeout_seconds=timeout_seconds,
+        cloud_client=cloud_client,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/__init__.py:retry -->
+```python contract-target
+def retry(
+    repository_root: Path,
+    run_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> RunResult:
+    """Append one attempt to a failed frozen run and verify its result."""
+    return _retry(
+        repository_root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+        cloud_client=cloud_client,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/__init__.py:benchmark -->
+```python contract-target
+def benchmark(
+    repository_root: Path,
+    resolved_run_path: Path,
+    benchmark_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> BenchmarkExecutionResult:
+    """Execute and verify one independent benchmark confirmation."""
+    return _benchmark(
+        repository_root,
+        resolved_run_path,
+        benchmark_spec_path,
+        timeout_seconds=timeout_seconds,
+        cloud_client=cloud_client,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_benchmark.py:ResolvedBenchmarkResultRef -->
+```python contract-target
+from ..references import (
+    GitFileRef,
+    LocalFileRef,
+    ResolvedBenchmarkResultRef,
+    ResolvedBenchmarkSpecRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_benchmark.py:ViperCloudClient -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_benchmark.py:bind_run_destination -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_benchmark.py:load_storage_settings -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/execution/_benchmark.py:publish_resolved_files -->
+```python contract-target
+from ..storage import (
+    LocalArtifactStore,
+    ViperCloudClient,
+    bind_run_destination,
+    load_storage_settings,
+    publish_resolved_files,
+)
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_benchmark.py:_metric_receipts -->
+```python contract-target
+def _metric_receipts(
+    attempt: RunAttempt,
+    fetcher: RunFetcher,
+    eval_stage_id: str,
+) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
+    """Load the recomputation receipt for each eval metric."""
+    receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
+    for reference in attempt.metric_verification_files:
+        receipt = MetricVerificationReceipt.model_validate(
+            parse_yaml_bytes(fetcher(reference.stored_at))
+        )
+        if receipt.stage_id == eval_stage_id:
+            receipts[receipt.metric_id] = (reference, receipt)
+    return receipts
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/execution/_benchmark.py:benchmark -->
+```python contract-target
+def benchmark(
+    repository_root: Path,
+    resolved_run_path: Path,
+    benchmark_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> BenchmarkExecutionResult:
+    """Execute, assemble, verify, and publish one benchmark confirmation."""
+    root = repository_root.resolve()
+    candidate_path = resolved_run_path.resolve()
+    candidate_raw = candidate_path.read_bytes()
+    candidate = ResolvedRun.model_validate(parse_yaml_bytes(candidate_raw))
+    run_spec_path = candidate_path.with_name("spec.yaml")
+    store = LocalArtifactStore(root)
+
+    run = candidate.spec
+    if isinstance(run.stored_at, GitFileRef):
+        source_repository = str(run.stored_at.repository)
+        run_raw = RunFetcher(root, store, source_repository)(run.stored_at)
+    elif isinstance(run.stored_at, LocalFileRef):
+        run_raw = store.fetch(run.stored_at)
+        source_repository = str(
+            RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
+        )
+    else:
+        run_raw = fetch_storage_bytes(run.stored_at)
+        source_repository = str(
+            RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
+        )
+    fetcher = RunFetcher(
+        root,
+        store,
+        source_repository,
+        cloud_client=cloud_client,
+    )
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({source_repository})
+    )
+    verified_candidate = verify_run_result(
+        candidate,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    plan = verified_candidate.plan
+    destination = bind_run_destination(
+        root,
+        plan.run.run_id,
+        load_storage_settings(root).destination,
+    )
+    if plan.benchmark is None or plan.run.benchmark_id is None:
+        raise BenchmarkExecutionError("candidate run has no benchmark specification")
+
+    expected_benchmark_path = (
+        root / f"benchmarks/{plan.benchmark.benchmark_id}.spec.yaml"
+    )
+    selected_benchmark_path = benchmark_spec_path.resolve()
+    if selected_benchmark_path != expected_benchmark_path.resolve():
+        raise BenchmarkExecutionError("benchmark path differs from the frozen plan")
+    benchmark_raw = selected_benchmark_path.read_bytes()
+    benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
+    if benchmark != plan.benchmark:
+        raise BenchmarkExecutionError("benchmark document differs from the frozen plan")
+    benchmark_location = GitFileRef(
+        repository=plan.run.source.repository,
+        commit=plan.run.source.commit,
+        path=f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
+    )
+    if fetcher(benchmark_location) != benchmark_raw:
+        raise BenchmarkExecutionError("benchmark bytes differ from the frozen source")
+
+    result_path = candidate_path.with_name("benchmark.result.yaml")
+    if result_path.exists():
+        raise BenchmarkExecutionError("benchmark result already exists")
+    confirmation_result = execute_benchmark_confirmation(
+        root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+        cloud_client=cloud_client,
+    )
+    confirmation = confirmation_result.attempt
+    confirmation_stages = verify_attempt_stages(
+        confirmation,
+        plan.run,
+        plan.stages,
+        require_complete=True,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    selected_attempt = next(
+        attempt
+        for attempt in verified_candidate.attempts
+        if attempt.attempt_id == candidate.successful_attempt_id
+    )
+    selected_stage_refs = {
+        stage.stage_id: stage for stage in selected_attempt.resolved_stages
+    }
+    confirmation_stage_refs = {
+        stage.stage_id: stage for stage in confirmation.resolved_stages
+    }
+
+    eval_stage_ids = tuple(
+        stage_id
+        for stage_id, stage in plan.stages.items()
+        if isinstance(stage, EvalSpec)
+    )
+    if len(eval_stage_ids) != 1:
+        raise BenchmarkExecutionError("benchmark requires one eval stage")
+    eval_stage_id = eval_stage_ids[0]
+    artifact_selectors = (
+        plan.run.estimator,
+        StageArtifactRef(
+            stage_id=eval_stage_id,
+            artifact_name=PREDICTIONS,
+        ),
+    )
+    artifact_receipts: list[ArtifactComparisonReceipt] = []
+    for selector in artifact_selectors:
+        candidate_artifact = verified_candidate.resolved_stages[
+            selector.stage_id
+        ].artifacts[selector.artifact_name]
+        confirmation_artifact = confirmation_stages[selector.stage_id].artifacts[
+            selector.artifact_name
+        ]
+        candidate_digest = document_digest(candidate_artifact)
+        confirmation_digest = document_digest(confirmation_artifact)
+        artifact_receipts.append(
+            ArtifactComparisonReceipt(
+                artifact=selector,
+                candidate_stage=selected_stage_refs[selector.stage_id],
+                confirmation_stage=confirmation_stage_refs[selector.stage_id],
+                candidate_digest=candidate_digest,
+                confirmation_digest=confirmation_digest,
+                passed=candidate_digest == confirmation_digest,
+            )
+        )
+
+    candidate_metrics = _metric_receipts(selected_attempt, fetcher, eval_stage_id)
+    confirmation_metrics = _metric_receipts(
+        confirmation,
+        fetcher,
+        eval_stage_id,
+    )
+    metric_receipts = _benchmark_metric_results(
+        benchmark,
+        candidate_metrics,
+        confirmation_metrics,
+    )
+
+    candidate_relative_path = candidate_path.relative_to(root).as_posix()
+    candidate_reference = publish_resolved_files(
+        root,
+        destination,
+        {candidate_relative_path: candidate_raw},
+        cloud_client=cloud_client,
+    )[candidate_relative_path]
+    result = BenchmarkResult(
+        benchmark=ResolvedBenchmarkSpecRef(
+            sha256=hashlib.sha256(benchmark_raw).hexdigest(),
+            bytes=len(benchmark_raw),
+            stored_at=benchmark_location,
+        ),
+        run=ResolvedRunRef(
+            sha256=candidate_reference.sha256,
+            bytes=candidate_reference.bytes,
+            stored_at=candidate_reference.stored_at,
+        ),
+        confirmation=confirmation_result.attempt_reference,
+        artifacts=tuple(artifact_receipts),
+        metrics=metric_receipts,
+        status=_benchmark_status(benchmark, tuple(artifact_receipts), metric_receipts),
+        completed_at=datetime.now(UTC),
+    )
+    verify_benchmark_result(result, policy=policy, fetcher=fetcher)
+    result_raw = serialize_document(result)
+    _write_new(result_path, result_raw)
+    result_relative_path = result_path.relative_to(root).as_posix()
+    result_reference = publish_resolved_files(
+        root,
+        destination,
+        {result_relative_path: result_raw},
+        cloud_client=cloud_client,
+    )[result_relative_path]
+    return BenchmarkExecutionResult(
+        result=result,
+        result_ref=ResolvedBenchmarkResultRef(
+            sha256=result_reference.sha256,
+            bytes=result_reference.bytes,
+            stored_at=result_reference.stored_at,
+        ),
+        result_path=result_path,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/authoring.py:LocalStorageDestination -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/authoring.py:StorageDestination -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/authoring.py:ViperCloudClient -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/authoring.py:ViperCloudDestination -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/authoring.py:bind_run_destination -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/authoring.py:load_storage_settings -->
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=src/viper/authoring.py:publish_resolved_files -->
+```python contract-target
+from .storage import (
+    LocalArtifactStore,
+    LocalStorageDestination,
+    StorageDestination,
+    ViperCloudClient,
+    ViperCloudDestination,
+    bind_run_destination,
+    load_storage_settings,
+    publish_resolved_files,
+)
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/authoring.py:_freeze_input -->
+```python contract-target
+def _freeze_input(
+    root: Path,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageInputDraft,
+    cache: dict[int, InputRef] | None = None,
+    *,
+    destination: StorageDestination | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> InputRef:
+    """Compile one input draft into its frozen reference."""
+    selected_destination = destination or LocalStorageDestination()
+    cached = None if cache is None else cache.get(id(draft))
+    if cached is not None:
+        return cached
+    if isinstance(draft, ExternalInputDraft):
+        path = resolve_path(root, draft.path, operation="read")
+        return ExternalInputRef(
+            source=LocalSource(path=path.relative_to(root).as_posix()),
+            data_role=draft.data_role,
+        )
+    if isinstance(draft, StageDraftArtifactRef):
+        owners = [name for name, stage in stages.items() if stage is draft.producer]
+        if len(owners) != 1:
+            raise ValueError("stage artifact must have one producer in this plan")
+        return FutureInputRef(
+            producer_stage_id=owners[0],
+            name=draft.artifact_name,
+        )
+    if isinstance(selected_destination, ViperCloudDestination) and isinstance(
+        draft.run.stored_at,
+        LocalFileRef,
+    ):
+        raise ValueError("storage_graph_unreachable")
+    pointer = ArtifactPointer(run=draft.run, artifact=draft.artifact)
+    raw = serialize_document(pointer)
+    parts = draft.path.split("/")
+    if len(parts) < 4 or parts[0] != "inputs":
+        raise ValueError("prior-run input path must include category and entity")
+    selection = f"{draft.artifact.artifact_name}_{draft.run.sha256}"
+    pointer_path = "/".join((*parts[:3], f"{selection}.pointer.yaml"))
+    published = publish_resolved_files(
+        root,
+        selected_destination,
+        {pointer_path: raw},
+        cloud_client=cloud_client,
+    )[pointer_path]
+    reference = ResolvedArtifactPointerRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=published.stored_at,
+    )
+    stored = StoredInputRef(
+        pointer=reference,
+        path=draft.path,
+        data_role=draft.data_role,
+    )
+    if cache is not None:
+        cache[id(draft)] = stored
+    return stored
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/authoring.py:_freeze_stage -->
+```python contract-target
+def _freeze_stage(
+    root: Path,
+    run_root: str,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageSpecDraft,
+    input_cache: dict[int, InputRef] | None = None,
+    *,
+    destination: StorageDestination | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> Spec:
+    """Freeze one Python stage draft into its protocol declaration."""
+    artifacts: dict[ArtifactName, ArtifactSpec] = {
+        name: _freeze_artifact(root, run_root, artifact)
+        for name, artifact in draft.artifacts.items()
+    }
+    if isinstance(draft, DownloadSpecDraft):
+        return DownloadSpec(
+            artifacts=artifacts,
+            env=draft.env,
+            inputs=draft.inputs,
+            http=_freeze_http(root, draft.http),
+            policy=draft.policy,
+        )
+    definition = stage_definition(draft.implementation)
+    source = inspect.getsourcefile(draft.implementation)
+    parameter_source = inspect.getsourcefile(definition.parameter_model)
+    if source is None or parameter_source is None:
+        raise ValueError("stage callable or parameter model has no Python source")
+    source_path = Path(source).resolve()
+    parameter_path = Path(parameter_source).resolve()
+    source_raw = source_path.read_bytes()
+    parameter_raw = parameter_path.read_bytes()
+    if definition.parameter_model.__module__ == params.__name__:
+        parameter = params.model_ref(definition.parameter_model)
+    else:
+        if not parameter_path.is_relative_to(root):
+            raise ValueError("stage parameter model is outside the project root")
+        parameter = ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        )
+    common = {
+        "artifacts": artifacts,
+        "env": draft.env,
+        "implementation": StageImplementationRef(
+            path=source_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(source_raw).hexdigest(),
+            bytes=len(source_raw),
+        ),
+        "parameter_model": parameter,
+        "params": draft.params,
+        "inputs": {
+            name: _freeze_input(
+                root,
+                stages,
+                value,
+                input_cache,
+                destination=destination,
+                cloud_client=cloud_client,
+            )
+            for name, value in draft.inputs.items()
+        },
+        "metric_ids": tuple(
+            metric_definition(metric.implementation).metric_id
+            for metric in draft.metrics
+        ),
+    }
+    if isinstance(draft, BuildSpecDraft):
+        return BuildSpec(**common)
+    objective = (
+        None
+        if draft.objective is None
+        else MetricObjectiveSpec(
+            metric_id=metric_definition(
+                draft.objective.metric.implementation
+            ).metric_id,
+            direction=draft.objective.direction,
+        )
+    )
+    if isinstance(draft, EmbedSpecDraft):
+        return EmbedSpec(**common, objective=objective)
+    if objective is None:
+        raise ValueError("train and eval stages require an objective")
+    if isinstance(draft, TrainSpecDraft):
+        return TrainSpec(**common, objective=objective)
+    return EvalSpec(
+        **common,
+        objective=objective,
+        eval_id=draft.eval_id,
+        split_inputs=draft.split_inputs,
+    )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/authoring.py:_compile_plan -->
+```python contract-target
+def _compile_plan(
+    root: Path,
+    draft: RunPlanDraft,
+    *,
+    destination: StorageDestination | None = None,
+    cloud_client: ViperCloudClient | None = None,
+) -> _CompiledPlan:
+    """Compile one immutable draft into a complete in-memory protocol graph."""
+    project_root = resolve_root(root)
+    experiment_draft = draft.experiment
+    variant_draft = experiment_draft.variants[draft.variant]
+    replicate_draft = experiment_draft.replicates[draft.replicate]
+    metrics = _compile_metrics(project_root, experiment_draft)
+    experiment_spec = ExperimentSpec(
+        experiment_id=experiment_draft.experiment_id,
+        factors=tuple(
+            FactorSpec(factor_id=factor_id, levels=factor.levels)
+            for factor_id, factor in sorted(experiment_draft.factors.items())
+        ),
+        variant_ids=tuple(sorted(experiment_draft.variants)),
+        replicates=tuple(
+            ReplicateSpec(replicate_id=replicate_id, seed=replicate.seed)
+            for replicate_id, replicate in sorted(experiment_draft.replicates.items())
+        ),
+        metrics=metrics,
+    )
+    variants = tuple(
+        _compile_variant(experiment_draft.experiment_id, variant_id, value)
+        for variant_id, value in sorted(experiment_draft.variants.items())
+    )
+    run_root = (
+        f"experiments/{experiment_draft.experiment_id}/runs/"
+        f"{draft.variant}/{draft.run_id}"
+    )
+    files: dict[RepoRelPath, bytes] = {
+        f"experiments/{experiment_draft.experiment_id}/spec.yaml": serialize_document(
+            experiment_spec
+        )
+    }
+    for variant_spec in variants:
+        path = (
+            f"experiments/{experiment_draft.experiment_id}/variants/"
+            f"{variant_spec.variant_id}.spec.yaml"
+        )
+        files[path] = serialize_document(variant_spec)
+
+    stage_refs: list[RunStageRef] = []
+    stage_specs: dict[StageId, Spec] = {}
+    input_cache: dict[int, InputRef] = {}
+    for stage_id, stage_draft in variant_draft.stages.items():
+        stage_spec = _freeze_stage(
+            project_root,
+            run_root,
+            variant_draft.stages,
+            stage_draft.spec,
+            input_cache,
+            destination=destination,
+            cloud_client=cloud_client,
+        )
+        stage_specs[stage_id] = stage_spec
+        raw = serialize_document(stage_spec)
+        path = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files[path] = raw
+        stage_refs.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=path,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    estimator_stage = next(
+        (
+            stage_id
+            for stage_id, stage_draft in variant_draft.stages.items()
+            if stage_draft is variant_draft.estimator.producer
+        ),
+        None,
+    )
+    if estimator_stage is None:
+        raise ValueError("estimator producer is absent from the plan")
+    benchmark_spec: BenchmarkSpec | None = None
+    if draft.benchmark is not None:
+        benchmark_draft = draft.benchmark
+        test = _freeze_input(
+            project_root,
+            variant_draft.stages,
+            benchmark_draft.test,
+            input_cache,
+            destination=destination,
+            cloud_client=cloud_client,
+        )
+        splits = {
+            name: _freeze_input(
+                project_root,
+                variant_draft.stages,
+                split,
+                input_cache,
+                destination=destination,
+                cloud_client=cloud_client,
+            )
+            for name, split in benchmark_draft.splits.items()
+        }
+        if not isinstance(test, StoredInputRef) or not isinstance(
+            test.pointer, ResolvedArtifactPointerRef
+        ):
+            raise ValueError("benchmark inputs must select completed-run artifacts")
+        resolved_splits: dict[InputName, ResolvedArtifactPointerRef] = {}
+        for name, split in splits.items():
+            if not isinstance(split, StoredInputRef) or not isinstance(
+                split.pointer, ResolvedArtifactPointerRef
+            ):
+                raise ValueError("benchmark inputs must select completed-run artifacts")
+            resolved_splits[name] = split.pointer
+        eval_stages = [
+            stage for stage in stage_specs.values() if isinstance(stage, EvalSpec)
+        ]
+        if len(eval_stages) != 1:
+            raise ValueError("benchmark plans require exactly one eval stage")
+        eval_stage = eval_stages[0]
+        eval_test = eval_stage.inputs.get("eval_dataset")
+        if (
+            not isinstance(eval_test, StoredInputRef)
+            or eval_test.pointer != test.pointer
+        ):
+            raise ValueError("benchmark test must match the eval test input")
+        if set(eval_stage.split_inputs) != set(splits):
+            raise ValueError("benchmark splits must match the eval split inputs")
+        for name in splits:
+            eval_split = eval_stage.inputs.get(name)
+            if (
+                not isinstance(eval_split, StoredInputRef)
+                or eval_split.pointer != resolved_splits[name]
+            ):
+                raise ValueError(f"benchmark split {name!r} must match the eval input")
+        benchmark_spec = BenchmarkSpec(
+            benchmark_id=benchmark_draft.benchmark_id,
+            eval_id=benchmark_draft.eval_id,
+            test=test.pointer,
+            splits=resolved_splits,
+            metric_ids=tuple(
+                metric_definition(metric.implementation).metric_id
+                for metric in benchmark_draft.metrics
+            ),
+            criteria=tuple(
+                MetricCriterion(
+                    metric_id=metric_definition(
+                        criterion.metric.implementation
+                    ).metric_id,
+                    comparison=criterion.comparison,
+                    threshold=criterion.threshold,
+                )
+                for criterion in benchmark_draft.criteria
+            ),
+        )
+        if set(eval_stage.metric_ids) != set(benchmark_spec.metric_ids):
+            raise ValueError("benchmark metrics must match the eval metrics")
+        files[f"benchmarks/{benchmark_spec.benchmark_id}.spec.yaml"] = (
+            serialize_document(benchmark_spec)
+        )
+
+    run = RunSpec(
+        run_id=draft.run_id,
+        experiment_id=experiment_draft.experiment_id,
+        variant_id=draft.variant,
+        replicate_id=draft.replicate,
+        benchmark_id=(None if benchmark_spec is None else benchmark_spec.benchmark_id),
+        seed=replicate_draft.seed,
+        source=draft.source,
+        env=draft.env,
+        reproducibility=draft.reproducibility,
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id=estimator_stage,
+            artifact_name=variant_draft.estimator.artifact_name,
+        ),
+    )
+    run_path = f"{run_root}/spec.yaml"
+    files[run_path] = serialize_document(run)
+    return _CompiledPlan(run=run, run_path=run_path, files=files)
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=src/viper/authoring.py:freeze_run_plan -->
+```python contract-target
+def freeze_run_plan(
+    root: Path,
+    draft: RunPlanDraft,
+    *,
+    cloud_client: ViperCloudClient | None = None,
+) -> FrozenPlanFiles:
+    """Publish one compiled plan and materialize its working files."""
+    project_root = resolve_root(root)
+    destination = bind_run_destination(
+        project_root,
+        draft.run_id,
+        load_storage_settings(project_root).destination,
+    )
+    compiled = _compile_plan(
+        project_root,
+        draft,
+        destination=destination,
+        cloud_client=cloud_client,
+    )
+    commit = LocalArtifactStore(project_root).publish(compiled.files)
+    paths = tuple(_target_path(project_root, path) for path in compiled.files)
+    for path, raw in zip(paths, compiled.files.values(), strict=True):
+        _write_exact_file(path, raw)
+    run_raw = compiled.files[compiled.run_path]
+    reference = ResolvedRunSpecRef(
+        sha256=hashlib.sha256(run_raw).hexdigest(),
+        bytes=len(run_raw),
+        stored_at=LocalFileRef(commit=commit, path=compiled.run_path),
+    )
+    return FrozenPlanFiles(run=compiled.run, reference=reference, files=paths)
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:hashlib -->
+```python contract-target
+import hashlib
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:UTC -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:datetime -->
+```python contract-target
+from datetime import UTC, datetime
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:RepoRelPath -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:SHA256 -->
+```python contract-target
+from viper._schema import SHA256, RepoRelPath
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:RunFetcher -->
+```python contract-target
+from viper.execution._source import RunFetcher
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:HumanId -->
+```python contract-target
+from viper.ids import HumanId
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:ResolvedRunSpecRef -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:SnapshotFileRef -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:ViperCloudFileRef -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:ViperCloudStageResultSnapshotRef -->
+```python contract-target
+from viper.references import (
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedRunSpecRef,
+    SnapshotFileRef,
+    ViperCloudFileRef,
+    ViperCloudStageResultSnapshotRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:ResolvedAttemptRef -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:ResolvedRun -->
+```python contract-target
+from viper.runs import ResolvedAttemptRef, ResolvedRun
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:PublicationSource -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:ViperCloudClient -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:ViperCloudSnapshotPublisher -->
+```python contract-target
+from viper.storage import (
+    LocalArtifactStore,
+    LocalSnapshotPublisher,
+    LocalStorageDestination,
+    LocalStoreError,
+    PublicationSource,
+    StorageConfigurationError,
+    StorageSettings,
+    ViperCloudClient,
+    ViperCloudDestination,
+    ViperCloudSnapshotPublisher,
+    bind_run_destination,
+    create_snapshot_publisher,
+    load_storage_settings,
+    publish_resolved_files,
+)
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:verify_run_result -->
+```python contract-target
+from viper.verification import verify_run_result
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:VerificationError -->
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:VerificationPolicy -->
+```python contract-target
+from viper.verification.models import VerificationError, VerificationPolicy
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:InMemoryViperCloudClient -->
+```python contract-target
+class InMemoryViperCloudClient(ViperCloudClient):
+    """Hold unsealed uploads separately from retrievable revisions."""
+
+    def __init__(self, *, rejected_seals: int = 0) -> None:
+        """Configure how many seal calls fail before the revision appears."""
+        self.uploads: dict[tuple[str, str, str, str], bytes] = {}
+        self.sealed: dict[tuple[str, str, str], tuple[SnapshotFileRef, ...]] = {}
+        self.rejected_seals = rejected_seals
+        self.seal_calls = 0
+
+    def upload(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+        source: PublicationSource,
+        sha256: SHA256,
+        bytes: int,
+    ) -> None:
+        """Save an upload without making it retrievable."""
+        raw = source.read_bytes() if isinstance(source, Path) else source
+        assert len(raw) == bytes
+        assert hashlib.sha256(raw).hexdigest() == sha256
+        key = (owner, project, revision, path)
+        existing = self.uploads.setdefault(key, raw)
+        assert existing == raw
+
+    def seal(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        files: tuple[SnapshotFileRef, ...],
+    ) -> None:
+        """Expose all uploaded files after the configured failures."""
+        self.seal_calls += 1
+        if self.seal_calls <= self.rejected_seals:
+            raise RuntimeError("seal unavailable")
+        self.sealed[(owner, project, revision)] = files
+
+    def fetch(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+        path: RepoRelPath,
+    ) -> bytes:
+        """Read a file only when its revision is sealed."""
+        if (owner, project, revision) not in self.sealed:
+            raise FileNotFoundError("revision is not sealed")
+        return self.uploads[(owner, project, revision, path)]
+
+    def list_files(
+        self,
+        *,
+        owner: HumanId,
+        project: HumanId,
+        revision: SHA256,
+    ) -> tuple[SnapshotFileRef, ...]:
+        """List the files exposed by a sealed revision."""
+        return self.sealed[(owner, project, revision)]
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:test_cloud_publication_is_atomic_and_retryable -->
+```python contract-target
+def test_cloud_publication_is_atomic_and_retryable(tmp_path: Path) -> None:
+    """Expose cloud files only after sealing one deterministic revision."""
+    artifact = tmp_path / "artifacts" / "model.bin"
+    artifact.parent.mkdir()
+    artifact.write_bytes(b"parameters")
+    destination = ViperCloudDestination(owner="machina", project="weekend_models")
+    client = InMemoryViperCloudClient(rejected_seals=1)
+
+    publisher = create_snapshot_publisher(
+        tmp_path,
+        destination,
+        cloud_client=client,
+    )
+    assert isinstance(publisher, ViperCloudSnapshotPublisher)
+    snapshot = publisher.publish(
+        resolved_stage_path="runs/example/stages/train/resolved.yaml",
+        resolved_stage=b"stage_id: train\n",
+        files={"artifacts/model.bin": artifact},
+    )
+
+    assert isinstance(snapshot, ViperCloudStageResultSnapshotRef)
+    assert client.seal_calls == 2
+    listed = client.list_files(
+        owner=snapshot.owner,
+        project=snapshot.project,
+        revision=snapshot.revision,
+    )
+    assert tuple(file.path for file in listed) == (
+        "artifacts/model.bin",
+        "runs/example/stages/train/resolved.yaml",
+    )
+    assert listed[0].sha256 == hashlib.sha256(b"parameters").hexdigest()
+    assert listed[0].bytes == len(b"parameters")
+
+    references = publish_resolved_files(
+        tmp_path,
+        destination,
+        {"runs/example/journal.jsonl": b'{"state":"terminal"}\n'},
+        cloud_client=client,
+    )
+    location = references["runs/example/journal.jsonl"].stored_at
+    assert isinstance(location, ViperCloudFileRef)
+    assert (
+        client.fetch(
+            owner=location.owner,
+            project=location.project,
+            revision=location.revision,
+            path=location.path,
+        )
+        == b'{"state":"terminal"}\n'
+    )
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:test_cloud_fetcher_retrieves_the_selected_sealed_file -->
+```python contract-target
+def test_cloud_fetcher_retrieves_the_selected_sealed_file(tmp_path: Path) -> None:
+    """Retrieve a cloud file through the same fetcher used by verification."""
+    client = InMemoryViperCloudClient()
+    raw = b"evidence"
+    location = ViperCloudFileRef(
+        owner="machina",
+        project="weekend_models",
+        revision="0" * 64,
+        path="runs/example/evidence.yaml",
+    )
+    client.upload(
+        owner=location.owner,
+        project=location.project,
+        revision=location.revision,
+        path=location.path,
+        source=raw,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+    )
+    client.seal(
+        owner=location.owner,
+        project=location.project,
+        revision=location.revision,
+        files=(),
+    )
+    fetcher = RunFetcher(
+        tmp_path,
+        LocalArtifactStore(tmp_path),
+        "https://example.com/source.git",
+        cloud_client=client,
+    )
+
+    assert fetcher(location) == raw
+```
+
+<!-- contract-target: requirements=RSP-04 block=P9-RSP-01 action=add target=tests/test_storage.py:test_cloud_verification_rejects_local_references -->
+```python contract-target
+def test_cloud_verification_rejects_local_references() -> None:
+    """Reject a cloud terminal graph that still reaches local evidence."""
+    resolved_run = ResolvedRun.model_construct(
+        spec=ResolvedRunSpecRef.model_construct(
+            stored_at=ViperCloudFileRef(
+                owner="machina",
+                project="weekend_models",
+                revision="0" * 64,
+                path="runs/example/spec.yaml",
+            )
+        ),
+        status="succeeded",
+        attempts=(
+            ResolvedAttemptRef.model_construct(
+                stored_at=LocalFileRef(
+                    commit="1" * 64,
+                    path="runs/example/attempt.yaml",
+                )
+            ),
+        ),
+        successful_attempt_id=1,
+        completed_at=datetime.now(UTC),
+    )
+
+    with pytest.raises(VerificationError, match="storage_graph_unreachable"):
+        verify_run_result(
+            resolved_run,
+            policy=VerificationPolicy(trusted_source_repositories=frozenset()),
+        )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_prior_run_inputs.py:pytest -->
+```python contract-target
+import pytest
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_prior_run_inputs.py:InMemoryViperCloudClient -->
+```python contract-target
+from tests.test_storage import InMemoryViperCloudClient
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_prior_run_inputs.py:ViperCloudFileRef -->
+```python contract-target
+from viper.references import (
+    LocalFileRef,
+    ResolvedArtifactPointerRef,
+    ResolvedRunRef,
+    ViperCloudFileRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_prior_run_inputs.py:ViperCloudDestination -->
+```python contract-target
+from viper.storage import LocalArtifactStore, ViperCloudDestination
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_prior_run_inputs.py:test_prior_run_pointer_uses_the_selected_cloud_destination -->
+```python contract-target
+def test_prior_run_pointer_uses_the_selected_cloud_destination(tmp_path) -> None:
+    """Publish a generated pointer directly to the bound cloud project."""
+    run = ResolvedRunRef(
+        sha256="a" * 64,
+        bytes=10,
+        stored_at=ViperCloudFileRef(
+            owner="machina",
+            project="source_models",
+            revision="b" * 64,
+            path="experiments/source/runs/base/run/resolved.yaml",
+        ),
+    )
+    draft = RunArtifactDraft(
+        run=run,
+        artifact=StageArtifactRef(stage_id="download", artifact_name="dataset"),
+        path="inputs/datasets/toy/current.bin",
+        data_role="training",
+    )
+    destination = ViperCloudDestination(owner="machina", project="weekend_models")
+    client = InMemoryViperCloudClient()
+
+    frozen = _freeze_input(
+        tmp_path,
+        {},
+        draft,
+        destination=destination,
+        cloud_client=client,
+    )
+
+    assert isinstance(frozen, StoredInputRef)
+    assert isinstance(frozen.pointer.stored_at, ViperCloudFileRef)
+    assert frozen.pointer.stored_at.owner == destination.owner
+    assert frozen.pointer.stored_at.project == destination.project
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_prior_run_inputs.py:test_cloud_pointer_rejects_a_local_producer -->
+```python contract-target
+def test_cloud_pointer_rejects_a_local_producer(tmp_path) -> None:
+    """Stop before publishing a pointer that cannot work off-machine."""
+    draft = RunArtifactDraft(
+        run=ResolvedRunRef(
+            sha256="a" * 64,
+            bytes=10,
+            stored_at=LocalFileRef(
+                commit="b" * 64,
+                path="experiments/source/runs/base/run/resolved.yaml",
+            ),
+        ),
+        artifact=StageArtifactRef(stage_id="download", artifact_name="dataset"),
+        path="inputs/datasets/toy/current.bin",
+        data_role="training",
+    )
+
+    with pytest.raises(ValueError, match="storage_graph_unreachable"):
+        _freeze_input(
+            tmp_path,
+            {},
+            draft,
+            destination=ViperCloudDestination(
+                owner="machina",
+                project="weekend_models",
+            ),
+            cloud_client=InMemoryViperCloudClient(),
+        )
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=update target=tests/test_benchmark_execution.py:test_api_returns_the_verified_benchmark_result -->
+```python contract-target
+def test_api_returns_the_verified_benchmark_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Return the result and canonical path produced by the benchmark executor."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    run_git(tmp_path, "init")
+    result = BenchmarkResult.model_construct(
+        benchmark=ResolvedBenchmarkSpecRef.model_construct(),
+        run=ResolvedRunRef.model_construct(),
+        confirmation=ResolvedAttemptRef.model_construct(),
+        artifacts=(),
+        metrics=(),
+        status="verified",
+        completed_at=datetime.now(UTC),
+    )
+    result_path = tmp_path / "benchmark.result.yaml"
+    monkeypatch.setattr(
+        "viper.api.execute_benchmark_run",
+        lambda *args, **kwargs: BenchmarkExecutionResult(
+            result=result,
+            result_ref=ResolvedBenchmarkResultRef.model_construct(),
+            result_path=result_path,
+        ),
+    )
+
+    response = execute_benchmark_application(
+        ExecuteBenchmarkRequest(
+            resolved_run=tmp_path / "resolved.yaml",
+            benchmark_spec=tmp_path / "benchmark.spec.yaml",
+            root=tmp_path,
+        )
+    )
+
+    assert response.result == result
+    assert response.result_path == result_path
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_execution_acceptance.py:InMemoryViperCloudClient -->
+```python contract-target
+from tests.test_storage import InMemoryViperCloudClient
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_execution_acceptance.py:publish_attempt_files -->
+```python contract-target
+from viper.execution._publication import publish_attempt_files
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_execution_acceptance.py:DurableJournal -->
+```python contract-target
+from viper.journal import DurableJournal
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_execution_acceptance.py:ViperCloudFileRef -->
+```python contract-target
+from viper.references import ViperCloudFileRef
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_execution_acceptance.py:ViperCloudDestination -->
+```python contract-target
+from viper.storage import ViperCloudDestination
+```
+
+<!-- contract-target: requirements=RSP-05 block=P9-RSP-01 action=add target=tests/test_execution_acceptance.py:test_attempt_publishes_evidence_to_selected_destination -->
+```python contract-target
+def test_attempt_publishes_evidence_to_selected_destination(tmp_path: Path) -> None:
+    """Publish journal, metric, verification, and log bytes directly to cloud."""
+    run_root = "experiments/example/runs/run"
+    journal = DurableJournal(tmp_path / run_root / "attempts/1/journal.jsonl")
+    journal.path.parent.mkdir(parents=True)
+    journal.path.write_bytes(b'{"state":"terminal"}\n')
+    measurement = tmp_path / run_root / "attempts/1/measurements/score.json"
+    verification = (
+        tmp_path / run_root / "attempts/1/metric_verification/score.json"
+    )
+    measurement.parent.mkdir(parents=True)
+    verification.parent.mkdir(parents=True)
+    measurement.write_bytes(b'{"value":1}\n')
+    verification.write_bytes(b'{"verified":true}\n')
+    client = InMemoryViperCloudClient()
+
+    journal_ref, measurements, verifications, logs = publish_attempt_files(
+        tmp_path,
+        ViperCloudDestination(owner="machina", project="weekend_models"),
+        run_root,
+        1,
+        journal,
+        {f"{run_root}/attempts/1/logs/stage.log": b"complete\n"},
+        [measurement],
+        [verification],
+        cloud_client=client,
+    )
+
+    stored = (
+        journal_ref.stored_at,
+        measurements[0].stored_at,
+        verifications[0].stored_at,
+        logs[0].stored_at,
+    )
+    assert all(isinstance(item, ViperCloudFileRef) for item in stored)
+    assert not (tmp_path / ".viper/store").exists()
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=tests/test_verification.py:HuggingFaceStageResultSnapshotRef -->
+```python contract-target
+from viper.references import (
+    ArtifactPointerRef,
+    GitFileRef,
+    GitSource,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    ResolvedArtifactPointerRef,
+    ResolvedFileRef,
+    ResolvedGitFileRef,
+    ResolvedRunRef,
+    ResolvedRunSpecRef,
+    ResolvedStageInvocationRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=tests/test_verification.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=tests/test_verification.py:snapshot -->
+```python contract-target
+def snapshot(*, commit: str = SNAPSHOT_COMMIT) -> HuggingFaceStageResultSnapshotRef:
+    """Build one immutable stage-result snapshot reference."""
+    return HuggingFaceStageResultSnapshotRef(
+        repository=HF_REPOSITORY,
+        commit=commit,
+        repo_type="dataset",
+    )
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=add target=tests/test_verification_acceptance.py:HuggingFaceStageResultSnapshotRef -->
+```python contract-target
+from viper.references import (
+    ArtifactPointerRef,
+    GitFileRef,
+    GitSource,
+    HuggingFaceFileRef,
+    HuggingFaceStageResultSnapshotRef,
+    LocalFileRef,
+    LocalStageResultSnapshotRef,
+    ResolvedArtifactPointerRef,
+    ResolvedBenchmarkSpecRef,
+    ResolvedFileRef,
+    ResolvedGitFileRef,
+    ResolvedRunRef,
+    ResolvedRunSpecRef,
+    ResolvedStageRef,
+    SnapshotFileRef,
+    StorageModel,
+)
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=remove target=tests/test_verification_acceptance.py:StageResultSnapshotRef -->
+<!-- contract-remove -->
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=tests/test_verification_acceptance.py:DocumentStore -->
+```python contract-target
+class DocumentStore:
+    """Store immutable test documents by their complete storage identity."""
+
+    def __init__(self) -> None:
+        """Initialize an empty in-memory document store."""
+        self.documents: dict[tuple[str, str, str, str, str], bytes] = {}
+
+    @staticmethod
+    def key(location: StorageModel) -> tuple[str, str, str, str, str]:
+        """Return the immutable storage identity used as the document key."""
+        if isinstance(location, LocalFileRef):
+            return (
+                location.kind,
+                str(location.store),
+                location.commit,
+                str(location.path),
+                "",
+            )
+        repo_type = getattr(location, "repo_type", "")
+        return (
+            location.kind,
+            str(location.repository),
+            location.commit,
+            str(location.path),
+            repo_type,
+        )
+
+    def put(self, location: StorageModel, raw: bytes) -> None:
+        """Store exact bytes at one immutable location."""
+        self.documents[self.key(location)] = raw
+
+    def fetch(self, location: StorageModel) -> bytes:
+        """Retrieve exact bytes from one immutable location."""
+        return self.documents[self.key(location)]
+
+    def list_snapshot_files(
+        self,
+        snapshot: HuggingFaceStageResultSnapshotRef | LocalStageResultSnapshotRef,
+    ) -> tuple[str, ...]:
+        """List every file stored in one simulated immutable snapshot."""
+        if isinstance(snapshot, LocalStageResultSnapshotRef):
+            prefix = (snapshot.kind, str(snapshot.store), snapshot.commit)
+        else:
+            prefix = (
+                snapshot.kind,
+                str(snapshot.repository),
+                snapshot.commit,
+            )
+        return tuple(sorted(key[3] for key in self.documents if key[:3] == prefix))
+```
+
+<!-- contract-target: requirements=RSP-06 block=P9-RSP-01 action=update target=tests/test_verification_acceptance.py:snapshot -->
+```python contract-target
+def snapshot(commit: str) -> HuggingFaceStageResultSnapshotRef:
+    """Build one immutable stage-result snapshot reference."""
+    return HuggingFaceStageResultSnapshotRef(
+        repository=ARTIFACT_REPOSITORY,
+        commit=commit,
+        repo_type="dataset",
+    )
+```
 
 ## Implementation sources
 
