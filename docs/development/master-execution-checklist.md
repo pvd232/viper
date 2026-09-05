@@ -290,7 +290,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Automatic input resolution](automatic-input-resolution.md) | Complete | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Complete | Immutable generated plans with source code kept on its source commit |
 | [Direct Viper Cloud publication](remote-storage.md) | Complete | Destination-neutral publication, cloud references, retrieval, and restore |
-| [Experiment expansion](experiment-expansion.md) | In progress; P12-EXP-03 planned | Deterministic variant-replicate expansion and bounded multi-run execution |
+| [Experiment expansion](experiment-expansion.md) | Complete | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Audited; owner approval pending | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
 | [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Audited; owner approval pending | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
@@ -1817,12 +1817,18 @@ The immutable evidence manifest is stored at Hugging Face commit
 
 ### 19.3 Typed API and CLI
 
-- [ ] Materialize and verify the typed batch API and CLI.
+- [x] Materialize and verify the typed batch API and CLI.
       <!-- pair-block: P12-EXP-03 -->
       <!-- pair-block-contract: P12-EXP-03 contract=experiment-expansion.md -->
-      <!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=planned owner=src/viper/api.py:run_many -->
-      <!-- contract-verification: requirement=EXP-03 rule=experiment.batch.public state=planned test=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
+      <!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=implemented owner=src/viper/api.py:run_many -->
+      <!-- contract-verification: requirement=EXP-03 rule=experiment.batch.public state=implemented test=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
       <!-- implements: EXP-03 -->
+
+**Evidence:** PlanCheck `ff08dc825c750e866da86397e10cb1d5239a2c1d00987db5d09626810e3aeabc`
+accepted implementation commit `be6a111704bf67c3eb49a71159fedd7c76dcc200`.
+The immutable evidence manifest is stored at Hugging Face commit
+`ca7626860490f1c09a0affc0e9f1c03b8cc3bf5f` under
+`checks/ff08dc825c750e866da86397e10cb1d5239a2c1d00987db5d09626810e3aeabc/manifest.json`.
 
 **Commit boundary:** `Expand and execute complete experiments`
 

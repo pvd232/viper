@@ -34,11 +34,13 @@ from .artifacts import (
 )
 from .authoring import freeze_run_plan, load_run_plan_draft
 from .benchmark import BenchmarkResult
+from .execution._batch import run_many as execute_many
 from .execution._benchmark import benchmark as execute_benchmark_run
 from .execution._restore import restore as restore_run_artifacts
 from .execution._run import run as execute_run
 from .execution._stage import StageExecutionError, execute_stage_process
 from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
+from .execution.results import ExperimentExecutionResult
 from .ids import RunId, StageId
 from .inspection import (
     InspectionError,
@@ -88,10 +90,6 @@ from .verification.models import (
     VerificationError,
     VerificationPolicy,
 )
-from .execution._batch import run_many as execute_many
-
-from .execution.results import ExperimentExecutionResult
-
 
 OperationName = Literal[
     "validate_stage",
@@ -666,11 +664,13 @@ class RunManyRequest(APIModel):
     timeout_seconds: float | None = Field(default=None, gt=0)
     stop_on_failure: bool = False
 
+
 class RunManySuccess(SuccessModel):
     """Return every batch outcome in the requested plan order."""
 
     operation: Literal["run_many"] = "run_many"  # pyright: ignore[reportIncompatibleVariableOverride]
     result: ExperimentExecutionResult
+
 
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
@@ -1493,6 +1493,7 @@ def run_many(request: RunManyRequest) -> RunManySuccess:
         path = request.run_specs[0]
         raise _document_error("run_many", path, exc) from exc
     return RunManySuccess(result=result)
+
 
 REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "validate_stage": ValidateStageRequest,

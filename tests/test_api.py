@@ -10,6 +10,7 @@ from viper.api import (
     CapabilitiesRequest,
     LocalRunPath,
     RestoreRequest,
+    RunManyRequest,
     SchemaRequest,
     StatusRequest,
     ValidateStageRequest,
@@ -19,10 +20,12 @@ from viper.api import (
     get_schema,
     restore_artifacts,
     result_json_bytes,
+    run_many,
     status,
     validate_stage,
 )
 from viper.cli import main
+from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
 from viper.journal import DurableJournal
 from viper.references import LocalFileRef, ResolvedRunRef
 from viper.restoration import (
@@ -31,10 +34,6 @@ from viper.restoration import (
     RestoredFile,
     RestoreResult,
 )
-from viper.api import RunManyRequest, run_many
-
-from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
-
 
 
 def test_api_schema_and_capability_discovery() -> None:
@@ -248,6 +247,8 @@ def test_restore_result_matches_python_api_and_cli(
             Path("model.bin"),
         ),
     ]
+
+
 def test_run_many_result_matches_python_api_and_cli(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
