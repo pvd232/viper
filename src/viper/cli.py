@@ -64,6 +64,19 @@ def parse_source_target(value: str) -> dict[str, str]:
     return {"path": path, "symbol": symbol}
 
 
+def parse_dependent_rename(value: str) -> dict[str, dict[str, str]]:
+    """Split one OLD_PATH:OLD_SYMBOL=NEW_PATH:NEW_SYMBOL mapping."""
+    old, separator, new = value.partition("=")
+    if not separator:
+        raise argparse.ArgumentTypeError(
+            "dependent rename must use OLD_PATH:OLD_SYMBOL=NEW_PATH:NEW_SYMBOL"
+        )
+    return {
+        "old_dependent": parse_source_target(old),
+        "new_dependent": parse_source_target(new),
+    }
+
+
 def build_parser() -> ArgumentParser:
     """Build the VIPER command parser and its API subcommands."""
     parser = ViperArgumentParser(prog="viper")
@@ -259,6 +272,13 @@ def build_parser() -> ArgumentParser:
         dest="edge_kinds",
         choices=("imports", "calls", "reads", "writes"),
     )
+    rename_plan.add_argument(
+        "--dependent-rename",
+        action="append",
+        dest="dependent_renames",
+        type=parse_dependent_rename,
+        help="map a renamed dependent as OLD_PATH:OLD_SYMBOL=NEW_PATH:NEW_SYMBOL",
+    )
     rename_plan.add_argument("--artifact-root", type=Path)
     rename_plan.add_argument("--cache-root", type=Path)
     rename_plan.add_argument("--codeql-executable", type=Path)
@@ -297,6 +317,13 @@ def build_parser() -> ArgumentParser:
         dest="edge_kinds",
         choices=("imports", "calls", "reads", "writes"),
         help="govern one dependency operation; repeat for several kinds",
+    )
+    rename_check.add_argument(
+        "--dependent-rename",
+        action="append",
+        dest="dependent_renames",
+        type=parse_dependent_rename,
+        help="map a renamed dependent as OLD_PATH:OLD_SYMBOL=NEW_PATH:NEW_SYMBOL",
     )
     rename_check.add_argument("--artifact-root", type=Path)
     rename_check.add_argument("--cache-root", type=Path)
@@ -362,6 +389,11 @@ def _operation_and_payload(
         and values.get("edge_kinds") is None
     ):
         values.pop("edge_kinds")
+    if (
+        operation in {"plan_rename", "check_rename"}
+        and values.get("dependent_renames") is None
+    ):
+        values.pop("dependent_renames")
     return operation, values
 
 

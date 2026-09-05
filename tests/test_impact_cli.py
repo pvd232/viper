@@ -17,12 +17,15 @@ def _index(tmp_path: Path) -> Path:
     index.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "coordinate_system": "line_one_based_column_utf8_zero_based",
                 "obligations_file": obligations.name,
                 "obligations_sha256": hashlib.sha256(
                     obligations.read_bytes()
                 ).hexdigest(),
                 "total": 1,
+                "old_target": {"path": "src/lib.py", "symbol": "old"},
+                "new_target": {"path": "src/lib.py", "symbol": "new"},
                 "sites": [
                     {
                         "dependent": {"path": "src/app.py", "symbol": "caller"},
@@ -30,8 +33,25 @@ def _index(tmp_path: Path) -> Path:
                         "path": "src/app.py",
                         "line": 7,
                         "column": 4,
+                        "binding_form": "module_alias",
                     }
                 ],
+                "batches": [
+                    {
+                        "path": "src/app.py",
+                        "edits": [
+                            {
+                                "line": 7,
+                                "column": 8,
+                                "end_column": 11,
+                                "old_text": "old",
+                                "new_text": "new",
+                                "reasons": ["module_alias"],
+                            }
+                        ],
+                    }
+                ],
+                "covered_without_text_edit": 0,
             }
         ),
         encoding="utf-8",
@@ -49,9 +69,27 @@ def test_worklist_lookup_reads_one_bound_page(tmp_path: Path, capsys) -> None:
     after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
     assert status == 0
     assert capsys.readouterr().out == (
-        "References: 1-1/1\n1. src/app.py:7:4 calls in caller\n"
+        "Rename: old -> new\n"
+        "Batch edits: 1 files\n"
+        "1. src/app.py at 7:8\n"
+        "Alias-bound references requiring no direct edit: 0\n"
+        "Apply all file batches before validation.\n"
     )
     assert after == before
+
+
+def test_worklist_lookup_can_render_individual_references(
+    tmp_path: Path, capsys
+) -> None:
+    """Retain exact semantic rows for audit and diagnosis."""
+    index = _index(tmp_path)
+
+    status = main(["--index", str(index), "--references", "--limit", "1"])
+
+    assert status == 0
+    assert capsys.readouterr().out == (
+        "References: 1-1/1\n1. src/app.py:7:4 calls in caller\n"
+    )
 
 
 def test_worklist_lookup_rejects_changed_obligations(tmp_path: Path, capsys) -> None:

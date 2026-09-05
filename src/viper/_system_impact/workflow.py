@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
 import tarfile
 import tempfile
+import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +22,7 @@ from viper.system_impact.explain import (
 )
 from viper.system_impact.models import SourceGraph, SourceSnapshot
 from viper.system_impact.rename import (
+    DependentRename,
     ReferenceKind,
     RenameAnalysisError,
     RenameCheck,
@@ -205,16 +208,104 @@ def _write_model(path: Path, value: RenameObligationSet | RenameCheck) -> None:
 
 
 def _write_worklist_index(
-    path: Path, *, obligations_path: Path, obligations: RenameObligationSet
+    path: Path,
+    *,
+    source_root: Path,
+    graph: SourceGraph,
+    obligations_path: Path,
+    obligations: RenameObligationSet,
 ) -> None:
-    """Persist the stdlib-only index consumed by the fast agent command."""
+    """Persist exact reference rows and file-batched token replacements."""
     sites = rename_worklist_sites(obligations, limit=10_000)
+    old_symbol = obligations.spec.old_target.symbol
+    new_symbol = obligations.spec.new_target.symbol
+    token_cache: dict[str, tuple[tuple[int, int, int], ...]] = {}
+
+    def name_tokens(relative: str) -> tuple[tuple[int, int, int], ...]:
+        """Return UTF-8 byte columns for every old-symbol name token."""
+        if relative in token_cache:
+            return token_cache[relative]
+        source = (source_root / relative).read_text(encoding="utf-8")
+        lines = source.splitlines()
+        matches = []
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type != tokenize.NAME or token.string != old_symbol:
+                continue
+            line = lines[token.start[0] - 1]
+            start = len(line[: token.start[1]].encode("utf-8"))
+            end = len(line[: token.end[1]].encode("utf-8"))
+            matches.append((token.start[0], start, end))
+        token_cache[relative] = tuple(matches)
+        return token_cache[relative]
+
+    edits: dict[tuple[str, int, int], dict[str, object]] = {}
+
+    def add_edit(
+        relative: str,
+        line: int,
+        minimum_column: int,
+        reason: str,
+    ) -> bool:
+        """Add the nearest governed old-symbol token on one source line."""
+        candidates = [
+            item
+            for item in name_tokens(relative)
+            if item[0] == line and item[1] >= minimum_column
+        ]
+        if not candidates:
+            return False
+        _, start, end = min(candidates, key=lambda item: item[1])
+        key = (relative, line, start)
+        edit = edits.setdefault(
+            key,
+            {
+                "line": line,
+                "column": start,
+                "end_column": end,
+                "old_text": old_symbol,
+                "new_text": new_symbol,
+                "reasons": [],
+            },
+        )
+        reasons = edit["reasons"]
+        assert isinstance(reasons, list)
+        if reason not in reasons:
+            reasons.append(reason)
+        return True
+
+    target = next(
+        node
+        for node in graph.nodes
+        if node.path == obligations.spec.old_target.path and node.symbol == old_symbol
+    )
+    add_edit(str(target.path), target.binding_start_line, 0, "definition")
+    covered_without_text_edit = 0
+    for site in sites:
+        if not add_edit(
+            str(site.path),
+            site.line,
+            site.column,
+            site.binding_form or site.kind,
+        ):
+            covered_without_text_edit += 1
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for (relative, _, _), edit in sorted(edits.items()):
+        grouped.setdefault(relative, []).append(edit)
+    batches = [
+        {"path": relative, "edits": file_edits}
+        for relative, file_edits in grouped.items()
+    ]
     document = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "coordinate_system": "line_one_based_column_utf8_zero_based",
         "obligations_file": obligations_path.name,
         "obligations_sha256": hashlib.sha256(obligations_path.read_bytes()).hexdigest(),
+        "old_target": obligations.spec.old_target.model_dump(mode="json"),
+        "new_target": obligations.spec.new_target.model_dump(mode="json"),
         "total": len(sites),
         "sites": [site.model_dump(mode="json") for site in sites],
+        "batches": batches,
+        "covered_without_text_edit": covered_without_text_edit,
     }
     temporary = path.with_suffix(f"{path.suffix}.tmp")
     temporary.write_text(
@@ -363,6 +454,7 @@ def plan_working_tree_rename(
     old_target: RepoSymbolRef,
     new_target: RepoSymbolRef,
     edge_kinds: tuple[ReferenceKind, ...],
+    dependent_renames: tuple[DependentRename, ...] = (),
     artifact_root: Path | None = None,
     cache_root: Path | None = None,
     codeql_executable: Path | None = None,
@@ -394,6 +486,7 @@ def plan_working_tree_rename(
             old_target=old_target,
             new_target=new_target,
             edge_kinds=edge_kinds,
+            dependent_renames=dependent_renames,
         )
         extraction, query, graph_format = resolve_analysis_specs(
             repository,
@@ -431,21 +524,23 @@ def plan_working_tree_rename(
                 graph=baseline,
                 spec=spec,
             )
+            baseline_path = output / "baseline-source-graph.json"
+            obligations_path = output / "rename-obligations.json"
+            worklist_path = output / "rename-worklist.json"
+            report = render_rename_plan(obligations)
+            _write_graph(baseline_path, baseline)
+            _write_model(obligations_path, obligations)
+            _write_worklist_index(
+                worklist_path,
+                source_root=baseline_root,
+                graph=baseline,
+                obligations_path=obligations_path,
+                obligations=obligations,
+            )
+            (output / "rename-plan.txt").write_text(report + "\n", encoding="utf-8")
     except (CodeQLAnalysisError, RenameAnalysisError, OSError, ValueError) as error:
         raise WorkingTreeImpactError(str(error)) from error
 
-    baseline_path = output / "baseline-source-graph.json"
-    obligations_path = output / "rename-obligations.json"
-    worklist_path = output / "rename-worklist.json"
-    report = render_rename_plan(obligations)
-    _write_graph(baseline_path, baseline)
-    _write_model(obligations_path, obligations)
-    _write_worklist_index(
-        worklist_path,
-        obligations_path=obligations_path,
-        obligations=obligations,
-    )
-    (output / "rename-plan.txt").write_text(report + "\n", encoding="utf-8")
     return WorkingTreeRenamePlan(
         repository_root=repository,
         base_revision=revision,
@@ -465,6 +560,7 @@ def analyze_working_tree_rename(
     old_target: RepoSymbolRef,
     new_target: RepoSymbolRef,
     edge_kinds: tuple[ReferenceKind, ...],
+    dependent_renames: tuple[DependentRename, ...] = (),
     artifact_root: Path | None = None,
     cache_root: Path | None = None,
     codeql_executable: Path | None = None,
@@ -496,6 +592,7 @@ def analyze_working_tree_rename(
             old_target=old_target,
             new_target=new_target,
             edge_kinds=edge_kinds,
+            dependent_renames=dependent_renames,
         )
         extraction, query, graph_format = resolve_analysis_specs(
             repository,

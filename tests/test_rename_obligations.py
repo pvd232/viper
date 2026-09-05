@@ -28,6 +28,7 @@ from viper.system_impact.models import (
     stage_key,
 )
 from viper.system_impact.rename import (
+    DependentRename,
     RenameAnalysisError,
     RenameSpec,
     check_rename_obligations,
@@ -334,6 +335,64 @@ def test_complete_rename_satisfies_every_compiled_obligation(tmp_path: Path) -> 
     assert [transition.status for transition in check.transitions] == ["satisfied"]
     assert "Satisfied: 1/1 references" in render_rename_check(check)
     assert "Completion: accepted" in render_rename_check(check)
+    assert obligations.obligations[0].baseline_sites[0].binding_form == "module_alias"
+
+
+@pytest.mark.unit
+@pytest.mark.domain_protocol
+def test_dependent_rename_preserves_transition_identity(tmp_path: Path) -> None:
+    """Match a governed edge through an explicitly renamed caller."""
+    baseline_root = tmp_path / "baseline"
+    candidate_root = tmp_path / "candidate"
+    spec = _SPEC.model_copy(
+        update={
+            "dependent_renames": (
+                DependentRename(
+                    old_dependent=RepoSymbolRef(
+                        path="tests/test_use.py", symbol="call"
+                    ),
+                    new_dependent=RepoSymbolRef(
+                        path="tests/test_use.py", symbol="call_checked"
+                    ),
+                ),
+            )
+        }
+    )
+    obligations = compile_rename_obligations(
+        root=baseline_root,
+        graph=_baseline(baseline_root),
+        spec=spec,
+    )
+    _write(
+        candidate_root,
+        "src/viper/_subprocess.py",
+        "def run_checked() -> None:\n    pass\n",
+    )
+    _write(
+        candidate_root,
+        "tests/test_use.py",
+        "from viper import _subprocess as subprocess\n\n"
+        "def call_checked() -> None:\n"
+        "    subprocess.run_checked()\n",
+    )
+    candidate = _graph(
+        candidate_root,
+        target="run_checked",
+        caller="call_checked",
+        include_edge=True,
+        committed=False,
+    )
+
+    check = check_rename_obligations(
+        root=candidate_root,
+        graph=candidate,
+        obligations=obligations,
+    )
+
+    assert check.passed
+    assert check.transitions[0].candidate_new_sites[0].dependent.symbol == (
+        "call_checked"
+    )
 
 
 @pytest.mark.unit

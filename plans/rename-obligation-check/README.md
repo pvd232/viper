@@ -6,7 +6,9 @@ rename-check implementation. Production behavior now belongs to
 API, and `viper impact rename-check`.
 `viper impact rename-plan` publishes the frozen baseline worklist before edits.
 It also publishes `rename-worklist.json`; the stdlib-only `viper-impact`
-command serves that index during the edit loop without starting CodeQL.
+command serves exact token replacements in file batches during the edit loop
+without starting CodeQL. Compound checks accept explicit mappings for
+dependents that are themselves renamed.
 
 [`agent-experiment.md`](agent-experiment.md) records the original smoke tests
 and the staged paired trial of ordinary search against the precomputed index.

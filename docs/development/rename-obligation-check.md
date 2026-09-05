@@ -20,6 +20,8 @@ source-backed `ContractTarget` ingestion.
 | ROC-07 <!-- contract-requirement: ROC-07 phase=0 test=tests/test_rename_obligations.py --> | Permit added replacement uses while requiring zero old uses and at least the baseline replacement count per dependent. |
 | ROC-08 <!-- contract-requirement: ROC-08 phase=0 test=tests/test_rename_obligations.py --> | Publish the frozen baseline obligations as a source-located worklist before candidate editing begins. |
 | ROC-09 <!-- contract-requirement: ROC-09 phase=0 test=tests/test_impact_cli.py --> | Serve a precomputed, digest-bound worklist without loading VIPER, running CodeQL, or writing repository state. |
+| ROC-10 <!-- contract-requirement: ROC-10 phase=0 test=tests/test_impact_cli.py --> | Compile governed reference sites into exact token replacements grouped by file. |
+| ROC-11 <!-- contract-requirement: ROC-11 phase=0 test=tests/test_rename_obligations.py --> | Preserve obligation identity when an explicit mapping renames a dependent declaration. |
 
 ## 2. Required claim
 
@@ -29,7 +31,7 @@ $G_1$, VIPER accepts exactly when:
 ```math
 \begin{aligned}
 O &= \operatorname{CompileRename}(\rho,G_0), \\
-T &= \operatorname{CheckRename}(O,G_1), \\
+T &= \operatorname{CheckRename}(O,G_1,M), \\
 \operatorname{Accept}(T) \iff{}& I(G_0)=I(G_1) \\
 &\land H(C)=O.\mathrm{checker\_sha256} \\
 &\land o\in V_0 \land o\notin V_1 \land n\in V_1 \\
@@ -45,6 +47,9 @@ T &= \operatorname{CheckRename}(O,G_1), \\
 checker. An overlay candidate also requires a valid overlay-base receipt and
 the digest of the exact changed Python paths. The lower bound permits valid new
 uses of the replacement without weakening the zero-old-reference requirement.
+`M` is an optional one-to-one map from a baseline dependent declaration to its
+renamed candidate declaration. An obligation owned by `d` is checked under
+`M(d)` when that mapping exists and under `d` otherwise.
 
 ## 3. Current gap
 
@@ -108,6 +113,7 @@ flowchart TB
 | `SourceReference` | Import-bound occurrence retained when its target is absent |
 | `DatabaseReceipt` | Full, overlay-base, or overlay extraction provenance |
 | `RenameSpec` | Old target, replacement target, and governed operations |
+| `DependentRename` | Explicit baseline-to-candidate identity for one renamed dependent |
 | `ReferenceSite` | One exact governed occurrence |
 | `RenameObligation` | Baseline sites for one dependent and operation |
 | `RenameObligationSet` | Frozen duties plus graph and checker identities |
@@ -131,9 +137,12 @@ and writes retain their containing declaration.
 5. `viper impact rename-plan` renders those frozen baseline sites before the
    replacement declaration or candidate graph exists and writes a flattened
    `rename-worklist.json` beside the authoritative obligations.
+   The index retains CodeQL binding forms and converts old-symbol name tokens
+   into byte-column replacements grouped by file.
 6. `check_rename_obligations()` joins candidate rows by dependent, operation,
    imported module, and symbol. Star imports, dynamic lookup, and relevant
-   alias rebinding fail closed.
+   alias rebinding fail closed. When `RenameSpec.dependent_renames` maps the
+   baseline owner, the checker selects candidate rows from the mapped owner.
 7. Rename-check orchestration builds an overlay base, computes changed Python paths
    from byte digests, builds the overlay, and records its base and manifest.
 8. Ordinary impact analysis retains full databases because the tested overlay
@@ -156,7 +165,7 @@ performs the language-aware relation evaluation.
 | overlay `DatabaseReceipt` | Snapshot, base key and digest, changes digest, command, and result digest |
 | `RenameObligationSet` | Baseline sites and frozen identities |
 | `rename-plan.txt` | Compact pre-edit list of required paths, locations, operations, and owners |
-| `rename-worklist.json` | Flattened, paged agent index bound to the adjacent obligation-file digest |
+| `rename-worklist.json` | Paged semantic rows and exact file-batched token replacements bound to the adjacent obligation-file digest |
 | `RenameCheck` | Candidate snapshot, graph digest, transitions, unresolved rows, and verdict |
 
 ## 7. Verification
@@ -172,6 +181,8 @@ performs the language-aware relation evaluation.
 | `rename.scope.boundary` | Ordinary impact does not consume overlays until dependency-edge parity is established. |
 | `rename.plan.complete` | The pre-edit report contains every compiled baseline site exactly once. |
 | `rename.worklist.read_only` | The fast command returns the indexed sites, rejects stale obligation bytes, and creates no files. |
+| `rename.worklist.batched` | Every emitted edit identifies the old and new token, one-based line, and zero-based UTF-8 byte columns under one file batch. |
+| `rename.dependent.transition` | A mapped candidate owner containing the required replacement edge satisfies its baseline owner's obligation. |
 
 ## 8. Propagation
 
@@ -179,7 +190,7 @@ performs the language-aware relation evaluation.
 |---|---|
 | Query pack | Add `RenameTransitions.ql`, evidence columns, and a new version. |
 | Graph protocol | Add `SourceReference`, edge columns, and digest coverage. |
-| Checker | Compile and verify query relations; support cross-module top-level replacements. |
+| Checker | Compile and verify query relations; support cross-module replacements and explicit dependent renames. |
 | Database protocol | Add full, overlay-base, and overlay receipt modes. |
 | Orchestration | Expose baseline-only `plan_working_tree_rename()` and use overlays only in candidate checking. |
 | Agent interface | Add `viper impact rename-plan` for offline compilation, `viper-impact` for fast lookup, and retain `rename-check` as the completion gate. |
@@ -213,11 +224,12 @@ decorator. The new count exceeds baseline and the candidate remains valid.
 5. Run a historical refactor and repair measured false rejections.
 6. Expose baseline obligations before editing and measure agent localization separately from completion checking.
 7. Flatten the frozen obligations into a stdlib-only, digest-bound worklist for the interactive edit loop.
+8. Group exact token replacements by file and map renamed dependent identities across compound refactors.
 
 ## 11. Contract-owned PairBlocks
 
 - `P0-ROC-01` owns the initial protocol and agent operation.
-- `P0-ROC-02` depends on it and owns ROC-05 through ROC-09: CodeQL transition
+- `P0-ROC-02` depends on it and owns ROC-05 through ROC-11: CodeQL transition
   rows, overlay provenance, query-derived checking, pre-edit planning, fast
   indexed lookup, and historical validation.
 

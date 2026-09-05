@@ -82,6 +82,7 @@ from .system_impact.explain import (
 )
 from .system_impact.models import CommitId, PlanCheck, SourceGraph
 from .system_impact.rename import (
+    DependentRename,
     ReferenceKind,
     ReferenceSite,
     RenameAnalysisError,
@@ -649,6 +650,10 @@ class RenameCheckRequest(APIModel):
         default=("imports", "calls", "reads", "writes"),
         min_length=1,
         description="Dependency operations governed by the rename.",
+    )
+    dependent_renames: tuple[DependentRename, ...] = Field(
+        default=(),
+        description="Explicit old-to-new identities for renamed dependents.",
     )
     artifact_root: Path | None = Field(
         default=None,
@@ -1598,6 +1603,7 @@ def plan_rename(request: RenamePlanRequest) -> RenamePlanSuccess:
             old_target=request.old_target,
             new_target=request.new_target,
             edge_kinds=request.edge_kinds,
+            dependent_renames=request.dependent_renames,
             artifact_root=request.artifact_root,
             cache_root=request.cache_root,
             codeql_executable=request.codeql_executable,
@@ -1633,6 +1639,7 @@ def check_rename(request: RenameCheckRequest) -> RenameCheckSuccess:
             old_target=request.old_target,
             new_target=request.new_target,
             edge_kinds=request.edge_kinds,
+            dependent_renames=request.dependent_renames,
             artifact_root=request.artifact_root,
             cache_root=request.cache_root,
             codeql_executable=request.codeql_executable,
@@ -1964,6 +1971,7 @@ __all__ = [
     "CapabilitiesSuccess",
     "CompareRunsRequest",
     "CompareRunsSuccess",
+    "DependentRename",
     "ExecuteStageRequest",
     "ExecuteStageSuccess",
     "ExecuteBenchmarkRequest",

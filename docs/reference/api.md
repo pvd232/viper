@@ -359,7 +359,10 @@ viper-impact \
 ```
 
 The fast command uses only the Python standard library, verifies the adjacent
-obligation-file digest, and does not write repository state. The equivalent
+obligation-file digest, and does not write repository state. Its default output
+groups exact old-to-new token replacements by file; `--references` returns the
+underlying semantic rows and `--json` returns both forms. Lines are one-based
+and columns are zero-based UTF-8 byte offsets. The equivalent
 typed operation is `get_rename_worklist`; the full CLI surface is
 `viper impact rename-worklist --obligations <rename-obligations.json>`.
 This index guides editing but does not decide completion. After editing, agents
@@ -372,6 +375,19 @@ viper impact rename-check \
   --old src/package/tools.py:run \
   --new src/package/tools.py:run_checked \
   --kind calls
+```
+
+For a compound refactor that also renames a governed caller, map its baseline
+and candidate identities explicitly:
+
+```bash
+viper impact rename-check \
+  --root . \
+  --base HEAD \
+  --old src/package/storage.py:load \
+  --new src/package/storage.py:load_verified \
+  --dependent-rename \
+    src/package/pipeline.py:prepare=src/package/pipeline.py:prepare_verified
 ```
 
 The command compiles every selected baseline reference into an obligation,

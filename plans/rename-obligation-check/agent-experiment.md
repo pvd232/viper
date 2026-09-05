@@ -143,3 +143,32 @@ batch edit plan per stage. The completion protocol also needs an explicit
 baseline-to-candidate dependent-symbol mapping before it can judge compound
 refactors. Another agent trial before those two changes would measure the same
 known interface and join failures again.
+
+## Batched-worklist follow-up
+
+The follow-up kept the fixture, model, four stages, sparse tests, 70 baseline
+transitions, and 120-second cutoff fixed. The treatment changed only the graph
+interface: each worklist supplied exact old-to-new token coordinates grouped
+into 14 file batches, and each of the first three specs mapped its downstream
+dependent to the declaration name required by the next stage.
+
+| Arm | Final state | Exact checker | Failed validations | Wall time | Output tokens |
+|---|---|---:|---:|---:|---:|
+| Recorded ordinary-search baseline | Complete | 70/70 after mapped recheck | 2 | 87 s | 10,618 |
+| Batched graph worklist | Complete | 70/70 | 0 | 60 s | 10,533 |
+
+The batched agent applied each stage through one scripted edit pass and passed
+all four validations on the first attempt. It changed the same 53 governed
+files as the baseline and changed zero decoy files. The four explicit
+dependent mappings removed the checker's three false `replacement_missing`
+results: all four checks accepted with 17, 18, 17, and 18 satisfied
+transitions.
+
+The first batch application lost time because the agent interpreted the byte
+column as one-based. The index now declares
+`line_one_based_column_utf8_zero_based`. Even with that recovery, batching
+reduced wall time by 27 seconds (31%) relative to the recorded baseline and by
+60 seconds relative to the row-oriented graph treatment. Output tokens were
+effectively unchanged. This remains one synthetic, graph-favorable fixture;
+the result isolates the execution-interface mechanism rather than estimating a
+general repair-rate gain.

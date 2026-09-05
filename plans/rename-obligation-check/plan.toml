@@ -5,7 +5,7 @@ baseline = "d541e31df9f88af3bdaac36bd245dcf7960408c4"
 
 [[blocks]]
 id = "P0-ROC-02"
-requirements = ["ROC-05", "ROC-06", "ROC-07", "ROC-08", "ROC-09"]
+requirements = ["ROC-05", "ROC-06", "ROC-07", "ROC-08", "ROC-09", "ROC-10", "ROC-11"]
 depends_on = []
 gate = "python -m pytest tests/test_impact_cli.py tests/test_rename_obligations.py tests/test_codeql_analysis.py tests/test_system_impact.py -q"
 

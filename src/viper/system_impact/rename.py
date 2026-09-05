@@ -37,6 +37,29 @@ class RenameAnalysisError(ValueError):
     """Report an input that cannot support an exact rename decision."""
 
 
+class DependentRename(ProtocolModel):
+    """Map one governed baseline dependent onto its candidate declaration."""
+
+    old_dependent: RepoSymbolRef = Field(
+        description="Baseline declaration containing a governed reference."
+    )
+    new_dependent: RepoSymbolRef = Field(
+        description="Candidate declaration containing the replacement reference."
+    )
+
+    @model_validator(mode="after")
+    def validate_transition(self) -> DependentRename:
+        """Require a real declaration-identity transition."""
+        if self.old_dependent == self.new_dependent:
+            raise ValueError("DependentRename endpoints must differ")
+        if (
+            self.old_dependent.symbol == _MODULE_IMPORTS_SYMBOL
+            or self.new_dependent.symbol == _MODULE_IMPORTS_SYMBOL
+        ):
+            raise ValueError("DependentRename cannot map module-import owners")
+        return self
+
+
 class RenameSpec(ProtocolModel):
     """Declare one repository symbol rename and its governed edge kinds."""
 
@@ -45,6 +68,10 @@ class RenameSpec(ProtocolModel):
     edge_kinds: tuple[ReferenceKind, ...] = Field(
         min_length=1,
         description="Dependency operations that every governed caller must replace.",
+    )
+    dependent_renames: tuple[DependentRename, ...] = Field(
+        default=(),
+        description="Explicit baseline-to-candidate identities for renamed dependents.",
     )
 
     @field_validator("edge_kinds")
@@ -56,6 +83,26 @@ class RenameSpec(ProtocolModel):
         if len(edge_kinds) != len(set(edge_kinds)):
             raise ValueError("RenameSpec.edge_kinds contains duplicates")
         return tuple(sorted(edge_kinds))
+
+    @field_validator("dependent_renames")
+    @classmethod
+    def order_dependent_renames(
+        cls, mappings: tuple[DependentRename, ...]
+    ) -> tuple[DependentRename, ...]:
+        """Require one-to-one mappings and store them by baseline identity."""
+        old = tuple(item.old_dependent for item in mappings)
+        new = tuple(item.new_dependent for item in mappings)
+        if len(old) != len(set(old)) or len(new) != len(set(new)):
+            raise ValueError("RenameSpec.dependent_renames must be one-to-one")
+        return tuple(
+            sorted(
+                mappings,
+                key=lambda item: (
+                    item.old_dependent.path,
+                    item.old_dependent.symbol,
+                ),
+            )
+        )
 
     @model_validator(mode="after")
     def validate_targets(self) -> RenameSpec:
@@ -77,6 +124,10 @@ class ReferenceSite(ProtocolModel):
     path: RepoRelPath = Field(description="Source file containing the reference.")
     line: int = Field(ge=1, description="One-based source line.")
     column: int = Field(ge=0, description="Zero-based UTF-8 source column.")
+    binding_form: NonEmptyStr | None = Field(
+        default=None,
+        description="Import-binding form that established this reference.",
+    )
 
 
 class RenameObligation(ProtocolModel):
@@ -321,6 +372,7 @@ def compile_rename_obligations(
                 path=reference.path,
                 line=reference.line,
                 column=reference.column,
+                binding_form=reference.binding_form,
             ),
         )
     if not selected:
@@ -413,13 +465,21 @@ def check_rename_obligations(
         )
 
     nodes = {(node.path, node.symbol): node for node in graph.nodes}
+    dependent_renames = {
+        item.old_dependent: item.new_dependent
+        for item in obligations.spec.dependent_renames
+    }
     old_module = _module_name(str(obligations.spec.old_target.path))
     new_module = _module_name(str(obligations.spec.new_target.path))
     all_unresolved: list[str] = []
     transitions: list[DependencyTransition] = []
     for obligation in obligations.obligations:
         module_imports = obligation.dependent.symbol == _MODULE_IMPORTS_SYMBOL
-        owner = nodes.get((obligation.dependent.path, obligation.dependent.symbol))
+        candidate_dependent = dependent_renames.get(
+            obligation.dependent,
+            obligation.dependent,
+        )
+        owner = nodes.get((candidate_dependent.path, candidate_dependent.symbol))
         if owner is None and not module_imports:
             transitions.append(
                 _transition(
@@ -451,11 +511,12 @@ def check_rename_obligations(
         )
         old_sites = tuple(
             ReferenceSite(
-                dependent=obligation.dependent,
+                dependent=candidate_dependent,
                 kind=obligation.kind,
                 path=item.path,
                 line=item.line,
                 column=item.column,
+                binding_form=item.binding_form,
             )
             for item in relevant
             if item.resolution == "resolved"
@@ -465,11 +526,12 @@ def check_rename_obligations(
         )
         new_sites = tuple(
             ReferenceSite(
-                dependent=obligation.dependent,
+                dependent=candidate_dependent,
                 kind=obligation.kind,
                 path=item.path,
                 line=item.line,
                 column=item.column,
+                binding_form=item.binding_form,
             )
             for item in relevant
             if item.resolution == "resolved"
@@ -598,6 +660,7 @@ def render_rename_worklist(
 
 
 __all__ = [
+    "DependentRename",
     "DependencyTransition",
     "ReferenceSite",
     "RenameAnalysisError",
