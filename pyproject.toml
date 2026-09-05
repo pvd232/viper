@@ -47,6 +47,9 @@ release = [
     "build>=1.2,<2",
     "twine>=6,<7",
 ]
+mcp = [
+    "mcp>=2,<3",
+]
 
 [project.urls]
 Repository = "https://github.com/pvd232/viper"

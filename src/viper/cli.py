@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Literal, NoReturn
 
+from . import _subprocess as subprocess
 from .api import (
     APIModel,
     OperationName,
@@ -153,6 +154,13 @@ def build_parser() -> ArgumentParser:
             default={},
             help="exact query model as one JSON object",
         )
+
+    mcp = commands.add_parser(
+        "mcp",
+        help="serve the typed VIPER API over local MCP stdio",
+    )
+    add_root(mcp)
+    mcp.add_argument("--access", choices=("read", "execute"), default="read")
 
     retry_command = commands.add_parser(
         "retry",
@@ -487,6 +495,21 @@ def main(argv: list[str] | None = None) -> int:
             return _render(failure, json_output=True)
         parser.print_usage(sys.stderr)
         return _render(failure, json_output=False)
+
+    if parsed.command == "mcp":
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "viper.mcp",
+                "--root",
+                str(parsed.root),
+                "--access",
+                parsed.access,
+            ],
+            check=False,
+        )
+        return completed.returncode
 
     operation, payload = _operation_and_payload(parsed)
     result = dispatch(operation, payload)

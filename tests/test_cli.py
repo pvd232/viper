@@ -14,6 +14,24 @@ from viper.cli import main
 from viper.journal import DurableJournal
 
 
+def test_mcp_stdio_requires_explicit_execution_access(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Start MCP in read mode unless the caller explicitly selects execution."""
+    calls: list[tuple[str, ...]] = []
+
+    def run(arguments, **_kwargs):
+        calls.append(tuple(str(item) for item in arguments))
+        return type("Completed", (), {"returncode": 0})()
+
+    monkeypatch.setattr("viper.cli.subprocess.run", run)
+
+    assert main(["mcp", "--root", str(tmp_path)]) == 0
+    assert calls[-1][-1] == "read"
+    assert main(["mcp", "--root", str(tmp_path), "--access", "execute"]) == 0
+    assert calls[-1][-1] == "execute"
+
+
 class CommandLineTests(unittest.TestCase):
     """Verify command dispatch through public authoring and validation paths."""
 

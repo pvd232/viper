@@ -1,20 +1,27 @@
 """Tests for VIPER's typed Python API."""
 
 import json
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast, get_type_hints
 
 import pytest
+from mcp import types
 
 from viper.api import (
+    HANDLER_REGISTRY,
+    REQUEST_REGISTRY,
     CapabilitiesRequest,
     CatalogRefreshRequest,
     LocalRunPath,
+    OperationName,
     RestoreRequest,
     RunManyRequest,
     SchemaRequest,
     SearchRunsRequest,
     StatusRequest,
+    SuccessModel,
     ValidateStageRequest,
     ViperFailure,
     catalog_refresh,
@@ -32,6 +39,14 @@ from viper.catalog import Catalog, CatalogRefreshResult
 from viper.cli import main
 from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
 from viper.journal import DurableJournal
+from viper.mcp import (
+    call_tool,
+    prompt_registry,
+    read_resource,
+    resource_registry,
+    resource_templates,
+    tool_registry,
+)
 from viper.references import LocalFileRef, ResolvedRunRef
 from viper.restoration import (
     ArtifactRestoreSelector,
@@ -39,6 +54,70 @@ from viper.restoration import (
     RestoredFile,
     RestoreResult,
 )
+
+
+def test_mcp_tool_schemas_match_typed_operations() -> None:
+    """Build MCP tools directly from the request and handler registries."""
+    first = tool_registry("read")
+    second = tool_registry("read")
+
+    assert first == second
+    assert tuple(tool.name for tool in first) == tuple(
+        sorted(tool.name for tool in first)
+    )
+    for tool in tool_registry("execute"):
+        operation = cast(OperationName, tool.name)
+        request = REQUEST_REGISTRY[operation]
+        success = get_type_hints(HANDLER_REGISTRY[operation])["return"]
+        assert isinstance(success, type) and issubclass(success, SuccessModel)
+        assert tool.input_schema == request.model_json_schema()
+        assert tool.output_schema == success.model_json_schema()
+
+    result = call_tool(Path.cwd(), "read", "get_capabilities")
+    assert result.is_error is False
+    assert result.structured_content["operation"] == "get_capabilities"
+
+
+def test_mcp_resources_are_stateless_inside_startup_root(tmp_path: Path) -> None:
+    """Resolve catalog resources and prompts from only the fixed startup root."""
+    database = tmp_path / ".viper/catalog.sqlite3"
+    database.parent.mkdir()
+    key = "a" * 64
+    reference = json.dumps({"path": "runs/final.yaml", "sha256": "b" * 64})
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE sources (
+                source_key TEXT PRIMARY KEY,
+                reference_json TEXT NOT NULL,
+                accepted INTEGER NOT NULL,
+                error TEXT
+            );
+            CREATE TABLE runs (source_key TEXT PRIMARY KEY);
+            CREATE TABLE benchmarks (source_key TEXT PRIMARY KEY);
+            """
+        )
+        connection.execute(
+            "INSERT INTO sources VALUES (?, ?, 1, NULL)",
+            (key, reference),
+        )
+        connection.execute("INSERT INTO runs VALUES (?)", (key,))
+
+    first = resource_registry(tmp_path)
+    second = resource_registry(tmp_path)
+    assert first == second
+    assert tuple(resource.uri for resource in first) == (
+        "viper://catalog/head",
+        f"viper://run/{key}",
+    )
+    loaded = read_resource(tmp_path, f"viper://run/{key}")
+    assert isinstance(loaded.contents[0], types.TextResourceContents)
+    assert json.loads(loaded.contents[0].text) == json.loads(reference)
+    assert resource_templates() == resource_templates()
+    assert prompt_registry() == prompt_registry()
+
+    with pytest.raises(ValueError, match="escapes the MCP startup root"):
+        call_tool(tmp_path, "read", "status", {"path": "../outside"})
 
 
 def test_api_schema_and_capability_discovery() -> None:
