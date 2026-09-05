@@ -1838,24 +1838,7 @@ def _human_success(result: SuccessModel) -> str:
 <!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:RunManyRequest -->
 <!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:run_many -->
 ```python contract-target
-from viper.api import (
-    CapabilitiesRequest,
-    LocalRunPath,
-    RestoreRequest,
-    RunManyRequest,
-    SchemaRequest,
-    StatusRequest,
-    ValidateStageRequest,
-    ViperFailure,
-    dispatch,
-    get_capabilities,
-    get_schema,
-    restore_artifacts,
-    result_json_bytes,
-    run_many,
-    status,
-    validate_stage,
-)
+from viper.api import RunManyRequest, run_many
 ```
 
 <!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:ExperimentExecutionResult -->
