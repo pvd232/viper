@@ -14,6 +14,9 @@ dependents that are themselves renamed.
 and the staged paired trials of ordinary search against the precomputed index.
 [`build_pairblock_stress.py`](build_pairblock_stress.py) generates the locked
 five-PairBlock fixture used by the orchestration stress test.
+[`pairblock_control.py`](pairblock_control.py) is the experimental dependency
+frontier and digest-bound transition executor used to hold scheduling constant
+between the final paired arms.
 
 `plan.toml` takes the accepted `P0-ROC-01` commit as its baseline and binds
 `P0-ROC-02` to the query-derived checker and overlay optimization. `check.py`

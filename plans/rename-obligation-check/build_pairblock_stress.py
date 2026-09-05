@@ -199,6 +199,31 @@ def main() -> int:
     for earlier_old, earlier_new in earlier:
         if earlier_old in registry or earlier_new not in registry:
             failures.append(f"earlier registry transition regressed: {earlier_new}")
+    checklist = (ROOT / "docs/master-execution-checklist.md").read_text()
+    for future_index, (future_old, future_new) in enumerate(
+        STAGES[args.phase:], start=args.phase + 1
+    ):
+        future_source = (ROOT / f"src/orbit/{future_old}.py").read_text()
+        if (
+            f"def {future_old}(" not in future_source
+            or f"def {future_new}(" in future_source
+        ):
+            failures.append(f"future declaration changed before PB-{future_index:02d}")
+        if (
+            future_old not in registry
+            or future_new in registry
+            or future_old not in cli
+            or future_new in cli
+        ):
+            failures.append(f"future resource changed before PB-{future_index:02d}")
+        future_contract = (
+            ROOT / f"docs/contracts/PB-{future_index:02d}.toml"
+        ).read_text()
+        if (
+            'state = "planned"' not in future_contract
+            or f"- [ ] PB-{future_index:02d}" not in checklist
+        ):
+            failures.append(f"future metadata closed before PB-{future_index:02d}")
     completed = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-q"],
         cwd=ROOT,

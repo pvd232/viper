@@ -234,3 +234,57 @@ neither sparse tests nor the current exact checker is yet a sufficient release
 oracle. Future generated fixtures import and execute every governed consumer,
 and the relative-import CodeQL omission remains an implementation blocker for
 authoritative acceptance.
+
+## Scheduler-controlled transition trial
+
+A fresh paired trial used hardened fixture commit
+`9b39e1cab8bab3934498e54cd3a75c134c865ac3`. Both `gpt-5.4-mini`
+agents received the same dependency-frontier controller. The controller
+exposed only the next ready PairBlock, required an explicit begin/close cycle,
+ran the block gate during closure, and updated its contract, checklist item,
+evidence, and digest after success. Phase gates also rejected premature
+changes to later declarations, resources, or completion metadata.
+
+The only intended treatment difference was transition execution. The ordinary
+arm located and edited references with repository tools. The graph arm could
+invoke `apply PB-NN`, which verified the worklist's obligation digest and
+validated every original token span before applying its exact symbol-token
+batches. Both agents still owned the new function signature, explicit call
+keyword, registry and command changes. Both received a nominal 420-second
+budget.
+
+| Arm | Result | PB-05 closure | Process wall time | Commands | Search-like commands | Output tokens |
+|---|---|---:|---:|---:|---:|---:|
+| Scheduled ordinary search | 5/5; 50/50 consumers | 349 s | 386 s | 59 | 12 | 18,494 |
+| Scheduled graph executor | 5/5; 50/50 consumers | 399 s | 431 s | 66 | 11 | 19,883 |
+
+The tracked patches were byte-identical, with SHA-256
+`6279a361e79e22f585da4bd60cf070ed24518c9f2259e316a7196bd20b2ed589`.
+Every phase gate passed on its first invocation, and independent release and
+50-consumer runtime checks passed in both candidates. The graph process
+overran the nominal limit by 11 seconds while producing its final status and
+response; its final PairBlock had closed after 399 seconds. The runner did not
+hard-kill at 420 seconds, so process-level completion must be reported as 431
+seconds rather than censored at the intended cutoff.
+
+The scheduler changed the ordinary agent's behavior relative to the previous
+trial. It began and closed each PairBlock before advancing instead of editing
+the entire chain before PB-01. This comparison does not isolate the scheduler's
+causal effect because the new fixture also had stronger phase and runtime
+oracles.
+
+With scheduling held constant, the graph executor did not improve this task's
+speed or token use. It removed symbol-replacement work, but the agent then
+searched for renamed calls and reconstructed the same signature-and-keyword
+edit separately in every phase. The treatment used 12% more commands, 8% more
+output tokens, 35% more input tokens, and took 12% longer end to end. It had no
+failed shell commands; the ordinary arm's six failures were probes for absent
+worklist files, not failed gates or defective edits.
+
+The next implementation target is therefore a typed transformation batch, not
+more reference rendering. One block operation should apply both relationship
+changes governed by the contract: rename the resolved target and add the
+declared keyword to every resolved call edge. The scheduler should then return
+the remaining non-code obligations and run the gate. That would test whether a
+complete graph-derived transformation removes search and repeated reasoning;
+the present symbol-only executor does not.
