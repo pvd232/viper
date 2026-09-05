@@ -293,7 +293,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Experiment expansion](experiment-expansion.md) | Complete | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | In progress; Phase 13 implemented; Phase 15 planned | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Complete | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
-| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | In progress; Master Phase 16 implemented; Master Phase 17 planned | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
+| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Complete | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
 | [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
 The contracts share models. One contract owns each shared decision:
@@ -1981,17 +1981,17 @@ as derived search aids outside the evidence and duplicate-rejection rules.
 
 ### PairBlocks
 
-- [ ] Execute `P17-EKP-01` from the governing contract.
+- [x] Execute `P17-EKP-01` from the governing contract.
       <!-- pair-block: P17-EKP-01 -->
       <!-- pair-block-contract: P17-EKP-01 contract=experiment-knowledge-primitives.md -->
       <!-- implements: EKP-03 -->
       <!-- implements: EKP-04 -->
       <!-- verifies: EKP-03 -->
       <!-- verifies: EKP-04 -->
-      <!-- contract-implementation: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned owner=src/viper/catalog.py:KnowledgeCatalog -->
-      <!-- contract-verification: requirement=EKP-03 rule=knowledge.retrieval.complete state=planned test=tests/test_inspection.py:test_knowledge_retrieval_keeps_exact_indexes_authoritative -->
-      <!-- contract-implementation: requirement=EKP-04 rule=knowledge.public.complete state=planned owner=src/viper/api.py:search_primitives -->
-      <!-- contract-verification: requirement=EKP-04 rule=knowledge.public.complete state=planned test=tests/test_api.py:test_knowledge_operations_match_python_cli_and_mcp -->
+      <!-- contract-implementation: requirement=EKP-03 rule=knowledge.retrieval.complete state=implemented owner=src/viper/catalog.py:KnowledgeCatalog -->
+      <!-- contract-verification: requirement=EKP-03 rule=knowledge.retrieval.complete state=implemented test=tests/test_inspection.py:test_knowledge_retrieval_keeps_exact_indexes_authoritative -->
+      <!-- contract-implementation: requirement=EKP-04 rule=knowledge.public.complete state=implemented owner=src/viper/api.py:search_primitives -->
+      <!-- contract-verification: requirement=EKP-04 rule=knowledge.public.complete state=implemented test=tests/test_api.py:test_knowledge_operations_match_python_cli_and_mcp -->
 
 **Commit boundary:** `Search experiment knowledge through every public surface`
 
