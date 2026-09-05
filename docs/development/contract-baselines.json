@@ -148,7 +148,7 @@
         "EXP-02",
         "EXP-03"
       ],
-      "sha256": "d7dd8d209b69800411c76a5ff7b14bb4c5651ce78a143084cd40ce1497549ec0"
+      "sha256": "5d48e4e5bdbb9adbcd0da702c7889fcb8b8eed749054381a59eecf75e9d6fed9"
     },
     {
       "path": "docs/development/provenance-catalog-mcp.md",
