@@ -183,7 +183,13 @@ def test_codeql_distinguishes_attribute_reads_and_writes(tmp_path: Path) -> None
         "            self.value = value\n"
         "\n"
         "        def increment(self) -> None:\n"
-        "            self.value += 1\n",
+        "            self.value += 1\n"
+        "\n"
+        "def freeze_artifact(value: int) -> int:\n"
+        "    return value\n"
+        "\n"
+        "def freeze_stage(values: list[int]) -> dict[int, int]:\n"
+        "    return {value: freeze_artifact(value) for value in values}\n",
         encoding="utf-8",
     )
     snapshot = SourceSnapshot(
@@ -238,6 +244,12 @@ def test_codeql_distinguishes_attribute_reads_and_writes(tmp_path: Path) -> None
             ("src/example.py:Counter.read", "reads", "src/example.py:Counter.value")
         )
         == 1
+    )
+    assert any(
+        edge.source == "src/example.py:freeze_stage"
+        and edge.kind == "calls"
+        and edge.target == "src/example.py:freeze_artifact"
+        for edge in graph.edges
     )
     assert (
         relationships.count(

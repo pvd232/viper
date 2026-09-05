@@ -11,6 +11,23 @@ import Nodes
 import semmle.python.objects.ObjectAPI
 
 /**
+ * Find the nearest represented declaration that contains dependency evidence.
+ * This keeps calls inside comprehensions attached to their enclosing function.
+ */
+private predicate dependencySource(AstNode evidence, AstNode source) {
+  source.contains(evidence) and
+  exists(AstNode binding, string kind, string name |
+    declaration(source, binding, kind, name)
+  ) and
+  not exists(AstNode nearer, AstNode binding, string kind, string name |
+    nearer.contains(evidence) and
+    source.contains(nearer) and
+    source != nearer and
+    declaration(nearer, binding, kind, name)
+  )
+}
+
+/**
  * Select an assignment that defines a module or class variable represented by
  * SourceNode.
  */
@@ -73,7 +90,7 @@ private predicate directNameWrite(
 ) {
   exists(Name store, Variable variable |
     store = variable.getAStore() and
-    source = store.getScope() and
+    dependencySource(store, source) and
     canonicalAssignment(variable, target) and
     evidence = store
   )
@@ -87,7 +104,7 @@ private predicate directNameRead(
 ) {
   exists(Name load, Variable variable |
     load = variable.getALoad() and
-    source = load.getScope() and
+    dependencySource(load, source) and
     canonicalAssignment(variable, target) and
     evidence = load
   )
@@ -150,7 +167,7 @@ private predicate directAttributeRead(
     variable.getScope() = owner and
     variable.getId() = name and
     canonicalAssignment(variable, target) and
-    source = load.getScope() and
+    dependencySource(load, source) and
     evidence = load
   )
 }
@@ -194,7 +211,7 @@ private predicate directAttributeWrite(
     variable.getScope() = owner and
     variable.getId() = name and
     canonicalAssignment(variable, target) and
-    source = store.getScope() and
+    dependencySource(store, source) and
     evidence = store
   )
 }
@@ -207,7 +224,7 @@ predicate dependency(
 ) {
   exists(Call call, FunctionValue function |
     evidence = call and
-    source = call.getScope() and
+    dependencySource(call, source) and
     call.getFunc().(ExprWithPointsTo).pointsTo(function) and
     target = function.getScope() and
     kind = "calls"
@@ -215,7 +232,7 @@ predicate dependency(
   or
   exists(Call call, ClassValue cls |
     evidence = call and
-    source = call.getScope() and
+    dependencySource(call, source) and
     call.getFunc().(ExprWithPointsTo).pointsTo(cls) and
     target = cls.getScope() and
     kind = "constructs"

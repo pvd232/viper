@@ -360,6 +360,7 @@ def validate(
     root: Path,
     blocks: tuple[PairBlockId, ...],
     codeql: Path,
+    query_pack: Path,
     python: Path,
     cache: Path,
     results: Path,
@@ -401,7 +402,7 @@ def validate(
     )
     extraction, query, format = _specs(
         codeql,
-        root / "tools/codeql/viper-python-impact",
+        query_pack,
     )
     results.mkdir(parents=True, exist_ok=False)
     # Every planned edit starts from the clean commit.
@@ -413,7 +414,7 @@ def validate(
         query=query,
         format=format,
         executable=codeql,
-        query_pack=root / "tools/codeql/viper-python-impact",
+        query_pack=query_pack,
         cache=cache,
         artifacts=results / "baseline-codeql",
     )
@@ -591,7 +592,7 @@ def validate(
                 query=query,
                 format=format,
                 executable=codeql,
-                query_pack=root / "tools/codeql/viper-python-impact",
+                query_pack=query_pack,
                 cache=cache,
                 artifacts=results / "planned-codeql",
             )
@@ -640,6 +641,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None if codeql is None else Path(codeql),
     )
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
+    parser.add_argument(
+        "--query-pack",
+        type=Path,
+        default=ROOT / "tools/codeql/viper-python-impact",
+    )
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--cache", type=Path, default=ROOT / ".viper/codeql-cache")
     parser.add_argument("--results", type=Path, required=True)
@@ -653,6 +659,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         root=args.root.resolve(),
         blocks=tuple(args.block),
         codeql=args.codeql.resolve(),
+        query_pack=args.query_pack.resolve(),
         python=Path(os.path.abspath(args.python)),
         cache=args.cache.resolve(),
         results=args.results.resolve(),
