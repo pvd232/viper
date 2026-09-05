@@ -293,7 +293,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Experiment expansion](experiment-expansion.md) | Complete | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | In progress; Phase 13 implemented; Phase 15 planned | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Complete | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
-| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Audited; owner approval pending | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
+| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Planned; Master Phases 16 and 17 | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
 | [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
 The contracts share models. One contract owns each shared decision:
@@ -1956,106 +1956,15 @@ python -m pytest \
 controlled comparisons, diagnostic signatures, and evidence-backed journal
 assertions while preserving the immutable run records they cite.
 
-### 23.1 Ontology, targets, and assignments
+### PairBlocks
 
-- [ ] Add `src/viper/knowledge.py` with the exact identifier aliases,
-      `PrimitiveRef`, four `KnowledgeTarget` variants, `PrimitiveSpec`,
-      `OntologySpec`, three assignment variants, and `PrimitiveAssignment`.
+- [ ] Execute `P16-EKP-01` from the governing contract.
+      <!-- pair-block: P16-EKP-01 -->
+      <!-- pair-block-contract: P16-EKP-01 contract=experiment-knowledge-primitives.md -->
       <!-- implements: EKP-01 -->
-- [ ] Reject duplicate primitive IDs, unknown parents, parent cycles, unknown
-      target entities, unknown primitive references, invalid confidence, and a
-      mismatched review source.
-- [ ] Sort ontology primitives and parent IDs before canonical publication.
-- [ ] Resolve effective assignments in this order: newest valid review,
-      declared assignment, inferred assignment. Break equal timestamps by
-      immutable reference.
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Keep `ResolvedRunRef` inside every target. The immutable run
-reference supplies evidence; the catalog key supplies lookup.
-
-**Hint 2:** Put source-specific fields in the three assignment variants. Avoid
-one model with nullable classifier, reviewer, and confidence fields.
-
-**Hint 3:** Validate the complete ontology graph before publishing any bytes.
-
-</details>
-
-### 23.2 Modulations, effects, diagnostics, and journals
-
-- [ ] Add `PrimitiveChange`, `ComparisonContext`, `Modulation`,
-      `PairedEffect`, and `EffectEstimate` with the exact contract fields.
-- [ ] Store baseline and candidate assignment references in every primitive
-      change. Verify their ontology dimensions and target-run membership.
-- [ ] Add `RunComparisonIdentity` and validate every field named by
-      `ComparisonContext.matched`. Preserve separate baseline and candidate
-      values for fields changed by the modulation.
-- [ ] Orient each pair so positive means improvement. Recompute the mean,
-      sample standard error, and normal interval during publication and
-      verification.
-- [ ] Add `ImpactPolicy` and `ImpactAssessment`. Reject unordered thresholds,
-      insufficient pairs, excessive interval width, context mismatch, and a
-      changed impact label.
-- [ ] Add `DiagnosticComponent` and `DiagnosticSignature`. Sort components and
-      hash their canonical tuple.
-- [ ] Add `JournalEvidence` and `JournalAssertion`. Enforce review-field states
-      and require effect or impact evidence for an exclusion.
-- [ ] Add `KnowledgeRecordKind`, `KnowledgeRecord`, and `KnowledgeStore`
-      through `JournalAssertion`; add `knowledge()` in `viper.knowledge` and
-      the corresponding typed publish methods.
-      Validate every referenced record, serialize canonical JSON, call
-      `publish_resolved_files()`, and return `KnowledgePublicationResult`.
       <!-- implements: EKP-02 -->
-- [ ] Add `KnowledgeManifest`. Publish one record and one manifest, then replace
-      `.viper/knowledge/head.json` atomically under a repository lock.
-- [ ] Wrap every record in `KnowledgeRecordEnvelope`. Validate its
-      `record_kind` against the concrete value before publication and return
-      the envelope in catalog results.
-- [ ] Add explicit knowledge-manifest heads to `Catalog.refresh()`. Walk the
-      local and supplied chains, reject cycles and wrong record types, and
-      deduplicate immutable references.
-- [ ] Load the repository `StorageSettings` when `destination=None`. Accept an
-      explicit local or cloud destination for cross-run knowledge records and
-      keep that location in every returned reference.
-- [ ] Add verifier dispatch for every Master Phase 16 knowledge record. Failed
-      validation stops before immutable publication.
-
-<details>
-<summary>Hints</summary>
-
-**Hint 1:** Start the effect verifier by loading `PairedEffect.modulation`, then
-load both measurement references. The stored floats are claims to recompute.
-
-**Hint 2:** Use `statistics.NormalDist().inv_cdf()` for the interval quantile.
-One pair stores `None` for the standard error and interval.
-
-**Hint 3:** Journal text and journal vectors are different records. A new
-embedder creates another vector and preserves the reviewed assertion.
-
-</details>
-
-### 23.3 Focused proof
-
-- [ ] Add exact field, union, canonical-order, ontology graph, assignment
-      history, and JSON round-trip tests. <!-- verifies: EKP-01 -->
-
-```bash
-python -m pytest tests/test_protocol.py -q
-```
-
-- [ ] In `tests/test_verification_acceptance.py`, sever every modulation,
-      measurement, policy, diagnostic, and journal reference. Recompute every
-      numeric field and assert each failure occurs before publication.
+      <!-- verifies: EKP-01 -->
       <!-- verifies: EKP-02 -->
-- [ ] Publish two records under the repository lock. Rebuild from the local
-      head and the returned remote-portable manifest. Reject a cycle, missing
-      prior manifest, wrong record type, and interrupted head update.
-
-```bash
-python -m pytest tests/test_verification_acceptance.py -q
-```
 
 **Commit boundary:** `Record verified experiment knowledge`
 

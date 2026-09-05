@@ -623,6 +623,7 @@ def test_knowledge_contract_exposes_exact_queries_and_tool_sets() -> None:
     )
     assert [argument.arg for argument in refresh.args.kwonlyargs] == [
         "runs",
+        "benchmarks",
         "knowledge",
     ]
     knowledge = next(

@@ -7,7 +7,7 @@ what happened, and which evidence supports a written conclusion.
 
 ## 1. Status
 
-**Contract status:** audited; owner approval pending.
+**Contract status:** planned; Master Phases 16 and 17.
 
 These requirements bind the contract to the master checklist:
 
@@ -756,11 +756,12 @@ class KnowledgeCatalog:
     def similar(self, query: SimilarityQuery) -> SimilarityPage: ...
 
 
-# Phase 16 replaces the base Catalog.refresh() method with this signature.
+# Phase 16 extends the existing Catalog.refresh() method with knowledge heads.
 def refresh(
     self,
     *,
-    runs: tuple[ResolvedRunRef, ...] = (),
+    runs: tuple[CatalogRunSource, ...] = (),
+    benchmarks: tuple[CatalogBenchmarkSource, ...] = (),
     knowledge: tuple[ResolvedFileRef, ...] = (),
 ) -> CatalogRefreshResult: ...
 
@@ -1127,3 +1128,1165 @@ building reviewed evidence records before training a research policy.
 narrow example of iterative experiment selection informed by analysis and
 retrieved knowledge. VIPER first records the controlled comparisons and
 reviewed decisions needed to evaluate such selection in another domain.
+
+## 18. Phase 16 executable plan
+
+<!-- pair-block-definition: P16-EKP-01 -->
+```toml pair-block
+id = "P16-EKP-01"
+requirements = ["EKP-01", "EKP-02"]
+targets = [
+    "src/viper/knowledge.py:annotations",
+    "src/viper/knowledge.py:hashlib",
+    "src/viper/knowledge.py:json",
+    "src/viper/knowledge.py:os",
+    "src/viper/knowledge.py:tempfile",
+    "src/viper/knowledge.py:Iterator",
+    "src/viper/knowledge.py:contextmanager",
+    "src/viper/knowledge.py:Path",
+    "src/viper/knowledge.py:Annotated",
+    "src/viper/knowledge.py:Literal",
+    "src/viper/knowledge.py:Self",
+    "src/viper/knowledge.py:AwareDatetime",
+    "src/viper/knowledge.py:BaseModel",
+    "src/viper/knowledge.py:ConfigDict",
+    "src/viper/knowledge.py:Field",
+    "src/viper/knowledge.py:StringConstraints",
+    "src/viper/knowledge.py:TypeAdapter",
+    "src/viper/knowledge.py:model_validator",
+    "src/viper/knowledge.py:SHA256",
+    "src/viper/knowledge.py:ArtifactName",
+    "src/viper/knowledge.py:NonEmptyStr",
+    "src/viper/knowledge.py:ProtocolModel",
+    "src/viper/knowledge.py:MetricId",
+    "src/viper/knowledge.py:StageId",
+    "src/viper/knowledge.py:ResolvedArtifactPointerRef",
+    "src/viper/knowledge.py:ResolvedFileRef",
+    "src/viper/knowledge.py:ResolvedRunRef",
+    "src/viper/knowledge.py:serialize_document",
+    "src/viper/knowledge.py:StorageDestination",
+    "src/viper/knowledge.py:load_storage_settings",
+    "src/viper/knowledge.py:publish_resolved_files",
+    "src/viper/knowledge.py:PrimitiveId",
+    "src/viper/knowledge.py:OntologyId",
+    "src/viper/knowledge.py:OntologyVersion",
+    "src/viper/knowledge.py:AssertionId",
+    "src/viper/knowledge.py:PrimitiveRef",
+    "src/viper/knowledge.py:RunKnowledgeTarget",
+    "src/viper/knowledge.py:StageKnowledgeTarget",
+    "src/viper/knowledge.py:ArtifactKnowledgeTarget",
+    "src/viper/knowledge.py:MeasurementKnowledgeTarget",
+    "src/viper/knowledge.py:KnowledgeTarget",
+    "src/viper/knowledge.py:PrimitiveSpec",
+    "src/viper/knowledge.py:OntologySpec",
+    "src/viper/knowledge.py:DeclaredPrimitiveAssignment",
+    "src/viper/knowledge.py:InferredPrimitiveAssignment",
+    "src/viper/knowledge.py:ReviewedPrimitiveAssignment",
+    "src/viper/knowledge.py:PrimitiveAssignment",
+    "src/viper/knowledge.py:PrimitiveChange",
+    "src/viper/knowledge.py:ComparisonField",
+    "src/viper/knowledge.py:RunComparisonIdentity",
+    "src/viper/knowledge.py:ComparisonContext",
+    "src/viper/knowledge.py:Modulation",
+    "src/viper/knowledge.py:PairedEffect",
+    "src/viper/knowledge.py:EffectEstimate",
+    "src/viper/knowledge.py:ImpactPolicy",
+    "src/viper/knowledge.py:ImpactAssessment",
+    "src/viper/knowledge.py:DiagnosticComponent",
+    "src/viper/knowledge.py:diagnostic_component_sha256",
+    "src/viper/knowledge.py:DiagnosticSignature",
+    "src/viper/knowledge.py:JournalEvidenceKind",
+    "src/viper/knowledge.py:JournalEvidence",
+    "src/viper/knowledge.py:JournalAssertion",
+    "src/viper/knowledge.py:KnowledgeRecordKind",
+    "src/viper/knowledge.py:KnowledgeRecord",
+    "src/viper/knowledge.py:_RECORD_TYPES",
+    "src/viper/knowledge.py:KnowledgeRecordEnvelope",
+    "src/viper/knowledge.py:KnowledgeManifest",
+    "src/viper/knowledge.py:KnowledgePublicationResult",
+    "src/viper/knowledge.py:_repository_lock",
+    "src/viper/knowledge.py:KnowledgeStore",
+    "src/viper/knowledge.py:knowledge",
+    "src/viper/knowledge.py:__all__",
+    "tests/test_protocol.py:UTC",
+    "tests/test_protocol.py:datetime",
+    "tests/test_protocol.py:DeclaredPrimitiveAssignment",
+    "tests/test_protocol.py:OntologySpec",
+    "tests/test_protocol.py:PrimitiveRef",
+    "tests/test_protocol.py:PrimitiveSpec",
+    "tests/test_protocol.py:RunKnowledgeTarget",
+    "tests/test_protocol.py:LocalFileRef",
+    "tests/test_protocol.py:ResolvedRunRef",
+    "tests/test_protocol.py:SnapshotFileRef",
+    "tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance",
+    "tests/test_verification_acceptance.py:DeclaredPrimitiveAssignment",
+    "tests/test_verification_acceptance.py:KnowledgeManifest",
+    "tests/test_verification_acceptance.py:KnowledgeRecordEnvelope",
+    "tests/test_verification_acceptance.py:OntologySpec",
+    "tests/test_verification_acceptance.py:PrimitiveRef",
+    "tests/test_verification_acceptance.py:PrimitiveSpec",
+    "tests/test_verification_acceptance.py:RunKnowledgeTarget",
+    "tests/test_verification_acceptance.py:knowledge",
+    "tests/test_verification_acceptance.py:document_digest",
+    "tests/test_verification_acceptance.py:parse_yaml_bytes",
+    "tests/test_verification_acceptance.py:LocalArtifactStore",
+    "tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence",
+]
+tests = [
+    "tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance",
+    "tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence",
+]
+gate = "python -m pytest tests/test_protocol.py::test_knowledge_ontology_preserves_assignment_provenance tests/test_verification_acceptance.py::test_knowledge_records_preserve_immutable_evidence -q"
+depends_on = ["P15-PCM-01"]
+```
+
+**Context:** Phase 16 defines the immutable scientific evidence records and one
+repository-bound publication chain. The block keeps ontology assignments tied
+to exact run references and advances the local knowledge head only after both
+the record and its manifest have been published.
+
+## 19. Phase 16 ContractTargets
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:annotations -->
+```python contract-target
+from __future__ import annotations
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:hashlib -->
+```python contract-target
+import hashlib
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:json -->
+```python contract-target
+import json
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:os -->
+```python contract-target
+import os
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:tempfile -->
+```python contract-target
+import tempfile
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:Iterator -->
+```python contract-target
+from collections.abc import Iterator
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:contextmanager -->
+```python contract-target
+from contextlib import contextmanager
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:Path -->
+```python contract-target
+from pathlib import Path
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:Annotated -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:Literal -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:Self -->
+```python contract-target
+from typing import Annotated, Literal, Self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:AwareDatetime -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:BaseModel -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ConfigDict -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:Field -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:StringConstraints -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:TypeAdapter -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:model_validator -->
+```python contract-target
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    model_validator,
+)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:SHA256 -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ArtifactName -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:NonEmptyStr -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ProtocolModel -->
+```python contract-target
+from ._schema import SHA256, ArtifactName, NonEmptyStr, ProtocolModel
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:MetricId -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:StageId -->
+```python contract-target
+from .ids import MetricId, StageId
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ResolvedArtifactPointerRef -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ResolvedFileRef -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ResolvedRunRef -->
+```python contract-target
+from .references import (
+    ResolvedArtifactPointerRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:serialize_document -->
+```python contract-target
+from .serialization import serialize_document
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:StorageDestination -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:load_storage_settings -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:publish_resolved_files -->
+```python contract-target
+from .storage import (
+    StorageDestination,
+    load_storage_settings,
+    publish_resolved_files,
+)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:PrimitiveId -->
+```python contract-target
+PrimitiveId = Annotated[str, StringConstraints(min_length=1)]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:OntologyId -->
+```python contract-target
+OntologyId = Annotated[str, StringConstraints(min_length=1)]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:OntologyVersion -->
+```python contract-target
+OntologyVersion = Annotated[str, StringConstraints(min_length=1)]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:AssertionId -->
+```python contract-target
+AssertionId = Annotated[str, StringConstraints(min_length=1)]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:PrimitiveRef -->
+```python contract-target
+class PrimitiveRef(ProtocolModel):
+    """Select one term from an exact ontology version."""
+
+    ontology_id: OntologyId
+    ontology_version: OntologyVersion
+    primitive_id: PrimitiveId
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:RunKnowledgeTarget -->
+```python contract-target
+class RunKnowledgeTarget(ProtocolModel):
+    """Identify one immutable run."""
+
+    kind: Literal["run"] = "run"
+    run: ResolvedRunRef
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:StageKnowledgeTarget -->
+```python contract-target
+class StageKnowledgeTarget(ProtocolModel):
+    """Identify one stage inside an immutable run."""
+
+    kind: Literal["stage"] = "stage"
+    run: ResolvedRunRef
+    stage_id: StageId
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ArtifactKnowledgeTarget -->
+```python contract-target
+class ArtifactKnowledgeTarget(ProtocolModel):
+    """Identify one artifact inside an immutable run."""
+
+    kind: Literal["artifact"] = "artifact"
+    run: ResolvedRunRef
+    stage_id: StageId
+    artifact_name: ArtifactName
+    sha256: SHA256
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:MeasurementKnowledgeTarget -->
+```python contract-target
+class MeasurementKnowledgeTarget(ProtocolModel):
+    """Identify one immutable measurement."""
+
+    kind: Literal["measurement"] = "measurement"
+    run: ResolvedRunRef
+    stage_id: StageId
+    metric_id: MetricId
+    measurement: ResolvedFileRef
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:KnowledgeTarget -->
+```python contract-target
+KnowledgeTarget = Annotated[
+    RunKnowledgeTarget
+    | StageKnowledgeTarget
+    | ArtifactKnowledgeTarget
+    | MeasurementKnowledgeTarget,
+    Field(discriminator="kind"),
+]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:PrimitiveSpec -->
+```python contract-target
+class PrimitiveSpec(ProtocolModel):
+    """Define one term and its place in the ontology graph."""
+
+    primitive_id: PrimitiveId
+    dimension: NonEmptyStr
+    label: NonEmptyStr
+    definition: NonEmptyStr
+    parents: tuple[PrimitiveId, ...] = ()
+    examples: tuple[NonEmptyStr, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_order(self) -> Self:
+        """Require stable parent and example order without duplicates."""
+        if self.parents != tuple(sorted(set(self.parents))):
+            raise ValueError("primitive parents must be unique and sorted")
+        if self.examples != tuple(sorted(set(self.examples))):
+            raise ValueError("primitive examples must be unique and sorted")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:OntologySpec -->
+```python contract-target
+class OntologySpec(ProtocolModel):
+    """Publish one complete acyclic ontology version."""
+
+    schema_version: Literal[1] = 1
+    ontology_id: OntologyId
+    version: OntologyVersion
+    primitives: tuple[PrimitiveSpec, ...] = Field(min_length=1)
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_graph(self) -> Self:
+        """Require one sorted definition per term and an acyclic parent graph."""
+        identifiers = tuple(item.primitive_id for item in self.primitives)
+        if identifiers != tuple(sorted(set(identifiers))):
+            raise ValueError("ontology primitives must be unique and sorted")
+        known = set(identifiers)
+        if any(
+            parent not in known for item in self.primitives for parent in item.parents
+        ):
+            raise ValueError("ontology parent is undefined")
+        parents = {item.primitive_id: item.parents for item in self.primitives}
+
+        def visit(node: PrimitiveId, path: frozenset[PrimitiveId]) -> None:
+            if node in path:
+                raise ValueError("ontology parents contain a cycle")
+            for parent in parents[node]:
+                visit(parent, path | {node})
+
+        for identifier in identifiers:
+            visit(identifier, frozenset())
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:DeclaredPrimitiveAssignment -->
+```python contract-target
+class DeclaredPrimitiveAssignment(ProtocolModel):
+    """Record a primitive assigned by an identified author."""
+
+    origin: Literal["declared"] = "declared"
+    target: KnowledgeTarget
+    primitive: PrimitiveRef
+    assigned_by: NonEmptyStr
+    assigned_at: AwareDatetime
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:InferredPrimitiveAssignment -->
+```python contract-target
+class InferredPrimitiveAssignment(ProtocolModel):
+    """Record a primitive assigned by an immutable classifier."""
+
+    origin: Literal["inferred"] = "inferred"
+    target: KnowledgeTarget
+    primitive: PrimitiveRef
+    classifier: ResolvedArtifactPointerRef
+    confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    assigned_at: AwareDatetime
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ReviewedPrimitiveAssignment -->
+```python contract-target
+class ReviewedPrimitiveAssignment(ProtocolModel):
+    """Record a human decision about an earlier assignment."""
+
+    origin: Literal["reviewed"] = "reviewed"
+    source_assignment: ResolvedFileRef
+    target: KnowledgeTarget
+    primitive: PrimitiveRef
+    decision: Literal["accepted", "corrected"]
+    reviewed_by: NonEmptyStr
+    reviewed_at: AwareDatetime
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:PrimitiveAssignment -->
+```python contract-target
+PrimitiveAssignment = Annotated[
+    DeclaredPrimitiveAssignment
+    | InferredPrimitiveAssignment
+    | ReviewedPrimitiveAssignment,
+    Field(discriminator="origin"),
+]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:PrimitiveChange -->
+```python contract-target
+class PrimitiveChange(ProtocolModel):
+    """Identify the assignment transition in one ontology dimension."""
+
+    dimension: NonEmptyStr
+    baseline_assignment: ResolvedFileRef | None = None
+    candidate_assignment: ResolvedFileRef | None = None
+
+    @model_validator(mode="after")
+    def validate_transition(self) -> Self:
+        """Require an actual assignment addition, removal, or replacement."""
+        if self.baseline_assignment is None and self.candidate_assignment is None:
+            raise ValueError("primitive change requires an assignment")
+        if self.baseline_assignment == self.candidate_assignment:
+            raise ValueError("primitive change assignments must differ")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ComparisonField -->
+```python contract-target
+ComparisonField = Literal[
+    "inputs",
+    "split",
+    "eval_spec",
+    "env",
+    "reproducibility",
+    "compute",
+]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:RunComparisonIdentity -->
+```python contract-target
+class RunComparisonIdentity(ProtocolModel):
+    """Store the exact fields that can be held constant between runs."""
+
+    input_sha256: tuple[SHA256, ...] = Field(min_length=1)
+    split_sha256: SHA256
+    eval_spec_sha256: SHA256
+    env_sha256: SHA256
+    reproducibility_sha256: SHA256
+    compute_sha256: SHA256
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ComparisonContext -->
+```python contract-target
+class ComparisonContext(ProtocolModel):
+    """Declare which run identities a modulation holds constant."""
+
+    baseline: RunComparisonIdentity
+    candidate: RunComparisonIdentity
+    matched: tuple[ComparisonField, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_matches(self) -> Self:
+        """Require every declared control to have the same exact value."""
+        if self.matched != tuple(sorted(set(self.matched))):
+            raise ValueError("matched fields must be unique and sorted")
+        field_names = {
+            "inputs": "input_sha256",
+            "split": "split_sha256",
+            "eval_spec": "eval_spec_sha256",
+            "env": "env_sha256",
+            "reproducibility": "reproducibility_sha256",
+            "compute": "compute_sha256",
+        }
+        for field in self.matched:
+            name = field_names[field]
+            if getattr(self.baseline, name) != getattr(self.candidate, name):
+                raise ValueError(f"matched comparison field differs: {field}")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:Modulation -->
+```python contract-target
+class Modulation(ProtocolModel):
+    """Compare two runs and enumerate their scientific changes."""
+
+    schema_version: Literal[1] = 1
+    baseline_run: ResolvedRunRef
+    candidate_run: ResolvedRunRef
+    changes: tuple[PrimitiveChange, ...] = Field(min_length=1)
+    context: ComparisonContext
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_changes(self) -> Self:
+        """Require one change per dimension in stable order."""
+        dimensions = tuple(item.dimension for item in self.changes)
+        if dimensions != tuple(sorted(set(dimensions))):
+            raise ValueError("modulation changes must be unique and sorted")
+        if self.baseline_run == self.candidate_run:
+            raise ValueError("modulation runs must differ")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:PairedEffect -->
+```python contract-target
+class PairedEffect(ProtocolModel):
+    """Store one oriented measurement difference for a run pair."""
+
+    modulation: ResolvedFileRef
+    baseline_measurement: ResolvedFileRef
+    candidate_measurement: ResolvedFileRef
+    baseline_value: float = Field(allow_inf_nan=False)
+    candidate_value: float = Field(allow_inf_nan=False)
+    improvement: float = Field(allow_inf_nan=False)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:EffectEstimate -->
+```python contract-target
+class EffectEstimate(ProtocolModel):
+    """Store a descriptive estimate across matched run pairs."""
+
+    schema_version: Literal[1] = 1
+    metric_id: MetricId
+    direction: Literal["min", "max"]
+    pairs: tuple[PairedEffect, ...] = Field(min_length=1)
+    mean_improvement: float = Field(allow_inf_nan=False)
+    standard_error: float | None = Field(default=None, ge=0.0, allow_inf_nan=False)
+    confidence: float = Field(default=0.95, gt=0.0, lt=1.0)
+    interval_low: float | None = Field(default=None, allow_inf_nan=False)
+    interval_high: float | None = Field(default=None, allow_inf_nan=False)
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_summary(self) -> Self:
+        """Require stored improvements and their mean to match the pair values."""
+        sign = 1.0 if self.direction == "max" else -1.0
+        expected = tuple(
+            sign * (pair.candidate_value - pair.baseline_value) for pair in self.pairs
+        )
+        if any(
+            abs(pair.improvement - value) > 1e-12
+            for pair, value in zip(self.pairs, expected)
+        ):
+            raise ValueError("paired improvement does not match its measurements")
+        if abs(self.mean_improvement - sum(expected) / len(expected)) > 1e-12:
+            raise ValueError("mean improvement does not match its pairs")
+        interval = (self.interval_low, self.interval_high)
+        if len(self.pairs) == 1 and (
+            self.standard_error is not None or interval != (None, None)
+        ):
+            raise ValueError("one pair cannot report an interval")
+        if len(self.pairs) > 1 and (self.standard_error is None or None in interval):
+            raise ValueError("several pairs require an interval")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ImpactPolicy -->
+```python contract-target
+class ImpactPolicy(ProtocolModel):
+    """Define reproducible thresholds for one qualitative impact label."""
+
+    schema_version: Literal[1] = 1
+    policy_id: NonEmptyStr
+    version: NonEmptyStr
+    metric_id: MetricId
+    context_sha256: SHA256
+    minimum_pairs: int = Field(ge=2)
+    maximum_interval_width: float = Field(gt=0.0, allow_inf_nan=False)
+    low_threshold: float = Field(gt=0.0, allow_inf_nan=False)
+    medium_threshold: float = Field(gt=0.0, allow_inf_nan=False)
+    high_threshold: float = Field(gt=0.0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_thresholds(self) -> Self:
+        """Require increasing low, medium, and high thresholds."""
+        if not self.low_threshold < self.medium_threshold < self.high_threshold:
+            raise ValueError("impact thresholds must increase")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:ImpactAssessment -->
+```python contract-target
+class ImpactAssessment(ProtocolModel):
+    """Apply one immutable policy to one immutable effect estimate."""
+
+    schema_version: Literal[1] = 1
+    effect: ResolvedFileRef
+    policy: ResolvedFileRef
+    impact: Literal["negative", "none", "low", "medium", "high"]
+    assessed_at: AwareDatetime
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:DiagnosticComponent -->
+```python contract-target
+class DiagnosticComponent(ProtocolModel):
+    """Bind one metric value to its immutable measurement."""
+
+    metric_id: MetricId
+    measurement: ResolvedFileRef
+    value: float = Field(allow_inf_nan=False)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:diagnostic_component_sha256 -->
+```python contract-target
+def diagnostic_component_sha256(components: tuple[DiagnosticComponent, ...]) -> str:
+    """Hash one ordered diagnostic component tuple."""
+    payload = [component.model_dump(mode="json") for component in components]
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(raw).hexdigest()
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:DiagnosticSignature -->
+```python contract-target
+class DiagnosticSignature(ProtocolModel):
+    """Store a deterministic metric signature for one stage."""
+
+    schema_version: Literal[1] = 1
+    run: ResolvedRunRef
+    stage_id: StageId
+    components: tuple[DiagnosticComponent, ...] = Field(min_length=1)
+    component_sha256: SHA256
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_components(self) -> Self:
+        """Require stable component order and the exact component digest."""
+        keys = tuple(
+            (str(item.metric_id), item.measurement.sha256) for item in self.components
+        )
+        if keys != tuple(sorted(set(keys))):
+            raise ValueError("diagnostic components must be unique and sorted")
+        if self.component_sha256 != diagnostic_component_sha256(self.components):
+            raise ValueError("diagnostic component digest differs")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:JournalEvidenceKind -->
+```python contract-target
+JournalEvidenceKind = Literal[
+    "run",
+    "artifact",
+    "measurement",
+    "benchmark",
+    "assignment",
+    "modulation",
+    "effect",
+    "impact",
+    "diagnostic",
+    "retrieval_judgment",
+]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:JournalEvidence -->
+```python contract-target
+class JournalEvidence(ProtocolModel):
+    """Cite one immutable record supporting a journal assertion."""
+
+    kind: JournalEvidenceKind
+    reference: ResolvedFileRef
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:JournalAssertion -->
+```python contract-target
+class JournalAssertion(ProtocolModel):
+    """State one bounded claim and its immutable evidence."""
+
+    schema_version: Literal[1] = 1
+    assertion_id: AssertionId
+    kind: Literal["observation", "hypothesis", "decision", "exclusion"]
+    text: NonEmptyStr
+    evidence: tuple[JournalEvidence, ...] = Field(min_length=1)
+    status: Literal["proposed", "reviewed", "rejected"]
+    authored_by: NonEmptyStr
+    created_at: AwareDatetime
+    reviewed_by: NonEmptyStr | None = None
+    reviewed_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_review(self) -> Self:
+        """Keep review identity and exclusion evidence consistent with status."""
+        reviewed = self.reviewed_by is not None and self.reviewed_at is not None
+        if (self.reviewed_by is None) != (self.reviewed_at is None):
+            raise ValueError("journal review fields must appear together")
+        if self.status == "proposed" and reviewed:
+            raise ValueError("proposed journal assertion cannot be reviewed")
+        if self.status != "proposed" and not reviewed:
+            raise ValueError("terminal journal assertion requires a reviewer")
+        if self.kind == "exclusion" and not any(
+            item.kind in {"effect", "impact"} for item in self.evidence
+        ):
+            raise ValueError("exclusion requires effect or impact evidence")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:KnowledgeRecordKind -->
+```python contract-target
+KnowledgeRecordKind = Literal[
+    "ontology",
+    "assignment",
+    "modulation",
+    "effect",
+    "impact_policy",
+    "impact",
+    "diagnostic",
+    "assertion",
+]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:KnowledgeRecord -->
+```python contract-target
+KnowledgeRecord = (
+    OntologySpec
+    | DeclaredPrimitiveAssignment
+    | InferredPrimitiveAssignment
+    | ReviewedPrimitiveAssignment
+    | Modulation
+    | EffectEstimate
+    | ImpactPolicy
+    | ImpactAssessment
+    | DiagnosticSignature
+    | JournalAssertion
+)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:_RECORD_TYPES -->
+```python contract-target
+_RECORD_TYPES: dict[KnowledgeRecordKind, type[ProtocolModel]] = {
+    "ontology": OntologySpec,
+    "assignment": DeclaredPrimitiveAssignment,
+    "modulation": Modulation,
+    "effect": EffectEstimate,
+    "impact_policy": ImpactPolicy,
+    "impact": ImpactAssessment,
+    "diagnostic": DiagnosticSignature,
+    "assertion": JournalAssertion,
+}
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:KnowledgeRecordEnvelope -->
+```python contract-target
+class KnowledgeRecordEnvelope(ProtocolModel):
+    """Pair each record with the discriminator stored on disk."""
+
+    schema_version: Literal[1] = 1
+    record_kind: KnowledgeRecordKind
+    value: KnowledgeRecord
+
+    @model_validator(mode="after")
+    def validate_kind(self) -> Self:
+        """Require the discriminator to name the concrete record type."""
+        if self.record_kind == "assignment":
+            valid = isinstance(
+                self.value,
+                (
+                    DeclaredPrimitiveAssignment,
+                    InferredPrimitiveAssignment,
+                    ReviewedPrimitiveAssignment,
+                ),
+            )
+        else:
+            valid = isinstance(self.value, _RECORD_TYPES[self.record_kind])
+        if not valid:
+            raise ValueError("knowledge record kind differs from its value")
+        return self
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:KnowledgeManifest -->
+```python contract-target
+class KnowledgeManifest(ProtocolModel):
+    """Link one published record to the preceding knowledge manifest."""
+
+    schema_version: Literal[1] = 1
+    record: ResolvedFileRef
+    previous: ResolvedFileRef | None = None
+    published_at: AwareDatetime
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:KnowledgePublicationResult -->
+```python contract-target
+class KnowledgePublicationResult(BaseModel):
+    """Return the immutable record and manifest references."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    record: ResolvedFileRef
+    manifest: ResolvedFileRef
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:_repository_lock -->
+```python contract-target
+def _repository_lock(root: Path) -> Iterator[None]:
+    """Reject concurrent knowledge-head writers with one exclusive lock file."""
+    path = root / ".viper/knowledge/head.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as error:
+        raise RuntimeError("knowledge head is locked by another publisher") from error
+    os.close(descriptor)
+    try:
+        yield
+    finally:
+        path.unlink(missing_ok=True)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:KnowledgeStore -->
+```python contract-target
+class KnowledgeStore:
+    """Publish knowledge records and one immutable manifest chain."""
+
+    def __init__(self, root: Path, destination: StorageDestination):
+        """Bind publication to one root and storage destination."""
+        self.root = root.resolve(strict=True)
+        self.destination = destination
+        self.head = self.root / ".viper/knowledge/head.json"
+
+    def _previous(self) -> ResolvedFileRef | None:
+        """Load the current manifest reference when a head exists."""
+        if not self.head.is_file():
+            return None
+        return TypeAdapter(ResolvedFileRef).validate_json(self.head.read_bytes())
+
+    def _replace_head(self, reference: ResolvedFileRef) -> None:
+        """Atomically replace the local discovery pointer."""
+        self.head.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, name = tempfile.mkstemp(
+            dir=self.head.parent,
+            prefix=".head.",
+        )
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(reference.model_dump_json().encode())
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.head)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _publish(
+        self,
+        kind: KnowledgeRecordKind,
+        value: KnowledgeRecord,
+        published_at: AwareDatetime,
+    ) -> KnowledgePublicationResult:
+        """Publish one record, append its manifest, and advance the head."""
+        envelope = KnowledgeRecordEnvelope(record_kind=kind, value=value)
+        raw = serialize_document(envelope)
+        record_path = f"knowledge/records/{hashlib.sha256(raw).hexdigest()}.yaml"
+        with _repository_lock(self.root):
+            record = publish_resolved_files(
+                self.root,
+                self.destination,
+                {record_path: raw},
+            )[record_path]
+            manifest = KnowledgeManifest(
+                record=record,
+                previous=self._previous(),
+                published_at=published_at,
+            )
+            manifest_raw = serialize_document(manifest)
+            manifest_path = (
+                f"knowledge/manifests/{hashlib.sha256(manifest_raw).hexdigest()}.yaml"
+            )
+            manifest_ref = publish_resolved_files(
+                self.root,
+                self.destination,
+                {manifest_path: manifest_raw},
+            )[manifest_path]
+            self._replace_head(manifest_ref)
+        return KnowledgePublicationResult(record=record, manifest=manifest_ref)
+
+    def publish_ontology(self, value: OntologySpec) -> KnowledgePublicationResult:
+        """Publish one ontology version."""
+        return self._publish("ontology", value, value.created_at)
+
+    def publish_assignment(
+        self, value: PrimitiveAssignment
+    ) -> KnowledgePublicationResult:
+        """Publish one declared, inferred, or reviewed assignment."""
+        timestamp = (
+            value.reviewed_at
+            if isinstance(value, ReviewedPrimitiveAssignment)
+            else value.assigned_at
+        )
+        return self._publish("assignment", value, timestamp)
+
+    def publish_modulation(self, value: Modulation) -> KnowledgePublicationResult:
+        """Publish one controlled run comparison."""
+        return self._publish("modulation", value, value.created_at)
+
+    def publish_effect(self, value: EffectEstimate) -> KnowledgePublicationResult:
+        """Publish one paired effect estimate."""
+        return self._publish("effect", value, value.created_at)
+
+    def publish_impact_policy(
+        self, value: ImpactPolicy, *, published_at: AwareDatetime
+    ) -> KnowledgePublicationResult:
+        """Publish one qualitative impact policy."""
+        return self._publish("impact_policy", value, published_at)
+
+    def publish_impact(self, value: ImpactAssessment) -> KnowledgePublicationResult:
+        """Publish one policy-backed impact assessment."""
+        return self._publish("impact", value, value.assessed_at)
+
+    def publish_signature(
+        self, value: DiagnosticSignature
+    ) -> KnowledgePublicationResult:
+        """Publish one deterministic diagnostic signature."""
+        return self._publish("diagnostic", value, value.created_at)
+
+    def publish_assertion(self, value: JournalAssertion) -> KnowledgePublicationResult:
+        """Publish one evidence-backed journal assertion."""
+        return self._publish("assertion", value, value.created_at)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:knowledge -->
+```python contract-target
+def knowledge(
+    *,
+    root: Path | None = None,
+    destination: StorageDestination | None = None,
+) -> KnowledgeStore:
+    """Open the knowledge store for one repository."""
+    project_root = Path.cwd().resolve() if root is None else root.resolve(strict=True)
+    selected = destination or load_storage_settings(project_root).destination
+    return KnowledgeStore(project_root, selected)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:__all__ -->
+```python contract-target
+__all__ = [
+    "ArtifactKnowledgeTarget",
+    "AssertionId",
+    "ComparisonContext",
+    "ComparisonField",
+    "DeclaredPrimitiveAssignment",
+    "DiagnosticComponent",
+    "DiagnosticSignature",
+    "EffectEstimate",
+    "ImpactAssessment",
+    "ImpactPolicy",
+    "InferredPrimitiveAssignment",
+    "JournalAssertion",
+    "JournalEvidence",
+    "JournalEvidenceKind",
+    "KnowledgeManifest",
+    "KnowledgePublicationResult",
+    "KnowledgeRecord",
+    "KnowledgeRecordEnvelope",
+    "KnowledgeRecordKind",
+    "KnowledgeStore",
+    "KnowledgeTarget",
+    "MeasurementKnowledgeTarget",
+    "Modulation",
+    "OntologyId",
+    "OntologySpec",
+    "OntologyVersion",
+    "PairedEffect",
+    "PrimitiveAssignment",
+    "PrimitiveChange",
+    "PrimitiveId",
+    "PrimitiveRef",
+    "PrimitiveSpec",
+    "ReviewedPrimitiveAssignment",
+    "RunComparisonIdentity",
+    "RunKnowledgeTarget",
+    "StageKnowledgeTarget",
+    "diagnostic_component_sha256",
+    "knowledge",
+]
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:UTC -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:datetime -->
+```python contract-target
+from datetime import UTC, datetime
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:DeclaredPrimitiveAssignment -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:OntologySpec -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:PrimitiveRef -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:PrimitiveSpec -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:RunKnowledgeTarget -->
+```python contract-target
+from viper.knowledge import (
+    DeclaredPrimitiveAssignment,
+    OntologySpec,
+    PrimitiveRef,
+    PrimitiveSpec,
+    RunKnowledgeTarget,
+)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:LocalFileRef -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:ResolvedRunRef -->
+```python contract-target
+from viper.references import LocalFileRef, ResolvedRunRef, SnapshotFileRef
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=update target=tests/test_protocol.py:SnapshotFileRef -->
+```python contract-target
+from viper.references import LocalFileRef, ResolvedRunRef, SnapshotFileRef
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance -->
+```python contract-target
+def test_knowledge_ontology_preserves_assignment_provenance() -> None:
+    """Keep each assignment bound to one ontology version and immutable run."""
+    ontology = OntologySpec(
+        ontology_id="viper-core",
+        version="1",
+        primitives=(
+            PrimitiveSpec(
+                primitive_id="gated-recurrence",
+                dimension="model-family",
+                label="Gated recurrence",
+                definition="A recurrent state transition with learned gates.",
+            ),
+        ),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    run = ResolvedRunRef(
+        sha256=SHA_A,
+        bytes=10,
+        stored_at=LocalFileRef(commit=SHA_B, path="runs/final.yaml"),
+    )
+    assignment = DeclaredPrimitiveAssignment(
+        target=RunKnowledgeTarget(run=run),
+        primitive=PrimitiveRef(
+            ontology_id=ontology.ontology_id,
+            ontology_version=ontology.version,
+            primitive_id=ontology.primitives[0].primitive_id,
+        ),
+        assigned_by="researcher",
+        assigned_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+
+    restored = DeclaredPrimitiveAssignment.model_validate_json(
+        assignment.model_dump_json()
+    )
+    assert restored == assignment
+    assert restored.target.run == run
+    assert restored.primitive.ontology_version == ontology.version
+
+    with pytest.raises(ValueError, match="parent is undefined"):
+        OntologySpec(
+            ontology_id="viper-core",
+            version="broken",
+            primitives=(
+                PrimitiveSpec(
+                    primitive_id="child",
+                    dimension="model-family",
+                    label="Child",
+                    definition="Broken parent reference.",
+                    parents=("missing",),
+                ),
+            ),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:DeclaredPrimitiveAssignment -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:KnowledgeManifest -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:KnowledgeRecordEnvelope -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:OntologySpec -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:PrimitiveRef -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:PrimitiveSpec -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:RunKnowledgeTarget -->
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:knowledge -->
+```python contract-target
+from viper.knowledge import (
+    DeclaredPrimitiveAssignment,
+    KnowledgeManifest,
+    KnowledgeRecordEnvelope,
+    OntologySpec,
+    PrimitiveRef,
+    PrimitiveSpec,
+    RunKnowledgeTarget,
+    knowledge,
+)
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=update target=tests/test_verification_acceptance.py:document_digest -->
+```python contract-target
+from viper.serialization import document_digest, parse_yaml_bytes
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:parse_yaml_bytes -->
+```python contract-target
+from viper.serialization import document_digest, parse_yaml_bytes
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:LocalArtifactStore -->
+```python contract-target
+from viper.storage import LocalArtifactStore
+```
+
+<!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence -->
+```python contract-target
+def test_knowledge_records_preserve_immutable_evidence(tmp_path: Path) -> None:
+    """Publish records and an immutable manifest chain before advancing the head."""
+    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    store = knowledge(root=tmp_path)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    ontology = OntologySpec(
+        ontology_id="viper-core",
+        version="1",
+        primitives=(
+            PrimitiveSpec(
+                primitive_id="gated-recurrence",
+                dimension="model-family",
+                label="Gated recurrence",
+                definition="A recurrent state transition with learned gates.",
+            ),
+        ),
+        created_at=created,
+    )
+    first = store.publish_ontology(ontology)
+    run = ResolvedRunRef(
+        sha256="a" * 64,
+        bytes=10,
+        stored_at=LocalFileRef(commit="b" * 64, path="runs/final.yaml"),
+    )
+    assignment = DeclaredPrimitiveAssignment(
+        target=RunKnowledgeTarget(run=run),
+        primitive=PrimitiveRef(
+            ontology_id=ontology.ontology_id,
+            ontology_version=ontology.version,
+            primitive_id=ontology.primitives[0].primitive_id,
+        ),
+        assigned_by="researcher",
+        assigned_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    second = store.publish_assignment(assignment)
+
+    local = LocalArtifactStore(tmp_path)
+    first_record = KnowledgeRecordEnvelope.model_validate(
+        parse_yaml_bytes(local.fetch(first.record.stored_at))
+    )
+    second_manifest = KnowledgeManifest.model_validate(
+        parse_yaml_bytes(local.fetch(second.manifest.stored_at))
+    )
+    assert first_record.record_kind == "ontology"
+    assert first_record.value == ontology
+    assert second_manifest.record == second.record
+    assert second_manifest.previous == first.manifest
+    stored_head = ResolvedFileRef.model_validate_json(store.head.read_bytes())
+    assert stored_head == second.manifest
+
+    with pytest.raises(ValueError, match="kind differs"):
+        KnowledgeRecordEnvelope(record_kind="impact", value=ontology)
+```
