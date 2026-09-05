@@ -86,6 +86,7 @@ def test_execution_namespace_owns_only_operations() -> None:
         "retry",
         "restore",
         "run",
+        "run_many",
     )
     assert issubclass(BenchmarkExecutionError, RuntimeError)
     assert issubclass(RunError, RuntimeError)
@@ -95,6 +96,7 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert callable(execution.retry)
     assert callable(execution.benchmark)
     assert callable(execution.restore)
+    assert callable(execution.run_many)
 
 
 def test_stage_interface_uses_parsimonious_names() -> None:

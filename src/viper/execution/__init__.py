@@ -11,6 +11,10 @@ from ._restore import restore
 from ._run import retry as _retry
 from ._run import run as _run
 from .results import BenchmarkExecutionResult, RunResult
+from ._batch import run_many as _run_many
+
+from .results import ExperimentExecutionResult
+
 
 
 def run(
@@ -77,9 +81,27 @@ def benchmark(
     )
 
 
+def run_many(
+    repository_root: Path,
+    run_spec_paths: tuple[Path, ...],
+    *,
+    max_concurrency: int = 1,
+    timeout_seconds: float | None = None,
+    stop_on_failure: bool = False,
+) -> ExperimentExecutionResult:
+    """Execute several frozen plans with bounded local concurrency."""
+    return _run_many(
+        repository_root,
+        run_spec_paths,
+        max_concurrency=max_concurrency,
+        timeout_seconds=timeout_seconds,
+        stop_on_failure=stop_on_failure,
+    )
+
 __all__ = [
     "benchmark",
     "retry",
     "restore",
     "run",
+    "run_many",
 ]

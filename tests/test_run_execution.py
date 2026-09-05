@@ -98,6 +98,12 @@ from viper.storage import LocalArtifactStore
 from viper.verification import verify_run_result
 from viper.verification.models import VerificationError, VerificationPolicy
 from viper.workspace import AttemptWorkspace, captured_input_path
+import time
+
+from viper.execution import _batch
+
+from viper.execution.results import RunResult
+
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
@@ -1012,3 +1018,68 @@ def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
         line not in exception_lines for line in call_lines["verify_captured_inputs"]
     )
     assert "for reference in captured_inputs.values()" in source
+def test_run_many_retains_one_result_per_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bound active runs and preserve success, failure, and skip positions."""
+    paths = tuple(tmp_path / f"{name}.yaml" for name in ("first", "second", "third"))
+    run_ids = (
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+    )
+    specs = {
+        path: RunSpec.model_construct(
+            run_id=run_id,
+            variant_id="baseline",
+            replicate_id=f"replicate_{index}",
+        )
+        for index, (path, run_id) in enumerate(zip(paths, run_ids, strict=True), 1)
+    }
+    monkeypatch.setattr(
+        _batch,
+        "_load_run_spec",
+        lambda root, path: (path, specs[path]),
+    )
+    lock = threading.Lock()
+    active = 0
+    maximum = 0
+
+    def execute(root: Path, path: Path, **kwargs) -> RunResult:
+        nonlocal active, maximum
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        time.sleep(0.02 if path == paths[0] else 0.01)
+        with lock:
+            active -= 1
+        if path == paths[1]:
+            raise RunError("planned failure")
+        return RunResult.model_construct(
+            resolved_run_path=path.with_suffix(".resolved.yaml"),
+            journal_path=path.with_suffix(".jsonl"),
+        )
+
+    monkeypatch.setattr(_batch, "execute_run", execute)
+
+    continued = _batch.run_many(tmp_path, paths, max_concurrency=2)
+    assert maximum == 2
+    assert tuple(item.status for item in continued.runs) == (
+        "succeeded",
+        "failed",
+        "succeeded",
+    )
+    assert tuple(item.run_spec_path for item in continued.runs) == paths
+
+    stopped = _batch.run_many(
+        tmp_path,
+        paths,
+        max_concurrency=1,
+        stop_on_failure=True,
+    )
+    assert tuple(item.status for item in stopped.runs) == (
+        "succeeded",
+        "failed",
+        "skipped",
+    )
