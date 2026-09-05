@@ -365,7 +365,6 @@ unstarted run from starting. Python, typed API, and CLI calls reject
 | `src/viper/execution/__init__.py` | Export `run_many()`. |
 | `src/viper/api.py` | Add typed batch request and success models plus the `run_many` operation. |
 | `src/viper/cli.py` | Add one batch command that accepts a list of frozen run-spec paths. |
-| `src/viper/__init__.py` | Export `expand` and the aggregate result types. |
 | `tests/test_authoring.py` | Cover ordering, filters, exact run-ID maps, and duplicate rejection. |
 | `tests/test_run_execution.py` | Cover bounded concurrency, order, continuation, and stop behavior. |
 | `tests/test_api.py` | Require equal Python, typed-operation, and CLI result shapes. |
@@ -476,6 +475,44 @@ depends_on = ["P12-EXP-01"]
 **Context:** A batch result must retain every input even when completion order
 differs or a run fails. This block keeps at most `max_concurrency` futures in
 flight and stores each outcome at the input path's original index.
+
+<!-- pair-block-definition: P12-EXP-03 -->
+```toml pair-block
+id = "P12-EXP-03"
+requirements = ["EXP-03"]
+targets = [
+    "src/viper/api.py:execute_many",
+    "src/viper/api.py:ExperimentExecutionResult",
+    "src/viper/api.py:OperationName",
+    "src/viper/api.py:RunManyRequest",
+    "src/viper/api.py:RunManySuccess",
+    "src/viper/api.py:SCHEMA_REGISTRY",
+    "src/viper/api.py:OPERATIONS",
+    "src/viper/api.py:run_many",
+    "src/viper/api.py:REQUEST_REGISTRY",
+    "src/viper/api.py:HANDLER_REGISTRY",
+    "src/viper/api.py:__all__",
+    "src/viper/cli.py:build_parser",
+    "src/viper/cli.py:_operation_and_payload",
+    "src/viper/cli.py:_human_success",
+    "tests/test_api.py:RunManyRequest",
+    "tests/test_api.py:run_many",
+    "tests/test_api.py:ExperimentExecutionResult",
+    "tests/test_api.py:ExperimentRunResult",
+    "tests/test_api.py:test_run_many_result_matches_python_api_and_cli",
+]
+tests = [
+    "tests/test_api.py:test_run_many_result_matches_python_api_and_cli",
+    "tests/test_public_api.py:test_api_exports_and_registries_are_complete",
+    "tests/test_public_api.py:test_api_operations_are_locally_defined",
+]
+gate = "python -m pytest tests/test_api.py::test_run_many_result_matches_python_api_and_cli tests/test_public_api.py::test_api_exports_and_registries_are_complete tests/test_public_api.py::test_api_operations_are_locally_defined -q"
+depends_on = ["P12-EXP-02"]
+```
+
+**Context:** The Python API, typed operation, and CLI must all invoke the same
+batch scheduler and return the same `ExperimentExecutionResult`. This block
+adds those adapters and keeps their registries synchronized.
 
 ## 13. ContractTarget
 
@@ -1131,4 +1168,781 @@ def test_execution_namespace_owns_only_operations() -> None:
     assert callable(execution.benchmark)
     assert callable(execution.restore)
     assert callable(execution.run_many)
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=src/viper/api.py:execute_many -->
+```python contract-target
+from .execution._batch import run_many as execute_many
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=src/viper/api.py:ExperimentExecutionResult -->
+```python contract-target
+from .execution.results import ExperimentExecutionResult
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/api.py:OperationName -->
+```python contract-target
+OperationName = Literal[
+    "validate_stage",
+    "validate_resolved_stage",
+    "validate_run_spec",
+    "freeze_run",
+    "preflight",
+    "execute_stage",
+    "run",
+    "run_many",
+    "retry",
+    "execute_benchmark",
+    "restore",
+    "plan_diff",
+    "lineage",
+    "status",
+    "compare_runs",
+    "verify_run",
+    "verify_benchmark",
+    "verify_pointer",
+    "get_schema",
+    "get_capabilities",
+    "init_project",
+    "explain_impact",
+    "analyze_impact",
+]
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=src/viper/api.py:RunManyRequest -->
+```python contract-target
+class RunManyRequest(APIModel):
+    """Select frozen plans for bounded execution on the active host."""
+
+    run_specs: tuple[Path, ...] = Field(min_length=1)
+    root: Path
+    max_concurrency: int = Field(default=1, ge=1)
+    timeout_seconds: float | None = Field(default=None, gt=0)
+    stop_on_failure: bool = False
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=src/viper/api.py:RunManySuccess -->
+```python contract-target
+class RunManySuccess(SuccessModel):
+    """Return every batch outcome in the requested plan order."""
+
+    operation: Literal["run_many"] = "run_many"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: ExperimentExecutionResult
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/api.py:SCHEMA_REGISTRY -->
+```python contract-target
+SCHEMA_REGISTRY: dict[str, Any] = {
+    "ArtifactPointer": ArtifactPointer,
+    "BenchmarkResult": BenchmarkResult,
+    "CapabilitiesRequest": CapabilitiesRequest,
+    "CapabilitiesSuccess": CapabilitiesSuccess,
+    "ExecuteStageRequest": ExecuteStageRequest,
+    "ExecuteStageSuccess": ExecuteStageSuccess,
+    "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
+    "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
+    "RestoreRequest": RestoreRequest,
+    "RestoreSuccess": RestoreSuccess,
+    "ExplainImpactRequest": ExplainImpactRequest,
+    "ExplainImpactSuccess": ExplainImpactSuccess,
+    "AnalyzeImpactRequest": AnalyzeImpactRequest,
+    "AnalyzeImpactSuccess": AnalyzeImpactSuccess,
+    "FreezeRunRequest": FreezeRunRequest,
+    "FreezeRunSuccess": FreezeRunSuccess,
+    "InitProjectRequest": InitProjectRequest,
+    "InitProjectSuccess": InitProjectSuccess,
+    "LineageRequest": LineageRequest,
+    "LineageSuccess": LineageSuccess,
+    "CompareRunsRequest": CompareRunsRequest,
+    "CompareRunsSuccess": CompareRunsSuccess,
+    "PlanDiffRequest": PlanDiffRequest,
+    "PlanDiffSuccess": PlanDiffSuccess,
+    "StatusRequest": StatusRequest,
+    "StatusSuccess": StatusSuccess,
+    "PreflightRequest": PreflightRequest,
+    "PreflightSuccess": PreflightSuccess,
+    "ResolvedRun": ResolvedRun,
+    "RunRequest": RunRequest,
+    "RunSuccess": RunSuccess,
+    "RunManyRequest": RunManyRequest,
+    "RunManySuccess": RunManySuccess,
+    "RetryRequest": RetryRequest,
+    "RetrySuccess": RetrySuccess,
+    "RunSpec": RunSpec,
+    "SchemaRequest": SchemaRequest,
+    "SchemaSuccess": SchemaSuccess,
+    "Spec": Spec,
+    "ValidateResolvedStageRequest": ValidateResolvedStageRequest,
+    "ValidateResolvedStageSuccess": ValidateResolvedStageSuccess,
+    "ValidateRunSpecRequest": ValidateRunSpecRequest,
+    "ValidateRunSpecSuccess": ValidateRunSpecSuccess,
+    "ValidateStageRequest": ValidateStageRequest,
+    "ValidateStageSuccess": ValidateStageSuccess,
+    "VerifyBenchmarkRequest": VerifyBenchmarkRequest,
+    "VerifyBenchmarkSuccess": VerifyBenchmarkSuccess,
+    "VerifyPointerRequest": VerifyPointerRequest,
+    "VerifyPointerSuccess": VerifyPointerSuccess,
+    "VerifyRunRequest": VerifyRunRequest,
+    "VerifyRunSuccess": VerifyRunSuccess,
+    "ViperFailure": ViperFailure,
+}
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/api.py:OPERATIONS -->
+```python contract-target
+OPERATIONS: tuple[OperationName, ...] = (
+    "validate_stage",
+    "validate_resolved_stage",
+    "validate_run_spec",
+    "freeze_run",
+    "preflight",
+    "execute_stage",
+    "run",
+    "run_many",
+    "retry",
+    "execute_benchmark",
+    "restore",
+    "plan_diff",
+    "lineage",
+    "status",
+    "compare_runs",
+    "verify_run",
+    "verify_benchmark",
+    "verify_pointer",
+    "get_schema",
+    "get_capabilities",
+    "init_project",
+    "explain_impact",
+    "analyze_impact",
+)
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=src/viper/api.py:run_many -->
+```python contract-target
+def run_many(request: RunManyRequest) -> RunManySuccess:
+    """Execute several frozen plans through the shared batch scheduler."""
+    project_root = _root(request.root, "run_many")
+    try:
+        result = execute_many(
+            project_root,
+            request.run_specs,
+            max_concurrency=request.max_concurrency,
+            timeout_seconds=request.timeout_seconds,
+            stop_on_failure=request.stop_on_failure,
+        )
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        path = request.run_specs[0]
+        raise _document_error("run_many", path, exc) from exc
+    return RunManySuccess(result=result)
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/api.py:REQUEST_REGISTRY -->
+```python contract-target
+REQUEST_REGISTRY: dict[OperationName, RequestType] = {
+    "validate_stage": ValidateStageRequest,
+    "validate_resolved_stage": ValidateResolvedStageRequest,
+    "validate_run_spec": ValidateRunSpecRequest,
+    "freeze_run": FreezeRunRequest,
+    "preflight": PreflightRequest,
+    "execute_stage": ExecuteStageRequest,
+    "run": RunRequest,
+    "run_many": RunManyRequest,
+    "retry": RetryRequest,
+    "execute_benchmark": ExecuteBenchmarkRequest,
+    "restore": RestoreRequest,
+    "plan_diff": PlanDiffRequest,
+    "lineage": LineageRequest,
+    "status": StatusRequest,
+    "compare_runs": CompareRunsRequest,
+    "verify_run": VerifyRunRequest,
+    "verify_benchmark": VerifyBenchmarkRequest,
+    "verify_pointer": VerifyPointerRequest,
+    "get_schema": SchemaRequest,
+    "get_capabilities": CapabilitiesRequest,
+    "init_project": InitProjectRequest,
+    "explain_impact": ExplainImpactRequest,
+    "analyze_impact": AnalyzeImpactRequest,
+}
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/api.py:HANDLER_REGISTRY -->
+```python contract-target
+HANDLER_REGISTRY: dict[OperationName, Handler] = {
+    "validate_stage": validate_stage,
+    "validate_resolved_stage": validate_resolved_stage,
+    "validate_run_spec": validate_run_spec,
+    "freeze_run": freeze_run,
+    "preflight": preflight,
+    "execute_stage": execute_stage,
+    "run": run_request,
+    "run_many": run_many,
+    "retry": retry_request,
+    "execute_benchmark": execute_benchmark,
+    "restore": restore_artifacts,
+    "plan_diff": plan_diff,
+    "lineage": lineage,
+    "status": status,
+    "compare_runs": compare_runs,
+    "verify_run": verify_run,
+    "verify_benchmark": verify_benchmark,
+    "verify_pointer": verify_pointer,
+    "get_schema": get_schema,
+    "get_capabilities": get_capabilities,
+    "init_project": init_project,
+    "explain_impact": explain_impact,
+    "analyze_impact": analyze_impact,
+}
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/api.py:__all__ -->
+```python contract-target
+__all__ = [
+    "APIModel",
+    "AnalyzeImpactRequest",
+    "AnalyzeImpactSuccess",
+    "CapabilitiesRequest",
+    "CapabilitiesSuccess",
+    "CompareRunsRequest",
+    "CompareRunsSuccess",
+    "ExecuteStageRequest",
+    "ExecuteStageSuccess",
+    "ExecuteBenchmarkRequest",
+    "ExecuteBenchmarkSuccess",
+    "ExplainImpactRequest",
+    "ExplainImpactSuccess",
+    "ErrorCode",
+    "FailureOrigin",
+    "FreezeRunRequest",
+    "FreezeRunSuccess",
+    "InitProjectRequest",
+    "InitProjectSuccess",
+    "LineageRequest",
+    "LineageSuccess",
+    "OperationName",
+    "PythonRunError",
+    "PlanDiffRequest",
+    "PlanDiffSuccess",
+    "PreflightRequest",
+    "PreflightSuccess",
+    "RunRequest",
+    "RunSuccess",
+    "RunManyRequest",
+    "RunManySuccess",
+    "RetryRequest",
+    "RetrySuccess",
+    "RestoreRequest",
+    "RestoreRequestReference",
+    "RestoreSuccess",
+    "LocalRunPath",
+    "ViperCloudRunReference",
+    "SchemaRequest",
+    "SchemaSuccess",
+    "StatusRequest",
+    "StatusSuccess",
+    "SuccessModel",
+    "ValidateResolvedStageRequest",
+    "ValidateResolvedStageSuccess",
+    "ValidateRunSpecRequest",
+    "ValidateRunSpecSuccess",
+    "ValidateStageRequest",
+    "ValidateStageSuccess",
+    "VerifyBenchmarkRequest",
+    "VerifyBenchmarkSuccess",
+    "VerifyPointerRequest",
+    "VerifyPointerSuccess",
+    "VerifyRunRequest",
+    "VerifyRunSuccess",
+    "ViperError",
+    "ViperFailure",
+    "analyze_impact",
+    "compare_runs",
+    "dispatch",
+    "execute_stage",
+    "execute_benchmark",
+    "explain_impact",
+    "restore_artifacts",
+    "freeze_run",
+    "get_capabilities",
+    "init_project",
+    "get_schema",
+    "lineage",
+    "plan_diff",
+    "preflight",
+    "result_json_bytes",
+    "retry",
+    "run",
+    "run_many",
+    "status",
+    "validate_resolved_stage",
+    "validate_run_spec",
+    "validate_stage",
+    "verify_benchmark",
+    "verify_pointer",
+    "verify_run",
+]
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/cli.py:build_parser -->
+```python contract-target
+def build_parser() -> ArgumentParser:
+    """Build the VIPER command parser and its API subcommands."""
+    parser = ViperArgumentParser(prog="viper")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="emit one machine-readable result document",
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    for name, help_text in (
+        ("validate-stage", "validate one authored stage specification"),
+        ("validate-resolved-stage", "validate one resolved stage specification"),
+        ("validate-run", "validate one frozen run specification"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+
+    freeze = commands.add_parser(
+        "freeze-run",
+        help="write canonical stage specs and a hash-bound RunSpec",
+    )
+    freeze.add_argument("draft", type=Path)
+    add_root(freeze)
+
+    preflight = commands.add_parser(
+        "preflight",
+        help="inspect every applicable check before local execution",
+    )
+    preflight.add_argument("run_spec", type=Path)
+    add_root(preflight)
+
+    execute = commands.add_parser(
+        "execute-stage",
+        help="run one stage from a frozen local run plan",
+    )
+    execute.add_argument("run_spec", type=Path)
+    execute.add_argument("stage_id")
+    add_root(execute)
+    execute.add_argument("--timeout-seconds", type=float)
+
+    run_command = commands.add_parser(
+        "run",
+        help="execute and verify one complete run on this host",
+    )
+    run_command.add_argument("run_spec", type=Path)
+    add_root(run_command)
+    run_command.add_argument("--timeout-seconds", type=float)
+
+    run_many = commands.add_parser(
+        "run-many",
+        help="execute several frozen run plans with bounded concurrency",
+    )
+    run_many.add_argument("run_specs", nargs="+", type=Path)
+    add_root(run_many)
+    run_many.add_argument("--max-concurrency", type=int, default=1)
+    run_many.add_argument("--timeout-seconds", type=float)
+    run_many.add_argument("--stop-on-failure", action="store_true")
+
+    retry_command = commands.add_parser(
+        "retry",
+        help="append one attempt to a failed frozen run",
+    )
+    retry_command.add_argument("run_spec", type=Path)
+    add_root(retry_command)
+    retry_command.add_argument("--timeout-seconds", type=float)
+
+    benchmark_command = commands.add_parser(
+        "execute-benchmark",
+        help="execute and verify one independent benchmark confirmation",
+    )
+    benchmark_command.add_argument("resolved_run", type=Path)
+    benchmark_command.add_argument("benchmark_spec", type=Path)
+    add_root(benchmark_command)
+    benchmark_command.add_argument("--timeout-seconds", type=float)
+
+    restore = commands.add_parser(
+        "restore",
+        help="restore verified artifacts from one successful run",
+    )
+    restore.add_argument("run_reference")
+    add_root(restore)
+    restore.add_argument(
+        "--artifacts",
+        nargs="+",
+        default=[],
+        type=parse_artifact_selector,
+        metavar="STAGE.ARTIFACT",
+    )
+    restore.add_argument("--output", type=Path)
+
+    plan_diff = commands.add_parser(
+        "plan-diff",
+        help="compare two complete frozen run plans",
+    )
+    plan_diff.add_argument("left_run_spec", type=Path)
+    plan_diff.add_argument("right_run_spec", type=Path)
+    add_root(plan_diff, "left_root")
+    add_root(plan_diff, "right_root")
+
+    status = commands.add_parser(
+        "status",
+        help="read the latest durable state of one local attempt",
+    )
+    status.add_argument("path", type=Path)
+
+    compare_runs = commands.add_parser(
+        "compare-runs",
+        help="compare all connected evidence from two verified runs",
+    )
+    compare_runs.add_argument("left_path", type=Path)
+    compare_runs.add_argument("right_path", type=Path)
+    add_root(compare_runs, "left_root")
+    add_root(compare_runs, "right_root")
+    compare_runs.add_argument(
+        "--trust-source",
+        action="append",
+        required=True,
+        help="source repository URL approved to supply executable loaders",
+    )
+
+    for name, help_text in (
+        ("verify-run", "verify one terminal resolved run"),
+        ("verify-benchmark", "verify one benchmark result"),
+        ("verify-pointer", "verify one promoted artifact pointer"),
+        ("lineage", "return the verified upstream lineage of one run"),
+    ):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument("path", type=Path)
+        add_root(command)
+        command.add_argument(
+            "--trust-source",
+            action="append",
+            required=True,
+            help="source repository URL approved to supply executable loaders",
+        )
+
+    schema = commands.add_parser("schema", help="return one public JSON Schema")
+    schema.add_argument("name")
+    commands.add_parser("capabilities", help="list installed VIPER capabilities")
+    initialize = commands.add_parser(
+        "init",
+        help="create a five-stage starter project",
+    )
+    initialize.add_argument("path", type=Path)
+    initialize.add_argument("--package", required=True)
+    impact = commands.add_parser(
+        "impact",
+        help="inspect verified source-impact evidence",
+    )
+    impact_commands = impact.add_subparsers(dest="impact_command", required=True)
+    explain = impact_commands.add_parser(
+        "explain",
+        help="join one PlanCheck one-hop result to source locations",
+    )
+    explain.add_argument("--check", type=Path, required=True)
+    explain.add_argument("--baseline-graph", type=Path, required=True)
+    explain.add_argument("--realized-graph", type=Path, required=True)
+    explain.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        default=[],
+        help="limit evidence to one PATH:SYMBOL target; repeat for several targets",
+    )
+    analyze = impact_commands.add_parser(
+        "analyze",
+        help="compile direct impact from one Git baseline to the working tree",
+    )
+    add_root(analyze)
+    analyze.add_argument(
+        "--base",
+        default="HEAD",
+        help="baseline Git revision; defaults to HEAD",
+    )
+    analyze.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        required=True,
+        help="analyze one PATH:SYMBOL target; repeat for several targets",
+    )
+    analyze.add_argument("--artifact-root", type=Path)
+    analyze.add_argument("--cache-root", type=Path)
+    analyze.add_argument("--codeql-executable", type=Path)
+    analyze.add_argument("--query-pack", type=Path)
+    return parser
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/cli.py:_operation_and_payload -->
+```python contract-target
+def _operation_and_payload(
+    arguments: argparse.Namespace,
+) -> tuple[OperationName, dict[str, Any]]:
+    """Map parsed command arguments onto one API operation."""
+    values = vars(arguments).copy()
+    command = values.pop("command")
+    values.pop("json_output")
+    if command == "impact":
+        command = f"impact-{values.pop('impact_command')}"
+    mapping: dict[str, OperationName] = {
+        "validate-stage": "validate_stage",
+        "validate-resolved-stage": "validate_resolved_stage",
+        "validate-run": "validate_run_spec",
+        "freeze-run": "freeze_run",
+        "preflight": "preflight",
+        "execute-stage": "execute_stage",
+        "run": "run",
+        "run-many": "run_many",
+        "retry": "retry",
+        "execute-benchmark": "execute_benchmark",
+        "restore": "restore",
+        "plan-diff": "plan_diff",
+        "lineage": "lineage",
+        "status": "status",
+        "compare-runs": "compare_runs",
+        "verify-run": "verify_run",
+        "verify-benchmark": "verify_benchmark",
+        "verify-pointer": "verify_pointer",
+        "schema": "get_schema",
+        "capabilities": "get_capabilities",
+        "init": "init_project",
+        "impact-explain": "explain_impact",
+        "impact-analyze": "analyze_impact",
+    }
+    operation = mapping[command]
+    if operation == "restore":
+        reference = values.pop("run_reference")
+        values["run_reference"] = (
+            {"kind": "viper_cloud_uri", "uri": reference}
+            if reference.startswith("viper://")
+            else {"kind": "local_path", "path": reference}
+        )
+        selectors = []
+        for stage_id, artifact_name in values.pop("artifacts"):
+            selectors.append({"stage_id": stage_id, "artifact_name": artifact_name})
+        values["artifacts"] = selectors
+        values["repository_root"] = values.pop("root")
+    trusted = values.pop("trust_source", None)
+    if trusted is not None:
+        values["trusted_source_repositories"] = trusted
+    return operation, values
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=update target=src/viper/cli.py:_human_success -->
+```python contract-target
+def _human_success(result: SuccessModel) -> str:
+    """Render one concise human result for an API success."""
+    if result.operation == "validate_stage":
+        return f"valid {getattr(result, 'stage_kind')} stage"
+    if result.operation == "validate_resolved_stage":
+        return f"valid resolved {getattr(result, 'stage_kind')} stage"
+    if result.operation == "validate_run_spec":
+        return "valid run plan"
+    if result.operation == "freeze_run":
+        files = getattr(result, "files")
+        return f"froze run {getattr(result, 'run_id')} in {len(files)} files"
+    if result.operation == "preflight":
+        checks = getattr(result, "checks")
+        failures = sum(check.status == "failure" for check in checks)
+        return (
+            "preflight ready"
+            if failures == 0
+            else f"preflight found {failures} failures"
+        )
+    if result.operation == "execute_stage":
+        artifacts = getattr(result, "artifacts")
+        count = sum(
+            1 if artifact.kind == "file" else len(artifact.members)
+            for artifact in artifacts.values()
+        )
+        return (
+            f"executed stage {getattr(result, 'stage_id')} and identified {count} files"
+        )
+    if result.operation == "run":
+        return f"completed and verified run {getattr(result, 'run_id')}"
+    if result.operation == "run_many":
+        runs = getattr(result, "result").runs
+        failures = sum(run.status == "failed" for run in runs)
+        return f"completed {len(runs)} runs with {failures} failures"
+    if result.operation == "retry":
+        return (
+            f"completed attempt {getattr(result, 'attempt_id')} for run "
+            f"{getattr(result, 'run_id')}"
+        )
+    if result.operation == "execute_benchmark":
+        benchmark = getattr(result, "result")
+        return (
+            f"benchmark {benchmark.status}: confirmation attempt "
+            f"{benchmark.confirmation.stored_at.path}"
+        )
+    if result.operation == "restore":
+        restored = getattr(result, "result")
+        file_count = sum(len(artifact.files) for artifact in restored.artifacts)
+        return f"restored {file_count} verified files"
+    if result.operation == "plan_diff":
+        changes = getattr(result, "changes")
+        if not changes:
+            return "plans are identical"
+        return "\n".join(f"{change.kind}: {change.path}" for change in changes)
+    if result.operation == "lineage":
+        return (
+            f"verified lineage with {len(getattr(result, 'nodes'))} nodes and "
+            f"{len(getattr(result, 'edges'))} edges"
+        )
+    if result.operation == "status":
+        state = getattr(result, "state")
+        entries = getattr(result, "entry_count")
+        return f"attempt state {state or 'empty'} after {entries} journal entries"
+    if result.operation == "compare_runs":
+        changes = getattr(result, "changes")
+        if not changes:
+            return "verified runs are identical"
+        return "\n".join(f"{change.kind}: {change.path}" for change in changes)
+    if result.operation == "verify_run":
+        return f"verified run {getattr(result, 'run_id')}"
+    if result.operation == "verify_benchmark":
+        return f"verified benchmark result {getattr(result, 'benchmark_status')}"
+    if result.operation == "verify_pointer":
+        return f"verified artifact with {getattr(result, 'file_count')} files"
+    if result.operation == "get_schema":
+        return result.model_dump_json(indent=2)
+    if result.operation == "init_project":
+        return f"created project at {getattr(result, 'project_root')}"
+    if result.operation == "explain_impact":
+        evidence = getattr(result, "evidence")
+        if not evidence:
+            return "no direct dependency evidence"
+        return "\n".join(
+            f"{item.state} {item.kind}: "
+            f"{item.dependent.path}:{item.dependent.symbol} -> "
+            f"{item.target.path}:{item.target.symbol} "
+            f"at {item.use_path}:{item.use_line}"
+            for item in evidence
+        )
+    if result.operation == "analyze_impact":
+        evidence = getattr(result, "evidence")
+        if not evidence:
+            return "no direct dependency evidence"
+        return "\n".join(
+            f"{item.state} {item.kind}: "
+            f"{item.dependent.path}:{item.dependent.symbol} -> "
+            f"{item.target.path}:{item.target.symbol} "
+            f"at {item.use_path}:{item.use_line}"
+            for item in evidence
+        )
+    capabilities = getattr(result, "operations")
+    return "\n".join(capabilities)
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:RunManyRequest -->
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:run_many -->
+```python contract-target
+from viper.api import (
+    CapabilitiesRequest,
+    LocalRunPath,
+    RestoreRequest,
+    RunManyRequest,
+    SchemaRequest,
+    StatusRequest,
+    ValidateStageRequest,
+    ViperFailure,
+    dispatch,
+    get_capabilities,
+    get_schema,
+    restore_artifacts,
+    result_json_bytes,
+    run_many,
+    status,
+    validate_stage,
+)
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:ExperimentExecutionResult -->
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:ExperimentRunResult -->
+```python contract-target
+from viper.execution.results import ExperimentExecutionResult, ExperimentRunResult
+```
+
+<!-- contract-target: requirements=EXP-03 block=P12-EXP-03 action=add target=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
+```python contract-target
+def test_run_many_result_matches_python_api_and_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Route typed and command batch requests through one execution result."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    run_spec = Path("experiments/example/runs/baseline/run/spec.yaml")
+    expected = ExperimentExecutionResult(
+        runs=(
+            ExperimentRunResult(
+                variant_id="baseline",
+                replicate_id="replicate_01",
+                run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                run_spec_path=run_spec,
+                status="skipped",
+                skip_reason="not started",
+            ),
+        )
+    )
+    calls = []
+
+    def fake_run_many(
+        repository_root: Path,
+        run_specs: tuple[Path, ...],
+        *,
+        max_concurrency: int,
+        timeout_seconds: float | None,
+        stop_on_failure: bool,
+    ) -> ExperimentExecutionResult:
+        """Record normalized batch arguments and return one result."""
+        calls.append(
+            (
+                repository_root,
+                run_specs,
+                max_concurrency,
+                timeout_seconds,
+                stop_on_failure,
+            )
+        )
+        return expected
+
+    monkeypatch.setattr("viper.api.execute_many", fake_run_many)
+    monkeypatch.setattr("viper.api.resolve_root", lambda root: root.resolve())
+    request = RunManyRequest(
+        run_specs=(run_spec,),
+        root=tmp_path,
+        max_concurrency=2,
+        timeout_seconds=5.0,
+        stop_on_failure=True,
+    )
+
+    direct = run_many(request)
+    status = main(
+        [
+            "--json",
+            "run-many",
+            str(run_spec),
+            "--root",
+            str(tmp_path),
+            "--max-concurrency",
+            "2",
+            "--timeout-seconds",
+            "5",
+            "--stop-on-failure",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert direct.result == expected
+    assert json.loads(output) == json.loads(result_json_bytes(direct))
+    assert calls == [
+        (tmp_path, (run_spec,), 2, 5.0, True),
+        (tmp_path, (run_spec,), 2, 5.0, True),
+    ]
 ```

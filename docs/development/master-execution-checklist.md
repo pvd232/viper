@@ -290,7 +290,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Automatic input resolution](automatic-input-resolution.md) | Complete | Python stage authoring and compilation of local, same-run, and prior-run inputs |
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Complete | Immutable generated plans with source code kept on its source commit |
 | [Direct Viper Cloud publication](remote-storage.md) | Complete | Destination-neutral publication, cloud references, retrieval, and restore |
-| [Experiment expansion](experiment-expansion.md) | Audited; owner approval pending | Deterministic variant-replicate expansion and bounded multi-run execution |
+| [Experiment expansion](experiment-expansion.md) | In progress; P12-EXP-03 planned | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | Audited; owner approval pending | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Audited; owner approval pending | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
 | [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Audited; owner approval pending | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
@@ -1775,9 +1775,6 @@ python -m pytest \
 
 ## 19. Master Phase 12 — experiment expansion and bounded execution
 
-<!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=planned owner=src/viper/api.py:run_many -->
-<!-- contract-verification: requirement=EXP-03 rule=experiment.batch.public state=planned test=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
-
 **Depends on:** Master Phase 11.
 
 **Contract:** [Experiment expansion](experiment-expansion.md)
@@ -1790,6 +1787,7 @@ limit.
 
 - [x] Materialize and verify deterministic experiment expansion.
       <!-- pair-block: P12-EXP-01 -->
+      <!-- pair-block-contract: P12-EXP-01 contract=experiment-expansion.md -->
       <!-- contract-implementation: requirement=EXP-01 rule=experiment.expansion.canonical state=implemented owner=src/viper/authoring.py:expand -->
       <!-- contract-verification: requirement=EXP-01 rule=experiment.expansion.canonical state=implemented test=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
       <!-- phase-produces: viper.authoring.expand -->
@@ -1805,6 +1803,7 @@ The immutable evidence manifest is stored at Hugging Face commit
 
 - [x] Materialize and verify bounded batch execution.
       <!-- pair-block: P12-EXP-02 -->
+      <!-- pair-block-contract: P12-EXP-02 contract=experiment-expansion.md -->
       <!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=implemented owner=src/viper/execution/_batch.py:run_many -->
       <!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=implemented test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
       <!-- implements: EXP-02 -->
@@ -1818,38 +1817,12 @@ The immutable evidence manifest is stored at Hugging Face commit
 
 ### 19.3 Typed API and CLI
 
-- [ ] Add `RunManyRequest` and `RunManySuccess` to `src/viper/api.py`.
+- [ ] Materialize and verify the typed batch API and CLI.
+      <!-- pair-block: P12-EXP-03 -->
+      <!-- pair-block-contract: P12-EXP-03 contract=experiment-expansion.md -->
+      <!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=planned owner=src/viper/api.py:run_many -->
+      <!-- contract-verification: requirement=EXP-03 rule=experiment.batch.public state=planned test=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
       <!-- implements: EXP-03 -->
-- [ ] Add `run_many` to `OperationName`, `OPERATIONS`, the schema registry,
-      request registry, and handler registry.
-- [ ] Add the operation body to `src/viper/api.py` and return the same
-      `ExperimentExecutionResult` as the Python function.
-- [ ] Add `viper run-many` with an ordered list of run-spec paths,
-      `--max-concurrency`, `--timeout-seconds`, and `--stop-on-failure`.
-- [ ] Reject zero and negative timeout values through Python, typed API, and
-      CLI validation before execution.
-- [ ] Keep stdout deterministic through `result_json_bytes()`.
-
-### 19.4 Focused proof
-
-- [ ] Add complete, filtered, missing-pair, extra-pair, duplicate-ID, and order
-      cases to `tests/test_authoring.py`.
-- [ ] Add active-call counting, out-of-order completion, continuation, stop,
-      forwarded process timeout, and timeout-plus-stop cases to
-      `tests/test_run_execution.py`.
-- [ ] Compare Python, typed API, and CLI aggregate result shapes in
-      `tests/test_api.py` and `tests/test_cli.py`.
-- [ ] Reject `timeout_seconds <= 0` through all three surfaces.
-- [ ] Run: <!-- verifies: EXP-01, EXP-02, EXP-03 -->
-
-```bash
-python -m pytest \
-  tests/test_authoring.py \
-  tests/test_run_execution.py \
-  tests/test_api.py \
-  tests/test_cli.py \
-  tests/test_public_api.py -q
-```
 
 **Commit boundary:** `Expand and execute complete experiments`
 
