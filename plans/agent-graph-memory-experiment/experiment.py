@@ -34,7 +34,7 @@ from viper.authoring import (
     variant,
 )
 from viper.metrics import max, measure
-from viper.params import Metric
+from viper.params import Metric, Train
 from viper.references import GitFileRef, GitSource
 from viper.resume import DataLoaderConfiguration
 from viper.runtime import (
@@ -320,14 +320,18 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
     }
     drafts = {}
     for arm in ARMS:
-        params = trial.AgentTrialParameters(
-            arm=arm,
-            model=model,
-            timeout_seconds=timeout_seconds,
-            fixture_sha256=_sha256(project / "inputs/fixture.tar.gz"),
-            graph_evidence_sha256=_sha256(project / "inputs/graph-evidence.tar.gz"),
-            prompt_sha256=_sha256(project / f"inputs/prompts/{arm}.txt"),
-            evaluator_sha256=_sha256(project / "inputs/hidden-evaluator.py"),
+        params = Train.model_validate(
+            {
+                "arm": arm,
+                "model": model,
+                "timeout_seconds": timeout_seconds,
+                "fixture_sha256": _sha256(project / "inputs/fixture.tar.gz"),
+                "graph_evidence_sha256": _sha256(
+                    project / "inputs/graph-evidence.tar.gz"
+                ),
+                "prompt_sha256": _sha256(project / f"inputs/prompts/{arm}.txt"),
+                "evaluator_sha256": _sha256(project / "inputs/hidden-evaluator.py"),
+            }
         )
         outputs = {
             name: artifact(

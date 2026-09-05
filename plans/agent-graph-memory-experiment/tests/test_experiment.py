@@ -74,14 +74,16 @@ def test_trial_parameters_reload_in_viper_worker() -> None:
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
     )
-    value = trial.AgentTrialParameters(
-        arm="ordinary",
-        model="gpt-5.4-mini",
-        timeout_seconds=480,
-        fixture_sha256="a" * 64,
-        graph_evidence_sha256="b" * 64,
-        prompt_sha256="c" * 64,
-        evaluator_sha256="d" * 64,
+    value = Train.model_validate(
+        {
+            "arm": "ordinary",
+            "model": "gpt-5.4-mini",
+            "timeout_seconds": 480,
+            "fixture_sha256": "a" * 64,
+            "graph_evidence_sha256": "b" * 64,
+            "prompt_sha256": "c" * 64,
+            "evaluator_sha256": "d" * 64,
+        }
     )
     validated = validate_parameters(path, reference, value, Train)
     assert validated["arm"] == "ordinary"
