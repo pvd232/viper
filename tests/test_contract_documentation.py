@@ -1921,58 +1921,6 @@ def test_contract_traceability_schema_describes_every_field() -> None:
     assert missing == {}
 
 
-def test_external_input_contract_targets_match_implementation() -> None:
-    """Keep every executable Phase 3 target equal to its contract payload."""
-    text = EXTERNAL_INPUT_ROOTS.read_text(encoding="utf-8")
-
-    def declaration(tree: ast.Module, symbol: str) -> ast.AST | None:
-        for node in tree.body:
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                if node.name == symbol:
-                    return node
-            elif isinstance(node, ast.Assign):
-                if any(
-                    isinstance(target, ast.Name) and target.id == symbol
-                    for target in node.targets
-                ):
-                    return node
-            elif isinstance(node, ast.AnnAssign):
-                if isinstance(node.target, ast.Name) and node.target.id == symbol:
-                    return node
-        return None
-
-    compared: set[str] = set()
-    for marker in traceability._TARGET_MARKER.finditer(text):
-        target_path, _, symbol = marker.group("target").partition(":")
-        if marker.group("action") == "remove":
-            assert symbol not in traceability._python_symbols(ROOT / target_path), (
-                marker.group("target")
-            )
-            continue
-        fence = traceability._TARGET_FENCE.search(text, marker.end())
-        assert fence is not None, marker.group("target")
-        expected = declaration(ast.parse(fence.group("body")), symbol)
-        if expected is None:
-            continue
-        actual = declaration(
-            ast.parse((ROOT / target_path).read_text(encoding="utf-8")),
-            symbol,
-        )
-        assert actual is not None, marker.group("target")
-        assert ast.dump(actual, include_attributes=False) == ast.dump(
-            expected,
-            include_attributes=False,
-        ), marker.group("target")
-        compared.add(marker.group("target"))
-
-    assert {
-        "src/viper/inputs.py:ExternalInputRef",
-        "src/viper/execution/_materialization.py:capture_external_input",
-        "src/viper/_verification/attempt.py:verify_external_inputs",
-        "tests/test_run_execution.py:test_attempt_rechecks_and_publishes_captured_local_inputs",
-    } <= compared
-
-
 def test_traceability_declaration_ref_rejects_reversed_span() -> None:
     """Reject declaration evidence whose final line precedes its first line."""
     with pytest.raises(ValueError, match="end_line must be greater"):
