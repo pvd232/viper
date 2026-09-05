@@ -17,13 +17,14 @@ from typing import Literal
 
 from pydantic import Field
 
-from viper.params import Embed
-from viper.stages import Context, embed
+from viper.metrics import MetricContext, metric
+from viper.params import Train
+from viper.stages import Context, train
 
 Arm = Literal["ordinary", "static_graph", "graph_predicate"]
 
 
-class AgentTrialParameters(Embed):
+class AgentTrialParameters(Train):
     """Select one treatment and its externally enforced agent controls."""
 
     arm: Arm
@@ -38,6 +39,16 @@ class AgentTrialParameters(Embed):
 def load_bytes(path: Path) -> bytes:
     """Load one experiment artifact without changing its representation."""
     return path.read_bytes()
+
+
+@metric(metric_id="candidate_acceptance", mode="live")
+def candidate_acceptance(
+    context: MetricContext,
+    accepted: float,
+) -> float:
+    """Return the hidden evaluator's binary acceptance observation."""
+    del context
+    return accepted
 
 
 def _extract_tar(path: Path, destination: Path) -> None:
@@ -177,7 +188,7 @@ def _candidate_digest(candidate: Path) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-@embed(params=AgentTrialParameters)
+@train(params=AgentTrialParameters)
 def run_agent_trial(context: Context[AgentTrialParameters]) -> None:
     """Run one arm, evaluate it once, and write only declared artifacts."""
     outputs = context.artifacts
@@ -249,26 +260,28 @@ def run_agent_trial(context: Context[AgentTrialParameters]) -> None:
             json.dumps(usage, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        outputs["verdict"].write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "arm": context.params.arm,
-                    "agent_exit_code": exit_code,
-                    "timed_out": timed_out,
-                    "duration_seconds": duration,
-                    "evaluator_exit_code": evaluator.returncode,
-                    "evaluated_candidate_sha256": evaluated_candidate_sha256,
-                    "candidate_unchanged_by_evaluator": candidate_unchanged,
-                    "candidate_archive_sha256": candidate_archive_sha256,
-                    "accepted": evaluator.returncode == 0 and candidate_unchanged,
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        accepted = evaluator.returncode == 0 and candidate_unchanged
+        verdict = {
+            "schema_version": 1,
+            "arm": context.params.arm,
+            "agent_exit_code": exit_code,
+            "timed_out": timed_out,
+            "duration_seconds": duration,
+            "evaluator_exit_code": evaluator.returncode,
+            "evaluated_candidate_sha256": evaluated_candidate_sha256,
+            "candidate_unchanged_by_evaluator": candidate_unchanged,
+            "candidate_archive_sha256": candidate_archive_sha256,
+            "accepted": accepted,
+        }
+        serialized_verdict = json.dumps(verdict, indent=2, sort_keys=True) + "\n"
+        outputs["verdict"].write_text(serialized_verdict, encoding="utf-8")
+        outputs["state"].write_text(serialized_verdict, encoding="utf-8")
+        context.metrics["candidate_acceptance"].record(float(accepted))
 
 
-__all__ = ["AgentTrialParameters", "load_bytes", "run_agent_trial"]
+__all__ = [
+    "AgentTrialParameters",
+    "candidate_acceptance",
+    "load_bytes",
+    "run_agent_trial",
+]

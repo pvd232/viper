@@ -121,5 +121,5 @@ def test_candidate_digest_covers_non_python_outputs(tmp_path: Path) -> None:
 def test_trial_callable_is_a_viper_estimator_stage() -> None:
     """Keep agent execution inside VIPER's governed invocation boundary."""
     definition = trial.run_agent_trial.__viper_stage__
-    assert definition.kind == "embed"
+    assert definition.kind == "train"
     assert definition.parameter_model is trial.AgentTrialParameters

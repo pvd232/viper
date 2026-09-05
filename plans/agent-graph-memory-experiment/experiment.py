@@ -25,6 +25,8 @@ from viper._system_impact.codeql import (
 from viper.api import VerifyRunRequest, verify_run
 from viper.artifacts import artifact
 from viper.authoring import experiment, factor, input, plan, replicate, stage, variant
+from viper.metrics import max, measure
+from viper.params import Metric
 from viper.references import GitFileRef, GitSource
 from viper.resume import DataLoaderConfiguration
 from viper.runtime import (
@@ -329,11 +331,13 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
                 "transcript": "transcript.jsonl",
                 "patch": "candidate.patch",
                 "model": "candidate.tar.gz",
+                "state": "trial-state.json",
                 "usage": "usage.json",
                 "verdict": "verdict.json",
                 "evaluator_output": "hidden-evaluator.txt",
             }.items()
         }
+        acceptance = measure(trial.candidate_acceptance, params=Metric())
         trial_stage = stage(
             trial.run_agent_trial,
             params=params,
@@ -345,6 +349,8 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
                 ),
             },
             artifacts=outputs,
+            metrics=(acceptance,),
+            objective=max(acceptance),
         )
         drafts[arm] = variant(
             levels={"arm": arm},
