@@ -14,6 +14,7 @@ from viper._system_impact.source import (
     classify_target_change,
     extract_declaration_bytes,
 )
+from viper.scheduling import final_targets, order_blocks
 
 from .models import (
     EdgeKind,
@@ -102,12 +103,10 @@ def inspect_plan(
     if missing:
         raise PlanInspectionError(f"selected PairBlocks are absent: {missing}")
 
-    selected = set(block_ids)
-    targets = tuple(
-        sorted(
-            (target for target in traceability.targets if target.block_id in selected),
-            key=lambda item: (item.block_id, item.target.path, item.target.symbol),
-        )
+    targets = final_targets(
+        traceability,
+        order_blocks(traceability, block_ids),
+        baseline,
     )
     nodes = _node_index(baseline)
     resolved: list[ResolvedContractTarget] = []
