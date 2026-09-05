@@ -24,9 +24,11 @@ from pydantic import (
     field_validator,
 )
 
+from ._contract_traceability import RepoSymbolRef
 from ._system_impact.workflow import (
     WorkingTreeImpactError,
     analyze_working_tree_impact,
+    analyze_working_tree_rename,
 )
 from .artifacts import (
     ArtifactPointer,
@@ -78,6 +80,7 @@ from .system_impact.explain import (
     explain_plan_check,
 )
 from .system_impact.models import CommitId, PlanCheck, SourceGraph
+from .system_impact.rename import ReferenceKind, RenameCheck
 from .verification import (
     verify_benchmark_result,
     verify_promoted_artifact,
@@ -112,6 +115,7 @@ OperationName = Literal[
     "init_project",
     "explain_impact",
     "analyze_impact",
+    "check_rename",
 ]
 FailureOrigin = Literal["request", "application", "cli", "internal"]
 ErrorCode = Literal[
@@ -616,6 +620,70 @@ class AnalyzeImpactSuccess(SuccessModel):
     )
 
 
+class RenameCheckRequest(APIModel):
+    """Select one old-to-new symbol transition for exact working-tree analysis."""
+
+    root: Path = Field(
+        default_factory=Path.cwd,
+        description="Git repository whose current Python working tree is checked.",
+    )
+    base: str = Field(
+        default="HEAD",
+        min_length=1,
+        description="Git revision expression resolved as the rename baseline.",
+    )
+    old_target: RepoSymbolRef = Field(description="Baseline declaration being renamed.")
+    new_target: RepoSymbolRef = Field(description="Required replacement declaration.")
+    edge_kinds: tuple[ReferenceKind, ...] = Field(
+        default=("imports", "calls", "reads", "writes"),
+        min_length=1,
+        description="Dependency operations governed by the rename.",
+    )
+    artifact_root: Path | None = Field(
+        default=None,
+        description="Optional directory for graphs and rename evidence.",
+    )
+    cache_root: Path | None = Field(
+        default=None,
+        description="Optional persistent directory for staged CodeQL cache entries.",
+    )
+    codeql_executable: Path | None = Field(
+        default=None,
+        description="Optional CodeQL executable; otherwise resolved from PATH.",
+    )
+    query_pack: Path | None = Field(
+        default=None,
+        description="Optional Python impact query pack directory.",
+    )
+
+
+class RenameCheckSuccess(SuccessModel):
+    """Return an exact rename verdict and its persisted evidence paths."""
+
+    operation: Literal["check_rename"] = "check_rename"  # pyright: ignore[reportIncompatibleVariableOverride]
+    repository_root: Path = Field(
+        description="Git top level that supplied both source snapshots."
+    )
+    base_revision: CommitId = Field(
+        description="Exact baseline commit checked by CodeQL."
+    )
+    artifact_root: Path = Field(
+        description="Directory containing the persisted rename evidence."
+    )
+    baseline_graph: Path = Field(
+        description="Receipt-bound graph for the baseline commit."
+    )
+    realized_graph: Path = Field(
+        description="Receipt-bound graph for the captured working tree."
+    )
+    obligations_path: Path = Field(description="Compiled baseline rename obligations.")
+    check_path: Path = Field(description="Machine-readable exact rename decision.")
+    report: str = Field(description="Compact agent-facing rename decision.")
+    check: RenameCheck = Field(
+        description="Validated rename transitions and derived verdict."
+    )
+
+
 class LocalRunPath(APIModel):
     """Select a terminal run document beneath the project root."""
 
@@ -667,6 +735,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "ExplainImpactSuccess": ExplainImpactSuccess,
     "AnalyzeImpactRequest": AnalyzeImpactRequest,
     "AnalyzeImpactSuccess": AnalyzeImpactSuccess,
+    "RenameCheckRequest": RenameCheckRequest,
+    "RenameCheckSuccess": RenameCheckSuccess,
     "FreezeRunRequest": FreezeRunRequest,
     "FreezeRunSuccess": FreezeRunSuccess,
     "InitProjectRequest": InitProjectRequest,
@@ -728,6 +798,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "init_project",
     "explain_impact",
     "analyze_impact",
+    "check_rename",
 )
 
 
@@ -1419,6 +1490,48 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
     )
 
 
+def check_rename(request: RenameCheckRequest) -> RenameCheckSuccess:
+    """Compile and verify one exact rename against the current working tree."""
+    try:
+        result = analyze_working_tree_rename(
+            request.root,
+            base=request.base,
+            old_target=request.old_target,
+            new_target=request.new_target,
+            edge_kinds=request.edge_kinds,
+            artifact_root=request.artifact_root,
+            cache_root=request.cache_root,
+            codeql_executable=request.codeql_executable,
+            query_pack=request.query_pack,
+        )
+    except WorkingTreeImpactError as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="check_rename",
+                origin="application",
+                code="verification_failed",
+                message=str(exc),
+                details={
+                    "root": request.root.as_posix(),
+                    "base": request.base,
+                    "old_target": str(request.old_target),
+                    "new_target": str(request.new_target),
+                },
+            )
+        ) from exc
+    return RenameCheckSuccess(
+        repository_root=result.repository_root,
+        base_revision=result.base_revision,
+        artifact_root=result.artifact_root,
+        baseline_graph=result.baseline_graph,
+        realized_graph=result.realized_graph,
+        obligations_path=result.obligations_path,
+        check_path=result.check_path,
+        report=result.report,
+        check=result.check,
+    )
+
+
 RequestType = type[APIModel]
 Handler = Callable[[Any], SuccessModel]
 
@@ -1478,6 +1591,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "init_project": InitProjectRequest,
     "explain_impact": ExplainImpactRequest,
     "analyze_impact": AnalyzeImpactRequest,
+    "check_rename": RenameCheckRequest,
 }
 
 HANDLER_REGISTRY: dict[OperationName, Handler] = {
@@ -1503,6 +1617,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "init_project": init_project,
     "explain_impact": explain_impact,
     "analyze_impact": analyze_impact,
+    "check_rename": check_rename,
 }
 
 
@@ -1701,6 +1816,8 @@ __all__ = [
     "APIModel",
     "AnalyzeImpactRequest",
     "AnalyzeImpactSuccess",
+    "RenameCheckRequest",
+    "RenameCheckSuccess",
     "CapabilitiesRequest",
     "CapabilitiesSuccess",
     "CompareRunsRequest",
@@ -1754,6 +1871,7 @@ __all__ = [
     "ViperError",
     "ViperFailure",
     "analyze_impact",
+    "check_rename",
     "compare_runs",
     "dispatch",
     "execute_stage",

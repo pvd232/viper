@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import viper._subprocess as subprocess
+from viper._contract_traceability import RepoSymbolRef
 from viper.system_impact.explain import (
     DependencyEvidence,
     ImpactPathSearch,
@@ -17,6 +18,16 @@ from viper.system_impact.explain import (
     rank_impact_paths,
 )
 from viper.system_impact.models import SourceGraph, SourceSnapshot
+from viper.system_impact.rename import (
+    ReferenceKind,
+    RenameAnalysisError,
+    RenameCheck,
+    RenameObligationSet,
+    RenameSpec,
+    check_rename_obligations,
+    compile_rename_obligations,
+    render_rename_check,
+)
 
 from .codeql import (
     IGNORED_PARTS,
@@ -42,6 +53,21 @@ class WorkingTreeImpact:
     realized_graph: Path
     evidence: tuple[DependencyEvidence, ...]
     path_search: ImpactPathSearch
+
+
+@dataclass(frozen=True)
+class WorkingTreeRenameCheck:
+    """Return an exact rename decision and its persisted evidence."""
+
+    repository_root: Path
+    base_revision: str
+    artifact_root: Path
+    baseline_graph: Path
+    realized_graph: Path
+    obligations_path: Path
+    check_path: Path
+    report: str
+    check: RenameCheck
 
 
 def _git(root: Path, *arguments: str) -> bytes:
@@ -150,6 +176,13 @@ def _write_graph(path: Path, graph: SourceGraph) -> None:
     """Atomically persist one canonical source graph."""
     temporary = path.with_suffix(f"{path.suffix}.tmp")
     temporary.write_text(graph.model_dump_json(), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _write_model(path: Path, value: RenameObligationSet | RenameCheck) -> None:
+    """Atomically persist one canonical rename protocol record."""
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(value.model_dump_json(), encoding="utf-8")
     temporary.replace(path)
 
 
@@ -285,8 +318,132 @@ def analyze_working_tree_impact(
     )
 
 
+def analyze_working_tree_rename(
+    root: Path,
+    *,
+    base: str,
+    old_target: RepoSymbolRef,
+    new_target: RepoSymbolRef,
+    edge_kinds: tuple[ReferenceKind, ...],
+    artifact_root: Path | None = None,
+    cache_root: Path | None = None,
+    codeql_executable: Path | None = None,
+    query_pack: Path | None = None,
+) -> WorkingTreeRenameCheck:
+    """Verify one exact rename from a Git baseline to the working tree."""
+    repository = _repository_root(root)
+    revision = _commit(repository, base)
+    executable_value = (
+        str(codeql_executable)
+        if codeql_executable is not None
+        else shutil.which("codeql")
+    )
+    if executable_value is None:
+        raise WorkingTreeImpactError("CodeQL executable is unavailable")
+    executable = Path(executable_value).resolve()
+    pack = (
+        query_pack.resolve()
+        if query_pack is not None
+        else Path(__file__).parents[3] / "tools/codeql/viper-python-impact"
+    )
+    cache = (
+        cache_root.resolve()
+        if cache_root is not None
+        else repository / ".viper/cache/codeql-source-analysis"
+    )
+    try:
+        spec = RenameSpec(
+            old_target=old_target,
+            new_target=new_target,
+            edge_kinds=edge_kinds,
+        )
+        extraction, query, graph_format = resolve_analysis_specs(
+            repository,
+            codeql_executable=executable,
+            query_pack=pack,
+        )
+        with tempfile.TemporaryDirectory(prefix="viper-rename-analysis.") as directory:
+            temporary_root = Path(directory)
+            baseline_root = temporary_root / "baseline"
+            realized_root = temporary_root / "realized"
+            _materialize_revision(repository, revision, baseline_root)
+            candidate_sha256 = _materialize_working_tree(repository, realized_root)
+            output = (
+                artifact_root.resolve()
+                if artifact_root is not None
+                else repository
+                / ".viper/system-impact/rename"
+                / f"{revision[:12]}-{candidate_sha256[:12]}"
+            )
+            output.mkdir(parents=True, exist_ok=True)
+            common = {
+                "extraction": extraction,
+                "query": query,
+                "format": graph_format,
+                "codeql_executable": executable,
+                "query_pack": pack,
+                "cache_root": cache,
+            }
+            baseline = analyze_source(
+                baseline_root,
+                snapshot=SourceSnapshot(
+                    base_revision=revision,
+                    source_sha256=source_digest(baseline_root),
+                    revision=revision,
+                ),
+                artifact_root=output / "baseline",
+                **common,
+            )
+            realized = analyze_source(
+                realized_root,
+                snapshot=SourceSnapshot(
+                    base_revision=revision,
+                    source_sha256=candidate_sha256,
+                    revision=None,
+                ),
+                artifact_root=output / "realized",
+                **common,
+            )
+            obligations = compile_rename_obligations(
+                root=baseline_root,
+                graph=baseline,
+                spec=spec,
+            )
+            decision = check_rename_obligations(
+                root=realized_root,
+                graph=realized,
+                obligations=obligations,
+            )
+    except (CodeQLAnalysisError, RenameAnalysisError, OSError, ValueError) as error:
+        raise WorkingTreeImpactError(str(error)) from error
+
+    baseline_path = output / "baseline-source-graph.json"
+    realized_path = output / "realized-source-graph.json"
+    obligations_path = output / "rename-obligations.json"
+    check_path = output / "rename-check.json"
+    report = render_rename_check(decision)
+    _write_graph(baseline_path, baseline)
+    _write_graph(realized_path, realized)
+    _write_model(obligations_path, obligations)
+    _write_model(check_path, decision)
+    (output / "rename-report.txt").write_text(report + "\n", encoding="utf-8")
+    return WorkingTreeRenameCheck(
+        repository_root=repository,
+        base_revision=revision,
+        artifact_root=output,
+        baseline_graph=baseline_path,
+        realized_graph=realized_path,
+        obligations_path=obligations_path,
+        check_path=check_path,
+        report=report,
+        check=decision,
+    )
+
+
 __all__ = [
     "WorkingTreeImpact",
     "WorkingTreeImpactError",
+    "WorkingTreeRenameCheck",
     "analyze_working_tree_impact",
+    "analyze_working_tree_rename",
 ]

@@ -54,6 +54,16 @@ def parse_artifact_selector(value: str) -> tuple[str, str]:
     return stage_id, artifact_name
 
 
+def parse_source_target(value: str) -> dict[str, str]:
+    """Split one PATH:SYMBOL selector for a source declaration."""
+    if ":" not in value:
+        raise argparse.ArgumentTypeError("source target must use PATH:SYMBOL")
+    path, symbol = value.rsplit(":", 1)
+    if not path or not symbol:
+        raise argparse.ArgumentTypeError("source target must use PATH:SYMBOL")
+    return {"path": path, "symbol": symbol}
+
+
 def build_parser() -> ArgumentParser:
     """Build the VIPER command parser and its API subcommands."""
     parser = ViperArgumentParser(prog="viper")
@@ -231,6 +241,33 @@ def build_parser() -> ArgumentParser:
     analyze.add_argument("--cache-root", type=Path)
     analyze.add_argument("--codeql-executable", type=Path)
     analyze.add_argument("--query-pack", type=Path)
+    rename_check = impact_commands.add_parser(
+        "rename-check",
+        help="verify an exact old-to-new dependency transition",
+    )
+    add_root(rename_check)
+    rename_check.add_argument(
+        "--base",
+        default="HEAD",
+        help="baseline Git revision; defaults to HEAD",
+    )
+    rename_check.add_argument(
+        "--old", dest="old_target", type=parse_source_target, required=True
+    )
+    rename_check.add_argument(
+        "--new", dest="new_target", type=parse_source_target, required=True
+    )
+    rename_check.add_argument(
+        "--kind",
+        action="append",
+        dest="edge_kinds",
+        choices=("imports", "calls", "reads", "writes"),
+        help="govern one dependency operation; repeat for several kinds",
+    )
+    rename_check.add_argument("--artifact-root", type=Path)
+    rename_check.add_argument("--cache-root", type=Path)
+    rename_check.add_argument("--codeql-executable", type=Path)
+    rename_check.add_argument("--query-pack", type=Path)
     return parser
 
 
@@ -266,6 +303,7 @@ def _operation_and_payload(
         "init": "init_project",
         "impact-explain": "explain_impact",
         "impact-analyze": "analyze_impact",
+        "impact-rename-check": "check_rename",
     }
     operation = mapping[command]
     if operation == "restore":
@@ -283,6 +321,8 @@ def _operation_and_payload(
     trusted = values.pop("trust_source", None)
     if trusted is not None:
         values["trusted_source_repositories"] = trusted
+    if operation == "check_rename" and values.get("edge_kinds") is None:
+        values.pop("edge_kinds")
     return operation, values
 
 
@@ -382,6 +422,8 @@ def _human_success(result: SuccessModel) -> str:
             f"at {item.use_path}:{item.use_line}"
             for item in evidence
         )
+    if result.operation == "check_rename":
+        return getattr(result, "report")
     capabilities = getattr(result, "operations")
     return "\n".join(capabilities)
 
@@ -399,6 +441,8 @@ def _render(result: APIModel, *, json_output: bool) -> int:
         return 1
     assert isinstance(result, SuccessModel)
     if result.operation == "preflight" and not getattr(result, "ready"):
+        return 1
+    if result.operation == "check_rename" and not getattr(result, "check").passed:
         return 1
     return 0
 

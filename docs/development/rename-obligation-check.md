@@ -2,11 +2,12 @@
 
 ## 1. Status
 
-**Contract status:** Source-backed implementation planned.
+**Contract status:** Implemented and validated on branch.
 
-`P0-ROC-01` passes its isolated Ruff, Pyright, unit-test, and same-identity CodeQL gate. Production
-activation follows the CodeQL Analysis migration and source-backed
-`ContractTarget` ingestion.
+`P0-ROC-01` passes its isolated Ruff, Pyright, unit-test, and same-identity CodeQL gate. The
+`viper impact rename-check` operation also passes a live rejected-then-accepted
+rename experiment. Checklist activation awaits source-backed `ContractTarget`
+ingestion.
 
 | ID | Implementation obligation |
 |---|---|
@@ -128,7 +129,7 @@ flowchart TB
     Scan["binding-aware site scan<br/>proposed"]
     Transition["DependencyTransition[]<br/>proposed"]
     Check["RenameCheck<br/>proposed output"]
-    Report["render_rename_check()<br/>proposed output"]
+    Report["render_rename_check()<br/>implemented output"]
 
     R -->|"rename contract"| Compile
     Compile -->|"baseline sites"| O
@@ -191,7 +192,7 @@ flowchart TB
 ## 4. Models
 
 The complete proposed declarations live in the planned
-[`system_impact/rename.py`](../../plans/rename-obligation-check/add/src/viper/system_impact/rename.py).
+[`system_impact/rename.py`](../../src/viper/system_impact/rename.py).
 
 | Model | Role |
 |---|---|
@@ -261,6 +262,8 @@ The accepted and rejected tests are in the planned
 | Type | Add the six complete rename records and `RenameTransitionStatus` in `system_impact/rename.py`. |
 | Authoring | Construct `RenameSpec` with one old target, one replacement target, and selected operations. |
 | Runtime | Add the compiler, binding-aware scanner, exact checker, and compact renderer in `system_impact/rename.py`. |
+| Orchestration | Add `analyze_working_tree_rename()` to materialize and analyze the baseline and current tree under one CodeQL identity. |
+| Agent interface | Add the typed `check_rename` API operation and `viper impact rename-check` command. |
 | Persistence | Serialize `RenameObligationSet` before editing and `RenameCheck` after candidate analysis. |
 | Verification | Derive acceptance from complete dependency transitions, shared analysis identities, source digests, and the checker digest. |
 | Test | Add the accepted rename, stale old call, standard-library separation, alias ambiguity, unrelated local alias, and stale graph cases. |
@@ -268,7 +271,7 @@ The accepted and rejected tests are in the planned
 | Documentation | Add this contract and one planned Master Phase 0 checklist block. |
 | Legacy cleanup | Keep `OneHop.changed` as descriptive evidence; remove it from any future transformation-completion decision. |
 
-This plan adds `system_impact/rename.py` as a new owner. Existing `OneHop`,
+This change adds `system_impact/rename.py` as a new owner. Existing `OneHop`,
 `explain_one_hop()`, and ranked impact paths remain valid advisory interfaces.
 
 ## 9. Acceptance case
@@ -297,14 +300,12 @@ candidate, and `render_rename_check()` prints `Completion: rejected`.
 
 ## 10. Implementation order
 
-1. Apply and close `P0-CQA-01` and `P0-CQA-02` so production owns the staged
-   CodeQL identity and receipt protocol already consumed by this plan.
-2. Add source-backed `ContractTarget` ingestion so the CTG can compile file
+1. Use the active staged CodeQL identity and receipt protocol.
+2. Apply `P0-ROC-01`, run the focused tests and live rejected-then-accepted
+   CodeQL experiment, and retain the resulting rename evidence.
+3. Add source-backed `ContractTarget` ingestion so the CTG can compile file
    actions directly from `plan.toml`.
-3. Rebase this source plan onto that accepted baseline and rerun `check.py`.
-4. Apply `P0-ROC-01`, run the focused tests and one live CodeQL gate, then
-   serialize the accepted `RenameObligationSet` and `RenameCheck` fixture.
-5. Register this contract in `contract-baselines.json`, close the checklist
+4. Register this contract in `contract-baselines.json`, close the checklist
    block, run the contract-documentation and checklist validators, and publish
    the accepted System Impact evidence.
 
@@ -325,9 +326,10 @@ transition.
 
 ## 12. ContractTarget
 
-The source plan is the sole authority for implementation bytes. `add` requires
-an absent destination and copies one complete reviewed file. `patch` requires
-the patch's changed paths to equal its declared destination set before
+The production modules now own runtime behavior. The retained source plan
+records the reviewed input that produced the first implementation. `add`
+requires an absent destination and copies one complete reviewed file. `patch`
+requires the patch's changed paths to equal its declared destination set before
 application.
 
 The plan compiles these targets after source-backed ingestion is available:
@@ -339,8 +341,8 @@ The plan compiles these targets after source-backed ingestion is available:
 | `patch` | [`P0-ROC-01.patch`](../../plans/rename-obligation-check/blocks/P0-ROC-01.patch): `tests/conftest.py` test classifications | ROC-03 |
 
 Each declaration difference must compile to one `ContractTarget` in
-`P0-ROC-01`. Production application remains blocked until the CTG enforces
-that one-to-one mapping for source-backed plans.
+`P0-ROC-01`. Checklist closure remains blocked until the CTG enforces that
+one-to-one mapping for source-backed plans.
 
 ## Future work
 
@@ -354,7 +356,7 @@ The active contract closes independently because ranking decides presentation
 order, while `RenameCheck` decides mandatory completion. Promotion requires a
 localization fixture set that measures recall, irrelevant candidates, tokens,
 and elapsed time. A separate ranking contract would own the signals, cache
-identity, benchmark, CLI or MCP surface, and acceptance thresholds.
+identity, benchmark, MCP surface, and acceptance thresholds.
 
 ## Sources
 

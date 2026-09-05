@@ -50,7 +50,7 @@ def fit(context: Context[TrainParameters]) -> None:
 `Context` provides the active run, attempt, and stage IDs; the validated
 parameter value; materialized input paths; writable artifact paths; live metric
 handles; and named NumPy generators. External-input retrieval remains owned by
-VIPER rather than project stage callables.
+VIPER. Project stage callables receive materialized input paths.
 
 `train_model` is the project's training implementation. VIPER supplies its
 validated parameter values and allocated paths. The `parameters` artifact key
@@ -146,11 +146,13 @@ model, schema registry, handler registry, and JSON encoder.
 | `validate_stage` | `ValidateStageRequest` | `ValidateStageSuccess` | `validate-stage` |
 | `validate_resolved_stage` | `ValidateResolvedStageRequest` | `ValidateResolvedStageSuccess` | `validate-resolved-stage` |
 | `validate_run_spec` | `ValidateRunSpecRequest` | `ValidateRunSpecSuccess` | `validate-run` |
+| `freeze_run` | `FreezeRunRequest` | `FreezeRunSuccess` | `freeze-run` |
 | `preflight` | `PreflightRequest` | `PreflightSuccess` | `preflight` |
 | `execute_stage` | `ExecuteStageRequest` | `ExecuteStageSuccess` | `execute-stage` |
 | `run` | `RunRequest` | `RunSuccess` | `run` |
 | `retry` | `RetryRequest` | `RetrySuccess` | `retry` |
 | `execute_benchmark` | `ExecuteBenchmarkRequest` | `ExecuteBenchmarkSuccess` | `execute-benchmark` |
+| `restore` | `RestoreRequest` | `RestoreSuccess` | `restore` |
 | `plan_diff` | `PlanDiffRequest` | `PlanDiffSuccess` | `plan-diff` |
 | `lineage` | `LineageRequest` | `LineageSuccess` | `lineage` |
 | `status` | `StatusRequest` | `StatusSuccess` | `status` |
@@ -162,6 +164,8 @@ model, schema registry, handler registry, and JSON encoder.
 | `get_capabilities` | `CapabilitiesRequest` | `CapabilitiesSuccess` | `capabilities` |
 | `init_project` | `InitProjectRequest` | `InitProjectSuccess` | `init` |
 | `explain_impact` | `ExplainImpactRequest` | `ExplainImpactSuccess` | `impact-explain` |
+| `analyze_impact` | `AnalyzeImpactRequest` | `AnalyzeImpactSuccess` | `impact-analyze` |
+| `check_rename` | `RenameCheckRequest` | `RenameCheckSuccess` | `impact-rename-check` |
 
 Python callers can invoke a concrete operation directly:
 
@@ -288,6 +292,7 @@ Public types and functions have one owner:
 | `viper.resume` | Optimizer, DataLoader, and combined resume-state contracts |
 | `viper.execution` | Run, retry, and benchmark operations |
 | `viper.system_impact.explain` | Joined one-hop dependency evidence for tools and agents |
+| `viper.system_impact.rename` | Exact old-to-new dependency obligations and completion checks |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval through the local store |
@@ -306,9 +311,8 @@ viper --json impact explain \
   --target src/package/api.py:parse
 ```
 
-When those evidence files do not exist yet, agents can compile the committed
-baseline and current Python working tree before receiving the same joined
-answer:
+Agents missing those evidence files can compile the committed baseline and
+current Python working tree before receiving the same joined answer:
 
 ```bash
 viper --json impact analyze \
@@ -328,6 +332,23 @@ the selected target. The result also contains `path_search`, an advisory ranked
 traversal over the baseline graph. Each candidate includes the complete path
 from the selected target, every edge kind, and the exact source location that
 supports each step.
+
+Agents can turn a planned rename into an exact completion check:
+
+```bash
+viper impact rename-check \
+  --root . \
+  --base HEAD \
+  --old src/package/tools.py:run \
+  --new src/package/tools.py:run_checked \
+  --kind calls
+```
+
+The command compiles every selected baseline reference into an obligation,
+analyzes the current tree under the same CodeQL identity, and reports each
+remaining old binding. A successful exit requires the old declaration and all
+governed references to disappear, the replacement declaration to exist, and
+every baseline occurrence to have one binding-equivalent replacement.
 
 Path ranking weights calls and constructions above inheritance, writes, reads,
 and imports. Each additional hop is discounted and penalized, and high-fanout

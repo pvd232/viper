@@ -281,7 +281,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Public module ownership](module-ownership.md) | Complete | One defining module for API operations, verification operations, and verification types |
 | [System Impact Check](system-impact-compiler.md) | Complete | Pinned CodeQL observations of baseline and frozen candidate source, exact declaration checks, a two-graph one-hop preflight, and rejection of unplanned source changes |
 | [CodeQL Analysis](codeql-analysis.md) | Design approved; source plan validated | Exact graph semantics plus separate extraction, query, and graph-lowering keys, caches, and receipts |
-| [Rename Obligation Check](rename-obligation-check.md) | Source-backed implementation planned | Exact old-to-new dependency transitions for governed Python renames |
+| [Rename Obligation Check](rename-obligation-check.md) | Implemented and validated on branch | Exact old-to-new dependency transitions for governed Python renames |
 | [CodeQL graph cache reuse](codeql-graph-cache-reuse.md) | Planned | Verified warm graph reuse without BQRS decoding unless a caller explicitly requests publication evidence |
 | [PairBlock scheduling](pair-block-scheduling.md) | Complete | CodeQL-informed dependency projection, write-conflict ordering, SCC condensation, and deterministic parallel execution waves |
 | [Child-process launching](child-process-launching.md) | Complete | Spawn-safe repository-owned child processes on macOS and the closed subprocess import boundary |

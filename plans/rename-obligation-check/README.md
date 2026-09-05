@@ -1,7 +1,12 @@
 # Rename Obligation Check Source Plan
 
-This directory contains the reviewed implementation of the exact rename
-checker proposed by the [Rename Obligation Check contract](../../docs/development/rename-obligation-check.md).
+This directory retains the reviewed source plan that produced the first exact
+rename-check implementation. Production behavior now belongs to
+[`system_impact/rename.py`](../../src/viper/system_impact/rename.py), the typed
+API, and `viper impact rename-check`.
+
+[`agent-experiment.md`](agent-experiment.md) records the paired coding-agent
+smoke test and its bounded conclusion.
 
 `plan.toml` binds `P0-ROC-01` to two complete added files. `check.py` extracts
 the recorded baseline into a temporary directory, adds those files, runs Ruff,

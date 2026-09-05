@@ -53,12 +53,14 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "compare_runs" in capabilities.operations
     assert "explain_impact" in capabilities.operations
     assert "analyze_impact" in capabilities.operations
+    assert "check_rename" in capabilities.operations
     assert "RunSpec" in capabilities.schemas
     assert "CompareRunsRequest" in capabilities.schemas
     assert "ExecuteBenchmarkRequest" in capabilities.schemas
     assert "InitProjectRequest" in capabilities.schemas
     assert "ExplainImpactRequest" in capabilities.schemas
     assert "AnalyzeImpactRequest" in capabilities.schemas
+    assert "RenameCheckRequest" in capabilities.schemas
     assert capabilities.execution_backends == ("trusted_local",)
 
 
@@ -99,6 +101,22 @@ def test_analyze_impact_rejects_an_unbounded_path_search() -> None:
     result = dispatch(
         "analyze_impact",
         {"targets": ["src/example.py:target"], "path_depth": 6},
+    )
+
+    assert isinstance(result, ViperFailure)
+    assert result.origin == "request"
+    assert result.code == "invalid_request"
+
+
+def test_rename_check_rejects_an_unknown_edge_kind_before_execution() -> None:
+    """Reject unsupported rename evidence before starting source analysis."""
+    result = dispatch(
+        "check_rename",
+        {
+            "old_target": {"path": "src/example.py", "symbol": "old"},
+            "new_target": {"path": "src/example.py", "symbol": "new"},
+            "edge_kinds": ["constructs"],
+        },
     )
 
     assert isinstance(result, ViperFailure)
