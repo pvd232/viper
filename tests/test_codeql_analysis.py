@@ -628,7 +628,14 @@ def test_working_tree_analysis_builds_and_explains_both_snapshots(
     assert result.evidence[0].dependent.symbol == "dependent"
     assert result.evidence[0].state == "unchanged"
     assert result.evidence[0].dependent_changed is True
+    assert len(result.path_search.paths) == 1
+    assert result.path_search.paths[0].candidate.symbol == "dependent"
+    assert result.path_search.paths[0].depth == 1
     persisted = json.loads(
         (result.artifact_root / "dependency-evidence.json").read_text()
     )
     assert persisted[0]["use_path"] == "src/example.py"
+    persisted_paths = json.loads(
+        (result.artifact_root / "impact-paths.json").read_text()
+    )
+    assert persisted_paths["paths"][0]["candidate"]["symbol"] == "dependent"

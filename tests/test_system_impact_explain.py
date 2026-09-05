@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from viper.system_impact.explain import explain_one_hop, explain_plan_check
+from viper.system_impact.explain import (
+    explain_one_hop,
+    explain_plan_check,
+    rank_impact_paths,
+)
 from viper.system_impact.models import (
+    EdgeKind,
     OneHop,
     PlanCheck,
     SourceEdge,
@@ -40,13 +45,14 @@ def _edge(
     source: SourceNode,
     target: SourceNode,
     line: int,
+    kind: EdgeKind = "calls",
 ) -> SourceEdge:
-    """Build one call occurrence for an explanation fixture."""
+    """Build one dependency occurrence for an explanation fixture."""
     return SourceEdge(
         edge_id=edge_id,
         source=source.node_id,
         target=target.node_id,
-        kind="calls",
+        kind=kind,
         query="viper/python-impact/dependencies",
         path=source.path,
         line=line,
@@ -117,6 +123,71 @@ def test_explain_one_hop_joins_dependencies_and_source_locations() -> None:
     assert result[0].kind == "calls"
     assert result[0].use_path == "src/adapter.py"
     assert result[0].use_line == 9
+
+
+def test_rank_impact_paths_returns_bounded_explained_candidates() -> None:
+    """Rank direct and multi-hop dependents with exact edge evidence."""
+    target = _node("src/parser.py", "parse")
+    command = _node("src/command.py", "run")
+    adapter = _node("src/adapter.py", "parse_adapter")
+    test = _node("tests/test_command.py", "test_invalid_input")
+    direct = _edge("1" * 64, source=command, target=target, line=14)
+    imported = _edge(
+        "2" * 64,
+        source=adapter,
+        target=target,
+        line=3,
+        kind="imports",
+    )
+    test_call = _edge("3" * 64, source=test, target=command, line=28)
+    cycle = _edge("4" * 64, source=target, target=command, line=7)
+    graph = _graph(
+        (target, command, adapter, test),
+        (direct, imported, test_call, cycle),
+    )
+
+    result = rank_impact_paths(
+        graph=graph,
+        targets=(target.node_id,),
+        max_depth=3,
+        limit=3,
+        expansion_budget=20,
+    )
+
+    assert [item.candidate.symbol for item in result.paths] == [
+        "run",
+        "parse_adapter",
+        "test_invalid_input",
+    ]
+    assert result.paths[2].candidate_is_test is True
+    assert [step.kind for step in result.paths[2].steps] == ["calls", "calls"]
+    assert result.paths[2].steps[1].use_line == 28
+    assert result.expansions == 3
+    assert result.truncated is False
+
+
+def test_rank_impact_paths_reports_budget_truncation_and_absent_targets() -> None:
+    """Expose omitted work when the bounded search cannot inspect every path."""
+    target = _node("src/parser.py", "parse")
+    first = _node("src/first.py", "first")
+    second = _node("src/second.py", "second")
+    graph = _graph(
+        (target, first, second),
+        (
+            _edge("5" * 64, source=first, target=target, line=4),
+            _edge("6" * 64, source=second, target=target, line=9),
+        ),
+    )
+
+    result = rank_impact_paths(
+        graph=graph,
+        targets=(target.node_id, "src/missing.py:missing"),
+        expansion_budget=1,
+    )
+
+    assert result.expansions == 1
+    assert result.truncated is True
+    assert result.unranked_targets == ("src/missing.py:missing",)
 
 
 def test_explain_one_hop_rejects_an_absent_edge() -> None:

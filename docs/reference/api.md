@@ -304,12 +304,29 @@ answer:
 viper --json impact analyze \
   --root . \
   --base HEAD \
-  --target src/package/api.py:parse
+  --target src/package/api.py:parse \
+  --path-depth 3 \
+  --path-limit 12 \
+  --path-expansion-budget 500
 ```
 
-`impact analyze` exports the baseline commit without changing the working tree,
+`impact analyze` exports the baseline commit while preserving the working tree,
 runs the checked-in Python CodeQL suite against both source snapshots, persists
 both receipt-bound graphs under `.viper/system-impact/analysis`, and reports
 every direct import, call, construction, inheritance, read, or write involving
-the selected target. Use `--artifact-root`, `--cache-root`,
+the selected target. The result also contains `path_search`, an advisory ranked
+traversal over the baseline graph. Each candidate includes the complete path
+from the selected target, every edge kind, and the exact source location that
+supports each step.
+
+Path ranking weights calls and constructions above inheritance, writes, reads,
+and imports. Each additional hop is discounted and penalized, and high-fanout
+intermediate declarations receive another penalty. Declarations beneath `src/`
+receive the largest role bonus; declarations beneath a repository-root `tests/`
+directory receive a smaller bonus. `path_search.truncated` reports when the
+result limit or expansion budget omitted candidates. Targets absent from the
+baseline, including new working-tree declarations, appear in
+`path_search.unranked_targets`.
+
+Use `--artifact-root`, `--cache-root`,
 `--codeql-executable`, or `--query-pack` to override the resolved defaults.

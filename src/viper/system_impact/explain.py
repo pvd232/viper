@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import heapq
+import math
 from typing import Literal
 
 from pydantic import Field
@@ -12,6 +14,15 @@ from viper._schema import SHA256, NonEmptyStr, ProtocolModel
 from .models import EdgeKind, OneHop, PlanCheck, SourceEdge, SourceGraph
 
 DependencyState = Literal["unchanged", "added", "removed"]
+
+_EDGE_WEIGHTS: dict[EdgeKind, float] = {
+    "calls": 6.0,
+    "constructs": 6.0,
+    "inherits": 5.0,
+    "writes": 5.0,
+    "reads": 4.0,
+    "imports": 3.0,
+}
 
 
 class DependencyEvidence(ProtocolModel):
@@ -42,6 +53,259 @@ class DependencyEvidence(ProtocolModel):
     )
     dependent_changed: bool = Field(
         description="Whether the dependent declaration changed between the graphs."
+    )
+
+
+class ImpactPathStep(ProtocolModel):
+    """Describe one dependency edge traversed from a target to its dependent."""
+
+    edge_id: SHA256 = Field(description="SourceEdge supporting this path step.")
+    target: RepoSymbolRef = Field(description="Declaration consumed at this path step.")
+    dependent: RepoSymbolRef = Field(
+        description="Declaration reached by following the dependency backward."
+    )
+    kind: EdgeKind = Field(description="Operation connecting both declarations.")
+    use_path: NonEmptyStr = Field(
+        description="Repository-relative source path containing the operation."
+    )
+    use_line: int = Field(
+        ge=1,
+        description="One-based source line containing the operation.",
+    )
+    query: NonEmptyStr = Field(
+        description="CodeQL query that observed the dependency operation."
+    )
+
+
+class RankedImpactPath(ProtocolModel):
+    """Rank one candidate declaration by its dependency path from a target."""
+
+    candidate: RepoSymbolRef = Field(
+        description="Declaration selected for agent inspection."
+    )
+    score: float = Field(
+        description="Deterministic advisory relevance score for this path."
+    )
+    depth: int = Field(
+        ge=1,
+        description="Number of dependency edges from the target to the candidate.",
+    )
+    candidate_is_test: bool = Field(
+        description="Whether the candidate lies beneath a test directory."
+    )
+    steps: tuple[ImpactPathStep, ...] = Field(
+        min_length=1,
+        description="Ordered dependency edges from the target to the candidate.",
+    )
+    reason: NonEmptyStr = Field(
+        description="Compact explanation of the score-bearing path properties."
+    )
+
+
+class ImpactPathSearch(ProtocolModel):
+    """Report one bounded ranked traversal over a baseline source graph."""
+
+    targets: tuple[RepoSymbolRef, ...] = Field(
+        description="Baseline declarations used as traversal seeds."
+    )
+    unranked_targets: tuple[NonEmptyStr, ...] = Field(
+        description="Requested declarations absent from the baseline graph."
+    )
+    max_depth: int = Field(
+        ge=1, description="Maximum dependency edges allowed in one returned path."
+    )
+    limit: int = Field(
+        ge=1, description="Maximum ranked candidate paths returned to the caller."
+    )
+    expansion_budget: int = Field(
+        ge=1, description="Maximum partial paths removed from the search frontier."
+    )
+    expansions: int = Field(
+        ge=0, description="Partial paths removed from the frontier during this search."
+    )
+    truncated: bool = Field(
+        description="Whether the expansion budget or result limit omitted candidates."
+    )
+    paths: tuple[RankedImpactPath, ...] = Field(
+        description="Highest-ranked candidate paths in deterministic order."
+    )
+
+
+def _is_test_path(path: str) -> bool:
+    """Return whether a repository path lies beneath its root test directory."""
+    parts = path.split("/")
+    return parts[0] in {"test", "tests"}
+
+
+def _candidate_role_bonus(path: str) -> float:
+    """Prioritize primary source, then root tests, over auxiliary Python trees."""
+    if path.startswith("src/"):
+        return 2.0
+    if _is_test_path(path):
+        return 0.5
+    return 0.0
+
+
+def _rank_score(
+    edges: tuple[SourceEdge, ...],
+    *,
+    nodes: dict[str, RepoSymbolRef],
+    incoming_counts: dict[str, int],
+) -> float:
+    """Score one path by edge strength, depth, fanout, and test evidence."""
+    edge_score = sum(
+        _EDGE_WEIGHTS[edge.kind] / (2**index) for index, edge in enumerate(edges)
+    )
+    depth_penalty = 4.0 * (len(edges) - 1)
+    fanout_penalty = sum(
+        math.log2(1 + incoming_counts.get(edge.source, 0)) / (2**index)
+        for index, edge in enumerate(edges[:-1], start=1)
+    )
+    candidate = nodes[edges[-1].source]
+    role_bonus = _candidate_role_bonus(candidate.path)
+    return round(edge_score - depth_penalty - fanout_penalty + role_bonus, 6)
+
+
+def _path_reason(edges: tuple[SourceEdge, ...], *, candidate_is_test: bool) -> str:
+    """Explain the visible properties used to rank one dependency path."""
+    kinds = " -> ".join(edge.kind for edge in edges)
+    candidate = edges[-1].source
+    suffix = "; test candidate" if candidate_is_test else ""
+    if candidate.startswith("src/"):
+        suffix = "; primary source candidate"
+    return f"{len(edges)}-hop {kinds} path{suffix}"
+
+
+def _ranked_path(
+    edges: tuple[SourceEdge, ...],
+    *,
+    nodes: dict[str, RepoSymbolRef],
+    incoming_counts: dict[str, int],
+) -> RankedImpactPath:
+    """Convert one internal edge path into agent-readable evidence."""
+    candidate = nodes[edges[-1].source]
+    candidate_is_test = _is_test_path(candidate.path)
+    return RankedImpactPath(
+        candidate=candidate,
+        score=_rank_score(edges, nodes=nodes, incoming_counts=incoming_counts),
+        depth=len(edges),
+        candidate_is_test=candidate_is_test,
+        steps=tuple(
+            ImpactPathStep(
+                edge_id=edge.edge_id,
+                target=nodes[edge.target],
+                dependent=nodes[edge.source],
+                kind=edge.kind,
+                use_path=edge.path,
+                use_line=edge.line,
+                query=edge.query,
+            )
+            for edge in edges
+        ),
+        reason=_path_reason(edges, candidate_is_test=candidate_is_test),
+    )
+
+
+def rank_impact_paths(
+    *,
+    graph: SourceGraph,
+    targets: tuple[str, ...],
+    max_depth: int = 3,
+    limit: int = 12,
+    expansion_budget: int = 500,
+) -> ImpactPathSearch:
+    """Rank bounded reverse-dependency paths from baseline declarations."""
+    if not targets or len(targets) != len(set(targets)):
+        raise ValueError("targets must contain unique source declarations")
+    if not 1 <= max_depth <= 5:
+        raise ValueError("max_depth must be between 1 and 5")
+    if not 1 <= limit <= 50:
+        raise ValueError("limit must be between 1 and 50")
+    if not 1 <= expansion_budget <= 5000:
+        raise ValueError("expansion_budget must be between 1 and 5000")
+
+    nodes = {
+        node.node_id: RepoSymbolRef(path=node.path, symbol=node.symbol)
+        for node in graph.nodes
+    }
+    resolved_ids = tuple(sorted(set(targets) & nodes.keys()))
+    unranked = tuple(sorted(set(targets) - nodes.keys()))
+    incoming: dict[str, list[SourceEdge]] = {}
+    for edge in graph.edges:
+        incoming.setdefault(edge.target, []).append(edge)
+    for edges in incoming.values():
+        edges.sort(key=lambda edge: edge.edge_id)
+    incoming_counts = {node_id: len(edges) for node_id, edges in incoming.items()}
+
+    frontier: list[
+        tuple[float, int, tuple[str, ...], tuple[SourceEdge, ...], tuple[str, ...]]
+    ] = []
+    for target in resolved_ids:
+        for edge in incoming.get(target, ()):
+            path = (edge,)
+            score = _rank_score(path, nodes=nodes, incoming_counts=incoming_counts)
+            heapq.heappush(
+                frontier,
+                (-score, 1, (edge.edge_id,), path, (target, edge.source)),
+            )
+
+    best: dict[str, RankedImpactPath] = {}
+    expansions = 0
+    while frontier and expansions < expansion_budget:
+        _priority, depth, edge_ids, edges, path_nodes = heapq.heappop(frontier)
+        expansions += 1
+        ranked = _ranked_path(edges, nodes=nodes, incoming_counts=incoming_counts)
+        candidate_id = edges[-1].source
+        current = best.get(candidate_id)
+        if current is None or (-ranked.score, edge_ids) < (
+            -current.score,
+            tuple(step.edge_id for step in current.steps),
+        ):
+            best[candidate_id] = ranked
+        if depth == max_depth:
+            continue
+        for edge in incoming.get(candidate_id, ()):
+            if edge.source in path_nodes:
+                continue
+            next_edges = (*edges, edge)
+            next_ids = (*edge_ids, edge.edge_id)
+            score = _rank_score(
+                next_edges,
+                nodes=nodes,
+                incoming_counts=incoming_counts,
+            )
+            heapq.heappush(
+                frontier,
+                (
+                    -score,
+                    depth + 1,
+                    next_ids,
+                    next_edges,
+                    (*path_nodes, edge.source),
+                ),
+            )
+
+    ordered = tuple(
+        sorted(
+            best.values(),
+            key=lambda item: (
+                -item.score,
+                item.depth,
+                item.candidate.path,
+                item.candidate.symbol,
+                tuple(step.edge_id for step in item.steps),
+            ),
+        )
+    )
+    return ImpactPathSearch(
+        targets=tuple(nodes[target] for target in resolved_ids),
+        unranked_targets=unranked,
+        max_depth=max_depth,
+        limit=limit,
+        expansion_budget=expansion_budget,
+        expansions=expansions,
+        truncated=bool(frontier) or len(ordered) > limit,
+        paths=ordered[:limit],
     )
 
 
@@ -289,7 +553,11 @@ def explain_source_comparison(
 __all__ = [
     "DependencyEvidence",
     "DependencyState",
+    "ImpactPathSearch",
+    "ImpactPathStep",
+    "RankedImpactPath",
     "explain_one_hop",
     "explain_plan_check",
     "explain_source_comparison",
+    "rank_impact_paths",
 ]

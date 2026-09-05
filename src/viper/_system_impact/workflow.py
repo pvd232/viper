@@ -12,7 +12,9 @@ from pathlib import Path
 import viper._subprocess as subprocess
 from viper.system_impact.explain import (
     DependencyEvidence,
+    ImpactPathSearch,
     explain_source_comparison,
+    rank_impact_paths,
 )
 from viper.system_impact.models import SourceGraph, SourceSnapshot
 
@@ -39,6 +41,7 @@ class WorkingTreeImpact:
     baseline_graph: Path
     realized_graph: Path
     evidence: tuple[DependencyEvidence, ...]
+    path_search: ImpactPathSearch
 
 
 def _git(root: Path, *arguments: str) -> bytes:
@@ -159,8 +162,11 @@ def analyze_working_tree_impact(
     cache_root: Path | None = None,
     codeql_executable: Path | None = None,
     query_pack: Path | None = None,
+    path_depth: int = 3,
+    path_limit: int = 12,
+    path_expansion_budget: int = 500,
 ) -> WorkingTreeImpact:
-    """Compile and explain direct dependencies around current working-tree targets."""
+    """Compile direct dependencies and ranked paths around source targets."""
     repository = _repository_root(root)
     revision = _commit(repository, base)
     executable_value = (
@@ -247,6 +253,13 @@ def analyze_working_tree_impact(
             realized=realized,
             targets=targets,
         )
+        path_search = rank_impact_paths(
+            graph=baseline,
+            targets=targets,
+            max_depth=path_depth,
+            limit=path_limit,
+            expansion_budget=path_expansion_budget,
+        )
     except ValueError as error:
         raise WorkingTreeImpactError(str(error)) from error
     (output / "dependency-evidence.json").write_text(
@@ -257,6 +270,10 @@ def analyze_working_tree_impact(
         ),
         encoding="utf-8",
     )
+    (output / "impact-paths.json").write_text(
+        path_search.model_dump_json(),
+        encoding="utf-8",
+    )
     return WorkingTreeImpact(
         repository_root=repository,
         base_revision=revision,
@@ -264,6 +281,7 @@ def analyze_working_tree_impact(
         baseline_graph=baseline_path,
         realized_graph=realized_path,
         evidence=evidence,
+        path_search=path_search,
     )
 
 

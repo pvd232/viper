@@ -65,7 +65,11 @@ from .stages import (
     verify_stage_implementation_bytes,
 )
 from .storage import LocalArtifactStore
-from .system_impact.explain import DependencyEvidence, explain_plan_check
+from .system_impact.explain import (
+    DependencyEvidence,
+    ImpactPathSearch,
+    explain_plan_check,
+)
 from .system_impact.models import CommitId, PlanCheck, SourceGraph
 from .verification import (
     verify_benchmark_result,
@@ -549,6 +553,24 @@ class AnalyzeImpactRequest(APIModel):
         default=None,
         description="Optional Python impact query pack directory.",
     )
+    path_depth: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description="Maximum reverse-dependency edges in one ranked path.",
+    )
+    path_limit: int = Field(
+        default=12,
+        ge=1,
+        le=50,
+        description="Maximum ranked candidate paths returned to the caller.",
+    )
+    path_expansion_budget: int = Field(
+        default=500,
+        ge=1,
+        le=5000,
+        description="Maximum partial paths evaluated by the advisory search.",
+    )
 
     @field_validator("targets")
     @classmethod
@@ -580,6 +602,9 @@ class AnalyzeImpactSuccess(SuccessModel):
     )
     evidence: tuple[DependencyEvidence, ...] = Field(
         description="Joined direct dependency occurrences around the selected targets."
+    )
+    path_search: ImpactPathSearch = Field(
+        description="Bounded ranked baseline dependency paths from the targets."
     )
 
 
@@ -1318,6 +1343,9 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
             cache_root=request.cache_root,
             codeql_executable=request.codeql_executable,
             query_pack=request.query_pack,
+            path_depth=request.path_depth,
+            path_limit=request.path_limit,
+            path_expansion_budget=request.path_expansion_budget,
         )
     except WorkingTreeImpactError as exc:
         raise ViperError(
@@ -1340,6 +1368,7 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
         baseline_graph=result.baseline_graph,
         realized_graph=result.realized_graph,
         evidence=result.evidence,
+        path_search=result.path_search,
     )
 
 

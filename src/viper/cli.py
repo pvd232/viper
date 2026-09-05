@@ -206,6 +206,24 @@ def build_parser() -> ArgumentParser:
     analyze.add_argument("--cache-root", type=Path)
     analyze.add_argument("--codeql-executable", type=Path)
     analyze.add_argument("--query-pack", type=Path)
+    analyze.add_argument(
+        "--path-depth",
+        type=int,
+        default=3,
+        help="maximum dependency edges in one ranked path; defaults to 3",
+    )
+    analyze.add_argument(
+        "--path-limit",
+        type=int,
+        default=12,
+        help="maximum ranked paths returned; defaults to 12",
+    )
+    analyze.add_argument(
+        "--path-expansion-budget",
+        type=int,
+        default=500,
+        help="maximum partial paths evaluated; defaults to 500",
+    )
     return parser
 
 
@@ -331,15 +349,21 @@ def _human_success(result: SuccessModel) -> str:
         )
     if result.operation == "analyze_impact":
         evidence = getattr(result, "evidence")
-        if not evidence:
-            return "no direct dependency evidence"
-        return "\n".join(
+        path_search = getattr(result, "path_search")
+        lines = [
             f"{item.state} {item.kind}: "
             f"{item.dependent.path}:{item.dependent.symbol} -> "
             f"{item.target.path}:{item.target.symbol} "
             f"at {item.use_path}:{item.use_line}"
             for item in evidence
+        ]
+        lines.extend(
+            f"rank {item.score:.3f}: "
+            f"{item.candidate.path}:{item.candidate.symbol} "
+            f"via {item.reason}"
+            for item in path_search.paths
         )
+        return "\n".join(lines) if lines else "no dependency evidence"
     capabilities = getattr(result, "operations")
     return "\n".join(capabilities)
 

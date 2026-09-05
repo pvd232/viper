@@ -23,10 +23,12 @@ from viper.journal import DurableJournal
 def test_api_schema_and_capability_discovery() -> None:
     """Return registered schemas and the installed operation inventory."""
     schema = get_schema(SchemaRequest(name="RunSpec"))
+    impact_schema = get_schema(SchemaRequest(name="AnalyzeImpactSuccess"))
     capabilities = get_capabilities(CapabilitiesRequest())
 
     assert schema.name == "RunSpec"
     assert schema.json_schema["title"] == "RunSpec"
+    assert "path_search" in impact_schema.json_schema["properties"]
     assert "validate_run_spec" in capabilities.operations
     assert "preflight" in capabilities.operations
     assert "run" in capabilities.operations
@@ -72,6 +74,18 @@ def test_analyze_impact_rejects_duplicate_targets_before_execution() -> None:
     result = dispatch(
         "analyze_impact",
         {"targets": ["src/example.py:target", "src/example.py:target"]},
+    )
+
+    assert isinstance(result, ViperFailure)
+    assert result.origin == "request"
+    assert result.code == "invalid_request"
+
+
+def test_analyze_impact_rejects_an_unbounded_path_search() -> None:
+    """Reject ranked traversal limits outside the public bounded contract."""
+    result = dispatch(
+        "analyze_impact",
+        {"targets": ["src/example.py:target"], "path_depth": 6},
     )
 
     assert isinstance(result, ViperFailure)
