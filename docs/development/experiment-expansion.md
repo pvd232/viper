@@ -459,6 +459,7 @@ targets = [
     "src/viper/execution/__init__.py:ExperimentExecutionResult",
     "src/viper/execution/__init__.py:run_many",
     "src/viper/execution/__init__.py:__all__",
+    "tests/test_run_execution.py:GCEEnvironmentSpec",
     "tests/test_run_execution.py:time",
     "tests/test_run_execution.py:_batch",
     "tests/test_run_execution.py:RunResult",
@@ -1032,6 +1033,11 @@ __all__ = [
 import time
 ```
 
+<!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=update target=tests/test_run_execution.py:GCEEnvironmentSpec -->
+```python contract-target
+from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
+```
+
 <!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=add target=tests/test_run_execution.py:_batch -->
 ```python contract-target
 from viper.execution import _batch
@@ -1049,9 +1055,7 @@ def test_run_many_retains_one_result_per_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Bound active runs and preserve success, failure, and skip positions."""
-    paths = tuple(
-        tmp_path / f"{name}.yaml" for name in ("first", "second", "third")
-    )
+    paths = tuple(tmp_path / f"{name}.yaml" for name in ("first", "second", "third"))
     run_ids = (
         "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         "01ARZ3NDEKTSV4RRFFQ69G5FAW",
