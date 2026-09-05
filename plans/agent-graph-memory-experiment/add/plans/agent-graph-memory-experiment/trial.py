@@ -1,7 +1,5 @@
 """Execute one coding-agent arm as a VIPER build stage."""
 
-from __future__ import annotations
-
 import hashlib
 import json
 import os

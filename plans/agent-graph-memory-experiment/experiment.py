@@ -27,7 +27,6 @@ from viper.artifacts import artifact
 from viper.authoring import (
     experiment,
     factor,
-    freeze_run_plan,
     input,
     plan,
     replicate,
@@ -312,12 +311,12 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
     commit = prepare_project(project)
     trial = _load_trial(project)
     fixtures = {
-        "fixture": input("inputs/fixture.tar.gz", data_role="benchmark"),
+        "fixture": input("inputs/fixture.tar.gz", data_role="validation"),
         "graph_evidence": input(
             "inputs/graph-evidence.tar.gz",
-            data_role="benchmark",
+            data_role="validation",
         ),
-        "evaluator": input("inputs/hidden-evaluator.py", data_role="benchmark"),
+        "evaluator": input("inputs/hidden-evaluator.py", data_role="validation"),
     }
     drafts = {}
     for arm in ARMS:
@@ -334,7 +333,7 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
             name: artifact(
                 path=f"artifacts/models/agent_trial/{filename}",
                 loader=trial.load_bytes,
-                data_role="benchmark",
+                data_role="validation",
             )
             for name, filename in {
                 "transcript": "transcript.jsonl",
@@ -354,7 +353,7 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
                 **fixtures,
                 "prompt": input(
                     f"inputs/prompts/{arm}.txt",
-                    data_role="benchmark",
+                    data_role="validation",
                 ),
             },
             artifacts=outputs,
@@ -396,13 +395,9 @@ def run_experiment(project: Path, *, model: str, timeout_seconds: int) -> Path:
             reproducibility=_reproducibility(),
         )
         print(f"{arm}: starting VIPER run", flush=True)
-        frozen = freeze_run_plan(project, draft)
-        _git(project, "add", "experiments")
-        _git(project, "commit", "-qm", f"Freeze {arm} trial plan")
-        run_path = project / frozen.reference.stored_at.path
         result = execution.run(
             project,
-            run_path,
+            draft,
             timeout_seconds=timeout_seconds + 180,
         )
         verified = verify_run(
