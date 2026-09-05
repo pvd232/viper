@@ -275,6 +275,7 @@ Public types and functions have one owner:
 | `viper.randomness` | Python, NumPy, and PyTorch generator-state contracts |
 | `viper.resume` | Optimizer, DataLoader, and combined resume-state contracts |
 | `viper.execution` | Run, retry, and benchmark operations |
+| `viper.system_impact.explain` | Joined one-hop dependency evidence for tools and agents |
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval through the local store |
