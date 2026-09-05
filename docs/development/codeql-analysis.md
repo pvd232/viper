@@ -123,24 +123,22 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    Contract["Contract"] --> Plan["Source plan + PairBlocks"]
-    Plan --> Candidate["Materialized candidate"]
+    Contract["Contract<br/>source plan + PairBlocks"] --> Candidate["Frozen plan + candidate"]
     Baseline["Baseline source"] --> Analyze["Staged CodeQL analysis"]
     Candidate --> Analyze
     Specs["Extraction · query · graph specs"] --> Analyze
     Analyze --> Evidence["G0 + G*<br/>receipts"]
     Candidate --> Gates["Pyright + PairBlock gates"]
-    Plan --> Gates
     Evidence --> Check["check_plan"]
     Gates --> Check
-    Plan --> Check
+    Candidate --> Check
     Check --> Result["PlanCheck"]
 
     classDef authored fill:#2563eb,stroke:#93c5fd,color:#ffffff,stroke-width:2px;
     classDef implementation fill:#0f766e,stroke:#5eead4,color:#ffffff,stroke-width:2px;
     classDef output fill:#7e22ce,stroke:#d8b4fe,color:#ffffff,stroke-width:2px;
     classDef checklist fill:#b45309,stroke:#fcd34d,color:#ffffff,stroke-width:2px;
-    class Contract,Plan,Specs authored;
+    class Contract,Specs authored;
     class Analyze,Gates,Check implementation;
     class Baseline,Candidate,Evidence,Result output;
     linkStyle default stroke:#94a3b8,stroke-width:2px;
