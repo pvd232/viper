@@ -461,7 +461,6 @@ targets = [
     "src/viper/execution/__init__.py:__all__",
     "tests/test_run_execution.py:time",
     "tests/test_run_execution.py:_batch",
-    "tests/test_run_execution.py:RunError",
     "tests/test_run_execution.py:RunResult",
     "tests/test_run_execution.py:test_run_many_retains_one_result_per_plan",
     "tests/test_public_api.py:test_execution_namespace_owns_only_operations",
@@ -1036,11 +1035,6 @@ import time
 <!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=add target=tests/test_run_execution.py:_batch -->
 ```python contract-target
 from viper.execution import _batch
-```
-
-<!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=add target=tests/test_run_execution.py:RunError -->
-```python contract-target
-from viper.execution.errors import RunError
 ```
 
 <!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=add target=tests/test_run_execution.py:RunResult -->
