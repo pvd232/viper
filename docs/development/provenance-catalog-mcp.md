@@ -3189,7 +3189,7 @@ from dataclasses import replace
 
 <!-- contract-target: requirements=PCM-01,PCM-02 block=P13-PCM-01 action=add target=tests/test_inspection.py:timedelta -->
 ```python contract-target
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 ```
 
 <!-- contract-target: requirements=PCM-01,PCM-02 block=P13-PCM-01 action=add target=tests/test_inspection.py:Catalog -->
@@ -3201,11 +3201,7 @@ from viper.catalog import Catalog, CatalogRunSource, RunQuery
 
 <!-- contract-target: requirements=PCM-01,PCM-02 block=P13-PCM-01 action=add target=tests/test_inspection.py:ResolvedRunRef -->
 ```python contract-target
-from viper.references import (
-    GitFileRef,
-    ResolvedRunRef,
-    ResolvedRunSpecRef,
-)
+from viper.references import ResolvedRunRef
 ```
 
 <!-- contract-target: requirements=PCM-01,PCM-02 block=P13-PCM-01 action=add target=tests/test_inspection.py:DownloadSpec -->
