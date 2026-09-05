@@ -7,7 +7,7 @@ Protocol server.
 
 ## 1. Status
 
-**Contract status:** in progress; Phase 13 implemented; Phase 15 planned.
+**Contract status:** in progress; Phases 13 and 15 implemented.
 
 These requirements bind the contract to the master checklist:
 

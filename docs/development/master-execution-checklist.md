@@ -1915,15 +1915,15 @@ stage invocation.
 resources, prompts, and read-only tools by default. An explicit startup flag
 adds the existing execution operations.
 
-- [ ] Materialize and verify the typed local MCP adapter.
+- [x] Materialize and verify the typed local MCP adapter.
       <!-- pair-block: P15-PCM-01 -->
       <!-- pair-block-contract: P15-PCM-01 contract=provenance-catalog-mcp.md -->
-      <!-- contract-implementation: requirement=PCM-03 rule=mcp.schema.parity state=planned owner=src/viper/mcp.py:tool_registry -->
-      <!-- contract-verification: requirement=PCM-03 rule=mcp.schema.parity state=planned test=tests/test_api.py:test_mcp_tool_schemas_match_typed_operations -->
-      <!-- contract-implementation: requirement=PCM-04 rule=mcp.stdio.access state=planned owner=src/viper/mcp.py:serve_stdio -->
-      <!-- contract-verification: requirement=PCM-04 rule=mcp.stdio.access state=planned test=tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access -->
-      <!-- contract-implementation: requirement=PCM-05 rule=mcp.resources.complete state=planned owner=src/viper/mcp.py:resource_registry -->
-      <!-- contract-verification: requirement=PCM-05 rule=mcp.resources.complete state=planned test=tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root -->
+      <!-- contract-implementation: requirement=PCM-03 rule=mcp.schema.parity state=implemented owner=src/viper/mcp.py:tool_registry -->
+      <!-- contract-verification: requirement=PCM-03 rule=mcp.schema.parity state=implemented test=tests/test_api.py:test_mcp_tool_schemas_match_typed_operations -->
+      <!-- contract-implementation: requirement=PCM-04 rule=mcp.stdio.access state=implemented owner=src/viper/mcp.py:serve_stdio -->
+      <!-- contract-verification: requirement=PCM-04 rule=mcp.stdio.access state=implemented test=tests/test_cli.py:test_mcp_stdio_requires_explicit_execution_access -->
+      <!-- contract-implementation: requirement=PCM-05 rule=mcp.resources.complete state=implemented owner=src/viper/mcp.py:resource_registry -->
+      <!-- contract-verification: requirement=PCM-05 rule=mcp.resources.complete state=implemented test=tests/test_api.py:test_mcp_resources_are_stateless_inside_startup_root -->
       <!-- implements: PCM-03, PCM-04, PCM-05 -->
       <!-- verifies: PCM-03, PCM-04, PCM-05 -->
       Install the optional MCP SDK, derive deterministic tool schemas from the
