@@ -23,6 +23,7 @@ from ._schema import ArtifactName, DataRole, RepoRelPath, RNGSeed
 from .artifacts import (
     ArtifactDraft,
     ArtifactLoaderRef,
+    ArtifactPointer,
     ArtifactSpec,
     BundleArtifactDraft,
     BundleArtifactSpec,
@@ -62,7 +63,13 @@ from .ids import (
     StageId,
     VariantId,
 )
-from .inputs import ExternalInputRef, FutureInputRef, InputRef, LocalSource
+from .inputs import (
+    ExternalInputRef,
+    FutureInputRef,
+    InputRef,
+    LocalSource,
+    StoredInputRef,
+)
 from .metrics import (
     MetricDraft,
     MetricImplementationRef,
@@ -73,7 +80,13 @@ from .metrics import (
 )
 from .params import ParameterModelRef
 from .project import resolve_path, resolve_root
-from .references import GitSource, LocalFileRef, ResolvedRunRef, ResolvedRunSpecRef
+from .references import (
+    GitSource,
+    LocalFileRef,
+    ResolvedArtifactPointerRef,
+    ResolvedRunRef,
+    ResolvedRunSpecRef,
+)
 from .runs import (
     RunSpec,
     RunStageRef,
@@ -683,7 +696,7 @@ def _freeze_input(
     stages: Mapping[StageId, StageDraft],
     draft: StageInputDraft,
 ) -> InputRef:
-    """Compile one local or same-run draft into a frozen input reference."""
+    """Compile one input draft into its frozen reference."""
     if isinstance(draft, ExternalInputDraft):
         path = resolve_path(root, draft.path, operation="read")
         return ExternalInputRef(
@@ -698,7 +711,24 @@ def _freeze_input(
             producer_stage_id=owners[0],
             name=draft.artifact_name,
         )
-    raise ValueError("prior-run inputs are compiled in Master Phase 7")
+    pointer = ArtifactPointer(run=draft.run, artifact=draft.artifact)
+    raw = serialize_document(pointer)
+    parts = draft.path.split("/")
+    if len(parts) < 4 or parts[0] != "inputs":
+        raise ValueError("prior-run input path must include category and entity")
+    selection = f"{draft.artifact.artifact_name}_{draft.run.sha256}"
+    pointer_path = "/".join((*parts[:3], f"{selection}.pointer.yaml"))
+    published = LocalArtifactStore(root).resolved_files({pointer_path: raw})[0]
+    reference = ResolvedArtifactPointerRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=published.stored_at,
+    )
+    return StoredInputRef(
+        pointer=reference,
+        path=draft.path,
+        data_role=draft.data_role,
+    )
 
 
 def _freeze_stage(

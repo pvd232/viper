@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from .ids import RunId
-from .inputs import ExternalInputRef, FutureInputRef, StoredInputRef
+from .inputs import ExternalInputRef, FutureInputRef, StoredInputRef, pointer_path
 from .journal import ATTEMPT_STATE_TRANSITIONS, AttemptState, DurableJournal
 from .runs import RunSpec
 from .serialization import load_stage_spec, parse_yaml_bytes
@@ -343,7 +343,7 @@ def lineage(verified: VerifiedRunResult) -> RunLineage:
                         node_id=source,
                         kind="promoted_selection",
                         data_role=input_ref.data_role,
-                        path=input_ref.pointer.path,
+                        path=pointer_path(input_ref.pointer),
                     )
                 else:
                     continue

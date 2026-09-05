@@ -1626,15 +1626,19 @@ now specify the accepted internal compilation and publication workflow.
 **Outcome:** The user assigns one Python value to an input slot. Freezing writes
 the correct provenance edge.
 
-- [ ] Compile and verify local, same-run, and prior-run input references.
+- [x] Compile and verify local, same-run, and prior-run input references.
       <!-- pair-block: P7-AIR-01 -->
       <!-- pair-block-contract: P7-AIR-01 contract=automatic-input-resolution.md -->
       <!-- implements: EIR-04, AIR-05 -->
       <!-- verifies: EIR-04, AIR-05 -->
-      <!-- contract-implementation: requirement=EIR-04 rule=input.authoring.routes state=planned owner=src/viper/authoring.py:_freeze_input -->
-      <!-- contract-verification: requirement=EIR-04 rule=input.authoring.routes state=planned test=tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer -->
-      <!-- contract-implementation: requirement=AIR-05 rule=input.pointer.complete state=planned owner=src/viper/authoring.py:_freeze_input -->
-      <!-- contract-verification: requirement=AIR-05 rule=input.pointer.complete state=planned test=tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer -->
+      <!-- contract-implementation: requirement=EIR-04 rule=input.authoring.routes state=implemented owner=src/viper/authoring.py:_freeze_input -->
+      <!-- contract-verification: requirement=EIR-04 rule=input.authoring.routes state=implemented test=tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer -->
+      <!-- contract-implementation: requirement=AIR-05 rule=input.pointer.complete state=implemented owner=src/viper/authoring.py:_freeze_input -->
+      <!-- contract-verification: requirement=AIR-05 rule=input.pointer.complete state=implemented test=tests/test_prior_run_inputs.py:test_prior_run_input_publishes_verified_pointer -->
+
+**Evidence:** Contract parity passed for 31 targets; Ruff passed; Pyright
+reported zero errors; `tests/test_prior_run_inputs.py` passed before this
+implementation commit.
 
 **Validation:** Run the PairBlock gate from the governing contract.
 

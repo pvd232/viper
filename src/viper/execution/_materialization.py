@@ -156,7 +156,22 @@ def resolve_inputs(
             paths[name] = captured_path
             captured[name] = resolved_input.file
         elif input_ref.kind == "stored":
-            pointer_raw = fetcher(input_ref.pointer)
+            if isinstance(input_ref.pointer, ResolvedArtifactPointerRef):
+                pointer_raw = fetcher(input_ref.pointer.stored_at)
+                if (
+                    len(pointer_raw) != input_ref.pointer.bytes
+                    or hashlib.sha256(pointer_raw).hexdigest()
+                    != input_ref.pointer.sha256
+                ):
+                    raise RunError("stored input pointer identity mismatch")
+                resolved_pointer = input_ref.pointer
+            else:
+                pointer_raw = fetcher(input_ref.pointer)
+                resolved_pointer = ResolvedArtifactPointerRef(
+                    sha256=hashlib.sha256(pointer_raw).hexdigest(),
+                    bytes=len(pointer_raw),
+                    stored_at=input_ref.pointer,
+                )
             pointer = ArtifactPointer.model_validate(parse_yaml_bytes(pointer_raw))
             verified = verify_promoted_artifact(
                 pointer,
@@ -165,13 +180,7 @@ def resolve_inputs(
                 fetcher=fetcher,
             )
             _materialize_verified_artifact(root, input_ref.path, verified)
-            resolved[name] = ResolvedStoredInputRef(
-                pointer=ResolvedArtifactPointerRef(
-                    sha256=hashlib.sha256(pointer_raw).hexdigest(),
-                    bytes=len(pointer_raw),
-                    stored_at=input_ref.pointer,
-                )
-            )
+            resolved[name] = ResolvedStoredInputRef(pointer=resolved_pointer)
             paths[name] = root / input_ref.path
             stored[name] = verified.references
     return resolved, paths, captured, stored

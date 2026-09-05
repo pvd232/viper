@@ -25,28 +25,31 @@ class GitFileRef(GitSource):
     path: RepoRelPath
 
 
+def _validate_pointer_path(path: RepoRelPath) -> None:
+    """Require the canonical path for one promoted-input pointer."""
+    parts = path.split("/")
+    selection = parts[3].removesuffix(".pointer.yaml") if len(parts) == 4 else ""
+    if (
+        len(parts) != 4
+        or parts[0] != "inputs"
+        or parts[1] not in {"benchmarks", "datasets", "models", "priors"}
+        or not parts[3].endswith(".pointer.yaml")
+        or re.fullmatch(r"[a-z][a-z0-9_]*", parts[2]) is None
+        or re.fullmatch(r"[a-z][a-z0-9_]*", selection) is None
+    ):
+        raise ValueError(
+            "artifact pointer path must match "
+            "inputs/<category>/<entity_id>/<selection_name>.pointer.yaml"
+        )
+
+
 class ArtifactPointerRef(GitFileRef):
     """A Git reference to the pointer selecting a promoted artifact."""
 
     @model_validator(mode="after")
     def validate_pointer_path(self) -> ArtifactPointerRef:
         """Enforce the canonical promoted-input pointer path."""
-        parts = self.path.split("/")
-        selection_name = (
-            parts[3].removesuffix(".pointer.yaml") if len(parts) == 4 else ""
-        )
-        if (
-            len(parts) != 4
-            or parts[0] != "inputs"
-            or parts[1] not in {"benchmarks", "datasets", "models", "priors"}
-            or not parts[3].endswith(".pointer.yaml")
-            or re.fullmatch(r"[a-z][a-z0-9_]*", parts[2]) is None
-            or re.fullmatch(r"[a-z][a-z0-9_]*", selection_name) is None
-        ):
-            raise ValueError(
-                "artifact pointer path must match "
-                "inputs/<category>/<entity_id>/<selection_name>.pointer.yaml"
-            )
+        _validate_pointer_path(self.path)
         return self
 
 
@@ -139,7 +142,12 @@ class ResolvedArtifactPointerRef(ResolvedFileRef):
     """Identify an exact verified artifact-pointer file."""
 
     kind: Literal["artifact_pointer"] = "artifact_pointer"
-    stored_at: ArtifactPointerRef  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    @model_validator(mode="after")
+    def validate_pointer_path(self) -> ResolvedArtifactPointerRef:
+        """Enforce the pointer path for every storage backend."""
+        _validate_pointer_path(self.stored_at.path)
+        return self
 
 
 class ResolvedRunSpecRef(ResolvedFileRef):

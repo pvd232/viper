@@ -1235,7 +1235,7 @@ def build_complete_fixture(
         inputs={
             "dataset": StoredInputRef(
                 kind="stored",
-                pointer=resolved_training_dataset_pointer.stored_at,
+                pointer=resolved_training_dataset_pointer,
                 path="inputs/datasets/toy/current.bin",
                 data_role="training",
             )
@@ -1300,13 +1300,13 @@ def build_complete_fixture(
             ),
             "evaluation_dataset": StoredInputRef(
                 kind="stored",
-                pointer=resolved_evaluation_dataset_pointer.stored_at,
+                pointer=resolved_evaluation_dataset_pointer,
                 path="inputs/datasets/toy/evaluation.bin",
                 data_role=evaluation_role,
             ),
             "test_split": StoredInputRef(
                 kind="stored",
-                pointer=resolved_split_pointer.stored_at,
+                pointer=resolved_split_pointer,
                 path="inputs/benchmarks/toy/test_split.json",
                 data_role=evaluation_role,
             ),

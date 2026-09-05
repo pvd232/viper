@@ -40,7 +40,7 @@ from .http import (
     ResolvedHttpRetrieval,
 )
 from .ids import EvalId, HumanId, InputName, MetricId, RunId, StageId
-from .inputs import InputRef, ResolvedInputRef
+from .inputs import InputRef, ResolvedInputRef, pointer_path
 from .metrics import MetricHandle, MetricObjectiveSpec
 from .params import ParameterModelRef
 from .references import (
@@ -313,7 +313,7 @@ class TrainSpec(InternalSpec):
             raise ValueError("checkpoint inputs must use the same input kind")
         if model_input.kind == "stored" and state_input.kind == "stored":
             if any(
-                value.pointer.path.split("/")[1] != "models"
+                pointer_path(value.pointer).split("/")[1] != "models"
                 for value in (model_input, state_input)
             ):
                 raise ValueError("stored checkpoint inputs must use inputs/models")
@@ -353,7 +353,7 @@ class EvalSpec(InternalSpec):
             raise ValueError("eval requires an eval_dataset input")
         if dataset.kind != "stored":
             raise ValueError("eval_dataset must be a stored input")
-        if dataset.pointer.path.split("/")[1] != "datasets":
+        if pointer_path(dataset.pointer).split("/")[1] != "datasets":
             raise ValueError("eval_dataset must use inputs/datasets")
         if dataset.data_role not in {"eval", "benchmark"}:
             raise ValueError("eval_dataset has an invalid data role")

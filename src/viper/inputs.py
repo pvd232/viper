@@ -51,23 +51,34 @@ class ResolvedExternalInputRef(ProtocolModel):
 # ----- Provenance graph boundary ----- #
 
 
+PointerRef = ArtifactPointerRef | ResolvedArtifactPointerRef
+
+
+def pointer_path(pointer: PointerRef) -> RepoRelPath:
+    """Return the path containing one artifact pointer."""
+    if isinstance(pointer, ResolvedArtifactPointerRef):
+        return pointer.stored_at.path
+    return pointer.path
+
+
 class StoredInputRef(ProtocolModel):
     """A promoted artifact selected before the run begins."""
 
     kind: Literal["stored"] = "stored"
-    pointer: ArtifactPointerRef
+    pointer: PointerRef
     path: RepoRelPath
     data_role: DataRole
 
     @model_validator(mode="after")
     def validate_materialization_path(self) -> StoredInputRef:
         """Keep materialized input bytes within their promoted-input scope."""
-        pointer_scope = self.pointer.path.split("/")[:3]
+        selected_pointer_path = pointer_path(self.pointer)
+        pointer_scope = selected_pointer_path.split("/")[:3]
         materialization_parts = self.path.split("/")
         if (
             len(materialization_parts) < 3
             or materialization_parts[:3] != pointer_scope
-            or repo_file_paths_overlap(self.path, self.pointer.path)
+            or repo_file_paths_overlap(self.path, selected_pointer_path)
             or materialization_parts[-1].endswith(".pointer.yaml")
         ):
             raise ValueError(
