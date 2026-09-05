@@ -514,20 +514,6 @@ def validate(
         query_pack,
     )
     results.mkdir(parents=True, exist_ok=False)
-    # Every planned edit starts from the clean commit.
-    baseline = _analyze(
-        root,
-        revision=revision,
-        committed=True,
-        extraction=extraction,
-        query=query,
-        format=format,
-        executable=codeql,
-        query_pack=query_pack,
-        cache=cache,
-        artifacts=results / "baseline-codeql",
-    )
-
     candidate = results / "candidate"
     try:
         _checkout_candidate(root, revision, candidate)
@@ -543,6 +529,21 @@ def validate(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
         )
         return result
+
+    # Analyze the clean worktree before editing it. Local caches and virtual
+    # environments in the shared checkout must never enter the CodeQL database.
+    baseline = _analyze(
+        candidate,
+        revision=revision,
+        committed=True,
+        extraction=extraction,
+        query=query,
+        format=format,
+        executable=codeql,
+        query_pack=query_pack,
+        cache=cache,
+        artifacts=results / "baseline-codeql",
+    )
 
     try:
         apply_plan(
