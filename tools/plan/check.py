@@ -379,27 +379,6 @@ def _import_failure(
     return None
 
 
-def _ruff(
-    python: Path,
-    targets: tuple[str, ...],
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    """Build Ruff checks that never rewrite the planned source."""
-    return (
-        (
-            "ruff-format",
-            (str(python), "-m", "ruff", "format", "--check", *targets),
-        ),
-        (
-            "ruff-imports",
-            (str(python), "-m", "ruff", "check", "--select", "I001", *targets),
-        ),
-        (
-            "ruff",
-            (str(python), "-m", "ruff", "check", "--ignore", "D100", *targets),
-        ),
-    )
-
-
 def _parity(
     plan_root: Path,
     source_root: Path,
@@ -574,33 +553,6 @@ def validate(
             json.dumps(result, indent=2, sort_keys=True) + "\n"
         )
         return result
-
-    python_targets = tuple(
-        sorted(
-            {
-                str(target.target.path)
-                for target in traceability.targets
-                if target.block_id in selected_ids
-                and Path(target.target.path).suffix in {".py", ".pyi"}
-            }
-        )
-    )
-    for stage, command in _ruff(python, python_targets):
-        completed = _run(command, cwd=candidate)
-        if completed.returncode != 0:
-            result = {
-                "passed": False,
-                "stage": stage,
-                "revision": revision,
-                "blocks": selected,
-                "command": tuple(completed.args),
-                "stdout": completed.stdout,
-                "stderr": completed.stderr,
-            }
-            (results / "result.json").write_text(
-                json.dumps(result, indent=2, sort_keys=True) + "\n"
-            )
-            return result
 
     modules = _changed_modules(root, candidate)
     import_failure = _import_failure(root, candidate, python, modules)

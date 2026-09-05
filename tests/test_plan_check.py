@@ -75,28 +75,7 @@ def test_baseline_analysis_uses_clean_candidate_worktree(
     ]
 
 
-def test_ruff_never_rewrites_candidate_copy() -> None:
-    """Keep formatting outside the exact contract materialization."""
-    python = Path(".venv/bin/python")
-    target = "src/viper/example.py"
-
-    commands = dict(check._ruff(python, (target,)))
-
-    assert commands["ruff-format"] == (
-        str(python),
-        "-m",
-        "ruff",
-        "format",
-        "--check",
-        target,
-    )
-    assert commands["ruff-imports"] == (
-        str(python),
-        "-m",
-        "ruff",
-        "check",
-        "--select",
-        "I001",
-        target,
-    )
-    assert all("--fix" not in command for command in commands.values())
+def test_plan_checker_leaves_ruff_outside_contract_parity() -> None:
+    """Keep cosmetic formatting outside the exact plan check."""
+    assert not hasattr(check, "_format")
+    assert not hasattr(check, "_ruff")

@@ -82,10 +82,10 @@ from viper.runs import (
 )
 from viper.runtime import (
     CUDAComputeSpec,
-    GCEEnvironmentSpec,
-    LocalEnvironmentSpec,
     observe_gce_provisioning,
 )
+from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
+from viper.runtime import LocalEnvSpec as LocalEnvironmentSpec
 from viper.serialization import parse_yaml_bytes, serialize_document
 from viper.stages import (
     DownloadSpec,

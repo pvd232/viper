@@ -459,7 +459,6 @@ targets = [
     "src/viper/execution/__init__.py:ExperimentExecutionResult",
     "src/viper/execution/__init__.py:run_many",
     "src/viper/execution/__init__.py:__all__",
-    "tests/test_run_execution.py:GCEEnvironmentSpec",
     "tests/test_run_execution.py:time",
     "tests/test_run_execution.py:_batch",
     "tests/test_run_execution.py:RunResult",
@@ -1031,11 +1030,6 @@ __all__ = [
 <!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=add target=tests/test_run_execution.py:time -->
 ```python contract-target
 import time
-```
-
-<!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=update target=tests/test_run_execution.py:GCEEnvironmentSpec -->
-```python contract-target
-from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 ```
 
 <!-- contract-target: requirements=EXP-02 block=P12-EXP-02 action=add target=tests/test_run_execution.py:_batch -->
