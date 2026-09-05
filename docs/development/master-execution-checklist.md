@@ -1632,9 +1632,6 @@ the correct provenance edge.
 
 ## 15. Master Phase 8 — benchmark drafting and complete results
 
-<!-- contract-implementation: requirement=UMD-05 rule=benchmark.result.complete state=planned owner=src/viper/benchmark.py:benchmark -->
-<!-- contract-verification: requirement=UMD-05 rule=benchmark.result.complete state=planned test=tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria -->
-
 **Depends on:** Master Phase 7.
 
 **Contract:** [Unified metric drafting](unified-metric-drafting.md)
@@ -1642,50 +1639,15 @@ the correct provenance edge.
 **Outcome:** A benchmark records metric results under fixed data and split
 conditions. Thresholds remain optional.
 
-### 15.1 Models and authoring
-
-- [ ] Add `BenchmarkDraft` and `benchmark()` in `viper.benchmark`.
+- [ ] Execute `P8-UMD-01` from the Unified metric drafting contract. It adds
+      immutable benchmark drafting, compiles fixed prior-run inputs once,
+      records every selected metric, applies optional criteria, and verifies
+      the resulting status. <!-- pair-block: P8-UMD-01 -->
+      <!-- pair-block-contract: P8-UMD-01 contract=unified-metric-drafting.md -->
       <!-- implements: UMD-05 -->
-- [ ] Add `BenchmarkDraft.test` and accept one prior-run test artifact plus
-      named split drafts.
-- [ ] Add `BenchmarkSpec.metric_ids`.
-- [ ] Make `BenchmarkSpec.criteria` optional.
-- [ ] Add `BenchmarkMetricResult`.
-- [ ] Attach an optional `MetricCriterionResult` to each metric result.
-- [ ] Define status as `verified`, `passed`, or `failed` by the contract table.
-- [ ] Add the benchmark draft to `RunPlanDraft` and freeze it canonically.
-- [ ] Require the evaluation stage to use the same test and split drafts.
-- [ ] Compile each draft once. Reuse the resulting `StoredInputRef.pointer` in
-      `BenchmarkSpec.test` and `BenchmarkSpec.splits`.
-
-### 15.2 Execution and verification
-
-- [ ] Change `execution/_benchmark.py` to iterate all selected metric IDs.
-- [ ] Read candidate and confirmation verification receipts.
-- [ ] Record both values and comparator match.
-- [ ] Apply a criterion only when one exists for that metric ID.
-- [ ] Keep artifact parity as an independent requirement.
-- [ ] Update `_verification/plan.py`, `_verification/metrics.py`, and
-      `verification.py` for the new result shape.
-- [ ] Add `benchmark.input.identity` for exact equality between evaluation
-      input pointers and benchmark pointers.
-
-### 15.3 Focused proof
-
-- [ ] Expand `tests/test_benchmark_execution.py` with:
-      one verified benchmark whose criteria tuple is empty, one passed
-      threshold, one failed threshold, and one metric mismatch.
-- [ ] Add freeze tests in `tests/test_authoring.py`.
-- [ ] Reject a benchmark whose test or split differs from the evaluation
-      stage's selected input.
-- [ ] Run: <!-- verifies: UMD-05 -->
-
-```bash
-python -m pytest \
-  tests/test_benchmark_execution.py \
-  tests/test_authoring.py \
-  tests/test_verification.py -q
-```
+      <!-- verifies: UMD-05 -->
+      <!-- contract-implementation: requirement=UMD-05 rule=benchmark.result.complete state=planned owner=src/viper/benchmark.py:benchmark -->
+      <!-- contract-verification: requirement=UMD-05 rule=benchmark.result.complete state=planned test=tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria -->
 
 **Commit boundary:** `Record complete benchmark metric results`
 

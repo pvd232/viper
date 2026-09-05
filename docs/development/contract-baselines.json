@@ -100,7 +100,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "25f688bf929c6885a8fffd817277346f772eadfc05c2b446adb52c54fd25a530"
+      "sha256": "fa4799defb1518e10ac889e36d0659926573b9533bdca2cd7beea875afefdeeb"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",

@@ -1161,72 +1161,9 @@ remains the same object.
 ### Benchmark drafts and frozen records
 
 A benchmark fixes the evaluation conditions and names every metric that the
-benchmark will record. Criteria select a subset of those metrics.
-
-```python
-class BenchmarkDraft(BaseModel):
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,
-        extra="forbid",
-        frozen=True,
-    )
-
-    benchmark_id: BenchmarkId
-    eval_id: EvalId
-    test: RunArtifactDraft
-    splits: dict[InputName, RunArtifactDraft] = Field(min_length=1)
-    metrics: tuple[MetricDraft, ...] = Field(min_length=1)
-    criteria: tuple[MetricCriterionDraft, ...] = ()
-    execution_count: Literal[2] = 2
-```
-
-The target persisted records are:
-
-```python
-class MetricCriterion(ProtocolModel):
-    metric_id: MetricId
-    comparison: Literal["ge", "le"]
-    threshold: float = Field(allow_inf_nan=False)
-
-
-class BenchmarkSpec(ProtocolModel):
-    schema_version: Literal[1] = 1
-    benchmark_id: BenchmarkId
-    eval_id: EvalId
-    test: ResolvedArtifactPointerRef
-    splits: dict[InputName, ResolvedArtifactPointerRef] = Field(min_length=1)
-    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
-    criteria: tuple[MetricCriterion, ...] = ()
-    execution_count: Literal[2] = 2
-
-
-class MetricCriterionResult(ProtocolModel):
-    criterion: MetricCriterion
-    candidate_passed: bool
-    confirmation_passed: bool
-    passed: bool
-
-
-class BenchmarkMetricResult(ProtocolModel):
-    metric_id: MetricId
-    candidate_verification: ResolvedFileRef
-    confirmation_verification: ResolvedFileRef
-    candidate_value: float = Field(allow_inf_nan=False)
-    confirmation_value: float = Field(allow_inf_nan=False)
-    matched: bool
-    criterion: MetricCriterionResult | None = None
-
-
-class BenchmarkResult(ProtocolModel):
-    schema_version: Literal[1] = 1
-    benchmark: ResolvedBenchmarkSpecRef
-    run: ResolvedRunRef
-    confirmation: ResolvedAttemptRef
-    artifacts: tuple[ArtifactComparisonReceipt, ...] = Field(min_length=2)
-    metrics: tuple[BenchmarkMetricResult, ...] = Field(min_length=1)
-    status: Literal["verified", "passed", "failed"]
-    completed_at: AwareDatetime
-```
+benchmark will record. Criteria select a subset of those metrics. The exact
+authoring and persisted declarations live in `P8-UMD-01`; this section defines
+their behavior without maintaining a second copy of the code.
 
 `BenchmarkSpec.metric_ids` declares results to record. `BenchmarkSpec.criteria`
 declares optional thresholds. Every criterion metric ID must occur in
@@ -1253,19 +1190,7 @@ all parity and matching checks pass, and one criterion fails
 -> failed
 ```
 
-The public constructor is:
-
-```python
-def benchmark(
-    *,
-    benchmark_id: BenchmarkId,
-    eval_id: EvalId,
-    test: RunArtifactDraft,
-    splits: dict[InputName, RunArtifactDraft],
-    metrics: tuple[MetricDraft, ...],
-    criteria: tuple[MetricCriterionDraft, ...] = (),
-) -> BenchmarkDraft: ...
-```
+`P8-UMD-01` owns the exact public `benchmark()` constructor.
 
 `RunPlanDraft.benchmark` carries the complete authoring object. Internal
 compilation writes `BenchmarkSpec` and writes `RunSpec.benchmark_id`.
@@ -6525,4 +6450,1808 @@ def test_run_compiles_plan_before_first_attempt(
 
     assert execution.run(tmp_path, draft) is result
     assert calls == ["freeze", "run"]
+```
+
+<!-- pair-block-definition: P8-UMD-01 -->
+```toml pair-block
+id = "P8-UMD-01"
+requirements = ["UMD-05"]
+targets = [
+    "src/viper/benchmark.py:AwareDatetime",
+    "src/viper/benchmark.py:BaseModel",
+    "src/viper/benchmark.py:ConfigDict",
+    "src/viper/benchmark.py:Field",
+    "src/viper/benchmark.py:model_validator",
+    "src/viper/benchmark.py:SHA256",
+    "src/viper/benchmark.py:BenchmarkId",
+    "src/viper/benchmark.py:DataRole",
+    "src/viper/benchmark.py:ProtocolModel",
+    "src/viper/benchmark.py:RepoRelPath",
+    "src/viper/benchmark.py:MetricCriterionDraft",
+    "src/viper/benchmark.py:MetricDraft",
+    "src/viper/benchmark.py:metric_definition",
+    "src/viper/benchmark.py:ArtifactPointerRef",
+    "src/viper/benchmark.py:ResolvedArtifactPointerRef",
+    "src/viper/benchmark.py:ResolvedBenchmarkSpecRef",
+    "src/viper/benchmark.py:ResolvedFileRef",
+    "src/viper/benchmark.py:ResolvedRunRef",
+    "src/viper/benchmark.py:ResolvedStageRef",
+    "src/viper/benchmark.py:RunArtifactDraft",
+    "src/viper/benchmark.py:BenchmarkDraft",
+    "src/viper/benchmark.py:BenchmarkSpec",
+    "src/viper/benchmark.py:MetricCriterionResult",
+    "src/viper/benchmark.py:BenchmarkMetricResult",
+    "src/viper/benchmark.py:MetricCriterionReceipt",
+    "src/viper/benchmark.py:BenchmarkResult",
+    "src/viper/benchmark.py:benchmark",
+    "src/viper/authoring.py:BenchmarkDraft",
+    "src/viper/authoring.py:BenchmarkSpec",
+    "src/viper/authoring.py:MetricCriterion",
+    "src/viper/authoring.py:RunArtifactDraft",
+    "src/viper/authoring.py:RunPlanDraft",
+    "src/viper/authoring.py:plan",
+    "src/viper/authoring.py:_freeze_input",
+    "src/viper/authoring.py:_freeze_stage",
+    "src/viper/authoring.py:_compile_plan",
+    "src/viper/execution/_benchmark.py:Literal",
+    "src/viper/execution/_benchmark.py:ArtifactComparisonReceipt",
+    "src/viper/execution/_benchmark.py:BenchmarkMetricResult",
+    "src/viper/execution/_benchmark.py:BenchmarkResult",
+    "src/viper/execution/_benchmark.py:BenchmarkSpec",
+    "src/viper/execution/_benchmark.py:MetricCriterionReceipt",
+    "src/viper/execution/_benchmark.py:MetricCriterionResult",
+    "src/viper/execution/_benchmark.py:MetricVerificationReceipt",
+    "src/viper/execution/_benchmark.py:compare_metric_values",
+    "src/viper/execution/_benchmark.py:_benchmark_metric_results",
+    "src/viper/execution/_benchmark.py:_benchmark_status",
+    "src/viper/execution/_benchmark.py:benchmark",
+    "src/viper/verification/__init__.py:Measurement",
+    "src/viper/verification/__init__.py:MetricVerificationReceipt",
+    "src/viper/verification/__init__.py:compare_metric_values",
+    "src/viper/verification/__init__.py:verify_benchmark_result",
+    "src/viper/_verification/plan.py:verify_run_plan_relationships",
+    "tests/test_benchmark_execution.py:UTC",
+    "tests/test_benchmark_execution.py:datetime",
+    "tests/test_benchmark_execution.py:build_benchmark_fixture",
+    "tests/test_benchmark_execution.py:ArtifactComparisonReceipt",
+    "tests/test_benchmark_execution.py:BenchmarkResult",
+    "tests/test_benchmark_execution.py:BenchmarkSpec",
+    "tests/test_benchmark_execution.py:MetricCriterion",
+    "tests/test_benchmark_execution.py:_benchmark_metric_results",
+    "tests/test_benchmark_execution.py:_benchmark_status",
+    "tests/test_benchmark_execution.py:FloatComparator",
+    "tests/test_benchmark_execution.py:MetricExecutionReceipt",
+    "tests/test_benchmark_execution.py:MetricVerificationReceipt",
+    "tests/test_benchmark_execution.py:LocalFileRef",
+    "tests/test_benchmark_execution.py:ResolvedArtifactPointerRef",
+    "tests/test_benchmark_execution.py:ResolvedBenchmarkResultRef",
+    "tests/test_benchmark_execution.py:ResolvedBenchmarkSpecRef",
+    "tests/test_benchmark_execution.py:ResolvedFileRef",
+    "tests/test_benchmark_execution.py:ResolvedRunRef",
+    "tests/test_benchmark_execution.py:parse_yaml_bytes",
+    "tests/test_benchmark_execution.py:ResolvedAttemptRef",
+    "tests/test_benchmark_execution.py:_file",
+    "tests/test_benchmark_execution.py:_pointer",
+    "tests/test_benchmark_execution.py:_metric",
+    "tests/test_benchmark_execution.py:test_benchmark_spec_counts_candidate_and_confirmation",
+    "tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria",
+    "tests/test_benchmark_execution.py:test_benchmark_status_covers_verified_and_failed_results",
+    "tests/test_benchmark_execution.py:test_api_returns_the_verified_benchmark_result",
+    "tests/test_authoring.py:ArtifactLoaderRef",
+    "tests/test_authoring.py:BundleArtifactDraft",
+    "tests/test_authoring.py:SingleFileArtifactDraft",
+    "tests/test_authoring.py:StageArtifactRef",
+    "tests/test_authoring.py:artifact",
+    "tests/test_authoring.py:RunArtifactDraft",
+    "tests/test_authoring.py:at_least",
+    "tests/test_authoring.py:benchmark",
+    "tests/test_authoring.py:FloatComparator",
+    "tests/test_authoring.py:MetricDependency",
+    "tests/test_authoring.py:MetricImplementationRef",
+    "tests/test_authoring.py:MetricSpec",
+    "tests/test_authoring.py:measure",
+    "tests/test_authoring.py:metric",
+    "tests/test_authoring.py:min",
+    "tests/test_authoring.py:GitSource",
+    "tests/test_authoring.py:LocalFileRef",
+    "tests/test_authoring.py:ResolvedRunRef",
+    "tests/test_authoring.py:test_benchmark_draft_is_frozen_with_the_run_plan",
+]
+tests = [
+    "tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria",
+    "tests/test_benchmark_execution.py:test_benchmark_status_covers_verified_and_failed_results",
+    "tests/test_authoring.py:test_benchmark_draft_is_frozen_with_the_run_plan",
+]
+gate = "python -m pytest tests/test_benchmark_execution.py tests/test_authoring.py -k 'benchmark_records_metrics_before_criteria or benchmark_status_covers_verified_and_failed_results or benchmark_draft_is_frozen_with_the_run_plan' -q"
+depends_on = ["P7-AIR-01"]
+```
+
+**Context:** Phase 7 makes prior-run artifacts reusable inputs. This block fixes those inputs as benchmark conditions, records every selected metric across candidate and confirmation runs, and applies thresholds only where the benchmark declares them.
+
+**File: `src/viper/benchmark.py`**
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:AwareDatetime -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:BaseModel -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:ConfigDict -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:Field -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:model_validator -->
+```python contract-target
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:SHA256 -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:BenchmarkId -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:DataRole -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:ProtocolModel -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:RepoRelPath -->
+```python contract-target
+from ._schema import SHA256, BenchmarkId, DataRole, ProtocolModel, RepoRelPath
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:MetricCriterionDraft -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:MetricDraft -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:metric_definition -->
+```python contract-target
+from .metrics import MetricCriterionDraft, MetricDraft, metric_definition
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:ResolvedArtifactPointerRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:ResolvedBenchmarkSpecRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:ResolvedFileRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:ResolvedRunRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:ResolvedStageRef -->
+```python contract-target
+from .references import (
+    ResolvedArtifactPointerRef,
+    ResolvedBenchmarkSpecRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+    ResolvedStageRef,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:RunArtifactDraft -->
+```python contract-target
+class RunArtifactDraft(BaseModel):
+    """Select one artifact from a completed run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run: ResolvedRunRef
+    artifact: StageArtifactRef
+    path: RepoRelPath
+    data_role: DataRole
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:BenchmarkDraft -->
+```python contract-target
+class BenchmarkDraft(BaseModel):
+    """Fix the inputs and metrics used by one benchmark."""
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        frozen=True,
+    )
+
+    benchmark_id: BenchmarkId
+    eval_id: EvalId
+    test: RunArtifactDraft
+    splits: dict[InputName, RunArtifactDraft] = Field(min_length=1)
+    metrics: tuple[MetricDraft[Any], ...] = Field(min_length=1)
+    criteria: tuple[MetricCriterionDraft, ...] = ()
+    execution_count: Literal[2] = 2
+
+    @model_validator(mode="after")
+    def validate_metrics(self) -> BenchmarkDraft:
+        """Require unique metrics and criteria selected from those metrics."""
+        metric_ids = tuple(
+            metric_definition(metric.implementation).metric_id
+            for metric in self.metrics
+        )
+        criterion_ids = tuple(
+            metric_definition(criterion.metric.implementation).metric_id
+            for criterion in self.criteria
+        )
+        if len(set(metric_ids)) != len(metric_ids):
+            raise ValueError("benchmark metric IDs must be unique")
+        if len(set(criterion_ids)) != len(criterion_ids):
+            raise ValueError("benchmark criterion metric IDs must be unique")
+        if not set(criterion_ids) <= set(metric_ids):
+            raise ValueError("benchmark criteria must select benchmark metrics")
+        return self
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:BenchmarkSpec -->
+```python contract-target
+class BenchmarkSpec(ProtocolModel):
+    """Define the fixed inputs and metrics for one benchmark."""
+
+    schema_version: Literal[1] = 1
+    benchmark_id: BenchmarkId
+    eval_id: EvalId
+    test: ResolvedArtifactPointerRef
+    splits: dict[InputName, ResolvedArtifactPointerRef] = Field(min_length=1)
+    metric_ids: tuple[MetricId, ...] = Field(min_length=1)
+    criteria: tuple[MetricCriterion, ...] = ()
+    execution_count: Literal[2] = 2
+
+    @model_validator(mode="after")
+    def validate_unique_metrics(self) -> BenchmarkSpec:
+        """Require unique metrics and optional criteria for selected metrics."""
+        metric_ids = self.metric_ids
+        if len(set(metric_ids)) != len(metric_ids):
+            raise ValueError("benchmark metric IDs must be unique")
+        criterion_ids = tuple(criterion.metric_id for criterion in self.criteria)
+        if len(set(criterion_ids)) != len(criterion_ids):
+            raise ValueError("benchmark criterion metric IDs must be unique")
+        if not set(criterion_ids) <= set(metric_ids):
+            raise ValueError("benchmark criteria must select benchmark metrics")
+        return self
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:MetricCriterionResult -->
+```python contract-target
+class MetricCriterionResult(ProtocolModel):
+    """Record one threshold result for both benchmark executions."""
+
+    criterion: MetricCriterion
+    candidate_passed: bool
+    confirmation_passed: bool
+    passed: bool
+
+    @model_validator(mode="after")
+    def validate_passed(self) -> MetricCriterionResult:
+        """Require the combined result to equal both execution results."""
+        if self.passed != (self.candidate_passed and self.confirmation_passed):
+            raise ValueError("criterion result differs from its execution results")
+        return self
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:BenchmarkMetricResult -->
+```python contract-target
+class BenchmarkMetricResult(ProtocolModel):
+    """Record one metric across candidate and confirmation executions."""
+
+    metric_id: MetricId
+    candidate_verification: ResolvedFileRef
+    confirmation_verification: ResolvedFileRef
+    candidate_value: float = Field(allow_inf_nan=False)
+    confirmation_value: float = Field(allow_inf_nan=False)
+    matched: bool
+    criterion: MetricCriterionResult | None = None
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/benchmark.py:BenchmarkResult -->
+```python contract-target
+class BenchmarkResult(ProtocolModel):
+    """Record the independent confirmation and outcome of a benchmark."""
+
+    schema_version: Literal[1] = 1
+    benchmark: ResolvedBenchmarkSpecRef
+    run: ResolvedRunRef
+    confirmation: ResolvedAttemptRef
+    artifacts: tuple[ArtifactComparisonReceipt, ...] = Field(min_length=2)
+    metrics: tuple[BenchmarkMetricResult, ...] = Field(min_length=1)
+    status: Literal["verified", "passed", "failed"]
+    completed_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_receipt_sets(self) -> BenchmarkResult:
+        """Require unique artifact selectors and metric results."""
+        artifacts = tuple(
+            (receipt.artifact.stage_id, receipt.artifact.artifact_name)
+            for receipt in self.artifacts
+        )
+        if len(set(artifacts)) != len(artifacts):
+            raise ValueError("benchmark artifact comparisons must be unique")
+        metrics = tuple(receipt.metric_id for receipt in self.metrics)
+        if len(set(metrics)) != len(metrics):
+            raise ValueError("benchmark metric results must be unique")
+        return self
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/benchmark.py:benchmark -->
+```python contract-target
+def benchmark(
+    *,
+    benchmark_id: BenchmarkId,
+    eval_id: EvalId,
+    test: RunArtifactDraft,
+    splits: dict[InputName, RunArtifactDraft],
+    metrics: tuple[MetricDraft[Any], ...],
+    criteria: tuple[MetricCriterionDraft, ...] = (),
+) -> BenchmarkDraft:
+    """Declare one benchmark over fixed prior-run inputs."""
+    return BenchmarkDraft(
+        benchmark_id=benchmark_id,
+        eval_id=eval_id,
+        test=test,
+        splits=splits,
+        metrics=metrics,
+        criteria=criteria,
+    )
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=remove target=src/viper/benchmark.py:ArtifactPointerRef -->
+<!-- contract-remove -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=remove target=src/viper/benchmark.py:MetricCriterionReceipt -->
+<!-- contract-remove -->
+
+**File: `src/viper/authoring.py`**
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/authoring.py:BenchmarkDraft -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/authoring.py:BenchmarkSpec -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/authoring.py:MetricCriterion -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/authoring.py:RunArtifactDraft -->
+```python contract-target
+from .benchmark import (
+    BenchmarkDraft,
+    BenchmarkSpec,
+    MetricCriterion,
+    RunArtifactDraft,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/authoring.py:RunPlanDraft -->
+```python contract-target
+class RunPlanDraft(BaseModel):
+    """Select one immutable experiment variant and replicate for execution."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    run_id: RunId
+    experiment: ExperimentDraft
+    variant: VariantId
+    replicate: ReplicateId
+    benchmark: BenchmarkDraft | None = None
+    source: GitSource
+    env: EnvSpec
+    reproducibility: ReproducibilitySpec
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/authoring.py:plan -->
+```python contract-target
+def plan(
+    *,
+    experiment: ExperimentDraft,
+    variant: VariantId,
+    replicate: ReplicateId,
+    benchmark: BenchmarkDraft | None = None,
+    source: GitSource,
+    env: EnvSpec,
+    reproducibility: ReproducibilitySpec,
+) -> RunPlanDraft:
+    """Create one identified plan detached from mutable caller values."""
+    if variant not in experiment.variants:
+        raise ValueError("variant is absent from the experiment")
+    if replicate not in experiment.replicates:
+        raise ValueError("replicate is absent from the experiment")
+    draft = RunPlanDraft(
+        run_id=_new_run_id(),
+        experiment=experiment,
+        variant=variant,
+        replicate=replicate,
+        benchmark=benchmark,
+        source=source,
+        env=env,
+        reproducibility=reproducibility,
+    )
+    return _deep_freeze(draft)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/authoring.py:_freeze_input -->
+```python contract-target
+def _freeze_input(
+    root: Path,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageInputDraft,
+    cache: dict[int, InputRef] | None = None,
+) -> InputRef:
+    """Compile one input draft into its frozen reference."""
+    cached = None if cache is None else cache.get(id(draft))
+    if cached is not None:
+        return cached
+    if isinstance(draft, ExternalInputDraft):
+        path = resolve_path(root, draft.path, operation="read")
+        return ExternalInputRef(
+            source=LocalSource(path=path.relative_to(root).as_posix()),
+            data_role=draft.data_role,
+        )
+    if isinstance(draft, StageDraftArtifactRef):
+        owners = [name for name, stage in stages.items() if stage is draft.producer]
+        if len(owners) != 1:
+            raise ValueError("stage artifact must have one producer in this plan")
+        return FutureInputRef(
+            producer_stage_id=owners[0],
+            name=draft.artifact_name,
+        )
+    pointer = ArtifactPointer(run=draft.run, artifact=draft.artifact)
+    raw = serialize_document(pointer)
+    parts = draft.path.split("/")
+    if len(parts) < 4 or parts[0] != "inputs":
+        raise ValueError("prior-run input path must include category and entity")
+    selection = f"{draft.artifact.artifact_name}_{draft.run.sha256}"
+    pointer_path = "/".join((*parts[:3], f"{selection}.pointer.yaml"))
+    published = LocalArtifactStore(root).resolved_files({pointer_path: raw})[0]
+    reference = ResolvedArtifactPointerRef(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        bytes=len(raw),
+        stored_at=published.stored_at,
+    )
+    stored = StoredInputRef(
+        pointer=reference,
+        path=draft.path,
+        data_role=draft.data_role,
+    )
+    if cache is not None:
+        cache[id(draft)] = stored
+    return stored
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/authoring.py:_freeze_stage -->
+```python contract-target
+def _freeze_stage(
+    root: Path,
+    run_root: str,
+    stages: Mapping[StageId, StageDraft],
+    draft: StageSpecDraft,
+    input_cache: dict[int, InputRef] | None = None,
+) -> Spec:
+    """Freeze one Python stage draft into its protocol declaration."""
+    artifacts: dict[ArtifactName, ArtifactSpec] = {
+        name: _freeze_artifact(root, run_root, artifact)
+        for name, artifact in draft.artifacts.items()
+    }
+    if isinstance(draft, DownloadSpecDraft):
+        return DownloadSpec(
+            artifacts=artifacts,
+            env=draft.env,
+            inputs=draft.inputs,
+            http=_freeze_http(root, draft.http),
+            policy=draft.policy,
+        )
+    definition = stage_definition(draft.implementation)
+    source = inspect.getsourcefile(draft.implementation)
+    parameter_source = inspect.getsourcefile(definition.parameter_model)
+    if source is None or parameter_source is None:
+        raise ValueError("stage callable or parameter model has no Python source")
+    source_path = Path(source).resolve()
+    parameter_path = Path(parameter_source).resolve()
+    source_raw = source_path.read_bytes()
+    parameter_raw = parameter_path.read_bytes()
+    if definition.parameter_model.__module__ == params.__name__:
+        parameter = params.model_ref(definition.parameter_model)
+    else:
+        if not parameter_path.is_relative_to(root):
+            raise ValueError("stage parameter model is outside the project root")
+        parameter = ParameterModelRef(
+            owner="project",
+            path=parameter_path.relative_to(root).as_posix(),
+            symbol=definition.parameter_model.__name__,
+            sha256=hashlib.sha256(parameter_raw).hexdigest(),
+            bytes=len(parameter_raw),
+        )
+    common = {
+        "artifacts": artifacts,
+        "env": draft.env,
+        "implementation": StageImplementationRef(
+            path=source_path.relative_to(root).as_posix(),
+            symbol=draft.implementation.__name__,
+            sha256=hashlib.sha256(source_raw).hexdigest(),
+            bytes=len(source_raw),
+        ),
+        "parameter_model": parameter,
+        "params": draft.params,
+        "inputs": {
+            name: _freeze_input(root, stages, value, input_cache)
+            for name, value in draft.inputs.items()
+        },
+        "metric_ids": tuple(
+            metric_definition(metric.implementation).metric_id
+            for metric in draft.metrics
+        ),
+    }
+    if isinstance(draft, BuildSpecDraft):
+        return BuildSpec(**common)
+    objective = (
+        None
+        if draft.objective is None
+        else MetricObjectiveSpec(
+            metric_id=metric_definition(
+                draft.objective.metric.implementation
+            ).metric_id,
+            direction=draft.objective.direction,
+        )
+    )
+    if isinstance(draft, EmbedSpecDraft):
+        return EmbedSpec(**common, objective=objective)
+    if objective is None:
+        raise ValueError("train and eval stages require an objective")
+    if isinstance(draft, TrainSpecDraft):
+        return TrainSpec(**common, objective=objective)
+    return EvalSpec(
+        **common,
+        objective=objective,
+        eval_id=draft.eval_id,
+        split_inputs=draft.split_inputs,
+    )
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/authoring.py:_compile_plan -->
+```python contract-target
+def _compile_plan(root: Path, draft: RunPlanDraft) -> _CompiledPlan:
+    """Compile one immutable draft into a complete in-memory protocol graph."""
+    project_root = resolve_root(root)
+    experiment_draft = draft.experiment
+    variant_draft = experiment_draft.variants[draft.variant]
+    replicate_draft = experiment_draft.replicates[draft.replicate]
+    metrics = _compile_metrics(project_root, experiment_draft)
+    experiment_spec = ExperimentSpec(
+        experiment_id=experiment_draft.experiment_id,
+        factors=tuple(
+            FactorSpec(factor_id=factor_id, levels=factor.levels)
+            for factor_id, factor in sorted(experiment_draft.factors.items())
+        ),
+        variant_ids=tuple(sorted(experiment_draft.variants)),
+        replicates=tuple(
+            ReplicateSpec(replicate_id=replicate_id, seed=replicate.seed)
+            for replicate_id, replicate in sorted(experiment_draft.replicates.items())
+        ),
+        metrics=metrics,
+    )
+    variants = tuple(
+        _compile_variant(experiment_draft.experiment_id, variant_id, value)
+        for variant_id, value in sorted(experiment_draft.variants.items())
+    )
+    run_root = (
+        f"experiments/{experiment_draft.experiment_id}/runs/"
+        f"{draft.variant}/{draft.run_id}"
+    )
+    files: dict[RepoRelPath, bytes] = {
+        f"experiments/{experiment_draft.experiment_id}/spec.yaml": serialize_document(
+            experiment_spec
+        )
+    }
+    for variant_spec in variants:
+        path = (
+            f"experiments/{experiment_draft.experiment_id}/variants/"
+            f"{variant_spec.variant_id}.spec.yaml"
+        )
+        files[path] = serialize_document(variant_spec)
+
+    stage_refs: list[RunStageRef] = []
+    stage_specs: dict[StageId, Spec] = {}
+    input_cache: dict[int, InputRef] = {}
+    for stage_id, stage_draft in variant_draft.stages.items():
+        stage_spec = _freeze_stage(
+            project_root,
+            run_root,
+            variant_draft.stages,
+            stage_draft.spec,
+            input_cache,
+        )
+        stage_specs[stage_id] = stage_spec
+        raw = serialize_document(stage_spec)
+        path = f"{run_root}/stages/{stage_id}/spec.yaml"
+        files[path] = raw
+        stage_refs.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=path,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    estimator_stage = next(
+        (
+            stage_id
+            for stage_id, stage_draft in variant_draft.stages.items()
+            if stage_draft is variant_draft.estimator.producer
+        ),
+        None,
+    )
+    if estimator_stage is None:
+        raise ValueError("estimator producer is absent from the plan")
+    benchmark_spec: BenchmarkSpec | None = None
+    if draft.benchmark is not None:
+        benchmark_draft = draft.benchmark
+        test = _freeze_input(
+            project_root,
+            variant_draft.stages,
+            benchmark_draft.test,
+            input_cache,
+        )
+        splits = {
+            name: _freeze_input(
+                project_root,
+                variant_draft.stages,
+                split,
+                input_cache,
+            )
+            for name, split in benchmark_draft.splits.items()
+        }
+        if not isinstance(test, StoredInputRef) or not isinstance(
+            test.pointer, ResolvedArtifactPointerRef
+        ):
+            raise ValueError("benchmark inputs must select completed-run artifacts")
+        resolved_splits: dict[InputName, ResolvedArtifactPointerRef] = {}
+        for name, split in splits.items():
+            if not isinstance(split, StoredInputRef) or not isinstance(
+                split.pointer, ResolvedArtifactPointerRef
+            ):
+                raise ValueError("benchmark inputs must select completed-run artifacts")
+            resolved_splits[name] = split.pointer
+        eval_stages = [
+            stage for stage in stage_specs.values() if isinstance(stage, EvalSpec)
+        ]
+        if len(eval_stages) != 1:
+            raise ValueError("benchmark plans require exactly one eval stage")
+        eval_stage = eval_stages[0]
+        eval_test = eval_stage.inputs.get("eval_dataset")
+        if (
+            not isinstance(eval_test, StoredInputRef)
+            or eval_test.pointer != test.pointer
+        ):
+            raise ValueError("benchmark test must match the eval test input")
+        if set(eval_stage.split_inputs) != set(splits):
+            raise ValueError("benchmark splits must match the eval split inputs")
+        for name in splits:
+            eval_split = eval_stage.inputs.get(name)
+            if (
+                not isinstance(eval_split, StoredInputRef)
+                or eval_split.pointer != resolved_splits[name]
+            ):
+                raise ValueError(f"benchmark split {name!r} must match the eval input")
+        benchmark_spec = BenchmarkSpec(
+            benchmark_id=benchmark_draft.benchmark_id,
+            eval_id=benchmark_draft.eval_id,
+            test=test.pointer,
+            splits=resolved_splits,
+            metric_ids=tuple(
+                metric_definition(metric.implementation).metric_id
+                for metric in benchmark_draft.metrics
+            ),
+            criteria=tuple(
+                MetricCriterion(
+                    metric_id=metric_definition(
+                        criterion.metric.implementation
+                    ).metric_id,
+                    comparison=criterion.comparison,
+                    threshold=criterion.threshold,
+                )
+                for criterion in benchmark_draft.criteria
+            ),
+        )
+        if set(eval_stage.metric_ids) != set(benchmark_spec.metric_ids):
+            raise ValueError("benchmark metrics must match the eval metrics")
+        files[f"benchmarks/{benchmark_spec.benchmark_id}.spec.yaml"] = (
+            serialize_document(benchmark_spec)
+        )
+
+    run = RunSpec(
+        run_id=draft.run_id,
+        experiment_id=experiment_draft.experiment_id,
+        variant_id=draft.variant,
+        replicate_id=draft.replicate,
+        benchmark_id=(None if benchmark_spec is None else benchmark_spec.benchmark_id),
+        seed=replicate_draft.seed,
+        source=draft.source,
+        env=draft.env,
+        reproducibility=draft.reproducibility,
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id=estimator_stage,
+            artifact_name=variant_draft.estimator.artifact_name,
+        ),
+    )
+    run_path = f"{run_root}/spec.yaml"
+    files[run_path] = serialize_document(run)
+    return _CompiledPlan(run=run, run_path=run_path, files=files)
+```
+
+**File: `src/viper/execution/_benchmark.py`**
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/execution/_benchmark.py:Literal -->
+```python contract-target
+from typing import Literal
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/execution/_benchmark.py:ArtifactComparisonReceipt -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/execution/_benchmark.py:BenchmarkMetricResult -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/execution/_benchmark.py:BenchmarkResult -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/execution/_benchmark.py:BenchmarkSpec -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/execution/_benchmark.py:MetricCriterionResult -->
+```python contract-target
+from ..benchmark import (
+    ArtifactComparisonReceipt,
+    BenchmarkMetricResult,
+    BenchmarkResult,
+    BenchmarkSpec,
+    MetricCriterionResult,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/execution/_benchmark.py:MetricVerificationReceipt -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/execution/_benchmark.py:compare_metric_values -->
+```python contract-target
+from ..metrics import MetricVerificationReceipt, compare_metric_values
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/execution/_benchmark.py:_benchmark_metric_results -->
+```python contract-target
+def _benchmark_metric_results(
+    benchmark: BenchmarkSpec,
+    candidate: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]],
+    confirmation: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]],
+) -> tuple[BenchmarkMetricResult, ...]:
+    """Record every selected metric, then apply any matching criterion."""
+    criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
+    results: list[BenchmarkMetricResult] = []
+    for metric_id in benchmark.metric_ids:
+        try:
+            candidate_ref, candidate_receipt = candidate[metric_id]
+            confirmation_ref, confirmation_receipt = confirmation[metric_id]
+        except KeyError as error:
+            raise BenchmarkExecutionError(
+                f"benchmark metric {metric_id!r} lacks verification evidence"
+            ) from error
+        candidate_value = candidate_receipt.recomputation.value
+        confirmation_value = confirmation_receipt.recomputation.value
+        matched = compare_metric_values(
+            candidate_value,
+            confirmation_value,
+            candidate_receipt.comparator,
+        )
+        criterion = criteria.get(metric_id)
+        criterion_result: MetricCriterionResult | None = None
+        if criterion is not None:
+            candidate_passed = (
+                candidate_value >= criterion.threshold
+                if criterion.comparison == "ge"
+                else candidate_value <= criterion.threshold
+            )
+            confirmation_passed = (
+                confirmation_value >= criterion.threshold
+                if criterion.comparison == "ge"
+                else confirmation_value <= criterion.threshold
+            )
+            criterion_result = MetricCriterionResult(
+                criterion=criterion,
+                candidate_passed=candidate_passed,
+                confirmation_passed=confirmation_passed,
+                passed=candidate_passed and confirmation_passed,
+            )
+        results.append(
+            BenchmarkMetricResult(
+                metric_id=metric_id,
+                candidate_verification=candidate_ref,
+                confirmation_verification=confirmation_ref,
+                candidate_value=candidate_value,
+                confirmation_value=confirmation_value,
+                matched=matched,
+                criterion=criterion_result,
+            )
+        )
+    return tuple(results)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/execution/_benchmark.py:_benchmark_status -->
+```python contract-target
+def _benchmark_status(
+    benchmark: BenchmarkSpec,
+    artifacts: tuple[ArtifactComparisonReceipt, ...],
+    metrics: tuple[BenchmarkMetricResult, ...],
+) -> Literal["verified", "passed", "failed"]:
+    """Derive the benchmark status from parity, matching, and criteria."""
+    failed = (
+        not all(receipt.passed for receipt in artifacts)
+        or not all(receipt.matched for receipt in metrics)
+        or any(
+            receipt.criterion is not None and not receipt.criterion.passed
+            for receipt in metrics
+        )
+    )
+    if failed:
+        return "failed"
+    return "verified" if not benchmark.criteria else "passed"
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/execution/_benchmark.py:benchmark -->
+```python contract-target
+def benchmark(
+    repository_root: Path,
+    resolved_run_path: Path,
+    benchmark_spec_path: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> BenchmarkExecutionResult:
+    """Execute, assemble, verify, and publish one benchmark confirmation."""
+    root = repository_root.resolve()
+    candidate_path = resolved_run_path.resolve()
+    candidate_raw = candidate_path.read_bytes()
+    candidate = ResolvedRun.model_validate(parse_yaml_bytes(candidate_raw))
+    run_spec_path = candidate_path.with_name("spec.yaml")
+    store = LocalArtifactStore(root)
+
+    run = candidate.spec
+    if isinstance(run.stored_at, GitFileRef):
+        source_repository = str(run.stored_at.repository)
+        run_raw = RunFetcher(root, store, source_repository)(run.stored_at)
+    elif isinstance(run.stored_at, LocalFileRef):
+        run_raw = store.fetch(run.stored_at)
+        source_repository = str(
+            RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
+        )
+    else:
+        run_raw = fetch_storage_bytes(run.stored_at)
+        source_repository = str(
+            RunSpec.model_validate(parse_yaml_bytes(run_raw)).source.repository
+        )
+    fetcher = RunFetcher(root, store, source_repository)
+    policy = VerificationPolicy(
+        trusted_source_repositories=frozenset({source_repository})
+    )
+    verified_candidate = verify_run_result(
+        candidate,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    plan = verified_candidate.plan
+    if plan.benchmark is None or plan.run.benchmark_id is None:
+        raise BenchmarkExecutionError("candidate run has no benchmark specification")
+
+    expected_benchmark_path = (
+        root / f"benchmarks/{plan.benchmark.benchmark_id}.spec.yaml"
+    )
+    selected_benchmark_path = benchmark_spec_path.resolve()
+    if selected_benchmark_path != expected_benchmark_path.resolve():
+        raise BenchmarkExecutionError("benchmark path differs from the frozen plan")
+    benchmark_raw = selected_benchmark_path.read_bytes()
+    benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
+    if benchmark != plan.benchmark:
+        raise BenchmarkExecutionError("benchmark document differs from the frozen plan")
+    benchmark_location = GitFileRef(
+        repository=plan.run.source.repository,
+        commit=plan.run.source.commit,
+        path=f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
+    )
+    if fetcher(benchmark_location) != benchmark_raw:
+        raise BenchmarkExecutionError("benchmark bytes differ from the frozen source")
+
+    result_path = candidate_path.with_name("benchmark.result.yaml")
+    if result_path.exists():
+        raise BenchmarkExecutionError("benchmark result already exists")
+    confirmation_result = execute_benchmark_confirmation(
+        root,
+        run_spec_path,
+        timeout_seconds=timeout_seconds,
+    )
+    confirmation = confirmation_result.attempt
+    confirmation_stages = verify_attempt_stages(
+        confirmation,
+        plan.run,
+        plan.stages,
+        require_complete=True,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    selected_attempt = next(
+        attempt
+        for attempt in verified_candidate.attempts
+        if attempt.attempt_id == candidate.successful_attempt_id
+    )
+    selected_stage_refs = {
+        stage.stage_id: stage for stage in selected_attempt.resolved_stages
+    }
+    confirmation_stage_refs = {
+        stage.stage_id: stage for stage in confirmation.resolved_stages
+    }
+
+    eval_stage_ids = tuple(
+        stage_id
+        for stage_id, stage in plan.stages.items()
+        if isinstance(stage, EvalSpec)
+    )
+    if len(eval_stage_ids) != 1:
+        raise BenchmarkExecutionError("benchmark requires one eval stage")
+    eval_stage_id = eval_stage_ids[0]
+    artifact_selectors = (
+        plan.run.estimator,
+        StageArtifactRef(
+            stage_id=eval_stage_id,
+            artifact_name=PREDICTIONS,
+        ),
+    )
+    artifact_receipts: list[ArtifactComparisonReceipt] = []
+    for selector in artifact_selectors:
+        candidate_artifact = verified_candidate.resolved_stages[
+            selector.stage_id
+        ].artifacts[selector.artifact_name]
+        confirmation_artifact = confirmation_stages[selector.stage_id].artifacts[
+            selector.artifact_name
+        ]
+        candidate_digest = document_digest(candidate_artifact)
+        confirmation_digest = document_digest(confirmation_artifact)
+        artifact_receipts.append(
+            ArtifactComparisonReceipt(
+                artifact=selector,
+                candidate_stage=selected_stage_refs[selector.stage_id],
+                confirmation_stage=confirmation_stage_refs[selector.stage_id],
+                candidate_digest=candidate_digest,
+                confirmation_digest=confirmation_digest,
+                passed=candidate_digest == confirmation_digest,
+            )
+        )
+
+    candidate_metrics = _metric_receipts(selected_attempt, store, eval_stage_id)
+    confirmation_metrics = _metric_receipts(
+        confirmation,
+        store,
+        eval_stage_id,
+    )
+    metric_receipts = _benchmark_metric_results(
+        benchmark,
+        candidate_metrics,
+        confirmation_metrics,
+    )
+
+    candidate_reference = store.resolved_files(
+        {candidate_path.relative_to(root).as_posix(): candidate_raw}
+    )[0]
+    result = BenchmarkResult(
+        benchmark=ResolvedBenchmarkSpecRef(
+            sha256=hashlib.sha256(benchmark_raw).hexdigest(),
+            bytes=len(benchmark_raw),
+            stored_at=benchmark_location,
+        ),
+        run=ResolvedRunRef(
+            sha256=candidate_reference.sha256,
+            bytes=candidate_reference.bytes,
+            stored_at=candidate_reference.stored_at,
+        ),
+        confirmation=confirmation_result.attempt_reference,
+        artifacts=tuple(artifact_receipts),
+        metrics=metric_receipts,
+        status=_benchmark_status(benchmark, tuple(artifact_receipts), metric_receipts),
+        completed_at=datetime.now(UTC),
+    )
+    verify_benchmark_result(result, policy=policy, fetcher=fetcher)
+    _write_new(result_path, serialize_document(result))
+    return BenchmarkExecutionResult(result=result, result_path=result_path)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=remove target=src/viper/execution/_benchmark.py:MetricCriterionReceipt -->
+<!-- contract-remove -->
+
+**File: `src/viper/verification/__init__.py`**
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/verification/__init__.py:Measurement -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/verification/__init__.py:MetricVerificationReceipt -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=src/viper/verification/__init__.py:compare_metric_values -->
+```python contract-target
+from ..metrics import Measurement, MetricVerificationReceipt, compare_metric_values
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/verification/__init__.py:verify_benchmark_result -->
+```python contract-target
+def verify_benchmark_result(
+    result: BenchmarkResult,
+    *,
+    policy: VerificationPolicy,
+    fetcher: StorageFetcher | None = None,
+) -> VerifiedBenchmarkResult:
+    """Verify benchmark parity and metric criteria across two executions."""
+    benchmark_raw = _storage.read_resolved_file(result.benchmark, fetcher=fetcher)
+    try:
+        benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            "benchmark result does not reference a valid BenchmarkSpec"
+        ) from exc
+
+    run_raw = _storage.read_resolved_file(result.run, fetcher=fetcher)
+    try:
+        resolved_run = ResolvedRun.model_validate(parse_yaml_bytes(run_raw))
+    except (yaml.YAMLError, ValueError) as exc:
+        raise VerificationError(
+            "benchmark result does not reference a valid ResolvedRun"
+        ) from exc
+
+    verified_run = verify_run_result(resolved_run, policy=policy, fetcher=fetcher)
+
+    if result.completed_at < resolved_run.completed_at:
+        raise VerificationError(
+            "benchmark result cannot precede the selected run completion"
+        )
+
+    expected_run_location = f"{_paths.run_root(verified_run.plan.run)}/resolved.yaml"
+    if result.run.stored_at.path != expected_run_location:
+        raise VerificationError(
+            "benchmark result run reference is outside the canonical run path"
+        )
+
+    expected_benchmark_location = GitFileRef(
+        repository=verified_run.plan.run.source.repository,
+        commit=verified_run.plan.run.source.commit,
+        path=f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
+    )
+    if result.benchmark.stored_at != expected_benchmark_location:
+        raise VerificationError(
+            "benchmark result reference does not match the run source snapshot"
+        )
+
+    if verified_run.plan.benchmark != benchmark:
+        raise VerificationError(
+            "benchmark result and run plan select different benchmark specs"
+        )
+
+    confirmation = _storage.read_attempt_reference(
+        result.confirmation,
+        verified_run.plan.run,
+        fetcher=fetcher,
+    )
+    if confirmation.status != "succeeded":
+        raise VerificationError("benchmark confirmation attempt must succeed")
+    if confirmation.purpose != "benchmark_confirmation":
+        raise VerificationError("benchmark confirmation has the wrong purpose")
+    if result.completed_at < confirmation.completed_at:
+        raise VerificationError(
+            "benchmark result cannot precede confirmation completion"
+        )
+
+    selected_attempt = next(
+        attempt
+        for attempt in verified_run.attempts
+        if attempt.attempt_id == resolved_run.successful_attempt_id
+    )
+    original_attempt_ids = {attempt.attempt_id for attempt in verified_run.attempts}
+    if confirmation.attempt_id in original_attempt_ids:
+        raise VerificationError("benchmark confirmation must use a new attempt ID")
+    if confirmation.attempt_id <= max(original_attempt_ids):
+        raise VerificationError(
+            "benchmark confirmation attempt ID must follow the candidate history"
+        )
+
+    original_snapshots = {
+        _storage.snapshot_identity(stage.snapshot)
+        for attempt in verified_run.attempts
+        for stage in attempt.resolved_stages
+    }
+    confirmation_snapshots = {
+        _storage.snapshot_identity(stage.snapshot)
+        for stage in confirmation.resolved_stages
+    }
+    if original_snapshots & confirmation_snapshots:
+        raise VerificationError(
+            "benchmark confirmation must use new stage-result snapshots"
+        )
+
+    original_attempt_file_snapshots = {
+        identity
+        for attempt in verified_run.attempts
+        for reference in (
+            attempt.journal,
+            *attempt.measurement_files,
+            *attempt.metric_verification_files,
+            *attempt.log_files,
+        )
+        if (identity := _storage.artifact_revision_identity(reference.stored_at))
+        is not None
+    }
+    confirmation_attempt_file_snapshots = {
+        identity
+        for reference in (
+            confirmation.journal,
+            *confirmation.measurement_files,
+            *confirmation.metric_verification_files,
+            *confirmation.log_files,
+        )
+        if (identity := _storage.artifact_revision_identity(reference.stored_at))
+        is not None
+    }
+    if original_attempt_file_snapshots & confirmation_attempt_file_snapshots:
+        raise VerificationError(
+            "benchmark confirmation must use a new measurement and log snapshot"
+        )
+    if confirmation_snapshots & confirmation_attempt_file_snapshots:
+        raise VerificationError(
+            "benchmark confirmation stage-result and attempt-file snapshots "
+            "must be distinct"
+        )
+
+    confirmation_stages = _attempt.verify_attempt_stages(
+        confirmation,
+        verified_run.plan.run,
+        verified_run.plan.stages,
+        require_complete=True,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    confirmation_stored_inputs = verify_stored_inputs(
+        confirmation_stages,
+        policy=policy,
+        fetcher=fetcher,
+    )
+    confirmation_future_inputs = verify_attempt_future_inputs(
+        confirmation,
+        verified_run.plan.run,
+        confirmation_stages,
+        fetcher=fetcher,
+    )
+    confirmation_measurements = _attempt.verify_attempt_files(
+        confirmation,
+        verified_run.plan.run,
+        verified_run.plan.experiment,
+        verified_run.plan.stages,
+        fetcher=fetcher,
+    )
+    _attempt.verify_measurement_stage_times(
+        confirmation_stages,
+        confirmation_measurements,
+        verified_run.plan.experiment,
+    )
+    _metrics.verify_recomputed_metrics(
+        confirmation,
+        verified_run.plan,
+        confirmation_stages,
+        confirmation_measurements,
+        confirmation_stored_inputs,
+        confirmation_future_inputs,
+        policy=policy,
+        fetcher=fetcher,
+    )
+
+    estimator_ref = verified_run.plan.run.estimator
+    selected_estimator = verified_run.resolved_stages[estimator_ref.stage_id].artifacts[
+        estimator_ref.artifact_name
+    ]
+    confirmation_estimator = confirmation_stages[estimator_ref.stage_id].artifacts[
+        estimator_ref.artifact_name
+    ]
+    estimator_parity = selected_estimator == confirmation_estimator
+
+    eval_stage_ids = [
+        stage_id
+        for stage_id, stage in verified_run.plan.stages.items()
+        if isinstance(stage, EvalSpec)
+    ]
+    if len(eval_stage_ids) != 1:
+        raise VerificationError("benchmark verification requires one eval stage")
+    eval_stage_id = eval_stage_ids[0]
+    selected_predictions = verified_run.resolved_stages[eval_stage_id].artifacts[
+        PREDICTIONS
+    ]
+    confirmation_predictions = confirmation_stages[eval_stage_id].artifacts[PREDICTIONS]
+    prediction_parity = selected_predictions == confirmation_predictions
+
+    expected_artifacts = {
+        (estimator_ref.stage_id, estimator_ref.artifact_name): (
+            estimator_ref,
+            next(
+                stage
+                for stage in selected_attempt.resolved_stages
+                if stage.stage_id == estimator_ref.stage_id
+            ),
+            next(
+                stage
+                for stage in confirmation.resolved_stages
+                if stage.stage_id == estimator_ref.stage_id
+            ),
+            selected_estimator,
+            confirmation_estimator,
+        ),
+        (eval_stage_id, PREDICTIONS): (
+            StageArtifactRef(
+                stage_id=eval_stage_id,
+                artifact_name=PREDICTIONS,
+            ),
+            next(
+                stage
+                for stage in selected_attempt.resolved_stages
+                if stage.stage_id == eval_stage_id
+            ),
+            next(
+                stage
+                for stage in confirmation.resolved_stages
+                if stage.stage_id == eval_stage_id
+            ),
+            selected_predictions,
+            confirmation_predictions,
+        ),
+    }
+    received_artifacts = {
+        (receipt.artifact.stage_id, receipt.artifact.artifact_name): receipt
+        for receipt in result.artifacts
+    }
+    if set(received_artifacts) != set(expected_artifacts):
+        raise VerificationError(
+            "benchmark.artifacts: result must compare parameters and predictions"
+        )
+    for artifact_key, expected in expected_artifacts.items():
+        (
+            artifact_ref,
+            candidate_stage,
+            confirmation_stage,
+            candidate,
+            confirmed,
+        ) = expected
+        receipt = received_artifacts[artifact_key]
+        expected_candidate_digest = document_digest(candidate)
+        expected_confirmation_digest = document_digest(confirmed)
+        if (
+            receipt.candidate_stage != candidate_stage
+            or receipt.confirmation_stage != confirmation_stage
+            or receipt.candidate_digest != expected_candidate_digest
+            or receipt.confirmation_digest != expected_confirmation_digest
+            or receipt.passed
+            != (expected_candidate_digest == expected_confirmation_digest)
+        ):
+            raise VerificationError(
+                "benchmark.artifacts: artifact comparison receipt differs"
+            )
+
+    def metric_receipts(
+        attempt: RunAttempt,
+    ) -> dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]]:
+        """Load the eval metric receipts owned by one attempt."""
+        receipts: dict[str, tuple[ResolvedFileRef, MetricVerificationReceipt]] = {}
+        for reference in attempt.metric_verification_files:
+            raw = _storage.read_resolved_file(reference, fetcher=fetcher)
+            try:
+                receipt = MetricVerificationReceipt.model_validate(
+                    parse_yaml_bytes(raw)
+                )
+            except (yaml.YAMLError, ValueError) as exc:
+                raise VerificationError(
+                    "benchmark.metrics: metric verification receipt is invalid"
+                ) from exc
+            if receipt.stage_id != eval_stage_id:
+                continue
+            receipts[receipt.metric_id] = (reference, receipt)
+        return receipts
+
+    candidate_metric_receipts = metric_receipts(selected_attempt)
+    confirmation_metric_receipts = metric_receipts(confirmation)
+    criteria = {criterion.metric_id: criterion for criterion in benchmark.criteria}
+    received_metrics = {receipt.metric_id: receipt for receipt in result.metrics}
+    if set(received_metrics) != set(benchmark.metric_ids):
+        raise VerificationError(
+            "benchmark.metrics: result metric IDs differ from the benchmark"
+        )
+    criteria_pass = True
+    metrics_match = True
+    for metric_id in benchmark.metric_ids:
+        if (
+            metric_id not in candidate_metric_receipts
+            or metric_id not in confirmation_metric_receipts
+        ):
+            raise VerificationError(
+                f"benchmark.metrics: metric {metric_id!r} lacks verification evidence"
+            )
+        candidate_ref, candidate_receipt = candidate_metric_receipts[metric_id]
+        confirmation_ref, confirmation_receipt = confirmation_metric_receipts[metric_id]
+        if candidate_receipt.comparator != confirmation_receipt.comparator:
+            raise VerificationError(
+                "benchmark.metrics: candidate and confirmation comparators differ"
+            )
+        candidate_value = candidate_receipt.recomputation.value
+        confirmation_value = confirmation_receipt.recomputation.value
+        matched = compare_metric_values(
+            candidate_value,
+            confirmation_value,
+            candidate_receipt.comparator,
+        )
+        receipt = received_metrics[metric_id]
+        if (
+            not candidate_receipt.passed
+            or not confirmation_receipt.passed
+            or receipt.candidate_verification != candidate_ref
+            or receipt.confirmation_verification != confirmation_ref
+            or receipt.candidate_value != candidate_value
+            or receipt.confirmation_value != confirmation_value
+            or receipt.matched != matched
+        ):
+            raise VerificationError("benchmark.metrics: metric result differs")
+        metrics_match &= matched
+
+        criterion = criteria.get(metric_id)
+        if criterion is None:
+            if receipt.criterion is not None:
+                raise VerificationError(
+                    "benchmark.metrics: metric has an undeclared criterion result"
+                )
+            continue
+        candidate_passed = (
+            candidate_value >= criterion.threshold
+            if criterion.comparison == "ge"
+            else candidate_value <= criterion.threshold
+        )
+        confirmation_passed = (
+            confirmation_value >= criterion.threshold
+            if criterion.comparison == "ge"
+            else confirmation_value <= criterion.threshold
+        )
+        criterion_passed = candidate_passed and confirmation_passed
+        if (
+            receipt.criterion is None
+            or receipt.criterion.criterion != criterion
+            or receipt.criterion.candidate_passed != candidate_passed
+            or receipt.criterion.confirmation_passed != confirmation_passed
+            or receipt.criterion.passed != criterion_passed
+        ):
+            raise VerificationError(
+                "benchmark.metrics: metric criterion result differs"
+            )
+        criteria_pass &= criterion_passed
+
+    passed = estimator_parity and prediction_parity and metrics_match and criteria_pass
+    expected_status = (
+        "failed" if not passed else "verified" if not benchmark.criteria else "passed"
+    )
+    if result.status != expected_status:
+        raise VerificationError(
+            "benchmark result status does not match parity and metric checks"
+        )
+
+    return VerifiedBenchmarkResult(
+        result=result,
+        run=verified_run,
+        confirmation=confirmation,
+        confirmation_stages=confirmation_stages,
+        confirmation_measurements=confirmation_measurements,
+    )
+```
+
+**File: `src/viper/_verification/plan.py`**
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=src/viper/_verification/plan.py:verify_run_plan_relationships -->
+```python contract-target
+def verify_run_plan_relationships(
+    run: RunSpec,
+    experiment: ExperimentSpec,
+    variant: VariantSpec,
+    benchmark: BenchmarkSpec | None,
+    stages: Mapping[StageId, BaseSpec],
+) -> None:
+    """Verify plan relationships spanning experiment, variant, and stages."""
+
+    def require_source_snapshot(location: GitFileRef, label: str) -> None:
+        if (
+            location.repository != run.source.repository
+            or location.commit != run.source.commit
+        ):
+            raise VerificationError(f"{label} must belong to the run source snapshot")
+
+    require_source_snapshot(run.env.lockfile, "shared lockfile")
+
+    for stage_id, stage in stages.items():
+        if stage.env is not None:
+            require_source_snapshot(
+                stage.env.lockfile,
+                f"env lockfile of stage {stage_id!r}",
+            )
+
+    prior_stages: dict[StageId, BaseSpec] = {}
+    prior_stages_by_id: dict[StageId, dict[StageId, BaseSpec]] = {}
+    for stage_reference in run.stages:
+        stage = stages[stage_reference.stage_id]
+        prior_stages_by_id[stage_reference.stage_id] = dict(prior_stages)
+        _verify_stage_data_roles(stage_reference.stage_id, stage, prior_stages)
+        prior_stages[stage_reference.stage_id] = stage
+
+    parameterized_stages = {
+        stage_id: stage
+        for stage_id, stage in stages.items()
+        if isinstance(
+            stage,
+            (BuildSpec, EmbedSpec, TrainSpec, EvalSpec),
+        )
+    }
+    variant_params = {stage.stage_id: stage for stage in variant.stage_params}
+
+    if set(variant_params) != set(parameterized_stages):
+        raise VerificationError(
+            "variant stage parameters must match all parameterized run stages"
+        )
+
+    for stage_id, stage in parameterized_stages.items():
+        selected = variant_params[stage_id]
+        if selected.kind != stage.kind or selected.params != stage.params:
+            raise VerificationError(
+                f"variant parameters do not match stage {stage_id!r}"
+            )
+
+    estimator_stage = stages.get(run.estimator.stage_id)
+    if not isinstance(estimator_stage, TrainSpec):
+        raise VerificationError("run estimator must select a training stage")
+
+    experiment_metrics = {metric.metric_id: metric for metric in experiment.metrics}
+    for stage_id, stage in stages.items():
+        undeclared_metrics = set(stage.metric_ids) - set(experiment_metrics)
+        if undeclared_metrics:
+            raise VerificationError(f"stage {stage_id!r} selects undeclared metrics")
+
+    eval_stages = [stage for stage in stages.values() if isinstance(stage, EvalSpec)]
+    expected_eval_role: DataRole = "benchmark" if benchmark is not None else "eval"
+    for eval in eval_stages:
+        dataset_input = eval.inputs["eval_dataset"]
+        assert isinstance(dataset_input, StoredInputRef)
+        if dataset_input.data_role != expected_eval_role:
+            raise VerificationError(
+                f"eval {eval.eval_id!r} must use {expected_eval_role!r} data_role"
+            )
+
+    for stage_id, stage in stages.items():
+        input_roles = (
+            _stage_input_roles(stage_id, stage, prior_stages_by_id[stage_id])
+            if isinstance(stage, InternalSpec)
+            else {}
+        )
+        for metric_id in stage.metric_ids:
+            metric = experiment_metrics[metric_id]
+            for dependency in metric.dependencies:
+                if dependency.source == "input":
+                    role = input_roles.get(dependency.name)
+                else:
+                    artifact = stage.artifacts.get(dependency.name)
+                    role = None if artifact is None else artifact.data_role
+                if role is None:
+                    raise VerificationError(
+                        f"metric {metric_id!r} selects absent {dependency.source} "
+                        f"dependency {dependency.name!r}"
+                    )
+                if role != dependency.required_data_role:
+                    raise VerificationError(
+                        f"metric {metric_id!r} dependency {dependency.name!r} "
+                        "data role differs from its stage declaration"
+                    )
+
+    if benchmark is None:
+        return
+
+    if len(eval_stages) != 1:
+        raise VerificationError("benchmark runs require exactly one eval stage")
+
+    eval = eval_stages[0]
+    model_input = eval.inputs[PARAMETERS_INPUT]
+    if not isinstance(model_input, FutureInputRef):
+        raise VerificationError("benchmark eval model must select the run estimator")
+    if (
+        model_input.producer_stage_id != run.estimator.stage_id
+        or model_input.name != run.estimator.artifact_name
+    ):
+        raise VerificationError("benchmark eval model must select the run estimator")
+
+    if eval.eval_id != benchmark.eval_id:
+        raise VerificationError("eval stage ID does not match the benchmark eval ID")
+
+    dataset_input = eval.inputs["eval_dataset"]
+    if not isinstance(dataset_input, StoredInputRef):
+        raise VerificationError("benchmark eval dataset must be stored")
+    if dataset_input.pointer != benchmark.test:
+        raise VerificationError(
+            "eval dataset does not match the benchmark specification"
+        )
+
+    if set(eval.split_inputs) != set(benchmark.splits):
+        raise VerificationError(
+            "eval split names do not match the benchmark specification"
+        )
+    for split_name, pointer in benchmark.splits.items():
+        split_input = eval.inputs[split_name]
+        if not isinstance(split_input, StoredInputRef):
+            raise VerificationError(f"benchmark split {split_name!r} must be stored")
+        if split_input.pointer != pointer:
+            raise VerificationError(
+                f"eval split {split_name!r} does not match the benchmark"
+            )
+
+    benchmark_metric_ids = set(benchmark.metric_ids)
+    if set(eval.metric_ids) != benchmark_metric_ids:
+        raise VerificationError("eval metrics do not match the benchmark specification")
+    for metric_id in benchmark.metric_ids:
+        metric = experiment_metrics[metric_id]
+        if metric.mode != "recompute":
+            raise VerificationError(
+                f"benchmark metric {metric_id!r} must select a recomputed eval metric"
+            )
+```
+
+**File: `tests/test_benchmark_execution.py`**
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:UTC -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:datetime -->
+```python contract-target
+from datetime import UTC, datetime
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:ArtifactComparisonReceipt -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:BenchmarkResult -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_benchmark_execution.py:BenchmarkSpec -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:MetricCriterion -->
+```python contract-target
+from viper.benchmark import (
+    ArtifactComparisonReceipt,
+    BenchmarkResult,
+    BenchmarkSpec,
+    MetricCriterion,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:_benchmark_metric_results -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:_benchmark_status -->
+```python contract-target
+from viper.execution._benchmark import _benchmark_metric_results, _benchmark_status
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:FloatComparator -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:MetricExecutionReceipt -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:MetricVerificationReceipt -->
+```python contract-target
+from viper.metrics import (
+    FloatComparator,
+    MetricExecutionReceipt,
+    MetricVerificationReceipt,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_benchmark_execution.py:LocalFileRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:ResolvedArtifactPointerRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_benchmark_execution.py:ResolvedBenchmarkResultRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:ResolvedBenchmarkSpecRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:ResolvedFileRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:ResolvedRunRef -->
+```python contract-target
+from viper.references import (
+    LocalFileRef,
+    ResolvedArtifactPointerRef,
+    ResolvedBenchmarkResultRef,
+    ResolvedBenchmarkSpecRef,
+    ResolvedFileRef,
+    ResolvedRunRef,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:ResolvedAttemptRef -->
+```python contract-target
+from viper.runs import ResolvedAttemptRef
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:_file -->
+```python contract-target
+def _file(path: str) -> ResolvedFileRef:
+    """Build one local file reference for a focused benchmark test."""
+    return ResolvedFileRef(
+        sha256="a" * 64,
+        bytes=1,
+        stored_at=LocalFileRef(commit="b" * 64, path=path),
+    )
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:_pointer -->
+```python contract-target
+def _pointer(path: str) -> ResolvedArtifactPointerRef:
+    """Build one resolved benchmark-input pointer."""
+    return ResolvedArtifactPointerRef(
+        sha256="a" * 64,
+        bytes=1,
+        stored_at=LocalFileRef(commit="b" * 64, path=path),
+    )
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:_metric -->
+```python contract-target
+def _metric(value: float) -> MetricVerificationReceipt:
+    """Build the metric fields consumed by benchmark assembly."""
+    return MetricVerificationReceipt.model_construct(
+        recomputation=MetricExecutionReceipt.model_construct(value=value),
+        comparator=FloatComparator(),
+        passed=True,
+    )
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_benchmark_execution.py:test_benchmark_spec_counts_candidate_and_confirmation -->
+```python contract-target
+def test_benchmark_spec_counts_candidate_and_confirmation() -> None:
+    """Expose the fixed two-execution contract through its public field."""
+    benchmark = BenchmarkSpec(
+        benchmark_id="holdout",
+        eval_id="eval",
+        test=_pointer("inputs/datasets/holdout/test.pointer.yaml"),
+        splits={"split": _pointer("inputs/benchmarks/holdout/split.pointer.yaml")},
+        metric_ids=("loss",),
+    )
+
+    assert benchmark.execution_count == 2
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:test_benchmark_records_metrics_before_criteria -->
+```python contract-target
+def test_benchmark_records_metrics_before_criteria() -> None:
+    """Record every metric while attaching a criterion only where declared."""
+    benchmark = BenchmarkSpec(
+        benchmark_id="holdout",
+        eval_id="eval",
+        test=_pointer("inputs/datasets/holdout/test.pointer.yaml"),
+        splits={"split": _pointer("inputs/benchmarks/holdout/split.pointer.yaml")},
+        metric_ids=("loss", "accuracy"),
+        criteria=(
+            MetricCriterion(metric_id="accuracy", comparison="ge", threshold=0.9),
+        ),
+    )
+    candidate = {
+        "loss": (_file("candidate-loss.yaml"), _metric(0.2)),
+        "accuracy": (_file("candidate-accuracy.yaml"), _metric(0.95)),
+    }
+    confirmation = {
+        "loss": (_file("confirmation-loss.yaml"), _metric(0.2)),
+        "accuracy": (_file("confirmation-accuracy.yaml"), _metric(0.95)),
+    }
+
+    metrics = _benchmark_metric_results(benchmark, candidate, confirmation)
+
+    assert tuple(metric.metric_id for metric in metrics) == benchmark.metric_ids
+    assert metrics[0].criterion is None
+    assert metrics[1].criterion is not None
+    assert metrics[1].criterion.passed
+    assert (
+        _benchmark_status(
+            benchmark,
+            (ArtifactComparisonReceipt.model_construct(passed=True),),
+            metrics,
+        )
+        == "passed"
+    )
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_benchmark_execution.py:test_benchmark_status_covers_verified_and_failed_results -->
+```python contract-target
+def test_benchmark_status_covers_verified_and_failed_results() -> None:
+    """Separate criterion-free verification from threshold or parity failure."""
+    test = _pointer("inputs/datasets/holdout/test.pointer.yaml")
+    splits = {"split": _pointer("inputs/benchmarks/holdout/split.pointer.yaml")}
+    verified = BenchmarkSpec(
+        benchmark_id="holdout",
+        eval_id="eval",
+        test=test,
+        splits=splits,
+        metric_ids=("accuracy",),
+    )
+    files = {
+        "accuracy": (_file("accuracy.yaml"), _metric(0.95)),
+    }
+    metrics = _benchmark_metric_results(verified, files, files)
+    artifacts = (ArtifactComparisonReceipt.model_construct(passed=True),)
+
+    assert _benchmark_status(verified, artifacts, metrics) == "verified"
+
+    threshold = verified.model_copy(
+        update={
+            "criteria": (
+                MetricCriterion(
+                    metric_id="accuracy",
+                    comparison="ge",
+                    threshold=0.99,
+                ),
+            )
+        }
+    )
+    failed_threshold = _benchmark_metric_results(threshold, files, files)
+    assert _benchmark_status(threshold, artifacts, failed_threshold) == "failed"
+
+    mismatch = _benchmark_metric_results(
+        verified,
+        files,
+        {"accuracy": (_file("confirmation.yaml"), _metric(0.94))},
+    )
+    assert _benchmark_status(verified, artifacts, mismatch) == "failed"
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_benchmark_execution.py:test_api_returns_the_verified_benchmark_result -->
+```python contract-target
+def test_api_returns_the_verified_benchmark_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Return the result and canonical path produced by the benchmark executor."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    run_git(tmp_path, "init")
+    result = BenchmarkResult.model_construct(
+        benchmark=ResolvedBenchmarkSpecRef.model_construct(),
+        run=ResolvedRunRef.model_construct(),
+        confirmation=ResolvedAttemptRef.model_construct(),
+        artifacts=(),
+        metrics=(),
+        status="verified",
+        completed_at=datetime.now(UTC),
+    )
+    result_path = tmp_path / "benchmark.result.yaml"
+    monkeypatch.setattr(
+        "viper.api.execute_benchmark_run",
+        lambda *args, **kwargs: BenchmarkExecutionResult(
+            result=result,
+            result_path=result_path,
+        ),
+    )
+
+    response = execute_benchmark_application(
+        ExecuteBenchmarkRequest(
+            resolved_run=tmp_path / "resolved.yaml",
+            benchmark_spec=tmp_path / "benchmark.spec.yaml",
+            root=tmp_path,
+        )
+    )
+
+    assert response.result == result
+    assert response.result_path == result_path
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=remove target=tests/test_benchmark_execution.py:build_benchmark_fixture -->
+<!-- contract-remove -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=remove target=tests/test_benchmark_execution.py:parse_yaml_bytes -->
+<!-- contract-remove -->
+
+**File: `tests/test_authoring.py`**
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:ArtifactLoaderRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:BundleArtifactDraft -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:SingleFileArtifactDraft -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:StageArtifactRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:artifact -->
+```python contract-target
+from viper.artifacts import (
+    ArtifactLoaderRef,
+    BundleArtifactDraft,
+    SingleFileArtifactDraft,
+    StageArtifactRef,
+    artifact,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:RunArtifactDraft -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:at_least -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:benchmark -->
+```python contract-target
+from viper.benchmark import RunArtifactDraft, at_least, benchmark
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:FloatComparator -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:MetricDependency -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:MetricImplementationRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:MetricSpec -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:measure -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:metric -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:min -->
+```python contract-target
+from viper.metrics import (
+    FloatComparator,
+    MetricDependency,
+    MetricImplementationRef,
+    MetricSpec,
+    measure,
+    metric,
+    min,
+)
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=update target=tests/test_authoring.py:GitSource -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:LocalFileRef -->
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:ResolvedRunRef -->
+```python contract-target
+from viper.references import GitSource, LocalFileRef, ResolvedRunRef
+```
+<!-- contract-target: requirements=UMD-05 block=P8-UMD-01 action=add target=tests/test_authoring.py:test_benchmark_draft_is_frozen_with_the_run_plan -->
+```python contract-target
+def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
+    """Keep benchmark inputs, metrics, and optional criteria immutable."""
+
+    @metric(metric_id="accuracy", mode="recompute")
+    def accuracy(context) -> float:
+        return 0.95
+
+    selected_metric = measure(
+        accuracy,
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name="predictions",
+                required_data_role="benchmark",
+            ),
+        ),
+        comparator=FloatComparator(),
+    )
+    prior = RunArtifactDraft(
+        run=ResolvedRunRef(
+            sha256="a" * 64,
+            bytes=1,
+            stored_at=LocalFileRef(commit="b" * 64, path="runs/prior/resolved.yaml"),
+        ),
+        artifact=StageArtifactRef(stage_id="eval", artifact_name="predictions"),
+        path="inputs/datasets/holdout/test.bin",
+        data_role="benchmark",
+    )
+    benchmark_draft = benchmark(
+        benchmark_id="holdout",
+        eval_id="eval",
+        test=prior,
+        splits={"holdout": prior},
+        metrics=(selected_metric,),
+        criteria=(at_least(selected_metric, 0.9),),
+    )
+    existing, _ = _immutable_plan()
+
+    selected = plan(
+        experiment=existing.experiment,
+        variant=existing.variant,
+        replicate=existing.replicate,
+        benchmark=benchmark_draft,
+        source=existing.source,
+        env=existing.env,
+        reproducibility=existing.reproducibility,
+    )
+
+    assert selected.benchmark is not None
+    assert selected.benchmark.benchmark_id == benchmark_draft.benchmark_id
+    assert selected.benchmark.criteria[0].threshold == 0.9
+    with pytest.raises(TypeError, match="frozen plan"):
+        selected.benchmark.splits["new"] = prior
 ```
