@@ -31,12 +31,11 @@ from .references import (
     SnapshotFileRef,
     StageResultSnapshot,
 )
+from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
 from .runs import RunAttempt
 from .serialization import document_digest, serialize_document
 from .stages import DownloadSpec, InternalSpec
 from .verification.models import VerifiedBenchmarkResult, VerifiedRunResult
-from .reuse import StageReuseCandidate, StageReuseKey, stage_reuse_key_sha256
-
 
 CatalogRunStatus = Literal["succeeded", "failed", "cancelled"]
 
@@ -514,6 +513,7 @@ def _validate_reuse_candidate(
         raise ValueError("reuse candidate does not use the successful attempt")
     if candidate.source_stage not in attempt.resolved_stages:
         raise ValueError("reuse candidate stage is absent from its attempt")
+
 
 class Catalog:
     """Refresh and query one derived SQLite catalog."""

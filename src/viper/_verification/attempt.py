@@ -19,6 +19,7 @@ from .._parameter.validation import (
     verify_parameter_model_bytes,
 )
 from .._schema import RepoRelPath, repo_file_paths_overlap
+from ..artifacts import ResolvedSingleFileArtifact
 from ..experiments import ExperimentSpec
 from ..http import (
     HttpRetrievalError,
@@ -36,6 +37,7 @@ from ..references import (
     ResolvedStageInvocationRef,
     StageResultSnapshot,
 )
+from ..reuse import ExecutedStageCompletion
 from ..runs import RunAttempt, RunSpec
 from ..runtime import (
     ComputeBackendContext,
@@ -86,10 +88,6 @@ from .storage import (
     read_snapshot_file,
     verify_snapshot_artifact,
 )
-from ..artifacts import ResolvedSingleFileArtifact
-
-from ..reuse import ExecutedStageCompletion
-
 
 RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
 
@@ -195,6 +193,7 @@ def _executed_completion(
     if not isinstance(resolved.completion, ExecutedStageCompletion):
         raise VerificationError("project stage did not execute")
     return resolved.completion
+
 
 def _verify_stage_invocation(
     reference: ResolvedStageInvocationRef,

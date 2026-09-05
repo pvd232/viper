@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from .._verification.storage import read_attempt_reference
+from ..catalog import Catalog
 from ..experiments import ExperimentSpec
 from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
@@ -26,6 +27,7 @@ from ..references import (
     ViperCloudFileRef,
     storage_file,
 )
+from ..reuse import ReuseInputIdentity, build_stage_reuse_key, input_identity
 from ..runs import (
     AttemptFailure,
     AttemptPurpose,
@@ -74,6 +76,7 @@ from ._resolution import (
     resolve_runner_env,
     resolve_stage,
 )
+from ._reuse import reuse_stage
 from ._source import RunFetcher, resolve_git_file, run_git
 from ._stage import (
     StageExecutionError,
@@ -82,12 +85,6 @@ from ._stage import (
 )
 from .errors import RunError
 from .results import ConfirmationRunResult, RunResult
-from ..catalog import Catalog
-
-from ..reuse import ReuseInputIdentity, build_stage_reuse_key, input_identity
-
-from ._reuse import reuse_stage
-
 
 
 def _reuse_input_identities(
@@ -107,6 +104,7 @@ def _reuse_input_identities(
             raise RunError("stage input has no reuse role")
         identities.append(input_identity(name, role, paths[str(name)]))
     return tuple(sorted(identities, key=lambda item: item.input_name))
+
 
 def execute_attempt(
     repository_root: Path,

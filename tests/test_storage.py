@@ -454,6 +454,8 @@ def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
 
     assert not first_destination.exists()
     assert second_destination.read_bytes() == b"occupied"
+
+
 def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
     """Publish verified local bytes under the target run's artifact paths."""
     source_artifact = tmp_path / "source" / "model.bin"
@@ -493,6 +495,7 @@ def test_local_snapshot_reuse_remaps_source_files(tmp_path: Path) -> None:
         )
         == b"parameters"
     )
+
 
 def test_cloud_snapshot_reuse_copies_existing_payload(tmp_path: Path) -> None:
     """Copy a sealed cloud payload and upload only the target stage document."""

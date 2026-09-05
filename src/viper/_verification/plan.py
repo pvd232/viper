@@ -5,10 +5,12 @@ from __future__ import annotations
 import ast
 import hashlib
 from collections.abc import Mapping
+from pathlib import Path
 
 import yaml
 from pydantic import TypeAdapter
 
+from .. import params
 from .._parameter.validation import (
     ParameterValidationError,
     verify_parameter_model_bytes,
@@ -47,10 +49,6 @@ from .storage import (
     read_resolved_file,
     verify_resolved_file_bytes,
 )
-from pathlib import Path
-
-from .. import params
-
 
 SPEC_ADAPTER = TypeAdapter(Spec)
 

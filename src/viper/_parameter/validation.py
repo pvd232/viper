@@ -195,6 +195,8 @@ def parameter_model_path(
     if not path.is_relative_to(base):
         raise ParameterValidationError("parameter model escapes its source root")
     return path
+
+
 def _installed_parameter_model(
     symbol: str,
     expected_base: type[params.ParameterSet],

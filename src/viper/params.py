@@ -1,3 +1,5 @@
+"""Define built-in and project-owned stage parameter models."""
+
 import hashlib
 import inspect
 from pathlib import Path

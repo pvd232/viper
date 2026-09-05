@@ -1,13 +1,11 @@
+"""Define verified stage-reuse identities and evidence."""
+
 from __future__ import annotations
 
 import hashlib
-
 import json
-
 from collections.abc import Mapping, Sequence
-
 from pathlib import Path
-
 from typing import TYPE_CHECKING, Annotated, Literal, Self, cast
 
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
@@ -20,11 +18,8 @@ from ._schema import (
     RepoRelPath,
     RNGSeed,
 )
-
 from .ids import InputName, MetricId, StageId
-
 from .metrics import MetricSpec
-
 from .references import (
     ResolvedFileRef,
     ResolvedGitFileRef,
@@ -33,9 +28,7 @@ from .references import (
     ResolvedStageRef,
     SnapshotFileRef,
 )
-
 from .runs import ResolvedAttemptRef
-
 from .runtime import (
     EnvSpec,
     ExecutionContext,
@@ -50,6 +43,7 @@ if TYPE_CHECKING:
 
 StageReuseMode = Literal["never", "verified"]
 
+
 class ReuseFileIdentity(ProtocolModel):
     """Identify one input file independently of its run-specific path."""
 
@@ -57,12 +51,14 @@ class ReuseFileIdentity(ProtocolModel):
     sha256: SHA256
     bytes: int = Field(ge=0)
 
+
 class ReuseInputIdentity(ProtocolModel):
     """Identify every file selected for one named stage input."""
 
     input_name: InputName
     data_role: DataRole
     files: tuple[ReuseFileIdentity, ...] = Field(min_length=1)
+
 
 class StageReuseKey(ProtocolModel):
     """Describe every recorded value allowed to affect a reusable stage."""
@@ -75,6 +71,7 @@ class StageReuseKey(ProtocolModel):
     env_sha256: SHA256
     reproducibility_sha256: SHA256
     metric_sha256s: tuple[SHA256, ...]
+
 
 class ReusedStageFile(ProtocolModel):
     """Map one verified source file to its target snapshot path."""
@@ -92,12 +89,14 @@ class ReusedStageFile(ProtocolModel):
             raise ValueError("reused file byte counts must match")
         return self
 
+
 class ReusedMetricEvidence(ProtocolModel):
     """Link one reused metric to its original measurement evidence."""
 
     metric_id: MetricId
     measurement: ResolvedFileRef
     verification: ResolvedFileRef | None = None
+
 
 class StageReuseReceipt(ProtocolModel):
     """Record the verified source and remapping for one reused stage."""
@@ -112,10 +111,12 @@ class StageReuseReceipt(ProtocolModel):
     metrics: tuple[ReusedMetricEvidence, ...]
     completed_at: AwareDatetime
 
+
 class ResolvedStageReuseRef(ResolvedFileRef):
     """Identify one immutable stage-reuse receipt."""
 
     kind: Literal["stage_reuse"] = "stage_reuse"
+
 
 class ExecutedStageCompletion(ProtocolModel):
     """Record evidence created by an actual project stage process."""
@@ -128,16 +129,19 @@ class ExecutedStageCompletion(ProtocolModel):
     invocation: ResolvedStageInvocationRef
     command: tuple[str, ...] = Field(min_length=1)
 
+
 class ReusedStageCompletion(ProtocolModel):
     """Record that a project stage selected verified prior output."""
 
     kind: Literal["reused"] = "reused"
     receipt: ResolvedStageReuseRef
 
+
 StageCompletion = Annotated[
     ExecutedStageCompletion | ReusedStageCompletion,
     Field(discriminator="kind"),
 ]
+
 
 class StageReuseCandidate(ProtocolModel):
     """Retain one catalog candidate and every source reference needed to verify it."""
@@ -149,11 +153,13 @@ class StageReuseCandidate(ProtocolModel):
     source_stage: ResolvedStageRef
     completed_at: AwareDatetime
 
+
 def _canonical_sha256(value: BaseModel | dict[str, object]) -> SHA256:
     """Hash one model or mapping through canonical JSON bytes."""
     payload = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest()
+
 
 def _normalized_stage(stage: ParameterizedSpec) -> dict[str, object]:
     """Remove run-specific paths and the permission flag from a stage spec."""
@@ -171,6 +177,7 @@ def _normalized_stage(stage: ParameterizedSpec) -> dict[str, object]:
             raise ValueError("stage artifact path has no run-relative boundary")
         artifact["path"] = f"artifacts/{path.split(marker, 1)[1]}"
     return payload
+
 
 def input_identity(
     input_name: InputName,
@@ -203,6 +210,7 @@ def input_identity(
         files=tuple(files),
     )
 
+
 def verified_input_identity(
     input_name: InputName,
     value: VerifiedInput,
@@ -229,6 +237,7 @@ def verified_input_identity(
         files=tuple(sorted(files, key=lambda item: item.relative_path)),
     )
 
+
 def build_stage_reuse_key(
     *,
     stage_id: StageId,
@@ -251,9 +260,11 @@ def build_stage_reuse_key(
         metric_sha256s=tuple(_canonical_sha256(metric) for metric in selected_metrics),
     )
 
+
 def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:
     """Return the catalog identity for one complete reuse key."""
     return _canonical_sha256(key)
+
 
 def catalog_reuse_candidates(
     source_run: ResolvedRunRef,
@@ -313,6 +324,7 @@ def catalog_reuse_candidates(
             )
         )
     return tuple(candidates)
+
 
 __all__ = [
     "ExecutedStageCompletion",

@@ -33,6 +33,7 @@ from tests.fixtures import (
     verification_policy,
 )
 from viper import parameters
+from viper import params as current_params
 from viper._schema import (
     PARAMETERS,
     PREDICTIONS,
@@ -92,6 +93,7 @@ from viper.metrics import (
     MetricVerificationReceipt,
     ResolvedMetricDependency,
 )
+from viper.params import ParameterModelRef as CurrentParameterModelRef
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -115,6 +117,15 @@ from viper.references import (
     ViperCloudStageResultSnapshotRef,
 )
 from viper.resume import DataLoaderConfiguration
+from viper.reuse import (
+    ExecutedStageCompletion,
+    ReusedMetricEvidence,
+    ReusedStageFile,
+    ReuseFileIdentity,
+    ReuseInputIdentity,
+    StageReuseReceipt,
+    build_stage_reuse_key,
+)
 from viper.runs import (
     AttemptFailure,
     AttemptJournalRef,
@@ -172,20 +183,6 @@ from viper.verification.models import (
     VerifiedRunResult,
 )
 from viper.workspace import captured_input_path
-from viper import params as current_params
-
-from viper.params import ParameterModelRef as CurrentParameterModelRef
-
-from viper.reuse import (
-    ExecutedStageCompletion,
-    ReusedMetricEvidence,
-    ReusedStageFile,
-    ReuseFileIdentity,
-    ReuseInputIdentity,
-    StageReuseReceipt,
-    build_stage_reuse_key,
-)
-
 
 SOURCE_REPOSITORY = HttpUrl("https://github.com/example/viper-project")
 ARTIFACT_REPOSITORY = "example/viper-runs"
@@ -2769,6 +2766,8 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
 def test_stage_reuse_rejects_each_severed_relationship() -> None:
     """Reject source, key, file, and metric evidence changed after reuse."""
     artifact_file = SnapshotFileRef(

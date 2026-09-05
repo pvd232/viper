@@ -402,6 +402,7 @@ def _verify_reuse_source(source: SnapshotFileRef, raw: bytes) -> None:
     if len(raw) != source.bytes or hashlib.sha256(raw).hexdigest() != source.sha256:
         raise StorageConfigurationError("reused snapshot file identity changed")
 
+
 def _cloud_upload_file(
     *,
     destination: ViperCloudDestination,
@@ -429,6 +430,7 @@ def _cloud_upload_file(
             if attempt + 1 == attempts:
                 raise StorageConfigurationError("storage_upload_failed") from error
 
+
 def _cloud_seal(
     *,
     destination: ViperCloudDestination,
@@ -450,6 +452,7 @@ def _cloud_seal(
         except Exception as error:
             if attempt + 1 == attempts:
                 raise StorageConfigurationError("storage_seal_failed") from error
+
 
 def _cloud_publish(
     *,

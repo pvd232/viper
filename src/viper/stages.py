@@ -43,7 +43,7 @@ from .ids import EvalId, HumanId, InputName, MetricId, RunId, StageId
 from .inputs import InputRef, ResolvedInputRef, pointer_path
 from .metrics import MetricHandle, MetricObjectiveSpec
 from .params import ParameterModelRef
-
+from .reuse import StageCompletion, StageReuseMode
 from .runtime import (
     EnvSpec,
     ExecutionContext,
@@ -52,8 +52,6 @@ from .runtime import (
     ResolvedEnv,
     ResolvedGCEEnv,
 )
-from .reuse import StageCompletion, StageReuseMode
-
 
 ParamsT = TypeVar("ParamsT", bound=params.ParameterSet)
 
@@ -503,6 +501,7 @@ class ResolvedExecutedSpec(ResolvedBaseSpec):
                 )
 
         return self
+
 
 class ResolvedDownloadSpec(ResolvedExecutedSpec):
     """Bind every frozen HTTP input to its completed retrieval evidence."""

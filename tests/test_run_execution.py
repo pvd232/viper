@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
 import inspect
 import os
 import threading
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+import viper.params as current_params
 from tests.fixtures import (
     builtin_http,
     http_policy,
@@ -49,6 +51,8 @@ from viper.authoring import (
     stage,
     variant,
 )
+from viper.authoring import input as external_input
+from viper.catalog import Catalog, CatalogRunSource
 from viper.execution import _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
@@ -84,11 +88,18 @@ from viper.metrics import (
     MetricSpec,
     measure,
 )
+from viper.metrics import (
+    min as minimize,
+)
 from viper.parameters import ParameterModelRef
 from viper.references import (
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
+)
+from viper.reuse import (
+    ReusedStageCompletion,
+    catalog_reuse_candidates,
 )
 from viper.runs import (
     ResolvedRun,
@@ -113,23 +124,6 @@ from viper.storage import LocalArtifactStore
 from viper.verification import verify_run_result
 from viper.verification.models import VerificationError, VerificationPolicy
 from viper.workspace import AttemptWorkspace, captured_input_path
-import importlib.util
-
-import viper.params as current_params
-
-from viper.authoring import input as external_input
-
-from viper.catalog import Catalog, CatalogRunSource
-
-from viper.metrics import (
-    min as minimize,
-)
-
-from viper.reuse import (
-    ReusedStageCompletion,
-    catalog_reuse_candidates,
-)
-
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
@@ -1111,6 +1105,8 @@ def test_run_many_retains_one_result_per_plan(
         "failed",
         "skipped",
     )
+
+
 def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     """Reuse verified output without invoking the project stage a second time."""
     root = tmp_path / "project"

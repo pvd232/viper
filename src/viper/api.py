@@ -76,6 +76,7 @@ from .restoration import (
     RestoreResult,
     ViperCloudRunUri,
 )
+from .reuse import catalog_reuse_candidates
 from .runs import (
     ResolvedRun,
     RunSpec,
@@ -104,8 +105,6 @@ from .verification.models import (
     VerificationError,
     VerificationPolicy,
 )
-from .reuse import catalog_reuse_candidates
-
 
 OperationName = Literal[
     "validate_stage",

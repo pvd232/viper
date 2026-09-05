@@ -17,6 +17,7 @@ from tests.fixtures import (
     stage_implementation_ref,
 )
 from viper import parameters
+from viper import params as current_params
 from viper._schema import (
     PARAMETERS,
     PREDICTIONS,
@@ -39,6 +40,13 @@ from viper.metrics import (
     MetricSpec,
 )
 from viper.references import SnapshotFileRef
+from viper.reuse import (
+    ReusedStageFile,
+    ReuseFileIdentity,
+    ReuseInputIdentity,
+    build_stage_reuse_key,
+    stage_reuse_key_sha256,
+)
 from viper.runs import (
     RunAttempt,
     RunSpec,
@@ -48,16 +56,6 @@ from viper.runtime import GCEEnvSpec as GCEEnvironmentSpec
 from viper.serialization import load_stage_spec
 from viper.stages import DownloadSpec, ParameterizedSpec, TrainSpec
 from viper.stages import EvalSpec as EvaluateSpec
-from viper import params as current_params
-
-from viper.reuse import (
-    ReusedStageFile,
-    ReuseFileIdentity,
-    ReuseInputIdentity,
-    build_stage_reuse_key,
-    stage_reuse_key_sha256,
-)
-
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -1027,6 +1025,8 @@ def test_python_stage_drafts_freeze_to_protocol_specs(tmp_path: Path) -> None:
     """Freeze one Python stage mapping without reading authored stage YAML."""
     assert "stages" in RunPlanDraft.model_fields
     assert "spec_source" not in RunPlanDraft.model_fields
+
+
 def test_stage_reuse_models_form_valid_completion_union() -> None:
     """Bind reuse permission, canonical inputs, and remapped file identity."""
     payload = train_payload()

@@ -171,7 +171,7 @@
         "SRU-03",
         "SRU-04"
       ],
-      "sha256": "30549c4757330dd107f681e5e041ea925f65ce13b12198afc7dc238bb2e8e4d6"
+      "sha256": "d59cf658405b6dd484dc4507d3190df19d640e1e1b49c0937279427f2ab33a91"
     },
     {
       "path": "docs/development/experiment-knowledge-primitives.md",

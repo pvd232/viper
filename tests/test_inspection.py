@@ -31,6 +31,13 @@ from viper.references import (
     ResolvedStageRef,
     SnapshotFileRef,
 )
+from viper.reuse import (
+    ReusedStageFile,
+    StageReuseCandidate,
+    StageReuseKey,
+    StageReuseReceipt,
+    stage_reuse_key_sha256,
+)
 from viper.runs import (
     ResolvedAttemptRef,
     ResolvedRun,
@@ -44,14 +51,6 @@ from viper.serialization import (
 )
 from viper.stages import DownloadSpec
 from viper.verification.models import VerifiedRunPlan, VerifiedRunResult
-from viper.reuse import (
-    ReusedStageFile,
-    StageReuseCandidate,
-    StageReuseKey,
-    StageReuseReceipt,
-    stage_reuse_key_sha256,
-)
-
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/inspection/runs/baseline/{RUN_ID}"
@@ -379,6 +378,8 @@ def test_catalog_results_retain_immutable_sources(tmp_path: Path) -> None:
         assert "another query" in str(error)
     else:
         raise AssertionError("a cursor was accepted under different filters")
+
+
 def _reuse_receipt() -> StageReuseReceipt:
     """Build one valid reuse receipt for inspection tests."""
     resolved_file = SnapshotFileRef(
@@ -433,6 +434,7 @@ def _reuse_receipt() -> StageReuseReceipt:
         completed_at=datetime(2026, 8, 22, tzinfo=UTC),
     )
 
+
 def test_reuse_identity_appears_in_inspection_surfaces(tmp_path: Path) -> None:
     """Expose one verified reuse receipt in lineage and run comparison."""
     run_path = _write_plan(tmp_path, seed=42)
@@ -454,6 +456,7 @@ def test_reuse_identity_appears_in_inspection_surfaces(tmp_path: Path) -> None:
         change.path == "stage_reuse" or change.path.startswith("stage_reuse.download")
         for change in comparison.changes
     )
+
 
 def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
     """Index one successful stage by its complete canonical reuse key."""

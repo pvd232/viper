@@ -1,43 +1,31 @@
 from __future__ import annotations
 
 import json
-
 from dataclasses import dataclass
-
 from datetime import UTC, datetime
-
 from pathlib import Path
-
 from typing import cast
 
 import yaml
 
 from .._schema import ArtifactName, RepoRelPath
-
 from .._verification.storage import read_snapshot_file
-
 from ..artifacts import (
     ResolvedArtifact,
     ResolvedBundleArtifact,
     ResolvedBundleMember,
     ResolvedSingleFileArtifact,
 )
-
 from ..catalog import Catalog
-
 from ..ids import InputName, MetricId, StageId
-
 from ..inputs import ResolvedInputRef
-
 from ..metrics import Measurement, MetricSpec
-
 from ..references import (
     ResolvedFileRef,
     SnapshotFileRef,
     StageResultSnapshot,
     StorageModel,
 )
-
 from ..reuse import (
     ExecutedStageCompletion,
     ResolvedStageReuseRef,
@@ -48,11 +36,8 @@ from ..reuse import (
     StageReuseReceipt,
     catalog_reuse_candidates,
 )
-
 from ..runs import ResolvedRun
-
 from ..serialization import parse_yaml_bytes, serialize_document
-
 from ..stages import (
     ParameterizedSpec,
     ResolvedBuildSpec,
@@ -62,7 +47,6 @@ from ..stages import (
     ResolvedParameterizedSpec,
     ResolvedTrainSpec,
 )
-
 from ..storage import (
     SnapshotPublisher,
     StorageDestination,
@@ -70,10 +54,9 @@ from ..storage import (
     publish_resolved_files,
     snapshot_file,
 )
-
 from ..verification import verify_run_result
-
 from ..verification.models import StorageFetcher, VerificationPolicy
+
 
 @dataclass(frozen=True)
 class ReuseStageResult:
@@ -82,6 +65,7 @@ class ReuseStageResult:
     resolved: ResolvedInternalSpec
     snapshot: StageResultSnapshot
     files: dict[RepoRelPath, SnapshotFileRef]
+
 
 def _remap_artifacts(
     source: ResolvedParameterizedSpec,
@@ -139,6 +123,7 @@ def _remap_artifacts(
         artifacts[name] = ResolvedBundleArtifact(members=tuple(members))
     return artifacts, tuple(receipt_files), publication_files
 
+
 def _metric_evidence(
     stage_id: StageId,
     metrics: dict[MetricId, MetricSpec],
@@ -185,6 +170,7 @@ def _metric_evidence(
         for metric_id in metrics
     )
 
+
 def _resolved_stage(
     stage: ParameterizedSpec,
     *,
@@ -208,6 +194,7 @@ def _resolved_stage(
     if stage.kind == "train":
         return ResolvedTrainSpec(**values)
     return ResolvedEvalSpec(**values)
+
 
 def reuse_stage(
     *,

@@ -3,25 +3,22 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from ._schema import SHA256
 from .ids import RunId, StageId
 from .inputs import ExternalInputRef, FutureInputRef, StoredInputRef, pointer_path
 from .journal import ATTEMPT_STATE_TRANSITIONS, AttemptState, DurableJournal
+from .reuse import StageReuseReceipt
 from .runs import RunSpec
 from .serialization import document_digest, load_stage_spec, parse_yaml_bytes
 from .stages import InternalSpec
 from .verification.models import VerifiedRunResult
-from collections.abc import Mapping
-
-from ._schema import SHA256
-
-from .reuse import StageReuseReceipt
-
 
 
 class InspectionError(RuntimeError):

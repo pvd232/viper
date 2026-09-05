@@ -292,7 +292,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Direct Viper Cloud publication](remote-storage.md) | Complete | Destination-neutral publication, cloud references, retrieval, and restore |
 | [Experiment expansion](experiment-expansion.md) | Complete | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | In progress; Phase 13 implemented; Phase 15 planned | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
-| [Verified stage reuse](stage-reuse.md) | Planned | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
+| [Verified stage reuse](stage-reuse.md) | Complete | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
 | [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Audited; owner approval pending | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
 | [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
@@ -1876,31 +1876,31 @@ The immutable evidence manifest is stored at Hugging Face commit
 publish it under the target paths, and record selection separately from a new
 stage invocation.
 
-- [ ] Define the reuse identity, completion evidence, catalog index, and
+- [x] Define the reuse identity, completion evidence, catalog index, and
       inspection surfaces.
       <!-- pair-block: P14-SRU-01 -->
       <!-- pair-block-contract: P14-SRU-01 contract=stage-reuse.md -->
       <!-- phase-consumes: viper.catalog -->
       <!-- phase-produces: StageReuseKey -->
-      <!-- contract-implementation: requirement=SRU-01 rule=reuse.model.complete state=planned owner=src/viper/reuse.py:StageReuseReceipt -->
-      <!-- contract-verification: requirement=SRU-01 rule=reuse.model.complete state=planned test=tests/test_protocol.py:test_stage_reuse_models_form_valid_completion_union -->
-      <!-- contract-implementation: requirement=SRU-04 rule=reuse.inspection.complete state=planned owner=src/viper/inspection.py:lineage -->
-      <!-- contract-verification: requirement=SRU-04 rule=reuse.inspection.complete state=planned test=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
+      <!-- contract-implementation: requirement=SRU-01 rule=reuse.model.complete state=implemented owner=src/viper/reuse.py:StageReuseReceipt -->
+      <!-- contract-verification: requirement=SRU-01 rule=reuse.model.complete state=implemented test=tests/test_protocol.py:test_stage_reuse_models_form_valid_completion_union -->
+      <!-- contract-implementation: requirement=SRU-04 rule=reuse.inspection.complete state=implemented owner=src/viper/inspection.py:lineage -->
+      <!-- contract-verification: requirement=SRU-04 rule=reuse.inspection.complete state=implemented test=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
       <!-- implements: SRU-01, SRU-04 -->
 
-- [ ] Verify and publish a reusable stage without starting its process.
+- [x] Verify and publish a reusable stage without starting its process.
       <!-- pair-block: P14-SRU-02 -->
       <!-- pair-block-contract: P14-SRU-02 contract=stage-reuse.md -->
-      <!-- contract-implementation: requirement=SRU-02 rule=reuse.execution.verified state=planned owner=src/viper/execution/_reuse.py:reuse_stage -->
-      <!-- contract-verification: requirement=SRU-02 rule=reuse.execution.verified state=planned test=tests/test_run_execution.py:test_verified_reuse_skips_stage_process -->
+      <!-- contract-implementation: requirement=SRU-02 rule=reuse.execution.verified state=implemented owner=src/viper/execution/_reuse.py:reuse_stage -->
+      <!-- contract-verification: requirement=SRU-02 rule=reuse.execution.verified state=implemented test=tests/test_run_execution.py:test_verified_reuse_skips_stage_process -->
       <!-- implements: SRU-02 -->
 
-- [ ] Rebuild and verify every source, key, file, input, completion, and metric
+- [x] Rebuild and verify every source, key, file, input, completion, and metric
       relationship before accepting reuse.
       <!-- pair-block: P14-SRU-03 -->
       <!-- pair-block-contract: P14-SRU-03 contract=stage-reuse.md -->
-      <!-- contract-implementation: requirement=SRU-03 rule=reuse.verification.complete state=planned owner=src/viper/verification/__init__.py:verify_stage_reuse -->
-      <!-- contract-verification: requirement=SRU-03 rule=reuse.verification.complete state=planned test=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
+      <!-- contract-implementation: requirement=SRU-03 rule=reuse.verification.complete state=implemented owner=src/viper/verification/__init__.py:verify_stage_reuse -->
+      <!-- contract-verification: requirement=SRU-03 rule=reuse.verification.complete state=implemented test=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
       <!-- implements: SRU-03 -->
 
 **Commit boundary:** `Reuse verified stage results with explicit evidence`

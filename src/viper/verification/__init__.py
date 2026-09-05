@@ -47,6 +47,14 @@ from ..references import (
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
+from ..reuse import (
+    ReusedStageCompletion,
+    ReuseInputIdentity,
+    StageReuseKey,
+    StageReuseReceipt,
+    build_stage_reuse_key,
+    verified_input_identity,
+)
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
@@ -68,15 +76,6 @@ from .models import (
     VerifiedRunPlan,
     VerifiedRunResult,
 )
-from ..reuse import (
-    ReusedStageCompletion,
-    ReuseInputIdentity,
-    StageReuseKey,
-    StageReuseReceipt,
-    build_stage_reuse_key,
-    verified_input_identity,
-)
-
 
 __all__ = [
     "verify_attempt_future_inputs",
@@ -101,12 +100,14 @@ def _stage_artifact_files(
             files[artifact_name] = tuple(member.file for member in artifact.members)
     return files
 
+
 def _artifact_relative_path(path: str) -> str:
     """Return the stable portion of an artifact path after its run root."""
     marker = "/artifacts/"
     if marker not in path:
         raise VerificationError("reused artifact file has no artifact path boundary")
     return path.split(marker, 1)[1]
+
 
 def _expected_reused_files(
     source: ResolvedBaseSpec,
@@ -136,6 +137,7 @@ def _expected_reused_files(
         )
     return tuple(pairs)
 
+
 def _metric_references(
     references: Sequence[ResolvedFileRef],
     *,
@@ -155,6 +157,7 @@ def _metric_references(
             raise VerificationError("reused metric evidence is duplicated")
         selected[metric_id] = reference
     return selected
+
 
 def _rebuilt_reuse_key(
     plan: VerifiedRunPlan,
@@ -178,6 +181,7 @@ def _rebuilt_reuse_key(
         )
     except (KeyError, ValueError) as exc:
         raise VerificationError("stage reuse key cannot be rebuilt") from exc
+
 
 def verify_stage_reuse(
     receipt: StageReuseReceipt,
@@ -284,6 +288,7 @@ def verify_stage_reuse(
             raise VerificationError("reuse receipt metric has no verified measurement")
     return receipt
 
+
 def _merge_stage_inputs(
     *groups: Mapping[StageId, Mapping[InputName, VerifiedInput]],
 ) -> dict[StageId, dict[InputName, VerifiedInput]]:
@@ -298,6 +303,7 @@ def _merge_stage_inputs(
             stage_inputs.update(inputs)
     return merged
 
+
 def _input_identities(
     inputs: Mapping[InputName, VerifiedInput],
 ) -> tuple[ReuseInputIdentity, ...]:
@@ -306,6 +312,7 @@ def _input_identities(
         verified_input_identity(input_name, value)
         for input_name, value in sorted(inputs.items())
     )
+
 
 def _verify_reused_stages(
     *,
@@ -364,6 +371,7 @@ def _verify_reused_stages(
         )
         receipts[stage_reference.stage_id] = receipt
     return receipts
+
 
 def verify_run_result(
     resolved_run: ResolvedRun,
@@ -1137,6 +1145,8 @@ def _verify_cloud_graph(resolved_run: ResolvedRun) -> None:
     )
     if cloud and local:
         raise VerificationError("storage_graph_unreachable")
+
+
 def _verify_run_result(
     resolved_run: ResolvedRun,
     *,

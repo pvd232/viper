@@ -9,6 +9,7 @@ from ..http import ResolvedHttpRetrieval
 from ..ids import InputName
 from ..inputs import ResolvedInputRef
 from ..references import ResolvedGitFileRef, ResolvedStageInvocationRef
+from ..reuse import ExecutedStageCompletion
 from ..runtime import (
     EnvSpec,
     ExecutionContext,
@@ -32,8 +33,6 @@ from ..stages import (
 from ._source import RunFetcher, resolve_git_file
 from ._stage import StageProcessResult
 from .errors import RunError
-from ..reuse import ExecutedStageCompletion
-
 
 
 def resolve_env(

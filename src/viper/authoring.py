@@ -92,6 +92,7 @@ from .references import (
     ResolvedRunRef,
     ResolvedRunSpecRef,
 )
+from .reuse import StageReuseMode
 from .runs import (
     RunSpec,
     RunStageRef,
@@ -119,8 +120,6 @@ from .storage import (
     load_storage_settings,
     publish_resolved_files,
 )
-from .reuse import StageReuseMode
-
 
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 UrlValue = str | int | float | bool

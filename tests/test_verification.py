@@ -89,6 +89,7 @@ from viper.references import (
     SnapshotFileRef,
 )
 from viper.resume import DataLoaderConfiguration
+from viper.reuse import ExecutedStageCompletion
 from viper.runs import (
     AttemptFailure,
     AttemptJournalRef,
@@ -139,8 +140,6 @@ from viper.verification.models import (
     VerifiedArtifact,
     VerifiedSnapshotFile,
 )
-from viper.reuse import ExecutedStageCompletion
-
 
 GIT_COMMIT = "a" * 40
 PLAN_COMMIT = "b" * 40

@@ -6,7 +6,7 @@ new run records the skip and the exact prior evidence it selected.
 
 ## 1. Status
 
-**Contract status:** planned.
+**Contract status:** implemented.
 
 These requirements bind the contract to the master checklist:
 

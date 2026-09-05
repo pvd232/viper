@@ -18,6 +18,7 @@ from ..metrics import (
     compare_metric_values,
 )
 from ..references import HuggingFaceFileRef, LocalFileRef
+from ..reuse import ReusedStageCompletion
 from ..runs import RunAttempt, RunSpec
 from ..runtime import (
     CUDABackendContext,
@@ -36,8 +37,6 @@ from ..verification.models import (
 )
 from .paths import run_root
 from .storage import StorageFetcher, read_resolved_file, verify_snapshot_artifact
-from ..reuse import ReusedStageCompletion
-
 
 
 def _verify_metric_worker_runtime(

@@ -17,10 +17,9 @@ from ..references import (
     StageResultSnapshot,
     StorageModel,
 )
+from ..reuse import StageReuseReceipt
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..stages import BaseSpec, ResolvedBaseSpec
-from ..reuse import StageReuseReceipt
-
 
 
 class VerificationError(ValueError):
