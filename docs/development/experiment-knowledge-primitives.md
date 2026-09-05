@@ -7,7 +7,7 @@ what happened, and which evidence supports a written conclusion.
 
 ## 1. Status
 
-**Contract status:** planned; Master Phases 16 and 17.
+**Contract status:** in progress; Master Phase 16 implemented; Master Phase 17 planned.
 
 These requirements bind the contract to the master checklist:
 

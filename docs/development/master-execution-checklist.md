@@ -293,7 +293,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Experiment expansion](experiment-expansion.md) | Complete | Deterministic variant-replicate expansion and bounded multi-run execution |
 | [Provenance catalog and MCP](provenance-catalog-mcp.md) | In progress; Phase 13 implemented; Phase 15 planned | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Complete | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
-| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Planned; Master Phases 16 and 17 | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
+| [Experiment knowledge primitives](experiment-knowledge-primitives.md) | In progress; Master Phase 16 implemented; Master Phase 17 planned | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
 | [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
 
 The contracts share models. One contract owns each shared decision:
@@ -1953,17 +1953,17 @@ assertions while preserving the immutable run records they cite.
 
 ### PairBlocks
 
-- [ ] Execute `P16-EKP-01` from the governing contract.
+- [x] Execute `P16-EKP-01` from the governing contract.
       <!-- pair-block: P16-EKP-01 -->
       <!-- pair-block-contract: P16-EKP-01 contract=experiment-knowledge-primitives.md -->
       <!-- implements: EKP-01 -->
       <!-- implements: EKP-02 -->
       <!-- verifies: EKP-01 -->
       <!-- verifies: EKP-02 -->
-      <!-- contract-implementation: requirement=EKP-01 rule=knowledge.ontology.complete state=planned owner=src/viper/knowledge.py:OntologySpec -->
-      <!-- contract-verification: requirement=EKP-01 rule=knowledge.ontology.complete state=planned test=tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance -->
-      <!-- contract-implementation: requirement=EKP-02 rule=knowledge.evidence.complete state=planned owner=src/viper/knowledge.py:KnowledgeStore -->
-      <!-- contract-verification: requirement=EKP-02 rule=knowledge.evidence.complete state=planned test=tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence -->
+      <!-- contract-implementation: requirement=EKP-01 rule=knowledge.ontology.complete state=implemented owner=src/viper/knowledge.py:OntologySpec -->
+      <!-- contract-verification: requirement=EKP-01 rule=knowledge.ontology.complete state=implemented test=tests/test_protocol.py:test_knowledge_ontology_preserves_assignment_provenance -->
+      <!-- contract-implementation: requirement=EKP-02 rule=knowledge.evidence.complete state=implemented owner=src/viper/knowledge.py:KnowledgeStore -->
+      <!-- contract-verification: requirement=EKP-02 rule=knowledge.evidence.complete state=implemented test=tests/test_verification_acceptance.py:test_knowledge_records_preserve_immutable_evidence -->
 
 **Commit boundary:** `Record verified experiment knowledge`
 
