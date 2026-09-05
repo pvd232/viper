@@ -12149,7 +12149,7 @@ source identity.
 A benchmark governs one eval contract across candidate run plans and
 requires an independently executed confirmation.
 """,
-        "run.py": f'''"""Run one authored project plan."""
+        "run.py": '''"""Run one authored project plan."""
 
 from pathlib import Path
 
