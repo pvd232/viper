@@ -8830,7 +8830,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert confirmation.attempt_path.is_file()
     assert result.resolved_run_path.read_bytes() == candidate_run_raw
     candidate_snapshots = {
-        snapshot_identity(stage.snapshot) for stage in successful_attempt.resolved_stages
+        snapshot_identity(stage.snapshot)
+        for stage in successful_attempt.resolved_stages
     }
     confirmation_snapshots = {
         snapshot_identity(stage.snapshot)
@@ -8983,7 +8984,9 @@ def build_benchmark_fixture(
         resolved_spec=resolved_train,
     )
 
-    copy_snapshot_files(store, snapshot_revision(original_evaluate.snapshot), evaluate_commit)
+    copy_snapshot_files(
+        store, snapshot_revision(original_evaluate.snapshot), evaluate_commit
+    )
     resolved_evaluate = ResolvedEvaluateSpec.model_validate(
         yaml.safe_load(
             store.fetch(
@@ -9187,7 +9190,9 @@ class CompleteProvenanceAcceptanceTests:
             "experiments/model_eval/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAB/"
             "artifacts/priors/toy/unrecorded.bin"
         )
-        store.put(hf_file(snapshot_revision(build_stage.snapshot), extra_path), b"extra")
+        store.put(
+            hf_file(snapshot_revision(build_stage.snapshot), extra_path), b"extra"
+        )
 
         with self.assertRaisesRegex(VerificationError, "artifact.bundle"):
             verify_run_result(resolved_run, policy=POLICY, fetcher=store.fetch)
@@ -9205,7 +9210,9 @@ class CompleteProvenanceAcceptanceTests:
             "artifacts/priors/toy/metadata.json"
         )
         del store.documents[
-            DocumentStore.key(hf_file(snapshot_revision(build_stage.snapshot), missing_path))
+            DocumentStore.key(
+                hf_file(snapshot_revision(build_stage.snapshot), missing_path)
+            )
         ]
 
         with self.assertRaisesRegex(
@@ -9226,7 +9233,9 @@ class CompleteProvenanceAcceptanceTests:
         reused_snapshot_measurement = measurement.model_copy(
             update={
                 "stored_at": measurement.stored_at.model_copy(
-                    update={"commit": snapshot_revision(attempt.resolved_stages[0].snapshot)}
+                    update={
+                        "commit": snapshot_revision(attempt.resolved_stages[0].snapshot)
+                    }
                 )
             }
         )
@@ -9253,7 +9262,11 @@ class CompleteProvenanceAcceptanceTests:
         reused_snapshot_measurement = measurement.model_copy(
             update={
                 "stored_at": measurement.stored_at.model_copy(
-                    update={"commit": snapshot_revision(confirmation.resolved_stages[0].snapshot)}
+                    update={
+                        "commit": snapshot_revision(
+                            confirmation.resolved_stages[0].snapshot
+                        )
+                    }
                 )
             }
         )
