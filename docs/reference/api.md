@@ -13,7 +13,6 @@ from viper.api import retry, run
 from viper.http import http_transport
 from viper.stages import (
     Context,
-    DownloadContext,
     build,
     download,
     embed,
@@ -50,8 +49,8 @@ def fit(context: Context[TrainParameters]) -> None:
 
 `Context` provides the active run, attempt, and stage IDs; the validated
 parameter value; materialized input paths; writable artifact paths; live metric
-handles; and named NumPy generators. `DownloadContext` adds verified HTTP
-retrieval handles.
+handles; and named NumPy generators. External-input retrieval remains owned by
+VIPER rather than project stage callables.
 
 `train_model` is the project's training implementation. VIPER supplies its
 validated parameter values and allocated paths. The `parameters` artifact key
@@ -109,20 +108,32 @@ execution namespace:
 
 ```python
 from viper import execution
+from viper import authoring
 from viper.execution.errors import BenchmarkExecutionError, RunError
 from viper.execution.results import BenchmarkExecutionResult, RunResult
 
-run_result = execution.run(repository_root, run_spec_path)
+draft = authoring.plan(
+    experiment=experiment,
+    variant="baseline",
+    replicate="replicate-1",
+    source=source,
+    env=environment,
+    reproducibility=reproducibility,
+)
+run_result = execution.run(repository_root, draft)
 retry_result = execution.retry(repository_root, run_spec_path)
 benchmark_result = execution.benchmark(
     repository_root,
     resolved_run_path,
     benchmark_spec_path,
 )
+restored = execution.restore(repository_root, run_reference)
 ```
 
-`run()` and `retry()` return `RunResult`. `benchmark()` returns
-`BenchmarkExecutionResult`. Callers can catch `RunError` and
+`viper.authoring.plan()` returns the immutable draft consumed by
+`viper.execution.run()`. `run()` and `retry()` return `RunResult`;
+`viper.execution.benchmark()` returns `BenchmarkExecutionResult`; and
+`viper.execution.restore()` returns `RestoreResult`. Callers can catch `RunError` and
 `BenchmarkExecutionError` through the same namespace.
 
 ## Typed operations
@@ -135,7 +146,6 @@ model, schema registry, handler registry, and JSON encoder.
 | `validate_stage` | `ValidateStageRequest` | `ValidateStageSuccess` | `validate-stage` |
 | `validate_resolved_stage` | `ValidateResolvedStageRequest` | `ValidateResolvedStageSuccess` | `validate-resolved-stage` |
 | `validate_run_spec` | `ValidateRunSpecRequest` | `ValidateRunSpecSuccess` | `validate-run` |
-| `freeze_run` | `FreezeRunRequest` | `FreezeRunSuccess` | `freeze-run` |
 | `preflight` | `PreflightRequest` | `PreflightSuccess` | `preflight` |
 | `execute_stage` | `ExecuteStageRequest` | `ExecuteStageSuccess` | `execute-stage` |
 | `run` | `RunRequest` | `RunSuccess` | `run` |

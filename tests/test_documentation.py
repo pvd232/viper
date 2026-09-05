@@ -780,3 +780,31 @@ def test_current_docs_import_public_functions_from_defining_modules() -> None:
     for name in ("benchmark", "catalog", "http", "knowledge"):
         assert re.search(rf"\bviper\.{name}\(", text) is None
         assert re.search(rf"@viper\.{name}(?!\.)\b", text) is None
+
+
+def test_public_workflow_uses_target_api() -> None:
+    """Publish the Phase 11 workflow without retired authoring concepts."""
+    documents = (
+        ROOT / "README.md",
+        ROOT / "docs/tutorials/getting-started.md",
+        ROOT / "docs/explanation/how-viper-works.md",
+        ROOT / "docs/reference/api.md",
+    )
+    text = "\n".join(path.read_text(encoding="utf-8") for path in documents)
+
+    required = {
+        "viper.authoring.plan",
+        "viper.execution.run",
+        "viper.execution.benchmark",
+        "viper.execution.restore",
+    }
+    retired = {
+        "freeze-run",
+        "freeze_run_plan",
+        "DownloadContext",
+        "download_stage",
+        "HttpSource",
+    }
+
+    assert required <= {name for name in required if name in text}
+    assert retired.isdisjoint({name for name in retired if name in text})

@@ -16,32 +16,6 @@ from viper.api import (
 from viper.project import find_root, init, resolve_root
 
 
-def test_init_generates_importable_five_stage_project(
-    tmp_path: Path,
-) -> None:
-    """Generate the project and execute its focused tests without editing it."""
-    target = tmp_path / "starter"
-    environment = environ.copy()
-    environment["PYTHONPATH"] = str(Path.cwd())
-
-    result = init_project(InitProjectRequest(path=target, package="sample_project"))
-    completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q"],
-        cwd=target,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.project_root == target
-    assert len(result.files) == 21
-    assert target / "viper.toml" in result.files
-    assert target / "inputs" / ".gitkeep" in result.files
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert "1 passed" in completed.stdout
-
-
 def test_init_rejects_occupied_target_without_mutation(
     tmp_path: Path,
 ) -> None:
@@ -96,3 +70,35 @@ def test_init_establishes_discoverable_root(tmp_path: Path) -> None:
         "pyproject.toml",
     }
     assert required <= {path.name for path in target.iterdir()}
+
+
+def test_init_generates_importable_python_project(
+    tmp_path: Path,
+) -> None:
+    """Generate the project and execute its focused tests without editing it."""
+    target = tmp_path / "starter"
+    environment = environ.copy()
+    environment["PYTHONPATH"] = str(Path.cwd())
+
+    result = init_project(InitProjectRequest(path=target, package="sample_project"))
+    completed = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q"],
+        cwd=target,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.project_root == target
+    assert len(result.files) == 21
+    assert target / "viper.toml" in result.files
+    assert target / "inputs" / ".gitkeep" in result.files
+    readme = (target / "README.md").read_text(encoding="utf-8")
+    runner = (target / "run.py").read_text(encoding="utf-8")
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "1 passed" in completed.stdout
+    assert "freeze-run" not in readme
+    assert "viper.execution.run()" in readme
+    assert "execution.run(root, draft)" in runner

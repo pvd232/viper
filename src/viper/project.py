@@ -139,9 +139,8 @@ Run the focused project tests:
 
     python -m pytest -q
 
-After replacing the stage templates, commit the project and write an experiment
-draft under `experiments/`. The draft selects the stages and files for one run.
-`viper freeze-run` turns that draft into the exact plan used for execution.
+After replacing the stage templates, commit the project and build a plan with
+`viper.authoring.plan()`. Pass that plan directly to `viper.execution.run()`.
 
 Benchmark specifications belong under `benchmarks/`.
 """,
@@ -171,7 +170,7 @@ pythonpath = ["src"]
             '''"""Define project-owned stage parameter models."""
 
 from pydantic import Field
-from viper import parameters
+from viper import params
 
 
 class BuildParameters(params.Build):
@@ -294,19 +293,17 @@ source identity.
 A benchmark governs one eval contract across candidate run plans and
 requires an independently executed confirmation.
 """,
-        "train.py": f'''"""Run one frozen project plan."""
+        "run.py": '''"""Run one authored project plan."""
 
-from {package}.stages.train import train
-from viper.api import run
+from pathlib import Path
 
-
-def main() -> None:
-    """Execute the complete plan selected by the command-line arguments."""
-    run(train)
+from viper import execution
+from viper.authoring import RunPlanDraft
 
 
-if __name__ == "__main__":
-    main()
+def execute(root: Path, draft: RunPlanDraft):
+    """Compile and execute one authored plan."""
+    return execution.run(root, draft)
 ''',
         "tests/test_stage_definitions.py": (
             f'''"""Verify generated stages expose their VIPER definitions."""
@@ -354,7 +351,7 @@ def test_stage_kinds() -> None:
             f"src/{package}/stages/{stage}.py"
         ] = f'''"""Execute the example {stage} stage."""
 
-from {package}.parameters import {parameter_class}
+from {package}.params import {parameter_class}
 from viper.stages import {decorator}
 
 

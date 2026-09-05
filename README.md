@@ -62,7 +62,7 @@ def fit(context: Context[TrainParameters]) -> None:
 
 Commit the project before freezing the experiment. VIPER checks the experiment code against this commit, giving each run an exact code version that can be retrieved and verified later.
 
-## Freeze the experiment
+## Author and run the experiment
 
 The draft is an editable YAML file that tells VIPER what to run. Its top-level
 fields are:
@@ -82,11 +82,9 @@ fields are:
 | `stages` | Lists the stage specifications in execution order. |
 | `estimator` | Selects the trained-model artifact produced by the run. |
 
-Freeze the draft with:
-
-```bash
-viper freeze-run experiments/example/draft.yaml --repository-root .
-```
+Create an immutable draft with `viper.authoring.plan()`, then pass that draft
+directly to `viper.execution.run()`. The execution boundary compiles and stores
+the plan before starting its first attempt.
 
 For `experiment_id: example`, `variant_id: baseline`, and `run_id: run-001`,
 VIPER creates:
@@ -95,7 +93,10 @@ VIPER creates:
 experiments/example/runs/baseline/run-001/spec.yaml
 ```
 
-Use this generated `spec.yaml` for `preflight` and `run`.
+Use the generated `spec.yaml` for later inspection and retry operations.
+
+After the run succeeds, use `viper.execution.benchmark()` for an independent
+confirmation and `viper.execution.restore()` to recover selected artifacts.
 
 ## Check the experiment
 
