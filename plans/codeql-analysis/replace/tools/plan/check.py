@@ -40,7 +40,9 @@ from viper._system_impact.source import (
 )
 from viper.scheduling import (
     ScheduleError,
+    final_targets,
     materialize_plan,
+    order_blocks,
     select_blocks,
 )
 from viper.system_impact.check import check_plan
@@ -443,8 +445,10 @@ def validate(
         )
         return result
 
-    selected_targets = tuple(
-        target for target in traceability.targets if target.block_id in selected_ids
+    selected_targets = final_targets(
+        traceability,
+        order_blocks(traceability, selected),
+        baseline,
     )
     raw_parity = _parity(root, raw, selected_targets, check_imports=False)
     if raw_parity:
