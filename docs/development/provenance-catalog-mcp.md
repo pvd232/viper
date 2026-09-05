@@ -638,6 +638,7 @@ to skip execution.
 | --- | --- |
 | `catalog.refresh.atomic` <!-- verifier-rule: catalog.refresh.atomic requirement=PCM-01 --> | Catalog refresh rebuilds from immutable evidence and atomically replaces the local index. |
 | `catalog.search.evidenced` <!-- verifier-rule: catalog.search.evidenced requirement=PCM-02 --> | Every run, artifact, measurement, benchmark, and lineage result retains its immutable source reference. |
+| `catalog.api.parity` <!-- verifier-rule: catalog.api.parity requirement=PCM-02 --> | The typed Python API and CLI expose the same catalog operations and result models. |
 | `mcp.schema.parity` <!-- verifier-rule: mcp.schema.parity requirement=PCM-03 --> | MCP tool schemas derive from typed operation models and dispatch through the same handlers. |
 | `mcp.stdio.access` <!-- verifier-rule: mcp.stdio.access requirement=PCM-04 --> | The local stdio server defaults to read-only access and requires explicit execution access. |
 | `mcp.resources.complete` <!-- verifier-rule: mcp.resources.complete requirement=PCM-05 --> | MCP resources, templates, prompts, discovery, caching, and subscriptions remain stateless inside the startup root. |

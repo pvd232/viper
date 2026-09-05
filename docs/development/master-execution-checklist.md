@@ -1854,6 +1854,8 @@ evidence and returns exact references with every result.
 - [x] Expose catalog refresh and exact search through the typed Python API and CLI.
       <!-- pair-block: P13-PCM-02 -->
       <!-- pair-block-contract: P13-PCM-02 contract=provenance-catalog-mcp.md -->
+      <!-- contract-implementation: requirement=PCM-02 rule=catalog.api.parity state=implemented owner=src/viper/api.py:catalog_refresh -->
+      <!-- contract-verification: requirement=PCM-02 rule=catalog.api.parity state=implemented test=tests/test_api.py:test_catalog_result_matches_python_api_and_cli -->
       <!-- implements: PCM-02 -->
 
 **Evidence:** PlanCheck `6ec4a517868481de3c622123f3115354bfddaccfad4544324d618631e14a4b67`
