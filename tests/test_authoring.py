@@ -337,7 +337,7 @@ class RunPlanAuthoringTests(unittest.TestCase):
                 bytes=1,
             ),
             params=parameters.Metric(),
-            mode="in_stage",
+            mode="stateless",
         )
         experiment = ExperimentSpec(
             experiment_id="e001_strand",
@@ -432,7 +432,7 @@ def test_artifact_constructor_selects_file_or_bundle() -> None:
 def test_python_stage_drafts_replace_yaml_authoring() -> None:
     """Keep a decorated callable and artifact handle in one Python stage draft."""
 
-    @metric(metric_id="training_loss", mode="in_stage")
+    @metric(metric_id="training_loss", mode="stateless")
     def training_loss(context) -> float:
         """Return one stable loss for the authoring boundary."""
         return 1.0
@@ -467,7 +467,7 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
 def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
     """Build one small plan and retain its caller-owned variant mapping."""
 
-    @metric(metric_id="training_loss", mode="in_stage")
+    @metric(metric_id="training_loss", mode="stateless")
     def training_loss(context) -> float:
         return 1.0
 
@@ -572,7 +572,7 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
         "from viper import params\n"
         "from viper.metrics import metric\n"
         "from viper.stages import Context, train\n\n"
-        "@metric(metric_id='training_loss', mode='in_stage')\n"
+        "@metric(metric_id='training_loss', mode='stateless')\n"
         "def training_loss(context):\n"
         "    return 1.0\n\n"
         "@train(params=params.Train)\n"
@@ -691,7 +691,7 @@ def test_preflight_reads_the_published_plan(tmp_path: Path) -> None:
 def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
     """Keep benchmark inputs, metrics, and optional criteria immutable."""
 
-    @metric(metric_id="accuracy", mode="post_stage")
+    @metric(metric_id="accuracy", mode="stateless")
     def accuracy(context) -> float:
         return 0.95
 

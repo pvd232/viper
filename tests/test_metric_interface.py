@@ -18,6 +18,7 @@ from viper.metrics import (
     MetricSpec,
     StatefulMetric,
     compare_metric_values,
+    is_recomputed_metric,
     load_metric,
     max,
     measure,
@@ -26,17 +27,17 @@ from viper.metrics import (
 )
 
 
-@metric(metric_id="mean_value", mode="post_stage")
+@metric(metric_id="mean_value", mode="stateless")
 def mean_value(context: MetricContext) -> float:
     """Return the frozen scalar supplied through metric parameters."""
     return float(context.params.model_dump()["value"])
 
 
-@metric(metric_id="running_mean", mode="in_stage")
+@metric(metric_id="running_mean", mode="stateful")
 class RunningMean(StatefulMetric):
     """Accumulate a scalar mean across training updates."""
 
-    def __init__(self) -> None:
+    def __init__(self, _context: MetricContext) -> None:
         """Initialize an empty accumulator."""
         self.total = 0.0
         self.count = 0
@@ -52,13 +53,35 @@ class RunningMean(StatefulMetric):
 
 
 def test_decorators_define_stateless_and_stateful_metrics() -> None:
-    """Attach the correct role and invocation timing to both authoring forms."""
-    assert mean_value.__viper_metric__.mode == "post_stage"  # type: ignore[attr-defined]
-    assert RunningMean.__viper_metric__.mode == "in_stage"  # type: ignore[attr-defined]
-    metric_value = RunningMean()
+    """Match each declared mode to its function or accumulator shape."""
+    assert mean_value.__viper_metric__.mode == "stateless"  # type: ignore[attr-defined]
+    assert RunningMean.__viper_metric__.mode == "stateful"  # type: ignore[attr-defined]
+    metric_value = RunningMean(MetricContext(params=parameters.Metric()))
     metric_value.update(1.0)
     metric_value.update(3.0)
     assert metric_value.compute() == 2.0
+
+
+def test_metric_modes_reject_the_wrong_implementation_shape() -> None:
+    """Require stateful classes and stateless functions."""
+    with pytest.raises(MetricError, match="stateful metrics must subclass"):
+
+        @metric(metric_id="invalid_function", mode="stateful")
+        def invalid_function(_context: MetricContext) -> float:
+            return 0.0
+
+    with pytest.raises(MetricError, match="stateless metrics must be functions"):
+
+        @metric(metric_id="invalid_class", mode="stateless")
+        class InvalidClass(StatefulMetric):
+            def __init__(self, _context: MetricContext) -> None:
+                pass
+
+            def update(self, value: float) -> None:
+                pass
+
+            def compute(self) -> float:
+                return 0.0
 
 
 def test_metric_loader_invokes_top_level_symbol(tmp_path: Path) -> None:
@@ -80,7 +103,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
     """Match the metric ID and mode declared in source and MetricSpec."""
     source = (
         b"from viper.metrics import metric\n\n"
-        b'@metric(metric_id="accuracy", mode="post_stage")\n'
+        b'@metric(metric_id="accuracy", mode="stateless")\n'
         b"def compute(context):\n"
         b"    return 1.0\n"
     )
@@ -96,7 +119,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
             bytes=len(source),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="stateless",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -144,7 +167,7 @@ def test_metric_comparator_applies_declared_tolerance() -> None:
 def test_metric_drafts_freeze_through_public_constructors() -> None:
     """Build metric, objective, and criterion drafts from one decorated callable."""
 
-    @metric(metric_id="accuracy", mode="post_stage")
+    @metric(metric_id="accuracy", mode="stateless")
     def accuracy(context: MetricContext[parameters.Metric]) -> float:
         return float(context.params.model_dump()["value"])
 
@@ -160,7 +183,12 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
         ),
         comparator=FloatComparator(),
     )
+    recorded = measure(mean_value, params=parameters.Metric())
+    stateful = measure(RunningMean, params=parameters.Metric())
 
+    assert is_recomputed_metric(draft)
+    assert not is_recomputed_metric(recorded)
+    assert not is_recomputed_metric(stateful)
     assert max(draft).metric == draft
     assert at_least(draft, 0.8).threshold == 0.8
     assert draft.implementation is accuracy

@@ -210,15 +210,15 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     metric_source = (
         b"from viper.metrics import metric\n\n"
         b'@metric(metric_id="parameter_bytes", '
-        b'mode="post_stage")\n'
+        b'mode="stateless")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
-    live_metric_source = (
+    stateful_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
+        b'@metric(metric_id="epoch_mean", mode="stateful")\n'
         b"class EpochMean(StatefulMetric):\n"
-        b"    def __init__(self):\n"
+        b"    def __init__(self, _context):\n"
         b"        self.values = []\n"
         b"    def update(self, value):\n"
         b"        self.values.append(float(value))\n"
@@ -235,7 +235,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="stateless",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -251,11 +251,11 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
-            sha256=hashlib.sha256(live_metric_source).hexdigest(),
-            bytes=len(live_metric_source),
+            sha256=hashlib.sha256(stateful_metric_source).hexdigest(),
+            bytes=len(stateful_metric_source),
         ),
         params=parameters.Metric(),
-        mode="in_stage",
+        mode="stateful",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -281,7 +281,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             f"    return {resume_state().model_dump(mode='python')!r}\n"
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
-        "project/metrics/epoch_mean.py": live_metric_source,
+        "project/metrics/epoch_mean.py": stateful_metric_source,
         "project/parameters/train.py": (
             b"from pydantic import Field\n"
             b"from viper import parameters\n\n"
@@ -671,15 +671,15 @@ def test_train_stage_captures_local_external_input(
     metric_source = (
         b"from viper.metrics import metric\n\n"
         b'@metric(metric_id="parameter_bytes", '
-        b'mode="post_stage")\n'
+        b'mode="stateless")\n'
         b"def compute(context):\n"
         b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
     )
-    live_metric_source = (
+    stateful_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
-        b'@metric(metric_id="epoch_mean", mode="in_stage")\n'
+        b'@metric(metric_id="epoch_mean", mode="stateful")\n'
         b"class EpochMean(StatefulMetric):\n"
-        b"    def __init__(self):\n"
+        b"    def __init__(self, _context):\n"
         b"        self.values = []\n"
         b"    def update(self, value):\n"
         b"        self.values.append(float(value))\n"
@@ -696,7 +696,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(metric_source),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="stateless",
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -712,11 +712,11 @@ def test_train_stage_captures_local_external_input(
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
             symbol="EpochMean",
-            sha256=hashlib.sha256(live_metric_source).hexdigest(),
-            bytes=len(live_metric_source),
+            sha256=hashlib.sha256(stateful_metric_source).hexdigest(),
+            bytes=len(stateful_metric_source),
         ),
         params=parameters.Metric(),
-        mode="in_stage",
+        mode="stateful",
     )
     experiment = ExperimentSpec(
         experiment_id="example",
@@ -742,7 +742,7 @@ def test_train_stage_captures_local_external_input(
             f"    return {resume_state().model_dump(mode='python')!r}\n"
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
-        "project/metrics/epoch_mean.py": live_metric_source,
+        "project/metrics/epoch_mean.py": stateful_metric_source,
         "project/parameters/train.py": (
             b"from pydantic import Field\n"
             b"from viper import parameters\n\n"
@@ -1123,7 +1123,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         "from viper import params\n"
         "from viper.metrics import metric\n"
         "from viper.stages import Context, train\n\n"
-        "@metric(metric_id='loss', mode='in_stage')\n"
+        "@metric(metric_id='loss', mode='stateless')\n"
         "def loss(context, values):\n"
         "    return sum(values) / len(values)\n\n"
         "@train(params=params.Train)\n"

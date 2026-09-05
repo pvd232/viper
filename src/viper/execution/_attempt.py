@@ -15,6 +15,7 @@ from ..http import HttpRetrievalError, ResolvedHttpRetrieval
 from ..ids import InputName, StageId
 from ..inputs import ExternalInputRef, FutureInputRef, ResolvedInputRef, StoredInputRef
 from ..journal import DurableJournal
+from ..metrics import is_recomputed_metric
 from ..preflight import preflight_plan
 from ..references import (
     GitFileRef,
@@ -464,9 +465,9 @@ def execute_attempt(
                     metric.metric_id: metric for metric in experiment.metrics
                 }
                 for metric_id in stage.metric_ids:
-                    if metric_specs[metric_id].mode != "in_stage":
+                    if is_recomputed_metric(metric_specs[metric_id]):
                         continue
-                    live_path = (
+                    measurement_path = (
                         root
                         / (
                             f"experiments/{run.experiment_id}/runs/"
@@ -475,8 +476,11 @@ def execute_attempt(
                         / f"attempts/{attempt_id}/measurements"
                         / f"{stage_reference.stage_id}.{metric_id}.jsonl"
                     )
-                    if live_path.is_file() and live_path not in measurement_paths:
-                        measurement_paths.append(live_path)
+                    if (
+                        measurement_path.is_file()
+                        and measurement_path not in measurement_paths
+                    ):
+                        measurement_paths.append(measurement_path)
             resolved_path = (
                 f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}"
                 f"/stages/{stage_reference.stage_id}/resolved.yaml"

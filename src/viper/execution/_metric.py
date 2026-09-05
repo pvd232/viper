@@ -33,6 +33,7 @@ from ..metrics import (
     MetricVerificationReceipt,
     ResolvedMetricDependency,
     compare_metric_values,
+    is_recomputed_metric,
 )
 from ..references import (
     ResolvedFileRef,
@@ -105,8 +106,8 @@ def execute_metric_process(
 ) -> MetricProcessResult:
     """Apply startup controls and execute one frozen metric callable."""
     root = repository_root.resolve()
-    if metric.mode != "post_stage":
-        raise MetricExecutionError("metric worker requires recompute mode")
+    if not is_recomputed_metric(metric):
+        raise MetricExecutionError("metric worker requires a recomputed metric")
     if metric.metric_id not in stage.metric_ids:
         raise MetricExecutionError("stage does not select the metric")
     expected_dependencies = tuple(metric.dependencies)
@@ -272,7 +273,7 @@ def run_after_stage_metrics(
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
     for metric_id in stage.metric_ids:
         metric = metrics[metric_id]
-        if metric.mode != "post_stage":
+        if not is_recomputed_metric(metric):
             continue
         dependencies = _resolve_metric_dependencies(
             stage,

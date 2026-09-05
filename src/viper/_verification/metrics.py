@@ -16,6 +16,7 @@ from ..metrics import (
     MetricVerificationReceipt,
     ResolvedMetricDependency,
     compare_metric_values,
+    is_recomputed_metric,
 )
 from ..references import HuggingFaceFileRef, LocalFileRef
 from ..reuse import ReusedStageCompletion
@@ -136,7 +137,7 @@ def verify_recomputed_metrics(
             ReusedStageCompletion,
         )
         for metric_id in stage.metric_ids
-        if metric_specs[metric_id].mode == "post_stage"
+        if is_recomputed_metric(metric_specs[metric_id])
     }
     if len(attempt.metric_verification_files) != len(expected_keys):
         raise VerificationError(
@@ -181,7 +182,7 @@ def verify_recomputed_metrics(
             continue
         for metric_id in stage.metric_ids:
             metric = metric_specs[metric_id]
-            if metric.mode != "post_stage":
+            if not is_recomputed_metric(metric):
                 continue
             recorded = tuple(
                 measurement

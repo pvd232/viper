@@ -16,7 +16,13 @@ from .._parameter.validation import instantiate_parameters, parameter_model_path
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
-from ..metrics import MeasurementSink, MetricContext, MetricHandle, bind_live_metric
+from ..metrics import (
+    MeasurementSink,
+    MetricContext,
+    MetricHandle,
+    bind_stage_metric,
+    is_recomputed_metric,
+)
 from ..runs import RunSpec
 from ..runtime import (
     apply_reproducibility,
@@ -104,13 +110,13 @@ def _planned_stage_context(
     return selected, expected_inputs
 
 
-def _live_metric_handles(
+def _stage_metric_handles(
     root: Path,
     run: RunSpec,
     stage: ParameterizedSpec,
     binding: StageContextBinding,
 ) -> dict[str, MetricHandle]:
-    """Bind every selected live metric to frozen parameters and stage paths."""
+    """Bind every stage-recorded metric to frozen parameters and stage paths."""
     if not stage.metric_ids:
         return {}
 
@@ -128,7 +134,7 @@ def _live_metric_handles(
         spec = metrics.get(metric_id)
         if spec is None:
             raise ValueError("startup.plan: stage selects an undeclared metric")
-        if spec.mode != "in_stage":
+        if is_recomputed_metric(spec):
             continue
         values = instantiate_parameters(
             parameter_model_path(root, spec.parameter_model),
@@ -142,7 +148,7 @@ def _live_metric_handles(
             / f"attempts/{binding.attempt_id}/measurements"
             / f"{binding.stage_id}.{metric_id}.jsonl"
         )
-        handles[metric_id] = bind_live_metric(
+        handles[metric_id] = bind_stage_metric(
             root,
             spec,
             MeasurementSink(
@@ -256,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             params=params,
             inputs=MappingProxyType(_workspace_paths(root, binding.inputs)),
             artifacts=MappingProxyType(_workspace_paths(root, binding.artifacts)),
-            metrics=MappingProxyType(_live_metric_handles(root, run, stage, binding)),
+            metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )
         with autocast_context(run.reproducibility):

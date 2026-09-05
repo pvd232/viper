@@ -35,7 +35,12 @@ from ..inputs import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
-from ..metrics import Measurement, MetricVerificationReceipt, compare_metric_values
+from ..metrics import (
+    Measurement,
+    MetricVerificationReceipt,
+    compare_metric_values,
+    is_recomputed_metric,
+)
 from ..references import (
     GitFileRef,
     LocalFileRef,
@@ -272,10 +277,10 @@ def verify_stage_reuse(
             raise VerificationError("reuse receipt metric is absent from source plan")
         expected_verification = (
             verifications.get(evidence.metric_id)
-            if metric.mode == "post_stage"
+            if is_recomputed_metric(metric)
             else None
         )
-        if metric.mode == "post_stage" and expected_verification is None:
+        if is_recomputed_metric(metric) and expected_verification is None:
             raise VerificationError("reused metric has no verification evidence")
         if evidence.verification != expected_verification:
             raise VerificationError("reuse receipt metric verification differs")

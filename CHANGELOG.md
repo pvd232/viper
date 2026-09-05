@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Rename metric modes to `stateful` and `stateless`. Stateful metrics accumulate
+  observations through `update()` and `compute()`; stateless metrics compute
+  directly from their current arguments or declared files.
+
 ## 0.1.0a2 — 2026-08-27
 
 - Export run and benchmark results and errors from `viper.execution`.

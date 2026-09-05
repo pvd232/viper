@@ -51,10 +51,9 @@ def python_environment() -> PythonEnvironmentSpec:
 
 def metric_source(metric_id: str, kind: MetricKind) -> bytes:
     """Build one decorated metric implementation matched by ``metric_spec``."""
-    mode = "post_stage" if kind == "evaluation" else "in_stage"
     return (
         "from viper.metrics import metric\n\n"
-        f'@metric(metric_id="{metric_id}", mode="{mode}")\n'
+        f'@metric(metric_id="{metric_id}", mode="stateless")\n'
         "def compute(context):\n"
         "    return 0.91\n"
     ).encode()
@@ -214,7 +213,7 @@ def metric_spec(
             metric_id=metric_id,
             implementation=implementation,
             params=parameters.Metric(),
-            mode="post_stage",
+            mode="stateless",
             dependencies=(
                 MetricDependency(
                     source="artifact",
@@ -229,7 +228,7 @@ def metric_spec(
         metric_id=metric_id,
         implementation=implementation,
         params=parameters.Metric(),
-        mode="in_stage",
+        mode="stateless",
     )
 
 

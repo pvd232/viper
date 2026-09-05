@@ -33,7 +33,7 @@ from .runtime import ExecutionContext, ProcessStartupReceipt, PythonEnvSpec
 MetricKind = Literal["training", "evaluation", "diagnostic"]
 
 
-MetricMode = Literal["post_stage", "in_stage"]
+MetricMode = Literal["stateful", "stateless"]
 MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
 
 
@@ -84,17 +84,22 @@ class MetricSpec(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_lifecycle(self) -> MetricSpec:
-        """Require one complete live or recomputed metric configuration."""
+        """Match the implementation mode with its runtime configuration."""
         identities = tuple((item.source, item.name) for item in self.dependencies)
         if len(set(identities)) != len(identities):
             raise ValueError("metric dependencies must be unique")
-        if self.mode == "post_stage":
-            if not self.dependencies:
-                raise ValueError("recomputed metrics require dependencies")
-            if self.comparator is None:
-                raise ValueError("recomputed metrics require a comparator")
-        elif self.dependencies or self.comparator is not None:
-            raise ValueError("live metrics do not declare dependencies or a comparator")
+        if self.mode == "stateful" and (
+            self.dependencies or self.comparator is not None
+        ):
+            raise ValueError(
+                "stateful metrics do not declare dependencies or a comparator"
+            )
+        if self.mode == "stateless" and bool(self.dependencies) != (
+            self.comparator is not None
+        ):
+            raise ValueError(
+                "recomputed stateless metrics require dependencies and a comparator"
+            )
         return self
 
 
@@ -233,13 +238,18 @@ def metric(
     metric_id: MetricId,
     mode: MetricMode,
 ) -> Callable[[DecoratedMetricT], DecoratedMetricT]:
-    """Attach one metric identity and invocation mode to an implementation."""
+    """Declare whether one metric retains state between observations."""
     definition = MetricDefinition(metric_id=metric_id, mode=mode)
 
     def decorate(value: DecoratedMetricT) -> DecoratedMetricT:
-        """Store the immutable definition on the selected Python object."""
+        """Validate the implementation shape and store its definition."""
+        is_stateful_class = inspect.isclass(value) and issubclass(value, StatefulMetric)
+        if mode == "stateful" and not is_stateful_class:
+            raise MetricError("stateful metrics must subclass StatefulMetric")
+        if mode == "stateless" and inspect.isclass(value):
+            raise MetricError("stateless metrics must be functions")
         setattr(value, "__viper_metric__", definition)
-        return value
+        return cast(DecoratedMetricT, value)
 
     return decorate
 
@@ -306,7 +316,7 @@ def validate_metric_definition(repository_root: Path, spec: MetricSpec) -> None:
 
 
 class MetricHandle:
-    """Bind one live metric implementation, context, and measurement sink."""
+    """Bind one stage-recorded metric, context, and measurement sink."""
 
     def __init__(
         self,
@@ -321,7 +331,7 @@ class MetricHandle:
         self._stateful: StatefulMetric[Any] | None = None
         if inspect.isclass(implementation):
             if not issubclass(implementation, StatefulMetric):
-                raise MetricError("live metric class must subclass StatefulMetric")
+                raise MetricError("stateful metric class must subclass StatefulMetric")
             self._stateful = implementation(context)
         else:
             self._function = implementation
@@ -339,7 +349,7 @@ class MetricHandle:
         step: int | None = None,
         **kwargs: Any,
     ) -> Measurement:
-        """Compute and persist one live measurement."""
+        """Compute and persist one measurement during the active stage."""
         if self._stateful is not None:
             if args or kwargs:
                 raise MetricError("stateful metric record uses accumulated state only")
@@ -350,15 +360,15 @@ class MetricHandle:
         return self._sink.append(value, epoch=epoch, step=step)
 
 
-def bind_live_metric(
+def bind_stage_metric(
     repository_root: Path,
     spec: MetricSpec,
     sink: MeasurementSink,
     context: MetricContext[Any],
 ) -> MetricHandle:
-    """Validate and bind one frozen live metric to its context and sink."""
-    if spec.mode != "in_stage":
-        raise MetricError("metric handle requires live mode")
+    """Validate and bind one metric recorded by the active stage."""
+    if is_recomputed_metric(spec):
+        raise MetricError("metric handle cannot bind a recomputed metric")
     validate_metric_definition(repository_root, spec)
     implementation = load_metric_object(
         repository_root.resolve() / spec.implementation.path,
@@ -481,19 +491,27 @@ def measure(
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")
-    if definition.mode == "post_stage":
-        if not dependencies:
-            raise MetricError("recomputed metrics require dependencies")
-        if comparator is None:
-            raise MetricError("recomputed metrics require a comparator")
-    elif dependencies or comparator is not None:
-        raise MetricError("live metrics do not declare dependencies or a comparator")
+    if definition.mode == "stateful" and (dependencies or comparator is not None):
+        raise MetricError(
+            "stateful metrics do not declare dependencies or a comparator"
+        )
+    if definition.mode == "stateless" and bool(dependencies) != (
+        comparator is not None
+    ):
+        raise MetricError(
+            "recomputed stateless metrics require dependencies and a comparator"
+        )
     return MetricDraft(
         implementation=implementation,
         params=selected_params,
         dependencies=dependencies,
         comparator=comparator,
     )
+
+
+def is_recomputed_metric(metric: MetricSpec | MetricDraft[Any]) -> bool:
+    """Return whether VIPER recomputes this metric from declared files."""
+    return bool(metric.dependencies)
 
 
 def min(metric: MetricDraft[Any]) -> MetricObjectiveDraft:

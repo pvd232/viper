@@ -2135,7 +2135,7 @@ class ReplicateSpec(ProtocolModel):
 
 
 MetricKind = Literal["training", "evaluation", "diagnostic"]
-MetricMode = Literal["post_stage", "in_stage"]
+MetricMode = Literal["stateful", "stateless"]
 
 
 class FloatComparator(ProtocolModel):
@@ -2200,13 +2200,17 @@ replicate IDs, replicate seeds, and `MetricSpec.metric_id` values are unique
 within the experiment. Each implementation reference identifies the exact
 metric file and top-level symbol within `RunSpec.source`.
 
-A metric with `mode="post_stage"` names every stage input or artifact it
-receives, supplies a comparator, and executes in a dedicated worker after the
-stage completes. Verification launches a second worker with the same immutable
-dependencies. A metric with `mode="in_stage"` has kind `training` or `diagnostic`,
-uses an empty file-dependency set, omits the comparator, and enters the stage
-through a runner-owned `MetricHandle`. An evaluation metric uses
-`mode="post_stage"`.
+`mode="stateful"` selects a `StatefulMetric` class. The class accumulates
+observations through `update()` and returns its current value from `compute()`.
+`mode="stateless"` selects a function that computes each value directly from
+its current arguments or declared files.
+
+A stateless metric with dependencies and a comparator executes in a dedicated
+worker after the stage completes. Verification launches a second worker with
+the same immutable dependencies. A stage-recorded metric has an empty
+dependency set, omits the comparator, and enters the stage through a
+runner-owned `MetricHandle`. Evaluation metrics are stateless and declare the
+files needed for recomputation.
 
 An exact comparator has zero tolerance. An absolute or relative comparator has
 a positive tolerance.
@@ -3474,7 +3478,7 @@ v_a^{(j)}.
 
 ### Metric verification
 
-For a metric with `mode="post_stage"`, the verifier:
+For a stateless metric with declared dependencies, the verifier:
 
 1. Retrieves and verifies its `MetricImplementationRef`.
 2. Resolves exactly the file dependencies declared by the metric.
@@ -3489,11 +3493,11 @@ For a metric with `mode="post_stage"`, the verifier:
    equality of their run, attempt, stage, and metric identities with the
    embedded measurement.
 
-For a metric with `mode="in_stage"`, the verifier establishes that the active
-`Context` contained the frozen metric handle and that the measurement was
-written through the attempt's measurement sink. A numerical recomputation
-claim requires a future contract that captures the live values supplied to the
-metric.
+For a metric recorded during the stage, the verifier establishes that the
+active `Context` contained the frozen metric handle and that the measurement
+was written through the attempt's measurement sink. A numerical recomputation
+claim requires captured values or declared files that can reproduce the metric
+call.
 
 ### Input-lineage verification
 

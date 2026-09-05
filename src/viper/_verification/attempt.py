@@ -29,7 +29,7 @@ from ..http import (
 from ..ids import InputName, StageId
 from ..inputs import ExternalInputRef, FutureInputRef, ResolvedExternalInputRef
 from ..journal import parse_journal_bytes
-from ..metrics import Measurement
+from ..metrics import Measurement, is_recomputed_metric
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
@@ -937,7 +937,7 @@ def verify_measurement_stage_times(
     measurements: tuple[Measurement, ...],
     experiment: ExperimentSpec,
 ) -> None:
-    """Place live and recomputed measurements on the correct stage boundary."""
+    """Place stage-recorded and recomputed measurements correctly in time."""
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
     for measurement in measurements:
         resolved_stage = resolved_stages.get(measurement.stage_id)
@@ -945,14 +945,14 @@ def verify_measurement_stage_times(
             raise VerificationError("measurement stage has no resolved stage result")
         metric = metrics[measurement.metric_id]
         if (
-            metric.mode == "in_stage"
+            not is_recomputed_metric(metric)
             and measurement.measured_at > resolved_stage.completed_at
         ):
             raise VerificationError(
-                "live measurement timestamp follows its named stage completion"
+                "stage-recorded measurement follows its named stage completion"
             )
         if (
-            metric.mode == "post_stage"
+            is_recomputed_metric(metric)
             and measurement.measured_at < resolved_stage.completed_at
         ):
             raise VerificationError(

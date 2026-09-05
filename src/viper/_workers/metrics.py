@@ -13,8 +13,8 @@ from ..execution._metric import MetricWorkerContext, MetricWorkerResult
 from ..metrics import (
     MetricContext,
     MetricExecutionReceipt,
+    is_recomputed_metric,
     load_metric,
-    metric_definition,
     validate_metric_definition,
 )
 from ..runtime import (
@@ -87,14 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("metric dependency bindings differ from MetricSpec")
         validate_metric_definition(root, context.metric)
-        definition = metric_definition(
-            load_metric(
-                root / context.metric.implementation.path,
-                context.metric.implementation.symbol,
-            )
-        )
-        if definition.mode != "post_stage":
-            raise ValueError("dedicated metric worker requires recompute mode")
+        if not is_recomputed_metric(context.metric):
+            raise ValueError("dedicated metric worker requires a recomputed metric")
 
         initialization = apply_reproducibility(
             context.run.seed,

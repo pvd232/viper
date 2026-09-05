@@ -20,6 +20,7 @@ from ..benchmark import BenchmarkSpec
 from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import InputName, StageId
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
+from ..metrics import is_recomputed_metric
 from ..references import (
     GitFileRef,
     ResolvedFileRef,
@@ -252,9 +253,9 @@ def verify_experiment_and_variant(
                 f"metric {metric.metric_id!r} implementation is not valid Python"
             ) from exc
         permitted_nodes: tuple[type[ast.AST], ...] = (
-            (ast.FunctionDef, ast.AsyncFunctionDef)
-            if metric.mode == "post_stage"
-            else (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            (ast.ClassDef,)
+            if metric.mode == "stateful"
+            else (ast.FunctionDef, ast.AsyncFunctionDef)
         )
         if not any(
             isinstance(node, permitted_nodes) and node.name == implementation.symbol
@@ -479,7 +480,7 @@ def verify_run_plan_relationships(
         raise VerificationError("eval metrics do not match the benchmark specification")
     for metric_id in benchmark.metric_ids:
         metric = experiment_metrics[metric_id]
-        if metric.mode != "post_stage":
+        if not is_recomputed_metric(metric):
             raise VerificationError(
                 f"benchmark metric {metric_id!r} must select a recomputed eval metric"
             )
@@ -717,7 +718,9 @@ def verify_stage_objectives(
             raise VerificationError(
                 f"objective of stage {stage_id!r} is absent from the experiment"
             )
-        if isinstance(stage, TrainSpec) and metric.mode != "in_stage":
-            raise VerificationError("training objectives require live metrics")
-        if isinstance(stage, EvalSpec) and metric.mode != "post_stage":
+        if isinstance(stage, TrainSpec) and is_recomputed_metric(metric):
+            raise VerificationError(
+                "training objectives require stage-recorded metrics"
+            )
+        if isinstance(stage, EvalSpec) and not is_recomputed_metric(metric):
             raise VerificationError("evaluation objectives require recomputed metrics")

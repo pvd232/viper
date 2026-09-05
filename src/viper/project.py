@@ -276,7 +276,7 @@ def load(path: Path) -> ResumeState:
 from viper.metrics import metric
 
 
-@metric(metric_id="prediction_bytes", mode="post_stage")
+@metric(metric_id="prediction_bytes", mode="stateless")
 def prediction_bytes(context) -> float:
     """Return the byte count of the verified prediction artifact."""
     return float(len(context.artifacts["predictions"].read_bytes()))

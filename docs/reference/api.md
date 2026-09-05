@@ -48,7 +48,7 @@ def fit(context: Context[TrainParameters]) -> None:
 ```
 
 `Context` provides the active run, attempt, and stage IDs; the validated
-parameter value; materialized input paths; writable artifact paths; live metric
+parameter value; materialized input paths; writable artifact paths; metric
 handles; and named NumPy generators. External-input retrieval remains owned by
 VIPER rather than project stage callables.
 

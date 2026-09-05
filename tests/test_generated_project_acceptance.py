@@ -430,7 +430,7 @@ def test_generated_project_uses_runner_owned_downloads(
             bytes=len(metric_raw),
         ),
         params=parameters.Metric(),
-        mode="post_stage",
+        mode="stateless",
         dependencies=(
             MetricDependency(
                 source="artifact",

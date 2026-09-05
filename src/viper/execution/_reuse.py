@@ -19,7 +19,7 @@ from ..artifacts import (
 from ..catalog import Catalog
 from ..ids import InputName, MetricId, StageId
 from ..inputs import ResolvedInputRef
-from ..metrics import Measurement, MetricSpec
+from ..metrics import Measurement, MetricSpec, is_recomputed_metric
 from ..references import (
     ResolvedFileRef,
     SnapshotFileRef,
@@ -153,7 +153,7 @@ def _metric_evidence(
             if metric_id in metrics:
                 verifications[metric_id] = reference
     if any(
-        metric.mode == "post_stage" and metric_id not in verifications
+        is_recomputed_metric(metric) and metric_id not in verifications
         for metric_id, metric in metrics.items()
     ):
         raise ValueError("reuse source is missing metric verification evidence")
@@ -163,7 +163,7 @@ def _metric_evidence(
             measurement=found[metric_id],
             verification=(
                 verifications.get(metric_id)
-                if metrics[metric_id].mode == "post_stage"
+                if is_recomputed_metric(metrics[metric_id])
                 else None
             ),
         )

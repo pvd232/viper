@@ -21,7 +21,7 @@ def load_json(path: Path) -> dict[str, float | int]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-@metric(metric_id="training_loss", mode="in_stage")
+@metric(metric_id="training_loss", mode="stateless")
 def training_loss(
     _context: MetricContext[params.Metric],
     loss: float,

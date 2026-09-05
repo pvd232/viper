@@ -72,7 +72,7 @@ def load_json(path: Path) -> dict[str, float | int]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-@metric(metric_id="training_loss", mode="in_stage")
+@metric(metric_id="training_loss", mode="stateless")
 def training_loss(
     _context: MetricContext[params.Metric],
     loss: float,
@@ -102,6 +102,11 @@ def fit(context: Context[params.Train]) -> None:
         encoding="utf-8",
     )
 ```
+
+`mode="stateless"` means `training_loss()` computes each value directly from
+the arguments passed to `record()`. A stateful metric is a `StatefulMetric`
+class that accumulates observations with `update()` and returns its current
+value from `compute()`.
 
 `Context` gives the stage its validated parameters, materialized input paths,
 writable artifact paths, metric handles, run identity, and named random

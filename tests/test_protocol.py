@@ -491,12 +491,12 @@ class ParameterContractTests(unittest.TestCase):
                 bytes=len(source),
             ),
             params=parameters.Metric.model_validate({"dim": 1}),
-            mode="post_stage",
+            mode="stateless",
             dependencies=(
                 MetricDependency(
                     source="artifact",
                     name="predictions",
-                    required_data_role="evaluation",
+                    required_data_role="eval",
                 ),
             ),
             comparator=FloatComparator(mode="exact", tolerance=0),
@@ -517,7 +517,7 @@ class ParameterContractTests(unittest.TestCase):
                     bytes=1,
                 ),
                 params=parameters.Metric(),
-                mode="post_stage",
+                mode="stateless",
                 dependencies=(
                     MetricDependency(
                         source="artifact",
@@ -1180,7 +1180,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             bytes=len(source),
         ),
         params=current_params.Metric(),
-        mode="in_stage",
+        mode="stateless",
     )
     env_payload = environment()
     env_payload["python_env"] = env_payload.pop("python_environment")

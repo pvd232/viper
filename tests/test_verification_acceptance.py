@@ -96,12 +96,14 @@ from viper.knowledge import (
 from viper.metrics import (
     FloatComparator,
     Measurement,
+    MetricDependency,
     MetricExecutionReceipt,
     MetricImplementationRef,
     MetricObjectiveSpec,
     MetricSpec,
     MetricVerificationReceipt,
     ResolvedMetricDependency,
+    is_recomputed_metric,
 )
 from viper.params import ParameterModelRef as CurrentParameterModelRef
 from viper.references import (
@@ -785,7 +787,7 @@ def add_plan_records(
             git_file(source_commit, metric.implementation.path),
             metric_source(
                 metric.metric_id,
-                "training" if metric.mode == "in_stage" else "evaluation",
+                "evaluation" if is_recomputed_metric(metric) else "training",
             ),
         )
 
@@ -2805,8 +2807,14 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
         ),
         parameter_model=parameter_model,
         params=current_params.Metric(),
-        mode="post_stage",
-        dependencies=(),
+        mode="stateless",
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name="predictions",
+                required_data_role="eval",
+            ),
+        ),
         comparator=FloatComparator(),
     )
     stage = EvaluateSpec.model_construct(

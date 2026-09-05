@@ -72,7 +72,7 @@ from viper.inputs import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
-from viper.metrics import MetricObjectiveSpec, MetricSpec
+from viper.metrics import MetricDependency, MetricObjectiveSpec, MetricSpec
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -2188,12 +2188,13 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
             direction="min",
         ),
     )
-    live = MetricSpec.model_construct(
+    recorded = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="in_stage",
+        mode="stateless",
+        dependencies=(),
     )
     experiment = ExperimentSpec.model_construct(
-        metrics=(live,),
+        metrics=(recorded,),
     )
 
     verify_stage_objectives({"train": stage}, experiment)
@@ -2202,10 +2203,19 @@ def test_stage_objectives_preserve_identity_and_direction() -> None:
 
     recomputed = MetricSpec.model_construct(
         metric_id="training_loss",
-        mode="post_stage",
+        mode="stateless",
+        dependencies=(
+            MetricDependency(
+                source="artifact",
+                name="model",
+                required_data_role="training",
+            ),
+        ),
     )
     invalid = ExperimentSpec.model_construct(
         metrics=(recomputed,),
     )
-    with pytest.raises(VerificationError, match="training objectives require live"):
+    with pytest.raises(
+        VerificationError, match="training objectives require stage-recorded"
+    ):
         verify_stage_objectives({"train": stage}, invalid)
