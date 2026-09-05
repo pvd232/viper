@@ -612,20 +612,6 @@ def validate(
             )
             return result
 
-    parity = _parity(root, candidate, selected_targets)
-    if parity:
-        result = {
-            "passed": False,
-            "stage": "parity",
-            "revision": revision,
-            "blocks": selected,
-            "targets": parity,
-        }
-        (results / "result.json").write_text(
-            json.dumps(result, indent=2, sort_keys=True) + "\n"
-        )
-        return result
-
     modules = _changed_modules(root, candidate)
     import_failure = _import_failure(root, candidate, python, modules)
     if import_failure is not None:
