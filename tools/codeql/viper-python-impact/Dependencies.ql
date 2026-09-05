@@ -93,11 +93,31 @@ private predicate directNameRead(
   )
 }
 
-/**
- * Resolve a direct attribute store to its declaring class when CodeQL knows
- * the receiver class.
- */
-private predicate attributeOwner(
+/** Resolve an attribute read to its declaring class. */
+private predicate attributeReadOwner(
+  Attribute load,
+  Class owner,
+  string name
+) {
+  exists(SelfAttributeRead selfRead |
+    load = selfRead and
+    owner = selfRead.getClass() and
+    name = selfRead.getName()
+  )
+  or
+  exists(AttrNode cfg, ClassObject classObject |
+    cfg.getNode() = load and
+    cfg.isLoad() and
+    name = load.getName() and
+    cfg.getObject(name)
+      .(ControlFlowNodeWithPointsTo)
+      .refersTo(_, classObject, _) and
+    owner = classObject.getPyClass()
+  )
+}
+
+/** Resolve an attribute write to its declaring class. */
+private predicate attributeWriteOwner(
   Attribute store,
   Class owner,
   string name
@@ -106,12 +126,6 @@ private predicate attributeOwner(
     store = selfStore and
     owner = selfStore.getClass() and
     name = selfStore.getName()
-  )
-  or
-  exists(SelfAttributeRead selfRead |
-    store = selfRead and
-    owner = selfRead.getClass() and
-    name = selfRead.getName()
   )
   or
   exists(AttrNode cfg, ClassObject classObject |
@@ -132,7 +146,7 @@ private predicate directAttributeRead(
   AstNode evidence
 ) {
   exists(Attribute load, Class owner, string name, Variable variable |
-    attributeOwner(load, owner, name) and
+    attributeReadOwner(load, owner, name) and
     variable.getScope() = owner and
     variable.getId() = name and
     canonicalAssignment(variable, target) and
@@ -176,7 +190,7 @@ private predicate directAttributeWrite(
   AstNode evidence
 ) {
   exists(Attribute store, Class owner, string name, Variable variable |
-    attributeOwner(store, owner, name) and
+    attributeWriteOwner(store, owner, name) and
     variable.getScope() = owner and
     variable.getId() = name and
     canonicalAssignment(variable, target) and

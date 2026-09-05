@@ -37,6 +37,7 @@ from viper._system_impact.codeql import (
     _qualified_declarations,
     _tree_digest,
     analyze_source,
+    lowering_digest,
     source_digest,
 )
 from viper._system_impact.source import (
@@ -52,14 +53,20 @@ from viper.system_impact.check import (
     check_plan,
 )
 from viper.system_impact.models import (
-    CodeQLIdentity,
-    CodeQLReceipt,
+    CodeQLAnalysisReceipt,
+    CodeQLExtractionSpec,
+    CodeQLQuerySpec,
+    DatabaseReceipt,
     EdgeKind,
+    GraphReceipt,
+    QueryReceipt,
     SourceEdge,
     SourceGraph,
+    SourceGraphFormat,
     SourceNode,
     SourceNodeKind,
     SourceSnapshot,
+    stage_key,
 )
 from viper.system_impact.plan import inspect_plan
 
@@ -852,8 +859,9 @@ def _source_graph(
     source_sha256: str = "2" * 64,
     base_revision: str = _REVISION,
     revision: str | None = _REVISION,
-    identity: CodeQLIdentity | None = None,
-    exit_code: int = 0,
+    extraction: CodeQLExtractionSpec | None = None,
+    query: CodeQLQuerySpec | None = None,
+    format: SourceGraphFormat | None = None,
 ) -> SourceGraph:
     canonical_nodes = tuple(sorted(nodes, key=lambda node: node.node_id))
     canonical_edges = tuple(sorted(edges, key=lambda edge: edge.edge_id))
@@ -870,29 +878,62 @@ def _source_graph(
         source_sha256=source_sha256,
         revision=revision,
     )
-    if identity is None:
-        identity = CodeQLIdentity(
+    if extraction is None:
+        extraction = CodeQLExtractionSpec(
             version="2.26.4",
             platform="osx64",
             executable_sha256="3" * 64,
-            pack="viper/python-impact@1.1.0",
-            pack_sha256="4" * 64,
+            extractor_sha256="4" * 64,
         )
-    receipt = CodeQLReceipt(
+    if query is None:
+        query = CodeQLQuerySpec(
+            pack="viper/python-impact@1.1.0",
+            pack_sha256="5" * 64,
+            suite="source-facts.qls",
+        )
+    if format is None:
+        format = SourceGraphFormat(
+            schema_version=3,
+            lowering_sha256=lowering_digest(),
+        )
+    database = DatabaseReceipt(
         snapshot=snapshot,
-        identity=identity,
-        commands=(("codeql", "query", "run"),),
-        exit_code=exit_code,
-        database_sha256="5" * 64,
-        result_sha256=_sha256(result_payload),
+        extraction=extraction,
+        key=stage_key(snapshot, extraction),
+        sha256="6" * 64,
+        commands=(("codeql", "database", "create"),),
+        exit_code=0,
         stderr_sha256="7" * 64,
+    )
+    results = QueryReceipt(
+        database_key=database.key,
+        database_sha256=database.sha256,
+        query=query,
+        key=stage_key(database.key, database.sha256, query),
+        sha256="8" * 64,
+        commands=(("codeql", "database", "run-queries"),),
+        exit_code=0,
+        stderr_sha256="9" * 64,
+    )
+    receipt = GraphReceipt(
+        query_key=results.key,
+        query_sha256=results.sha256,
+        format=format,
+        key=stage_key(results.key, results.sha256, format),
+        sha256=_sha256(result_payload),
+        commands=(("codeql", "bqrs", "decode"),),
+        exit_code=0,
+        stderr_sha256="a" * 64,
     )
     return SourceGraph(
         snapshot=snapshot,
-        identity=identity,
         nodes=canonical_nodes,
         edges=canonical_edges,
-        receipt=receipt,
+        receipt=CodeQLAnalysisReceipt(
+            database=database,
+            query=results,
+            graph=receipt,
+        ),
     )
 
 
@@ -901,7 +942,7 @@ def _observed_graph(
     *,
     base_revision: str = _REVISION,
     revision: str | None = None,
-    identity: CodeQLIdentity | None = None,
+    extraction: CodeQLExtractionSpec | None = None,
 ) -> SourceGraph:
     """Build canonical declaration facts from one small Python fixture tree."""
     nodes: list[SourceNode] = []
@@ -943,7 +984,7 @@ def _observed_graph(
         source_sha256=source_digest(root),
         base_revision=base_revision,
         revision=revision,
-        identity=identity,
+        extraction=extraction,
     )
 
 
@@ -1424,75 +1465,76 @@ def test_source_graph_rejects_receipt_drift_duplicates_and_dangling_edges() -> N
 
     edge = _edge(index=40, source=dependent, target=dependency, kind="calls")
     graph = _source_graph(nodes=(dependency, dependent), edges=(edge,))
-    changed_snapshot = graph.snapshot.model_copy(update={"source_sha256": "a" * 64})
-    changed_identity = graph.identity.model_copy(update={"version": "2.27.0"})
 
     with pytest.raises(ValueError, match="binding must lie inside its declaration"):
         SourceNode.model_validate(invalid_span)
 
     with pytest.raises(ValueError, match="snapshot differs"):
-        SourceGraph(
-            snapshot=changed_snapshot,
-            identity=graph.identity,
-            nodes=graph.nodes,
-            edges=graph.edges,
-            receipt=graph.receipt,
+        SourceGraph.model_validate(
+            {
+                **graph.model_dump(),
+                "snapshot": graph.snapshot.model_copy(
+                    update={"source_sha256": "a" * 64}
+                ),
+            }
         )
-    with pytest.raises(ValueError, match="identity differs"):
-        SourceGraph(
-            snapshot=graph.snapshot,
-            identity=changed_identity,
-            nodes=graph.nodes,
-            edges=graph.edges,
-            receipt=graph.receipt,
-        )
-    with pytest.raises(ValueError, match="duplicate node IDs"):
-        SourceGraph(
-            snapshot=graph.snapshot,
-            identity=graph.identity,
-            nodes=(dependency, dependency),
-            edges=(),
-            receipt=graph.receipt,
-        )
-    with pytest.raises(ValueError, match="ambiguous source target"):
-        SourceGraph(
-            snapshot=graph.snapshot,
-            identity=graph.identity,
-            nodes=(
-                dependency,
-                dependency.model_copy(
+    with pytest.raises(ValueError, match="does not consume DatabaseReceipt"):
+        SourceGraph.model_validate(
+            {
+                **graph.model_dump(),
+                "receipt": graph.receipt.model_copy(
                     update={
-                        "node_id": "different-id",
-                        "binding_start_col": dependency.binding_start_col + 2,
-                        "binding_end_col": dependency.binding_end_col + 2,
-                        "start_col": dependency.start_col + 2,
-                        "end_col": dependency.end_col + 2,
+                        "query": graph.receipt.query.model_copy(
+                            update={"database_key": "0" * 64}
+                        )
                     }
                 ),
-            ),
-            edges=(),
-            receipt=graph.receipt,
+            }
+        )
+    with pytest.raises(ValueError, match="duplicate node IDs"):
+        SourceGraph.model_validate(
+            {
+                **graph.model_dump(),
+                "nodes": (dependency, dependency),
+                "edges": (),
+            }
+        )
+    with pytest.raises(ValueError, match="ambiguous source target"):
+        SourceGraph.model_validate(
+            {
+                **graph.model_dump(),
+                "nodes": (
+                    dependency,
+                    dependency.model_copy(
+                        update={
+                            "node_id": "different-id",
+                            "binding_start_col": dependency.binding_start_col + 2,
+                            "binding_end_col": dependency.binding_end_col + 2,
+                            "start_col": dependency.start_col + 2,
+                            "end_col": dependency.end_col + 2,
+                        }
+                    ),
+                ),
+                "edges": (),
+            }
         )
     with pytest.raises(ValueError, match="duplicate edge IDs"):
-        SourceGraph(
-            snapshot=graph.snapshot,
-            identity=graph.identity,
-            nodes=graph.nodes,
-            edges=(edge, edge),
-            receipt=graph.receipt,
-        )
+        SourceGraph.model_validate({**graph.model_dump(), "edges": (edge, edge)})
     with pytest.raises(ValueError, match="unknown endpoint"):
-        SourceGraph(
-            snapshot=graph.snapshot,
-            identity=graph.identity,
-            nodes=graph.nodes,
-            edges=(edge.model_copy(update={"target": "src/missing.py:missing"}),),
-            receipt=graph.receipt,
+        SourceGraph.model_validate(
+            {
+                **graph.model_dump(),
+                "edges": (
+                    edge.model_copy(update={"target": "src/missing.py:missing"}),
+                ),
+            }
         )
 
 
-def _write_fake_codeql(path: Path) -> Path:
+def _write_fake_codeql(path: Path, extractor: Path) -> Path:
     """Write a process-compatible CodeQL stand-in with fixed BQRS rows."""
+    extractor.mkdir()
+    (extractor / "extractor.py").write_text("VERSION = 1\n", encoding="utf-8")
     source = f"""#!{sys.executable}
 import json
 import sys
@@ -1505,10 +1547,20 @@ def option(prefix: str) -> str:
 
 if args[0] == "version":
     print(json.dumps({{"version": "2.26.4"}}))
+elif args[:2] == ["resolve", "languages"]:
+    print(json.dumps({{"python": [{str(extractor)!r}]}}))
 elif args[:2] == ["database", "create"]:
-    Path(args[2]).mkdir(parents=True, exist_ok=True)
-elif args[:2] == ["query", "run"]:
-    Path(option("--output=")).write_text(Path(args[2]).stem, encoding="utf-8")
+    database = Path(args[2])
+    facts = database / "db-python/default"
+    facts.mkdir(parents=True, exist_ok=True)
+    (facts / "facts.rel").write_text("facts", encoding="utf-8")
+    (database / "src.zip").write_bytes(b"source")
+elif args[:2] == ["database", "run-queries"]:
+    database = Path(args[3])
+    results = database / "results/viper/python-impact"
+    results.mkdir(parents=True)
+    (results / "Declarations.bqrs").write_text("Declarations", encoding="utf-8")
+    (results / "Dependencies.bqrs").write_text("Dependencies", encoding="utf-8")
 elif args[:2] == ["bqrs", "decode"]:
     query = Path(args[2]).read_text(encoding="utf-8")
     if query == "Declarations":
@@ -1606,14 +1658,28 @@ def test_load_edges_uses_exact_binding_locations(tmp_path: Path) -> None:
         _load_edges(tmp_path, rows, nodes)
 
 
-def _sig02_identity(query_pack: Path, executable: Path) -> CodeQLIdentity:
-    """Bind the fake analyzer and exact checked-in query-pack tree."""
-    return CodeQLIdentity(
-        version="2.26.4",
-        platform="osx64",
-        executable_sha256=_sha256(executable.read_bytes()),
-        pack="viper/python-impact@1.1.0",
-        pack_sha256=_tree_digest(query_pack),
+def _sig02_specs(
+    query_pack: Path,
+    executable: Path,
+    extractor: Path,
+) -> tuple[CodeQLExtractionSpec, CodeQLQuerySpec, SourceGraphFormat]:
+    """Bind the fake extraction, query, and graph stages."""
+    return (
+        CodeQLExtractionSpec(
+            version="2.26.4",
+            platform="osx64",
+            executable_sha256=_sha256(executable.read_bytes()),
+            extractor_sha256=_tree_digest(extractor),
+        ),
+        CodeQLQuerySpec(
+            pack="viper/python-impact@1.1.0",
+            pack_sha256=_tree_digest(query_pack),
+            suite="source-facts.qls",
+        ),
+        SourceGraphFormat(
+            schema_version=3,
+            lowering_sha256=lowering_digest(),
+        ),
     )
 
 
@@ -1624,8 +1690,9 @@ def test_analyze_source_binds_digests_identity_and_database_reuse(
     root = tmp_path / "source"
     _sig02_source_fixture(root)
     query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
-    executable = _write_fake_codeql(tmp_path / "codeql")
-    identity = _sig02_identity(query_pack, executable)
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor)
+    extraction, query, format = _sig02_specs(query_pack, executable, extractor)
     snapshot = SourceSnapshot(
         base_revision=_REVISION,
         source_sha256=source_digest(root),
@@ -1636,7 +1703,9 @@ def test_analyze_source_binds_digests_identity_and_database_reuse(
     first = analyze_source(
         root,
         snapshot=snapshot,
-        identity=identity,
+        extraction=extraction,
+        query=query,
+        format=format,
         codeql_executable=executable,
         query_pack=query_pack,
         cache_root=cache,
@@ -1645,7 +1714,9 @@ def test_analyze_source_binds_digests_identity_and_database_reuse(
     second = analyze_source(
         root,
         snapshot=snapshot,
-        identity=identity,
+        extraction=extraction,
+        query=query,
+        format=format,
         codeql_executable=executable,
         query_pack=query_pack,
         cache_root=cache,
@@ -1653,18 +1724,21 @@ def test_analyze_source_binds_digests_identity_and_database_reuse(
     )
 
     assert first.snapshot == snapshot
-    assert first.identity == identity
-    assert first.receipt.identity == identity
-    assert first.receipt.snapshot == snapshot
-    assert first.receipt.database_sha256 == second.receipt.database_sha256
-    assert first.receipt.result_sha256 == second.receipt.result_sha256
+    assert first.receipt.database.extraction == extraction
+    assert first.receipt.query.query == query
+    assert first.receipt.graph.format == format
+    assert first.receipt.database.snapshot == snapshot
+    assert first.receipt.database.sha256 == second.receipt.database.sha256
+    assert first.receipt.query.sha256 == second.receipt.query.sha256
     assert first.nodes == second.nodes
     assert first.edges == second.edges
     assert any(
-        command[1:3] == ("database", "create") for command in first.receipt.commands
+        command[1:3] == ("database", "create")
+        for command in first.receipt.database.commands
     )
     assert all(
-        command[1:3] != ("database", "create") for command in second.receipt.commands
+        command[1:3] != ("database", "create")
+        for command in second.receipt.query.commands
     )
     assert tuple(node.symbol for node in first.nodes) == (
         "dependency",
@@ -1681,8 +1755,9 @@ def test_analyze_source_rebuilds_tampered_cache_manifest(tmp_path: Path) -> None
     root = tmp_path / "source"
     _sig02_source_fixture(root)
     query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
-    executable = _write_fake_codeql(tmp_path / "codeql")
-    identity = _sig02_identity(query_pack, executable)
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor)
+    extraction, query, format = _sig02_specs(query_pack, executable, extractor)
     snapshot = SourceSnapshot(
         base_revision=_REVISION,
         source_sha256=source_digest(root),
@@ -1692,7 +1767,9 @@ def test_analyze_source_rebuilds_tampered_cache_manifest(tmp_path: Path) -> None
     arguments = {
         "snapshot_root": root,
         "snapshot": snapshot,
-        "identity": identity,
+        "extraction": extraction,
+        "query": query,
+        "format": format,
         "codeql_executable": executable,
         "query_pack": query_pack,
         "cache_root": cache,
@@ -1701,7 +1778,7 @@ def test_analyze_source_rebuilds_tampered_cache_manifest(tmp_path: Path) -> None
         **arguments,
         artifact_root=tmp_path / "artifacts-first",
     )
-    manifest = next(cache.glob("*/viper-database.json"))
+    manifest = next(cache.glob("databases/*/receipt.json"))
     manifest.write_text('{"key":"tampered"}', encoding="utf-8")
 
     rebuilt = analyze_source(
@@ -1710,12 +1787,13 @@ def test_analyze_source_rebuilds_tampered_cache_manifest(tmp_path: Path) -> None
     )
 
     assert any(
-        command[1:3] == ("database", "create") for command in rebuilt.receipt.commands
+        command[1:3] == ("database", "create")
+        for command in rebuilt.receipt.database.commands
     )
     assert json.loads(manifest.read_text(encoding="utf-8")) != {"key": "tampered"}
 
-    database = manifest.parent / "database"
-    (database / "tampered").write_text("changed", encoding="utf-8")
+    database = manifest.parent / "database/db-python/default"
+    (database / "tampered.rel").write_text("changed", encoding="utf-8")
     rebuilt_again = analyze_source(
         **arguments,
         artifact_root=tmp_path / "artifacts-rebuilt-again",
@@ -1723,9 +1801,9 @@ def test_analyze_source_rebuilds_tampered_cache_manifest(tmp_path: Path) -> None
 
     assert any(
         command[1:3] == ("database", "create")
-        for command in rebuilt_again.receipt.commands
+        for command in rebuilt_again.receipt.database.commands
     )
-    assert not (database / "tampered").exists()
+    assert not (database / "tampered.rel").exists()
 
 
 def test_analyze_source_rejects_source_pack_and_cli_identity_drift(
@@ -1735,8 +1813,9 @@ def test_analyze_source_rejects_source_pack_and_cli_identity_drift(
     root = tmp_path / "source"
     _sig02_source_fixture(root)
     query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
-    executable = _write_fake_codeql(tmp_path / "codeql")
-    identity = _sig02_identity(query_pack, executable)
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor)
+    extraction, query, format = _sig02_specs(query_pack, executable, extractor)
     snapshot = SourceSnapshot(
         base_revision=_REVISION,
         source_sha256=source_digest(root),
@@ -1745,7 +1824,9 @@ def test_analyze_source_rejects_source_pack_and_cli_identity_drift(
     arguments = {
         "snapshot_root": root,
         "snapshot": snapshot,
-        "identity": identity,
+        "extraction": extraction,
+        "query": query,
+        "format": format,
         "codeql_executable": executable,
         "query_pack": query_pack,
         "cache_root": tmp_path / "cache",
@@ -1759,25 +1840,27 @@ def test_analyze_source_rejects_source_pack_and_cli_identity_drift(
                 "snapshot": snapshot.model_copy(update={"source_sha256": "0" * 64}),
             }
         )
-    with pytest.raises(CodeQLAnalysisError, match="query-pack bytes"):
+    with pytest.raises(CodeQLAnalysisError, match="query-pack digest"):
         analyze_source(
             **{
                 **arguments,
-                "identity": identity.model_copy(update={"pack_sha256": "0" * 64}),
+                "query": query.model_copy(update={"pack_sha256": "0" * 64}),
             }
         )
     with pytest.raises(CodeQLAnalysisError, match="executable version"):
         analyze_source(
             **{
                 **arguments,
-                "identity": identity.model_copy(update={"version": "2.27.0"}),
+                "extraction": extraction.model_copy(update={"version": "2.27.0"}),
             }
         )
     with pytest.raises(CodeQLAnalysisError, match="executable digest"):
         analyze_source(
             **{
                 **arguments,
-                "identity": identity.model_copy(update={"executable_sha256": "0" * 64}),
+                "extraction": extraction.model_copy(
+                    update={"executable_sha256": "0" * 64}
+                ),
             }
         )
 
@@ -1807,6 +1890,12 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
 
     version = run_subprocess(
         (str(executable), "version", "--format=json"),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    languages = run_subprocess(
+        (str(executable), "resolve", "languages", "--format=json"),
         check=True,
         capture_output=True,
         text=True,
@@ -1841,18 +1930,30 @@ def test_checked_in_codeql_pack_analyzes_tiny_repository(tmp_path: Path) -> None
         source_sha256=source_digest(root),
         revision=None,
     )
-    identity = CodeQLIdentity(
+    extraction = CodeQLExtractionSpec(
         version=json.loads(version.stdout)["version"],
         platform=sys.platform,
         executable_sha256=_sha256(executable.read_bytes()),
+        extractor_sha256=_tree_digest(
+            Path(json.loads(languages.stdout)["python"][0]).resolve()
+        ),
+    )
+    query = CodeQLQuerySpec(
         pack="viper/python-impact@1.1.0",
         pack_sha256=_tree_digest(query_pack),
+        suite="source-facts.qls",
+    )
+    format = SourceGraphFormat(
+        schema_version=3,
+        lowering_sha256=lowering_digest(),
     )
 
     graph = analyze_source(
         root,
         snapshot=snapshot,
-        identity=identity,
+        extraction=extraction,
+        query=query,
+        format=format,
         codeql_executable=executable,
         query_pack=query_pack,
         cache_root=tmp_path / "cache",
@@ -2177,7 +2278,9 @@ def test_plan_check_rejects_wrong_target_and_receipt_identity(
         gate=f"{sys.executable} -c pass",
     )
     baseline = _observed_graph(baseline_root, revision=_REVISION)
-    other_identity = baseline.identity.model_copy(update={"version": "2.27.0"})
+    other_extraction = baseline.receipt.database.extraction.model_copy(
+        update={"version": "2.27.0"}
+    )
 
     result = check_plan(
         root=realized_root,
@@ -2185,7 +2288,7 @@ def test_plan_check_rejects_wrong_target_and_receipt_identity(
         traceability=traceability,
         block_ids=("P0-SIG-04",),
         baseline=baseline,
-        realized=_observed_graph(realized_root, identity=other_identity),
+        realized=_observed_graph(realized_root, extraction=other_extraction),
     )
 
     assert result.targets[0].state == "failed"

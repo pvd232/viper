@@ -277,7 +277,7 @@ def final_targets(
 
 
 def _imports(source: bytes) -> frozenset[str]:
-    """Return the names bound by top-level imports."""
+    """Return ContractTarget identities for top-level imports."""
     try:
         tree = ast.parse(source)
     except SyntaxError as error:
@@ -292,8 +292,6 @@ def _imports(source: bytes) -> frozenset[str]:
                 continue
             if alias.asname is not None:
                 names.add(alias.asname)
-            elif isinstance(node, ast.Import):
-                names.add(alias.name.split(".", maxsplit=1)[0])
             else:
                 names.add(alias.name)
     return frozenset(names)
@@ -313,14 +311,8 @@ def _drop_import(source: bytes, symbol: str) -> bytes:
             raise ScheduleError("planned import edit contains non-import code")
         aliases: list[ast.alias] = []
         for alias in node.names:
-            local = alias.asname
-            if local is None:
-                local = (
-                    alias.name.split(".", maxsplit=1)[0]
-                    if isinstance(node, ast.Import)
-                    else alias.name
-                )
-            if local == symbol:
+            identity = alias.asname or alias.name
+            if identity == symbol:
                 found = True
             else:
                 aliases.append(alias)

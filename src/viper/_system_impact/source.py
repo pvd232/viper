@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Literal, TypeAlias, cast
 
@@ -34,6 +34,33 @@ _SupportedDeclaration: TypeAlias = (
 
 class SourceDeclarationError(ValueError):
     """Report an absent, ambiguous, malformed, or impossible declaration change."""
+
+
+def declaration_statements(body: Sequence[ast.stmt]) -> Iterator[ast.stmt]:
+    """Yield declarations from module or class control-flow blocks."""
+    for node in body:
+        yield node
+
+        # Classes get their own qualified scope; functions are intentionally local.
+        if isinstance(
+            node,
+            (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+        ):
+            continue
+        if isinstance(node, (ast.If, ast.For, ast.AsyncFor, ast.While)):
+            yield from declaration_statements(node.body)
+            yield from declaration_statements(node.orelse)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            yield from declaration_statements(node.body)
+        elif isinstance(node, (ast.Try, ast.TryStar)):
+            yield from declaration_statements(node.body)
+            for handler in node.handlers:
+                yield from declaration_statements(handler.body)
+            yield from declaration_statements(node.orelse)
+            yield from declaration_statements(node.finalbody)
+        elif isinstance(node, ast.Match):
+            for case in node.cases:
+                yield from declaration_statements(case.body)
 
 
 def import_binding(source: bytes, symbol: str) -> ImportBinding:
@@ -148,7 +175,9 @@ def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
         )
 
     direct = [
-        node for node in tree.body if qualified_symbol in _declaration_names(node)
+        node
+        for node in declaration_statements(tree.body)
+        if qualified_symbol in _declaration_names(node)
     ]
     if len(direct) == 1:
         return direct[0]
@@ -159,7 +188,11 @@ def _resolve_declaration(tree: ast.Module, qualified_symbol: str) -> ast.stmt:
 
     body: Sequence[ast.stmt] = tree.body
     for index, part in enumerate(parts):
-        matches = [node for node in body if part in _declaration_names(node)]
+        matches = [
+            node
+            for node in declaration_statements(body)
+            if part in _declaration_names(node)
+        ]
         if not matches:
             raise SourceDeclarationError(
                 f"Python declaration is absent: {qualified_symbol}"

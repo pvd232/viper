@@ -9,9 +9,12 @@ import os
 import platform
 import shutil
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 import viper.system_impact.models as impact
 from viper import _subprocess as subprocess
@@ -26,6 +29,7 @@ from viper._contract_traceability import (
 from viper._system_impact.codeql import (
     _tree_digest,
     analyze_source,
+    lowering_digest,
     source_digest,
 )
 from viper._system_impact.source import (
@@ -52,6 +56,21 @@ _IMPORT_SCRIPT = (
 
 class PlanValidationError(RuntimeError):
     """Report a failed pre-pairing plan check."""
+
+
+@contextmanager
+def _environment(**updates: str) -> Iterator[None]:
+    """Restore process environment values after a scoped override."""
+    previous = {name: os.environ.get(name) for name in updates}
+    os.environ.update(updates)
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def _run(command: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -87,35 +106,46 @@ def _contracts(root: Path) -> tuple[Path, ...]:
     return tuple(root / record["path"] for record in manifest["contracts"])
 
 
-def _identity(executable: Path, query_pack: Path) -> impact.CodeQLIdentity:
-    """Identify the CodeQL executable and query pack."""
+def _specs(
+    executable: Path,
+    query_pack: Path,
+) -> tuple[
+    impact.CodeQLExtractionSpec, impact.CodeQLQuerySpec, impact.SourceGraphFormat
+]:
+    """Identify extraction, queries, and graph conversion separately."""
     version = _run((str(executable), "version", "--format=json"), cwd=ROOT)
     if version.returncode != 0:
         raise PlanValidationError(version.stderr.strip() or "CodeQL version failed")
-    payload = json.loads(version.stdout)
-    pack_result = _run(
-        (
-            sys.executable,
-            "-c",
-            (
-                "import json,yaml,pathlib; "
-                "p=yaml.safe_load(pathlib.Path('qlpack.yml').read_text()); "
-                "print(json.dumps(p))"
-            ),
-        ),
-        cwd=query_pack,
+    languages = _run(
+        (str(executable), "resolve", "languages", "--format=json"),
+        cwd=ROOT,
     )
-    if pack_result.returncode != 0:
+    if languages.returncode != 0:
         raise PlanValidationError(
-            pack_result.stderr.strip() or "CodeQL pack inspection failed"
+            languages.stderr.strip() or "CodeQL language resolution failed"
         )
-    pack = json.loads(pack_result.stdout)
-    return impact.CodeQLIdentity(
-        version=payload["version"],
-        platform=f"{platform.system().lower()}-{platform.machine()}",
-        executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
-        pack=f"{pack['name']}@{pack['version']}",
-        pack_sha256=_tree_digest(query_pack),
+    candidates = json.loads(languages.stdout).get("python")
+    if not isinstance(candidates, list) or not candidates:
+        raise PlanValidationError("CodeQL has no Python extractor")
+    pack = yaml.safe_load((query_pack / "qlpack.yml").read_text(encoding="utf-8"))
+    if not isinstance(pack, dict):
+        raise PlanValidationError("CodeQL pack metadata is not a mapping")
+    return (
+        impact.CodeQLExtractionSpec(
+            version=json.loads(version.stdout)["version"],
+            platform=f"{platform.system().lower()}-{platform.machine()}",
+            executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),
+            extractor_sha256=_tree_digest(Path(candidates[0]).resolve()),
+        ),
+        impact.CodeQLQuerySpec(
+            pack=f"{pack['name']}@{pack['version']}",
+            pack_sha256=_tree_digest(query_pack),
+            suite="source-facts.qls",
+        ),
+        impact.SourceGraphFormat(
+            schema_version=3,
+            lowering_sha256=lowering_digest(),
+        ),
     )
 
 
@@ -124,7 +154,9 @@ def _analyze(
     *,
     revision: str,
     committed: bool,
-    identity: impact.CodeQLIdentity,
+    extraction: impact.CodeQLExtractionSpec,
+    query: impact.CodeQLQuerySpec,
+    format: impact.SourceGraphFormat,
     executable: Path,
     query_pack: Path,
     cache: Path,
@@ -139,7 +171,9 @@ def _analyze(
     return analyze_source(
         root,
         snapshot=snapshot,
-        identity=identity,
+        extraction=extraction,
+        query=query,
+        format=format,
         codeql_executable=executable,
         query_pack=query_pack,
         cache_root=cache,
@@ -365,14 +399,19 @@ def validate(
         contracts,
         requirement_ids=requirement_ids,
     )
-    identity = _identity(codeql, root / "tools/codeql/viper-python-impact")
+    extraction, query, format = _specs(
+        codeql,
+        root / "tools/codeql/viper-python-impact",
+    )
     results.mkdir(parents=True, exist_ok=False)
     # Every planned edit starts from the clean commit.
     baseline = _analyze(
         root,
         revision=revision,
         committed=True,
-        identity=identity,
+        extraction=extraction,
+        query=query,
+        format=format,
         executable=codeql,
         query_pack=root / "tools/codeql/viper-python-impact",
         cache=cache,
@@ -509,69 +548,66 @@ def validate(
         )
         return result
 
-    # Make Pyright import the candidate instead of the baseline.
-    original_pythonpath = os.environ.get("PYTHONPATH")
-    os.environ["PYTHONPATH"] = str(candidate / "src")
-    pyright = _run(
-        (
-            str(python),
-            "-m",
-            "pyright",
-            str(candidate / "src"),
-            "--project",
-            str(candidate / "pyrightconfig.json"),
-            "--pythonpath",
-            str(python),
-        ),
-        cwd=candidate,
-    )
-    if pyright.returncode != 0:
-        result = {
-            "passed": False,
-            "stage": "pyright",
-            "revision": revision,
-            "blocks": selected,
-            "command": tuple(pyright.args),
-            "stdout": pyright.stdout,
-            "stderr": pyright.stderr,
-        }
-        (results / "result.json").write_text(
-            json.dumps(result, indent=2, sort_keys=True) + "\n"
+    # Gates run inside check_plan(), so keep the candidate importable until it ends.
+    with _environment(PYTHONPATH=str(candidate / "src")):
+        pyright = _run(
+            (
+                str(python),
+                "-m",
+                "pyright",
+                str(candidate / "src"),
+                "--project",
+                str(candidate / "pyrightconfig.json"),
+                "--pythonpath",
+                str(python),
+            ),
+            cwd=candidate,
         )
-        if original_pythonpath is None:
-            os.environ.pop("PYTHONPATH", None)
-        else:
-            os.environ["PYTHONPATH"] = original_pythonpath
-        return result
+        if pyright.returncode != 0:
+            result = {
+                "passed": False,
+                "stage": "pyright",
+                "revision": revision,
+                "blocks": selected,
+                "command": tuple(pyright.args),
+                "stdout": pyright.stdout,
+                "stderr": pyright.stderr,
+            }
+            (results / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
+            return result
 
-    # Pyright checks types first; CodeQL then observes G*.
-    original_path = os.environ.get("PATH")
-    os.environ["PATH"] = os.pathsep.join(
-        part for part in (str(python.parent), original_path) if part
-    )
-    planned = _analyze(
-        candidate,
-        revision=revision,
-        committed=False,
-        identity=identity,
-        executable=codeql,
-        query_pack=root / "tools/codeql/viper-python-impact",
-        cache=cache,
-        artifacts=results / "planned-codeql",
-    )
-    unconsumed = _unconsumed_private_owners(
-        traceability,
-        frozenset(selected),
-        planned,
-    )
-    checked = check_plan(
-        root=candidate,
-        baseline_root=root,
-        traceability=traceability,
-        block_ids=selected,
-        baseline=baseline,
-        realized=planned,
-    )
+        # CodeQL needs the candidate's Python; the gate inherits only PYTHONPATH.
+        path = os.pathsep.join(
+            part for part in (str(python.parent), os.environ.get("PATH")) if part
+        )
+        with _environment(PATH=path):
+            planned = _analyze(
+                candidate,
+                revision=revision,
+                committed=False,
+                extraction=extraction,
+                query=query,
+                format=format,
+                executable=codeql,
+                query_pack=root / "tools/codeql/viper-python-impact",
+                cache=cache,
+                artifacts=results / "planned-codeql",
+            )
+        unconsumed = _unconsumed_private_owners(
+            traceability,
+            frozenset(selected),
+            planned,
+        )
+        checked = check_plan(
+            root=candidate,
+            baseline_root=root,
+            traceability=traceability,
+            block_ids=selected,
+            baseline=baseline,
+            realized=planned,
+        )
     result = {
         "passed": checked.passed and not unconsumed,
         "stage": "complete",
@@ -590,14 +626,6 @@ def validate(
     (results / "result.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n"
     )
-    if original_pythonpath is None:
-        os.environ.pop("PYTHONPATH", None)
-    else:
-        os.environ["PYTHONPATH"] = original_pythonpath
-    if original_path is None:
-        os.environ.pop("PATH", None)
-    else:
-        os.environ["PATH"] = original_path
     return result
 
 

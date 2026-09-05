@@ -11,18 +11,27 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+import yaml
+
 import viper._subprocess as subprocess
 
 from ..system_impact.models import (
-    CodeQLIdentity,
-    CodeQLReceipt,
+    CodeQLAnalysisReceipt,
+    CodeQLExtractionSpec,
+    CodeQLQuerySpec,
+    DatabaseReceipt,
     EdgeKind,
+    GraphReceipt,
+    QueryReceipt,
     SourceEdge,
     SourceGraph,
+    SourceGraphFormat,
     SourceNode,
     SourceNodeKind,
     SourceSnapshot,
+    stage_key,
 )
+from .source import declaration_statements
 
 IGNORED_PARTS = frozenset(
     {
@@ -35,9 +44,16 @@ IGNORED_PARTS = frozenset(
         "node_modules",
     }
 )
-_QUERY_FILES = ("Declarations.ql", "Dependencies.ql")
 _EDGE_KINDS = frozenset(
     {"imports", "calls", "constructs", "inherits", "reads", "writes"}
+)
+_LOWERING_ASSETS = (
+    ("src/viper/_system_impact/codeql.py", Path(__file__)),
+    ("src/viper/_system_impact/source.py", Path(__file__).with_name("source.py")),
+    (
+        "src/viper/system_impact/models.py",
+        Path(__file__).parents[1] / "system_impact/models.py",
+    ),
 )
 
 
@@ -57,6 +73,23 @@ class _Declaration:
 
 # CodeQL and AST use this key to identify the same declaration within one file.
 _Anchor = tuple[str, SourceNodeKind, int, int]
+
+
+@dataclass(frozen=True)
+class _DatabaseStage:
+    """Keep a verified database path with its receipt."""
+
+    path: Path
+    receipt: DatabaseReceipt
+
+
+@dataclass(frozen=True)
+class _QueryStage:
+    """Keep verified BQRS paths with their receipt."""
+
+    database: Path
+    results: tuple[Path, ...]
+    receipt: QueryReceipt
 
 
 def _hash_parts(parts: Iterable[bytes]) -> str:
@@ -83,6 +116,7 @@ def _python_files(root: Path) -> tuple[Path, ...]:
 
 
 def source_digest(root: Path) -> str:
+    """Hash every analyzed Python path and its bytes."""
     rows = [
         {
             "path": path.relative_to(root).as_posix(),
@@ -105,25 +139,87 @@ def _tree_digest(root: Path) -> str:
     return _hash_parts(parts)
 
 
-def _database_is_reusable(
-    database: Path,
-    manifest: Path,
-    *,
-    key: str,
-    source_sha256: str,
-) -> bool:
-    if not database.is_dir() or not manifest.is_file():
-        return False
+def lowering_digest() -> str:
+    """Hash the explicit files that convert CodeQL rows into a SourceGraph."""
+    parts: list[bytes] = []
+    for relative, path in _LOWERING_ASSETS:
+        try:
+            source = path.read_bytes()
+        except OSError as error:
+            raise CodeQLAnalysisError(
+                f"lowering asset is absent: {relative}"
+            ) from error
+        parts.extend((relative.encode(), source))
+    return _hash_parts(parts)
+
+
+def _database_digest(database: Path) -> str:
+    """Hash extracted facts while ignoring query caches and logs."""
+    files: list[Path] = []
+    facts = database / "db-python"
+    if facts.is_dir():
+        files.extend(
+            path
+            for path in facts.rglob("*")
+            if path.is_file() and "cache" not in path.relative_to(facts).parts
+        )
+    source = database / "src.zip"
+    if source.is_file():
+        files.append(source)
+    if not files:
+        raise CodeQLAnalysisError("CodeQL database contains no extracted facts")
+    parts: list[bytes] = []
+    for path in sorted(files, key=lambda item: item.relative_to(database).as_posix()):
+        parts.extend(
+            (path.relative_to(database).as_posix().encode(), path.read_bytes())
+        )
+    return _hash_parts(parts)
+
+
+def _result_files(database: Path) -> tuple[Path, ...]:
+    """Return the BQRS files selected by the authoritative query suite."""
+    results = tuple(sorted((database / "results").rglob("*.bqrs")))
+    if not results:
+        raise CodeQLAnalysisError("CodeQL query suite produced no BQRS results")
+    stems = tuple(path.stem for path in results)
+    if len(stems) != len(set(stems)):
+        raise CodeQLAnalysisError("CodeQL query suite produced duplicate result names")
+    return results
+
+
+def _result_digest(database: Path, results: tuple[Path, ...]) -> str:
+    """Hash every suite result by path and bytes."""
+    parts: list[bytes] = []
+    for path in results:
+        parts.extend(
+            (path.relative_to(database).as_posix().encode(), path.read_bytes())
+        )
+    return _hash_parts(parts)
+
+
+def _write_receipt(path: Path, receipt: object) -> None:
+    """Write one canonical stage receipt."""
+    model_dump = getattr(receipt, "model_dump")
+    path.write_text(
+        json.dumps(model_dump(mode="json"), sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+
+def _load_database_receipt(path: Path) -> DatabaseReceipt | None:
+    """Load a database receipt or treat invalid bytes as a cache miss."""
     try:
-        recorded = json.loads(manifest.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    expected = {
-        "key": key,
-        "source_sha256": source_sha256,
-        "database_sha256": _tree_digest(database),
-    }
-    return recorded == expected
+        return DatabaseReceipt.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+
+
+def _load_query_receipt(path: Path) -> QueryReceipt | None:
+    """Load a query receipt or treat invalid bytes as a cache miss."""
+    try:
+        return QueryReceipt.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
 
 
 def _run(command: Sequence[str], *, cwd: Path) -> tuple[bytes, bytes]:
@@ -148,7 +244,7 @@ def _qualified_declarations(
 
     def visit(body: Sequence[ast.stmt], prefix: str = "") -> None:
         """Collect declarations from one module or class body."""
-        for node in body:
+        for node in declaration_statements(body):
             bindings: tuple[tuple[str, ast.AST], ...] = ()
             kind: SourceNodeKind | None = None
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -505,149 +601,355 @@ def _load_edges(
     return tuple(sorted(edges.values(), key=lambda edge: edge.edge_id))
 
 
+def _check_extraction(
+    root: Path,
+    executable: Path,
+    extraction: CodeQLExtractionSpec,
+) -> tuple[tuple[tuple[str, ...], ...], tuple[bytes, ...]]:
+    """Confirm that the executable and selected Python extractor match the plan."""
+    version_command = (str(executable), "version", "--format=json")
+    version_stdout, version_stderr = _run(version_command, cwd=root)
+    version = json.loads(version_stdout).get("version")
+    if version != extraction.version:
+        raise CodeQLAnalysisError(
+            "CodeQL executable version differs from CodeQLExtractionSpec"
+        )
+    if hashlib.sha256(executable.read_bytes()).hexdigest() != (
+        extraction.executable_sha256
+    ):
+        raise CodeQLAnalysisError(
+            "CodeQL executable digest differs from CodeQLExtractionSpec"
+        )
+
+    languages_command = (str(executable), "resolve", "languages", "--format=json")
+    languages_stdout, languages_stderr = _run(languages_command, cwd=root)
+    candidates = json.loads(languages_stdout).get(extraction.language)
+    if not isinstance(candidates, list) or not candidates:
+        raise CodeQLAnalysisError("CodeQL has no Python extractor")
+    extractor = Path(candidates[0]).resolve()
+    if _tree_digest(extractor) != extraction.extractor_sha256:
+        raise CodeQLAnalysisError(
+            "Python extractor digest differs from CodeQLExtractionSpec"
+        )
+    return (
+        (version_command, languages_command),
+        (b"version", version_stderr, b"languages", languages_stderr),
+    )
+
+
+def _check_query_pack(query_pack: Path, query: CodeQLQuerySpec) -> Path:
+    """Confirm the query pack and suite selected by the plan."""
+    pack_root = query_pack.resolve()
+    if _tree_digest(pack_root) != query.pack_sha256:
+        raise CodeQLAnalysisError("query-pack digest differs from CodeQLQuerySpec")
+    try:
+        metadata = yaml.safe_load(
+            (pack_root / "qlpack.yml").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as error:
+        raise CodeQLAnalysisError("cannot read query-pack metadata") from error
+    if not isinstance(metadata, dict):
+        raise CodeQLAnalysisError("query-pack metadata is not a mapping")
+    if f"{metadata.get('name')}@{metadata.get('version')}" != query.pack:
+        raise CodeQLAnalysisError("query-pack identity differs from CodeQLQuerySpec")
+    suite = pack_root / query.suite
+    if not suite.is_file():
+        raise CodeQLAnalysisError("CodeQLQuerySpec suite is absent from the query pack")
+    return suite
+
+
+def _extract_database(
+    root: Path,
+    *,
+    snapshot: SourceSnapshot,
+    extraction: CodeQLExtractionSpec,
+    executable: Path,
+    cache_root: Path,
+) -> _DatabaseStage:
+    """Create or reuse the database selected by the source and extraction spec."""
+    commands, stderr_parts = _check_extraction(root, executable, extraction)
+    key = stage_key(snapshot, extraction)
+    stage_root = cache_root / "databases" / key
+    database = stage_root / "database"
+    receipt_path = stage_root / "receipt.json"
+    receipt = _load_database_receipt(receipt_path)
+    cached_sha256 = None
+    if database.is_dir():
+        try:
+            cached_sha256 = _database_digest(database)
+        except CodeQLAnalysisError:
+            pass
+    if (
+        receipt is not None
+        and receipt.snapshot == snapshot
+        and receipt.extraction == extraction
+        and receipt.key == key
+        and receipt.exit_code == 0
+        and receipt.sha256 == cached_sha256
+    ):
+        return _DatabaseStage(path=database, receipt=receipt)
+
+    if stage_root.exists():
+        shutil.rmtree(stage_root)
+    stage_root.mkdir(parents=True)
+    create_command = (
+        str(executable),
+        "database",
+        "create",
+        str(database),
+        f"--language={extraction.language}",
+        f"--build-mode={extraction.build_mode}",
+        f"--source-root={root}",
+        "--overwrite",
+    )
+    _, create_stderr = _run(create_command, cwd=root)
+    receipt = DatabaseReceipt(
+        snapshot=snapshot,
+        extraction=extraction,
+        key=key,
+        sha256=_database_digest(database),
+        commands=(*commands, create_command),
+        exit_code=0,
+        stderr_sha256=_hash_parts((*stderr_parts, b"database-create", create_stderr)),
+    )
+    _write_receipt(receipt_path, receipt)
+    return _DatabaseStage(path=database, receipt=receipt)
+
+
+def _run_query_suite(
+    root: Path,
+    *,
+    database: _DatabaseStage,
+    query: CodeQLQuerySpec,
+    suite: Path,
+    executable: Path,
+    cache_root: Path,
+) -> _QueryStage:
+    """Run or reuse the authoritative suite without mutating the base database."""
+    key = stage_key(database.receipt.key, database.receipt.sha256, query)
+    stage_root = cache_root / "queries" / key
+    query_database = stage_root / "database"
+    receipt_path = stage_root / "receipt.json"
+    receipt = _load_query_receipt(receipt_path)
+    results: tuple[Path, ...] = ()
+    if receipt is not None and query_database.is_dir():
+        try:
+            results = _result_files(query_database)
+            database_sha256 = _database_digest(query_database)
+        except CodeQLAnalysisError:
+            database_sha256 = None
+        if (
+            results
+            and receipt.database_key == database.receipt.key
+            and receipt.database_sha256 == database.receipt.sha256
+            and receipt.query == query
+            and receipt.key == key
+            and receipt.exit_code == 0
+            and receipt.sha256 == _result_digest(query_database, results)
+            and database_sha256 == database.receipt.sha256
+        ):
+            return _QueryStage(
+                database=query_database,
+                results=results,
+                receipt=receipt,
+            )
+
+    if stage_root.exists():
+        shutil.rmtree(stage_root)
+    stage_root.mkdir(parents=True)
+    shutil.copytree(database.path, query_database)
+    command = (
+        str(executable),
+        "database",
+        "run-queries",
+        "--",
+        str(query_database),
+        str(suite),
+    )
+    _, stderr = _run(command, cwd=root)
+    if _database_digest(query_database) != database.receipt.sha256:
+        raise CodeQLAnalysisError(
+            "query execution changed the extracted database facts"
+        )
+    results = _result_files(query_database)
+    receipt = QueryReceipt(
+        database_key=database.receipt.key,
+        database_sha256=database.receipt.sha256,
+        query=query,
+        key=key,
+        sha256=_result_digest(query_database, results),
+        commands=(command,),
+        exit_code=0,
+        stderr_sha256=_hash_parts((b"database-run-queries", stderr)),
+    )
+    _write_receipt(receipt_path, receipt)
+    return _QueryStage(database=query_database, results=results, receipt=receipt)
+
+
+def _lower_graph(
+    root: Path,
+    *,
+    snapshot: SourceSnapshot,
+    extraction: CodeQLExtractionSpec,
+    query: CodeQLQuerySpec,
+    format: SourceGraphFormat,
+    database: DatabaseReceipt,
+    results: _QueryStage,
+    executable: Path,
+    cache_root: Path,
+    artifact_root: Path,
+) -> SourceGraph:
+    """Decode one query result set and convert it into a canonical graph."""
+    key = stage_key(results.receipt.key, results.receipt.sha256, format)
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    artifact_results: list[Path] = []
+    for result in results.results:
+        artifact = artifact_root / result.name
+        shutil.copy2(result, artifact)
+        artifact_results.append(artifact)
+    graph_root = cache_root / "graphs" / key
+    graph_path = graph_root / "source-graph.json"
+
+    decoded: dict[str, list[list[Any]]] = {}
+    commands: list[tuple[str, ...]] = []
+    stderr_parts: list[bytes] = []
+    for result in artifact_results:
+        decoded_path = artifact_root / f"{result.stem}.json"
+        command = (
+            str(executable),
+            "bqrs",
+            "decode",
+            str(result),
+            "--format=json",
+            f"--output={decoded_path}",
+        )
+        _, stderr = _run(command, cwd=root)
+        commands.append(command)
+        stderr_parts.extend((result.stem.encode(), stderr))
+        rows = _table_rows(json.loads(decoded_path.read_text(encoding="utf-8")))
+        rows.sort(
+            key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":"))
+        )
+        decoded[result.stem] = rows
+    if graph_path.is_file():
+        try:
+            graph = SourceGraph.model_validate_json(
+                graph_path.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, ValueError):
+            graph = None
+        if (
+            graph is not None
+            and graph.receipt.database == database
+            and graph.receipt.query == results.receipt
+            and graph.receipt.graph.key == key
+            and graph.receipt.graph.format == format
+        ):
+            return graph
+
+    try:
+        declaration_rows = decoded["Declarations"]
+        dependency_rows = decoded["Dependencies"]
+    except KeyError as error:
+        raise CodeQLAnalysisError(
+            "query suite must produce Declarations and Dependencies results"
+        ) from error
+
+    nodes = _load_nodes(root, declaration_rows)
+    edges = _load_edges(root, dependency_rows, nodes)
+    graph_sha256 = hashlib.sha256(
+        json.dumps(
+            {
+                "nodes": [node.model_dump(mode="json") for node in nodes],
+                "edges": [edge.model_dump(mode="json") for edge in edges],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    receipt = GraphReceipt(
+        query_key=results.receipt.key,
+        query_sha256=results.receipt.sha256,
+        format=format,
+        key=key,
+        sha256=graph_sha256,
+        commands=tuple(commands),
+        exit_code=0,
+        stderr_sha256=_hash_parts(stderr_parts),
+    )
+    graph = SourceGraph(
+        snapshot=snapshot,
+        nodes=nodes,
+        edges=edges,
+        receipt=CodeQLAnalysisReceipt(
+            database=database,
+            query=results.receipt,
+            graph=receipt,
+        ),
+    )
+    if graph_root.exists():
+        shutil.rmtree(graph_root)
+    graph_root.mkdir(parents=True)
+    graph_path.write_text(graph.model_dump_json(), encoding="utf-8")
+    return graph
+
+
 def analyze_source(
     snapshot_root: Path,
     *,
     snapshot: SourceSnapshot,
-    identity: CodeQLIdentity,
+    extraction: CodeQLExtractionSpec,
+    query: CodeQLQuerySpec,
+    format: SourceGraphFormat,
     codeql_executable: Path,
     query_pack: Path,
     cache_root: Path,
     artifact_root: Path,
 ) -> SourceGraph:
-    """Analyze one exact Python source tree with a pinned CodeQL query pack."""
+    """Extract, query, and lower one exact Python source tree."""
     root = snapshot_root.resolve()
     if source_digest(root) != snapshot.source_sha256:
         raise CodeQLAnalysisError(
             "SourceSnapshot.source_sha256 does not match source bytes"
         )
-    if _tree_digest(query_pack.resolve()) != identity.pack_sha256:
+    if format.lowering_sha256 != lowering_digest():
         raise CodeQLAnalysisError(
-            "CodeQLIdentity.pack_sha256 does not match query-pack bytes"
+            "SourceGraphFormat lowering digest differs from loaded assets"
         )
-
-    version_stdout, version_stderr = _run(
-        (str(codeql_executable), "version", "--format=json"), cwd=root
-    )
-    version_payload = json.loads(version_stdout)
-    if version_payload.get("version") != identity.version:
-        raise CodeQLAnalysisError(
-            "CodeQL executable version does not match CodeQLIdentity"
-        )
-    if hashlib.sha256(codeql_executable.read_bytes()).hexdigest() != (
-        identity.executable_sha256
-    ):
-        raise CodeQLAnalysisError(
-            "CodeQL executable digest does not match CodeQLIdentity"
-        )
-
-    key = _hash_parts(
-        (
-            snapshot.source_sha256.encode(),
-            identity.version.encode(),
-            identity.executable_sha256.encode(),
-            identity.pack_sha256.encode(),
-        )
-    )
-    database = cache_root.resolve() / key / "database"
-    manifest = database.parent / "viper-database.json"
-    commands: list[tuple[str, ...]] = [
-        (str(codeql_executable), "version", "--format=json")
-    ]
-    stderr_parts: list[bytes] = [b"version", version_stderr]
-    if not _database_is_reusable(
-        database,
-        manifest,
-        key=key,
-        source_sha256=snapshot.source_sha256,
-    ):
-        if database.parent.exists():
-            shutil.rmtree(database.parent)
-        database.parent.mkdir(parents=True)
-        command = (
-            str(codeql_executable),
-            "database",
-            "create",
-            str(database),
-            "--language=python",
-            f"--source-root={root}",
-            "--overwrite",
-        )
-        _, stderr = _run(command, cwd=root)
-        commands.append(command)
-        stderr_parts.extend((b"database-create", stderr))
-    artifact_root.mkdir(parents=True, exist_ok=True)
-    decoded: dict[str, list[list[Any]]] = {}
-    for query_name in _QUERY_FILES:
-        query = query_pack / query_name
-        bqrs = artifact_root / f"{query.stem}.bqrs"
-        decoded_path = artifact_root / f"{query.stem}.json"
-        run_command = (
-            str(codeql_executable),
-            "query",
-            "run",
-            str(query),
-            f"--database={database}",
-            f"--output={bqrs}",
-        )
-        _, stderr = _run(run_command, cwd=root)
-        commands.append(run_command)
-        stderr_parts.extend((query_name.encode(), stderr))
-        decode_command = (
-            str(codeql_executable),
-            "bqrs",
-            "decode",
-            str(bqrs),
-            "--format=json",
-            f"--output={decoded_path}",
-        )
-        _, stderr = _run(decode_command, cwd=root)
-        commands.append(decode_command)
-        stderr_parts.extend((f"decode:{query_name}".encode(), stderr))
-        rows = _table_rows(json.loads(decoded_path.read_text(encoding="utf-8")))
-        rows.sort(
-            key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":"))
-        )
-        decoded[query.stem] = rows
-
-    nodes = _load_nodes(root, decoded["Declarations"])
-    edges = _load_edges(root, decoded["Dependencies"], nodes)
-    result_payload = json.dumps(
-        {
-            "nodes": [node.model_dump(mode="json") for node in nodes],
-            "edges": [edge.model_dump(mode="json") for edge in edges],
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode()
-    database_sha256 = _tree_digest(database)
-    manifest.write_text(
-        json.dumps(
-            {
-                "key": key,
-                "source_sha256": snapshot.source_sha256,
-                "database_sha256": database_sha256,
-            },
-            sort_keys=True,
-        ),
-        encoding="utf-8",
-    )
-    receipt = CodeQLReceipt(
+    suite = _check_query_pack(query_pack, query)
+    database = _extract_database(
+        root,
         snapshot=snapshot,
-        identity=identity,
-        commands=tuple(commands),
-        exit_code=0,
-        database_sha256=database_sha256,
-        result_sha256=hashlib.sha256(result_payload).hexdigest(),
-        stderr_sha256=_hash_parts(stderr_parts),
+        extraction=extraction,
+        executable=codeql_executable,
+        cache_root=cache_root.resolve(),
     )
-    return SourceGraph(
+    results = _run_query_suite(
+        root,
+        database=database,
+        query=query,
+        suite=suite,
+        executable=codeql_executable,
+        cache_root=cache_root.resolve(),
+    )
+    return _lower_graph(
+        root,
         snapshot=snapshot,
-        identity=identity,
-        nodes=nodes,
-        edges=edges,
-        receipt=receipt,
+        extraction=extraction,
+        query=query,
+        format=format,
+        database=database.receipt,
+        results=results,
+        executable=codeql_executable,
+        cache_root=cache_root.resolve(),
+        artifact_root=artifact_root.resolve(),
     )
 
 
-__all__ = ["CodeQLAnalysisError", "IGNORED_PARTS", "analyze_source", "source_digest"]
+__all__ = [
+    "CodeQLAnalysisError",
+    "IGNORED_PARTS",
+    "analyze_source",
+    "lowering_digest",
+    "source_digest",
+]

@@ -8,12 +8,12 @@ from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from .._contract_traceability import (
+from viper._contract_traceability import (
     ContractTarget,
     PairBlockId,
     RepoSymbolRef,
 )
-from .._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
+from viper._schema import SHA256, NonEmptyStr, ProtocolModel, RepoRelPath
 
 CommitId = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 NodeId = NonEmptyStr
@@ -31,16 +31,25 @@ ChangeKind = Literal[
 CheckState = Literal["passed", "failed"]
 
 
-class CodeQLIdentity(ProtocolModel):
-    """Fix the analyzer and query pack used for both source snapshots."""
+def _hash_parts(parts: tuple[bytes, ...]) -> str:
+    """Hash a sequence without allowing adjacent values to blur together."""
+    digest = hashlib.sha256()
+    for part in parts:
+        digest.update(len(part).to_bytes(8, "big"))
+        digest.update(part)
+    return digest.hexdigest()
 
-    version: NonEmptyStr = Field(description="Required CodeQL CLI version.")
-    platform: NonEmptyStr = Field(description="CodeQL bundle platform identifier.")
-    executable_sha256: SHA256 = Field(
-        description="Digest of the exact CodeQL launcher executable."
-    )
-    pack: NonEmptyStr = Field(description="Name and version of the VIPER query pack.")
-    pack_sha256: SHA256 = Field(description="Digest of the exact query-pack bytes.")
+
+def _canonical_bytes(value: object) -> bytes:
+    """Serialize a stage input for a stable cache key."""
+    model_dump = getattr(value, "model_dump", None)
+    payload = model_dump(mode="json") if model_dump is not None else value
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+
+
+def stage_key(*values: object) -> str:
+    """Hash the exact inputs consumed by one analysis stage."""
+    return _hash_parts(tuple(_canonical_bytes(value) for value in values))
 
 
 class SourceSnapshot(ProtocolModel):
@@ -57,29 +66,151 @@ class SourceSnapshot(ProtocolModel):
     )
 
 
-class CodeQLReceipt(ProtocolModel):
-    """Record one completed source-analysis invocation."""
+class CodeQLExtractionSpec(ProtocolModel):
+    """Identify the CodeQL installation and extraction mode."""
 
-    snapshot: SourceSnapshot = Field(
-        description="Immutable source snapshot analyzed by CodeQL."
+    version: NonEmptyStr = Field(description="CodeQL CLI version.")
+    platform: NonEmptyStr = Field(description="CodeQL bundle platform.")
+    executable_sha256: SHA256 = Field(description="Digest of the CodeQL executable.")
+    extractor_sha256: SHA256 = Field(description="Digest of the Python extractor tree.")
+    language: Literal["python"] = Field(
+        default="python",
+        description="Language extracted into the database.",
     )
-    identity: CodeQLIdentity = Field(
-        description="Exact CodeQL and query-pack identity used by every command."
+    build_mode: Literal["none"] = Field(
+        default="none",
+        description="CodeQL database build mode.",
+    )
+
+
+class CodeQLQuerySpec(ProtocolModel):
+    """Identify the query pack and suite executed against a database."""
+
+    pack: NonEmptyStr = Field(description="Query-pack name and version.")
+    pack_sha256: SHA256 = Field(description="Digest of the query-pack tree.")
+    suite: NonEmptyStr = Field(description="Query suite selected from the pack.")
+
+
+class SourceGraphFormat(ProtocolModel):
+    """Identify the graph schema and CodeQL-row conversion rules."""
+
+    schema_version: int = Field(
+        ge=1,
+        description="Serialized SourceGraph format version.",
+    )
+    lowering_sha256: SHA256 = Field(
+        description=(
+            "Digest of the explicit path-and-byte manifest for graph lowering."
+        ),
+    )
+
+
+class DatabaseReceipt(ProtocolModel):
+    """Record one completed source extraction."""
+
+    snapshot: SourceSnapshot = Field(description="Source extracted by CodeQL.")
+    extraction: CodeQLExtractionSpec = Field(description="Extraction settings used.")
+    key: SHA256 = Field(description="Digest of the snapshot and extraction settings.")
+    sha256: SHA256 = Field(description="Digest of the extracted database facts.")
+    commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
+        min_length=1,
+        description="Commands executed to create the database.",
+    )
+    exit_code: Literal[0] = Field(
+        default=0,
+        description="Successful database-creation process exit code.",
+    )
+    stderr_sha256: SHA256 = Field(description="Digest of captured standard error.")
+
+    @model_validator(mode="after")
+    def validate_key(self) -> DatabaseReceipt:
+        """Require the key derived from this receipt's stage inputs."""
+        if self.key != stage_key(self.snapshot, self.extraction):
+            raise ValueError("DatabaseReceipt key differs from its stage inputs")
+        return self
+
+
+class QueryReceipt(ProtocolModel):
+    """Record one completed query-suite execution."""
+
+    database_key: SHA256 = Field(description="Key of the database queried.")
+    database_sha256: SHA256 = Field(description="Digest of that database's facts.")
+    query: CodeQLQuerySpec = Field(description="Query pack and suite executed.")
+    key: SHA256 = Field(description="Digest of the database and query specification.")
+    sha256: SHA256 = Field(description="Digest of the suite's BQRS files.")
+    commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
+        min_length=1,
+        description="Commands executed to produce the query results.",
+    )
+    exit_code: Literal[0] = Field(
+        default=0,
+        description="Successful query process exit code.",
+    )
+    stderr_sha256: SHA256 = Field(description="Digest of captured standard error.")
+
+    @model_validator(mode="after")
+    def validate_key(self) -> QueryReceipt:
+        """Require the key derived from this receipt's stage inputs."""
+        if self.key != stage_key(
+            self.database_key,
+            self.database_sha256,
+            self.query,
+        ):
+            raise ValueError("QueryReceipt key differs from its stage inputs")
+        return self
+
+
+class GraphReceipt(ProtocolModel):
+    """Record the conversion of query results into a source graph."""
+
+    query_key: SHA256 = Field(description="Key of the query results converted.")
+    query_sha256: SHA256 = Field(description="Digest of the suite's BQRS files.")
+    format: SourceGraphFormat = Field(
+        description="Graph schema and conversion rules used."
+    )
+    key: SHA256 = Field(description="Digest of the query results and graph format.")
+    sha256: SHA256 = Field(
+        description="Digest of the canonical SourceGraph nodes and edges."
     )
     commands: tuple[tuple[NonEmptyStr, ...], ...] = Field(
         min_length=1,
-        description="Ordered argument vectors executed for this analysis.",
+        description="Commands used to decode the query results.",
     )
-    exit_code: int = Field(description="Terminal process exit code.")
-    database_sha256: SHA256 = Field(
-        description="Digest of the CodeQL database's relative paths and file bytes."
+    exit_code: Literal[0] = Field(
+        default=0,
+        description="Successful graph-conversion process exit code.",
     )
-    result_sha256: SHA256 = Field(description="Digest of the decoded canonical rows.")
-    stderr_sha256: SHA256 = Field(
-        description=(
-            "Digest of the ordered query labels and captured standard error bytes."
-        )
-    )
+    stderr_sha256: SHA256 = Field(description="Digest of captured standard error.")
+
+    @model_validator(mode="after")
+    def validate_key(self) -> GraphReceipt:
+        """Require the key derived from this receipt's stage inputs."""
+        if self.key != stage_key(self.query_key, self.query_sha256, self.format):
+            raise ValueError("GraphReceipt key differs from its stage inputs")
+        return self
+
+
+class CodeQLAnalysisReceipt(ProtocolModel):
+    """Join the receipts for one complete CodeQL analysis."""
+
+    database: DatabaseReceipt = Field(description="Database extraction evidence.")
+    query: QueryReceipt = Field(description="Query execution evidence.")
+    graph: GraphReceipt = Field(description="Graph conversion evidence.")
+
+    @model_validator(mode="after")
+    def validate_chain(self) -> CodeQLAnalysisReceipt:
+        """Require each stage to consume the preceding stage's exact result."""
+        if (
+            self.query.database_key != self.database.key
+            or self.query.database_sha256 != self.database.sha256
+        ):
+            raise ValueError("QueryReceipt does not consume DatabaseReceipt")
+        if (
+            self.graph.query_key != self.query.key
+            or self.graph.query_sha256 != self.query.sha256
+        ):
+            raise ValueError("GraphReceipt does not consume QueryReceipt")
+        return self
 
 
 class SourceNode(ProtocolModel):
@@ -159,15 +290,12 @@ class SourceEdge(ProtocolModel):
 class SourceGraph(ProtocolModel):
     """Store one canonical CodeQL observation of a source snapshot."""
 
-    schema_version: Literal[2] = Field(
-        default=2,
+    schema_version: Literal[3] = Field(
+        default=3,
         description="Source-graph format version.",
     )
     snapshot: SourceSnapshot = Field(
         description="Immutable source snapshot represented by the graph."
-    )
-    identity: CodeQLIdentity = Field(
-        description="Analyzer identity used for this graph."
     )
     nodes: tuple[SourceNode, ...] = Field(
         description="Nodes sorted by stable identifier."
@@ -175,8 +303,8 @@ class SourceGraph(ProtocolModel):
     edges: tuple[SourceEdge, ...] = Field(
         description="Edges sorted by stable identifier."
     )
-    receipt: CodeQLReceipt = Field(
-        description="Evidence for the completed analysis run."
+    receipt: CodeQLAnalysisReceipt = Field(
+        description="Evidence for extraction, query execution, and graph conversion."
     )
 
     @field_validator("nodes")
@@ -220,10 +348,27 @@ class SourceGraph(ProtocolModel):
             edge.source not in known or edge.target not in known for edge in self.edges
         ):
             raise ValueError("SourceGraph contains an edge with an unknown endpoint")
-        if self.receipt.snapshot != self.snapshot:
-            raise ValueError("CodeQLReceipt snapshot differs from SourceGraph snapshot")
-        if self.receipt.identity != self.identity:
-            raise ValueError("CodeQLReceipt identity differs from SourceGraph identity")
+        database = self.receipt.database
+        query = self.receipt.query
+        graph = self.receipt.graph
+        if database.snapshot != self.snapshot:
+            raise ValueError(
+                "DatabaseReceipt snapshot differs from SourceGraph snapshot"
+            )
+        if query.database_key != database.key:
+            raise ValueError("QueryReceipt database key differs from DatabaseReceipt")
+        if query.database_sha256 != database.sha256:
+            raise ValueError(
+                "QueryReceipt database digest differs from DatabaseReceipt"
+            )
+        if graph.query_key != query.key:
+            raise ValueError("GraphReceipt query key differs from QueryReceipt")
+        if graph.query_sha256 != query.sha256:
+            raise ValueError("GraphReceipt query digest differs from QueryReceipt")
+        if graph.format.schema_version != self.schema_version:
+            raise ValueError(
+                "SourceGraphFormat schema version differs from SourceGraph"
+            )
         result_payload = json.dumps(
             {
                 "nodes": [node.model_dump(mode="json") for node in self.nodes],
@@ -232,10 +377,8 @@ class SourceGraph(ProtocolModel):
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
-        if hashlib.sha256(result_payload).hexdigest() != self.receipt.result_sha256:
-            raise ValueError(
-                "CodeQLReceipt result digest differs from SourceGraph rows"
-            )
+        if hashlib.sha256(result_payload).hexdigest() != graph.sha256:
+            raise ValueError("GraphReceipt digest differs from SourceGraph rows")
         return self
 
 
@@ -409,7 +552,7 @@ class PlanCheck(ProtocolModel):
     )
     receipts_valid: bool = Field(
         description=(
-            "Whether both graphs have successful receipts with one analyzer identity."
+            "Whether both graphs have valid receipts and matching stage specifications."
         )
     )
     plan_valid: bool = Field(
@@ -452,23 +595,29 @@ class PlanInspection(ProtocolModel):
 
 __all__ = [
     "Acceptance",
-    "CodeQLIdentity",
-    "CodeQLReceipt",
     "ChangeKind",
     "CheckState",
+    "CodeQLAnalysisReceipt",
+    "CodeQLExtractionSpec",
+    "CodeQLQuerySpec",
     "CommitId",
+    "DatabaseReceipt",
     "EdgeKind",
     "GateCheck",
+    "GraphReceipt",
     "Impact",
     "NodeId",
     "OneHop",
     "PlanCheck",
     "PlanInspection",
+    "QueryReceipt",
     "ResolvedContractTarget",
     "SourceEdge",
     "SourceGraph",
+    "SourceGraphFormat",
     "SourceNode",
     "SourceNodeKind",
     "SourceSnapshot",
     "TargetCheck",
+    "stage_key",
 ]

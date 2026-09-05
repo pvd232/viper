@@ -10,8 +10,7 @@ import tempfile
 from pathlib import Path
 
 import viper._subprocess as subprocess
-
-from .._contract_traceability import (
+from viper._contract_traceability import (
     ContractTarget,
     ContractTraceabilityGraph,
     PairBlock,
@@ -19,13 +18,14 @@ from .._contract_traceability import (
     RepoSymbolRef,
     compile_contract_plan,
 )
-from .._system_impact.codeql import IGNORED_PARTS, source_digest
-from .._system_impact.source import (
+from viper._system_impact.codeql import IGNORED_PARTS, source_digest
+from viper._system_impact.source import (
     SourceDeclarationError,
     declaration_payload,
     extract_declaration_bytes,
     import_binding,
 )
+
 from .models import (
     Acceptance,
     CommitId,
@@ -36,6 +36,7 @@ from .models import (
     SourceGraph,
     SourceNode,
     TargetCheck,
+    stage_key,
 )
 from .plan import IMPACT_EDGE_KINDS_V1, inspect_plan
 
@@ -344,7 +345,7 @@ def _run_gate(
 
 
 def _receipt_pair_is_valid(baseline: SourceGraph, realized: SourceGraph) -> bool:
-    def result_sha256(graph: SourceGraph) -> str:
+    def graph_sha256(graph: SourceGraph) -> str:
         return _sha256(
             _canonical_json(
                 {
@@ -354,14 +355,59 @@ def _receipt_pair_is_valid(baseline: SourceGraph, realized: SourceGraph) -> bool
             )
         )
 
+    try:
+        baseline = SourceGraph.model_validate(baseline.model_dump())
+        realized = SourceGraph.model_validate(realized.model_dump())
+    except ValueError:
+        return False
+    baseline_database = baseline.receipt.database
+    realized_database = realized.receipt.database
+    baseline_query = baseline.receipt.query
+    realized_query = realized.receipt.query
+    baseline_graph = baseline.receipt.graph
+    realized_graph = realized.receipt.graph
     return (
-        baseline.receipt.snapshot == baseline.snapshot
-        and realized.receipt.snapshot == realized.snapshot
-        and baseline.receipt.exit_code == 0
-        and realized.receipt.exit_code == 0
-        and baseline.receipt.result_sha256 == result_sha256(baseline)
-        and realized.receipt.result_sha256 == result_sha256(realized)
-        and baseline.identity == realized.identity
+        baseline_database.snapshot == baseline.snapshot
+        and realized_database.snapshot == realized.snapshot
+        and baseline_database.key
+        == stage_key(baseline.snapshot, baseline_database.extraction)
+        and realized_database.key
+        == stage_key(realized.snapshot, realized_database.extraction)
+        and baseline_query.key
+        == stage_key(
+            baseline_database.key,
+            baseline_database.sha256,
+            baseline_query.query,
+        )
+        and realized_query.key
+        == stage_key(
+            realized_database.key,
+            realized_database.sha256,
+            realized_query.query,
+        )
+        and baseline_graph.key
+        == stage_key(
+            baseline_query.key,
+            baseline_query.sha256,
+            baseline_graph.format,
+        )
+        and realized_graph.key
+        == stage_key(
+            realized_query.key,
+            realized_query.sha256,
+            realized_graph.format,
+        )
+        and baseline_database.exit_code == 0
+        and realized_database.exit_code == 0
+        and baseline_query.exit_code == 0
+        and realized_query.exit_code == 0
+        and baseline_graph.exit_code == 0
+        and realized_graph.exit_code == 0
+        and baseline_graph.sha256 == graph_sha256(baseline)
+        and realized_graph.sha256 == graph_sha256(realized)
+        and baseline_database.extraction == realized_database.extraction
+        and baseline_query.query == realized_query.query
+        and baseline_graph.format == realized_graph.format
         and baseline.snapshot.revision is not None
         and realized.snapshot.base_revision == baseline.snapshot.revision
     )
