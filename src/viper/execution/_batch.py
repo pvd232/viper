@@ -1,19 +1,12 @@
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-
 from pathlib import Path
 
 from ..runs import RunSpec
-
 from ..serialization import parse_yaml_bytes
-
-from ._run import run as execute_run
-
-from .errors import RunError
-
-from ._stage import StageExecutionError
-
 from ..verification.models import VerificationError
-
+from ._run import run as execute_run
+from ._stage import StageExecutionError
+from .errors import RunError
 from .results import (
     ExperimentExecutionResult,
     ExperimentRunFailure,
@@ -22,6 +15,7 @@ from .results import (
     RunResult,
 )
 
+
 def _load_run_spec(root: Path, path: Path) -> tuple[Path, RunSpec]:
     """Resolve and parse one batch input before starting any run."""
     selected = path if path.is_absolute() else root / path
@@ -29,6 +23,7 @@ def _load_run_spec(root: Path, path: Path) -> tuple[Path, RunSpec]:
     if not selected.is_relative_to(root):
         raise ValueError("run specification is outside the project root")
     return selected, RunSpec.model_validate(parse_yaml_bytes(selected.read_bytes()))
+
 
 def _failed_run(path: Path, spec: RunSpec, error: Exception) -> ExperimentRunResult:
     """Convert one expected run failure into its batch entry."""
@@ -50,6 +45,7 @@ def _failed_run(path: Path, spec: RunSpec, error: Exception) -> ExperimentRunRes
             message=str(error) or type(error).__name__,
         ),
     )
+
 
 def run_many(
     repository_root: Path,

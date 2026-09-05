@@ -1803,12 +1803,18 @@ The immutable evidence manifest is stored at Hugging Face commit
 
 ### 19.2 Bounded execution
 
-- [ ] Materialize and verify bounded batch execution.
+- [x] Materialize and verify bounded batch execution.
       <!-- pair-block: P12-EXP-02 -->
-      <!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=planned owner=src/viper/execution/_batch.py:run_many -->
-      <!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=planned test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
+      <!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=implemented owner=src/viper/execution/_batch.py:run_many -->
+      <!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=implemented test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
       <!-- implements: EXP-02 -->
       <!-- phase-produces: viper.execution.run_many -->
+
+**Evidence:** PlanCheck `6528499e8a317d1a2fafd240f594f370d4326a8a690ffbe9ff14a23ea919d31d`
+accepted implementation commit `a747fc85bb86954cbe1eb8d35c83275e41e24a47`.
+The immutable evidence manifest is stored at Hugging Face commit
+`6f04efe754eff5ce2e1419673ebb2e28c078413a` under
+`checks/6528499e8a317d1a2fafd240f594f370d4326a8a690ffbe9ff14a23ea919d31d/manifest.json`.
 
 ### 19.3 Typed API and CLI
 

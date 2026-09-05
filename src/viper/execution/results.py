@@ -1,18 +1,14 @@
 """Define the public results returned by complete run execution."""
 
 from pathlib import Path
-
-from pydantic import BaseModel, ConfigDict
-
-from ..benchmark import BenchmarkResult
-from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
-from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..benchmark import BenchmarkResult
 from ..ids import ReplicateId, RunId, VariantId
-
+from ..references import ResolvedBenchmarkResultRef, ResolvedRunRef
+from ..runs import ResolvedAttemptRef, ResolvedRun, RunAttempt
 
 
 class RunResult(BaseModel):
@@ -55,6 +51,7 @@ ExperimentRunFailureCode = Literal[
 
 ExperimentRunStatus = Literal["succeeded", "failed", "skipped"]
 
+
 class ExperimentRunFailure(BaseModel):
     """Describe why one run in a batch failed."""
 
@@ -62,6 +59,7 @@ class ExperimentRunFailure(BaseModel):
 
     code: ExperimentRunFailureCode
     message: str = Field(min_length=1)
+
 
 class ExperimentRunResult(BaseModel):
     """Retain one batch entry in its original input position."""
@@ -101,12 +99,14 @@ class ExperimentRunResult(BaseModel):
             raise ValueError("batch result fields differ from status")
         return self
 
+
 class ExperimentExecutionResult(BaseModel):
     """Return every batch result in input order."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     runs: tuple[ExperimentRunResult, ...] = Field(min_length=1)
+
 
 __all__ = [
     "BenchmarkExecutionResult",

@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import os
 import threading
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,6 +39,7 @@ from viper.artifacts import (
     StageArtifactRef,
 )
 from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
+from viper.execution import _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
 from viper.execution._attempt import execute_attempt
@@ -50,6 +52,7 @@ from viper.execution._run import execute_benchmark_confirmation
 from viper.execution._source import RunFetcher
 from viper.execution._stage import StageExecutionError, execute_stage_process
 from viper.execution.errors import RunError
+from viper.execution.results import RunResult
 from viper.experiments import (
     ExperimentSpec,
     ReplicateSpec,
@@ -98,12 +101,6 @@ from viper.storage import LocalArtifactStore
 from viper.verification import verify_run_result
 from viper.verification.models import VerificationError, VerificationPolicy
 from viper.workspace import AttemptWorkspace, captured_input_path
-import time
-
-from viper.execution import _batch
-
-from viper.execution.results import RunResult
-
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
@@ -1018,6 +1015,8 @@ def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
         line not in exception_lines for line in call_lines["verify_captured_inputs"]
     )
     assert "for reference in captured_inputs.values()" in source
+
+
 def test_run_many_retains_one_result_per_plan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
