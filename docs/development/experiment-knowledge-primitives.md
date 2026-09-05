@@ -1927,6 +1927,7 @@ class KnowledgePublicationResult(BaseModel):
 
 <!-- contract-target: requirements=EKP-01,EKP-02 block=P16-EKP-01 action=add target=src/viper/knowledge.py:_repository_lock -->
 ```python contract-target
+@contextmanager
 def _repository_lock(root: Path) -> Iterator[None]:
     """Reject concurrent knowledge-head writers with one exclusive lock file."""
     path = root / ".viper/knowledge/head.lock"
