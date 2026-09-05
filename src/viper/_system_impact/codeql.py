@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import shutil
+import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -786,6 +787,67 @@ def _run_query_suite(
     return _QueryStage(database=query_database, results=results, receipt=receipt)
 
 
+def _decode_query_results(
+    root: Path,
+    *,
+    results: _QueryStage,
+    executable: Path,
+    artifact_root: Path | None,
+) -> tuple[
+    dict[str, list[list[Any]]],
+    tuple[tuple[str, ...], ...],
+    str,
+]:
+    """Decode verified BQRS and optionally materialize publication evidence."""
+
+    def decode_to(
+        output_root: Path,
+    ) -> tuple[
+        dict[str, list[list[Any]]],
+        tuple[tuple[str, ...], ...],
+        str,
+    ]:
+        """Decode every result into one temporary or caller-owned directory."""
+        decoded: dict[str, list[list[Any]]] = {}
+        commands: list[tuple[str, ...]] = []
+        stderr_parts: list[bytes] = []
+        decoded_paths: list[Path] = []
+        for result in results.results:
+            decoded_path = output_root / f"{result.stem}.json"
+            command = (
+                str(executable),
+                "bqrs",
+                "decode",
+                str(result),
+                "--format=json",
+                f"--output={decoded_path}",
+            )
+            _, stderr = _run(command, cwd=root)
+            commands.append(command)
+            stderr_parts.extend((result.stem.encode(), stderr))
+            rows = _table_rows(json.loads(decoded_path.read_text(encoding="utf-8")))
+            rows.sort(
+                key=lambda row: json.dumps(
+                    row,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+            decoded[result.stem] = rows
+            decoded_paths.append(decoded_path)
+
+        if artifact_root is not None:
+            artifact_root.mkdir(parents=True, exist_ok=True)
+            for result in results.results:
+                shutil.copy2(result, artifact_root / result.name)
+            for decoded_path in decoded_paths:
+                shutil.copy2(decoded_path, artifact_root / decoded_path.name)
+        return decoded, tuple(commands), _hash_parts(stderr_parts)
+
+    with tempfile.TemporaryDirectory(prefix="viper-codeql-decode.") as directory:
+        return decode_to(Path(directory))
+
+
 def _lower_graph(
     root: Path,
     *,
@@ -797,40 +859,12 @@ def _lower_graph(
     results: _QueryStage,
     executable: Path,
     cache_root: Path,
-    artifact_root: Path,
+    artifact_root: Path | None,
 ) -> SourceGraph:
-    """Decode one query result set and convert it into a canonical graph."""
+    """Reuse or lower a graph and materialize evidence only when requested."""
     key = stage_key(results.receipt.key, results.receipt.sha256, format)
-    artifact_root.mkdir(parents=True, exist_ok=True)
-    artifact_results: list[Path] = []
-    for result in results.results:
-        artifact = artifact_root / result.name
-        shutil.copy2(result, artifact)
-        artifact_results.append(artifact)
     graph_root = cache_root / "graphs" / key
     graph_path = graph_root / "source-graph.json"
-
-    decoded: dict[str, list[list[Any]]] = {}
-    commands: list[tuple[str, ...]] = []
-    stderr_parts: list[bytes] = []
-    for result in artifact_results:
-        decoded_path = artifact_root / f"{result.stem}.json"
-        command = (
-            str(executable),
-            "bqrs",
-            "decode",
-            str(result),
-            "--format=json",
-            f"--output={decoded_path}",
-        )
-        _, stderr = _run(command, cwd=root)
-        commands.append(command)
-        stderr_parts.extend((result.stem.encode(), stderr))
-        rows = _table_rows(json.loads(decoded_path.read_text(encoding="utf-8")))
-        rows.sort(
-            key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":"))
-        )
-        decoded[result.stem] = rows
     if graph_path.is_file():
         try:
             graph = SourceGraph.model_validate_json(
@@ -845,8 +879,21 @@ def _lower_graph(
             and graph.receipt.graph.key == key
             and graph.receipt.graph.format == format
         ):
+            if artifact_root is not None:
+                _decode_query_results(
+                    root,
+                    results=results,
+                    executable=executable,
+                    artifact_root=artifact_root,
+                )
             return graph
 
+    decoded, commands, stderr_sha256 = _decode_query_results(
+        root,
+        results=results,
+        executable=executable,
+        artifact_root=artifact_root,
+    )
     try:
         declaration_rows = decoded["Declarations"]
         dependency_rows = decoded["Dependencies"]
@@ -873,9 +920,9 @@ def _lower_graph(
         format=format,
         key=key,
         sha256=graph_sha256,
-        commands=tuple(commands),
+        commands=commands,
         exit_code=0,
-        stderr_sha256=_hash_parts(stderr_parts),
+        stderr_sha256=stderr_sha256,
     )
     graph = SourceGraph(
         snapshot=snapshot,
@@ -904,7 +951,7 @@ def analyze_source(
     codeql_executable: Path,
     query_pack: Path,
     cache_root: Path,
-    artifact_root: Path,
+    artifact_root: Path | None = None,
 ) -> SourceGraph:
     """Extract, query, and lower one exact Python source tree."""
     root = snapshot_root.resolve()
@@ -942,7 +989,7 @@ def analyze_source(
         results=results,
         executable=codeql_executable,
         cache_root=cache_root.resolve(),
-        artifact_root=artifact_root.resolve(),
+        artifact_root=None if artifact_root is None else artifact_root.resolve(),
     )
 
 

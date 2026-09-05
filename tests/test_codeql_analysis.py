@@ -471,3 +471,99 @@ def test_candidate_pythonpath_spans_plan_check(
     with preflight._environment(PYTHONPATH="candidate"):
         assert os.environ["PYTHONPATH"] == "candidate"
     assert os.environ["PYTHONPATH"] == "before"
+
+
+def test_cached_graph_reuse_decodes_only_requested_artifacts(tmp_path: Path) -> None:
+    """Enforce codeql.graph.warm_reuse and explicit evidence materialization."""
+    root = tmp_path / "source"
+    _write_source(root)
+    query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
+    calls = tmp_path / "calls.jsonl"
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor, calls)
+    extraction, query, format = _specs(executable, extractor, query_pack)
+    snapshot = SourceSnapshot(
+        base_revision=_REVISION,
+        source_sha256=source_digest(root),
+        revision=None,
+    )
+    arguments = {
+        "snapshot_root": root,
+        "snapshot": snapshot,
+        "extraction": extraction,
+        "query": query,
+        "format": format,
+        "codeql_executable": executable,
+        "query_pack": query_pack,
+        "cache_root": tmp_path / "cache",
+    }
+
+    first = analyze_source(**arguments)
+    after_miss = [json.loads(line) for line in calls.read_text().splitlines()]
+    second = analyze_source(**arguments)
+    after_reuse = [json.loads(line) for line in calls.read_text().splitlines()]
+
+    assert first == second
+    assert sum(command[:2] == ["bqrs", "decode"] for command in after_miss) == 2
+    assert sum(command[:2] == ["bqrs", "decode"] for command in after_reuse) == 2
+
+    artifact_root = tmp_path / "artifacts"
+    third = analyze_source(**arguments, artifact_root=artifact_root)
+    after_evidence = [json.loads(line) for line in calls.read_text().splitlines()]
+
+    assert third == first
+    assert sum(command[:2] == ["bqrs", "decode"] for command in after_evidence) == 4
+    assert {path.name for path in artifact_root.iterdir()} == {
+        "Declarations.bqrs",
+        "Declarations.json",
+        "Dependencies.bqrs",
+        "Dependencies.json",
+    }
+
+
+def test_requested_artifacts_reject_decode_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Enforce codeql.evidence.requested when a cached graph cannot be decoded."""
+    root = tmp_path / "source"
+    _write_source(root)
+    query_pack = Path(__file__).parents[1] / "tools/codeql/viper-python-impact"
+    calls = tmp_path / "calls.jsonl"
+    extractor = tmp_path / "extractor"
+    executable = _write_fake_codeql(tmp_path / "codeql", extractor, calls)
+    extraction, query, format = _specs(executable, extractor, query_pack)
+    snapshot = SourceSnapshot(
+        base_revision=_REVISION,
+        source_sha256=source_digest(root),
+        revision=None,
+    )
+    arguments = {
+        "snapshot_root": root,
+        "snapshot": snapshot,
+        "extraction": extraction,
+        "query": query,
+        "format": format,
+        "codeql_executable": executable,
+        "query_pack": query_pack,
+        "cache_root": tmp_path / "cache",
+    }
+    analyze_source(**arguments)
+    original_run = codeql._run
+
+    def fail_decode(
+        command: tuple[str, ...],
+        *,
+        cwd: Path,
+    ) -> tuple[bytes, bytes]:
+        if command[1:3] == ("bqrs", "decode"):
+            raise CodeQLAnalysisError(
+                "CodeQL command failed (bqrs decode): forced failure"
+            )
+        return original_run(command, cwd=cwd)
+
+    monkeypatch.setattr(codeql, "_run", fail_decode)
+    artifact_root = tmp_path / "artifacts"
+    with pytest.raises(CodeQLAnalysisError, match="CodeQL command failed"):
+        analyze_source(**arguments, artifact_root=artifact_root)
+    assert not artifact_root.exists()
