@@ -12,14 +12,10 @@ from tests._documentation import (
     IMPLEMENTATION_CONTRACTS,
     MASTER_EXECUTION_CHECKLIST,
     ROOT,
-    class_bases,
-    class_fields,
     decoded_local_link,
-    definitions,
     dotted_name,
     github_anchors,
     local_links,
-    normalized,
     python_blocks,
 )
 from viper.api import OPERATIONS
@@ -186,51 +182,6 @@ PUBLIC_MARKDOWN = (
     ROOT / "tests/README.md",
 )
 
-PROTOCOL_MODULES = (
-    "_schema.py",
-    "parameters.py",
-    "references.py",
-    "artifacts.py",
-    "inputs.py",
-    "stages.py",
-    "runtime.py",
-    "resume.py",
-    "metrics.py",
-    "experiments.py",
-    "runs.py",
-    "benchmark.py",
-    "http.py",
-)
-
-PROTOCOL_ALIASES = {
-    "ArtifactSpec",
-    "AttemptFailureCode",
-    "AttemptPurpose",
-    "AttemptStatus",
-    "ComputeBackendContext",
-    "ComputeSpec",
-    "DataRole",
-    "EnvironmentSpec",
-    "GeneratorFamily",
-    "GCEProvisioningRef",
-    "HostContext",
-    "HttpImplementationSpec",
-    "InputRef",
-    "MetricKind",
-    "MetricMode",
-    "ParameterizedStageSpec",
-    "ResolvedArtifact",
-    "ResolvedEnvironment",
-    "ResolvedInputRef",
-    "ResolvedSpec",
-    "Spec",
-    "StageResultSnapshot",
-    "StartupVariable",
-    "StorageModel",
-    "StorageRef",
-    "VariantStageParams",
-}
-
 
 def _complete_authoring_blocks() -> tuple[str, ...]:
     """Return the marked end-to-end authoring and execution blocks."""
@@ -241,70 +192,14 @@ def _complete_authoring_blocks() -> tuple[str, ...]:
     return blocks
 
 
-def _protocoldefinitions() -> tuple[dict[str, ast.ClassDef], dict[str, ast.AST]]:
-    """Collect the classes and aliases shown in the formal protocol."""
-    classes: dict[str, ast.ClassDef] = {}
-    aliases: dict[str, ast.AST] = {}
-    for block in python_blocks(PROTOCOL.read_text()):
-        tree = ast.parse(block, filename=str(PROTOCOL))
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                if node.name in classes:
-                    raise AssertionError(f"duplicate protocol class: {node.name}")
-                classes[node.name] = node
-            elif isinstance(node, ast.Assign) and len(node.targets) == 1:
-                target = node.targets[0]
-                if isinstance(target, ast.Name):
-                    aliases[target.id] = node.value
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                if node.value is not None:
-                    aliases[node.target.id] = node.value
-    return classes, aliases
+def test_protocol_uses_live_schemas_instead_of_repeated_source_models() -> None:
+    """Keep exact protocol fields owned by the installed schema registry."""
+    text = PROTOCOL.read_text(encoding="utf-8")
 
-
-def test_protocol_class_fields_match_their_defining_modules() -> None:
-    """Require every repeated protocol class to show exact current fields."""
-    source_paths = tuple(ROOT / "src/viper" / name for name in PROTOCOL_MODULES)
-    source_classes, _ = definitions(source_paths)
-    protocol_classes, _ = _protocoldefinitions()
-    repeated = source_classes.keys() & protocol_classes.keys()
-
-    assert len(repeated) >= 45
-    mismatches = {
-        name: (
-            (class_bases(source_classes[name]), class_fields(source_classes[name])),
-            (
-                class_bases(protocol_classes[name]),
-                class_fields(protocol_classes[name]),
-            ),
-        )
-        for name in sorted(repeated)
-        if (
-            class_bases(source_classes[name]),
-            class_fields(source_classes[name]),
-        )
-        != (
-            class_bases(protocol_classes[name]),
-            class_fields(protocol_classes[name]),
-        )
-    }
-    assert mismatches == {}
-
-
-def test_protocol_type_aliases_match_their_defining_modules() -> None:
-    """Require claim-bearing protocol unions to match their source aliases."""
-    source_paths = tuple(ROOT / "src/viper" / name for name in PROTOCOL_MODULES)
-    _, source_aliases = definitions(source_paths)
-    _, protocol_aliases = _protocoldefinitions()
-
-    assert PROTOCOL_ALIASES <= source_aliases.keys()
-    assert PROTOCOL_ALIASES <= protocol_aliases.keys()
-    mismatches = {
-        name: (normalized(source_aliases[name]), normalized(protocol_aliases[name]))
-        for name in sorted(PROTOCOL_ALIASES)
-        if normalized(source_aliases[name]) != normalized(protocol_aliases[name])
-    }
-    assert mismatches == {}
+    assert "viper --json schema RunSpec" in text
+    assert "viper --json capabilities" in text
+    assert "../internal/foundational-reproducibility-formalism.md" in text
+    assert not python_blocks(text)
 
 
 def test_protocol_uses_renderer_safe_math_fences() -> None:
@@ -376,13 +271,14 @@ def test_target_contracts_use_env_identifiers() -> None:
         )
         for path in IMPLEMENTATION_CONTRACTS
     )
-    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
     target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
 
     assert TARGET_ENV_IDENTIFIERS - target_identifiers == set()
     assert 'kind: Literal["env"] = "env"' in full_contract_text
     assert 'kind: Literal["environment"] = "environment"' not in contract_text
-    assert all(name in checklist for name in TARGET_ENV_IDENTIFIERS)
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    assert "[Automatic input resolution](automatic-input-resolution.md)" in checklist
+    assert "[Frozen plan Git identity](frozen-plan-git-identity.md)" in checklist
 
 
 def test_target_contracts_use_eval_identifiers() -> None:
@@ -400,7 +296,6 @@ def test_target_contracts_use_eval_identifiers() -> None:
         )
         for path in EVAL_VOCABULARY_CONTRACTS
     )
-    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
     target_identifiers = set(re.findall(r"\b[A-Za-z_]\w*\b", contract_text))
 
     assert TARGET_EVAL_IDENTIFIERS - target_identifiers == set()
@@ -413,7 +308,8 @@ def test_target_contracts_use_eval_identifiers() -> None:
     assert "artifacts/evaluations/" not in contract_text
     assert "eval_id" in target_identifiers
     assert "evaluation_id" not in target_identifiers
-    assert all(name in checklist for name in TARGET_EVAL_IDENTIFIERS)
+    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
+    assert "[Unified metric drafting](unified-metric-drafting.md)" in checklist
 
 
 def test_complete_authoring_example_uses_env_keywords() -> None:
@@ -655,14 +551,14 @@ def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
     assert documented == expected
 
 
-def test_changelog_starts_with_the_package_version() -> None:
-    """Keep the first changelog release aligned with package metadata."""
+def test_changelog_names_the_package_version_after_unreleased() -> None:
+    """Keep active work above the current released package entry."""
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text())
     package_version = metadata["project"]["version"]
-    first_release = re.search(r"^## ([^ ]+)", (ROOT / "CHANGELOG.md").read_text(), re.M)
+    headings = re.findall(r"^## ([^\n]+)", (ROOT / "CHANGELOG.md").read_text(), re.M)
 
-    assert first_release is not None
-    assert first_release.group(1) == package_version
+    assert headings[0] == "Unreleased"
+    assert headings[1].startswith(package_version)
 
 
 def test_explanation_names_the_current_release() -> None:
@@ -676,13 +572,13 @@ def test_explanation_names_the_current_release() -> None:
 
 
 def test_public_examples_distinguish_weights_from_the_artifact_key() -> None:
-    """Keep tutorial vocabulary clear without changing the protocol artifact name."""
+    """Keep the example's model path tied to its declared artifact key."""
     public_text = "\n".join(
         _TRACEABILITY_MODEL_FENCE.sub("", path.read_text()) for path in PUBLIC_MARKDOWN
     )
 
-    assert 'weights_path = context.artifacts["parameters"]' in public_text
-    assert "parameters_path" not in public_text
+    assert 'model = context.artifacts["model"]' in public_text
+    assert 'context.artifacts["weights"]' not in public_text
 
 
 def test_training_examples_name_the_project_owned_training_function() -> None:
@@ -715,6 +611,7 @@ def test_public_guides_import_modules_owned_by_the_api_reference() -> None:
         ROOT / "CONTRIBUTING.md",
         *sorted((ROOT / "docs/reference").glob("*.md")),
         *sorted((ROOT / "docs/tutorials").rglob("*.md")),
+        *sorted((ROOT / "docs/how-to").rglob("*.md")),
         *sorted((ROOT / "docs/explanation").rglob("*.md")),
         *sorted((ROOT / "examples").rglob("*.md")),
         ROOT / "tests/README.md",
@@ -799,7 +696,6 @@ def test_public_workflow_uses_target_api() -> None:
         "viper.execution.restore",
     }
     retired = {
-        "freeze-run",
         "freeze_run_plan",
         "DownloadContext",
         "download_stage",
@@ -808,3 +704,52 @@ def test_public_workflow_uses_target_api() -> None:
 
     assert required <= {name for name in required if name in text}
     assert retired.isdisjoint({name for name in retired if name in text})
+
+
+def test_documentation_navigation_separates_reader_and_internal_routes() -> None:
+    """Keep one complete public path and one explicit internal doorway."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    home = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    tutorial = (ROOT / "docs/tutorials/getting-started.md").read_text(encoding="utf-8")
+    explanation = (ROOT / "docs/explanation/how-viper-works.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "[documentation home](docs/README.md)" in readme
+    for heading in (
+        "## Tutorial",
+        "## How-to guides",
+        "## Explanation",
+        "## Reference",
+        "## Contributing and internal engineering",
+    ):
+        assert home.count(heading) == 1
+
+    required_routes = (
+        "tutorials/getting-started.md",
+        "how-to/inputs.md",
+        "how-to/metrics-and-benchmarks.md",
+        "how-to/variants-and-replicates.md",
+        "how-to/retry-restore-compare.md",
+        "how-to/catalog-knowledge-mcp.md",
+        "how-to/troubleshooting.md",
+        "explanation/how-viper-works.md",
+        "explanation/guarantees.md",
+        "reference/README.md",
+        "internal/README.md",
+    )
+    assert all(home.count(route) == 1 for route in required_routes)
+
+    internal_contracts = (
+        "automatic-input-resolution.md",
+        "remote-storage.md",
+        "system-impact-compiler.md",
+        "unified-metric-drafting.md",
+    )
+    assert all(contract not in home for contract in internal_contracts)
+
+    workflow = tutorial + explanation
+    assert workflow.count("../../examples/cpu_quickstart.py") >= 2
+    assert "execution.run()" in workflow
+    assert "viper.parameters" not in workflow
+    assert "viper.api.run" not in workflow

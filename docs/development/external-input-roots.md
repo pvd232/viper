@@ -22,7 +22,7 @@ attempt-owned input file, supplies that file to the stage, and records it in
 
 ## 1. Status
 
-**Contract status:** In progress; Phase 3 implemented; EIR-04 and EIR-05 scheduled.
+**Contract status:** Complete.
 
 These requirements bind the contract to the master checklist:
 

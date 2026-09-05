@@ -14,14 +14,14 @@ stage, and run documents without requiring a public freezing step.
 
 ## 1. Status
 
-**Contract status:** in progress.
+**Contract status:** Complete.
 
 These requirements bind the contract to the master checklist:
 
 | ID | Implementation obligation |
 | --- | --- |
 | UMD-01 <!-- contract-requirement: UMD-01 phase=4 test=tests/test_metric_interface.py --> | Add metric drafts, objective drafts, criterion drafts, and their public constructors. |
-| UMD-02 <!-- contract-requirement: UMD-02 phase=4 test=tests/test_metric_provenance.py --> | Dein_stager frozen parameter classes and values to in_stage and recomputed metrics while reusing existing dependency snapshots. |
+| UMD-02 <!-- contract-requirement: UMD-02 phase=4 test=tests/test_metric_provenance.py --> | Deliver frozen parameter classes and values to in-stage and recomputed metrics while reusing existing dependency snapshots. |
 | UMD-03 <!-- contract-requirement: UMD-03 phase=4 test=tests/test_verification.py --> | Persist objective identity and direction and enforce stage-specific objective rules. |
 | UMD-04 <!-- contract-requirement: UMD-04 phase=6 test=tests/test_authoring.py --> | Add experiment, factor, variant, and replicate drafting with a derived metric registry; generate an immutable run identity; recursively freeze each returned plan; and compile it internally when execution begins. |
 | UMD-05 <!-- contract-requirement: UMD-05 phase=8 test=tests/test_benchmark_execution.py --> | Record every benchmark metric under fixed inputs and apply optional criteria. |
@@ -74,7 +74,7 @@ metric result.
 ## 2. Required claim
 
 When a user selects a configured metric as a stage objective, diagnostic, or
-benchmark measurement, VIPER freezes one exact `MetricSpec`, dein_stagers its
+benchmark measurement, VIPER freezes one exact `MetricSpec`, delivers its
 validated parameters to the metric implementation, records each produced
 value, and verifies every recomputed value from its declared files.
 
@@ -567,7 +567,7 @@ def bind_live_metric(
 ```
 
 One shared `MetricContext` gives both modes the same invocation context and
-parameter-dein_stagery rule.
+parameter-delivery rule.
 
 The alternatives fail at a specific boundary:
 
@@ -577,7 +577,7 @@ The alternatives fail at a specific boundary:
 | Decorate a factory that returns a configured metric | Parameters stay inside the returned callable | The returned closure can capture unrecorded values, and its generated identity is harder to bind to one source symbol. |
 | Permit custom parameters only on `StatefulMetric` classes | Constructor dein_stagery is simple | A stateless calculation must become a class solely to receive parameters. |
 | Store parameters on `MetricHandle.params` | Preserves the current metric function signature | Stage code must manually read and forward the values, so the metric invocation itself lacks a required parameter handoff. |
-| Add `in_stageMetricContext` | Makes the mode visible in the type | It duplicates the role already carried by `MetricContext` and creates two parameter-dein_stagery APIs. |
+| Add a second metric-context type | Makes the mode visible in the type | It duplicates the role already carried by `MetricContext` and creates two parameter-delivery APIs. |
 
 ### Frozen metric records
 
@@ -1432,7 +1432,7 @@ a `ParameterModelRef` for that exact class. The built-in class uses
 the named source root, checks the source digest and byte count, loads the
 symbol, and reconstructs the instance from `MetricSpec.params`.
 
-### `metric.in_stage.parameter_dein_stagery`
+### `metric.in_stage.parameter_delivery`
 
 The stage worker validates `MetricSpec.params` through the frozen parameter
 class. The `MetricContext.params` object supplied by `MetricHandle` equals that
@@ -1594,7 +1594,7 @@ The superseded behavior has these dispositions:
 | `MetricKind` and the decorator's `kind=` argument | Delete them. The stage's `objective=` or `metrics=` field records the metric's role; `MetricMode` records when VIPER calculates it. |
 | Public examples that construct `MetricImplementationRef` and `MetricSpec` | Replace with `@viper.metrics.metric` and `viper.metrics.measure()`. |
 | Python stage authoring that accepts `metric_ids=` | Replace with `objective=` and `metrics=`. |
-| Proposed `in_stageMetricContext` | Delete; `MetricContext` serves both modes. |
+| Proposed second metric-context type | Delete; `MetricContext` serves both modes. |
 | in_stage metric functions whose first parameter is an observation | Add `MetricContext` first and update `MetricHandle`. |
 | Parameterless `StatefulMetric` subclasses | Replace constructors with `MetricContext`. |
 | Manual `ExperimentSpec` and `VariantSpec` construction in public examples | Replace with `viper.authoring.experiment()`, `viper.authoring.variant()`, and `viper.authoring.replicate()`. |
@@ -1771,10 +1771,10 @@ Adding `DownloadVariantStageParams` fails `experiment.variant.parameters`.
 ### Targeted rejections
 
 Changing an in_stage metric parameter after compilation fails
-`metric.in_stage.parameter_dein_stagery`.
+`metric.in_stage.parameter_delivery`.
 
 Changing `StageInvocationReceipt.context.metric_ids` while retaining the old
-measurement fails `metric.in_stage.parameter_dein_stagery`.
+measurement fails `metric.in_stage.parameter_delivery`.
 
 Removing the metric decorator metadata fails `metric.definition.binding`.
 
@@ -1810,7 +1810,7 @@ existing benchmark input-identity checks before execution.
 - [ ] Compare parameter-model references during parameter reconstruction and
       recomputation verification.
 - [ ] Make `MetricContext` generic.
-- [ ] Dein_stager `MetricContext` through in_stage functions and stateful constructors.
+- [ ] Deliver `MetricContext` through in-stage functions and stateful constructors.
 - [ ] Join in_stage measurements to
       `StageInvocationReceipt.context.metric_ids`, frozen stage `metric_ids`,
       and `ExperimentSpec.metrics` during verification.
@@ -8266,7 +8266,7 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
         selected.benchmark.splits["new"] = prior
 ```
 
-### Phase 8 propagation
+### Master Phase 8 propagation
 
 **File: tests/test_generated_project_acceptance.py**
 

@@ -226,11 +226,11 @@ Each workflow starts from a verified run or an immutable plan:
 | Goal | Public interface | Guide |
 | --- | --- | --- |
 | Author and execute a plan | `viper.authoring.plan()` and `viper.execution.run()` | [Get started](docs/tutorials/getting-started.md) |
-| Retry a failed run | `viper.execution.retry()` or `viper retry` | [Python and CLI API](docs/reference/api.md#python-execution) |
+| Retry a failed run | `viper.execution.retry()` or `viper retry` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Confirm a benchmark | `viper.execution.benchmark()` | [How VIPER works](docs/explanation/how-viper-works.md) |
-| Restore verified artifacts | `viper.execution.restore()` | [Python and CLI API](docs/reference/api.md#python-execution) |
-| Inspect lineage or compare runs | `viper lineage` and `viper compare-runs` | [Python and CLI API](docs/reference/api.md#json-cli) |
-| Search completed measurements | `viper catalog-refresh` and `viper search-measurements` | [Python and CLI API](docs/reference/api.md#json-cli) |
+| Restore verified artifacts | `viper.execution.restore()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
+| Inspect lineage or compare runs | `viper lineage` and `viper compare-runs` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
+| Search completed measurements | `viper catalog-refresh` and `viper search-measurements` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
 | Give an agent typed access | `viper mcp --root .` | [How VIPER works](docs/explanation/how-viper-works.md) |
 
 Place `--json` before a CLI command when another program needs one typed result
@@ -243,12 +243,14 @@ viper --json verify-run path/to/resolved.yaml \
 
 ## Documentation
 
-- [Get started](docs/tutorials/getting-started.md)
-- [Python and CLI API](docs/reference/api.md)
-- [How VIPER works](docs/explanation/how-viper-works.md)
-- [Formal protocol](docs/reference/protocol.md)
-- [Versioning policy](docs/reference/versioning.md)
-- [Contributing](CONTRIBUTING.md)
+Use the [documentation home](docs/README.md) to choose a tutorial, a task-focused
+guide, an explanation, or reference material.
+
+- New to VIPER: [build and run the CPU quickstart](docs/tutorials/getting-started.md).
+- Solving a specific task: open the [how-to guides](docs/README.md#how-to-guides).
+- Understanding the evidence model: read [how VIPER works](docs/explanation/how-viper-works.md).
+- Looking up an interface: open the [reference index](docs/reference/README.md).
+- Changing VIPER itself: read [Contributing](CONTRIBUTING.md).
 
 ## License
 

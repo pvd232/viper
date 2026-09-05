@@ -26,7 +26,7 @@ selected artifact supplies the later stage's input bytes.
 
 ## 1. Status
 
-**Contract status:** In progress; Phase 2 implemented; DRA-06 planned for Master Phase 11.
+**Contract status:** Complete.
 
 These requirements bind the contract to the master checklist:
 

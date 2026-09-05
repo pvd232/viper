@@ -78,7 +78,7 @@
         "DRA-05",
         "DRA-06"
       ],
-      "sha256": "50265270014ad58b8b783fbd4dd8f42b0966437a96bf44b89967e7f87c5d383d"
+      "sha256": "aba011e4be7daf48e051658ddbac7f5c4eb3c85ba2719fc0480956b237c29bf6"
     },
     {
       "path": "docs/development/external-input-roots.md",
@@ -89,7 +89,7 @@
         "EIR-04",
         "EIR-05"
       ],
-      "sha256": "2c11894b726f54cad9985233e80da2ae24070ef77fbebfbfd0c500914567b115"
+      "sha256": "cbb460eda8a01c2ded3f0110eeafa7c3ec96ae591fe612f7ae3a8210b6b84608"
     },
     {
       "path": "docs/development/unified-metric-drafting.md",
@@ -101,7 +101,7 @@
         "UMD-05",
         "UMD-06"
       ],
-      "sha256": "c262a8fdd4cd739cda29c0d675f512b6842bc5bb959d7c31c1b6c145541cd348"
+      "sha256": "8d09105874f84da9be1286556f96fe0c5f344dc3f345690758b49b541224bdcf"
     },
     {
       "path": "docs/development/automatic-input-resolution.md",
@@ -113,7 +113,7 @@
         "AIR-05",
         "AIR-06"
       ],
-      "sha256": "c9912e6eac8928d3e31a63d805c1a2241617c232f46df5206dfa47ade1d78e78"
+      "sha256": "087476b66bff497c930ea400633fd386f7183e10051409c47c71f41bf3f1397b"
     },
     {
       "path": "docs/development/frozen-plan-git-identity.md",
@@ -139,7 +139,7 @@
         "RSP-08",
         "RSP-09"
       ],
-      "sha256": "cd76a1b8a8598ddc433a819becd25b723c385e322a274e6870cadc1903b15add"
+      "sha256": "9830116d1f9b79d70435585ec31abfa68b4014fae3aeea56a2100cf1ce5f8582"
     },
     {
       "path": "docs/development/experiment-expansion.md",
@@ -148,7 +148,7 @@
         "EXP-02",
         "EXP-03"
       ],
-      "sha256": "70eefab50108154599cbfea319f11ecf4704a634fe113a8922a0638b35fe8cdb"
+      "sha256": "0b790695cd69773ab1bc1a04439e8c0dc78536863dd5a71e236d36d846eefbf9"
     },
     {
       "path": "docs/development/provenance-catalog-mcp.md",
@@ -161,7 +161,7 @@
         "PCM-06",
         "PCM-07"
       ],
-      "sha256": "2d5ea1a8935698dcdd5f6ffd4a6630b28bb16dd3a18431276a367dd26570830d"
+      "sha256": "6c199872ce40a5d4e3d17851f0a5e605db9b0727681dd1268bb199fed3d05cdf"
     },
     {
       "path": "docs/development/stage-reuse.md",
@@ -171,7 +171,7 @@
         "SRU-03",
         "SRU-04"
       ],
-      "sha256": "26000d5e106167f3d3ac2bd4d93bb7265a6fa4576c6acd11f8997a419d52bf23"
+      "sha256": "0f0eea9930d560033d5e96827ee9d35c735c80b48a75d0fcffeee236c150c063"
     },
     {
       "path": "docs/development/experiment-knowledge-primitives.md",
@@ -181,7 +181,7 @@
         "EKP-03",
         "EKP-04"
       ],
-      "sha256": "690a2b037130a31ce0d6dd7637a68ab1c2e4fb02a629065a15d2902a919ef374"
+      "sha256": "4329ebfc679eb4b9fe2a6d447e10f5e8d7f5da7a8fa527ed19776ff2eb2f879e"
     },
     {
       "path": "docs/development/research-memory-roadmap.md",

@@ -1,43 +1,50 @@
 # VIPER documentation
 
-Start with the task you need to complete.
+Choose the kind of help you need. The tutorial teaches one complete workflow;
+how-to guides solve a specific task; explanations describe why the system works;
+reference pages define exact interfaces and records.
 
-## Learn and use VIPER
+## Tutorial
 
-| Document | Use it to |
+[Build your first experiment](tutorials/getting-started.md) runs the checked CPU
+example, shows what VIPER writes, and gives you a small project to modify.
+
+## How-to guides
+
+| Task | Guide |
 | --- | --- |
-| [Getting started](tutorials/getting-started.md) | Install VIPER, create a project, and run the primary commands |
-| [How VIPER works](explanation/how-viper-works.md) | Follow one experiment from its frozen plan through terminal verification |
-| [API reference](reference/api.md) | Call the Python interface, typed operations, CLI, and discovery endpoints |
+| Supply files or download data | [Load local and HTTP inputs](how-to/inputs.md) |
+| Record measurements and acceptance criteria | [Define metrics and benchmarks](how-to/metrics-and-benchmarks.md) |
+| Generate and execute several runs | [Run variants and replicates](how-to/variants-and-replicates.md) |
+| Recover or inspect completed work | [Retry, restore, and compare runs](how-to/retry-restore-compare.md) |
+| Search evidence or expose it to an agent | [Use the catalog, knowledge store, and MCP](how-to/catalog-knowledge-mcp.md) |
+| Diagnose a failed command or run | [Troubleshoot VIPER](how-to/troubleshooting.md) |
 
-## Protocol and compatibility
+## Explanation
 
-| Document | Authority |
-| --- | --- |
-| [Formal protocol](reference/protocol.md) | Serialized documents, identities, state transitions, and verification relationships |
-| [Versioning policy](reference/versioning.md) | Package, schema, and compatibility rules |
+- [How VIPER works](explanation/how-viper-works.md) follows the checked CPU
+  example from Python source to a verified terminal result.
+- [What VIPER guarantees](explanation/guarantees.md) separates recorded identity,
+  execution evidence, and verification from claims VIPER does not make.
 
-## Develop and release VIPER
+## Reference
 
-| Document | Use it to |
-| --- | --- |
-| [Contributing guide](../CONTRIBUTING.md) | Set up the repository and submit a validated change |
-| [Testing guide](development/testing.md) | Select a test tier, domain, CI gate, or live CUDA check |
-| [Contract implementation guide](development/master-execution-checklist.md) | Review and build the contracts in dependency order with pair-coding hints and acceptance gates |
-| [Contract Traceability](development/contract-traceability.md) | Link each contract requirement to its verifier rule, implementation owner, and acceptance test |
-| [Project data root contract](development/project-data-root.md) | Bind initialization, protocol paths, local storage, and later commands to one selected project root |
-| [System Impact Check](development/system-impact-compiler.md) | Compare one closed CTG plan with pinned CodeQL observations before and after implementation |
-| [PairBlock scheduling](development/pair-block-scheduling.md) | Derive dependency-safe parallel execution waves from approved PairBlocks and CodeQL source edges |
-| [CodeQL graph cache reuse](development/codeql-graph-cache-reuse.md) | Reuse a verified source graph while skipping publication decoding on the search path |
-| [CodeQL impact observations](development/codeql-impact-observations.md) | Track whether typed one-hop reports add actionable dependencies during contract execution |
-| [Child-process launching](development/child-process-launching.md) | Start repository-owned child processes without calling `fork()` from an initialized macOS process |
-| [Research Memory and Agent Learning](development/research-memory-roadmap.md) | Record auditable research episodes, curate leakage-safe learning data, evaluate policy changes, and connect literature through the full MCP layout |
-| [Research Memory Pair-Coding Guide](development/research-memory-pair-coding.md) | Implement Master Phases 18–20 through bounded, tested PairBlocks |
-| [Download retrieval contract](development/download-retrieval-artifacts.md) | Make each verified HTTP body the same-named stage artifact |
-| [External input roots contract](development/external-input-roots.md) | Capture local roots and connect HTTP artifacts to later consumers |
-| [Automatic input resolution contract](development/automatic-input-resolution.md) | Compile Python stage drafts and artifact selections into frozen plans |
-| [Frozen plan Git identity contract](development/frozen-plan-git-identity.md) | Bind generated plan YAML and project source to separate Git commits |
-| [Unified metric drafting contract](development/unified-metric-drafting.md) | Implement metric, objective, experiment, and benchmark Python authoring |
-| [Direct Viper Cloud publication contract](development/remote-storage.md) | Publish immutable evidence locally or directly to Viper Cloud and restore artifacts |
-| [0.1.0a2 release evidence](releases/0.1.0a2.md) | Inspect the current public distributions, registry attestations, clean installations, and NVIDIA L4 validation |
-| [0.1.0a1 release evidence](releases/0.1.0a1.md) | Inspect the first public distribution and live NVIDIA L4 validation |
+The [reference index](reference/README.md) routes to the Python API, CLI,
+configuration, formal protocol, and versioning policy.
+
+## Contributing and internal engineering
+
+- [Contributing](../CONTRIBUTING.md) covers repository setup and change delivery.
+- [Testing VIPER](development/testing.md) defines the validation tiers and domains.
+- [Internal engineering index](internal/README.md) is the single entry point for
+  executable contracts, the master checklist, architecture plans, and release
+  evidence. These documents govern VIPER development; they are not user guides.
+
+## Validate these docs
+
+From the repository root, with `.venv` active:
+
+```bash
+python -m pytest tests/test_readme_workflow.py -q
+python -m pytest tests/test_documentation.py -q -k documentation_navigation
+```

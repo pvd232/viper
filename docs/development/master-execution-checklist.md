@@ -291,7 +291,7 @@ is complete only when every mapped PairBlock and requirement is complete.
 | [Frozen plan Git identity](frozen-plan-git-identity.md) | Complete | Immutable generated plans with source code kept on its source commit |
 | [Direct Viper Cloud publication](remote-storage.md) | Complete | Destination-neutral publication, cloud references, retrieval, and restore |
 | [Experiment expansion](experiment-expansion.md) | Complete | Deterministic variant-replicate expansion and bounded multi-run execution |
-| [Provenance catalog and MCP](provenance-catalog-mcp.md) | In progress; Phase 13 implemented; Phase 15 planned | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
+| [Provenance catalog and MCP](provenance-catalog-mcp.md) | In progress; Phases 13 and 15 implemented; PCM-06 and PCM-07 planned for Phase 20 | Rebuildable cross-run search and a typed MCP adapter over VIPER operations |
 | [Verified stage reuse](stage-reuse.md) | Complete | Opt-in stage skipping with a canonical key, source evidence, and a new target snapshot |
 | [Experiment knowledge primitives](experiment-knowledge-primitives.md) | Complete | Versioned scientific labels, controlled comparisons, diagnostic signatures, journals, and knowledge search |
 | [Research Memory and Agent Learning](research-memory-roadmap.md) | Planned; owner approval pending | Research episodes, adaptive experiment selection, learning datasets, policy evaluation and promotion, literature evidence, and the research-facing MCP surface |
@@ -1746,6 +1746,8 @@ artifacts.
 - [x] Execute `P11-AIR-01`: update the generated project and public workflow,
       then pass both focused acceptance tests. <!-- pair-block: P11-AIR-01 -->
       <!-- pair-block-contract: P11-AIR-01 contract=automatic-input-resolution.md -->
+      <!-- implements: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
+      <!-- verifies: DRA-06, EIR-05, UMD-06, AIR-06, RSP-09 -->
       <!-- contract-implementation: requirement=DRA-06 rule=download.docs.current state=implemented owner=src/viper/project.py:_project_files -->
       <!-- contract-verification: requirement=DRA-06 rule=download.docs.current state=implemented test=tests/test_documentation.py:test_public_workflow_uses_target_api -->
       <!-- contract-implementation: requirement=EIR-05 rule=input.docs.current state=implemented owner=src/viper/project.py:_project_files -->
@@ -1773,6 +1775,17 @@ python -m pytest \
 
 **Commit boundary:** `Publish the Python-authored VIPER workflow`
 
+### 18.1 Documentation architecture repair
+
+- [x] Rebuild the public documentation routes around the executed CPU
+      quickstart and place executable contracts behind one internal engineering
+      index. See [Documentation Architecture](documentation-architecture.md).
+
+```bash
+python -m pytest tests/test_readme_workflow.py -q
+python -m pytest tests/test_documentation.py -q -k documentation_navigation
+```
+
 ## 19. Master Phase 12 — experiment expansion and bounded execution
 
 **Depends on:** Master Phase 11.
@@ -1792,6 +1805,7 @@ limit.
       <!-- contract-verification: requirement=EXP-01 rule=experiment.expansion.canonical state=implemented test=tests/test_authoring.py:test_experiment_expansion_is_canonical -->
       <!-- phase-produces: viper.authoring.expand -->
       <!-- implements: EXP-01 -->
+      <!-- verifies: EXP-01 -->
 
 **Evidence:** PlanCheck `b90637e20e6559033341bbecdcdac322f3fe7a83c0cdcae619b6fa09fcab0535`
 accepted implementation commit `f086dc9adbc678d6cada62a7034986796420a84f`.
@@ -1807,6 +1821,7 @@ The immutable evidence manifest is stored at Hugging Face commit
       <!-- contract-implementation: requirement=EXP-02 rule=experiment.batch.complete state=implemented owner=src/viper/execution/_batch.py:run_many -->
       <!-- contract-verification: requirement=EXP-02 rule=experiment.batch.complete state=implemented test=tests/test_run_execution.py:test_run_many_retains_one_result_per_plan -->
       <!-- implements: EXP-02 -->
+      <!-- verifies: EXP-02 -->
       <!-- phase-produces: viper.execution.run_many -->
 
 **Evidence:** PlanCheck `6528499e8a317d1a2fafd240f594f370d4326a8a690ffbe9ff14a23ea919d31d`
@@ -1823,6 +1838,7 @@ The immutable evidence manifest is stored at Hugging Face commit
       <!-- contract-implementation: requirement=EXP-03 rule=experiment.batch.public state=implemented owner=src/viper/api.py:run_many -->
       <!-- contract-verification: requirement=EXP-03 rule=experiment.batch.public state=implemented test=tests/test_api.py:test_run_many_result_matches_python_api_and_cli -->
       <!-- implements: EXP-03 -->
+      <!-- verifies: EXP-03 -->
 
 **Evidence:** PlanCheck `ff08dc825c750e866da86397e10cb1d5239a2c1d00987db5d09626810e3aeabc`
 accepted implementation commit `be6a111704bf67c3eb49a71159fedd7c76dcc200`.
@@ -1850,13 +1866,13 @@ evidence and returns exact references with every result.
       <!-- contract-implementation: requirement=PCM-02 rule=catalog.search.evidenced state=implemented owner=src/viper/catalog.py:Catalog -->
       <!-- contract-verification: requirement=PCM-02 rule=catalog.search.evidenced state=implemented test=tests/test_inspection.py:test_catalog_results_retain_immutable_sources -->
       <!-- implements: PCM-01, PCM-02 -->
+      <!-- verifies: PCM-01, PCM-02 -->
 
 - [x] Expose catalog refresh and exact search through the typed Python API and CLI.
       <!-- pair-block: P13-PCM-02 -->
       <!-- pair-block-contract: P13-PCM-02 contract=provenance-catalog-mcp.md -->
       <!-- contract-implementation: requirement=PCM-02 rule=catalog.api.parity state=implemented owner=src/viper/api.py:catalog_refresh -->
       <!-- contract-verification: requirement=PCM-02 rule=catalog.api.parity state=implemented test=tests/test_api.py:test_catalog_result_matches_python_api_and_cli -->
-      <!-- implements: PCM-02 -->
 
 **Evidence:** PlanCheck `6ec4a517868481de3c622123f3115354bfddaccfad4544324d618631e14a4b67`
 accepted implementation commit `468a7b6e62dd00f4e2fcc7d1ad520682ece5304d`.
@@ -1887,6 +1903,7 @@ stage invocation.
       <!-- contract-implementation: requirement=SRU-04 rule=reuse.inspection.complete state=implemented owner=src/viper/inspection.py:lineage -->
       <!-- contract-verification: requirement=SRU-04 rule=reuse.inspection.complete state=implemented test=tests/test_inspection.py:test_reuse_identity_appears_in_inspection_surfaces -->
       <!-- implements: SRU-01, SRU-04 -->
+      <!-- verifies: SRU-01, SRU-04 -->
 
 - [x] Verify and publish a reusable stage without starting its process.
       <!-- pair-block: P14-SRU-02 -->
@@ -1894,6 +1911,7 @@ stage invocation.
       <!-- contract-implementation: requirement=SRU-02 rule=reuse.execution.verified state=implemented owner=src/viper/execution/_reuse.py:reuse_stage -->
       <!-- contract-verification: requirement=SRU-02 rule=reuse.execution.verified state=implemented test=tests/test_run_execution.py:test_verified_reuse_skips_stage_process -->
       <!-- implements: SRU-02 -->
+      <!-- verifies: SRU-02 -->
 
 - [x] Rebuild and verify every source, key, file, input, completion, and metric
       relationship before accepting reuse.
@@ -1902,6 +1920,7 @@ stage invocation.
       <!-- contract-implementation: requirement=SRU-03 rule=reuse.verification.complete state=implemented owner=src/viper/verification/__init__.py:verify_stage_reuse -->
       <!-- contract-verification: requirement=SRU-03 rule=reuse.verification.complete state=implemented test=tests/test_verification_acceptance.py:test_stage_reuse_rejects_each_severed_relationship -->
       <!-- implements: SRU-03 -->
+      <!-- verifies: SRU-03 -->
 
 **Commit boundary:** `Reuse verified stage results with explicit evidence`
 
@@ -1984,6 +2003,7 @@ as derived search aids outside the evidence and duplicate-rejection rules.
 - [x] Execute `P17-EKP-01` from the governing contract.
       <!-- pair-block: P17-EKP-01 -->
       <!-- pair-block-contract: P17-EKP-01 contract=experiment-knowledge-primitives.md -->
+      <!-- phase-produces: KnowledgeVector, RetrievalJudgment -->
       <!-- implements: EKP-03 -->
       <!-- implements: EKP-04 -->
       <!-- verifies: EKP-03 -->

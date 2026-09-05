@@ -1,175 +1,151 @@
-# Get started with VIPER
+# Build your first VIPER experiment
 
-This tutorial creates a project, inspects its stage interface, and runs the
-validation commands used before execution.
+This tutorial runs one small training experiment on your CPU. You will create a
+verified run, inspect its output, and learn which parts of the workflow belong
+to your code and which parts VIPER records.
 
-## Install VIPER
+## Install the repository
 
-Create a Python 3.11 or newer environment, then install the package:
-
-```bash
-python -m pip install viper-provenance
-```
-
-Confirm the installed command and machine-readable interface:
+VIPER requires Python 3.11 or newer.
 
 ```bash
-viper --help
-viper --json capabilities
+git clone https://github.com/pvd232/viper.git
+cd viper
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --editable '.[test]'
 ```
 
-## Create a project
-
-Generate the starter project:
+## Run the checked example
 
 ```bash
-viper init my-project --package my_project
-cd my-project
-python -m pip install -e '.[test]'
-python -m pytest -q
+python examples/cpu_quickstart.py
 ```
 
-The project contains build, embed, train, and evaluate callables. It
-also contains project parameter classes, one evaluation metric, artifact
-loaders, and authored protocol directories.
+The command fits a one-parameter model to
+[`examples/data/tiny.csv`](../../examples/data/tiny.csv) and prints:
 
-VIPER accepts any repository layout. Frozen specifications identify project
-code through repository-relative paths and exact file identities.
+```text
+status: succeeded
+model: {"weight": 1.999...}
+result: experiments/cpu_quickstart/runs/baseline/<run-id>/resolved.yaml
+```
 
-## Define a stage
+The exact run ID changes on each execution. The successful status and the
+verified result file do not.
 
-A project parameter class extends the matching category from
-`viper.parameters`. The stage callable receives one typed context:
+## See the three pieces you authored
+
+Open [`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py). The file
+contains one metric, one stage, and one experiment.
+
+### 1. The metric names a measurement
 
 ```python
-from my_project.training import train_model
-from viper import parameters
-from viper.api import run
-from viper.stages import Context, train
-
-
-class TrainParameters(parameters.Train):
-    epochs: int
-    learning_rate: float
-
-
-@train(params=TrainParameters)
-def fit(context: Context[TrainParameters]) -> None:
-    dataset_path = context.inputs["dataset"]
-    weights_path = context.artifacts["parameters"]
-    train_model(
-        dataset_path=dataset_path,
-        weights_path=weights_path,
-        epochs=context.params.epochs,
-        learning_rate=context.params.learning_rate,
-    )
+@metric(metric_id="training_loss", mode="stateless")
+def training_loss(
+    _context: MetricContext[params.Metric],
+    loss: float,
+) -> float:
+    return loss
 ```
 
-VIPER validates the frozen parameter mapping through `TrainParameters` before
-calling `train`. The worker supplies the resulting object as `context.params`.
-It also supplies the materialized input path and the allocated artifact path.
-`train_model` belongs to the project and performs the scientific computation.
-The `parameters` key names VIPER's required trained-model artifact.
-`weights_path` names that artifact's destination inside the project.
+The training loop already computes `loss`. This stateless metric validates and
+returns each supplied value. A stateful metric instead owns accumulated state:
+it subclasses `StatefulMetric`, receives observations through `update()`, and
+returns the current value from `compute()`.
 
-## Start a run from Python
-
-Use the decorated callable in the project's normal entrypoint:
+### 2. The stage performs the scientific work
 
 ```python
-if __name__ == "__main__":
-    run(fit)
+@train(params=params.Train)
+def fit(context: Context[params.Train]) -> None:
+    rows = context.inputs["dataset"].read_text(encoding="utf-8")
+    model = context.artifacts["model"]
+    # The complete example parses the rows, trains the model, records loss,
+    # and writes the declared model and state artifacts.
 ```
 
-The entrypoint receives the selected plan and stage through command arguments:
+`Context` supplies the stage's validated parameters, readable input paths,
+writable artifact paths, metric handles, run identity, and random generators.
+Your function owns the model computation. VIPER owns the paths and records the
+files and measurements produced there.
 
-```bash
-python train.py \
-  --run experiments/example/runs/run-001/spec.yaml \
-  --stage train \
-  --root .
+### 3. The experiment connects a stage to a variant and seed
+
+```python
+loss = measure(training_loss, params=params.Metric())
+training = stage(
+    fit,
+    params=params.Train(),
+    inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
+    artifacts={...},
+    metrics=(loss,),
+    objective=min(loss),
+)
+
+study = experiment(
+    experiment_id="cpu_quickstart",
+    variants={
+        "baseline": variant(
+            levels={},
+            stages={"train": training},
+            estimator=training.artifacts["model"],
+        )
+    },
+    replicates={"seed_7": replicate(seed=7)},
+)
 ```
 
-`run(fit)` checks that `fit` matches the implementation selected by
-the frozen stage. It then executes and verifies the complete run.
+The ellipses shorten the excerpt; they are not copied into the runnable file.
+The complete example declares both artifact paths and selects the model as the
+variant's estimator.
 
-## Author and inspect a plan
+## Follow the call that runs it
 
-Commit the project source before authoring. The source commit becomes part of
-the run identity.
+`plan()` creates an immutable Python draft tied to a Git commit, an observed
+environment, and reproducibility settings. `execution.run()` compiles that
+draft into protocol files, executes the stage, verifies the evidence, and
+returns the terminal result.
 
-Create the draft with `viper.authoring.plan()`, then call
-`viper.execution.run()` with the project root and draft. Execution compiles the
-immutable files before starting the run. Use `viper.execution.benchmark()` to
-run an independent confirmation and `viper.execution.restore()` to recover
-selected artifacts afterward.
+```python
+draft = plan(
+    experiment=study,
+    variant="baseline",
+    replicate="seed_7",
+    source=source,
+    env=environment,
+    reproducibility=_reproducibility(),
+)
 
-The compiled plan writes canonical stage specifications and the `RunSpec` that
-references them. Preflight checks the selected source, implementations,
-parameters, inputs, environment, and execution requirements on the current
-host before execution begins.
-
-## Execute and verify
-
-Run the complete plan through the installed command:
-
-```bash
-viper run experiments/example/runs/run-001/spec.yaml --root .
+result = execution.run(root, draft)
 ```
 
-Inspect the durable attempt and terminal result:
+There is no separate public freeze step in this workflow. Freezing is the first
+operation performed by `execution.run()` when it receives a `RunPlanDraft`.
 
-```bash
-viper --json status .viper/workspaces/run-001/attempts/1/journal.jsonl
-viper --json verify-run path/to/resolved.yaml --trust-source <repository-url>
-viper --json lineage path/to/resolved.yaml --trust-source <repository-url>
+## Inspect the result
+
+Open the printed `resolved.yaml`. It identifies the terminal status, the
+successful attempt, and the immutable references that connect the result to its
+plan and produced evidence. The model itself is under:
+
+```text
+experiments/cpu_quickstart/runs/baseline/<run-id>/artifacts/models/tiny/model.json
 ```
 
-The exact terminal path appears in the successful `run` result. JSON mode emits
-one machine-readable document with stable operation and failure identifiers.
+The example is guarded by
+[`tests/test_readme_workflow.py`](../../tests/test_readme_workflow.py), which
+runs it in a clean temporary Git repository and requires the output shown above.
 
-## Retry a failed plan
+## Make it yours
 
-Retry appends another attempt to the same frozen plan:
+Change one thing at a time:
 
-```bash
-viper retry experiments/example/runs/run-001/spec.yaml --root .
-```
+1. Add a row to `examples/data/tiny.csv` and rerun the example.
+2. Change the learning rate or epoch count inside `fit()`.
+3. Add another `variant()` with a different training stage or parameter set.
+4. Add another `replicate()` with a different seed.
 
-VIPER preserves the earlier attempt document, failure evidence, journal, and
-logs. The new attempt receives the next integer ID.
-
-## Confirm a benchmark
-
-An evaluation measures one candidate. A benchmark executes an independent
-confirmation from the same frozen plan and checks the shared evaluation
-criteria:
-
-```bash
-viper execute-benchmark \
-  path/to/candidate/resolved.yaml \
-  benchmarks/example/spec.yaml \
-  --root .
-```
-
-The benchmark verifies the confirmation attempt, compares the trained-model
-artifact and predictions, and applies its metric thresholds.
-
-## Run on a GPU VM
-
-Provision and enter the VM through the infrastructure workflow you already
-use. Install the same VIPER wheel inside that machine and run the same Python or
-CLI entrypoint. The plan's `GCEEnvironmentSpec` fixes the requested environment.
-Each stage records the observed host, CPU, selected CUDA device, driver,
-PyTorch CUDA runtime, and cuDNN runtime.
-
-Version `0.1` supports one host process and one selected CUDA device per stage.
-The [execution-environment explanation](../explanation/how-viper-works.md#12-execution-environment-and-scope)
-defines the requested and observed fields.
-
-## Continue reading
-
-- [How VIPER works](../explanation/how-viper-works.md)
-- [Python and CLI API](../reference/api.md)
-- [Formal protocol](../reference/protocol.md)
-- [Versioning policy](../reference/versioning.md)
+Then continue with [metrics and benchmarks](../how-to/metrics-and-benchmarks.md)
+or [variants and replicates](../how-to/variants-and-replicates.md).

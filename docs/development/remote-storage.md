@@ -14,7 +14,7 @@ the immutable copy.
 
 ## 1. Status
 
-**Contract status:** in progress.
+**Contract status:** Complete.
 
 These requirements bind the contract to the master checklist:
 

@@ -7,7 +7,7 @@ frozen plans and returns every outcome.
 
 ## 1. Status
 
-**Contract status:** approved for implementation.
+**Contract status:** Complete.
 
 These requirements bind the contract to the master checklist:
 

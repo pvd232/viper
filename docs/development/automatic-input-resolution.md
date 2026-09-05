@@ -7,7 +7,7 @@ contract will define explicit harness mode.
 
 ## 1. Status
 
-**Contract status:** in progress.
+**Contract status:** Complete.
 
 These requirements bind the contract to the master checklist:
 
@@ -210,7 +210,7 @@ flowchart LR
 VIPER defines the map keys required by training and evaluation stages. The
 exact `Train`, `Eval`, `EvalId`, and `DataRole` declarations are the
 `P5-AIR-01` targets in [Accepted `ContractTarget`
-declarations](#13-accepted-contracttarget-declarations).
+declarations](#13-contracttarget).
 
 The public import is:
 
@@ -382,7 +382,7 @@ external programs required by that function.
 
 ### Target metric and experiment drafts
 
-[`unified-metric-drafting.md`](unified-metric-drafting.md#4-contract-models)
+[`unified-metric-drafting.md`](unified-metric-drafting.md#4-models)
 contains the complete `MetricDraft`, `MetricObjectiveDraft`, `MetricSpec`,
 `MetricContext`, `ExperimentDraft`, and benchmark declarations. This contract
 uses those models when a stage selects metrics or a run plan selects an

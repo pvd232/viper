@@ -7,7 +7,7 @@ Protocol server.
 
 ## 1. Status
 
-**Contract status:** in progress; Phases 13 and 15 implemented.
+**Contract status:** In progress; Phases 13 and 15 implemented; PCM-06 and PCM-07 planned for Phase 20.
 
 These requirements bind the contract to the master checklist:
 
