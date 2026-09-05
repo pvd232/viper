@@ -4,8 +4,12 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from viper.api import (
     CapabilitiesRequest,
+    LocalRunPath,
+    RestoreRequest,
     SchemaRequest,
     StatusRequest,
     ValidateStageRequest,
@@ -13,11 +17,20 @@ from viper.api import (
     dispatch,
     get_capabilities,
     get_schema,
+    restore_artifacts,
     result_json_bytes,
     status,
     validate_stage,
 )
+from viper.cli import main
 from viper.journal import DurableJournal
+from viper.references import LocalFileRef, ResolvedRunRef
+from viper.restoration import (
+    ArtifactRestoreSelector,
+    RestoredArtifact,
+    RestoredFile,
+    RestoreResult,
+)
 
 
 def test_api_schema_and_capability_discovery() -> None:
@@ -143,3 +156,91 @@ def test_status_returns_latest_durable_attempt_state(tmp_path: Path) -> None:
 
     assert result.state == "allocated"
     assert result.next_states == ("preflighting", "terminal")
+
+
+def test_restore_result_matches_python_api_and_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Route typed and command restore requests through one execution result."""
+    (tmp_path / "viper.toml").write_text(
+        "[project]\nschema_version = 1\n",
+        encoding="utf-8",
+    )
+    selector = ArtifactRestoreSelector(stage_id="train", artifact_name="model")
+    expected = RestoreResult(
+        run=ResolvedRunRef(
+            sha256="a" * 64,
+            bytes=12,
+            stored_at=LocalFileRef(
+                commit="b" * 64,
+                path="runs/example/resolved.yaml",
+            ),
+        ),
+        artifacts=(
+            RestoredArtifact(
+                selector=selector,
+                files=(
+                    RestoredFile(
+                        path=tmp_path / "model.bin",
+                        status="restored",
+                    ),
+                ),
+            ),
+        ),
+    )
+    calls = []
+
+    def fake_restore(
+        repository_root: Path,
+        run_reference: Path,
+        *,
+        artifacts: tuple[ArtifactRestoreSelector, ...],
+        output: Path | None,
+    ) -> RestoreResult:
+        """Record the normalized public arguments and return one result."""
+        calls.append((repository_root, run_reference, artifacts, output))
+        return expected
+
+    monkeypatch.setattr("viper.api.restore_run_artifacts", fake_restore)
+    monkeypatch.setattr("viper.api.resolve_root", lambda root: root.resolve())
+    request = RestoreRequest(
+        run_reference=LocalRunPath(path=Path("runs/example/resolved.yaml")),
+        repository_root=tmp_path,
+        artifacts=(selector,),
+        output=Path("model.bin"),
+    )
+
+    direct = restore_artifacts(request)
+    status = main(
+        [
+            "--json",
+            "restore",
+            "runs/example/resolved.yaml",
+            "--root",
+            str(tmp_path),
+            "--artifacts",
+            "train.model",
+            "--output",
+            "model.bin",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert status == 0
+    assert json.loads(output) == json.loads(result_json_bytes(direct))
+    assert calls == [
+        (
+            tmp_path,
+            Path("runs/example/resolved.yaml"),
+            (selector,),
+            Path("model.bin"),
+        ),
+        (
+            tmp_path,
+            Path("runs/example/resolved.yaml"),
+            (selector,),
+            Path("model.bin"),
+        ),
+    ]

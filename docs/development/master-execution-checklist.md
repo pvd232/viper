@@ -1707,20 +1707,24 @@ authentication exchange, error mapping, and service-side seal semantics.
 
 **Outcome:** The user can restore every artifact, one artifact, or a list.
 
-- [ ] Execute `P10-RSP-01` from `remote-storage.md`.
+- [x] Execute `P10-RSP-01` from `remote-storage.md`.
       <!-- pair-block: P10-RSP-01 -->
       <!-- pair-block-contract: P10-RSP-01 contract=remote-storage.md -->
       <!-- implements: RSP-07 -->
       <!-- verifies: RSP-07 -->
-      <!-- contract-implementation: requirement=RSP-07 rule=storage.restore.atomic state=planned owner=src/viper/execution/_restore.py:restore -->
-      <!-- contract-verification: requirement=RSP-07 rule=storage.restore.atomic state=planned test=tests/test_storage.py:test_restore_verifies_before_atomic_write -->
-- [ ] Execute `P10-RSP-02` from `remote-storage.md`.
+      <!-- contract-implementation: requirement=RSP-07 rule=storage.restore.atomic state=implemented owner=src/viper/execution/_restore.py:restore -->
+      <!-- contract-verification: requirement=RSP-07 rule=storage.restore.atomic state=implemented test=tests/test_storage.py:test_restore_verifies_before_atomic_write -->
+- [x] Execute `P10-RSP-02` from `remote-storage.md`.
       <!-- pair-block: P10-RSP-02 -->
       <!-- pair-block-contract: P10-RSP-02 contract=remote-storage.md -->
       <!-- implements: RSP-08 -->
       <!-- verifies: RSP-08 -->
-      <!-- contract-implementation: requirement=RSP-08 rule=storage.restore.public state=planned owner=src/viper/api.py:restore_artifacts -->
-      <!-- contract-verification: requirement=RSP-08 rule=storage.restore.public state=planned test=tests/test_api.py:test_restore_result_matches_python_api_and_cli -->
+      <!-- contract-implementation: requirement=RSP-08 rule=storage.restore.public state=implemented owner=src/viper/api.py:restore_artifacts -->
+      <!-- contract-verification: requirement=RSP-08 rule=storage.restore.public state=implemented test=tests/test_api.py:test_restore_result_matches_python_api_and_cli -->
+
+**Evidence:** Raw contract parity passed for both blocks. Batched imports passed,
+Ruff cleaned the generated files after parity, the candidate introduced no
+Pyright diagnostics, and both restore acceptance tests passed.
 
 **Commit boundary:** `Restore complete runs and selected artifacts`
 

@@ -88,7 +88,7 @@ class SnapshotPublisher(Protocol):
         ...
 
 
-def _content_commit(files: Mapping[RepoRelPath, bytes]) -> str:
+def content_revision(files: Mapping[RepoRelPath, bytes]) -> str:
     """Derive one revision identity from ordered paths and file identities."""
     digest = hashlib.sha256()
     for path, raw in sorted(files.items()):
@@ -116,7 +116,7 @@ class LocalArtifactStore:
         """Write one immutable revision and return its content-derived identity."""
         if not files:
             raise LocalStoreError("an immutable revision requires at least one file")
-        commit = _content_commit(files)
+        commit = content_revision(files)
         revision_root = self.store_root / commit
         for relative_path, raw in sorted(files.items()):
             target = (revision_root / relative_path).resolve()

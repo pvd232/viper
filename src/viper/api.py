@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import (
@@ -35,9 +35,10 @@ from .artifacts import (
 from .authoring import freeze_run_plan, load_run_plan_draft
 from .benchmark import BenchmarkResult
 from .execution._benchmark import benchmark as execute_benchmark_run
+from .execution._restore import restore as restore_run_artifacts
 from .execution._run import run as execute_run
 from .execution._stage import StageExecutionError, execute_stage_process
-from .execution.errors import BenchmarkExecutionError, RunError
+from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
 from .ids import RunId, StageId
 from .inspection import (
     InspectionError,
@@ -53,6 +54,12 @@ from .inspection import plan_diff as compare_frozen_plans
 from .journal import AttemptState
 from .preflight import PreflightCheck, preflight_plan
 from .project import InitError, RootError, init, resolve_root
+from .references import ResolvedRunRef
+from .restoration import (
+    ArtifactRestoreSelector,
+    RestoreResult,
+    ViperCloudRunUri,
+)
 from .runs import (
     ResolvedRun,
     RunSpec,
@@ -92,6 +99,7 @@ OperationName = Literal[
     "run",
     "retry",
     "execute_benchmark",
+    "restore",
     "plan_diff",
     "lineage",
     "status",
@@ -608,6 +616,42 @@ class AnalyzeImpactSuccess(SuccessModel):
     )
 
 
+class LocalRunPath(APIModel):
+    """Select a terminal run document beneath the project root."""
+
+    kind: Literal["local_path"] = "local_path"
+    path: Path
+
+
+class ViperCloudRunReference(APIModel):
+    """Select a terminal run from one sealed Viper Cloud revision."""
+
+    kind: Literal["viper_cloud_uri"] = "viper_cloud_uri"
+    uri: ViperCloudRunUri
+
+
+RestoreRequestReference = Annotated[
+    LocalRunPath | ViperCloudRunReference | ResolvedRunRef,
+    Field(discriminator="kind"),
+]
+
+
+class RestoreRequest(APIModel):
+    """Select a successful run and the artifacts to restore from it."""
+
+    run_reference: RestoreRequestReference
+    repository_root: Path
+    artifacts: tuple[ArtifactRestoreSelector, ...] = ()
+    output: Path | None = None
+
+
+class RestoreSuccess(SuccessModel):
+    """Return the files restored from one immutable run."""
+
+    operation: Literal["restore"] = "restore"  # pyright: ignore[reportIncompatibleVariableOverride]
+    result: RestoreResult
+
+
 SCHEMA_REGISTRY: dict[str, Any] = {
     "ArtifactPointer": ArtifactPointer,
     "BenchmarkResult": BenchmarkResult,
@@ -617,6 +661,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "ExecuteStageSuccess": ExecuteStageSuccess,
     "ExecuteBenchmarkRequest": ExecuteBenchmarkRequest,
     "ExecuteBenchmarkSuccess": ExecuteBenchmarkSuccess,
+    "RestoreRequest": RestoreRequest,
+    "RestoreSuccess": RestoreSuccess,
     "ExplainImpactRequest": ExplainImpactRequest,
     "ExplainImpactSuccess": ExplainImpactSuccess,
     "AnalyzeImpactRequest": AnalyzeImpactRequest,
@@ -669,6 +715,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "run",
     "retry",
     "execute_benchmark",
+    "restore",
     "plan_diff",
     "lineage",
     "status",
@@ -1375,6 +1422,39 @@ def analyze_impact(request: AnalyzeImpactRequest) -> AnalyzeImpactSuccess:
 RequestType = type[APIModel]
 Handler = Callable[[Any], SuccessModel]
 
+
+def restore_artifacts(request: RestoreRequest) -> RestoreSuccess:
+    """Restore selected artifacts through the shared execution engine."""
+    project_root = _root(request.repository_root, "restore")
+    selected = request.run_reference
+    if isinstance(selected, LocalRunPath):
+        run_reference = selected.path
+    elif isinstance(selected, ViperCloudRunReference):
+        run_reference = selected.uri
+    else:
+        run_reference = selected
+    try:
+        result = restore_run_artifacts(
+            project_root,
+            run_reference,
+            artifacts=request.artifacts,
+            output=request.output,
+        )
+    except RestoreError as exc:
+        raise ViperError(
+            ViperFailure(
+                operation="restore",
+                origin="application",
+                code="verification_failed",
+                message="artifact restore failed",
+            )
+        ) from exc
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        path = selected.path if isinstance(selected, LocalRunPath) else project_root
+        raise _document_error("restore", path, exc) from exc
+    return RestoreSuccess(result=result)
+
+
 REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "validate_stage": ValidateStageRequest,
     "validate_resolved_stage": ValidateResolvedStageRequest,
@@ -1385,6 +1465,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "run": RunRequest,
     "retry": RetryRequest,
     "execute_benchmark": ExecuteBenchmarkRequest,
+    "restore": RestoreRequest,
     "plan_diff": PlanDiffRequest,
     "lineage": LineageRequest,
     "status": StatusRequest,
@@ -1409,6 +1490,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "run": run_request,
     "retry": retry_request,
     "execute_benchmark": execute_benchmark,
+    "restore": restore_artifacts,
     "plan_diff": plan_diff,
     "lineage": lineage,
     "status": status,
@@ -1647,6 +1729,11 @@ __all__ = [
     "RunSuccess",
     "RetryRequest",
     "RetrySuccess",
+    "RestoreRequest",
+    "RestoreRequestReference",
+    "RestoreSuccess",
+    "LocalRunPath",
+    "ViperCloudRunReference",
     "SchemaRequest",
     "SchemaSuccess",
     "StatusRequest",
@@ -1672,6 +1759,7 @@ __all__ = [
     "execute_stage",
     "execute_benchmark",
     "explain_impact",
+    "restore_artifacts",
     "freeze_run",
     "get_capabilities",
     "init_project",

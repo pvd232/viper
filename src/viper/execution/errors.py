@@ -9,4 +9,8 @@ class BenchmarkExecutionError(RuntimeError):
     """Report a benchmark request, execution, or publication failure."""
 
 
-__all__ = ["BenchmarkExecutionError", "RunError"]
+class RestoreError(RuntimeError):
+    """Report an invalid restore reference, selection, or destination."""
+
+
+__all__ = ["BenchmarkExecutionError", "RestoreError", "RunError"]

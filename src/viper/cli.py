@@ -44,6 +44,16 @@ def add_root(parser: ArgumentParser, name: RootArg = "root") -> None:
     )
 
 
+def parse_artifact_selector(value: str) -> tuple[str, str]:
+    """Split one STAGE.ARTIFACT selector for the typed restore request."""
+    if value.count(".") != 1:
+        raise argparse.ArgumentTypeError("artifact selector must use STAGE.ARTIFACT")
+    stage_id, artifact_name = value.split(".")
+    if not stage_id or not artifact_name:
+        raise argparse.ArgumentTypeError("artifact selector must use STAGE.ARTIFACT")
+    return stage_id, artifact_name
+
+
 def build_parser() -> ArgumentParser:
     """Build the VIPER command parser and its API subcommands."""
     parser = ViperArgumentParser(prog="viper")
@@ -110,6 +120,21 @@ def build_parser() -> ArgumentParser:
     benchmark_command.add_argument("benchmark_spec", type=Path)
     add_root(benchmark_command)
     benchmark_command.add_argument("--timeout-seconds", type=float)
+
+    restore = commands.add_parser(
+        "restore",
+        help="restore verified artifacts from one successful run",
+    )
+    restore.add_argument("run_reference")
+    add_root(restore)
+    restore.add_argument(
+        "--artifacts",
+        nargs="+",
+        default=[],
+        type=parse_artifact_selector,
+        metavar="STAGE.ARTIFACT",
+    )
+    restore.add_argument("--output", type=Path)
 
     plan_diff = commands.add_parser(
         "plan-diff",
@@ -206,24 +231,6 @@ def build_parser() -> ArgumentParser:
     analyze.add_argument("--cache-root", type=Path)
     analyze.add_argument("--codeql-executable", type=Path)
     analyze.add_argument("--query-pack", type=Path)
-    analyze.add_argument(
-        "--path-depth",
-        type=int,
-        default=3,
-        help="maximum dependency edges in one ranked path; defaults to 3",
-    )
-    analyze.add_argument(
-        "--path-limit",
-        type=int,
-        default=12,
-        help="maximum ranked paths returned; defaults to 12",
-    )
-    analyze.add_argument(
-        "--path-expansion-budget",
-        type=int,
-        default=500,
-        help="maximum partial paths evaluated; defaults to 500",
-    )
     return parser
 
 
@@ -246,6 +253,7 @@ def _operation_and_payload(
         "run": "run",
         "retry": "retry",
         "execute-benchmark": "execute_benchmark",
+        "restore": "restore",
         "plan-diff": "plan_diff",
         "lineage": "lineage",
         "status": "status",
@@ -260,6 +268,18 @@ def _operation_and_payload(
         "impact-analyze": "analyze_impact",
     }
     operation = mapping[command]
+    if operation == "restore":
+        reference = values.pop("run_reference")
+        values["run_reference"] = (
+            {"kind": "viper_cloud_uri", "uri": reference}
+            if reference.startswith("viper://")
+            else {"kind": "local_path", "path": reference}
+        )
+        selectors = []
+        for stage_id, artifact_name in values.pop("artifacts"):
+            selectors.append({"stage_id": stage_id, "artifact_name": artifact_name})
+        values["artifacts"] = selectors
+        values["repository_root"] = values.pop("root")
     trusted = values.pop("trust_source", None)
     if trusted is not None:
         values["trusted_source_repositories"] = trusted
@@ -307,6 +327,10 @@ def _human_success(result: SuccessModel) -> str:
             f"benchmark {benchmark.status}: confirmation attempt "
             f"{benchmark.confirmation.stored_at.path}"
         )
+    if result.operation == "restore":
+        restored = getattr(result, "result")
+        file_count = sum(len(artifact.files) for artifact in restored.artifacts)
+        return f"restored {file_count} verified files"
     if result.operation == "plan_diff":
         changes = getattr(result, "changes")
         if not changes:
@@ -349,21 +373,15 @@ def _human_success(result: SuccessModel) -> str:
         )
     if result.operation == "analyze_impact":
         evidence = getattr(result, "evidence")
-        path_search = getattr(result, "path_search")
-        lines = [
+        if not evidence:
+            return "no direct dependency evidence"
+        return "\n".join(
             f"{item.state} {item.kind}: "
             f"{item.dependent.path}:{item.dependent.symbol} -> "
             f"{item.target.path}:{item.target.symbol} "
             f"at {item.use_path}:{item.use_line}"
             for item in evidence
-        ]
-        lines.extend(
-            f"rank {item.score:.3f}: "
-            f"{item.candidate.path}:{item.candidate.symbol} "
-            f"via {item.reason}"
-            for item in path_search.paths
         )
-        return "\n".join(lines) if lines else "no dependency evidence"
     capabilities = getattr(result, "operations")
     return "\n".join(capabilities)
 

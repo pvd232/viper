@@ -7,16 +7,23 @@ from pathlib import Path
 import pytest
 
 from viper._schema import SHA256, RepoRelPath
+from viper.execution._restore import (
+    _PlannedFile,
+    _restore_files,
+)
 from viper.execution._source import RunFetcher
+from viper.execution.errors import RestoreError
 from viper.ids import HumanId
 from viper.references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
+    ResolvedFileRef,
     ResolvedRunSpecRef,
     SnapshotFileRef,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
+from viper.restoration import ArtifactRestoreSelector
 from viper.runs import ResolvedAttemptRef, ResolvedRun
 from viper.storage import (
     LocalArtifactStore,
@@ -380,3 +387,51 @@ def test_bind_run_destination_is_idempotent_and_rejects_change(
             RUN_ID,
             ViperCloudDestination(owner="machina", project="weekend_models"),
         )
+
+
+def test_restore_verifies_before_atomic_write(tmp_path: Path) -> None:
+    """Leave every destination untouched when one selected file conflicts."""
+    selector = ArtifactRestoreSelector(stage_id="train", artifact_name="model")
+    first = b"first"
+    second = b"second"
+    references = (
+        ResolvedFileRef(
+            sha256=hashlib.sha256(first).hexdigest(),
+            bytes=len(first),
+            stored_at=LocalFileRef(commit="a" * 64, path="artifacts/first.bin"),
+        ),
+        ResolvedFileRef(
+            sha256=hashlib.sha256(second).hexdigest(),
+            bytes=len(second),
+            stored_at=LocalFileRef(commit="a" * 64, path="artifacts/second.bin"),
+        ),
+    )
+    first_destination = tmp_path / "restored/first.bin"
+    second_destination = tmp_path / "restored/second.bin"
+    second_destination.parent.mkdir()
+    second_destination.write_bytes(b"occupied")
+    planned = tuple(
+        _PlannedFile(
+            selector=selector,
+            reference=reference,
+            destination=destination,
+        )
+        for reference, destination in zip(
+            references,
+            (first_destination, second_destination),
+            strict=True,
+        )
+    )
+    payloads = {
+        "artifacts/first.bin": first,
+        "artifacts/second.bin": second,
+    }
+
+    with pytest.raises(RestoreError, match="different bytes"):
+        _restore_files(
+            lambda location: payloads[location.path],
+            planned,
+        )
+
+    assert not first_destination.exists()
+    assert second_destination.read_bytes() == b"occupied"
