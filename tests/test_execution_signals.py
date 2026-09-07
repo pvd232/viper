@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -13,6 +13,7 @@ import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 import torch
@@ -26,30 +27,23 @@ from tests.fixtures import (
     resume_state,
 )
 from viper import _subprocess as subprocess
-from viper import parameters
-from viper._schema import (
-    PARAMETERS,
-    RESUME_STATE,
-)
+from viper import params
 from viper._verification.attempt import _verify_stage_invocation, verify_attempt_stages
 from viper._verification.storage import read_attempt_reference
-from viper.artifacts import (
-    ArtifactLoaderRef,
-    SingleFileArtifactSpec,
-    StageArtifactRef,
+from viper.artifacts import SingleFileArtifactDraft, artifact
+from viper.authoring import (
+    RunPlanDraft,
+    download,
+    experiment,
+    freeze_run_plan,
+    replicate,
+    stage,
+    variant,
 )
-from viper.authoring import RunPlanDraft, StageDraft, freeze_run_plan
 from viper.execution import run as execute_run
 from viper.execution._source import RunFetcher
-from viper.experiments import (
-    ExperimentSpec,
-    ReplicateSpec,
-    TrainVariantStageParams,
-    VariantSpec,
-)
-from viper.inputs import FutureInputRef
 from viper.journal import DurableJournal
-from viper.parameters import ParameterModelRef
+from viper.metrics import measure, min
 from viper.preflight import preflight_plan
 from viper.references import (
     GitFileRef,
@@ -69,9 +63,7 @@ from viper.runtime import (
 )
 from viper.serialization import document_digest, parse_yaml_bytes, serialize_document
 from viper.stages import (
-    DownloadSpec,
     ResolvedTrainSpec,
-    StageImplementationRef,
     StageInvocationReceipt,
     TrainSpec,
 )
@@ -127,10 +119,10 @@ def _git(root: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
-def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes]:
+def _write_source_files(root: Path, *, blocking: bool = True) -> None:
     """Write the two stage callables and their supporting project code."""
     train_operation = (
-        b"    output_root = context.artifacts['parameters'].parent\n"
+        b"    output_root = context.artifacts['model'].parent\n"
         b"    output_root.mkdir(parents=True, exist_ok=True)\n"
         b"    child = subprocess.Popen(\n"
         b"        [sys.executable, '-c', 'import time; time.sleep(300)']\n"
@@ -139,6 +131,7 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes
         b"        f'{os.getpid()}\\n{child.pid}\\n', encoding='utf-8'\n"
         b"    )\n"
         b"    print('blocking train started', flush=True)\n"
+        b"    context.metrics['signal_objective'].record(0.0, epoch=1, step=1)\n"
         b"    while True:\n"
         b"        time.sleep(1)\n"
         if blocking
@@ -148,39 +141,38 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes
             b"    device = 'cuda' if torch.cuda.is_available() else 'cpu'\n"
             b"    values = torch.tensor([2.0, 3.0], device=device)\n"
             b"    result = values.square().sum().item()\n"
-            b"    context.artifacts['parameters'].parent.mkdir(\n"
+            b"    context.artifacts['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
             b"    )\n"
-            b"    context.artifacts['parameters'].write_bytes(\n"
+            b"    context.artifacts['model'].write_bytes(\n"
             b"        f'{device}:{result}'.encode()\n"
             b"    )\n"
-            b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            b"    context.artifacts['state'].write_bytes(b'resume')\n"
+            b"    context.metrics['signal_objective'].record(\n"
+            b"        result, epoch=1, step=1\n"
+            b"    )\n"
         )
     )
     source_files = {
         "viper.toml": b"[project]\nschema_version = 1\n",
         "environment.yml": b"name: viper-signal-test\n",
-        "project/loaders/bytes_file.py": (
-            b"def load(path):\n    return path.read_bytes()\n"
-        ),
-        "project/loaders/resume_state.py": (
-            "def load(path):\n"
-            f"    return {resume_state().model_dump(mode='python')!r}\n"
-        ).encode(),
-        "project/parameters/train.py": (
-            b"from viper import parameters\n\n"
-            b"class SignalTrainParameters(parameters.Train):\n"
-            b'    """Validate this fixture\'s training parameters."""\n'
-        ),
         "jobs/train.py": (
             b"import os\n"
             b"import subprocess\n"
             b"import sys\n"
             b"import time\n\n"
-            b"from project.parameters.train import SignalTrainParameters\n"
+            b"from viper import params\n"
             b"from viper.api import run\n"
+            b"from viper.metrics import metric\n"
             b"from viper.stages import train\n\n"
-            b"@train(params=SignalTrainParameters)\n"
+            b"def load_bytes(path):\n"
+            b"    return path.read_bytes()\n\n"
+            b"def load_resume_state(path):\n"
+            + f"    return {resume_state().model_dump(mode='python')!r}\n\n".encode()
+            + b"@metric(metric_id='signal_objective', mode='stateless')\n"
+            b"def signal_objective(_context, value):\n"
+            b"    return value\n\n"
+            b"@train(params=params.Train)\n"
             b"def train(context):\n"
             + train_operation
             + b"\nif __name__ == '__main__':\n"
@@ -191,74 +183,38 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> dict[str, bytes
         path = root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw)
-    return source_files
+
+
+def _load_fixture_module(path: Path) -> ModuleType:
+    """Load the committed fixture callables used to author the plan."""
+    spec = importlib.util.spec_from_file_location("_viper_signal_fixture", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load signal fixture module: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _freeze_signal_plan(
     root: Path,
-    source_files: dict[str, bytes],
     host: str,
     port: int,
     *,
     compute: CPUComputeSpec | CUDAComputeSpec | None = None,
 ) -> Path:
     """Freeze one download-then-blocking-train plan for a real coordinator."""
-    experiment = ExperimentSpec(
-        experiment_id="signals",
-        factors=(),
-        variant_ids=("baseline",),
-        replicates=(ReplicateSpec(replicate_id="r1", seed=7),),
-        metrics=(),
-    )
-    variant = VariantSpec(
-        experiment_id="signals",
-        variant_id="baseline",
-        levels={},
-        stage_params=(
-            TrainVariantStageParams(stage_id="train", params=parameters.Train()),
-        ),
-    )
-    experiment_path = root / "experiments/signals/spec.yaml"
-    variant_path = root / "experiments/signals/variants/baseline.spec.yaml"
-    experiment_path.parent.mkdir(parents=True, exist_ok=True)
-    variant_path.parent.mkdir(parents=True, exist_ok=True)
-    experiment_path.write_bytes(serialize_document(experiment))
-    variant_path.write_bytes(serialize_document(variant))
     _git(root, "add", ".")
     _git(root, "commit", "--quiet", "-m", "source")
     source_commit = _git(root, "rev-parse", "HEAD")
 
-    source = GitSource.model_validate(
-        {"repository": REPOSITORY, "commit": source_commit}
+    fixture = _load_fixture_module(root / "jobs/train.py")
+    prior_artifact = artifact(
+        path="artifacts/datasets/tiny/prior.bin",
+        loader=fixture.load_bytes,
+        data_role="training",
     )
-    environment = LocalEnvSpec(
-        compute=CPUComputeSpec() if compute is None else compute,
-        lockfile=GitFileRef.model_validate(
-            {
-                "repository": REPOSITORY,
-                "commit": source_commit,
-                "path": "environment.yml",
-            }
-        ),
-        python_env=python_environment(),
-    )
-    bytes_loader = ArtifactLoaderRef(
-        path="project/loaders/bytes_file.py",
-        symbol="load",
-        sha256=hashlib.sha256(
-            source_files["project/loaders/bytes_file.py"]
-        ).hexdigest(),
-        bytes=len(source_files["project/loaders/bytes_file.py"]),
-    )
-    resume_loader = ArtifactLoaderRef(
-        path="project/loaders/resume_state.py",
-        symbol="load",
-        sha256=hashlib.sha256(
-            source_files["project/loaders/resume_state.py"]
-        ).hexdigest(),
-        bytes=len(source_files["project/loaders/resume_state.py"]),
-    )
-    download = DownloadSpec(
+    assert isinstance(prior_artifact, SingleFileArtifactDraft)
+    acquisition = download(
         inputs={
             "prior": http_request(
                 url=f"http://{host}:{port}/prior",
@@ -270,77 +226,75 @@ def _freeze_signal_plan(
             hosts=frozenset({host}),
             ports=frozenset({port}),
         ),
+        artifacts={"prior": prior_artifact},
+    )
+    objective = measure(fixture.signal_objective, params=params.Metric())
+    training = stage(
+        fixture.train,
+        params=params.Train(),
+        inputs={"prior": acquisition.artifacts["prior"]},
         artifacts={
-            "prior": SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/datasets/tiny/prior.bin",
-                loader=bytes_loader,
+            "model": artifact(
+                path="artifacts/models/tiny/parameters.bin",
+                loader=fixture.load_bytes,
                 data_role="training",
+            ),
+            "state": artifact(
+                path="artifacts/models/tiny/resume_state.bin",
+                loader=fixture.load_resume_state,
+                data_role="training",
+            ),
+        },
+        metrics=(objective,),
+        objective=min(objective),
+    )
+    study = experiment(
+        experiment_id="signals",
+        variants={
+            "baseline": variant(
+                levels={},
+                stages={"download": acquisition, "train": training},
+                estimator=training.artifacts["model"],
             )
         },
+        replicates={"r1": replicate(seed=7)},
     )
-    train = TrainSpec(
-        implementation=StageImplementationRef(
-            path="jobs/train.py",
-            symbol="train",
-            sha256=hashlib.sha256(source_files["jobs/train.py"]).hexdigest(),
-            bytes=len(source_files["jobs/train.py"]),
-        ),
-        parameter_model=ParameterModelRef(
-            owner="project",
-            path="project/parameters/train.py",
-            symbol="SignalTrainParameters",
-            sha256=hashlib.sha256(
-                source_files["project/parameters/train.py"]
-            ).hexdigest(),
-            bytes=len(source_files["project/parameters/train.py"]),
-        ),
-        inputs={
-            "prior": FutureInputRef(
-                producer_stage_id="download",
-                name="prior",
-            )
-        },
-        params=parameters.Train(),
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
-                loader=bytes_loader,
-                data_role="training",
+
+    def freeze(commit: str):
+        """Compile the plan against one committed source snapshot."""
+        source = GitSource.model_validate({"repository": REPOSITORY, "commit": commit})
+        environment = LocalEnvSpec(
+            compute=CPUComputeSpec() if compute is None else compute,
+            lockfile=GitFileRef.model_validate(
+                {
+                    "repository": REPOSITORY,
+                    "commit": commit,
+                    "path": "environment.yml",
+                }
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/models/tiny/resume_state.bin",
-                loader=resume_loader,
-                data_role="training",
+            python_env=python_environment(),
+        )
+        return freeze_run_plan(
+            root,
+            RunPlanDraft(
+                run_id=RUN_ID,
+                experiment=study,
+                variant="baseline",
+                replicate="r1",
+                source=source,
+                env=environment,
+                reproducibility=reproducibility(),
             ),
-        },
-    )
-    draft_root = root.parent / "drafts"
-    draft_root.mkdir()
-    download_draft = draft_root / "download.yaml"
-    train_draft = draft_root / "train.yaml"
-    download_draft.write_bytes(serialize_document(download))
-    train_draft.write_bytes(serialize_document(train))
-    frozen = freeze_run_plan(
-        root,
-        RunPlanDraft(
-            run_id=RUN_ID,
-            experiment_id="signals",
-            variant_id="baseline",
-            replicate_id="r1",
-            seed=7,
-            source=source,
-            environment=environment,
-            reproducibility=reproducibility(),
-            stages=(
-                StageDraft(stage_id="download", spec_source=download_draft),
-                StageDraft(stage_id="train", spec_source=train_draft),
-            ),
-            estimator=StageArtifactRef(
-                stage_id="train",
-                artifact_name=PARAMETERS,
-            ),
-        ),
-    )
+        )
+
+    # Path-based execution reads experiment records from the source snapshot.
+    # Compile them once, add them to that snapshot, then freeze the final run.
+    freeze(source_commit)
+    shutil.rmtree(root / RUN_ROOT)
+    _git(root, "add", "experiments/signals/spec.yaml")
+    _git(root, "add", "experiments/signals/variants/baseline.spec.yaml")
+    _git(root, "commit", "--quiet", "--amend", "--no-edit")
+    frozen = freeze(_git(root, "rev-parse", "HEAD"))
     _git(root, "add", f"experiments/signals/runs/baseline/{RUN_ID}")
     _git(root, "commit", "--quiet", "-m", "plan")
     return frozen.files[-1]
@@ -380,10 +334,9 @@ def test_live_l4_stage_records_requested_backend(
     _git(root, "config", "user.name", "VIPER Test")
     _git(root, "remote", "add", "origin", REPOSITORY)
 
-    source_files = _write_source_files(root, blocking=False)
+    _write_source_files(root, blocking=False)
     run_path = _freeze_signal_plan(
         root,
-        source_files,
         *signal_http_source,
         compute=compute,
     )
@@ -405,7 +358,7 @@ def test_live_l4_stage_records_requested_backend(
     assert result.resolved_run.status == "succeeded"
     assert verified.attempts[-1].status == "succeeded"
     assert isinstance(backend, expected_backend_type)
-    assert train_result.completion.startup.environment["CUDA_VISIBLE_DEVICES"] == (
+    assert train_result.completion.startup.env["CUDA_VISIBLE_DEVICES"] == (
         "" if compute.kind == "cpu" else "0"
     )
 
@@ -461,10 +414,9 @@ def test_signal_closes_attempt_with_active_stage_evidence(
     _git(root, "config", "user.email", "viper@example.com")
     _git(root, "config", "user.name", "VIPER Test")
     _git(root, "remote", "add", "origin", REPOSITORY)
-    source_files = _write_source_files(root)
+    _write_source_files(root)
     run_path = _freeze_signal_plan(
         root,
-        source_files,
         *signal_http_source,
     )
     pid_path = root / RUN_ROOT / "artifacts/models/tiny/worker-pids.txt"
@@ -556,10 +508,9 @@ def test_python_adapter_and_cli_share_verification_boundary(
     _git(python_root, "config", "user.email", "viper@example.com")
     _git(python_root, "config", "user.name", "VIPER Test")
     _git(python_root, "remote", "add", "origin", REPOSITORY)
-    source_files = _write_source_files(python_root, blocking=False)
+    _write_source_files(python_root, blocking=False)
     python_run_path = _freeze_signal_plan(
         python_root,
-        source_files,
         *signal_http_source,
     )
     cli_root = tmp_path / "cli-project"
@@ -771,10 +722,9 @@ def test_preflight_rejects_unsupported_cuda_requests(
     _git(root, "config", "user.email", "viper@example.com")
     _git(root, "config", "user.name", "VIPER Test")
     _git(root, "remote", "add", "origin", REPOSITORY)
-    source_files = _write_source_files(root, blocking=False)
+    _write_source_files(root, blocking=False)
     run_path = _freeze_signal_plan(
         root,
-        source_files,
         *signal_http_source,
         compute=compute,
     )
