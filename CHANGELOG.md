@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.1.0a3 — 2026-09-07
+
+- Remove the experimental System Impact, graph-localization, CodeQL,
+  scheduling, contract-plan, fixture, and research-work surfaces from the
+  public package and source distribution.
+- Retain the execution, verification, storage, restoration, catalog,
+  knowledge, and MCP behavior added after `0.1.0a2`.
+- Keep scientific knowledge publication and exact filtered similarity search
+  in the base installation, implemented by exhaustive cosine distance.
+- Reject candidate wheel and source-distribution archives that contain any
+  removed experimental path.
+- Repair generated-project benchmark lookup so execution and verification read
+  the benchmark specification from the immutable run plan.
+- Align stage, artifact, parameter, resume-state, and prediction terminology
+  across the retained public workflow.
+
 - Rename metric modes to `stateful` and `stateless`. Stateful metrics accumulate
   observations through `update()` and `compute()`; stateless metrics compute
   directly from their current arguments or declared files.

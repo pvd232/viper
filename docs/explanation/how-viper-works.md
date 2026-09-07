@@ -146,6 +146,6 @@ unbiased, or that a metric answers the right research question. Those judgments
 remain with the experiment author and reviewer. See
 [What VIPER guarantees](guarantees.md) for the exact boundary.
 
-VIPER `0.1.0a2` is available from PyPI. The
-[release report](../releases/0.1.0a2.md) records the published files, source
-identity, and validation evidence.
+VIPER `0.1.0a3` is the current release candidate. The
+[release report](../releases/0.1.0a3.md) will record the published files, source
+identity, and validation evidence after the release gates pass.

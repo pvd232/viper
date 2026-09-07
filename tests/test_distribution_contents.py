@@ -78,6 +78,24 @@ def _distribution_metadata(path: Path) -> bytes:
         return extracted.read()
 
 
+def _distribution_file(path: Path, member_path: str) -> bytes:
+    """Read one archive member by its distribution-relative path."""
+    if path.suffix == ".whl":
+        with zipfile.ZipFile(path) as archive:
+            return archive.read(member_path)
+
+    with tarfile.open(path, mode="r:gz") as archive:
+        member = next(
+            item
+            for item in archive.getmembers()
+            if PurePosixPath(*PurePosixPath(item.name).parts[1:]).as_posix()
+            == member_path
+        )
+        extracted = archive.extractfile(member)
+        assert extracted is not None
+        return extracted.read()
+
+
 def _experimental_members(members: tuple[str, ...]) -> tuple[str, ...]:
     """Return members owned by the extracted experimental subsystem."""
     return tuple(
@@ -146,3 +164,12 @@ def test_built_distributions_exclude_experimental_surfaces(tmp_path: Path) -> No
         metadata = _distribution_metadata(distribution)
         assert b"Provides-Extra: knowledge" not in metadata
         assert b"usearch" not in metadata
+
+        package_prefix = "" if distribution.suffix == ".whl" else "src/"
+        for module in ("api.py", "cli.py", "mcp.py"):
+            source = _distribution_file(
+                distribution,
+                f"{package_prefix}viper/{module}",
+            )
+            assert b'"analyze_impact"' not in source
+            assert b'"explain_impact"' not in source

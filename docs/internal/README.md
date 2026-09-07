@@ -18,6 +18,7 @@ tutorials.
 
 ## Release evidence
 
+- [0.1.0a3 candidate](../releases/0.1.0a3.md)
 - [0.1.0a2](../releases/0.1.0a2.md)
 - [0.1.0a1](../releases/0.1.0a1.md)
 
