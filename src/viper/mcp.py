@@ -384,7 +384,7 @@ def build_server(root: Path, access: AccessMode = "read") -> Server[None]:
     adapter = MCPAdapter(root, access)
     return Server(
         "viper",
-        version="0.1.0a2",
+        version="0.1.0a3",
         on_list_tools=adapter.list_tools,
         on_call_tool=adapter.call_tool,
         on_list_resources=adapter.list_resources,

@@ -1187,9 +1187,7 @@ class KnowledgeCatalog:
             rows = connection.execute(
                 "SELECT payload_json FROM knowledge_primitives"
             ).fetchall()
-        primitives = tuple(
-            CatalogPrimitive.model_validate_json(row[0]) for row in rows
-        )
+        primitives = tuple(CatalogPrimitive.model_validate_json(row[0]) for row in rows)
         values = tuple(
             sorted(
                 (
@@ -1321,8 +1319,7 @@ class KnowledgeCatalog:
             for item in self._records()
             if isinstance(item.record.value, EffectEstimate)
             and (
-                not query.metric_ids
-                or item.record.value.metric_id in query.metric_ids
+                not query.metric_ids or item.record.value.metric_id in query.metric_ids
             )
             and (
                 not query.directions or item.record.value.direction in query.directions
@@ -1377,8 +1374,7 @@ class KnowledgeCatalog:
             )
             and (
                 query.context_sha256 is None
-                or related(item.record.value)[1].context_sha256
-                == query.context_sha256
+                or related(item.record.value)[1].context_sha256 == query.context_sha256
             )
         )
         return self._page(query, values)

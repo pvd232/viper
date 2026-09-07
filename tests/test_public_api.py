@@ -158,6 +158,7 @@ def test_verification_namespace_separates_operations_and_models() -> None:
     operations = (
         verification.verify_run_result,
         verification.verify_promoted_artifact,
+        verification.verify_stage_reuse,
         verification.verify_stored_input_selections,
         verification.verify_stored_inputs,
         verification.verify_attempt_future_inputs,
@@ -180,6 +181,7 @@ def test_verification_namespace_separates_operations_and_models() -> None:
         "verify_benchmark_result",
         "verify_promoted_artifact",
         "verify_run_result",
+        "verify_stage_reuse",
         "verify_stored_input_selections",
         "verify_stored_inputs",
     ]

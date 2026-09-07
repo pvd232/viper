@@ -40,7 +40,12 @@ from .http import (
     ResolvedHttpRetrieval,
 )
 from .ids import EvalId, HumanId, InputName, MetricId, RunId, StageId
-from .inputs import InputRef, ResolvedInputRef, pointer_path
+from .inputs import (
+    InputRef,
+    ResolvedInputRef,
+    pointer_location_matches,
+    pointer_path,
+)
 from .metrics import MetricHandle, MetricObjectiveSpec
 from .params import ParameterModelRef
 from .reuse import StageCompletion, StageReuseMode
@@ -343,7 +348,8 @@ class EvalSpec(InternalSpec):
             raise ValueError("eval metric IDs must be unique")
         if len(set(self.split_inputs)) != len(self.split_inputs):
             raise ValueError("eval split input names must be unique")
-        if keys.Train.MODEL not in self.inputs:
+        model_input = self.inputs.get(keys.Train.MODEL)
+        if model_input is None:
             raise ValueError("eval requires a parameters input")
         dataset = self.inputs.get(keys.Eval.TEST)
         if dataset is None:
@@ -359,6 +365,33 @@ class EvalSpec(InternalSpec):
             raise ValueError("eval splits must differ from reserved inputs")
         if any(name not in self.inputs for name in self.split_inputs):
             raise ValueError("eval split input is absent")
+        for split_name in self.split_inputs:
+            split_input = self.inputs[split_name]
+            if split_input.kind != "stored":
+                raise ValueError(f"eval split input {split_name!r} must be stored")
+            if pointer_path(split_input.pointer).split("/")[1] != "benchmarks":
+                raise ValueError(
+                    f"eval split input {split_name!r} must use inputs/benchmarks"
+                )
+            if split_input.data_role != dataset.data_role:
+                raise ValueError(
+                    f"eval split input {split_name!r} data_role must match test"
+                )
+        if model_input.kind == "future":
+            if model_input.name != keys.Train.MODEL:
+                raise ValueError("same-run eval must consume model")
+        elif model_input.kind == "stored":
+            if pointer_path(model_input.pointer).split("/")[1] != "models":
+                raise ValueError("stored eval model must use inputs/models")
+            if model_input.data_role not in {"training", "validation"}:
+                raise ValueError(
+                    "stored eval parameters data_role must be training or validation"
+                )
+        elif model_input.data_role not in {"training", "validation"}:
+            raise ValueError(
+                "external evaluation parameters data_role must be training "
+                "or validation"
+            )
         predictions = self.artifacts.get(keys.Eval.PREDS)
         if predictions is None:
             raise ValueError("eval requires a predictions artifact")
@@ -603,7 +636,10 @@ class ResolvedInternalSpec(ResolvedParameterizedSpec):
             if (
                 resolved_input.kind == "stored"
                 and spec_input.kind == "stored"
-                and resolved_input.pointer.stored_at != spec_input.pointer
+                and not pointer_location_matches(
+                    spec_input.pointer,
+                    resolved_input.pointer.stored_at,
+                )
             ):
                 raise ValueError(
                     f"resolved input {name!r} pointer location must match "

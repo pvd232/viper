@@ -1,3 +1,5 @@
+"""Define canonical input and artifact names for built-in stage roles."""
+
 from typing import Final
 
 from ._schema import ArtifactName

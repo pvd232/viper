@@ -27,10 +27,16 @@ def test_run_compiles_plan_before_first_attempt(
     result = object()
     calls: list[str] = []
 
-    def freeze(root: Path, selected: RunPlanDraft):
+    def freeze(
+        root: Path,
+        selected: RunPlanDraft,
+        *,
+        cloud_client: object | None = None,
+    ):
         calls.append("freeze")
         assert root == tmp_path
         assert selected is draft
+        assert cloud_client is None
         return frozen
 
     def run(root: Path, path: Path, **kwargs: object):

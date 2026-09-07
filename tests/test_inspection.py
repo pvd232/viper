@@ -151,7 +151,7 @@ def _run(stage_raw: bytes, *, seed: int) -> RunSpec:
 def _write_plan(root: Path, *, seed: int) -> Path:
     """Write one complete frozen plan beneath a temporary repository root."""
     stage_data = parse_yaml_bytes(EXAMPLE_STAGE.read_bytes())
-    stage_data.pop("environment")
+    stage_data.pop("env", None)
     for artifact in stage_data["artifacts"].values():
         if artifact["data_role"] == "evaluation":
             artifact["data_role"] = "eval"
@@ -653,12 +653,13 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
     primitive_page = records.primitives(
         PrimitiveQuery(primitive_ids=("gated-recurrence",))
     )
-    assert tuple(item.label for item in primitive_page.items) == (
-        "Gated recurrence",
+    assert tuple(item.label for item in primitive_page.items) == ("Gated recurrence",)
+    assert (
+        records.assignments(AssignmentQuery(origins=("declared",)))
+        .items[0]
+        .record.value
+        == assignment
     )
-    assert records.assignments(
-        AssignmentQuery(origins=("declared",))
-    ).items[0].record.value == assignment
 
     similar = records.similar(
         SimilarityQuery(
@@ -676,10 +677,13 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
         )
     )
     assert len(judgments.items) == 1
-    assert records.similar(
-        SimilarityQuery(
-            view_id="another-view",
-            view_version="1",
-            values=(1.0,),
-        )
-    ).items == ()
+    assert (
+        records.similar(
+            SimilarityQuery(
+                view_id="another-view",
+                view_version="1",
+                values=(1.0,),
+            )
+        ).items
+        == ()
+    )

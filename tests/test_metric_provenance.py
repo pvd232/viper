@@ -144,17 +144,19 @@ def test_metric_dependencies_reuse_snapshot_references() -> None:
     dependency = metrics.MetricDependency(
         source="artifact",
         name="predictions",
-        required_data_role="evaluation",
+        required_data_role="eval",
     )
     resolved = metric_execution._resolve_metric_dependencies(
-        SimpleNamespace(inputs={}),
-        SimpleNamespace(
+        SimpleNamespace(inputs={}),  # pyright: ignore[reportArgumentType]
+        SimpleNamespace(  # pyright: ignore[reportArgumentType]
             inputs={},
             artifacts={"predictions": artifacts.ResolvedSingleFileArtifact(file=file)},
         ),
         stage_ref,
         {},
-        SimpleNamespace(dependencies=(dependency,)),
+        SimpleNamespace(  # pyright: ignore[reportArgumentType]
+            dependencies=(dependency,)
+        ),
         {},
     )
 
@@ -183,7 +185,7 @@ def test_metric_dependency_rejects_republished_payload() -> None:
     dependency = metrics.MetricDependency(
         source="artifact",
         name="predictions",
-        required_data_role="evaluation",
+        required_data_role="eval",
     )
     with pytest.raises(VerificationError, match="dependency references differ"):
         metric_verification.verify_metric_dependency_references(

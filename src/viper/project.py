@@ -125,8 +125,8 @@ def _project_files(package: str) -> dict[str, str]:
     stage_definitions = {
         "build": ("BuildParameters", "build", "prior"),
         "embed": ("EmbedParameters", "embed", "embedding"),
-        "train": ("TrainParameters", "train", "parameters"),
-        "eval": ("EvalParameters", "eval", "predictions"),
+        "train": ("TrainParameters", "train", "model"),
+        "eval": ("EvalParameters", "eval", "preds"),
     }
     files: dict[str, str] = {
         **ROOT_FILES,
@@ -152,7 +152,7 @@ build-backend = "setuptools.build_meta"
 name = "{package.replace("_", "-")}"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["viper-provenance>=0.1.0a2"]
+dependencies = ["viper-provenance>=0.1.0a3"]
 
 [project.optional-dependencies]
 test = ["pytest>=9,<10"]
@@ -279,7 +279,7 @@ from viper.metrics import metric
 @metric(metric_id="prediction_bytes", mode="stateless")
 def prediction_bytes(context) -> float:
     """Return the byte count of the verified prediction artifact."""
-    return float(len(context.artifacts["predictions"].read_bytes()))
+    return float(len(context.artifacts["preds"].read_bytes()))
 '''
         ),
         "experiments/README.md": """# Experiments
@@ -331,17 +331,28 @@ def test_stage_kinds() -> None:
     }
     for stage, (parameter_class, decorator, artifact) in stage_definitions.items():
         if stage == "eval":
-            input_read = "    payload = context.inputs['parameters'].read_bytes()\n"
+            input_read = "    payload = context.inputs['model'].read_bytes()\n"
         else:
             input_read = (
                 "    source = next(iter(context.inputs.values()))\n"
                 "    payload = source.read_bytes()\n"
             )
         extra_artifact = ""
+        metric_import = ""
+        metric_definition = ""
         if stage == "train":
             extra_artifact = (
-                "    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+                "    context.artifacts['state'].write_bytes(b'resume')\n"
+                "    context.metrics['training_loss'].record([0.0], epoch=0, step=1)\n"
             )
+            metric_import = "from viper.metrics import metric\n"
+            metric_definition = '''
+
+@metric(metric_id="training_loss", mode="stateless")
+def training_loss(context, values) -> float:
+    """Return the mean loss recorded by the example training stage."""
+    return float(sum(values) / len(values))
+'''
         destination_line = f'    destination = context.artifacts["{artifact}"]\n'
         stage_body = f"""{input_read}{destination_line}\
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -352,8 +363,9 @@ def test_stage_kinds() -> None:
         ] = f'''"""Execute the example {stage} stage."""
 
 from {package}.params import {parameter_class}
+{metric_import}\
 from viper.stages import {decorator}
-
+{metric_definition}
 
 @{decorator}(params={parameter_class})
 def {stage}(context) -> None:

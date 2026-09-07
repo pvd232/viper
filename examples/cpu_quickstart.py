@@ -11,7 +11,15 @@ from viper.artifacts import artifact
 from viper.authoring import experiment, input, plan, replicate, stage, variant
 from viper.metrics import MetricContext, measure, metric, min
 from viper.project import resolve_root
+from viper.randomness import capture_main_process_rng
 from viper.references import GitFileRef, GitSource
+from viper.resume import (
+    DataLoaderConfiguration,
+    DataLoaderResumeState,
+    ResumeState,
+    load_resume_state,
+    save_resume_state,
+)
 from viper.runtime import LocalEnvSpec, ReproducibilitySpec, observe_python_env
 from viper.stages import Context, train
 
@@ -19,6 +27,11 @@ from viper.stages import Context, train
 def load_json(path: Path) -> dict[str, float | int]:
     """Load one model or checkpoint written by the training stage."""
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_state(path: Path) -> ResumeState:
+    """Load and validate the terminal training state."""
+    return load_resume_state(path)
 
 
 @metric(metric_id="training_loss", mode="stateless")
@@ -51,9 +64,19 @@ def fit(context: Context[params.Train]) -> None:
     model = context.artifacts["model"]
     model.parent.mkdir(parents=True, exist_ok=True)
     model.write_text(json.dumps({"weight": weight}) + "\n", encoding="utf-8")
-    context.artifacts["state"].write_text(
-        json.dumps({"epoch": epoch, "loss": loss}) + "\n",
-        encoding="utf-8",
+    save_resume_state(
+        context.artifacts["state"],
+        ResumeState(
+            optimizer_state={"weight": weight, "loss": loss},
+            main_process_rng=capture_main_process_rng(
+                context.numpy_generators,
+                capture_legacy_global=True,
+            ),
+            dataloader=DataLoaderResumeState(
+                configuration=DataLoaderConfiguration(workers=0),
+                state_dict={"epoch": epoch},
+            ),
+        ),
     )
 
 
@@ -136,8 +159,8 @@ def main() -> None:
                 data_role="training",
             ),
             "state": artifact(
-                path="artifacts/models/tiny/state.json",
-                loader=load_json,
+                path="artifacts/models/tiny/state.pt",
+                loader=load_state,
                 data_role="training",
             ),
         },

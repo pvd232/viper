@@ -1,6 +1,5 @@
 kind: download
 schema_version: 1
-environment: null
 metric_ids: []
 artifacts:
   dataset:
@@ -20,7 +19,7 @@ artifacts:
       symbol: load
       sha256: bd95723e8f125165e4fa975e965b2038ca02e88897976baa6183d1bc5495bacc
       bytes: 178
-    data_role: evaluation
+    data_role: eval
 inputs:
   dataset:
     kind: http

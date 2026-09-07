@@ -27,6 +27,7 @@ from viper.artifacts import (
 from viper.authoring import (
     RunIdMap,
     RunPlanDraft,
+    TrainSpecDraft,
     VariantDraft,
     _compile_plan,
     _CompiledPlan,
@@ -51,7 +52,13 @@ from viper.experiments import (
     TrainVariantStageParams,
     VariantSpec,
 )
-from viper.http import CustomHttpDraft, HttpContext, HttpResult, http
+from viper.http import (
+    CustomHttpDraft,
+    HttpContext,
+    HttpResult,
+    ObservedHttpResponse,
+    http,
+)
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
@@ -119,7 +126,7 @@ def environment_payload(commit: str = COMMIT) -> dict[str, object]:
             "commit": commit,
             "path": "environment.yml",
         },
-        "python_environment": {
+        "python_env": {
             "python_version": "3.13.0",
             "distributions": [{"name": "viper-provenance", "version": "0.1.0"}],
         },
@@ -170,6 +177,8 @@ def training_spec(
     return TrainSpec.model_validate(
         {
             "kind": "train",
+            "metric_ids": ["training_loss"],
+            "objective": {"metric_id": "training_loss", "direction": "min"},
             "implementation": implementation.model_dump(mode="json"),
             "parameter_model": parameter_model.model_dump(mode="json"),
             "inputs": {
@@ -285,32 +294,14 @@ class RunPlanAuthoringTests(unittest.TestCase):
                     )
                 )
             )
-            draft = RunPlanDraft.model_validate(
-                {
-                    "run_id": RUN_ID,
-                    "experiment_id": "e001_strand",
-                    "variant_id": "baseline",
-                    "replicate_id": "replicate_01",
-                    "seed": 42,
-                    "source": {
-                        "kind": "git",
-                        "repository": "https://github.com/example/viper-project",
-                        "commit": source_commit,
-                    },
-                    "environment": environment_payload(source_commit),
-                    "reproducibility": reproducibility_payload(),
-                    "stages": [
-                        {"stage_id": "train", "spec_source": "drafts/train.yaml"}
-                    ],
-                    "estimator": {
-                        "stage_id": "train",
-                        "artifact_name": PARAMETERS,
-                    },
-                }
-            )
+            current_root = root / "current"
+            current_root.mkdir()
+            _, draft = _compiled_plan(current_root)
+            root = current_root
 
             frozen = freeze_run_plan(root, draft)
-            stage_path, run_path = frozen.files
+            stage_path = next(path for path in frozen.files if "/stages/" in str(path))
+            run_path = frozen.files[-1]
             stage_raw = stage_path.read_bytes()
             loaded_run = RunSpec.model_validate(parse_yaml_bytes(run_path.read_bytes()))
 
@@ -321,9 +312,13 @@ class RunPlanAuthoringTests(unittest.TestCase):
         self.assertEqual(loaded_run.stages[0].bytes, len(stage_raw))
         self.assertEqual(
             stage_path.relative_to(root).as_posix(),
-            f"{RUN_ROOT}/stages/train/spec.yaml",
+            "experiments/e001_strand/runs/"
+            f"baseline/{draft.run_id}/stages/train/spec.yaml",
         )
-        self.assertEqual(run_path.relative_to(root).as_posix(), f"{RUN_ROOT}/spec.yaml")
+        self.assertEqual(
+            run_path.relative_to(root).as_posix(),
+            f"experiments/e001_strand/runs/baseline/{draft.run_id}/spec.yaml",
+        )
 
     def test_experiment_and_variant_writers_use_identity_paths(self) -> None:
         """Write experiment and variant records under one experiment identity."""
@@ -400,7 +395,14 @@ def test_artifact_and_http_drafts_preserve_callable_identity() -> None:
 
     @http(id="dataset")
     def fetch(context: HttpContext[params.Http]) -> HttpResult:
-        return HttpResult(body=context.destination, response=context.request)
+        return HttpResult(
+            body=context.destination,
+            response=ObservedHttpResponse(
+                response_url=context.request.url,
+                status=200,
+                response_headers={},
+            ),
+        )
 
     artifact_draft = artifact(
         path="artifacts/data.csv", loader=load, data_role="training"
@@ -460,6 +462,7 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         objective=min(loss),
     )
 
+    assert isinstance(draft.spec, TrainSpecDraft)
     assert draft.spec.implementation is fit
     assert draft.artifacts["model"].producer is draft
 
@@ -509,15 +512,16 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
         replicates={"replicate_01": replicate(seed=42)},
     )
     env_payload = environment_payload()
-    env_payload["python_env"] = env_payload.pop("python_environment")
     return (
         plan(
             experiment=authored,
             variant="baseline",
             replicate="replicate_01",
-            source=GitSource(
-                repository="https://github.com/example/viper-project",
-                commit=COMMIT,
+            source=GitSource.model_validate(
+                {
+                    "repository": "https://github.com/example/viper-project",
+                    "commit": COMMIT,
+                }
             ),
             env=TypeAdapter(EnvSpec).validate_python(env_payload),
             reproducibility=ReproducibilitySpec.model_validate(
@@ -626,14 +630,15 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
         replicates={"replicate_01": replicate(seed=42)},
     )
     env_payload = environment_payload(commit)
-    env_payload["python_env"] = env_payload.pop("python_environment")
     draft = plan(
         experiment=authored,
         variant="baseline",
         replicate="replicate_01",
-        source=GitSource(
-            repository="https://github.com/example/viper-project",
-            commit=commit,
+        source=GitSource.model_validate(
+            {
+                "repository": "https://github.com/example/viper-project",
+                "commit": commit,
+            }
         ),
         env=TypeAdapter(EnvSpec).validate_python(env_payload),
         reproducibility=ReproducibilitySpec.model_validate(reproducibility_payload()),

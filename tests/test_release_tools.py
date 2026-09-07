@@ -21,7 +21,7 @@ def test_release_metadata_matches_the_approved_public_identity() -> None:
     ]
 
     assert project["name"] == "viper-provenance"
-    assert project["version"] == "0.1.0a2"
+    assert project["version"] == "0.1.0a3"
     assert project["description"] == (
         "Run and verify reproducible ML experiments with machine-readable "
         "guardrails for agents."

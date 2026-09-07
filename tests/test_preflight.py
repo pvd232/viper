@@ -18,6 +18,7 @@ from viper._schema import (
 )
 from viper.artifacts import SingleFileArtifactSpec
 from viper.inputs import FutureInputRef
+from viper.metrics import MetricObjectiveSpec
 from viper.preflight import preflight_plan
 from viper.runs import (
     RunSpec,
@@ -43,6 +44,11 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
     """Return every independent plan, source, environment, and stage failure."""
     run_root = "experiments/example/runs/baseline/01JABCDEFGHJKMNPQRSTVWXYZ0"
     stage = TrainSpec(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         implementation=stage_implementation_ref("project/build.py"),
         parameter_model=parameter_model_ref("train"),
         inputs={
@@ -76,7 +82,7 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
                 "repository": "https://github.com/example/project",
                 "commit": "a" * 40,
             },
-            "environment": {
+            "env": {
                 "kind": "gce",
                 "provisioning": {
                     "kind": "boot_image",
@@ -92,7 +98,7 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
                     "commit": "a" * 40,
                     "path": "environment.yml",
                 },
-                "python_environment": {
+                "python_env": {
                     "python_version": "3.13.0",
                     "distributions": [{"name": "viper-provenance", "version": "0.1.0"}],
                 },
@@ -149,8 +155,8 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
     failures = {check.code for check in report.checks if check.status == "failure"}
     assert failures == {
         "artifact.loader",
-        "environment.gce",
-        "environment.python",
+        "env.gce",
+        "env.python",
         "input.future",
         "metric.implementation",
         "parameter_model.identity",

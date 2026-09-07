@@ -12,10 +12,8 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from ._schema import (
-    RESUME_STATE,
-    ArtifactName,
-)
+from . import keys
+from ._schema import ArtifactName
 from .artifacts import ArtifactLoaderRef
 from .resume import ResumeState
 from .runs import RunSpec
@@ -142,7 +140,7 @@ def validate_artifact_context(
 ) -> ArtifactValidationResult:
     """Invoke one loader and apply the reserved validator when applicable."""
     value = _load_artifact_value(context)
-    if context.artifact_name == RESUME_STATE:
+    if context.artifact_name == keys.Train.STATE:
         _validate_resume_state(value, context.run)
         return ArtifactValidationResult(guarantee="artifact.semantic.resume_state")
     return ArtifactValidationResult(guarantee="artifact.loadability")

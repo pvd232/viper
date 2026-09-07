@@ -369,14 +369,16 @@ def http(
     *,
     id: HumanId,
     params: type[HttpParamsT] = params.Http,
+    parameter_model: type[HttpParamsT] | None = None,
     executables: tuple[ExternalExecutableSpec, ...] = (),
 ) -> Callable[[DecoratedHttp], DecoratedHttp]:
-    """Declare one project-owned HTTP callable."""
-    if not issubclass(params, ParameterSet):
+    """Declare one project-owned HTTP callable with its parameter model."""
+    selected_params = params if parameter_model is None else parameter_model
+    if not issubclass(selected_params, ParameterSet):
         raise TypeError("HTTP parameter model must subclass viper.params.ParameterSet")
     definition = HttpDefinition(
         id=id,
-        parameter_model=params,
+        parameter_model=selected_params,
         executables=executables,
     )
 
@@ -669,13 +671,15 @@ def invoke_http(
     destination: Path,
     *,
     env: Mapping[str, str] | None = None,
+    environment: Mapping[str, str] | None = None,
 ) -> HttpResult:
     """Invoke the selected HTTP implementation and verify its result."""
     root = repository_root.resolve()
     validate_request_policy(request, policy)
+    selected_env = env if environment is None else environment
     credential = _resolve_credential(
         request.credentials,
-        os.environ if env is None else env,
+        os.environ if selected_env is None else selected_env,
     )
     resolved_workspace = workspace.resolve()
     resolved_destination = destination.resolve()

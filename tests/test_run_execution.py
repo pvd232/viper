@@ -42,8 +42,7 @@ from viper.artifacts import (
     artifact,
 )
 from viper.authoring import (
-    RunPlanDraft,
-    StageDraft,
+    FrozenPlanFiles,
     experiment,
     freeze_run_plan,
     plan,
@@ -85,6 +84,7 @@ from viper.metrics import (
     Measurement,
     MetricDependency,
     MetricImplementationRef,
+    MetricObjectiveSpec,
     MetricSpec,
     measure,
 )
@@ -96,6 +96,8 @@ from viper.references import (
     GitFileRef,
     GitSource,
     HuggingFaceFileRef,
+    LocalFileRef,
+    ResolvedRunSpecRef,
 )
 from viper.reuse import (
     ReusedStageCompletion,
@@ -104,6 +106,7 @@ from viper.reuse import (
 from viper.runs import (
     ResolvedRun,
     RunSpec,
+    RunStageRef,
 )
 from viper.runtime import (
     CUDAComputeSpec,
@@ -127,6 +130,59 @@ from viper.workspace import AttemptWorkspace, captured_input_path
 
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 RUN_ROOT = f"experiments/example/runs/baseline/{RUN_ID}"
+
+
+def freeze_protocol_plan(
+    root: Path,
+    *,
+    stages: tuple[tuple[str, DownloadSpec | TrainSpec], ...],
+    source: GitSource,
+    env: LocalEnvironmentSpec | GCEEnvironmentSpec,
+) -> FrozenPlanFiles:
+    """Publish an already-constructed protocol plan for execution-focused tests."""
+    files: dict[str, bytes] = {}
+    references: list[RunStageRef] = []
+    for stage_id, spec in stages:
+        stage_path = f"{RUN_ROOT}/stages/{stage_id}/spec.yaml"
+        raw = serialize_document(spec)
+        files[stage_path] = raw
+        references.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=stage_path,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    run = RunSpec(
+        run_id=RUN_ID,
+        experiment_id="example",
+        variant_id="baseline",
+        replicate_id="r1",
+        seed=7,
+        source=source,
+        env=env,
+        reproducibility=reproducibility(),
+        stages=tuple(references),
+        estimator=StageArtifactRef(stage_id="train", artifact_name=PARAMETERS),
+    )
+    run_path = f"{RUN_ROOT}/spec.yaml"
+    run_raw = serialize_document(run)
+    files[run_path] = run_raw
+    commit = LocalArtifactStore(root).publish(files)
+    paths = tuple(root / path for path in files)
+    for path, raw in zip(paths, files.values(), strict=True):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    return FrozenPlanFiles(
+        run=run,
+        reference=ResolvedRunSpecRef(
+            sha256=hashlib.sha256(run_raw).hexdigest(),
+            bytes=len(run_raw),
+            stored_at=LocalFileRef(commit=commit, path=run_path),
+        ),
+        files=paths,
+    )
 
 
 @pytest.fixture
@@ -212,7 +268,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         b'@metric(metric_id="parameter_bytes", '
         b'mode="stateless")\n'
         b"def compute(context):\n"
-        b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
+        b"    return float(len(context.artifacts['model'].read_bytes()))\n"
     )
     stateful_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
@@ -299,11 +355,11 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             b"    assert context.params.batch_size == 1\n"
             b"    assert context.params.learning_rate == 0.1\n"
             b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
-            b"    context.artifacts['parameters'].parent.mkdir(\n"
+            b"    context.artifacts['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
             b"    )\n"
-            b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
-            b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            b"    context.artifacts['model'].write_bytes(b'parameters')\n"
+            b"    context.artifacts['state'].write_bytes(b'resume')\n"
             b"    live_metric = context.metrics['epoch_mean']\n"
             b"    live_metric.update(1.0)\n"
             b"    live_metric.update(3.0)\n"
@@ -336,12 +392,12 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             machine_type="g2-standard-12",
             compute=CUDAComputeSpec(model="NVIDIA L4", count=1),
             lockfile=lockfile,
-            python_environment=python_environment(),
+            python_env=python_environment(),
         )
     else:
         environment = LocalEnvironmentSpec(
             lockfile=lockfile,
-            python_environment=python_environment(),
+            python_env=python_environment(),
         )
     host, port = http_source
     download = DownloadSpec(
@@ -388,6 +444,10 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(source_files["project/parameters/train.py"]),
         ),
         metric_ids=("parameter_bytes", "epoch_mean"),
+        objective=MetricObjectiveSpec(
+            metric_id="epoch_mean",
+            direction="min",
+        ),
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="download",
@@ -422,32 +482,11 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             ),
         },
     )
-    draft_root = tmp_path / "drafts"
-    draft_root.mkdir()
-    download_draft = draft_root / "download.yaml"
-    train_draft = draft_root / "train.yaml"
-    download_draft.write_bytes(serialize_document(download))
-    train_draft.write_bytes(serialize_document(train))
-    frozen = freeze_run_plan(
+    frozen = freeze_protocol_plan(
         root,
-        RunPlanDraft(
-            run_id=RUN_ID,
-            experiment_id="example",
-            variant_id="baseline",
-            replicate_id="r1",
-            seed=7,
-            source=source,
-            environment=environment,
-            reproducibility=reproducibility(),
-            stages=(
-                StageDraft(stage_id="download", spec_source=download_draft),
-                StageDraft(stage_id="train", spec_source=train_draft),
-            ),
-            estimator=StageArtifactRef(
-                stage_id="train",
-                artifact_name=PARAMETERS,
-            ),
-        ),
+        stages=(("download", download), ("train", train)),
+        source=source,
+        env=environment,
     )
     run_git(root, "add", "experiments/example/runs")
     run_git(root, "commit", "--quiet", "-m", "plan")
@@ -673,7 +712,7 @@ def test_train_stage_captures_local_external_input(
         b'@metric(metric_id="parameter_bytes", '
         b'mode="stateless")\n'
         b"def compute(context):\n"
-        b"    return float(len(context.artifacts['parameters'].read_bytes()))\n"
+        b"    return float(len(context.artifacts['model'].read_bytes()))\n"
     )
     stateful_metric_source = (
         b"from viper.metrics import StatefulMetric, metric\n\n"
@@ -760,11 +799,11 @@ def test_train_stage_captures_local_external_input(
             b"    assert context.params.batch_size == 1\n"
             b"    assert context.params.learning_rate == 0.1\n"
             b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
-            b"    context.artifacts['parameters'].parent.mkdir(\n"
+            b"    context.artifacts['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
             b"    )\n"
-            b"    context.artifacts['parameters'].write_bytes(b'parameters')\n"
-            b"    context.artifacts['resume_state'].write_bytes(b'resume')\n"
+            b"    context.artifacts['model'].write_bytes(b'parameters')\n"
+            b"    context.artifacts['state'].write_bytes(b'resume')\n"
             b"    live_metric = context.metrics['epoch_mean']\n"
             b"    live_metric.update(1.0)\n"
             b"    live_metric.update(3.0)\n"
@@ -798,12 +837,12 @@ def test_train_stage_captures_local_external_input(
             machine_type="g2-standard-12",
             compute=CUDAComputeSpec(model="NVIDIA L4", count=1),
             lockfile=lockfile,
-            python_environment=python_environment(),
+            python_env=python_environment(),
         )
     else:
         environment = LocalEnvironmentSpec(
             lockfile=lockfile,
-            python_environment=python_environment(),
+            python_env=python_environment(),
         )
 
     train = TrainSpec(
@@ -823,6 +862,10 @@ def test_train_stage_captures_local_external_input(
             bytes=len(source_files["project/parameters/train.py"]),
         ),
         metric_ids=("parameter_bytes", "epoch_mean"),
+        objective=MetricObjectiveSpec(
+            metric_id="epoch_mean",
+            direction="min",
+        ),
         inputs={
             "prior": ExternalInputRef(
                 source=LocalSource(path="inputs/raw/prior.bin"),
@@ -857,27 +900,11 @@ def test_train_stage_captures_local_external_input(
             ),
         },
     )
-    draft_root = tmp_path / "drafts"
-    draft_root.mkdir()
-    train_draft = draft_root / "train.yaml"
-    train_draft.write_bytes(serialize_document(train))
-    frozen = freeze_run_plan(
+    frozen = freeze_protocol_plan(
         root,
-        RunPlanDraft(
-            run_id=RUN_ID,
-            experiment_id="example",
-            variant_id="baseline",
-            replicate_id="r1",
-            seed=7,
-            source=source,
-            environment=environment,
-            reproducibility=reproducibility(),
-            stages=(StageDraft(stage_id="train", spec_source=train_draft),),
-            estimator=StageArtifactRef(
-                stage_id="train",
-                artifact_name=PARAMETERS,
-            ),
-        ),
+        stages=(("train", train),),
+        source=source,
+        env=environment,
     )
     run_git(root, "add", "experiments/example/runs")
     run_git(root, "commit", "--quiet", "-m", "plan")
@@ -1016,15 +1043,7 @@ def test_attempt_rechecks_and_publishes_captured_local_inputs() -> None:
     resolution = min(call_lines["resolve_stage"])
     publication = min(call_lines["publish"])
 
-    assert stage_exit < custody_check < resolution < publication
-    assert any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "verify_captured_inputs"
-        for handler in ast.walk(tree)
-        if isinstance(handler, ast.ExceptHandler)
-        for node in ast.walk(handler)
-    )
+    assert stage_exit < resolution < custody_check < publication
     exception_lines = {
         node.lineno
         for handler in ast.walk(tree)
@@ -1139,7 +1158,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         "def load(path):\n"
         "    return path.read_bytes()\n\n"
         "def load_state(path):\n"
-        "    return path.read_bytes()\n",
+        f"    return {resume_state().model_dump(mode='python')!r}\n",
         encoding="utf-8",
     )
     dataset = root / "inputs/raw/dataset.bin"

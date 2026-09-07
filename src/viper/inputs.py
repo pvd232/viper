@@ -19,6 +19,7 @@ from .references import (
     ResolvedArtifactPointerRef,
     ResolvedStageRef,
     SnapshotFileRef,
+    StorageModel,
 )
 
 # ----- Provenance graph boundary ----- #
@@ -54,11 +55,23 @@ class ResolvedExternalInputRef(ProtocolModel):
 PointerRef = ArtifactPointerRef | ResolvedArtifactPointerRef
 
 
+def pointer_location(pointer: PointerRef) -> StorageModel:
+    """Return the immutable storage location of one artifact pointer."""
+    if isinstance(pointer, ResolvedArtifactPointerRef):
+        return pointer.stored_at
+    return pointer
+
+
+def pointer_location_matches(pointer: PointerRef, location: StorageModel) -> bool:
+    """Compare pointer locations without requiring identical model subclasses."""
+    return pointer_location(pointer).model_dump(mode="json") == location.model_dump(
+        mode="json"
+    )
+
+
 def pointer_path(pointer: PointerRef) -> RepoRelPath:
     """Return the path containing one artifact pointer."""
-    if isinstance(pointer, ResolvedArtifactPointerRef):
-        return pointer.stored_at.path
-    return pointer.path
+    return pointer_location(pointer).path
 
 
 class StoredInputRef(ProtocolModel):

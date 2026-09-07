@@ -734,9 +734,7 @@ class SimilarityQuery(BaseModel):
     values: tuple[float, ...] = Field(min_length=1)
     primitive_ids: tuple[PrimitiveId, ...] = ()
     metric_ids: tuple[MetricId, ...] = ()
-    assertion_statuses: tuple[
-        Literal["proposed", "reviewed", "rejected"], ...
-    ] = ()
+    assertion_statuses: tuple[Literal["proposed", "reviewed", "rejected"], ...] = ()
     limit: int = Field(default=20, ge=1, le=500)
 
     @model_validator(mode="after")

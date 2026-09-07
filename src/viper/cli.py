@@ -9,7 +9,8 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Literal, NoReturn
 
-from . import _subprocess as subprocess
+import viper._subprocess as subprocess
+
 from .api import (
     APIModel,
     OperationName,

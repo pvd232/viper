@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
+
+from viper import _subprocess as subprocess
 
 
 def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:

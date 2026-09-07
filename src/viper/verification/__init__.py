@@ -7,15 +7,8 @@ from collections.abc import Mapping, Sequence
 import yaml
 from pydantic import BaseModel
 
-from .._schema import (
-    PARAMETERS,
-    PARAMETERS_INPUT,
-    PREDICTIONS,
-    RESUME_STATE,
-    RESUME_STATE_INPUT,
-    DataRole,
-    RepoRelPath,
-)
+from .. import keys
+from .._schema import DataRole, RepoRelPath
 from .._verification import attempt as _attempt
 from .._verification import metrics as _metrics
 from .._verification import paths as _paths
@@ -34,6 +27,7 @@ from ..inputs import (
     ResolvedFutureInputRef,
     ResolvedStoredInputRef,
     StoredInputRef,
+    pointer_location_matches,
 )
 from ..metrics import (
     Measurement,
@@ -51,6 +45,7 @@ from ..references import (
     SnapshotFileRef,
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
+    storage_file,
 )
 from ..reuse import (
     ReusedStageCompletion,
@@ -516,14 +511,14 @@ def verify_stored_input_selections(
 ) -> None:
     """Verify relationships among stored pointers consumed by one stage."""
     if isinstance(stage_spec, TrainSpec):
-        model_input = stage_spec.inputs.get(PARAMETERS_INPUT)
-        state_input = stage_spec.inputs.get(RESUME_STATE_INPUT)
+        model_input = stage_spec.inputs.get(keys.Train.MODEL)
+        state_input = stage_spec.inputs.get(keys.Train.STATE)
         if isinstance(model_input, StoredInputRef) and isinstance(
             state_input,
             StoredInputRef,
         ):
-            model_pointer = pointers[PARAMETERS_INPUT]
-            state_pointer = pointers[RESUME_STATE_INPUT]
+            model_pointer = pointers[keys.Train.MODEL]
+            state_pointer = pointers[keys.Train.STATE]
             if model_pointer.run != state_pointer.run:
                 raise VerificationError(
                     f"stored checkpoint inputs of stage {stage_id!r} must select "
@@ -534,22 +529,22 @@ def verify_stored_input_selections(
                     f"stored checkpoint inputs of stage {stage_id!r} must select "
                     "one producer stage"
                 )
-            if model_pointer.artifact.artifact_name != PARAMETERS:
+            if model_pointer.artifact.artifact_name != keys.Train.MODEL:
                 raise VerificationError(
                     f"stored checkpoint model input of stage {stage_id!r} must "
                     "select parameters"
                 )
-            if state_pointer.artifact.artifact_name != RESUME_STATE:
+            if state_pointer.artifact.artifact_name != keys.Train.STATE:
                 raise VerificationError(
                     f"stored checkpoint state input of stage {stage_id!r} must "
                     "select resume_state"
                 )
 
     if isinstance(stage_spec, EvalSpec):
-        model_input = stage_spec.inputs[PARAMETERS_INPUT]
+        model_input = stage_spec.inputs[keys.Eval.MODEL]
         if isinstance(model_input, StoredInputRef):
-            model_pointer = pointers[PARAMETERS_INPUT]
-            if model_pointer.artifact.artifact_name != PARAMETERS:
+            model_pointer = pointers[keys.Eval.MODEL]
+            if model_pointer.artifact.artifact_name != keys.Train.MODEL:
                 raise VerificationError(
                     f"stored eval model input of stage {stage_id!r} must "
                     "select parameters"
@@ -583,7 +578,10 @@ def verify_stored_inputs(
                     "resolved stored-input reference"
                 )
 
-            if resolved_input.pointer.stored_at != spec_input.pointer:
+            if not pointer_location_matches(
+                spec_input.pointer,
+                resolved_input.pointer.stored_at,
+            ):
                 raise VerificationError(
                     f"stored input {input_name!r} of stage {stage_id!r} resolved "
                     "a different pointer location than the stage spec"
@@ -774,14 +772,13 @@ def verify_benchmark_result(
             "benchmark result run reference is outside the canonical run path"
         )
 
-    expected_benchmark_location = GitFileRef(
-        repository=verified_run.plan.run.source.repository,
-        commit=verified_run.plan.run.source.commit,
-        path=f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
+    expected_benchmark_location = storage_file(
+        resolved_run.spec.stored_at,
+        f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
     )
     if result.benchmark.stored_at != expected_benchmark_location:
         raise VerificationError(
-            "benchmark result reference does not match the run source snapshot"
+            "benchmark result reference does not match the immutable run plan"
         )
 
     if verified_run.plan.benchmark != benchmark:
@@ -923,9 +920,11 @@ def verify_benchmark_result(
         raise VerificationError("benchmark verification requires one eval stage")
     eval_stage_id = eval_stage_ids[0]
     selected_predictions = verified_run.resolved_stages[eval_stage_id].artifacts[
-        PREDICTIONS
+        keys.Eval.PREDS
     ]
-    confirmation_predictions = confirmation_stages[eval_stage_id].artifacts[PREDICTIONS]
+    confirmation_predictions = confirmation_stages[eval_stage_id].artifacts[
+        keys.Eval.PREDS
+    ]
     prediction_parity = selected_predictions == confirmation_predictions
 
     expected_artifacts = {
@@ -944,10 +943,10 @@ def verify_benchmark_result(
             selected_estimator,
             confirmation_estimator,
         ),
-        (eval_stage_id, PREDICTIONS): (
+        (eval_stage_id, keys.Eval.PREDS): (
             StageArtifactRef(
                 stage_id=eval_stage_id,
-                artifact_name=PREDICTIONS,
+                artifact_name=keys.Eval.PREDS,
             ),
             next(
                 stage

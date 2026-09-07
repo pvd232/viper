@@ -26,7 +26,7 @@ from viper._schema import (
     DataRole,
 )
 from viper.artifacts import ResolvedBundleArtifact
-from viper.authoring import RunPlanDraft
+from viper.authoring import RunPlanDraft, VariantDraft
 from viper.experiments import VariantSpec
 from viper.inputs import (
     ExternalInputRef,
@@ -210,7 +210,7 @@ def environment(*, compute: dict | None = None) -> dict:
         "machine_type": "n2-standard-8",
         "compute": compute or {"kind": "cpu"},
         "lockfile": git_file("uv.lock"),
-        "python_environment": {
+        "python_env": {
             "python_version": "3.13.0",
             "distributions": [{"name": "viper-provenance", "version": "0.1.0"}],
         },
@@ -283,6 +283,8 @@ def train_payload() -> dict:
     """Build a valid training-stage request payload."""
     return {
         "kind": "train",
+        "metric_ids": ["training_loss"],
+        "objective": {"metric_id": "training_loss", "direction": "min"},
         "implementation": stage_implementation_ref(
             "project/training/fit.py", symbol="fit"
         ).model_dump(mode="json"),
@@ -324,7 +326,7 @@ def run_payload() -> dict:
             "repository": REPOSITORY,
             "commit": GIT_COMMIT,
         },
-        "environment": environment(),
+        "env": environment(),
         "reproducibility": reproducibility(),
         "stages": [
             {
@@ -353,9 +355,9 @@ class RunPlanTests(unittest.TestCase):
         run = RunSpec.model_validate(run_payload())
 
         self.assertEqual(run.seed, 42)
-        self.assertIsInstance(run.environment, GCEEnvironmentSpec)
-        assert isinstance(run.environment, GCEEnvironmentSpec)
-        self.assertEqual(run.environment.machine_type, "n2-standard-8")
+        self.assertIsInstance(run.env, GCEEnvironmentSpec)
+        assert isinstance(run.env, GCEEnvironmentSpec)
+        self.assertEqual(run.env.machine_type, "n2-standard-8")
         self.assertEqual(run.estimator.artifact_name, PARAMETERS)
 
     def test_estimator_must_select_parameters(self) -> None:
@@ -363,7 +365,7 @@ class RunPlanTests(unittest.TestCase):
         payload = run_payload()
         payload["estimator"]["artifact_name"] = RESUME_STATE
 
-        with self.assertRaisesRegex(ValidationError, "parameters"):
+        with self.assertRaisesRegex(ValidationError, "model"):
             RunSpec.model_validate(payload)
 
     def test_stage_spec_reference_uses_canonical_run_path(self) -> None:
@@ -522,7 +524,7 @@ class ParameterContractTests(unittest.TestCase):
                     MetricDependency(
                         source="artifact",
                         name="predictions",
-                        required_data_role="evaluation",
+                        required_data_role="eval",
                     ),
                 ),
                 comparator=FloatComparator(mode="exact", tolerance=0),
@@ -641,7 +643,7 @@ class TrainingCheckpointTests(unittest.TestCase):
             "json_file",
         )
 
-        with self.assertRaisesRegex(ValidationError, "reserved for evaluation"):
+        with self.assertRaisesRegex(ValidationError, "reserved for eval"):
             TrainSpec.model_validate(payload)
 
     def test_train_requires_both_terminal_checkpoint_artifacts(self) -> None:
@@ -649,7 +651,7 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload = train_payload()
         del payload["artifacts"][RESUME_STATE]
 
-        with self.assertRaisesRegex(ValidationError, "resume_state"):
+        with self.assertRaisesRegex(ValidationError, "state"):
             TrainSpec.model_validate(payload)
 
     def test_checkpoint_inputs_select_one_producer_and_both_artifacts(self) -> None:
@@ -657,12 +659,12 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload = train_payload()
         payload["inputs"].update(
             {
-                "parameters": {
+                "model": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
                     "name": PARAMETERS,
                 },
-                "resume_state": {
+                "state": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
                     "name": RESUME_STATE,
@@ -671,7 +673,7 @@ class TrainingCheckpointTests(unittest.TestCase):
         )
 
         spec = TrainSpec.model_validate(payload)
-        checkpoint = spec.inputs["parameters"]
+        checkpoint = spec.inputs["model"]
         assert isinstance(checkpoint, FutureInputRef)
         self.assertEqual(
             checkpoint.producer_stage_id,
@@ -681,7 +683,7 @@ class TrainingCheckpointTests(unittest.TestCase):
     def test_checkpoint_inputs_must_occur_together(self) -> None:
         """Verify that checkpoint inputs must occur together."""
         payload = train_payload()
-        payload["inputs"]["parameters"] = {
+        payload["inputs"]["model"] = {
             "kind": "future",
             "producer_stage_id": "train_01",
             "name": PARAMETERS,
@@ -695,12 +697,12 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload = train_payload()
         payload["inputs"].update(
             {
-                "parameters": {
+                "model": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
                     "name": PARAMETERS,
                 },
-                "resume_state": {
+                "state": {
                     "kind": "future",
                     "producer_stage_id": "train_02",
                     "name": RESUME_STATE,
@@ -708,7 +710,7 @@ class TrainingCheckpointTests(unittest.TestCase):
             }
         )
 
-        with self.assertRaisesRegex(ValidationError, "one checkpoint-producing"):
+        with self.assertRaisesRegex(ValidationError, "one producer stage"):
             TrainSpec.model_validate(payload)
 
     def test_stored_checkpoint_inputs_use_model_paths(self) -> None:
@@ -716,11 +718,11 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload = train_payload()
         payload["inputs"].update(
             {
-                "parameters": stored_input(
+                "model": stored_input(
                     "inputs/priors/strand/parameters.safetensors",
                     "inputs/priors/strand/parameters.pointer.yaml",
                 ),
-                "resume_state": stored_input(
+                "state": stored_input(
                     "inputs/priors/strand/resume_state.pt",
                     "inputs/priors/strand/resume_state.pointer.yaml",
                 ),
@@ -738,39 +740,43 @@ class EvaluationTests(unittest.TestCase):
         """Verify that evaluation requires fixed inputs metrics and predictions."""
         spec = EvaluateSpec.model_validate(
             {
-                "kind": "evaluate",
+                "kind": "eval",
                 "implementation": stage_implementation_ref(
                     "project/evaluation/predict.py", symbol="predict"
                 ).model_dump(mode="json"),
                 "parameter_model": parameter_model_ref("evaluate").model_dump(
                     mode="json"
                 ),
-                "evaluation_id": "strand_predictions",
+                "eval_id": "strand_predictions",
                 "metric_ids": ["pearson_correlation"],
+                "objective": {
+                    "metric_id": "pearson_correlation",
+                    "direction": "max",
+                },
                 "split_inputs": ["perturbation_split"],
                 "inputs": {
-                    "parameters": {
+                    "model": {
                         "kind": "future",
                         "producer_stage_id": "train",
                         "name": PARAMETERS,
                     },
-                    "evaluation_dataset": stored_input(
+                    "test": stored_input(
                         "inputs/datasets/replogle_test/dataset.h5ad",
                         "inputs/datasets/replogle_test/current.pointer.yaml",
-                        "evaluation",
+                        "eval",
                     ),
                     "perturbation_split": stored_input(
                         "inputs/benchmarks/replogle/perturbations.json",
                         "inputs/benchmarks/replogle/perturbations.pointer.yaml",
-                        "evaluation",
+                        "eval",
                     ),
                 },
                 "params": {},
                 "artifacts": {
                     PREDICTIONS: artifact(
-                        f"{RUN_ROOT}/artifacts/evaluations/strand_predictions/predictions.json",
+                        f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
                         "json_file",
-                        "evaluation",
+                        "eval",
                     )
                 },
             }
@@ -781,42 +787,41 @@ class EvaluationTests(unittest.TestCase):
     def test_predictions_may_use_a_project_defined_bundle_format(self) -> None:
         """Accept a prediction bundle with an exact project-owned loader path."""
         payload = {
-            "kind": "evaluate",
+            "kind": "eval",
             "implementation": stage_implementation_ref(
                 "evaluation/predict.py", symbol="predict"
             ).model_dump(mode="json"),
             "parameter_model": parameter_model_ref("evaluate").model_dump(mode="json"),
-            "evaluation_id": "structured_predictions",
+            "eval_id": "structured_predictions",
             "metric_ids": ["accuracy"],
+            "objective": {"metric_id": "accuracy", "direction": "max"},
             "split_inputs": ["test_split"],
             "inputs": {
-                "parameters": {
+                "model": {
                     "kind": "future",
                     "producer_stage_id": "train",
                     "name": PARAMETERS,
                 },
-                "evaluation_dataset": stored_input(
+                "test": stored_input(
                     "inputs/datasets/test/data.bin",
                     "inputs/datasets/test/current.pointer.yaml",
-                    "evaluation",
+                    "eval",
                 ),
                 "test_split": stored_input(
                     "inputs/benchmarks/test/split.json",
                     "inputs/benchmarks/test/current.pointer.yaml",
-                    "evaluation",
+                    "eval",
                 ),
             },
             "params": {},
             "artifacts": {
                 PREDICTIONS: {
                     "kind": "bundle",
-                    "path": (
-                        f"{RUN_ROOT}/artifacts/evaluations/structured_predictions"
-                    ),
+                    "path": (f"{RUN_ROOT}/artifacts/evals/structured_predictions"),
                     "loader": artifact_loader_ref(
                         "custom_code/load_prediction_bundle.py"
                     ).model_dump(mode="json"),
-                    "data_role": "evaluation",
+                    "data_role": "eval",
                 }
             },
         }
@@ -828,36 +833,40 @@ class EvaluationTests(unittest.TestCase):
     def test_evaluation_inputs_use_role_specific_paths(self) -> None:
         """Verify that evaluation inputs use role specific paths."""
         payload = {
-            "kind": "evaluate",
+            "kind": "eval",
             "implementation": stage_implementation_ref(
                 "project/evaluation/predict.py", symbol="predict"
             ).model_dump(mode="json"),
             "parameter_model": parameter_model_ref("evaluate").model_dump(mode="json"),
-            "evaluation_id": "strand_predictions",
+            "eval_id": "strand_predictions",
             "metric_ids": ["pearson_correlation"],
+            "objective": {
+                "metric_id": "pearson_correlation",
+                "direction": "max",
+            },
             "split_inputs": ["split"],
             "inputs": {
-                "parameters": stored_input(
+                "model": stored_input(
                     "inputs/priors/strand/parameters.safetensors",
                     "inputs/priors/strand/current.pointer.yaml",
                 ),
-                "evaluation_dataset": stored_input(
+                "test": stored_input(
                     "inputs/datasets/replogle_test/dataset.h5ad",
                     "inputs/datasets/replogle_test/current.pointer.yaml",
-                    "evaluation",
+                    "eval",
                 ),
                 "split": stored_input(
                     "inputs/benchmarks/replogle/split.json",
                     "inputs/benchmarks/replogle/split.pointer.yaml",
-                    "evaluation",
+                    "eval",
                 ),
             },
             "params": {},
             "artifacts": {
                 PREDICTIONS: artifact(
-                    f"{RUN_ROOT}/artifacts/evaluations/strand_predictions/predictions.json",
+                    f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
                     "json_file",
-                    "evaluation",
+                    "eval",
                 )
             },
         }
@@ -865,27 +874,27 @@ class EvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "inputs/models"):
             EvaluateSpec.model_validate(payload)
 
-        payload["inputs"]["parameters"] = stored_input(
+        payload["inputs"]["model"] = stored_input(
             "inputs/models/strand/parameters.safetensors",
             "inputs/models/strand/current.pointer.yaml",
         )
-        payload["inputs"]["evaluation_dataset"] = stored_input(
+        payload["inputs"]["test"] = stored_input(
             "inputs/priors/replogle_test/dataset.h5ad",
             "inputs/priors/replogle_test/current.pointer.yaml",
-            "evaluation",
+            "eval",
         )
         with self.assertRaisesRegex(ValidationError, "inputs/datasets"):
             EvaluateSpec.model_validate(payload)
 
-        payload["inputs"]["evaluation_dataset"] = stored_input(
+        payload["inputs"]["test"] = stored_input(
             "inputs/datasets/replogle_test/dataset.h5ad",
             "inputs/datasets/replogle_test/current.pointer.yaml",
-            "evaluation",
+            "eval",
         )
         payload["inputs"]["split"] = stored_input(
             "inputs/datasets/replogle/split.json",
             "inputs/datasets/replogle/split.pointer.yaml",
-            "evaluation",
+            "eval",
         )
         with self.assertRaisesRegex(ValidationError, "inputs/benchmarks"):
             EvaluateSpec.model_validate(payload)
@@ -893,15 +902,15 @@ class EvaluationTests(unittest.TestCase):
         payload["inputs"]["split"] = stored_input(
             "inputs/benchmarks/replogle/split.json",
             "inputs/benchmarks/replogle/split.pointer.yaml",
-            "evaluation",
+            "eval",
         )
-        payload["inputs"]["parameters"] = ExternalInputRef(
+        payload["inputs"]["model"] = ExternalInputRef(
             source=LocalSource(path="inputs/raw/parameters.safetensors"),
             data_role="training",
         ).model_dump(mode="json")
         EvaluateSpec.model_validate(payload)
 
-        payload["inputs"]["parameters"]["data_role"] = "evaluation"
+        payload["inputs"]["model"]["data_role"] = "eval"
         with self.assertRaisesRegex(
             ValidationError,
             "external evaluation parameters data_role",
@@ -911,41 +920,45 @@ class EvaluationTests(unittest.TestCase):
     def test_evaluation_rejects_training_checkpoint_outputs(self) -> None:
         """Verify that evaluation rejects training checkpoint outputs."""
         payload = {
-            "kind": "evaluate",
+            "kind": "eval",
             "implementation": stage_implementation_ref(
                 "project/evaluation/predict.py", symbol="predict"
             ).model_dump(mode="json"),
             "parameter_model": parameter_model_ref("evaluate").model_dump(mode="json"),
-            "evaluation_id": "strand_predictions",
+            "eval_id": "strand_predictions",
             "metric_ids": ["pearson_correlation"],
+            "objective": {
+                "metric_id": "pearson_correlation",
+                "direction": "max",
+            },
             "split_inputs": ["split"],
             "inputs": {
-                "parameters": stored_input(
+                "model": stored_input(
                     "inputs/models/strand/parameters.safetensors",
                     "inputs/models/strand/current.pointer.yaml",
                 ),
-                "evaluation_dataset": stored_input(
+                "test": stored_input(
                     "inputs/datasets/replogle_test/dataset.h5ad",
                     "inputs/datasets/replogle_test/current.pointer.yaml",
-                    "evaluation",
+                    "eval",
                 ),
                 "split": stored_input(
                     "inputs/benchmarks/replogle/split.json",
                     "inputs/benchmarks/replogle/split.pointer.yaml",
-                    "evaluation",
+                    "eval",
                 ),
             },
             "params": {},
             "artifacts": {
                 PREDICTIONS: artifact(
-                    f"{RUN_ROOT}/artifacts/evaluations/strand_predictions/predictions.json",
+                    f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
                     "json_file",
-                    "evaluation",
+                    "eval",
                 ),
                 PARAMETERS: artifact(
-                    f"{RUN_ROOT}/artifacts/evaluations/strand_predictions/parameters.safetensors",
+                    f"{RUN_ROOT}/artifacts/evals/strand_predictions/parameters.safetensors",
                     "parameters",
-                    "evaluation",
+                    "eval",
                 ),
             },
         }
@@ -1145,7 +1158,7 @@ if __name__ == "__main__":
 
 def test_python_stage_drafts_freeze_to_protocol_specs(tmp_path: Path) -> None:
     """Freeze one Python stage mapping without reading authored stage YAML."""
-    assert "stages" in RunPlanDraft.model_fields
+    assert "stages" in VariantDraft.model_fields
     assert "spec_source" not in RunPlanDraft.model_fields
 
 
@@ -1183,7 +1196,6 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
         mode="stateless",
     )
     env_payload = environment()
-    env_payload["python_env"] = env_payload.pop("python_environment")
     key = build_stage_reuse_key(
         stage_id="train",
         stage=enabled,

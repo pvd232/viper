@@ -244,7 +244,7 @@ def environment() -> GCEEnvSpec:
         machine_type="n2-standard-8",
         compute=CPUComputeSpec(kind="cpu"),
         lockfile=git_file("uv.lock"),
-        python_environment=python_environment(),
+        python_env=python_environment(),
     )
 
 
@@ -381,7 +381,7 @@ def run_spec(stage_specs: list[tuple[str, object]]) -> tuple[RunSpec, dict[str, 
         replicate_id="replicate_01",
         seed=42,
         source=GitSource(repository=REPOSITORY, commit=GIT_COMMIT),
-        environment=environment(),
+        env=environment(),
         reproducibility=reproducibility(),
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
@@ -410,6 +410,11 @@ def train_spec(*, future_prior: bool = False) -> TrainSpec:
         )
 
     return TrainSpec(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         implementation=stage_implementation_ref(
             "project/training/fit.py",
             b"def fit(context):\n    pass\n",
@@ -478,7 +483,7 @@ def resolved_environment(lock_raw: bytes) -> ResolvedGCEEnv:
         machine_type="n2-standard-8",
         compute=CPUComputeSpec(kind="cpu"),
         lockfile=resolved_git(lock_raw, "uv.lock"),
-        python_environment=python_environment(),
+        python_env=python_environment(),
     )
 
 
@@ -514,7 +519,7 @@ def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
             )
         )
     return ProcessStartupReceipt(
-        environment=process_environment(
+        env=process_environment(
             run.seed,
             run.reproducibility,
             CPUComputeSpec(),
@@ -1438,7 +1443,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
             factors=(),
             variant_ids=("baseline",),
             replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(),
+            metrics=(metric_spec("training_loss", "training"),),
         )
         variant = VariantSpec(
             experiment_id="e001_strand",
@@ -1469,7 +1474,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
             update={
                 "inputs": {
                     "training_dataset": training_dataset.model_copy(
-                        update={"data_role": "evaluation"}
+                        update={"data_role": "eval"}
                     )
                 }
             }
@@ -1508,9 +1513,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
         prior = build.artifacts["prior"]
         build = build.model_copy(
             update={
-                "artifacts": {
-                    "prior": prior.model_copy(update={"data_role": "evaluation"})
-                }
+                "artifacts": {"prior": prior.model_copy(update={"data_role": "eval"})}
             }
         )
         train = train_spec(future_prior=True)
@@ -1553,9 +1556,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
             self.fail("depmap must be a stored input")
         build = build.model_copy(
             update={
-                "inputs": {
-                    "depmap": depmap.model_copy(update={"data_role": "evaluation"})
-                }
+                "inputs": {"depmap": depmap.model_copy(update={"data_role": "eval"})}
             }
         )
         train = train_spec(future_prior=True)
@@ -1599,7 +1600,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
             factors=(),
             variant_ids=("baseline",),
             replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(metric_spec("pearson_correlation", "evaluation"),),
+            metrics=(metric_spec("training_loss", "training"),),
         )
         variant = VariantSpec(
             experiment_id="e001_strand",
@@ -1666,9 +1667,9 @@ class RunPlanRelationshipTests(unittest.TestCase):
 
         wrong_lockfile = run.model_copy(
             update={
-                "environment": run.environment.model_copy(
+                "env": run.env.model_copy(
                     update={
-                        "lockfile": run.environment.lockfile.model_copy(
+                        "lockfile": run.env.lockfile.model_copy(
                             update={"commit": "d" * 40}
                         )
                     }
@@ -1693,7 +1694,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
             factors=(),
             variant_ids=("baseline",),
             replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-            metrics=(metric_spec("pearson_correlation", "evaluation"),),
+            metrics=(metric_spec("training_loss", "training"),),
         )
         variant = VariantSpec(
             experiment_id="e001_strand",
@@ -1737,16 +1738,20 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 symbol="predict",
             ),
             parameter_model=parameter_model_ref("evaluate"),
-            evaluation_id="replogle_predictions",
+            eval_id="replogle_predictions",
             metric_ids=("pearson_correlation",),
+            objective=MetricObjectiveSpec(
+                metric_id="pearson_correlation",
+                direction="max",
+            ),
             split_inputs=("perturbation_split",),
             inputs={
-                "parameters": FutureInputRef(
+                "model": FutureInputRef(
                     kind="future",
                     producer_stage_id="train",
                     name=PARAMETERS,
                 ),
-                "evaluation_dataset": StoredInputRef(
+                "test": StoredInputRef(
                     kind="stored",
                     pointer=artifact_pointer(
                         "inputs/datasets/replogle_test/current.pointer.yaml"
@@ -1765,10 +1770,10 @@ class RunPlanRelationshipTests(unittest.TestCase):
             },
             params=parameters.Evaluate(),
             artifacts={
-                "predictions": SingleFileArtifactSpec(
+                "preds": SingleFileArtifactSpec(
                     kind="file",
                     path=(
-                        f"{RUN_ROOT}/artifacts/evaluations/"
+                        f"{RUN_ROOT}/artifacts/evals/"
                         "replogle_predictions/predictions.json"
                     ),
                     loader=loader_ref("json_file"),
@@ -1785,6 +1790,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
             variant_ids=("baseline",),
             replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
             metrics=(
+                metric_spec("training_loss", "training"),
                 metric_spec(
                     "pearson_correlation",
                     "evaluation",
@@ -1801,7 +1807,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                     kind="train", stage_id="train", params=train.params
                 ),
                 EvalVariantStageParams(
-                    kind="evaluate", stage_id="evaluate", params=evaluation.params
+                    kind="eval", stage_id="evaluate", params=evaluation.params
                 ),
             ),
         )
@@ -1832,13 +1838,14 @@ class RunPlanRelationshipTests(unittest.TestCase):
             {"train": train, "evaluate": evaluation},
         )
 
-        selected_metric = experiment.metrics[0]
+        selected_metric = experiment.metrics[1]
         missing_dependency = selected_metric.dependencies[0].model_copy(
             update={"name": "missing_predictions"}
         )
         invalid_experiment = experiment.model_copy(
             update={
                 "metrics": (
+                    experiment.metrics[0],
                     selected_metric.model_copy(
                         update={"dependencies": (missing_dependency,)}
                     ),
@@ -1855,9 +1862,9 @@ class RunPlanRelationshipTests(unittest.TestCase):
             )
 
         ordinary_payload = evaluation.model_dump(mode="python")
-        ordinary_payload["inputs"]["evaluation_dataset"]["data_role"] = "evaluation"
-        ordinary_payload["inputs"]["perturbation_split"]["data_role"] = "evaluation"
-        ordinary_payload["artifacts"]["predictions"]["data_role"] = "evaluation"
+        ordinary_payload["inputs"]["test"]["data_role"] = "eval"
+        ordinary_payload["inputs"]["perturbation_split"]["data_role"] = "eval"
+        ordinary_payload["artifacts"]["preds"]["data_role"] = "eval"
         ordinary_evaluation = EvalSpec.model_validate(ordinary_payload)
         with self.assertRaisesRegex(VerificationError, "must use 'benchmark'"):
             verify_run_plan_relationships(
@@ -1868,10 +1875,8 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 {"train": train, "evaluate": ordinary_evaluation},
             )
 
-        wrong_benchmark = benchmark.model_copy(
-            update={"evaluation_id": "other_evaluation"}
-        )
-        with self.assertRaisesRegex(VerificationError, "evaluation ID"):
+        wrong_benchmark = benchmark.model_copy(update={"eval_id": "other_evaluation"})
+        with self.assertRaisesRegex(VerificationError, "eval ID"):
             verify_run_plan_relationships(
                 run,
                 experiment,
@@ -1882,9 +1887,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
 
         other_train = train_spec()
         wrong_evaluation_payload = evaluation.model_dump(mode="python")
-        wrong_evaluation_payload["inputs"]["parameters"]["producer_stage_id"] = (
-            "other_train"
-        )
+        wrong_evaluation_payload["inputs"]["model"]["producer_stage_id"] = "other_train"
         wrong_evaluation = EvalSpec.model_validate(wrong_evaluation_payload)
         wrong_run, _ = run_spec(
             [
@@ -1953,7 +1956,7 @@ class StoredInputSelectionTests(unittest.TestCase):
         payload = train_spec().model_dump(mode="python")
         payload["inputs"].update(
             {
-                "parameters": {
+                "model": {
                     "kind": "stored",
                     "data_role": "training",
                     "pointer": artifact_pointer(
@@ -1961,7 +1964,7 @@ class StoredInputSelectionTests(unittest.TestCase):
                     ),
                     "path": "inputs/models/toy/parameters.bin",
                 },
-                "resume_state": {
+                "state": {
                     "kind": "stored",
                     "data_role": "training",
                     "pointer": artifact_pointer(
@@ -1996,8 +1999,8 @@ class StoredInputSelectionTests(unittest.TestCase):
             "train_resume",
             spec,
             {
-                "parameters": model_pointer,
-                "resume_state": state_pointer,
+                "model": model_pointer,
+                "state": state_pointer,
             },
         )
 
@@ -2013,8 +2016,8 @@ class StoredInputSelectionTests(unittest.TestCase):
                 "train_resume",
                 spec,
                 {
-                    "parameters": model_pointer,
-                    "resume_state": state_pointer.model_copy(update={"run": other_run}),
+                    "model": model_pointer,
+                    "state": state_pointer.model_copy(update={"run": other_run}),
                 },
             )
 

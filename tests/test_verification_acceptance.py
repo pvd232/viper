@@ -477,7 +477,7 @@ def startup_receipt(run: RunSpec) -> ProcessStartupReceipt:
             )
         )
     return ProcessStartupReceipt(
-        environment=process_environment(
+        env=process_environment(
             run.seed,
             run.reproducibility,
             CPUComputeSpec(),
@@ -763,12 +763,12 @@ def add_plan_records(
     """Publish the experiment, variant, metrics, stage specs, and run plan."""
     source_commit = run.source.commit
     store.put(
-        git_file(source_commit, f"experiments/{run.experiment_id}/spec.yaml"),
+        git_file(plan_commit, f"experiments/{run.experiment_id}/spec.yaml"),
         yaml_bytes(experiment),
     )
     store.put(
         git_file(
-            source_commit,
+            plan_commit,
             f"experiments/{run.experiment_id}/variants/{run.variant_id}.spec.yaml",
         ),
         yaml_bytes(variant),
@@ -776,7 +776,7 @@ def add_plan_records(
     if benchmark is not None:
         store.put(
             git_file(
-                source_commit,
+                plan_commit,
                 f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
             ),
             yaml_bytes(benchmark),
@@ -843,7 +843,7 @@ def make_run(
             repository=SOURCE_REPOSITORY,
             commit=source_commit,
         ),
-        environment=environment(source_commit),
+        env=environment(source_commit),
         reproducibility=reproducibility(),
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
@@ -931,7 +931,7 @@ def resolved_pointer(
 def publish_producer_run(
     store: DocumentStore,
     *,
-    evaluation_role: DataRole = "evaluation",
+    evaluation_role: DataRole = "eval",
 ) -> tuple[ResolvedRunRef, dict[str, Any]]:
     """Publish a complete upstream run for stored-input verification."""
     run_root = "experiments/source_data/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAA"
@@ -977,6 +977,11 @@ def publish_producer_run(
         },
     )
     train = TrainSpec(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         implementation=stage_implementation_ref(
             "training/fit.py",
             TRAIN_SOURCE,
@@ -1025,7 +1030,7 @@ def publish_producer_run(
         factors=(),
         variant_ids=("baseline",),
         replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
-        metrics=(),
+        metrics=(metric_spec("training_loss", "training"),),
     )
     variant = VariantSpec(
         experiment_id="source_data",
@@ -1226,7 +1231,7 @@ def build_complete_fixture(
 ]:
     """Publish one complete valid provenance chain and return its roots."""
     store = DocumentStore()
-    evaluation_role = "benchmark" if benchmark_enabled else "evaluation"
+    evaluation_role = "benchmark" if benchmark_enabled else "eval"
     producer_run_ref, _ = publish_producer_run(
         store,
         evaluation_role=producer_evaluation_role or evaluation_role,
@@ -1297,6 +1302,11 @@ def build_complete_fixture(
         },
     )
     train = TrainSpec(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         implementation=stage_implementation_ref(
             "training/fit.py",
             TRAIN_SOURCE,
@@ -1343,12 +1353,12 @@ def build_complete_fixture(
         ),
         split_inputs=("test_split",),
         inputs={
-            "parameters": FutureInputRef(
+            "model": FutureInputRef(
                 kind="future",
                 producer_stage_id="train",
                 name=PARAMETERS,
             ),
-            "evaluation_dataset": StoredInputRef(
+            "test": StoredInputRef(
                 kind="stored",
                 pointer=resolved_evaluation_dataset_pointer,
                 path="inputs/datasets/toy/evaluation.bin",
@@ -1363,11 +1373,9 @@ def build_complete_fixture(
         },
         params=current_params.Eval(),
         artifacts={
-            "predictions": SingleFileArtifactSpec(
+            "preds": SingleFileArtifactSpec(
                 kind="file",
-                path=(
-                    f"{run_root}/artifacts/evaluations/toy_predictions/predictions.json"
-                ),
+                path=(f"{run_root}/artifacts/evals/toy_predictions/predictions.json"),
                 loader=loader_ref("json_file"),
                 data_role=evaluation_role,
             )
@@ -1409,6 +1417,7 @@ def build_complete_fixture(
         variant_ids=("baseline",),
         replicates=(ReplicateSpec(replicate_id="replicate_01", seed=42),),
         metrics=(
+            metric_spec("training_loss", "training"),
             metric_spec(
                 "pearson_correlation",
                 "evaluation",
@@ -1575,8 +1584,8 @@ def build_complete_fixture(
         stage_id="evaluate",
         stage=evaluate,
         input_paths={
-            "parameters": str(train.artifacts[PARAMETERS].path),
-            "evaluation_dataset": "inputs/datasets/toy/evaluation.bin",
+            "model": str(train.artifacts[PARAMETERS].path),
+            "test": "inputs/datasets/toy/evaluation.bin",
             "test_split": "inputs/benchmarks/toy/test_split.json",
         },
         started_at=datetime(2026, 8, 20, 21, 31, tzinfo=UTC),
@@ -1594,8 +1603,8 @@ def build_complete_fixture(
             command=("python", "-m", "viper._workers.stages"),
         ),
         inputs={
-            "parameters": ResolvedFutureInputRef(producer=train_stage),
-            "evaluation_dataset": ResolvedStoredInputRef(
+            "model": ResolvedFutureInputRef(producer=train_stage),
+            "test": ResolvedStoredInputRef(
                 kind="stored",
                 pointer=resolved_evaluation_dataset_pointer,
             ),
@@ -1604,10 +1613,10 @@ def build_complete_fixture(
             ),
         },
         artifacts={
-            "predictions": add_single_artifact(
+            "preds": add_single_artifact(
                 store,
                 evaluate_commit,
-                str(evaluate.artifacts["predictions"].path),
+                str(evaluate.artifacts["preds"].path),
                 b"fixed predictions",
             )
         },
@@ -1637,14 +1646,14 @@ def build_complete_fixture(
         bytes=len(measurement_raw),
         stored_at=measurement_location,
     )
-    predictions = resolved_evaluate.artifacts["predictions"]
+    predictions = resolved_evaluate.artifacts["preds"]
     assert isinstance(predictions, ResolvedSingleFileArtifact)
     metric_verification_reference = publish_metric_verification(
         store,
         run=run,
         attempt_id=1,
         stage_id="evaluate",
-        metric=experiment.metrics[0],
+        metric=experiment.metrics[1],
         measurement_raw=measurement_raw,
         stage_completed_at=resolved_evaluate.completed_at,
         dependency_files=(
@@ -1766,7 +1775,14 @@ def build_benchmark_fixture(
         commit="f" * 40,
         attempt_id=2,
     )
-    resolved_build = resolved_build.model_copy(update={"invocation": build_invocation})
+    assert resolved_build.completion.kind == "executed"
+    resolved_build = resolved_build.model_copy(
+        update={
+            "completion": resolved_build.completion.model_copy(
+                update={"invocation": build_invocation}
+            )
+        }
+    )
     confirmation_build = publish_resolved_stage(
         store,
         run_root_path=run_root,
@@ -1803,7 +1819,14 @@ def build_benchmark_fixture(
         commit="f" * 40,
         attempt_id=2,
     )
-    resolved_train = resolved_train.model_copy(update={"invocation": train_invocation})
+    assert resolved_train.completion.kind == "executed"
+    resolved_train = resolved_train.model_copy(
+        update={
+            "completion": resolved_train.completion.model_copy(
+                update={"invocation": train_invocation}
+            )
+        }
+    )
     confirmation_train = publish_resolved_stage(
         store,
         run_root_path=run_root,
@@ -1830,7 +1853,7 @@ def build_benchmark_fixture(
         update={
             "inputs": {
                 **resolved_evaluate.inputs,
-                "parameters": ResolvedFutureInputRef(producer=confirmation_train),
+                "model": ResolvedFutureInputRef(producer=confirmation_train),
             }
         }
     )
@@ -1840,8 +1863,8 @@ def build_benchmark_fixture(
         stage_id="evaluate",
         stage=resolved_evaluate.spec,
         input_paths={
-            "parameters": str(resolved_train.spec.artifacts[PARAMETERS].path),
-            "evaluation_dataset": "inputs/datasets/toy/evaluation.bin",
+            "model": str(resolved_train.spec.artifacts[PARAMETERS].path),
+            "test": "inputs/datasets/toy/evaluation.bin",
             "test_split": "inputs/benchmarks/toy/test_split.json",
         },
         started_at=datetime(2026, 8, 20, 21, 31, tzinfo=UTC),
@@ -1849,8 +1872,13 @@ def build_benchmark_fixture(
         commit="f" * 40,
         attempt_id=2,
     )
+    assert resolved_evaluate.completion.kind == "executed"
     resolved_evaluate = resolved_evaluate.model_copy(
-        update={"invocation": evaluate_invocation}
+        update={
+            "completion": resolved_evaluate.completion.model_copy(
+                update={"invocation": evaluate_invocation}
+            )
+        }
     )
     confirmation_evaluate = publish_resolved_stage(
         store,
@@ -1875,20 +1903,20 @@ def build_benchmark_fixture(
         yaml.safe_load(
             store.fetch(
                 git_file(
-                    MAIN_SOURCE_COMMIT,
+                    MAIN_PLAN_COMMIT,
                     "experiments/model_eval/spec.yaml",
                 )
             )
         )
     )
-    predictions = resolved_evaluate.artifacts["predictions"]
+    predictions = resolved_evaluate.artifacts["preds"]
     assert isinstance(predictions, ResolvedSingleFileArtifact)
     metric_verification_reference = publish_metric_verification(
         store,
         run=run,
         attempt_id=2,
         stage_id="evaluate",
-        metric=experiment.metrics[0],
+        metric=experiment.metrics[1],
         measurement_raw=measurement_raw,
         stage_completed_at=resolved_evaluate.completed_at,
         dependency_files=(
@@ -1940,7 +1968,7 @@ def build_benchmark_fixture(
     )
 
     benchmark_path = "benchmarks/toy_strict.spec.yaml"
-    benchmark_location = git_file(MAIN_SOURCE_COMMIT, benchmark_path)
+    benchmark_location = git_file(MAIN_PLAN_COMMIT, benchmark_path)
     benchmark_raw = store.fetch(benchmark_location)
     benchmark_reference = ResolvedBenchmarkSpecRef(
         sha256=sha256(benchmark_raw),
@@ -2059,17 +2087,16 @@ def test_external_input_identity_survives_execution() -> None:
     snapshot_commit = "7" * 40
     store.put(hf_file(snapshot_commit, captured_path), raw)
 
-    assert (
-        verify_external_inputs(
-            RunAttempt.model_construct(attempt_id=attempt_id),
-            RunSpec.model_construct(run_id=run_id),
-            stage_id,
-            resolved,
-            snapshot(snapshot_commit),
-            fetcher=store.fetch,
-        )
-        is None
+    verified = verify_external_inputs(
+        RunAttempt.model_construct(attempt_id=attempt_id),
+        RunSpec.model_construct(run_id=run_id),
+        stage_id,
+        resolved,
+        snapshot(snapshot_commit),
+        fetcher=store.fetch,
     )
+    assert verified["dataset"].path == source.path
+    assert verified["dataset"].files[0].content == raw
     assert store.fetch(hf_file(snapshot_commit, captured_path)) == raw
 
 
@@ -2124,6 +2151,11 @@ def test_worker_startup_derives_attempt_owned_external_input_path(
     run_id = "01ARZ3NDEKTSV4RRFFQ69G5FAB"
     run_root = f"experiments/external_input/runs/baseline/{run_id}"
     stage = TrainSpec(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         implementation=stage_implementation_ref(
             "training/fit.py",
             TRAIN_SOURCE,
@@ -2448,8 +2480,8 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
                 fetcher=store.fetch,
             )
 
-    def test_strict_benchmark_rejects_a_source_mismatch(self) -> None:
-        """Reject a benchmark specification selected from another source commit."""
+    def test_strict_benchmark_rejects_a_plan_mismatch(self) -> None:
+        """Reject a benchmark specification selected from another plan revision."""
         result, _, store = build_benchmark_fixture()
         changed_location = result.benchmark.stored_at.model_copy(
             update={"commit": "9" * 40}
@@ -2463,7 +2495,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             }
         )
 
-        with self.assertRaisesRegex(VerificationError, "run source snapshot"):
+        with self.assertRaisesRegex(VerificationError, "immutable run plan"):
             verify_benchmark_result(
                 changed_result,
                 policy=POLICY,
@@ -2480,7 +2512,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         )
         changed_result = result.model_copy(update={"metrics": (changed_metric,)})
 
-        with self.assertRaisesRegex(VerificationError, "metric criterion receipt"):
+        with self.assertRaisesRegex(VerificationError, "metric result differs"):
             verify_benchmark_result(
                 changed_result,
                 policy=POLICY,
@@ -2601,7 +2633,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             update={
                 "inputs": {
                     **resolved_evaluate.inputs,
-                    "parameters": ResolvedFutureInputRef(producer=tampered_train),
+                    "model": ResolvedFutureInputRef(producer=tampered_train),
                 }
             }
         )
@@ -2649,7 +2681,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
                 )
             )
         )
-        evaluation_dataset = resolved_evaluate.inputs["evaluation_dataset"]
+        evaluation_dataset = resolved_evaluate.inputs["test"]
         self.assertEqual(evaluation_dataset.kind, "stored")
         assert isinstance(evaluation_dataset, ResolvedStoredInputRef)
         tampered_dataset = evaluation_dataset.model_copy(
@@ -2663,7 +2695,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             update={
                 "inputs": {
                     **resolved_evaluate.inputs,
-                    "evaluation_dataset": tampered_dataset,
+                    "test": tampered_dataset,
                 }
             }
         )

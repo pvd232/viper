@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from .._schema import PREDICTIONS
+from .. import keys
 from .._verification.attempt import verify_attempt_stages
 from .._verification.storage import fetch_storage_bytes
 from ..artifacts import StageArtifactRef
@@ -28,6 +28,7 @@ from ..references import (
     ResolvedBenchmarkSpecRef,
     ResolvedFileRef,
     ResolvedRunRef,
+    storage_file,
 )
 from ..runs import ResolvedRun, RunAttempt, RunSpec
 from ..serialization import document_digest, parse_yaml_bytes, serialize_document
@@ -222,13 +223,12 @@ def benchmark(
     benchmark = BenchmarkSpec.model_validate(parse_yaml_bytes(benchmark_raw))
     if benchmark != plan.benchmark:
         raise BenchmarkExecutionError("benchmark document differs from the frozen plan")
-    benchmark_location = GitFileRef(
-        repository=plan.run.source.repository,
-        commit=plan.run.source.commit,
-        path=f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
+    benchmark_location = storage_file(
+        candidate.spec.stored_at,
+        f"benchmarks/{benchmark.benchmark_id}.spec.yaml",
     )
     if fetcher(benchmark_location) != benchmark_raw:
-        raise BenchmarkExecutionError("benchmark bytes differ from the frozen source")
+        raise BenchmarkExecutionError("benchmark bytes differ from the frozen plan")
 
     result_path = candidate_path.with_name("benchmark.result.yaml")
     if result_path.exists():
@@ -272,7 +272,7 @@ def benchmark(
         plan.run.estimator,
         StageArtifactRef(
             stage_id=eval_stage_id,
-            artifact_name=PREDICTIONS,
+            artifact_name=keys.Eval.PREDS,
         ),
     )
     artifact_receipts: list[ArtifactComparisonReceipt] = []

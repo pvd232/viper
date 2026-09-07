@@ -10,16 +10,21 @@ from pathlib import Path
 import yaml
 from pydantic import TypeAdapter
 
-from .. import params
+from .. import keys, params
 from .._parameter.validation import (
     ParameterValidationError,
     verify_parameter_model_bytes,
 )
-from .._schema import PARAMETERS_INPUT, DataRole, RepoRelPath, repo_file_paths_overlap
+from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
 from ..benchmark import BenchmarkSpec
 from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import InputName, StageId
-from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
+from ..inputs import (
+    ExternalInputRef,
+    FutureInputRef,
+    StoredInputRef,
+    pointer_location_matches,
+)
 from ..metrics import is_recomputed_metric
 from ..references import (
     GitFileRef,
@@ -96,14 +101,14 @@ def _verify_stage_data_roles(
             )
 
     if isinstance(stage, EvalSpec):
-        model_role = input_roles[PARAMETERS_INPUT]
+        model_role = input_roles[keys.Eval.MODEL]
         if _DATA_ROLE_RANK[model_role] > _DATA_ROLE_RANK["validation"]:
             raise VerificationError(
                 f"evaluation stage {stage_id!r} parameters must have training "
                 "or validation data_role"
             )
 
-        dataset_input = stage.inputs["evaluation_dataset"]
+        dataset_input = stage.inputs[keys.Eval.TEST]
         assert isinstance(dataset_input, StoredInputRef)
         evaluation_role = dataset_input.data_role
         incompatible = {
@@ -403,7 +408,7 @@ def verify_run_plan_relationships(
     eval_stages = [stage for stage in stages.values() if isinstance(stage, EvalSpec)]
     expected_eval_role: DataRole = "benchmark" if benchmark is not None else "eval"
     for eval in eval_stages:
-        dataset_input = eval.inputs["eval_dataset"]
+        dataset_input = eval.inputs[keys.Eval.TEST]
         assert isinstance(dataset_input, StoredInputRef)
         if dataset_input.data_role != expected_eval_role:
             raise VerificationError(
@@ -442,7 +447,7 @@ def verify_run_plan_relationships(
         raise VerificationError("benchmark runs require exactly one eval stage")
 
     eval = eval_stages[0]
-    model_input = eval.inputs[PARAMETERS_INPUT]
+    model_input = eval.inputs[keys.Eval.MODEL]
     if not isinstance(model_input, FutureInputRef):
         raise VerificationError("benchmark eval model must select the run estimator")
     if (
@@ -454,10 +459,10 @@ def verify_run_plan_relationships(
     if eval.eval_id != benchmark.eval_id:
         raise VerificationError("eval stage ID does not match the benchmark eval ID")
 
-    dataset_input = eval.inputs["eval_dataset"]
+    dataset_input = eval.inputs[keys.Eval.TEST]
     if not isinstance(dataset_input, StoredInputRef):
         raise VerificationError("benchmark eval dataset must be stored")
-    if dataset_input.pointer != benchmark.test:
+    if not pointer_location_matches(dataset_input.pointer, benchmark.test.stored_at):
         raise VerificationError(
             "eval dataset does not match the benchmark specification"
         )
@@ -470,7 +475,7 @@ def verify_run_plan_relationships(
         split_input = eval.inputs[split_name]
         if not isinstance(split_input, StoredInputRef):
             raise VerificationError(f"benchmark split {split_name!r} must be stored")
-        if split_input.pointer != pointer:
+        if not pointer_location_matches(split_input.pointer, pointer.stored_at):
             raise VerificationError(
                 f"eval split {split_name!r} does not match the benchmark"
             )

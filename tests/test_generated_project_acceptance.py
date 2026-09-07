@@ -18,13 +18,8 @@ from tests.fixtures import (
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_run_execution import http_source as execution_http_source
 from viper import _subprocess as subprocess
-from viper import parameters
-from viper._schema import (
-    PARAMETERS,
-    PREDICTIONS,
-    RESUME_STATE,
-    DataRole,
-)
+from viper import params
+from viper._schema import DataRole
 from viper.artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
@@ -32,9 +27,6 @@ from viper.artifacts import (
     StageArtifactRef,
 )
 from viper.authoring import (
-    RunPlanDraft,
-    StageDraft,
-    freeze_run_plan,
     write_benchmark_spec,
     write_experiment_spec,
     write_variant_spec,
@@ -54,13 +46,16 @@ from viper.experiments import (
     VariantSpec,
 )
 from viper.inputs import FutureInputRef, StoredInputRef
+from viper.keys import Eval as EvalKeys
+from viper.keys import Train as TrainKeys
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
     MetricImplementationRef,
+    MetricObjectiveSpec,
     MetricSpec,
 )
-from viper.parameters import ParameterModelRef
+from viper.params import ParameterModelRef
 from viper.project import init
 from viper.references import (
     ArtifactPointerRef,
@@ -69,7 +64,7 @@ from viper.references import (
     ResolvedArtifactPointerRef,
     ResolvedRunRef,
 )
-from viper.runs import ResolvedRun
+from viper.runs import ResolvedRun, RunSpec, RunStageRef
 from viper.runtime import (
     CPUComputeSpec,
     GCEEnvSpec,
@@ -107,7 +102,7 @@ def _stage_implementation(root: Path, stage: str) -> StageImplementationRef:
 
 def _parameter_model(root: Path, symbol: str) -> ParameterModelRef:
     """Identify one class in the generated parameter module."""
-    path = "src/sample_project/parameters.py"
+    path = "src/sample_project/params.py"
     raw = (root / path).read_bytes()
     return ParameterModelRef(
         owner="project",
@@ -184,35 +179,47 @@ def _freeze(
     benchmark_id: str | None = None,
 ) -> Path:
     """Freeze and commit one complete plan assembled by this acceptance case."""
-    draft_root = root / ".viper" / "drafts" / run_id
-    draft_root.mkdir(parents=True)
-    stage_drafts = []
+    run_root = f"experiments/{experiment_id}/runs/baseline/{run_id}"
+    files: dict[str, bytes] = {}
+    stage_refs = []
     for stage_id, stage in stages.items():
-        path = draft_root / f"{stage_id}.yaml"
-        path.write_bytes(serialize_document(stage))
-        stage_drafts.append(StageDraft(stage_id=stage_id, spec_source=path))
-    frozen = freeze_run_plan(
-        root,
-        RunPlanDraft(
-            run_id=run_id,
-            experiment_id=experiment_id,
-            variant_id="baseline",
-            replicate_id="r1",
-            benchmark_id=benchmark_id,
-            seed=seed,
-            source=_source(source_commit),
-            environment=_environment(source_commit),
-            reproducibility=reproducibility(),
-            stages=tuple(stage_drafts),
-            estimator=StageArtifactRef(
-                stage_id="train",
-                artifact_name=PARAMETERS,
-            ),
+        path = f"{run_root}/stages/{stage_id}/spec.yaml"
+        raw = serialize_document(stage)
+        files[path] = raw
+        stage_refs.append(
+            RunStageRef(
+                stage_id=stage_id,
+                spec=path,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                bytes=len(raw),
+            )
+        )
+    run = RunSpec(
+        run_id=run_id,
+        experiment_id=experiment_id,
+        variant_id="baseline",
+        replicate_id="r1",
+        benchmark_id=benchmark_id,
+        seed=seed,
+        source=_source(source_commit),
+        env=_environment(source_commit),
+        reproducibility=reproducibility(),
+        stages=tuple(stage_refs),
+        estimator=StageArtifactRef(
+            stage_id="train",
+            artifact_name=TrainKeys.MODEL,
         ),
     )
+    run_path = f"{run_root}/spec.yaml"
+    files[run_path] = serialize_document(run)
+    LocalArtifactStore(root).publish(files)
+    for relative_path, raw in files.items():
+        target = root / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
     run_git(root, "add", f"experiments/{experiment_id}/runs")
     run_git(root, "commit", "--quiet", "-m", f"freeze {experiment_id} plan")
-    return frozen.files[-1]
+    return root / run_path
 
 
 def _pointer_ref(commit: str, path: str) -> ArtifactPointerRef:
@@ -265,7 +272,7 @@ def test_generated_project_uses_runner_owned_downloads(
     init(root, "sample_project")
     assert not (root / "src/sample_project/stages/download.py").exists()
     assert "DownloadParameters" not in (
-        root / "src/sample_project/parameters.py"
+        root / "src/sample_project/params.py"
     ).read_text(encoding="utf-8")
     run_git(root, "init", "--quiet")
     run_git(root, "config", "user.email", "viper@example.com")
@@ -273,7 +280,21 @@ def test_generated_project_uses_runner_owned_downloads(
     run_git(root, "remote", "add", "origin", REPOSITORY)
     host, port = http_source
 
-    train_params = parameters.Train.model_validate({"epochs": 1})
+    train_params = params.Train.model_validate({"epochs": 1})
+    training_metric_path = "src/sample_project/stages/train.py"
+    training_metric_raw = (root / training_metric_path).read_bytes()
+    training_metric = MetricSpec(
+        parameter_model=params.model_ref(params.Metric),
+        metric_id="training_loss",
+        implementation=MetricImplementationRef(
+            path=training_metric_path,
+            symbol="training_loss",
+            sha256=hashlib.sha256(training_metric_raw).hexdigest(),
+            bytes=len(training_metric_raw),
+        ),
+        params=params.Metric(),
+        mode="stateless",
+    )
     write_experiment_spec(
         root,
         ExperimentSpec(
@@ -281,7 +302,7 @@ def test_generated_project_uses_runner_owned_downloads(
             factors=(),
             variant_ids=("baseline",),
             replicates=(ReplicateSpec(replicate_id="r1", seed=11),),
-            metrics=(),
+            metrics=(training_metric,),
         ),
     )
     write_variant_spec(
@@ -331,6 +352,11 @@ def test_generated_project_uses_runner_owned_downloads(
     acquisition_train = TrainSpec(
         implementation=_stage_implementation(root, "train"),
         parameter_model=_parameter_model(root, "TrainParameters"),
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
@@ -339,12 +365,12 @@ def test_generated_project_uses_runner_owned_downloads(
         },
         params=train_params,
         artifacts={
-            PARAMETERS: _artifact(
+            TrainKeys.MODEL: _artifact(
                 root,
                 f"{acquisition_root}/artifacts/models/starter/parameters.bin",
                 "training",
             ),
-            RESUME_STATE: _artifact(
+            TrainKeys.STATE: _artifact(
                 root,
                 f"{acquisition_root}/artifacts/models/starter/resume_state.bin",
                 "training",
@@ -418,10 +444,10 @@ def test_generated_project_uses_runner_owned_downloads(
     evaluation_pointer = _pointer_ref(pointer_commit, evaluation_pointer_path)
     split_pointer = _pointer_ref(pointer_commit, split_pointer_path)
 
-    metric_path = "src/sample_project/metrics/evaluation.py"
+    metric_path = "src/sample_project/metrics/eval.py"
     metric_raw = (root / metric_path).read_bytes()
     metric = MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric),
+        parameter_model=params.model_ref(params.Metric),
         metric_id="prediction_bytes",
         implementation=MetricImplementationRef(
             path=metric_path,
@@ -429,20 +455,20 @@ def test_generated_project_uses_runner_owned_downloads(
             sha256=hashlib.sha256(metric_raw).hexdigest(),
             bytes=len(metric_raw),
         ),
-        params=parameters.Metric(),
+        params=params.Metric(),
         mode="stateless",
         dependencies=(
             MetricDependency(
                 source="artifact",
-                name=PREDICTIONS,
+                name=EvalKeys.PREDS,
                 required_data_role="benchmark",
             ),
         ),
         comparator=FloatComparator(),
     )
-    build_params = parameters.Build.model_validate({"delimiter": ","})
-    embed_params = parameters.Embed.model_validate({"dimensions": 2})
-    evaluate_params = parameters.Evaluate.model_validate({"label": "baseline"})
+    build_params = params.Build.model_validate({"delimiter": ","})
+    embed_params = params.Embed.model_validate({"dimensions": 2})
+    evaluate_params = params.Eval.model_validate({"label": "baseline"})
     write_experiment_spec(
         root,
         ExperimentSpec(
@@ -450,7 +476,7 @@ def test_generated_project_uses_runner_owned_downloads(
             factors=(),
             variant_ids=("baseline",),
             replicates=(ReplicateSpec(replicate_id="r1", seed=17),),
-            metrics=(metric,),
+            metrics=(training_metric, metric),
         ),
     )
     write_variant_spec(
@@ -548,6 +574,11 @@ def test_generated_project_uses_runner_owned_downloads(
     candidate_train = TrainSpec(
         implementation=_stage_implementation(root, "train"),
         parameter_model=_parameter_model(root, "TrainParameters"),
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         inputs={
             "embedding": FutureInputRef(
                 producer_stage_id="embed",
@@ -556,12 +587,12 @@ def test_generated_project_uses_runner_owned_downloads(
         },
         params=train_params,
         artifacts={
-            PARAMETERS: _artifact(
+            TrainKeys.MODEL: _artifact(
                 root,
                 f"{candidate_root}/artifacts/models/starter/parameters.bin",
                 "training",
             ),
-            RESUME_STATE: _artifact(
+            TrainKeys.STATE: _artifact(
                 root,
                 f"{candidate_root}/artifacts/models/starter/resume_state.bin",
                 "training",
@@ -570,17 +601,21 @@ def test_generated_project_uses_runner_owned_downloads(
         },
     )
     candidate_evaluate = EvalSpec(
-        implementation=_stage_implementation(root, "evaluate"),
-        parameter_model=_parameter_model(root, "EvaluateParameters"),
-        evaluation_id="starter_eval",
+        implementation=_stage_implementation(root, "eval"),
+        parameter_model=_parameter_model(root, "EvalParameters"),
+        eval_id="starter_eval",
         metric_ids=("prediction_bytes",),
+        objective=MetricObjectiveSpec(
+            metric_id="prediction_bytes",
+            direction="max",
+        ),
         split_inputs=("test_split",),
         inputs={
-            PARAMETERS: FutureInputRef(
+            EvalKeys.MODEL: FutureInputRef(
                 producer_stage_id="train",
-                name=PARAMETERS,
+                name=TrainKeys.MODEL,
             ),
-            "evaluation_dataset": StoredInputRef(
+            EvalKeys.TEST: StoredInputRef(
                 pointer=evaluation_pointer,
                 path="inputs/datasets/starter/evaluation.bin",
                 data_role="benchmark",
@@ -593,12 +628,9 @@ def test_generated_project_uses_runner_owned_downloads(
         },
         params=evaluate_params,
         artifacts={
-            PREDICTIONS: _artifact(
+            EvalKeys.PREDS: _artifact(
                 root,
-                (
-                    f"{candidate_root}/artifacts/evaluations/"
-                    "starter_eval/predictions.bin"
-                ),
+                (f"{candidate_root}/artifacts/evals/starter_eval/predictions.bin"),
                 "benchmark",
             )
         },
@@ -618,27 +650,28 @@ def test_generated_project_uses_runner_owned_downloads(
             "evaluate": candidate_evaluate,
         },
     )
-    subprocess.run(
+    candidate_process = subprocess.run(
         (
             sys.executable,
-            "train.py",
-            "--run",
+            "-m",
+            "viper.cli",
+            "--json",
+            "run",
             str(candidate_plan),
-            "--stage",
-            "train",
             "--root",
             str(root),
         ),
         cwd=root,
         env=child_environment,
-        check=True,
+        check=False,
         capture_output=True,
     )
+    assert candidate_process.returncode == 0, candidate_process.stderr.decode()
     candidate_result_path = root / candidate_root / "resolved.yaml"
     candidate_result = ResolvedRun.model_validate(
         parse_yaml_bytes(candidate_result_path.read_bytes())
     )
-    subprocess.run(
+    benchmark_process = subprocess.run(
         (
             sys.executable,
             "-m",
@@ -652,9 +685,12 @@ def test_generated_project_uses_runner_owned_downloads(
         ),
         cwd=root,
         env=child_environment,
-        check=True,
+        check=False,
         capture_output=True,
     )
+    assert benchmark_process.returncode == 0, (
+        benchmark_process.stdout + benchmark_process.stderr
+    ).decode()
     benchmark_result = BenchmarkResult.model_validate(
         parse_yaml_bytes(
             (candidate_result_path.parent / "benchmark.result.yaml").read_bytes()

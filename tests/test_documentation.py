@@ -152,7 +152,7 @@ def test_explanation_names_the_current_release() -> None:
     package_version = metadata["project"]["version"]
     explanation = (ROOT / "docs/explanation/how-viper-works.md").read_text()
 
-    assert f"VIPER `{package_version}` is available from PyPI." in explanation
+    assert f"VIPER `{package_version}` is the current release candidate." in explanation
     assert f"[release report](../releases/{package_version}.md)" in explanation
 
 

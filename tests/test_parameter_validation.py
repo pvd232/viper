@@ -21,6 +21,7 @@ from viper._schema import (
 )
 from viper.artifacts import SingleFileArtifactSpec
 from viper.inputs import StoredInputRef
+from viper.metrics import MetricObjectiveSpec
 from viper.parameters import ParameterModelRef
 from viper.references import ArtifactPointerRef
 from viper.serialization import serialize_document
@@ -163,6 +164,11 @@ def test_stage_parameter_validation_runs_in_a_worker(tmp_path: Path) -> None:
     model_path.parent.mkdir(parents=True)
     model_path.write_bytes(raw)
     stage = TrainSpec(
+        metric_ids=("training_loss",),
+        objective=MetricObjectiveSpec(
+            metric_id="training_loss",
+            direction="min",
+        ),
         implementation=stage_implementation_ref("project/train.py"),
         parameter_model=reference,
         inputs={

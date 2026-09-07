@@ -61,12 +61,12 @@ SelectionName = HumanId
 RNGSeed = Annotated[int, Field(ge=0, le=2**32 - 1)]
 DataRole = Literal["training", "validation", "eval", "benchmark"]
 
-PARAMETERS: ArtifactName = "parameters"
-RESUME_STATE: ArtifactName = "resume_state"
-PARAMETERS_INPUT: InputName = "parameters"
-RESUME_STATE_INPUT: InputName = "resume_state"
+PARAMETERS: ArtifactName = "model"
+RESUME_STATE: ArtifactName = "state"
+PARAMETERS_INPUT: InputName = "model"
+RESUME_STATE_INPUT: InputName = "state"
 
-PREDICTIONS: ArtifactName = "predictions"
+PREDICTIONS: ArtifactName = "preds"
 
 
 class ProtocolModel(BaseModel):

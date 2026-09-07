@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
+
+from viper import _subprocess as subprocess
 
 ROOT = Path(__file__).parents[1]
 
