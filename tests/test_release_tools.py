@@ -39,6 +39,7 @@ def test_release_metadata_matches_the_approved_public_identity() -> None:
         "Issues": "https://github.com/pvd232/viper/issues",
     }
     assert project["scripts"] == {"viper": "viper.cli:main"}
+    assert set(project["optional-dependencies"]) == {"test", "release", "mcp"}
     assert project["dependencies"] == [
         "huggingface_hub>=1,<2",
         "httpx>=0.28,<1",

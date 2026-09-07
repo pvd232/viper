@@ -8,7 +8,7 @@
 | --- | --- |
 | DOC-01 | The root README runs one checked CPU workflow and links the documentation home. |
 | DOC-02 | The documentation home separates tutorial, how-to, explanation, reference, and contributing routes. |
-| DOC-03 | Internal contracts remain executable authority behind one maintainer index. |
+| DOC-03 | Active release and maintainer documents remain behind one internal index. |
 | DOC-04 | Public workflow prose uses the current `plan() -> execution.run()` API and links the checked example. |
 | DOC-05 | A deterministic documentation test rejects missing routes, obsolete workflow names, and direct contract sprawl. |
 
@@ -49,7 +49,7 @@ flowchart LR
     Readme --> API[API]
     Readme --> Works[How it works]
     Docs[Docs index] --> Public[Public guides]
-    Docs --> Contracts[Many internal contracts]
+    Docs --> Internal[Internal engineering documents]
 ```
 
 The root linked three useful pages but not the documentation home. The home
@@ -78,16 +78,17 @@ flowchart LR
     Readme[README] --> Example
     Readme --> Home[Documentation home]
     Home --> User[Learn · tasks · explanation · reference]
-    Home --> Maintainer[Contributing · internal contracts]
+    Home --> Maintainer[Contributing · internal engineering]
     Test --> Acceptance[Documentation acceptance]
     User --> Acceptance
     Maintainer --> Acceptance
 ```
 
-The executable contracts remain under `docs/development/`. Moving them would
-change compiler paths, baselines, and historical links without improving the
-reader boundary. The new internal index changes navigation while preserving
-their identity.
+The active release contract and maintainer guides remain under
+`docs/development/`. The preservation branch named by the release contract
+retains the removed experimental specifications, compiler inputs, and research
+records. The internal index keeps those engineering routes separate from user
+documentation.
 
 ## 4. Execution
 
@@ -98,9 +99,8 @@ their identity.
    knowledge, MCP, and troubleshooting.
 5. Add separate CLI and configuration reference entry points without copying
    the formal protocol.
-6. Route maintainers through `docs/internal/README.md` to contracts and release
-   evidence.
-7. Repair corrupted contract prose without changing PairBlock authority.
+6. Route maintainers through `docs/internal/README.md` to the active release
+   contract, maintainer guides, and release evidence.
 
 ## 5. Verification
 

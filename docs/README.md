@@ -37,8 +37,9 @@ configuration, formal protocol, and versioning policy.
 - [Contributing](../CONTRIBUTING.md) covers repository setup and change delivery.
 - [Testing VIPER](development/testing.md) defines the validation tiers and domains.
 - [Internal engineering index](internal/README.md) is the single entry point for
-  executable contracts, the master checklist, architecture plans, and release
-  evidence. These documents govern VIPER development; they are not user guides.
+  the active release contract, maintainer guides, architecture decisions, and
+  release evidence. These documents govern VIPER development; they are not user
+  guides.
 
 ## Validate these docs
 

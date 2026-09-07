@@ -43,6 +43,10 @@ knowledge head before searching those records.
 Knowledge records point to immutable run, stage, artifact, or measurement
 targets. They annotate evidence; they do not replace it.
 
+Knowledge publication, exact filtering, and vector similarity search are part
+of the base VIPER installation. Similarity search filters records first, then
+calculates cosine distance across the matching vectors with stable ordering.
+
 ## Give an agent access
 
 ```bash
