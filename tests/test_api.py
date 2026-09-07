@@ -167,18 +167,21 @@ def test_knowledge_operations_match_python_cli_and_mcp(
         KnowledgeSearchRequest(root=tmp_path, query=query)
     )
 
-    assert main(
-        [
-            "--json",
-            "knowledge",
-            "search",
-            "search_primitives",
-            "--root",
-            str(tmp_path),
-            "--query",
-            json.dumps(query),
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "--json",
+                "knowledge",
+                "search",
+                "search_primitives",
+                "--root",
+                str(tmp_path),
+                "--query",
+                json.dumps(query),
+            ]
+        )
+        == 0
+    )
     cli_result = json.loads(capsys.readouterr().out)
     mcp_result = call_tool(
         tmp_path,
@@ -193,6 +196,8 @@ def test_knowledge_operations_match_python_cli_and_mcp(
     read_tools = {tool.name for tool in tool_registry("read")}
     execute_tools = {tool.name for tool in tool_registry("execute")}
     assert "search_primitives" in read_tools
+    assert "analyze_impact" not in read_tools | execute_tools
+    assert "explain_impact" not in read_tools | execute_tools
     assert "publish_ontology" not in read_tools
     assert "publish_ontology" in execute_tools
 
@@ -200,12 +205,10 @@ def test_knowledge_operations_match_python_cli_and_mcp(
 def test_api_schema_and_capability_discovery() -> None:
     """Return registered schemas and the installed operation inventory."""
     schema = get_schema(SchemaRequest(name="RunSpec"))
-    impact_schema = get_schema(SchemaRequest(name="AnalyzeImpactSuccess"))
     capabilities = get_capabilities(CapabilitiesRequest())
 
     assert schema.name == "RunSpec"
     assert schema.json_schema["title"] == "RunSpec"
-    assert "path_search" in impact_schema.json_schema["properties"]
     assert "validate_run_spec" in capabilities.operations
     assert "preflight" in capabilities.operations
     assert "run" in capabilities.operations
@@ -215,16 +218,16 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "lineage" in capabilities.operations
     assert "status" in capabilities.operations
     assert "compare_runs" in capabilities.operations
-    assert "explain_impact" in capabilities.operations
-    assert "analyze_impact" in capabilities.operations
+    assert "explain_impact" not in capabilities.operations
+    assert "analyze_impact" not in capabilities.operations
     assert "catalog_refresh" in capabilities.operations
     assert "search_runs" in capabilities.operations
     assert "RunSpec" in capabilities.schemas
     assert "CompareRunsRequest" in capabilities.schemas
     assert "ExecuteBenchmarkRequest" in capabilities.schemas
     assert "InitProjectRequest" in capabilities.schemas
-    assert "ExplainImpactRequest" in capabilities.schemas
-    assert "AnalyzeImpactRequest" in capabilities.schemas
+    assert "ExplainImpactRequest" not in capabilities.schemas
+    assert "AnalyzeImpactRequest" not in capabilities.schemas
     assert "CatalogRefreshRequest" in capabilities.schemas
     assert "SearchRunsRequest" in capabilities.schemas
     assert capabilities.execution_backends == ("trusted_local",)
@@ -244,30 +247,6 @@ def test_validate_stage_returns_typed_success() -> None:
 def test_dispatch_returns_typed_request_failure() -> None:
     """Return stable request errors before an operation is invoked."""
     result = dispatch("validate_stage", {})
-
-    assert isinstance(result, ViperFailure)
-    assert result.origin == "request"
-    assert result.code == "invalid_request"
-
-
-def test_analyze_impact_rejects_duplicate_targets_before_execution() -> None:
-    """Reject repeated source targets at the public request boundary."""
-    result = dispatch(
-        "analyze_impact",
-        {"targets": ["src/example.py:target", "src/example.py:target"]},
-    )
-
-    assert isinstance(result, ViperFailure)
-    assert result.origin == "request"
-    assert result.code == "invalid_request"
-
-
-def test_analyze_impact_rejects_an_unbounded_path_search() -> None:
-    """Reject ranked traversal limits outside the public bounded contract."""
-    result = dispatch(
-        "analyze_impact",
-        {"targets": ["src/example.py:target"], "path_depth": 6},
-    )
 
     assert isinstance(result, ViperFailure)
     assert result.origin == "request"

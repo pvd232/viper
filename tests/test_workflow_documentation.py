@@ -8,31 +8,9 @@ from tests._documentation import (
     ROOT,
 )
 
-MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
-
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release.yml"
 
 WORKFLOWS = tuple(sorted((ROOT / ".github/workflows").glob("*.yml")))
-
-_PHASE_HEADING = re.compile(r"^## \d+\. Master Phase (?P<phase>\d+)\b.*$", re.MULTILINE)
-
-
-def test_terminal_release_gate_follows_every_implementation_phase() -> None:
-    """Keep full repository and wheel validation after the last build phase."""
-    checklist = MASTER_EXECUTION_CHECKLIST.read_text()
-    phases = tuple(_PHASE_HEADING.finditer(checklist))
-    assert phases
-    assert int(phases[-1].group("phase")) == 21
-    terminal = checklist[phases[-1].start() :]
-    earlier = checklist[: phases[-1].start()]
-
-    for command in ("make check", "make check-integration", "make check-release"):
-        assert command in terminal
-        assert command not in earlier
-    assert (
-        "Install the wheel with the `mcp`, `knowledge`, and `research` extras"
-        in terminal
-    )
 
 
 def test_release_workflow_copies_only_existing_acceptance_inputs() -> None:

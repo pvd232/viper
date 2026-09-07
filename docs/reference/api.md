@@ -137,8 +137,6 @@ knowledge records.
 | `viper.verification` | Run, artifact, pointer, and benchmark verification |
 | `viper.serialization` | Canonical YAML and JSON encoding and parsing |
 | `viper.storage` | Immutable publication and retrieval |
-| `viper.system_impact` | Contract plan checks and accepted source-impact evidence |
-| `viper.system_impact.explain` | Joined one-hop dependency evidence for tools and agents |
 
 ## Typed operations
 
@@ -169,8 +167,6 @@ the same operations.
 | `get_schema` | `SchemaRequest` | `SchemaSuccess` | `schema` |
 | `get_capabilities` | `CapabilitiesRequest` | `CapabilitiesSuccess` | `capabilities` |
 | `init_project` | `InitProjectRequest` | `InitProjectSuccess` | `init` |
-| `explain_impact` | `ExplainImpactRequest` | `ExplainImpactSuccess` | `impact-explain` |
-| `analyze_impact` | `AnalyzeImpactRequest` | `AnalyzeImpactSuccess` | `impact-analyze` |
 | `catalog_refresh` | `CatalogRefreshRequest` | `CatalogRefreshSuccess` | `catalog-refresh` |
 | `search_runs` | `SearchRunsRequest` | `SearchRunsSuccess` | `search-runs` |
 | `search_artifacts` | `SearchArtifactsRequest` | `SearchArtifactsSuccess` | `search-artifacts` |

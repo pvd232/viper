@@ -3,24 +3,11 @@
 from __future__ import annotations
 
 import ast
-import json
 import re
 from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).parents[1]
-
-MASTER_EXECUTION_CHECKLIST = ROOT / "docs/development/master-execution-checklist.md"
-
-CONTRACT_BASELINE_MANIFEST = ROOT / "docs/development/contract-baselines.json"
-
-CONTRACT_BASELINE_DATA = json.loads(CONTRACT_BASELINE_MANIFEST.read_text())
-
-IMPLEMENTATION_CONTRACTS = tuple(
-    ROOT / record["path"] for record in CONTRACT_BASELINE_DATA["contracts"]
-)
-
-CONTRACTS_WITH_COMPLETE_EXAMPLES = IMPLEMENTATION_CONTRACTS
 
 _FENCED_CODE = re.compile(r"^```[^\n]*\n.*?^```[ \t]*$", re.MULTILINE | re.DOTALL)
 

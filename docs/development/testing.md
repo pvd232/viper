@@ -116,7 +116,6 @@ schema or verifier relationship:
 ```bash
 python -m pytest \
   tests/test_documentation.py \
-  tests/test_contract_documentation.py \
   tests/test_workflow_documentation.py \
   tests/test_protocol.py \
   tests/test_validation_architecture.py \
@@ -128,64 +127,16 @@ reference with its defining source class. It also checks type aliases, local
 links, API operation names, CLI command names, release metadata, and multiline
 math fences.
 
-The same module keeps the pending implementation contracts tied to the
-[master execution checklist](master-execution-checklist.md). Every contract
-requirement must name its phase and observing test. The checklist must contain
-one implementation task and one test gate for that requirement in the same
-phase. The check also rejects missing test modules and contract edits whose
-pinned digest differs from the reviewed digest in the checklist.
-
-The implemented [contract traceability](contract-traceability.md) compiler adds
-this stricter chain:
-
-```text
-requirement ID
--> named verifier rule
--> exact implementation file and symbol
--> exact test file and test function
-```
-
-The requirement states the promised behavior. The verifier rule names the
-condition VIPER checks. The implementation symbol performs that check. The test
-supplies the accepted or rejected value. Planned edges retain exact future
-targets. Symbol resolution begins when an edge advances to `implemented`.
-
-Each contract-gap specification also carries three Mermaid flowcharts in its
-Current gap section: the inspected current DAG, the proposed-change DAG, and
-the integrated DAG. One marked worked example must contain syntax-valid Python.
-Executable PairBlocks use `ContractTarget` as their sole code-change inventory.
-Mermaid rendering remains a separate visual check;
-the repository renderer must produce readable light and dark previews before
-review.
-
-The requirement-level parser remains the migration oracle while the canonical
-graph and documentation checks run together.
-
-### System Impact Check validation
-
-Master Phase 0 records one `CodeQLIdentity` and uses it for the baseline and
-realized revisions. `tests/test_system_impact.py` owns canonical source-graph,
-receipt, reverse-dependency, target-transition, unexpected-change, and replay
-gates. CodeQL is an external toolchain; install the reviewed bundle and verify
-its recorded digest before running those tests.
-
-The check reports baseline dependents for review. It accepts the implementation
-only when every declared target has the required after-state, every PairBlock
-test passes, and the closed CTG plan names every changed source declaration.
-The resulting evidence covers statically represented Python declarations.
-Execution tests remain responsible for runtime behavior.
-
-Planned links name exact future symbols. Implemented links must resolve in the
-candidate source tree. Phase closure requires every link to use the implemented
-state.
+The active [0.1.0a3 core release contract](v0.1.0a3-core-release.md) owns the
+cleanup inventory and release acceptance boundary. Git history and its named
+preservation branch retain the retired planning, traceability, source-impact,
+and research documents.
 
 ## macOS child-process launching
 
 Production code imports the private `viper._subprocess` facade. On macOS, the
 facade starts a Python bridge through `posix_spawn`; the bridge applies the
 requested process settings and replaces itself with the target executable.
-The [child-process contract](child-process-launching.md) defines the supported
-arguments and exact acceptance checks.
 
 `tests/test_process_startup.py` disables `_fork_exec` while running a real
 command, verifies its output, and checks the previously crashing preflight Git
@@ -195,8 +146,3 @@ subprocess on macOS. It also scans `src/viper` and `tests` and rejects direct
 standard-library subprocess imports outside the facade and that regression
 module. Run it without `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` after changing a
 repository-owned process boundary.
-
-The automatic-input contract marks one complete public workflow. Documentation
-tests parse that example and require every planned public constructor. They
-also require at least five used fields in each project-owned parameter model
-and comments beside every major authoring and execution handoff.
