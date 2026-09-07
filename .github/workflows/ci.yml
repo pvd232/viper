@@ -24,7 +24,7 @@ jobs:
           python-version: "3.14"
           cache: pip
       - name: Install project and validation dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,release]"
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,release,mcp]"
       - name: Lint and type-check
         run: |
           ruff check src/viper tests
@@ -45,7 +45,7 @@ jobs:
           python-version: "3.14"
           cache: pip
       - name: Install project and test dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[test]"
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,mcp]"
       - name: Run integration tests
         run: python -m pytest tests -q -m "integration and not live_cuda"
 
@@ -61,7 +61,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install the oldest supported Pydantic release
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[test]" "pydantic==2.12.0"
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,mcp]" "pydantic==2.12.0"
       - name: Validate project-defined parameter subclasses
         run: python -m pytest tests/test_parameter_validation.py -q
 
@@ -77,7 +77,7 @@ jobs:
           python-version: "3.14"
           cache: pip
       - name: Install project and release dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,release]"
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,release,mcp]"
       - name: Run generated-project acceptance
         run: python -m pytest tests -q -m release
       - name: Build and inspect distributions
@@ -109,7 +109,7 @@ jobs:
           python-version: "${{ matrix.python-version }}"
           cache: pip
       - name: Install project and release dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,release]"
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[test,release,mcp]"
       - name: Run compatibility tests
         run: python -m pytest tests -q -m "unit or contract"
       - name: Build and inspect distributions

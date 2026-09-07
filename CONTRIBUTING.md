@@ -10,15 +10,15 @@ Create and activate a project-local Python environment:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --editable ".[test,release]"
+python -m pip install --editable ".[test,release,mcp]"
 ```
 
 On Windows, activate the environment with `.venv\Scripts\activate`.
 
 The installation command reads VIPER and its dependencies from the current
 checkout. Editable mode makes source changes available immediately. The
-bracketed names add the `test` and `release` dependency groups declared in
-`pyproject.toml`.
+bracketed names add the `test`, `release`, and `mcp` dependency groups declared
+in `pyproject.toml`.
 
 Confirm that Python resolves from `.venv` before running project commands:
 

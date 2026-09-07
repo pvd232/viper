@@ -105,7 +105,7 @@ jobs:
             --index-url https://test.pypi.org/simple/ \
             --no-deps \
             "viper-provenance==$VERSION"
-          python -m pip install "pytest>=9,<10"
+          python -m pip install "pytest>=9,<10" "mcp>=2,<3"
           python -I -m pytest tests/test_public_api.py -q
           viper --json capabilities
           ACCEPTANCE_ROOT="$(mktemp -d)"
@@ -167,7 +167,7 @@ jobs:
             --project viper-provenance \
             --version "$VERSION" \
             --dist dist
-          python -m pip install dist/*.whl "pytest>=9,<10"
+          python -m pip install dist/*.whl "pytest>=9,<10" "mcp>=2,<3"
           python -m pip uninstall --yes viper-provenance
           python -m pip install \
             --index-url https://test.pypi.org/simple/ \
