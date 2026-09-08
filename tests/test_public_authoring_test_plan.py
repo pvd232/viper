@@ -106,6 +106,11 @@ def test_first_pair_block_has_an_executable_boundary() -> None:
     }
     assert first["planned_destination"] in first["allowed_paths"]
     assert "tests/conftest.py" in first["allowed_paths"]
+    assert str(CHECKLIST_PATH.relative_to(ROOT)) in first["allowed_paths"]
+    assert (
+        "docs/development/receipts/contract-traceability-bug-ledger.json"
+        in first["allowed_paths"]
+    )
     assert first["focused_gate"][:4] == [
         ".venv/bin/python",
         "-m",

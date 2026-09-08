@@ -2,6 +2,21 @@
   "bugs": [
     {
       "affected_paths": [
+        "plans/v0.1.0a3-public-authoring/plan.json",
+        "docs/development/v0.1.0a3-public-authoring-contract.checklist.json",
+        "docs/development/receipts/contract-traceability-bug-ledger.json"
+      ],
+      "confirmation_evidence": "P0-PAC-01 requires retained checklist completion evidence, but its allowed_paths omitted both the checklist and the requested bug ledger.",
+      "first_detecting_check": "requirement-to-owner trace before P0-PAC-01 activation",
+      "focused_gate_would_catch": false,
+      "pair_block_id": "P0-PAC-01",
+      "regression_test": "tests/test_public_authoring_test_plan.py::test_first_pair_block_has_an_executable_boundary",
+      "repair_commit": null,
+      "requirement_id": "PAC-01",
+      "summary": "PAC-01 excluded its required completion-evidence files from its allowed path boundary."
+    },
+    {
+      "affected_paths": [
         "docs/development/v0.1.0a3-public-authoring-contract.md",
         "docs/development/v0.1.0a3-public-authoring-contract.checklist.json",
         "tests/test_public_authoring_test_plan.py"
@@ -17,6 +32,12 @@
     }
   ],
   "checks": [
+    {
+      "check": "trace PAC-01 completion evidence to an allowed path",
+      "outcome": "confirmed_bug",
+      "pair_block_id": "P0-PAC-01",
+      "requirement_id": "PAC-01"
+    },
     {
       "check": "compare the checklist contract digest with the current contract bytes",
       "outcome": "confirmed_bug",

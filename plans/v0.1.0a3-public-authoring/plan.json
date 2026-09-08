@@ -14,6 +14,8 @@
         "domain": "domain_protocol"
       },
       "allowed_paths": [
+        "docs/development/receipts/contract-traceability-bug-ledger.json",
+        "docs/development/v0.1.0a3-public-authoring-contract.checklist.json",
         "src/viper/_config/__init__.py",
         "src/viper/_config/validation.py",
         "src/viper/_parameter/__init__.py",
