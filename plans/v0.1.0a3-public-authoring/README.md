@@ -13,7 +13,7 @@ For each PairBlock:
 3. Implement only the owning PairBlock.
 4. Run the focused test, the live plan validator, and the change-aware wider
    checks.
-5. Record the test output in the block's Git commit and closure evidence.
+5. Record the test output in the block's Git commit and requirement evidence.
 
 The live validator rejects skipped tests, duplicate test names, missing block
 metadata, invalid Python, and a dependency order that differs from the master
