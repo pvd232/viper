@@ -10,7 +10,7 @@
       "focused_gate_would_catch": false,
       "pair_block_id": "P0-PAC-01",
       "regression_test": "tests/test_documentation.py::test_public_markdown_links_resolve",
-      "repair_commit": null,
+      "repair_commit": "78d8e66",
       "requirement_id": "PAC-01",
       "summary": "PAC-01 file renames left two repository-relative documentation links unresolved."
     },
@@ -23,7 +23,7 @@
       "focused_gate_would_catch": true,
       "pair_block_id": "P0-PAC-01",
       "regression_test": "tests/test_http_retrieval.py shared implementation fixture collection",
-      "repair_commit": null,
+      "repair_commit": "78d8e66",
       "requirement_id": "PAC-01",
       "summary": "A mechanical vocabulary rename altered pytest's external params keyword."
     },
@@ -37,7 +37,7 @@
       "focused_gate_would_catch": true,
       "pair_block_id": "P0-PAC-01",
       "regression_test": "tests/test_config_contract.py",
-      "repair_commit": null,
+      "repair_commit": "78d8e66",
       "requirement_id": "PAC-01",
       "summary": "PAC-01 acceptance assertions reached into two dependency-blocked requirements."
     },

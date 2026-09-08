@@ -40,7 +40,8 @@
         "PAC-01 focused gate: 168 passed and 23 subtests passed",
         "Post-cleanup impacted tests: 71 passed; final HTTP and authoring regression: 50 passed",
         "Contract digest, link, and plan guards: 6 passed",
-        "Ruff: all checks passed; Pyright: 0 errors"
+        "Ruff: all checks passed; Pyright: 0 errors",
+        "Implementation commit: 78d8e66"
       ]
     },
     {
@@ -196,7 +197,8 @@
         "PAC-01 focused gate: 168 passed and 23 subtests passed",
         "Post-cleanup impacted tests: 71 passed; final HTTP and authoring regression: 50 passed",
         "Contract digest, link, and plan guards: 6 passed",
-        "Ruff: all checks passed; Pyright: 0 errors"
+        "Ruff: all checks passed; Pyright: 0 errors",
+        "Implementation commit: 78d8e66"
       ]
     },
     {
