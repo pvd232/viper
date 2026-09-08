@@ -371,7 +371,7 @@ class RunPlanDraft(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     run_id: RunId
     experiment: ExperimentDraft
     variant: VariantId

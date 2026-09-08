@@ -68,7 +68,7 @@ class AttemptJournalRef(ResolvedFileRef):
 class RunAttempt(ProtocolModel):
     """Record the status and published files of one run attempt."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     attempt_id: int = Field(ge=1)
     purpose: AttemptPurpose
     status: AttemptStatus
@@ -192,7 +192,7 @@ class RunStageRef(ProtocolModel):
 class RunSpec(ProtocolModel):
     """Freeze one run plan and its ordered stage specifications."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     run_id: RunId
     experiment_id: ExperimentId
     variant_id: VariantId
@@ -240,7 +240,7 @@ class RunSpec(ProtocolModel):
 class ResolvedRun(ProtocolModel):
     """Reference every attempt and record the terminal outcome of one run."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
 
     spec: ResolvedRunSpecRef
 

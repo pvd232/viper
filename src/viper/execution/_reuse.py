@@ -190,15 +190,16 @@ def _resolved_stage(
     }
     if stage.kind == "build":
         return ResolvedBuildSpec(**values)
-    if stage.kind == "embed":
+    elif stage.kind == "embed":
         return ResolvedEmbedSpec(**values)
-    if stage.kind == "diagnostic":
+    elif stage.kind == "diagnostic":
         return ResolvedDiagnosticSpec(**values)
-    if stage.kind == "train":
+    elif stage.kind == "train":
         return ResolvedTrainSpec(**values)
-    if stage.kind == "eval":
+    elif stage.kind == "eval":
         return ResolvedEvalSpec(**values)
-    raise ValueError(f"unsupported stage kind: {stage.kind}")
+    else:
+        raise ValueError(f"unsupported stage kind: {stage.kind}")
 
 
 def reuse_stage(

@@ -85,7 +85,7 @@ class StageImplementationRef(ProtocolModel):
 class StageContextBinding(ProtocolModel):
     """Persist the stable values used to construct one live stage context."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     run_id: RunId
     attempt_id: int = Field(ge=1)
     stage_id: StageId
@@ -119,7 +119,7 @@ class BaseSpec(ProtocolModel):
     """Execution request recorded before a stage runs."""
 
     kind: str
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
 
     env: EnvSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
@@ -388,7 +388,7 @@ Spec = Annotated[
 class ResolvedBaseSpec(ProtocolModel):
     """Record an execution and the exact output files it produced."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     kind: str
 
     spec: BaseSpec

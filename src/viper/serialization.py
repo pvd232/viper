@@ -50,6 +50,33 @@ _SPEC_ADAPTER = TypeAdapter(Spec)
 _RESOLVED_SPEC_ADAPTER = TypeAdapter(ResolvedSpec)
 
 
+class MigrationRequiredError(ValueError):
+    """Explain how to update a retired version-1 authoring document."""
+
+
+def load_stage_document(value: object) -> Spec:
+    """Validate one stage mapping with targeted version-1 migration errors."""
+    if isinstance(value, dict) and value.get("schema_version") == 1:
+        retired_config_fields = (
+            field
+            for field in ("params", "parameter_model", "stage_params")
+            if field in value
+        )
+        retired = next(retired_config_fields, None)
+        if retired is not None:
+            raise MigrationRequiredError(
+                f"schema version 1 field {retired!r} was replaced by config vocabulary"
+            )
+        if "artifacts" in value:
+            raise MigrationRequiredError(
+                "schema version 1 field 'artifacts' was replaced by 'outputs'"
+            )
+        raise MigrationRequiredError(
+            "schema version 1 stage documents must be regenerated with VIPER 0.1.0a3"
+        )
+    return _SPEC_ADAPTER.validate_python(value)
+
+
 def serialize_document(document: BaseModel) -> bytes:
     """Serialize one validated protocol document as deterministic YAML bytes."""
     value = document.model_dump(mode="json")
@@ -88,7 +115,7 @@ def _load_yaml(path: Path) -> Any:
 
 def load_stage_spec(path: str | Path) -> Spec:
     """Load and validate a VIPER stage spec."""
-    return _SPEC_ADAPTER.validate_python(_load_yaml(Path(path)))
+    return load_stage_document(_load_yaml(Path(path)))
 
 
 def load_resolved_stage(path: str | Path) -> ResolvedSpec:

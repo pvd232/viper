@@ -19,7 +19,7 @@ class Config(BaseModel):
         init=False,
         exclude=True,
     )
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
 
 
 class BuildConfig(Config):

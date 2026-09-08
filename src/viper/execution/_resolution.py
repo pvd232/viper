@@ -117,15 +117,16 @@ def resolve_stage(
     assert inputs is not None
     if stage.kind == "build":
         return ResolvedBuildSpec(**common, inputs=inputs)
-    if stage.kind == "embed":
+    elif stage.kind == "embed":
         return ResolvedEmbedSpec(**common, inputs=inputs)
-    if stage.kind == "diagnostic":
+    elif stage.kind == "diagnostic":
         return ResolvedDiagnosticSpec(**common, inputs=inputs)
-    if stage.kind == "train":
+    elif stage.kind == "train":
         return ResolvedTrainSpec(**common, inputs=inputs)
-    if stage.kind == "eval":
+    elif stage.kind == "eval":
         return ResolvedEvalSpec(**common, inputs=inputs)
-    raise ValueError(f"unsupported stage kind: {stage.kind}")
+    else:
+        raise ValueError(f"unsupported stage kind: {stage.kind}")
 
 
 def resolve_download_stage(

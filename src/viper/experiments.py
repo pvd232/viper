@@ -36,7 +36,7 @@ class ReplicateSpec(ProtocolModel):
 class ExperimentSpec(ProtocolModel):
     """Declare the factors, variants, replicates, and metrics in an experiment."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     experiment_id: ExperimentId
 
     factors: tuple[FactorSpec, ...]
@@ -122,7 +122,7 @@ VariantStageConfig = Annotated[
 class VariantSpec(ProtocolModel):
     """Assign factor levels and typed stage config to one variant."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     experiment_id: ExperimentId
     variant_id: VariantId
     levels: dict[FactorId, LevelId]

@@ -43,7 +43,7 @@ class StageArtifactRef(ProtocolModel):
 class ArtifactPointer(ProtocolModel):
     """Select one artifact accepted as a reusable input."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     run: ResolvedRunRef
     artifact: StageArtifactRef
     benchmark_result: ResolvedBenchmarkResultRef | None = None
