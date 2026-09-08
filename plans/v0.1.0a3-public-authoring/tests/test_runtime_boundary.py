@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import dataclasses
-import importlib
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+import viper.metrics as metrics
+import viper.stages as stages
 
 PAIR_BLOCK_ID = "P3-PAC-10"
 REQUIREMENT_ID = "PAC-10"
@@ -17,8 +19,6 @@ PLANNED_DESTINATION = "tests/test_runtime_boundary.py"
 
 def test_runtime_contexts_are_frozen_slotted_dataclasses() -> None:
     """Keep live contexts lightweight while preventing reassignment."""
-    stages = importlib.import_module("viper.stages")
-    metrics = importlib.import_module("viper.metrics")
     for runtime_type in (stages.Context, metrics.MetricContext):
         assert dataclasses.is_dataclass(runtime_type)
         assert getattr(runtime_type, "__dataclass_params__").frozen is True
@@ -28,7 +28,6 @@ def test_runtime_contexts_are_frozen_slotted_dataclasses() -> None:
 
 def test_runtime_context_rejects_field_reassignment() -> None:
     """Preserve the logical immutability supplied by frozen dataclasses."""
-    stages = importlib.import_module("viper.stages")
     context = stages.Context.__new__(stages.Context)
     with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
         context.stage_id = "other"
@@ -68,8 +67,6 @@ def test_metric_update_does_not_validate_or_persist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Forward raw batch values only to the in-memory metric state."""
-    metrics = importlib.import_module("viper.metrics")
-
     def reject_measurement(*args: object, **kwargs: object) -> object:
         del args, kwargs
         raise AssertionError("MetricHandle.update constructed Measurement")
@@ -96,7 +93,6 @@ class _RecordingSink:
 
 def test_metric_record_persists_one_measurement() -> None:
     """Publish exactly one measurement at an explicit reporting boundary."""
-    metrics = importlib.import_module("viper.metrics")
     sink = _RecordingSink()
     handle = metrics.MetricHandle(_stateful_metric_type(metrics), sink, object())
     handle.update(1.25)
@@ -110,7 +106,6 @@ def test_measurement_sink_writes_one_json_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Construct and append one validated Measurement per record call."""
-    metrics = importlib.import_module("viper.metrics")
     calls = 0
     original = metrics.Measurement
 

@@ -3,42 +3,113 @@
 from __future__ import annotations
 
 import ast
-import importlib
 from importlib import resources
 from pathlib import Path
 
 import viper
 import viper.api as api
+import viper.artifact_loaders as artifact_loaders
+import viper.artifacts as artifacts
+import viper.authoring as authoring
+import viper.benchmark as benchmark
+import viper.catalog as catalog
+import viper.cli as cli
 import viper.config as config
 import viper.execution as execution
+import viper.execution.errors as execution_errors
+import viper.execution.results as execution_results
+import viper.experiments as experiments
+import viper.http as http
+import viper.ids as ids
+import viper.inputs as inputs
+import viper.inspection as inspection
+import viper.journal as journal
 import viper.keys as keys
+import viper.knowledge as knowledge
+import viper.mcp as mcp
+import viper.metrics as metrics
+import viper.preflight as preflight
+import viper.project as project
+import viper.randomness as randomness
+import viper.references as references
+import viper.restoration as restoration
+import viper.resume as resume
+import viper.reuse as reuse
+import viper.runs as runs
 import viper.runtime as runtime
+import viper.serialization as serialization
 import viper.stages as stages
+import viper.storage as storage
 import viper.verification as verification
+import viper.worker as worker
+import viper.workspace as workspace
 from viper.execution.errors import BenchmarkExecutionError, RunError
 from viper.execution.results import BenchmarkExecutionResult, RunResult
 from viper.stages import eval
 from viper.verification import models as verification_models
 
 PUBLIC_MODULES = (
-    "api",
-    "artifacts",
-    "benchmark",
-    "execution",
-    "experiments",
-    "http",
-    "metrics",
-    "config",
-    "randomness",
-    "references",
-    "resume",
-    "runs",
-    "runtime",
-    "serialization",
-    "stages",
-    "storage",
-    "verification",
+    api,
+    artifacts,
+    benchmark,
+    execution,
+    experiments,
+    http,
+    metrics,
+    config,
+    randomness,
+    references,
+    resume,
+    runs,
+    runtime,
+    serialization,
+    stages,
+    storage,
+    verification,
 )
+
+PUBLIC_MODULES_BY_NAME = {
+    module.__name__: module
+    for module in (
+        api,
+        artifact_loaders,
+        artifacts,
+        authoring,
+        benchmark,
+        catalog,
+        cli,
+        config,
+        execution,
+        execution_errors,
+        execution_results,
+        experiments,
+        http,
+        ids,
+        inputs,
+        inspection,
+        journal,
+        keys,
+        knowledge,
+        mcp,
+        metrics,
+        preflight,
+        project,
+        randomness,
+        references,
+        restoration,
+        resume,
+        reuse,
+        runs,
+        runtime,
+        serialization,
+        stages,
+        storage,
+        verification,
+        verification_models,
+        worker,
+        workspace,
+    )
+}
 
 
 def _root_package_statements(path: Path) -> list[ast.stmt]:
@@ -75,8 +146,7 @@ def test_root_package_rejects_a_forwarding_import(tmp_path: Path) -> None:
 
 def test_every_public_module_imports() -> None:
     """Import every module promised by the public API inventory."""
-    for name in PUBLIC_MODULES:
-        assert importlib.import_module(f"viper.{name}") is not None
+    assert all(module is not None for module in PUBLIC_MODULES)
 
 
 def test_execution_namespace_owns_only_operations() -> None:
@@ -118,7 +188,7 @@ def test_public_modules_export_only_local_definitions() -> None:
         module_name = ".".join(("viper", *relative.with_suffix("").parts))
         if module_name.endswith(".__init__"):
             module_name = module_name.removesuffix(".__init__")
-        module = importlib.import_module(module_name)
+        module = PUBLIC_MODULES_BY_NAME[module_name]
         tree = ast.parse(path.read_text(encoding="utf-8"))
         local_names = {
             node.name
@@ -203,8 +273,7 @@ def test_verification_namespace_separates_operations_and_models() -> None:
 
 def test_config_categories_form_the_public_extension_namespace() -> None:
     """Expose one config base for each supported extension role."""
-    config_module = importlib.import_module("viper.config")
-    assert tuple(config_module.__all__) == (
+    assert tuple(config.__all__) == (
         "BuildConfig",
         "ConfigOwner",
         "ConfigTypeRef",

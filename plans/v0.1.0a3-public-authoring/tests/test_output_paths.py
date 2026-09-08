@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from viper.outputs import StageOutputs, output, run_output_path
+
+from viper.references import output_pointer_path
 
 PAIR_BLOCK_ID = "P1-PAC-03"
 REQUIREMENT_ID = "PAC-03"
@@ -21,8 +23,7 @@ def _load_bytes(path: Path) -> bytes:
 
 def _output(path: str) -> Any:
     """Build one future output declaration."""
-    viper = importlib.import_module("viper")
-    return viper.output(path=path, loader=_load_bytes, data_role="training")
+    return output(path=path, loader=_load_bytes, data_role="training")
 
 
 def test_output_paths_are_relative_to_the_named_output() -> None:
@@ -40,8 +41,7 @@ def test_output_paths_reject_escape_from_generated_root(path: str) -> None:
 
 def test_two_build_outputs_do_not_require_categories() -> None:
     """Accept unrelated workspace outputs without build-to-priors coupling."""
-    outputs = importlib.import_module("viper.outputs")
-    declared = outputs.StageOutputs(
+    declared = StageOutputs(
         features=_output("customers.parquet"),
         index=_output("customers.usearch"),
     )
@@ -50,8 +50,7 @@ def test_two_build_outputs_do_not_require_categories() -> None:
 
 def test_generated_run_paths_use_stage_and_output_identity() -> None:
     """Place bytes under the stage ID, output name, and relative path."""
-    outputs = importlib.import_module("viper.outputs")
-    path = outputs.run_output_path(
+    path = run_output_path(
         stage_id="train", output_name="parameters", relative_path="model.json"
     )
     assert path == "artifacts/train/parameters/model.json"
@@ -59,8 +58,7 @@ def test_generated_run_paths_use_stage_and_output_identity() -> None:
 
 def test_generated_pointer_paths_use_run_stage_and_output_identity() -> None:
     """Keep storage categories out of promoted-output pointer paths."""
-    references = importlib.import_module("viper.references")
-    path = references.output_pointer_path(
+    path = output_pointer_path(
         run_digest="a" * 64,
         producer_stage_id="train",
         output_name="parameters",
@@ -74,8 +72,7 @@ def test_generated_pointer_paths_use_run_stage_and_output_identity() -> None:
 
 def test_generated_paths_do_not_contain_retired_categories() -> None:
     """Exclude datasets, models, priors, and evals from generated identity."""
-    outputs = importlib.import_module("viper.outputs")
-    path = outputs.run_output_path(
+    path = run_output_path(
         stage_id="build", output_name="features", relative_path="values.bin"
     )
     assert not {"datasets", "models", "priors", "evals"} & set(path.split("/"))

@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import viper.outputs as outputs
+import viper.repository as repository
+
+import viper.config as config
+import viper.stages as stages
 
 PAIR_BLOCK_ID = "P3-PAC-07"
 REQUIREMENT_ID = "PAC-07"
@@ -28,10 +33,6 @@ RETIRED_AUTHORING_TERMS = (
 
 def test_public_modules_expose_the_approved_authoring_vocabulary() -> None:
     """Present config, output, diagnostic, workspace, and repository names."""
-    config = importlib.import_module("viper.config")
-    outputs = importlib.import_module("viper.outputs")
-    stages = importlib.import_module("viper.stages")
-    repository = importlib.import_module("viper.repository")
     assert hasattr(config, "TrainConfig")
     assert hasattr(outputs, "TrainOutputs")
     assert hasattr(stages, "diagnostic")
@@ -75,7 +76,6 @@ def test_public_examples_use_direct_owner_module_imports() -> None:
 
 def test_generated_workspace_uses_final_public_names(tmp_path: Path) -> None:
     """Generate examples with the same vocabulary users read in the docs."""
-    repository = importlib.import_module("viper.repository")
     repository.init_workspace(tmp_path)
     generated = "\n".join(
         path.read_text() for path in sorted(tmp_path.rglob("*.py"))
