@@ -34,6 +34,7 @@ from .benchmark import (
 from .config import ConfigTypeRef
 from .experiments import (
     BuildVariantStageConfig,
+    DiagnosticVariantStageConfig,
     EmbedVariantStageConfig,
     EvalVariantStageConfig,
     ExperimentSpec,
@@ -99,6 +100,7 @@ from .serialization import parse_yaml_bytes, serialize_document
 from .stages import (
     BuildSpec,
     Context,
+    DiagnosticSpec,
     DownloadSpec,
     EmbedSpec,
     EvalSpec,
@@ -239,6 +241,13 @@ class EmbedSpecDraft(InternalSpecDraft):
     objective: MetricObjectiveDraft | None = None
 
 
+class DiagnosticSpecDraft(InternalSpecDraft):
+    """Hold one terminal descriptive diagnostic stage."""
+
+    kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: config.DiagnosticConfig  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
 class TrainSpecDraft(InternalSpecDraft):
     """Hold one configured training stage and required objective."""
 
@@ -261,6 +270,7 @@ StageSpecDraft = Annotated[
     DownloadSpecDraft
     | BuildSpecDraft
     | EmbedSpecDraft
+    | DiagnosticSpecDraft
     | TrainSpecDraft
     | EvalSpecDraft,
     Field(discriminator="kind"),
@@ -900,6 +910,8 @@ def _freeze_stage(
     }
     if isinstance(draft, BuildSpecDraft):
         return BuildSpec(**common)
+    if isinstance(draft, DiagnosticSpecDraft):
+        return DiagnosticSpec(**common)
     objective = (
         None
         if draft.objective is None
@@ -975,6 +987,15 @@ def stage(
     reuse: StageReuseMode = "never",
 ) -> StageDraft:
     """Build the draft selected by one decorated workspace callable."""
+    for input_name, value in inputs.items():
+        if (
+            isinstance(value, StageDraftOutputRef)
+            and value.producer.spec.kind == "diagnostic"
+        ):
+            raise ValueError(
+                f"diagnostic output {value.output_name!r} is terminal and cannot "
+                f"feed input {input_name!r}"
+            )
     definition = stage_definition(implementation)
     values = {
         "implementation": implementation,
@@ -990,6 +1011,10 @@ def stage(
         spec = BuildSpecDraft(**values)
     elif definition.kind == "embed":
         spec = EmbedSpecDraft(**values, objective=objective)
+    elif definition.kind == "diagnostic":
+        if objective is not None:
+            raise ValueError("diagnostic stages do not accept an objective")
+        spec = DiagnosticSpecDraft(**values)
     elif definition.kind == "train":
         if objective is None:
             raise ValueError("training stages require an objective")
@@ -1090,6 +1115,10 @@ def _compile_variant(
         elif isinstance(spec, EmbedSpecDraft):
             stage_configs.append(
                 EmbedVariantStageConfig(stage_id=stage_id, config=spec.config)
+            )
+        elif isinstance(spec, DiagnosticSpecDraft):
+            stage_configs.append(
+                DiagnosticVariantStageConfig(stage_id=stage_id, config=spec.config)
             )
         elif isinstance(spec, TrainSpecDraft):
             stage_configs.append(

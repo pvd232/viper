@@ -41,6 +41,7 @@ from ..serialization import parse_yaml_bytes, serialize_document
 from ..stages import (
     ParameterizedSpec,
     ResolvedBuildSpec,
+    ResolvedDiagnosticSpec,
     ResolvedEmbedSpec,
     ResolvedEvalSpec,
     ResolvedInternalSpec,
@@ -191,9 +192,13 @@ def _resolved_stage(
         return ResolvedBuildSpec(**values)
     if stage.kind == "embed":
         return ResolvedEmbedSpec(**values)
+    if stage.kind == "diagnostic":
+        return ResolvedDiagnosticSpec(**values)
     if stage.kind == "train":
         return ResolvedTrainSpec(**values)
-    return ResolvedEvalSpec(**values)
+    if stage.kind == "eval":
+        return ResolvedEvalSpec(**values)
+    raise ValueError(f"unsupported stage kind: {stage.kind}")
 
 
 def reuse_stage(

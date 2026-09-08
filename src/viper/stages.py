@@ -258,6 +258,13 @@ class EmbedSpec(InternalSpec):
         return self
 
 
+class DiagnosticSpec(InternalSpec):
+    """Request a terminal descriptive diagnostic operation."""
+
+    kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: config.DiagnosticConfig
+
+
 class TrainSpec(InternalSpec):
     """Request training with a measured minimization or maximization objective."""
 
@@ -369,7 +376,7 @@ class EvalSpec(InternalSpec):
         return self
 
 
-ParameterizedStageSpec = BuildSpec | EmbedSpec | TrainSpec | EvalSpec
+ParameterizedStageSpec = BuildSpec | EmbedSpec | DiagnosticSpec | TrainSpec | EvalSpec
 
 
 Spec = Annotated[
@@ -632,6 +639,13 @@ class ResolvedEmbedSpec(ResolvedInternalSpec):
     spec: EmbedSpec  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
+class ResolvedDiagnosticSpec(ResolvedInternalSpec):
+    """Record the realized execution of one diagnostic stage."""
+
+    kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
+    spec: DiagnosticSpec  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
 class ResolvedTrainSpec(ResolvedInternalSpec):
     """Record the realized execution of one training stage."""
 
@@ -650,6 +664,7 @@ ResolvedSpec = Annotated[
     ResolvedDownloadSpec
     | ResolvedBuildSpec
     | ResolvedEmbedSpec
+    | ResolvedDiagnosticSpec
     | ResolvedTrainSpec
     | ResolvedEvalSpec,
     Field(discriminator="kind"),
@@ -704,6 +719,13 @@ def embed(
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one embedding-stage callable."""
     return _stage_decorator("embed", config)
+
+
+def diagnostic(
+    *, config: type[config.DiagnosticConfig]
+) -> Callable[[DecoratedStage], DecoratedStage]:
+    """Declare one terminal diagnostic-stage callable."""
+    return _stage_decorator("diagnostic", config)
 
 
 def train(

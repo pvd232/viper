@@ -38,6 +38,7 @@ from ..serialization import parse_yaml_bytes
 from ..stages import (
     BaseSpec,
     BuildSpec,
+    DiagnosticSpec,
     EmbedSpec,
     EvalSpec,
     InternalSpec,
@@ -382,7 +383,7 @@ def verify_run_plan_relationships(
         for stage_id, stage in stages.items()
         if isinstance(
             stage,
-            (BuildSpec, EmbedSpec, TrainSpec, EvalSpec),
+            (BuildSpec, EmbedSpec, DiagnosticSpec, TrainSpec, EvalSpec),
         )
     }
     variant_configs = {stage.stage_id: stage for stage in variant.stage_configs}

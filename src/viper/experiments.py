@@ -85,6 +85,14 @@ class EmbedVariantStageConfig(ProtocolModel):
     config: config.EmbedConfig
 
 
+class DiagnosticVariantStageConfig(ProtocolModel):
+    """Bind one diagnostic stage to its selected variant config."""
+
+    kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
+    stage_id: StageId
+    config: config.DiagnosticConfig
+
+
 class TrainVariantStageConfig(ProtocolModel):
     """Bind one training stage to its selected variant config."""
 
@@ -104,6 +112,7 @@ class EvalVariantStageConfig(ProtocolModel):
 VariantStageConfig = Annotated[
     BuildVariantStageConfig
     | EmbedVariantStageConfig
+    | DiagnosticVariantStageConfig
     | TrainVariantStageConfig
     | EvalVariantStageConfig,
     Field(discriminator="kind"),

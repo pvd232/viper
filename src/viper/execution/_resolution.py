@@ -24,6 +24,7 @@ from ..stages import (
     DownloadSpec,
     ParameterizedSpec,
     ResolvedBuildSpec,
+    ResolvedDiagnosticSpec,
     ResolvedDownloadSpec,
     ResolvedEmbedSpec,
     ResolvedEvalSpec,
@@ -118,9 +119,13 @@ def resolve_stage(
         return ResolvedBuildSpec(**common, inputs=inputs)
     if stage.kind == "embed":
         return ResolvedEmbedSpec(**common, inputs=inputs)
+    if stage.kind == "diagnostic":
+        return ResolvedDiagnosticSpec(**common, inputs=inputs)
     if stage.kind == "train":
         return ResolvedTrainSpec(**common, inputs=inputs)
-    return ResolvedEvalSpec(**common, inputs=inputs)
+    if stage.kind == "eval":
+        return ResolvedEvalSpec(**common, inputs=inputs)
+    raise ValueError(f"unsupported stage kind: {stage.kind}")
 
 
 def resolve_download_stage(
