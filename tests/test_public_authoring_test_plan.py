@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 from pathlib import Path
 
@@ -49,6 +50,14 @@ def test_public_authoring_test_plan_matches_master_checklist() -> None:
         if block["requirement_ids"][0] not in {"PAC-08", "PAC-09"}
     ]
     assert planned == expected
+
+
+def test_master_checklist_binds_the_current_contract_bytes() -> None:
+    """Reject a checklist whose approved contract digest is stale."""
+    checklist = json.loads(CHECKLIST_PATH.read_text())
+    contract = checklist["contracts"][0]
+    contract_path = ROOT / contract["path"]
+    assert hashlib.sha256(contract_path.read_bytes()).hexdigest() == contract["sha256"]
 
 
 def test_each_planned_file_is_executable_owned_test_source() -> None:

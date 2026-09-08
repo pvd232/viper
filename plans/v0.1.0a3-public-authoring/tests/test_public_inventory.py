@@ -64,6 +64,15 @@ def test_public_documents_do_not_teach_retired_authoring_terms() -> None:
     assert offenders == []
 
 
+def test_public_examples_use_direct_owner_module_imports() -> None:
+    """Keep public examples concise without hiding symbol ownership."""
+    readme = (ROOT / "README.md").read_text()
+    assert "from viper.stages import" in readme
+    assert "from viper.outputs import" in readme
+    assert "@viper.stages." not in readme
+    assert "viper.outputs.TrainOutputs" not in readme
+
+
 def test_generated_workspace_uses_final_public_names(tmp_path: Path) -> None:
     """Generate examples with the same vocabulary users read in the docs."""
     repository = importlib.import_module("viper.repository")

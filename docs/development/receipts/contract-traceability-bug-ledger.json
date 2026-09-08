@@ -1,0 +1,28 @@
+{
+  "bugs": [
+    {
+      "affected_paths": [
+        "docs/development/v0.1.0a3-public-authoring-contract.md",
+        "docs/development/v0.1.0a3-public-authoring-contract.checklist.json",
+        "tests/test_public_authoring_test_plan.py"
+      ],
+      "confirmation_evidence": "The contract SHA-256 was 496942683b5226c1193b2f183f49c47c6ccad06ef237dcbe279d21d0cc6ec95c while the checklist retained 96d78bfc66cc00a6edead84bd0798f0790fbd68a7e24ad358addada8e0e7d535; the active plan tests still passed.",
+      "first_detecting_check": "manual contract-to-checklist digest comparison before P0-PAC-01",
+      "focused_gate_would_catch": false,
+      "pair_block_id": "P0-PAC-01",
+      "regression_test": "tests/test_public_authoring_test_plan.py::test_master_checklist_binds_the_current_contract_bytes",
+      "repair_commit": null,
+      "requirement_id": "PAC-01",
+      "summary": "The public-authoring checklist did not mechanically verify its stored contract digest."
+    }
+  ],
+  "checks": [
+    {
+      "check": "compare the checklist contract digest with the current contract bytes",
+      "outcome": "confirmed_bug",
+      "pair_block_id": "P0-PAC-01",
+      "requirement_id": "PAC-01"
+    }
+  ],
+  "schema_version": 1
+}
