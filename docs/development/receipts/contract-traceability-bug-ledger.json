@@ -11,7 +11,7 @@
       "focused_gate_would_catch": false,
       "pair_block_id": "P0-PAC-01",
       "regression_test": "tests/test_public_authoring_test_plan.py::test_master_checklist_binds_the_current_contract_bytes",
-      "repair_commit": null,
+      "repair_commit": "c756ef8",
       "requirement_id": "PAC-01",
       "summary": "The public-authoring checklist did not mechanically verify its stored contract digest."
     }
