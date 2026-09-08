@@ -67,24 +67,14 @@ def test_protocol_uses_live_schemas_instead_of_repeated_source_models() -> None:
     assert not python_blocks(text)
 
 
-def test_protocol_uses_renderer_safe_math_fences() -> None:
-    """Keep multiline protocol equations inside balanced GitHub math fences."""
-    text = PROTOCOL.read_text()
-    open_fence: str | None = None
-    math_fences = 0
-    for line in text.splitlines():
-        if not line.startswith("```"):
-            continue
-        if open_fence is None:
-            open_fence = line
-            math_fences += line == "```math"
-        else:
-            assert line == "```"
-            open_fence = None
+def test_protocol_reference_does_not_repeat_the_walkthrough_or_guarantees() -> None:
+    """Keep the protocol page focused on record lookup and distinctions."""
+    text = PROTOCOL.read_text(encoding="utf-8")
 
-    assert not re.search(r"^\$\$$", text, flags=re.MULTILINE)
-    assert math_fences > 0
-    assert open_fence is None
+    assert "## Record map" in text
+    assert "## Terms that mark different lifecycle states" in text
+    assert "## What happens during a run" not in text
+    assert "## Core acceptance relation" not in text
 
 
 def test_public_python_examples_are_syntactically_valid() -> None:
