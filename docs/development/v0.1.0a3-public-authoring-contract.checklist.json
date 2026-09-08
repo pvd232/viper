@@ -8,7 +8,7 @@
       "contract_id": "public-authoring",
       "path": "docs/development/v0.1.0a3-public-authoring-contract.md",
       "revision": "working-tree",
-      "sha256": "b0f076d2a01a6df58363cc15f05a51c8a9f4725e8011da932b889fc4ca507720",
+      "sha256": "96d78bfc66cc00a6edead84bd0798f0790fbd68a7e24ad358addada8e0e7d535",
       "requirement_ids": [
         "PAC-01",
         "PAC-02",
@@ -34,7 +34,7 @@
       "state": "planned",
       "gate": {
         "kind": "test",
-        "target": "authoring.config.only plus focused config and protocol tests"
+        "target": "authoring.config.only across Python, serialized, CLI/MCP protocol, and workspace-generator surfaces plus focused config and protocol tests"
       },
       "completion_evidence": []
     },
@@ -139,7 +139,7 @@
       "state": "planned",
       "gate": {
         "kind": "test",
-        "target": "public inventory, documentation checks, generated-workspace acceptance, and CPU quickstart"
+        "target": "documentation checks, generated-workspace acceptance, CPU quickstart, and the final repository-wide public inventory"
       },
       "completion_evidence": []
     },
@@ -185,7 +185,7 @@
       "state": "planned",
       "gate": {
         "kind": "test",
-        "target": "authoring.config.only plus focused config and protocol tests"
+        "target": "authoring.config.only across Python, serialized, CLI/MCP protocol, and workspace-generator surfaces plus focused config and protocol tests"
       },
       "completion_evidence": []
     },
@@ -283,7 +283,7 @@
       "state": "planned",
       "gate": {
         "kind": "test",
-        "target": "public inventory, documentation checks, generated-workspace acceptance, and CPU quickstart"
+        "target": "documentation checks, generated-workspace acceptance, CPU quickstart, and the final repository-wide public inventory"
       },
       "completion_evidence": []
     },

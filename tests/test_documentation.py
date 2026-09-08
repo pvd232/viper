@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import tomllib
 
@@ -39,6 +40,22 @@ PUBLIC_MARKDOWN = (
     *sorted((ROOT / "examples").rglob("*.md")),
     ROOT / "tests/README.md",
 )
+
+
+def test_public_authoring_config_gate_precedes_documentation_migration() -> None:
+    """Keep PAC-01 executable before PAC-07 owns the documentation migration."""
+    checklist = json.loads(
+        (
+            ROOT
+            / "docs/development/v0.1.0a3-public-authoring-contract.checklist.json"
+        ).read_text(encoding="utf-8")
+    )
+    requirements = {
+        item["requirement_id"]: item for item in checklist["requirements"]
+    }
+
+    assert "documentation" not in requirements["PAC-01"]["gate"]["target"]
+    assert "documentation" in requirements["PAC-07"]["gate"]["target"]
 
 
 def test_protocol_uses_live_schemas_instead_of_repeated_source_models() -> None:
