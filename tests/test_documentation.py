@@ -73,6 +73,7 @@ def test_protocol_reference_does_not_repeat_the_walkthrough_or_guarantees() -> N
 
     assert "## Record map" in text
     assert "## Terms that mark different lifecycle states" in text
+    assert "| `ResolvedSpec` | Stage attempt |" in text
     assert "## What happens during a run" not in text
     assert "## Core acceptance relation" not in text
 

@@ -12,7 +12,7 @@ for their exact fields.
 | `VariantSpec` | Variant | Selects the stage graph and config for each stage. |
 | `RunSpec` | Run | Selects one variant and replicate, the source revision, runtime, reproducibility settings, estimator, optional benchmark, and ordered stages. |
 | `Spec` | Stage | Declares one stage's function, config, inputs, outputs, metrics, objective, runtime override, and reuse policy. |
-| Resolved stage spec | Stage attempt | Records the artifacts and runtime evidence produced by one stage. |
+| `ResolvedSpec` | Stage attempt | Records the artifacts and runtime evidence produced by one stage. |
 | `RunAttempt` | Attempt | Records status, timing, completed stages, measurements, logs, and failure evidence. |
 | `ResolvedRun` | Run | Records the terminal status and the attempt that supports it. |
 
@@ -25,7 +25,7 @@ The model definitions live in [`viper.experiments`](../../src/viper/experiments.
 | Before execution | After execution |
 | --- | --- |
 | An **output** declares where a stage must write. | An **artifact** identifies the files written for that output. |
-| A stage **spec** declares the requested operation. | A **resolved stage spec** records the completed operation. |
+| A stage `Spec` declares the requested operation. | A `ResolvedSpec` records the completed operation. |
 | A `RunSpec` fixes the requested run. | A `ResolvedRun` records its terminal result. |
 
 Workspace functions therefore write through `context.outputs`. Verification,
