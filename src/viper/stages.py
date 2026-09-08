@@ -43,7 +43,6 @@ from .inputs import (
     InputRef,
     ResolvedInputRef,
     pointer_location_matches,
-    pointer_path,
 )
 from .metrics import MetricHandle, MetricObjectiveSpec
 from .outputs import OutputSpec, StageOutputs
@@ -129,44 +128,24 @@ class BaseSpec(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_output_paths(self) -> BaseSpec:
-        """Enforce output-path and metric declarations."""
+        """Validate generated stage and output paths without categories."""
         if len(set(self.metric_ids)) != len(self.metric_ids):
             raise ValueError("stage metric IDs must be unique")
-
-        output_categories = {
-            "download": "datasets",
-            "build": "priors",
-            "embed": "models",
-            "train": "models",
-            "eval": "evals",
-        }
-        output_category = output_categories.get(self.kind)
-        if output_category is None:
-            raise ValueError("stage kind has no output category contract")
-
-        checkpoint_outputs = {keys.Train.MODEL, keys.Train.RESUME_STATE}
-        if self.kind != "train" and checkpoint_outputs & set(self.outputs.keys()):
-            raise ValueError(
-                "model and resume_state are reserved for training stages"
-            )
-        if self.kind != "eval" and keys.Eval.PREDICTIONS in self.outputs.keys():
-            raise ValueError("predictions is reserved for eval stages")
 
         output_roots: dict[RepoRelPath, OutputName] = {}
         for name, output in self.outputs.items():
             parts = output.path.split("/")
             if (
-                len(parts) < 8
+                len(parts) < 9
                 or parts[0] != "experiments"
                 or parts[2] != "runs"
                 or parts[5] != "artifacts"
-                or parts[6] != output_category
-                or re.fullmatch(r"[a-z][a-z0-9_]*", parts[7]) is None
+                or re.fullmatch(r"[a-z][a-z0-9_]*", parts[6]) is None
+                or parts[7] != name
                 or (output.kind == "file" and len(parts) < 9)
             ):
                 raise ValueError(
-                    f"output {name!r} path must use a run output category "
-                    "and entity ID"
+                    f"output {name!r} path must use its stage and output identity"
                 )
 
             for previous_path, previous_name in output_roots.items():
@@ -309,10 +288,12 @@ class TrainSpec(InternalSpec):
             raise ValueError("checkpoint inputs must use the same input kind")
         if model_input.kind == "stored" and state_input.kind == "stored":
             if any(
-                pointer_path(value.pointer).split("/")[1] != "models"
+                value.data_role not in {"training", "validation"}
                 for value in (model_input, state_input)
             ):
-                raise ValueError("stored checkpoint inputs must use inputs/models")
+                raise ValueError(
+                    "stored checkpoint inputs require training or validation data"
+                )
         if model_input.kind == "future" and state_input.kind == "future":
             if model_input.producer_stage_id != state_input.producer_stage_id:
                 raise ValueError("checkpoint inputs must select one producer stage")
@@ -350,8 +331,6 @@ class EvalSpec(InternalSpec):
             raise ValueError("eval requires an eval_dataset input")
         if dataset.kind != "stored":
             raise ValueError("eval_dataset must be a stored input")
-        if pointer_path(dataset.pointer).split("/")[1] != "datasets":
-            raise ValueError("eval_dataset must use inputs/datasets")
         if dataset.data_role not in {"eval", "benchmark"}:
             raise ValueError("eval_dataset has an invalid data role")
         reserved = {keys.Train.MODEL, keys.Eval.TEST}
@@ -363,10 +342,6 @@ class EvalSpec(InternalSpec):
             split_input = self.inputs[split_name]
             if split_input.kind != "stored":
                 raise ValueError(f"eval split input {split_name!r} must be stored")
-            if pointer_path(split_input.pointer).split("/")[1] != "benchmarks":
-                raise ValueError(
-                    f"eval split input {split_name!r} must use inputs/benchmarks"
-                )
             if split_input.data_role != dataset.data_role:
                 raise ValueError(
                     f"eval split input {split_name!r} data_role must match test"
@@ -375,8 +350,6 @@ class EvalSpec(InternalSpec):
             if model_input.name != keys.Train.MODEL:
                 raise ValueError("same-run eval must consume model")
         elif model_input.kind == "stored":
-            if pointer_path(model_input.pointer).split("/")[1] != "models":
-                raise ValueError("stored eval model must use inputs/models")
             if model_input.data_role not in {"training", "validation"}:
                 raise ValueError(
                     "stored eval parameters data_role must be training or validation"

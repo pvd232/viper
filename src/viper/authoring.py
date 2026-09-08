@@ -79,7 +79,7 @@ from .metrics import (
     MetricSpec,
     metric_definition,
 )
-from .outputs import OutputDraft, OutputSpec, StageOutputs
+from .outputs import OutputDraft, OutputSpec, StageOutputs, run_output_path
 from .project import resolve_path, resolve_root
 from .references import (
     GitSource,
@@ -87,6 +87,7 @@ from .references import (
     ResolvedArtifactPointerRef,
     ResolvedRunRef,
     ResolvedRunSpecRef,
+    output_pointer_path,
 )
 from .reuse import StageReuseMode
 from .runs import (
@@ -748,11 +749,11 @@ def _freeze_input(
         raise ValueError("storage_graph_unreachable")
     pointer = ArtifactPointer(run=draft.run, artifact=draft.artifact)
     raw = serialize_document(pointer)
-    parts = draft.path.split("/")
-    if len(parts) < 4 or parts[0] != "inputs":
-        raise ValueError("prior-run input path must include category and entity")
-    selection = f"{draft.artifact.artifact_name}_{draft.run.sha256}"
-    pointer_path = "/".join((*parts[:3], f"{selection}.pointer.yaml"))
+    pointer_path = output_pointer_path(
+        run_digest=draft.run.sha256,
+        producer_stage_id=draft.artifact.stage_id,
+        output_name=draft.artifact.artifact_name,
+    )
     published = publish_resolved_files(
         root,
         selected_destination,
@@ -777,6 +778,8 @@ def _freeze_input(
 def _freeze_output(
     root: Path,
     run_root: str,
+    stage_id: StageId,
+    output_name: OutputName,
     draft: OutputDraft,
 ) -> OutputSpec:
     """Freeze one promised output into its pre-execution declaration."""
@@ -787,9 +790,14 @@ def _freeze_output(
     if not path.is_relative_to(root):
         raise ValueError("output loader is outside the workspace root")
     raw = path.read_bytes()
+    relative_output_path = run_output_path(
+        stage_id=stage_id,
+        output_name=output_name,
+        relative_path=draft.path,
+    )
     return OutputSpec(
         kind=draft.kind,
-        path=f"{run_root}/{draft.path}",
+        path=f"{run_root}/{relative_output_path}",
         loader=ArtifactLoaderRef(
             path=path.relative_to(root).as_posix(),
             symbol=draft.loader.__name__,
@@ -803,6 +811,7 @@ def _freeze_output(
 def _freeze_declared_outputs(
     root: Path,
     run_root: str,
+    stage_id: StageId,
     declared: StageOutputs[OutputDraft],
 ) -> StageOutputs[OutputSpec]:
     """Freeze output values while retaining their declared output class."""
@@ -810,7 +819,7 @@ def _freeze_declared_outputs(
     origin = declared_type.__pydantic_generic_metadata__.get("origin")
     output_type = StageOutputs[OutputSpec] if origin is None else origin[OutputSpec]
     values = {
-        name: _freeze_output(root, run_root, output)
+        name: _freeze_output(root, run_root, stage_id, name, output)
         for name, output in declared.items()
     }
     return cast(
@@ -822,6 +831,7 @@ def _freeze_declared_outputs(
 def _freeze_stage(
     root: Path,
     run_root: str,
+    stage_id: StageId,
     stages: Mapping[StageId, StageDraft],
     draft: StageSpecDraft,
     input_cache: dict[int, InputRef] | None = None,
@@ -830,7 +840,7 @@ def _freeze_stage(
     cloud_client: ViperCloudClient | None = None,
 ) -> Spec:
     """Freeze one Python stage draft into its protocol declaration."""
-    outputs = _freeze_declared_outputs(root, run_root, draft.outputs)
+    outputs = _freeze_declared_outputs(root, run_root, stage_id, draft.outputs)
     if isinstance(draft, DownloadSpecDraft):
         return DownloadSpec(
             outputs=outputs,
@@ -1152,6 +1162,7 @@ def _compile_plan(
         stage_spec = _freeze_stage(
             project_root,
             run_root,
+            stage_id,
             variant_draft.stages,
             stage_draft.spec,
             input_cache,

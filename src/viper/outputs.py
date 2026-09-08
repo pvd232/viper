@@ -7,13 +7,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Generic, Literal, Self, TypeVar, cast
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, TypeAdapter, model_validator
 
 from ._schema import DataRole, ProtocolModel, RepoRelPath
 from .artifacts import ArtifactLoaderRef
-from .ids import OutputName
+from .ids import OutputName, StageId
 
 OutputT = TypeVar("OutputT")
+REPO_REL_PATH = TypeAdapter(RepoRelPath)
 
 
 class OutputDraft(BaseModel):
@@ -116,6 +117,18 @@ def output(
     )
 
 
+def run_output_path(
+    *,
+    stage_id: StageId,
+    output_name: OutputName,
+    relative_path: RepoRelPath,
+) -> RepoRelPath:
+    """Generate the run-relative path owned by one named stage output."""
+    return REPO_REL_PATH.validate_python(
+        f"artifacts/{stage_id}/{output_name}/{relative_path}"
+    )
+
+
 __all__ = [
     "EvalOutputs",
     "OutputDraft",
@@ -123,4 +136,5 @@ __all__ = [
     "StageOutputs",
     "TrainOutputs",
     "output",
+    "run_output_path",
 ]

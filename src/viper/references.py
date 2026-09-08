@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field, HttpUrl, model_validator
 
 from ._schema import SHA256, GitCommit, NonEmptyStr, ProtocolModel, RepoRelPath
-from .ids import HumanId, StageId
+from .ids import HumanId, OutputName, StageId
 
 
 class GitSource(ProtocolModel):
@@ -26,21 +26,37 @@ class GitFileRef(GitSource):
 
 
 def _validate_pointer_path(path: RepoRelPath) -> None:
-    """Require the canonical path for one promoted-input pointer."""
+    """Require the canonical path for one run-output pointer."""
     parts = path.split("/")
-    selection = parts[3].removesuffix(".pointer.yaml") if len(parts) == 4 else ""
+    selection = parts[4].removesuffix(".pointer.yaml") if len(parts) == 5 else ""
     if (
-        len(parts) != 4
-        or parts[0] != "inputs"
-        or parts[1] not in {"benchmarks", "datasets", "models", "priors"}
-        or not parts[3].endswith(".pointer.yaml")
-        or re.fullmatch(r"[a-z][a-z0-9_]*", parts[2]) is None
+        len(parts) != 5
+        or parts[0] != ".viper"
+        or parts[1] != "pointers"
+        or re.fullmatch(r"[0-9a-f]{64}", parts[2]) is None
+        or re.fullmatch(r"[a-z][a-z0-9_]*", parts[3]) is None
+        or not parts[4].endswith(".pointer.yaml")
         or re.fullmatch(r"[a-z][a-z0-9_]*", selection) is None
     ):
         raise ValueError(
-            "artifact pointer path must match "
-            "inputs/<category>/<entity_id>/<selection_name>.pointer.yaml"
+            "output pointer path must match "
+            ".viper/pointers/<run_digest>/<stage_id>/<output_name>.pointer.yaml"
         )
+
+
+def output_pointer_path(
+    *,
+    run_digest: SHA256,
+    producer_stage_id: StageId,
+    output_name: OutputName,
+) -> RepoRelPath:
+    """Generate the pointer path for one completed run output."""
+    path = (
+        f".viper/pointers/{run_digest}/{producer_stage_id}/"
+        f"{output_name}.pointer.yaml"
+    )
+    _validate_pointer_path(path)
+    return path
 
 
 class ArtifactPointerRef(GitFileRef):

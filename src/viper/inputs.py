@@ -78,19 +78,14 @@ class StoredInputRef(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_materialization_path(self) -> StoredInputRef:
-        """Keep materialized input bytes within their promoted-input scope."""
+        """Keep materialized bytes separate from the immutable pointer file."""
         selected_pointer_path = pointer_path(self.pointer)
-        pointer_scope = selected_pointer_path.split("/")[:3]
-        materialization_parts = self.path.split("/")
         if (
-            len(materialization_parts) < 3
-            or materialization_parts[:3] != pointer_scope
-            or repo_file_paths_overlap(self.path, selected_pointer_path)
-            or materialization_parts[-1].endswith(".pointer.yaml")
+            repo_file_paths_overlap(self.path, selected_pointer_path)
+            or self.path.endswith(".pointer.yaml")
         ):
             raise ValueError(
-                "stored input path must use the pointer's category and entity ID "
-                "and must not use or overlap a pointer-file path"
+                "stored input path must not use or overlap a pointer-file path"
             )
         return self
 
