@@ -6,15 +6,15 @@ for their exact fields.
 
 ## Record map
 
-| Record | Scope | Purpose |
-| --- | --- | --- |
-| `ExperimentSpec` | Experiment | Defines factors, variants, replicates, and metrics. |
-| `VariantSpec` | Variant | Selects the stage graph and config for each stage. |
-| `RunSpec` | Run | Selects one variant and replicate, the source revision, runtime, reproducibility settings, estimator, optional benchmark, and ordered stages. |
-| `Spec` | Stage | Declares one stage's function, config, inputs, outputs, metrics, objective, runtime override, and reuse policy. |
-| `ResolvedSpec` | Stage attempt | Records the artifacts and runtime evidence produced by one stage. |
-| `RunAttempt` | Attempt | Records status, timing, completed stages, measurements, logs, and failure evidence. |
-| `ResolvedRun` | Run | Records the terminal status and the attempt that supports it. |
+| Record | Purpose |
+| --- | --- |
+| `ExperimentSpec` | Defines factors, variants, replicates, and metrics. |
+| `VariantSpec` | Selects the stage graph and config for each stage. |
+| `RunSpec` | Selects one variant and replicate, the source revision, runtime, reproducibility settings, estimator, optional benchmark, and ordered stages. |
+| `Spec` | Declares one stage's function, config, inputs, outputs, metrics, objective, runtime override, and reuse policy. |
+| `ResolvedSpec` | Records the artifacts and runtime evidence produced by one stage attempt. |
+| `RunAttempt` | Records status, timing, completed stages, measurements, logs, and failure evidence for one attempt. |
+| `ResolvedRun` | Records a run's terminal status and the attempt that supports it. |
 
 The model definitions live in [`viper.experiments`](../../src/viper/experiments.py),
 [`viper.runs`](../../src/viper/runs.py), and
