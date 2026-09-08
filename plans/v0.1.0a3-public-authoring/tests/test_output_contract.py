@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import importlib
 import inspect
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from viper.outputs import EvalOutputs, OutputDraft, StageOutputs, TrainOutputs, output
+
+import viper.artifacts as artifacts
+from viper.authoring import stage
 
 PAIR_BLOCK_ID = "P1-PAC-02"
 REQUIREMENT_ID = "PAC-02"
@@ -19,22 +22,19 @@ def _load_bytes(path: Path) -> bytes:
     return path.read_bytes()
 
 
-def _draft(path: str) -> object:
+def _draft(path: str) -> OutputDraft:
     """Declare one output through the approved public constructor."""
-    outputs = importlib.import_module("viper.outputs")
-    return outputs.output(path=path, loader=_load_bytes, data_role="training")
+    return output(path=path, loader=_load_bytes, data_role="training")
 
 
 def test_output_constructor_returns_an_output_draft() -> None:
     """Name pre-execution writes as outputs rather than artifacts."""
-    outputs = importlib.import_module("viper.outputs")
-    assert isinstance(_draft("model.json"), outputs.OutputDraft)
+    assert isinstance(_draft("model.json"), OutputDraft)
 
 
 def test_flexible_stage_outputs_accept_workspace_names() -> None:
     """Allow flexible stages to choose semantic output field names."""
-    outputs = importlib.import_module("viper.outputs")
-    selected = outputs.StageOutputs(
+    selected = StageOutputs(
         features=_draft("features.parquet"),
         index=_draft("search.index"),
     )
@@ -44,35 +44,31 @@ def test_flexible_stage_outputs_accept_workspace_names() -> None:
 
 def test_output_names_must_be_identifiers() -> None:
     """Reject names that cannot become stable Python field access."""
-    outputs = importlib.import_module("viper.outputs")
     with pytest.raises(ValidationError, match="output name"):
-        outputs.StageOutputs.model_validate({"not-a-name": _draft("value.bin")})
+        StageOutputs.model_validate({"not-a-name": _draft("value.bin")})
 
 
 @pytest.mark.parametrize("missing", ["model", "resume_state"])
 def test_train_outputs_require_checkpoint_roles(missing: str) -> None:
     """Require both terminal training results by semantic role."""
-    outputs = importlib.import_module("viper.outputs")
     values = {
         "model": _draft("model.json"),
         "resume_state": _draft("resume_state.pt"),
     }
     del values[missing]
     with pytest.raises(ValidationError, match=missing):
-        outputs.TrainOutputs.model_validate(values)
+        TrainOutputs.model_validate(values)
 
 
 def test_eval_outputs_require_predictions() -> None:
     """Require the canonical evaluation result."""
-    outputs = importlib.import_module("viper.outputs")
     with pytest.raises(ValidationError, match="predictions"):
-        outputs.EvalOutputs.model_validate({})
+        EvalOutputs.model_validate({})
 
 
 def test_typed_output_roles_support_attribute_access() -> None:
     """Expose required roles without a second enum or raw dictionary."""
-    outputs = importlib.import_module("viper.outputs")
-    selected = outputs.TrainOutputs(
+    selected = TrainOutputs(
         model=_draft("model.json"),
         resume_state=_draft("resume_state.pt"),
     )
@@ -82,14 +78,12 @@ def test_typed_output_roles_support_attribute_access() -> None:
 
 def test_stage_authoring_accepts_outputs_not_artifacts() -> None:
     """Use outputs for promises made before stage execution."""
-    authoring = importlib.import_module("viper.authoring")
-    parameters = inspect.signature(authoring.stage).parameters
+    parameters = inspect.signature(stage).parameters
     assert "outputs" in parameters
     assert "artifacts" not in parameters
 
 
 def test_resolved_results_remain_artifacts() -> None:
     """Retain artifact terminology after VIPER observes completed bytes."""
-    artifacts = importlib.import_module("viper.artifacts")
     assert hasattr(artifacts, "ResolvedArtifact")
     assert hasattr(artifacts, "ResolvedSingleFileArtifact")
