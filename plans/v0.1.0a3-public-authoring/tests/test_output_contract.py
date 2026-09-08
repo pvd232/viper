@@ -10,9 +10,11 @@ import pytest
 from pydantic import ValidationError
 
 import viper.artifacts as artifacts
-from viper.authoring import StageDraftOutputRef, stage
+from viper.authoring import StageDraftOutputRef, download, stage
+from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 from viper.ids import OutputName
 from viper.outputs import EvalOutputs, OutputDraft, StageOutputs, TrainOutputs, output
+from viper.stages import DownloadSpec, ResolvedDownloadSpec
 
 PAIR_BLOCK_ID = "P1-PAC-02"
 REQUIREMENT_ID = "PAC-02"
@@ -27,6 +29,28 @@ def _load_bytes(path: Path) -> bytes:
 def _draft(path: str) -> OutputDraft:
     """Declare one output through the approved public constructor."""
     return output(path=path, loader=_load_bytes, data_role="training")
+
+
+def _request() -> HttpRequestSpec:
+    """Declare one deterministic HTTP response for download validation."""
+    return HttpRequestSpec(
+        url="https://data.example.org/train.csv",
+        version="2026-09-08",
+        expected_body_sha256="0" * 64,
+        expected_body_bytes=1,
+    )
+
+
+def _policy() -> HttpRetrievalPolicy:
+    """Allow only the deterministic test origin."""
+    return HttpRetrievalPolicy(
+        allowed_schemes=frozenset({"https"}),
+        allowed_hosts=frozenset({"data.example.org"}),
+        allowed_ports=frozenset({443}),
+        max_redirects=0,
+        max_body_bytes=1,
+        timeout_seconds=1,
+    )
 
 
 def test_output_constructor_returns_an_output_draft() -> None:
@@ -95,6 +119,46 @@ def test_stage_authoring_accepts_outputs_not_artifacts() -> None:
     parameters = inspect.signature(stage).parameters
     assert "outputs" in parameters
     assert "artifacts" not in parameters
+
+
+def test_download_authoring_accepts_outputs_not_artifacts() -> None:
+    """Use outputs for files promised by an HTTP download stage."""
+    parameters = inspect.signature(download).parameters
+    assert "outputs" in parameters
+    assert "artifacts" not in parameters
+
+
+def test_download_spec_declares_outputs_before_execution() -> None:
+    """Keep download promises separate from completed artifacts."""
+    assert "outputs" in DownloadSpec.model_fields
+    assert "artifacts" not in DownloadSpec.model_fields
+    assert "artifacts" in ResolvedDownloadSpec.model_fields
+
+
+def test_download_requires_matching_input_and_output_names() -> None:
+    """Bind each HTTP request to the output that receives its body."""
+    with pytest.raises(ValidationError, match="input and output names must match"):
+        download(
+            inputs={"dataset": _request()},
+            outputs=StageOutputs.model_validate({"other": _draft("train.csv")}),
+            policy=_policy(),
+        )
+
+
+def test_download_rejects_bundle_outputs() -> None:
+    """Require every downloaded response body to resolve as one file."""
+    bundle = output(
+        path="downloaded",
+        loader=_load_bytes,
+        data_role="training",
+        kind="bundle",
+    )
+    with pytest.raises(ValidationError, match="outputs must be single files"):
+        download(
+            inputs={"dataset": _request()},
+            outputs=StageOutputs.model_validate({"dataset": bundle}),
+            policy=_policy(),
+        )
 
 
 def test_resolved_results_remain_artifacts() -> None:
