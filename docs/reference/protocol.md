@@ -1,8 +1,8 @@
 # VIPER protocol reference
 
-VIPER stores the request for a run separately from the evidence produced while
-executing it. This page is a map of those records. Use the installed schemas
-for their exact fields.
+VIPER stores the request for a run separately from the evidence produced while executing
+it. This page is a map of those records. Use the installed schemas for their exact
+fields.
 
 ## Record map
 
@@ -28,8 +28,8 @@ The model definitions live in [`viper.experiments`](../../src/viper/experiments.
 | A stage `Spec` declares the requested operation. | A `ResolvedSpec` records the completed operation. |
 | A `RunSpec` fixes the requested run. | A `ResolvedRun` records its terminal result. |
 
-Workspace functions therefore write through `context.outputs`. Verification,
-restore, and catalog queries consume artifact records.
+Workspace functions therefore write through `context.outputs`. Verification, restore,
+and catalog queries consume artifact records.
 
 ## Input references
 
@@ -39,24 +39,25 @@ restore, and catalog queries consume artifact records.
 | `FutureInputRef` | An output from an earlier stage in the same run. |
 | `StoredInputRef` | An artifact from a verified earlier run. |
 
-Download stages use `HttpRequestSpec` instead. The request stores the expected
-response size and SHA-256 digest; the resolved retrieval records the observed
-response.
+Download stages use `HttpRequestSpec` instead. The request stores the expected response
+size and SHA-256 digest; the resolved retrieval records the observed response.
 
 ## File references
 
-Every file reference records a location, byte count, and SHA-256 digest. VIPER
-checks the count and digest when it retrieves the file. References to immutable
-storage also identify the repository revision that owns the path.
+A source reference such as `GitFileRef` selects a repository, revision, and path. A
+resolved file reference adds the byte count and SHA-256 digest, which VIPER checks when
+retrieving the file. Local storage references use a content digest to identify a store
+revision; Git and Hugging Face references use repository commits. See
+[`viper.references`](../../src/viper/references.py).
 
 ## Attempt and terminal states
 
-`retry()` creates another numbered attempt against the same `RunSpec`. Earlier
-attempts and the run plan remain unchanged.
+`retry()` creates another numbered attempt against the same `RunSpec`. Earlier attempts
+and the run plan remain unchanged.
 
-An attempt ends as `succeeded`, `failed`, `preempted`, or `cancelled`. A
-`ResolvedRun` ends as `succeeded`, `failed`, or `cancelled`. A successful
-`ResolvedRun` identifies exactly one successful attempt.
+An attempt ends as `succeeded`, `failed`, `preempted`, or `cancelled`. A `ResolvedRun`
+ends as `succeeded`, `failed`, or `cancelled`. A successful `ResolvedRun` identifies
+exactly one successful attempt.
 
 ## Inspect exact fields
 
@@ -74,6 +75,5 @@ List every available schema and operation:
 viper --json capabilities
 ```
 
-See [How VIPER works](../explanation/how-viper-works.md) for the execution
-walkthrough and [What VIPER guarantees](../explanation/guarantees.md) for the
-verification boundary.
+See [How VIPER works](../explanation/how-viper-works.md) for the execution walkthrough
+and [What VIPER guarantees](../explanation/guarantees.md) for the verification boundary.

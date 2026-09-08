@@ -16,8 +16,6 @@ from .references import (
     StorageModel,
 )
 
-# ----- Provenance graph boundary ----- #
-
 
 class LocalSource(ProtocolModel):
     """Identify one repository-local file selected by the user."""
@@ -43,9 +41,6 @@ class ResolvedExternalInputRef(ProtocolModel):
     data_role: DataRole
 
 
-# ----- Provenance graph boundary ----- #
-
-
 PointerRef = ArtifactPointerRef | ResolvedArtifactPointerRef
 
 
@@ -69,7 +64,7 @@ def pointer_path(pointer: PointerRef) -> RepoRelPath:
 
 
 class StoredInputRef(ProtocolModel):
-    """A promoted artifact selected before the run begins."""
+    """Select a prior run's artifact through its stored pointer."""
 
     kind: Literal["stored"] = "stored"
     pointer: PointerRef

@@ -12,6 +12,7 @@ import viper.config as config
 import viper.outputs as outputs
 import viper.repository as repository
 import viper.stages as stages
+from tests._documentation import dotted_name, python_blocks
 from viper import _subprocess as subprocess
 
 PAIR_BLOCK_ID = "P3-PAC-07"
@@ -22,7 +23,6 @@ RETIRED_AUTHORING_TERMS = (
     "ParameterModelRef",
     "parameter_model",
     "stage_params",
-    "artifacts=",
     "context.params",
     "ProjectHttpImplementationSpec",
     "init_project",
@@ -70,6 +70,15 @@ def test_public_documents_do_not_teach_retired_authoring_terms() -> None:
         for term in RETIRED_AUTHORING_TERMS:
             if term in text:
                 offenders.append(f"{path.relative_to(ROOT)}:{term}")
+        for block in python_blocks(text):
+            for node in ast.walk(ast.parse(block)):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = dotted_name(node.func)
+                if name is None or name.rsplit(".", 1)[-1] not in {"stage", "download"}:
+                    continue
+                if any(keyword.arg == "artifacts" for keyword in node.keywords):
+                    offenders.append(f"{path.relative_to(ROOT)}:{name}(artifacts=)")
     assert offenders == []
 
 

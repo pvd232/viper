@@ -72,7 +72,9 @@ def run_many(
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
         pending: dict[Future[RunResult], int] = {}
         while pending or (next_index < len(inputs) and not stop):
-            while len(pending) < max_concurrency and next_index < len(inputs):
+            while (
+                not stop and len(pending) < max_concurrency and next_index < len(inputs)
+            ):
                 path, _ = inputs[next_index]
                 pending[
                     executor.submit(

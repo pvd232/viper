@@ -585,15 +585,15 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     )
     result = execute_retry(root, frozen.files[-1])
 
-    assert result.resolved_run.status == "succeeded"
+    assert result.status == result.record.status == "succeeded"
     destination_path = (
         root / ".viper" / "workspaces" / RUN_ID / "storage-destination.json"
     )
     assert destination_path.read_bytes() == b'{"kind":"local"}\n'
-    assert result.resolved_run_path.is_file()
+    assert result.path.is_file()
     attempts = tuple(
         read_attempt_reference(reference, run_plan, fetcher=fetcher)
-        for reference in result.resolved_run.attempts
+        for reference in result.record.attempts
     )
     assert [attempt.attempt_id for attempt in attempts] == [1, 2, 3]
     assert (root / RUN_ROOT / "attempts/3/resolved.yaml").is_file()
@@ -638,8 +638,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert live_measurement.step == 1
     comparison = compare_runs_application(
         CompareRunsRequest(
-            left_path=result.resolved_run_path,
-            right_path=result.resolved_run_path,
+            left_path=result.path,
+            right_path=result.path,
             left_root=root,
             right_root=root,
             trusted_source_repositories=frozenset({REPOSITORY}),
@@ -650,13 +650,13 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     assert comparison.identical is True
     assert comparison.changes == ()
 
-    candidate_run_raw = result.resolved_run_path.read_bytes()
+    candidate_run_raw = result.path.read_bytes()
     confirmation = execute_benchmark_confirmation(root, frozen.files[-1])
     assert confirmation.attempt.attempt_id == 4
     assert confirmation.attempt.purpose == "benchmark_confirmation"
     assert confirmation.attempt.status == "succeeded"
     assert confirmation.attempt_path.is_file()
-    assert result.resolved_run_path.read_bytes() == candidate_run_raw
+    assert result.path.read_bytes() == candidate_run_raw
     candidate_snapshots = {
         snapshot_identity(stage.snapshot)
         for stage in successful_attempt.resolved_stages
@@ -678,7 +678,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     stored_artifact.write_bytes(b"tampered")
     with pytest.raises(VerificationError, match="byte-count mismatch"):
         verify_run_result(
-            result.resolved_run,
+            result.record,
             policy=VerificationPolicy(
                 trusted_source_repositories=frozenset({REPOSITORY})
             ),
@@ -903,10 +903,10 @@ def test_train_stage_captures_local_external_input(
 
     result = execute_run(root, frozen.files[-1])
 
-    assert result.resolved_run.status == "succeeded"
+    assert result.status == result.record.status == "succeeded"
     store = LocalArtifactStore(root)
     verified = verify_run_result(
-        result.resolved_run,
+        result.record,
         policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
         fetcher=RunFetcher(root, store, REPOSITORY),
     )
@@ -1090,7 +1090,7 @@ def test_run_many_retains_one_result_per_plan(
         if path == paths[1]:
             raise RunError("planned failure")
         return RunResult.model_construct(
-            resolved_run_path=path.with_suffix(".resolved.yaml"),
+            path=path.with_suffix(".resolved.yaml"),
             journal_path=path.with_suffix(".jsonl"),
         )
 
@@ -1116,6 +1116,44 @@ def test_run_many_retains_one_result_per_plan(
         "failed",
         "skipped",
     )
+
+    # Hold the first run open until the scheduler has observed the second's failure.
+    started = threading.Event()
+    release = threading.Event()
+    executed: list[Path] = []
+    wait_for_completion = _batch.wait
+    waits = 0
+
+    def wait_with_release(futures, **kwargs):
+        """Finish the active run only after the scheduler has handled failure."""
+        nonlocal waits
+        waits += 1
+        if waits == 2:
+            release.set()
+        return wait_for_completion(futures, **kwargs)
+
+    def execute_with_pending_run(root: Path, path: Path, **kwargs) -> RunResult:
+        """Keep one run active while its concurrent sibling fails."""
+        executed.append(path)
+        if path == paths[0]:
+            started.set()
+            assert release.wait(timeout=10)
+        elif path == paths[1]:
+            assert started.wait(timeout=10)
+            raise RunError("planned concurrent failure")
+        return RunResult.model_construct(path=path.with_suffix(".resolved.yaml"))
+
+    monkeypatch.setattr(_batch, "wait", wait_with_release)
+    monkeypatch.setattr(_batch, "execute_run", execute_with_pending_run)
+    concurrent_stop = _batch.run_many(
+        tmp_path, paths, max_concurrency=2, stop_on_failure=True
+    )
+    assert tuple(item.status for item in concurrent_stop.runs) == (
+        "succeeded",
+        "failed",
+        "skipped",
+    )
+    assert paths[2] not in executed
 
 
 def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
@@ -1234,17 +1272,17 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     fetcher = RunFetcher(root, store, REPOSITORY)
     policy = VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY}))
     first_verified = verify_run_result(
-        first.resolved_run,
+        first.record,
         policy=policy,
         fetcher=fetcher,
     )
     Catalog(root).refresh(
         runs=(
             CatalogRunSource(
-                reference=first.resolved_run_ref,
+                reference=first.reference,
                 verified=first_verified,
                 reuse_candidates=catalog_reuse_candidates(
-                    first.resolved_run_ref,
+                    first.reference,
                     first_verified,
                 ),
             ),
@@ -1267,7 +1305,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     )
     assert isinstance(second, RunResult)
     second_verified = verify_run_result(
-        second.resolved_run,
+        second.record,
         policy=policy,
         fetcher=fetcher,
     )

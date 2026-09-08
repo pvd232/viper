@@ -345,7 +345,7 @@ def test_live_l4_stage_records_requested_backend(
     store = LocalArtifactStore(root)
     fetcher = RunFetcher(root, store, REPOSITORY)
     verified = verify_run_result(
-        result.resolved_run,
+        result.record,
         policy=VerificationPolicy(trusted_source_repositories=frozenset({REPOSITORY})),
         fetcher=fetcher,
     )
@@ -355,7 +355,7 @@ def test_live_l4_stage_records_requested_backend(
     assert train_result.completion.kind == "executed"
     backend = train_result.completion.execution_context.backend
 
-    assert result.resolved_run.status == "succeeded"
+    assert result.status == result.record.status == "succeeded"
     assert verified.attempts[-1].status == "succeeded"
     assert isinstance(backend, expected_backend_type)
     assert train_result.completion.startup.env["CUDA_VISIBLE_DEVICES"] == (

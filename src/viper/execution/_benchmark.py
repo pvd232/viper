@@ -343,11 +343,11 @@ def benchmark(
         cloud_client=cloud_client,
     )[result_relative_path]
     return BenchmarkExecutionResult(
-        result=result,
-        result_ref=ResolvedBenchmarkResultRef(
+        record=result,
+        reference=ResolvedBenchmarkResultRef(
             sha256=result_reference.sha256,
             bytes=result_reference.bytes,
             stored_at=result_reference.stored_at,
         ),
-        result_path=result_path,
+        path=result_path,
     )

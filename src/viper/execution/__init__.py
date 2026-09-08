@@ -21,7 +21,13 @@ def run(
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
 ) -> RunResult:
-    """Compile one authored plan, then execute its immutable files."""
+    """Execute a Python draft or a saved run specification.
+
+    A draft is frozen before execution; a Path selects an existing RunSpec.
+    Return a verified RunResult with direct status and path attributes.
+    Execution and verification failures raise and leave attempt evidence for
+    inspection. timeout_seconds bounds each stage or metric worker invocation.
+    """
     if isinstance(plan, Path):
         return _run(
             repository_root,
@@ -51,7 +57,11 @@ def retry(
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
 ) -> RunResult:
-    """Append one attempt to a failed frozen run and verify its result."""
+    """Append an attempt to the same frozen plan and verify its result.
+
+    Earlier attempts remain available. Source or config changes require a new
+    plan. The return value and worker timeout follow run().
+    """
     return _retry(
         repository_root,
         run_spec_path,
@@ -68,7 +78,12 @@ def benchmark(
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
 ) -> BenchmarkExecutionResult:
-    """Execute and verify one independent benchmark confirmation."""
+    """Execute an independent confirmation and compare it with a completed run.
+
+    Return the saved comparison through record, reference, path, and status.
+    A failed comparison returns status="failed"; an execution or verification
+    error raises an exception. The benchmark specification must match the plan.
+    """
     return _benchmark(
         repository_root,
         resolved_run_path,
@@ -86,7 +101,13 @@ def run_many(
     timeout_seconds: float | None = None,
     stop_on_failure: bool = False,
 ) -> ExperimentExecutionResult:
-    """Execute several frozen plans with bounded local concurrency."""
+    """Execute saved plans and return one outcome for each input, in input order.
+
+    Load all plans before scheduling. max_concurrency limits active runs;
+    stop_on_failure leaves unscheduled runs marked as skipped after a failure.
+    Already-started runs finish. Expected execution failures are captured in
+    each entry's failure field. Invalid plan files raise before execution.
+    """
     return _run_many(
         repository_root,
         run_spec_paths,

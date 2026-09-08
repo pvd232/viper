@@ -563,12 +563,12 @@ def verify_attempt_stages(
 
     if set(stage_specs) != set(expected_stage_ids):
         raise VerificationError("loaded stage specs do not match the run stage plan")
-    planned_configized_ids = tuple(
+    planned_invocation_stage_ids = tuple(
         stage_id
         for stage_id in expected_stage_ids
         if isinstance(stage_specs[stage_id], ParameterizedSpec)
     )
-    if len(attempt.invocations) > len(planned_configized_ids):
+    if len(attempt.invocations) > len(planned_invocation_stage_ids):
         raise VerificationError("attempt contains more invocations than planned stages")
 
     verified_stages: dict[StageId, ResolvedBaseSpec] = {}

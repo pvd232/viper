@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "viper-provenance"
 version = "0.1.0a3"
-description = "Run and verify reproducible ML experiments with machine-readable guardrails for agents."
+description = "Run ML experiments and verify their source, inputs, outputs, and measurements."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"

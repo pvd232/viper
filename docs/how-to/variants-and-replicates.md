@@ -1,15 +1,21 @@
 # Run variants and replicates
 
-A variant chooses one stage graph and its factor levels. A replicate supplies a
-reproducible seed. Their Cartesian product defines the runs in an experiment.
+A variant selects a stage graph and factor levels. A replicate supplies a seed. Run each
+selected variant with each selected replicate to compare the variants under the same
+seeds.
 
 ## Declare factors and variants
+
+Start with two training stages, `adam_training` and `sgd_training`, declared as in the
+[CPU tutorial](../tutorials/getting-started.md). Each stage must actually use the named
+optimizer in its function or config; factor labels describe the choice while the
+function and config determine training behavior.
 
 ```python
 from viper.authoring import experiment, factor, replicate, variant
 
 study = experiment(
-    experiment_id="optimizer-study",
+    experiment_id="optimizer_study",
     factors={"optimizer": factor(levels=("adam", "sgd"))},
     variants={
         "adam": variant(
@@ -30,14 +36,18 @@ study = experiment(
 )
 ```
 
-Every variant must assign one level for every declared factor. Every estimator
-must be an artifact produced by that variant's stage graph.
+Every variant assigns one level to each declared factor. Its estimator selects an output
+from its stage graph. Reuse the source, environment, and reproducibility records from
+your experiment setup in the following calls.
 
 ## Create one plan
 
-Use `plan()` when you want one selected variant-replicate pair:
+`plan()` assigns a new run ID to one selected pair:
 
 ```python
+from viper import execution
+from viper.authoring import plan
+
 draft = plan(
     experiment=study,
     variant="adam",
@@ -51,10 +61,31 @@ result = execution.run(root, draft)
 
 ## Expand the experiment
 
-Use `expand()` to create an ordered plan for every selected pair. Freeze those
-plans, then execute their paths with bounded concurrency:
+`expand()` returns a tuple of drafts in variant declaration order, then replicate
+declaration order. Supply a distinct run ID for each selected pair. This example uses
+fixed IDs to show the mapping; assign new IDs for a new batch.
 
 ```python
+from viper.authoring import expand, freeze_run_plan
+
+drafts = expand(
+    study,
+    run_ids={
+        "adam": {
+            "seed_7": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "seed_19": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        },
+        "sgd": {
+            "seed_7": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+            "seed_19": "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+        },
+    },
+    source=source,
+    env=environment,
+    reproducibility=reproducibility,
+)
+frozen = tuple(freeze_run_plan(root, draft) for draft in drafts)
+run_spec_paths = tuple(root / item.reference.stored_at.path for item in frozen)
 result = execution.run_many(
     root,
     run_spec_paths,
@@ -63,5 +94,9 @@ result = execution.run_many(
 )
 ```
 
-`max_concurrency` limits simultaneous local runs. It does not change the
-experiment's variant or replicate identity.
+To select a subset, pass `variants=("adam",)` or `replicates=("seed_7",)` and restrict
+`run_ids` to exactly those pairs. Missing pairs, extra pairs, and duplicate run IDs are
+rejected.
+
+`max_concurrency` limits simultaneous local runs. Inspect `result.runs` for each run's
+outcome, including failures returned by a completed batch.

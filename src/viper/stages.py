@@ -69,7 +69,11 @@ ConfigT = TypeVar("ConfigT", bound=Config)
 
 @dataclass(frozen=True, slots=True)
 class Context(Generic[ConfigT]):
-    """Carry one validated workspace-stage invocation inside the controlled child."""
+    """Give a running stage access to its declared inputs and outputs.
+
+    config contains validated stage settings. metrics records measurements;
+    numpy_generators supplies the named generators selected by the run plan.
+    """
 
     run_id: RunId
     attempt_id: int
@@ -136,7 +140,7 @@ class BaseSpec(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_output_paths(self) -> BaseSpec:
-        """Validate generated stage and output paths without categories."""
+        """Require each output path to belong to its named stage and output."""
         if len(set(self.metric_ids)) != len(self.metric_ids):
             raise ValueError("stage metric IDs must be unique")
 
@@ -242,7 +246,7 @@ class InternalSpec(ParameterizedSpec):
 
 
 class BuildSpec(InternalSpec):
-    """Request construction of a workspace-defined prior artifact."""
+    """Request a workspace function that prepares data or other input artifacts."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
     config: BuildConfig
@@ -267,7 +271,7 @@ class EmbedSpec(InternalSpec):
 
 
 class DiagnosticSpec(InternalSpec):
-    """Request a terminal descriptive diagnostic operation."""
+    """Request a diagnostic stage whose outputs cannot feed downstream stages."""
 
     kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
     config: DiagnosticConfig
@@ -283,7 +287,7 @@ class TrainSpec(InternalSpec):
 
     @model_validator(mode="after")
     def validate_training_contract(self) -> TrainSpec:
-        """Require the objective and canonical terminal checkpoint contract."""
+        """Require a declared objective and matching model and resume-state outputs."""
         if self.objective.metric_id not in self.metric_ids:
             raise ValueError("training objective must occur in stage metric IDs")
         required_outputs = {keys.Train.MODEL, keys.Train.RESUME_STATE}
@@ -313,7 +317,7 @@ class TrainSpec(InternalSpec):
             if model_input.producer_stage_id != state_input.producer_stage_id:
                 raise ValueError("checkpoint inputs must select one producer stage")
             if model_input.name != keys.Train.MODEL:
-                raise ValueError("parameters input must select parameters")
+                raise ValueError("model input must select model")
             if state_input.name != keys.Train.RESUME_STATE:
                 raise ValueError("resume_state input must select resume_state")
         return self
@@ -340,14 +344,14 @@ class EvalSpec(InternalSpec):
             raise ValueError("eval split input names must be unique")
         model_input = self.inputs.get(keys.Train.MODEL)
         if model_input is None:
-            raise ValueError("eval requires a parameters input")
+            raise ValueError("eval requires a model input")
         dataset = self.inputs.get(keys.Eval.TEST)
         if dataset is None:
-            raise ValueError("eval requires an eval_dataset input")
+            raise ValueError("eval requires a test input")
         if dataset.kind != "stored":
-            raise ValueError("eval_dataset must be a stored input")
+            raise ValueError("test must be a stored input")
         if dataset.data_role not in {"eval", "benchmark"}:
-            raise ValueError("eval_dataset has an invalid data role")
+            raise ValueError("test has an invalid data role")
         reserved = {keys.Train.MODEL, keys.Eval.TEST}
         if reserved & set(self.split_inputs):
             raise ValueError("eval splits must differ from reserved inputs")
@@ -367,12 +371,11 @@ class EvalSpec(InternalSpec):
         elif model_input.kind == "stored":
             if model_input.data_role not in {"training", "validation"}:
                 raise ValueError(
-                    "stored eval parameters data_role must be training or validation"
+                    "stored eval model data_role must be training or validation"
                 )
         elif model_input.data_role not in {"training", "validation"}:
             raise ValueError(
-                "external evaluation parameters data_role must be training "
-                "or validation"
+                "external evaluation model data_role must be training or validation"
             )
         predictions = (
             self.outputs[keys.Eval.PREDICTIONS]

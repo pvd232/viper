@@ -531,7 +531,7 @@ def verify_stored_input_selections(
             if model_pointer.artifact.artifact_name != keys.Train.MODEL:
                 raise VerificationError(
                     f"stored checkpoint model input of stage {stage_id!r} must "
-                    "select parameters"
+                    "select model"
                 )
             if state_pointer.artifact.artifact_name != keys.Train.RESUME_STATE:
                 raise VerificationError(
@@ -545,8 +545,7 @@ def verify_stored_input_selections(
             model_pointer = pointers[keys.Eval.MODEL]
             if model_pointer.artifact.artifact_name != keys.Train.MODEL:
                 raise VerificationError(
-                    f"stored eval model input of stage {stage_id!r} must "
-                    "select parameters"
+                    f"stored eval model input of stage {stage_id!r} must select model"
                 )
 
 
@@ -971,7 +970,7 @@ def verify_benchmark_result(
     }
     if set(received_artifacts) != set(expected_artifacts):
         raise VerificationError(
-            "benchmark.artifacts: result must compare parameters and predictions"
+            "benchmark.artifacts: result must compare model and predictions"
         )
     for artifact_key, expected in expected_artifacts.items():
         (

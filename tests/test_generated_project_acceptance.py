@@ -417,8 +417,7 @@ def test_generated_project_uses_runner_owned_downloads(
     )[0]
     producer = ResolvedRunRef.model_validate(resolved_run_file.model_dump())
     evaluation_pointer_path = (
-        f".viper/pointers/{producer.sha256}/download/"
-        "evaluation_dataset.pointer.yaml"
+        f".viper/pointers/{producer.sha256}/download/evaluation_dataset.pointer.yaml"
     )
     split_pointer_path = (
         f".viper/pointers/{producer.sha256}/download/test_split.pointer.yaml"

@@ -1,125 +1,45 @@
-# Documentation Architecture
+# Documentation architecture
 
-## 1. Status
+The root README introduces VIPER through the CPU quickstart. The
+[documentation home](../README.md) directs readers to a tutorial, task guide,
+explanation, or reference page. The [internal index](../internal/README.md)
+collects release contracts and maintainer records.
 
-**Contract status:** Implemented.
+## Page responsibilities
 
-| ID | Requirement |
-| --- | --- |
-| DOC-01 | The root README runs one checked CPU workflow and links the documentation home. |
-| DOC-02 | The documentation home separates tutorial, how-to, explanation, reference, and contributing routes. |
-| DOC-03 | Active release and maintainer documents remain behind one internal index. |
-| DOC-04 | Public workflow prose uses the current `plan() -> execution.run()` API and links the checked example. |
-| DOC-05 | A deterministic documentation test rejects missing routes, obsolete workflow names, and direct contract sprawl. |
+| Page type | Reader's need | Content |
+| --- | --- | --- |
+| Tutorial | Run a first experiment. | Setup, runnable example, expected output, and a next change. |
+| How-to | Complete a specific task. | Prerequisites, code or commands, results, and relevant failure conditions. |
+| Explanation | Understand how the system works. | Operations in execution order, with inputs, outputs, and limitations. |
+| Reference | Look up an interface. | Names, arguments, return values, constraints, and links to defining code. |
+| Maintainer guide | Change or release VIPER. | Development procedures, validation commands, and release evidence. |
 
-## 2. Required claim
+Keep exact schema fields in the installed schema registry. The protocol page
+explains record relationships and links to model definitions. Keep historical
+interfaces in release notes or clearly marked archived documents.
 
-Let \(D\) be the Markdown documents reachable from the root README and let
-\(K = \{T,H,E,R,C\}\) represent tutorial, how-to, explanation, reference, and
-contributing content. Let \(I \subset D\) be internal engineering documents.
-The public navigation is accepted only when:
+## Examples
 
-\[
-\operatorname{Accept}(D)
-\Rightarrow
-\left(\forall k \in K,\; \exists!\; r_k\right)
-\land
-\left(\forall i \in I,\; r(i)=r_C/\text{internal}\right)
-\land
-\operatorname{Runs}(Q)
-\]
+[`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py) owns the complete
+introductory workflow. Public excerpts use the same imports, names, and calls.
+Mark abbreviated examples and identify any values the reader must supply.
+Parsing checks syntax. Also validate constructor
+arguments, identifiers, CLI commands, and required setup against the package.
 
-Here, \(r_k\) is the named route for one reader need and \(Q\) is the CPU
-quickstart linked by the README and tutorial. Internal documents may remain
-reachable, but they enter through one clearly labeled maintainer route rather
-than appearing as ordinary user guides.
+The primary Python workflow is `plan() -> execution.run()`. The batch guide
+also explains `freeze_run_plan()` for saving plans before execution.
 
-This follows the distinction among tutorials, how-to guides, explanations, and
-reference described by [Diátaxis](https://diataxis.fr/) and the requirement that
-sample code be runnable, concise, and tested in
-[Google's sample-code guidance](https://developers.google.com/tech-writing/two/sample-code).
+## Validation
 
-## 3. Current gap
-
-### Current DAG
-
-```mermaid
-flowchart LR
-    Readme[README] --> Tutorial[Getting started]
-    Readme --> API[API]
-    Readme --> Works[How it works]
-    Docs[Docs index] --> Public[Public guides]
-    Docs --> Internal[Internal engineering documents]
-```
-
-The root linked three useful pages but not the documentation home. The home
-mixed reader guides, formal protocol, active contracts, research plans, and
-release evidence in one flat list. The tutorial and execution explanation still
-taught retired public interfaces.
-
-### Proposed-change DAG
-
-```mermaid
-flowchart LR
-    Readme[README + checked example] --> Home[Documentation home]
-    Home --> Learn[Tutorial]
-    Home --> Tasks[How-to]
-    Home --> Explain[Explanation]
-    Home --> Lookup[Reference]
-    Home --> Contribute[Contributing]
-    Contribute --> Internal[Internal index]
-```
-
-### Integrated DAG
-
-```mermaid
-flowchart LR
-    Example[CPU quickstart] --> Test[Execution test]
-    Readme[README] --> Example
-    Readme --> Home[Documentation home]
-    Home --> User[Learn · tasks · explanation · reference]
-    Home --> Maintainer[Contributing · internal engineering]
-    Test --> Acceptance[Documentation acceptance]
-    User --> Acceptance
-    Maintainer --> Acceptance
-```
-
-The active release contract and maintainer guides remain under
-`docs/development/`. The preservation branch named by the release contract
-retains the removed experimental specifications, compiler inputs, and research
-records. The internal index keeps those engineering routes separate from user
-documentation.
-
-## 4. Execution
-
-1. Keep `examples/cpu_quickstart.py` as the sole complete introductory workflow.
-2. Make `docs/README.md` the public documentation home.
-3. Rewrite the tutorial and execution explanation against the checked example.
-4. Add task-focused guides for inputs, metrics, expansion, recovery, catalog,
-   knowledge, MCP, and troubleshooting.
-5. Add separate CLI and configuration reference entry points without copying
-   the formal protocol.
-6. Route maintainers through `docs/internal/README.md` to the active release
-   contract, maintainer guides, and release evidence.
-
-## 5. Verification
-
-| Rule | Executable condition |
-| --- | --- |
-| `documentation.navigation.complete` | `docs/README.md` contains all five reader routes and links every required landing page. |
-| `documentation.internal.separate` | The public home links one internal index and does not enumerate individual product contracts. |
-| `documentation.workflow.current` | The tutorial and explanation link the CPU quickstart, use `params` and `execution.run()`, and do not teach the retired `viper.parameters` or `viper.api.run` path. |
-| `documentation.example.executes` | `tests/test_readme_workflow.py` runs the example in a clean temporary Git repository and observes a successful terminal result. |
-| `documentation.links.resolve` | The documentation link test resolves every repository-local Markdown link and anchor. |
-
-## 6. Acceptance
-
-Run from the repository root with `.venv` active:
+From the repository root, with `.venv` active:
 
 ```bash
+python -m pytest tests/test_documentation.py tests/test_public_inventory.py -q
 python -m pytest tests/test_readme_workflow.py -q
-python -m pytest tests/test_documentation.py -q -k documentation_navigation
 ```
 
-Acceptance requires both commands to pass and the working tree to contain no
-unexplained documentation corruption.
+The documentation tests check local links and anchors, navigation, Python
+syntax, public imports, API operations, CLI commands, and release references.
+The quickstart test executes the example in a temporary Git repository and
+checks its terminal status and model output.

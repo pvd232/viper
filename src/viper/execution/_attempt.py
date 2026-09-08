@@ -648,13 +648,13 @@ def execute_attempt(
             cloud_client=cloud_client,
         )[terminal_path.relative_to(root).as_posix()]
         return RunResult(
-            resolved_run=resolved_run,
-            resolved_run_ref=ResolvedRunRef(
+            record=resolved_run,
+            reference=ResolvedRunRef(
                 sha256=terminal_reference.sha256,
                 bytes=terminal_reference.bytes,
                 stored_at=terminal_reference.stored_at,
             ),
-            resolved_run_path=terminal_path,
+            path=terminal_path,
             journal_path=journal.path,
         )
     except (Exception, KeyboardInterrupt) as exc:

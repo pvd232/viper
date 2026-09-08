@@ -65,7 +65,7 @@ from viper.metrics import (
     metric,
     min,
 )
-from viper.outputs import output
+from viper.outputs import EvalOutputs, output
 from viper.preflight import preflight_plan
 from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 from viper.runs import RunSpec
@@ -761,6 +761,88 @@ def test_benchmark_draft_is_frozen_with_the_run_plan() -> None:
     assert selected.benchmark.criteria[0].threshold == 0.9
     with pytest.raises(TypeError, match="frozen plan"):
         selected.benchmark.splits["new"] = prior
+
+
+def test_benchmark_compilation_uses_the_evaluation_test_input(tmp_path: Path) -> None:
+    """Compile a benchmark whose dataset matches the evaluation's test input."""
+    _, existing = _compiled_plan(tmp_path)
+    source = tmp_path / "project/evaluation.py"
+    source.write_text(
+        "from viper.config import EvalConfig\n"
+        "from viper.stages import eval\n\n"
+        "@eval(config=EvalConfig)\n"
+        "def evaluate(context):\n"
+        "    context.outputs['predictions'].write_bytes(b'predictions')\n\n"
+        "def load(path):\n"
+        "    return path.read_bytes()\n"
+    )
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "evaluation source")
+    spec = importlib.util.spec_from_file_location("project.evaluation", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    training = existing.experiment.variants["baseline"].stages["train"]
+    assert isinstance(training.spec, TrainSpecDraft)
+    loss = training.spec.metrics[0]
+    dataset = RunArtifactDraft(
+        run=ResolvedRunRef(
+            sha256="a" * 64,
+            bytes=1,
+            stored_at=LocalFileRef(commit="b" * 64, path="runs/data/resolved.yaml"),
+        ),
+        artifact=StageArtifactRef(stage_id="build", artifact_name="dataset"),
+        path="inputs/holdout.bin",
+        data_role="benchmark",
+    )
+    split = dataset.model_copy(update={"path": "inputs/split.bin"})
+    evaluation = stage(
+        module.evaluate,
+        config=config.EvalConfig(),
+        inputs={"model": training.outputs["model"], "test": dataset, "holdout": split},
+        outputs=EvalOutputs(
+            predictions=output(
+                path="predictions.bin", loader=module.load, data_role="benchmark"
+            )
+        ),
+        metrics=(loss,),
+        objective=min(loss),
+        eval_id="holdout",
+        split_inputs=("holdout",),
+    )
+    study = experiment(
+        experiment_id="benchmark_compilation",
+        variants={
+            "baseline": variant(
+                levels={},
+                stages={"train": training, "eval": evaluation},
+                estimator=training.outputs["model"],
+            )
+        },
+        replicates={"seed_42": replicate(seed=42)},
+    )
+    selected = plan(
+        experiment=study,
+        variant="baseline",
+        replicate="seed_42",
+        benchmark=benchmark(
+            benchmark_id="holdout",
+            eval_id="holdout",
+            test=dataset,
+            splits={"holdout": split},
+            metrics=(loss,),
+        ),
+        source=existing.source.model_copy(
+            update={"commit": _git(tmp_path, "rev-parse", "HEAD")}
+        ),
+        env=existing.env,
+        reproducibility=existing.reproducibility,
+    )
+
+    compiled = _compile_plan(tmp_path, selected)
+
+    assert compiled.run.benchmark_id == "holdout"
+    assert "benchmarks/holdout.spec.yaml" in compiled.files
 
 
 def test_experiment_expansion_is_canonical() -> None:

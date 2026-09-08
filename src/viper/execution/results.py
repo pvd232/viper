@@ -16,10 +16,19 @@ class RunResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    resolved_run: ResolvedRun
-    resolved_run_ref: ResolvedRunRef
-    resolved_run_path: Path
-    journal_path: Path
+    record: ResolvedRun = Field(
+        description="Verified terminal record saved by the run."
+    )
+    reference: ResolvedRunRef = Field(
+        description="Immutable reference to the saved terminal record."
+    )
+    path: Path = Field(description="Local path of the terminal record.")
+    journal_path: Path = Field(description="Local journal for the completed attempt.")
+
+    @property
+    def status(self) -> Literal["succeeded", "failed", "cancelled"]:
+        """Return the terminal status recorded for this run."""
+        return self.record.status
 
 
 class ConfirmationRunResult(BaseModel):
@@ -27,10 +36,12 @@ class ConfirmationRunResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    attempt: RunAttempt
-    attempt_reference: ResolvedAttemptRef
-    attempt_path: Path
-    journal_path: Path
+    attempt: RunAttempt = Field(description="Completed benchmark confirmation attempt.")
+    attempt_reference: ResolvedAttemptRef = Field(
+        description="Immutable reference to the confirmation attempt."
+    )
+    attempt_path: Path = Field(description="Local path of the confirmation attempt.")
+    journal_path: Path = Field(description="Journal of confirmation state changes.")
 
 
 class BenchmarkExecutionResult(BaseModel):
@@ -38,9 +49,16 @@ class BenchmarkExecutionResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    result: BenchmarkResult
-    result_ref: ResolvedBenchmarkResultRef
-    result_path: Path
+    record: BenchmarkResult = Field(description="Verified benchmark comparison record.")
+    reference: ResolvedBenchmarkResultRef = Field(
+        description="Immutable reference to the benchmark record."
+    )
+    path: Path = Field(description="Local path of the benchmark record.")
+
+    @property
+    def status(self) -> Literal["verified", "passed", "failed"]:
+        """Return the comparison and criteria outcome recorded by the benchmark."""
+        return self.record.status
 
 
 ExperimentRunFailureCode = Literal[
@@ -57,8 +75,8 @@ class ExperimentRunFailure(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    code: ExperimentRunFailureCode
-    message: str = Field(min_length=1)
+    code: ExperimentRunFailureCode = Field(description="Category of the run failure.")
+    message: str = Field(min_length=1, description="Explanation of the run failure.")
 
 
 class ExperimentRunResult(BaseModel):
@@ -66,14 +84,20 @@ class ExperimentRunResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    variant_id: VariantId
-    replicate_id: ReplicateId
-    run_id: RunId
-    run_spec_path: Path
-    status: ExperimentRunStatus
-    result: RunResult | None = None
-    failure: ExperimentRunFailure | None = None
-    skip_reason: str | None = Field(default=None, min_length=1)
+    variant_id: VariantId = Field(description="Variant selected by this batch entry.")
+    replicate_id: ReplicateId = Field(description="Replicate selected by this entry.")
+    run_id: RunId = Field(description="Identity assigned to the selected run.")
+    run_spec_path: Path = Field(description="Frozen plan supplied for this entry.")
+    status: ExperimentRunStatus = Field(description="Execution outcome of this entry.")
+    result: RunResult | None = Field(
+        default=None, description="Verified run returned when execution succeeded."
+    )
+    failure: ExperimentRunFailure | None = Field(
+        default=None, description="Failure details when execution failed."
+    )
+    skip_reason: str | None = Field(
+        default=None, min_length=1, description="Reason this entry was left unexecuted."
+    )
 
     @model_validator(mode="after")
     def validate_status(self) -> "ExperimentRunResult":
@@ -105,7 +129,9 @@ class ExperimentExecutionResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    runs: tuple[ExperimentRunResult, ...] = Field(min_length=1)
+    runs: tuple[ExperimentRunResult, ...] = Field(
+        min_length=1, description="Per-run outcomes in the original input order."
+    )
 
 
 __all__ = [

@@ -1,4 +1,4 @@
-"""Author canonical experiment, variant, benchmark, stage, and run-plan files."""
+"""Declare experiments in Python and compile their plans into protocol files."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
 
+from . import keys
 from ._schema import DataRole, RepoRelPath, RNGSeed
 from .artifacts import (
     ArtifactLoaderRef,
@@ -235,7 +236,7 @@ class InternalSpecDraft(ParameterizedSpecDraft):
 
 
 class BuildSpecDraft(InternalSpecDraft):
-    """Hold one workspace-defined prior builder."""
+    """Declare a workspace function that prepares data or other input artifacts."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
     config: BuildConfig  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -250,7 +251,7 @@ class EmbedSpecDraft(InternalSpecDraft):
 
 
 class DiagnosticSpecDraft(InternalSpecDraft):
-    """Hold one terminal descriptive diagnostic stage."""
+    """Declare a diagnostic stage whose outputs cannot feed downstream stages."""
 
     kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
     config: DiagnosticConfig  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -502,7 +503,12 @@ def variant(
     stages: dict[StageId, StageDraft],
     estimator: StageDraftOutputRef,
 ) -> VariantDraft:
-    """Declare one reusable variant graph."""
+    """Connect an ordered stage graph and select its estimator output.
+
+    Insert producers before their consumers in stages. levels selects one
+    declared level for each experiment factor; use an empty mapping for an
+    experiment without factors.
+    """
     return VariantDraft(levels=levels, stages=stages, estimator=estimator)
 
 
@@ -569,7 +575,13 @@ def plan(
     env: EnvSpec,
     reproducibility: ReproducibilitySpec,
 ) -> RunPlanDraft:
-    """Create one identified plan detached from mutable caller values."""
+    """Select a variant and replicate and assign a new run ID.
+
+    Copy and freeze the declarations so later caller edits leave this plan
+    unchanged. Compilation and file writes occur when freeze_run_plan() or
+    execution.run() consumes the draft. Both selected names must exist in
+    the experiment.
+    """
     return _plan_with_run_id(
         experiment=experiment,
         variant=variant,
@@ -587,9 +599,13 @@ class FrozenPlanFiles(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    run: RunSpec
-    reference: ResolvedRunSpecRef
-    files: tuple[Path, ...]
+    run: RunSpec = Field(description="Compiled run specification saved by freezing.")
+    reference: ResolvedRunSpecRef = Field(
+        description="Immutable reference to the saved run specification."
+    )
+    files: tuple[Path, ...] = Field(
+        description="Local files materialized for the plan."
+    )
 
 
 class _CompiledPlan(BaseModel):
@@ -956,7 +972,12 @@ def run_artifact(
     path: RepoRelPath,
     data_role: DataRole,
 ) -> RunArtifactDraft:
-    """Select one completed-run artifact for pointer compilation in Phase 7."""
+    """Select a completed run's artifact as an input or benchmark target.
+
+    path chooses where the consumer materializes the input. data_role must
+    agree with the producer's artifact. Freezing records the selection;
+    execution retrieves and verifies its bytes.
+    """
     return RunArtifactDraft(run=run, artifact=artifact, path=path, data_role=data_role)
 
 
@@ -968,7 +989,12 @@ def download(
     http: HttpDraft | None = None,
     env: EnvSpec | None = None,
 ) -> StageDraft:
-    """Declare one runner-owned HTTP download stage."""
+    """Declare HTTP requests and their same-named file outputs.
+
+    Omit http to use VIPER's built-in client, or supply a CustomHttpDraft.
+    The policy constrains retrieval in either case. Requests run during stage
+    execution; declaring the stage leaves the remote server untouched.
+    """
     selected_http = BuiltinHttpImplementationSpec() if http is None else http
     return StageDraft(
         spec=DownloadSpecDraft(
@@ -994,7 +1020,16 @@ def stage(
     split_inputs: tuple[InputName, ...] = (),
     reuse: StageReuseMode = "never",
 ) -> StageDraft:
-    """Build the draft selected by one decorated workspace callable."""
+    """Connect a decorated workspace function to its inputs and outputs.
+
+    The decorator selects the stage kind and config class. Training and
+    evaluation require an objective; evaluation also requires eval_id and
+    named split_inputs. An embedding objective is optional. Diagnostic outputs
+    are terminal and must be omitted from downstream input selections.
+
+    Returned output handles connect this stage to later stages. env overrides
+    the run environment; reuse="verified" permits a verified catalog candidate.
+    """
     for input_name, value in inputs.items():
         if (
             isinstance(value, StageDraftOutputRef)
@@ -1267,7 +1302,7 @@ def _compile_plan(
         if len(eval_stages) != 1:
             raise ValueError("benchmark plans require exactly one eval stage")
         eval_stage = eval_stages[0]
-        eval_test = eval_stage.inputs.get("eval_dataset")
+        eval_test = eval_stage.inputs.get(keys.Eval.TEST)
         if (
             not isinstance(eval_test, StoredInputRef)
             or eval_test.pointer != test.pointer
@@ -1335,7 +1370,12 @@ def freeze_run_plan(
     *,
     cloud_client: ViperCloudClient | None = None,
 ) -> FrozenPlanFiles:
-    """Publish one compiled plan and materialize its working files."""
+    """Compile a draft, publish its immutable files, and write local copies.
+
+    Return the RunSpec, its immutable reference, and the paths written.
+    Existing matching files are reused; conflicting bytes raise FileExistsError.
+    Stage execution starts when the saved plan is passed to execution.run().
+    """
     repository_root = resolve_root(root)
     destination = bind_run_destination(
         repository_root,
@@ -1372,7 +1412,13 @@ def expand(
     variants: tuple[VariantId, ...] | None = None,
     replicates: tuple[ReplicateId, ...] | None = None,
 ) -> tuple[RunPlanDraft, ...]:
-    """Expand selected variants and replicates in declaration order."""
+    """Create plans for selected variant-replicate pairs in declaration order.
+
+    run_ids maps each selected variant to each selected replicate's unique
+    run ID. Omitted filters select all declared names. The returned tuple is
+    ordered by variant, then replicate, regardless of filter order. Each plan
+    is copied and frozen as in plan(); file writes occur during freezing.
+    """
     if variants is not None and len(variants) != len(set(variants)):
         raise ValueError("variant filter contains duplicates")
     if replicates is not None and len(replicates) != len(set(replicates)):

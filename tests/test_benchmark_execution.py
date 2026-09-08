@@ -189,13 +189,16 @@ def test_api_returns_the_verified_benchmark_result(
         completed_at=datetime.now(UTC),
     )
     result_path = tmp_path / "benchmark.result.yaml"
+    execution_result = BenchmarkExecutionResult(
+        record=result,
+        reference=ResolvedBenchmarkResultRef.model_construct(),
+        path=result_path,
+    )
+    assert execution_result.status == result.status
+    assert execution_result.path == result_path
     monkeypatch.setattr(
         "viper.api.execute_benchmark_run",
-        lambda *args, **kwargs: BenchmarkExecutionResult(
-            result=result,
-            result_ref=ResolvedBenchmarkResultRef.model_construct(),
-            result_path=result_path,
-        ),
+        lambda *args, **kwargs: execution_result,
     )
 
     response = execute_benchmark_application(

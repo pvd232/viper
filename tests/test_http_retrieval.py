@@ -500,7 +500,7 @@ def test_project_http_receives_typed_configs_and_exact_destination(
             bytes=len(implementation_raw),
         ),
         config_type=ConfigTypeRef(
-                owner="workspace",
+            owner="workspace",
             path="project/transport_params.py",
             symbol="ProjectTransportConfig",
             sha256=hashlib.sha256(config_raw).hexdigest(),
@@ -708,7 +708,7 @@ def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
             bytes=len(implementation_raw),
         ),
         config_type=ConfigTypeRef(
-                owner="workspace",
+            owner="workspace",
             path="project/config.py",
             symbol="EscapeConfig",
             sha256=hashlib.sha256(config_raw).hexdigest(),

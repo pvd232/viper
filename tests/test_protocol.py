@@ -635,7 +635,9 @@ class TrainingCheckpointTests(unittest.TestCase):
 
         spec = TrainSpec.model_validate(payload)
 
-        self.assertTrue(spec.outputs[TrainKeys.MODEL].path.endswith("/alternate.safetensors"))
+        self.assertTrue(
+            spec.outputs[TrainKeys.MODEL].path.endswith("/alternate.safetensors")
+        )
 
     def test_reserved_artifact_names_are_stage_specific(self) -> None:
         """Verify that reserved artifact names are stage specific."""
@@ -909,7 +911,7 @@ class EvaluationTests(unittest.TestCase):
         payload["inputs"]["model"]["data_role"] = "eval"
         with self.assertRaisesRegex(
             ValidationError,
-            "external evaluation parameters data_role",
+            "external evaluation model data_role",
         ):
             EvaluateSpec.model_validate(payload)
 

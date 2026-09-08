@@ -7,6 +7,8 @@ import json
 import re
 import tomllib
 
+import pytest
+
 from tests._documentation import (
     ROOT,
     decoded_local_link,
@@ -15,6 +17,7 @@ from tests._documentation import (
     python_blocks,
 )
 from viper.api import OPERATIONS
+from viper.cli import build_parser
 
 PROTOCOL = ROOT / "docs/reference/protocol.md"
 
@@ -46,13 +49,10 @@ def test_public_authoring_config_gate_precedes_documentation_migration() -> None
     """Keep PAC-01 executable before PAC-07 owns the documentation migration."""
     checklist = json.loads(
         (
-            ROOT
-            / "docs/development/v0.1.0a3-public-authoring-contract.checklist.json"
+            ROOT / "docs/development/v0.1.0a3-public-authoring-contract.checklist.json"
         ).read_text(encoding="utf-8")
     )
-    requirements = {
-        item["requirement_id"]: item for item in checklist["requirements"]
-    }
+    requirements = {item["requirement_id"]: item for item in checklist["requirements"]}
 
     assert "documentation" not in requirements["PAC-01"]["gate"]["target"]
     assert "documentation" in requirements["PAC-07"]["gate"]["target"]
@@ -118,7 +118,7 @@ def test_public_markdown_links_resolve() -> None:
 def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
     """Keep every typed API operation beside its exact CLI command."""
     rows = re.findall(
-        r"^\| `([a-z_]+)` \| `[^`]+` \| `[^`]+` \| `([a-z-]+)` \|$",
+        r"^\| `([a-z_]+)` \| `[^`]+` \| `[^`]+` \| `([a-z_ -]+)` \|$",
         API_REFERENCE.read_text(),
         flags=re.MULTILINE,
     )
@@ -141,8 +141,26 @@ def test_api_operation_table_matches_python_and_cli_surfaces() -> None:
 
     assert cli_mapping is not None
     expected = {operation: command for command, operation in cli_mapping.items()}
+    for operation in expected:
+        if operation == "knowledge_refresh":
+            expected[operation] = "knowledge refresh"
+        elif operation.startswith("publish_"):
+            expected[operation] = f"knowledge publish {operation}"
+        elif expected[operation].startswith("search-") and operation not in {
+            "search_runs",
+            "search_artifacts",
+            "search_measurements",
+            "search_benchmarks",
+        }:
+            expected[operation] = f"knowledge search {operation}"
     assert tuple(documented) == OPERATIONS
     assert documented == expected
+
+    parser = build_parser()
+    for command in documented.values():
+        with pytest.raises(SystemExit) as exited:
+            parser.parse_args([*command.split(), "--help"])
+        assert exited.value.code == 0, command
 
 
 def test_changelog_names_the_package_version_after_unreleased() -> None:
@@ -195,7 +213,7 @@ def test_public_guides_import_modules_owned_by_the_api_reference() -> None:
     """Require user-facing examples to import only documented public modules."""
     allowed_modules = set(
         re.findall(
-            r"^\| `(viper\.[a-z_]+)` \|",
+            r"^\| `(viper\.[a-z_.]+)` \|",
             API_REFERENCE.read_text(encoding="utf-8"),
             flags=re.MULTILINE,
         )
@@ -274,7 +292,7 @@ def test_current_docs_import_public_functions_from_defining_modules() -> None:
 
 
 def test_public_workflow_uses_target_api() -> None:
-    """Publish the Phase 11 workflow without retired authoring concepts."""
+    """Document execution from Python drafts and saved plans with current APIs."""
     documents = (
         ROOT / "README.md",
         ROOT / "docs/tutorials/getting-started.md",
@@ -285,12 +303,12 @@ def test_public_workflow_uses_target_api() -> None:
 
     required = {
         "viper.authoring.plan",
+        "freeze_run_plan",
         "viper.execution.run",
         "viper.execution.benchmark",
         "viper.execution.restore",
     }
     retired = {
-        "freeze_run_plan",
         "DownloadContext",
         "download_stage",
         "HttpSource",

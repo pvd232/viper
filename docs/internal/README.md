@@ -1,8 +1,7 @@
 # VIPER internal engineering
 
-This directory is the doorway from reader documentation into VIPER's
-maintainer guides and archived foundations. These documents are not user
-tutorials.
+This index links the release contracts, testing guide, release reports, and
+archived design documents used to maintain VIPER.
 
 ## Active release work
 

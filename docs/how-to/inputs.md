@@ -1,7 +1,7 @@
 # Load local and HTTP inputs
 
-Use a local input when the bytes already live in the workspace. Use a download
-stage when execution must retrieve bytes over HTTP and record the response.
+Use a local input when the bytes already live in the workspace. Use a download stage
+when execution must retrieve bytes over HTTP and record the response.
 
 ## Select a local file
 
@@ -13,10 +13,14 @@ from viper.authoring import input
 dataset = input("data/train.csv", data_role="training")
 ```
 
-Connect it to a stage under the name the stage function reads:
+Using the function, outputs, and metric declared in the [CPU
+tutorial](../tutorials/getting-started.md), connect the file under the name the stage
+function reads:
 
 ```python
+from viper.authoring import stage
 from viper.config import TrainConfig
+from viper.metrics import min
 
 
 training = stage(
@@ -29,14 +33,17 @@ training = stage(
 )
 ```
 
-Inside `fit()`, `context.inputs["dataset"]` is the materialized path. The
-authoring name and the context lookup must match.
+Inside `fit()`, `context.inputs["dataset"]` is the materialized path. The authoring name
+and the context lookup must match.
 
 ## Declare an HTTP download
 
-HTTP retrieval is a stage because the response is observed during execution.
-The request records the expected body identity; the policy limits where the
-runner may connect and how much it may accept.
+HTTP retrieval is a stage because the response is observed during execution. The request
+records the expected body identity; the policy limits where the runner may connect and
+how much it may accept.
+
+The following template requires a workspace loader named `load_rows` and the actual
+dataset URL, digest, and byte count.
 
 ```python
 from viper.outputs import StageOutputs, output
@@ -70,17 +77,88 @@ fetch_data = download(
 )
 ```
 
-Obtain the expected byte count and SHA-256 digest from a trusted dataset
-release, manifest, or one reviewed acquisition before freezing the experiment.
-VIPER uses those values to detect a server response that changed. It does not
-discover the expected identity from the same untrusted response it is checking.
+Obtain the expected byte count and SHA-256 digest from a trusted dataset release,
+manifest, or one reviewed acquisition before freezing the experiment. VIPER uses those
+values to detect a server response that changed. The expected identity must come from a
+source you trust before the request runs.
 
 ## Feed downloaded bytes to another stage
 
-An artifact handle from one stage can become the input to a later stage. Use
-the artifact selected from `fetch_data` in the downstream stage's `inputs`
-mapping. Freezing turns that handle into a same-run dependency.
+Select the download stage's output in the downstream stage:
 
-For the complete HTTP protocol and credential model, use the
-[Python API reference](../reference/api.md) and
-[`viper.http`](../../src/viper/http.py).
+```python
+training = stage(
+    fit,
+    config=TrainConfig(),
+    inputs={"dataset": fetch_data.outputs["dataset"]},
+    outputs=training_outputs,
+    metrics=(loss,),
+    objective=min(loss),
+)
+```
+
+Include both stages in the variant, with the download before training. Freezing turns
+the output reference into a same-run dependency. The download input and output names
+must match: `"dataset"` selects the retrieved body in this example.
+
+For the complete HTTP protocol and credential model, use the [Python API
+reference](../reference/api.md) and [`viper.http`](../../src/viper/http.py).
+
+## Output names and paths
+
+`output(path="model.json", ...)` selects a path beneath that output's directory. For a
+stage named `train` and an output named `model`, the working file is
+`artifacts/train/model/model.json` beneath the run directory. Use `kind="bundle"` for a
+directory whose member files are recorded together.
+
+`TrainOutputs` requires `model` and `resume_state`; `EvalOutputs` requires
+`predictions`. Other stage outputs use `StageOutputs`. An output declaration reserves
+the path and loader; your function writes the file. The recorded file then becomes an
+artifact.
+
+## Use an artifact from a completed run
+
+Use the completed run's `.reference` and the producing stage and output names:
+
+```python
+from viper.artifacts import StageArtifactRef
+from viper.authoring import run_artifact
+
+test_data = run_artifact(
+    data_run.reference,
+    StageArtifactRef(stage_id="build", artifact_name="test_data"),
+    path="inputs/test.csv",
+    data_role="eval",
+)
+test_split = run_artifact(
+    data_run.reference,
+    StageArtifactRef(stage_id="build", artifact_name="test_split"),
+    path="inputs/holdout.json",
+    data_role="eval",
+)
+```
+
+Here `data_run` is the result of an earlier `execution.run()` that produced the
+named artifacts. Each `path` is the consuming workspace's materialization path;
+use distinct paths for distinct inputs. Freezing publishes a pointer to the
+selected artifact. Execution verifies the pointer and retrieves the bytes
+before invoking the consumer.
+
+The selected data role must agree with the stored artifact. Training accepts
+`training` and `validation` inputs. Evaluation test data uses `eval` or
+`benchmark`. Output roles retain the restrictions imposed by their inputs;
+VIPER rejects relabeling benchmark data as training data.
+
+## Customize HTTP retrieval
+
+Use the built-in HTTP implementation for ordinary downloads. To integrate a
+workspace-specific client, decorate a function with `viper.http.http`, then
+pass a `CustomHttpDraft` through `download(http=...)`. The function receives an
+`HttpContext` containing the request, policy, config, and destination, and
+returns an `HttpResult` describing the observed response.
+
+The custom implementation still obeys the declared host, redirect, body-size,
+and digest checks. See the exact callable and draft signatures in
+[`viper.http`](../../src/viper/http.py), and the custom-client cases in
+[HTTP retrieval tests](../../tests/test_http_retrieval.py). Credentials are supplied
+through the execution environment. Keep versioned URLs free of credentials.

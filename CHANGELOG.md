@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Give Python run and benchmark results direct `status` and `path` access, with
+  the stored `record` and immutable `reference` available for inspection.
+- Add guides for stage composition, execution outcomes, checkpoint resumption,
+  stored inputs, and verified stage reuse.
+- Correct the public API, CLI, batch, compatibility, and recovery guides; add
+  configuration and metric examples and clarify verification limits.
+- Fix benchmark compilation to select the evaluation stage's `test` input.
+- Stop scheduling new batch runs after a failure when `stop_on_failure=True`,
+  including while other runs are still active.
+
 ## 0.1.0a3 — 2026-09-07
 
 - Remove the experimental System Impact, graph-localization, CodeQL,

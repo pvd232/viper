@@ -61,6 +61,7 @@ SelectionName = HumanId
 RNGSeed = Annotated[int, Field(ge=0, le=2**32 - 1)]
 DataRole = Literal["training", "validation", "eval", "benchmark"]
 
+
 class ProtocolModel(BaseModel):
     """Closed, frozen protocol object."""
 

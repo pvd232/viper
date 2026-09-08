@@ -1041,18 +1041,15 @@ def run_request(request: RunRequest) -> RunSuccess:
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise _document_error("run", request.run_spec, exc) from exc
     run = RunSpec.model_validate(parse_yaml_bytes(request.run_spec.read_bytes()))
-    attempt_id = result.resolved_run.successful_attempt_id
+    attempt_id = result.record.successful_attempt_id
     assert attempt_id is not None
     return RunSuccess(
         run_id=run.run_id,
         attempt_id=attempt_id,
         resolved_attempt=(
-            result.resolved_run_path.parent
-            / "attempts"
-            / str(attempt_id)
-            / "resolved.yaml"
+            result.path.parent / "attempts" / str(attempt_id) / "resolved.yaml"
         ),
-        resolved_run=result.resolved_run_path,
+        resolved_run=result.path,
         journal=result.journal_path,
     )
 
@@ -1088,12 +1085,12 @@ def retry_request(request: RetryRequest) -> RetrySuccess:
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise _document_error("retry", request.run_spec, exc) from exc
     run_spec = RunSpec.model_validate(parse_yaml_bytes(request.run_spec.read_bytes()))
-    attempt_id = result.resolved_run.successful_attempt_id
+    attempt_id = result.record.successful_attempt_id
     assert attempt_id is not None
     return RetrySuccess(
         run_id=run_spec.run_id,
         attempt_id=attempt_id,
-        resolved_run=result.resolved_run_path,
+        resolved_run=result.path,
         journal=result.journal_path,
     )
 
@@ -1140,8 +1137,8 @@ def execute_benchmark(
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise _document_error("execute_benchmark", request.resolved_run, exc) from exc
     return ExecuteBenchmarkSuccess(
-        result=execution.result,
-        result_path=execution.result_path,
+        result=execution.record,
+        result_path=execution.path,
     )
 
 

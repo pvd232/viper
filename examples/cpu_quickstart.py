@@ -193,11 +193,11 @@ def main() -> None:
         reproducibility=_reproducibility(),
     )
 
-    result = execution.run(root, draft)
-    model_path = result.resolved_run_path.parent / "artifacts/train/model/model.json"
-    print(f"status: {result.resolved_run.status}")
+    resolved_run = execution.run(root, draft)
+    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+    print(f"status: {resolved_run.status}")
     print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
-    print(f"result: {result.resolved_run_path.relative_to(root)}")
+    print(f"result: {resolved_run.path.relative_to(root)}")
 
 
 if __name__ == "__main__":

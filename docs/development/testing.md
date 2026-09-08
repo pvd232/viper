@@ -90,7 +90,7 @@ The marker declarations in `pyproject.toml` are authoritative.
 ## Continuous integration
 
 GitHub Actions starts with the fast Python 3.14 gate. A successful fast gate
-starts four independent jobs:
+starts the four jobs listed below.
 
 Every external action is pinned to a full commit SHA. The adjacent comment
 records the corresponding release line. GitHub identifies a full commit SHA as
@@ -102,7 +102,7 @@ guidance](https://docs.github.com/en/actions/reference/security/secure-use#using
 | Integration | Every integration test under Python 3.14 |
 | Release candidate | Generated-project execution, distribution build, and installed-wheel smoke test under Python 3.14 |
 | Compatibility | Unit and contract tests plus build and wheel checks under Python 3.11, 3.12, and 3.13 |
-| Minimum Pydantic | Project-defined parameter subclasses under Pydantic 2.12.0 |
+| Minimum Pydantic | Workspace-defined config subclasses under Pydantic 2.12.0 |
 
 The release commit must pass every job. A live hardware report then identifies
 the exact wheel installed on the designated CUDA host and records the resulting
@@ -122,10 +122,9 @@ python -m pytest \
   -q
 ```
 
-`test_documentation.py` compares every protocol class repeated in the formal
-reference with its defining source class. It also checks type aliases, local
-links, API operation names, CLI command names, release metadata, and multiline
-math fences.
+`test_documentation.py` checks local links, Python snippet syntax, API and CLI
+operation names, release metadata, and documentation navigation. The protocol
+reference links to the installed schemas.
 
 The active [0.1.0a3 core release contract](v0.1.0a3-core-release.md) owns the
 cleanup inventory and release acceptance boundary. Git history and its named
@@ -144,5 +143,5 @@ read. It replaces `platform.processor()` with a rejecting stub while observing
 the local runtime, because that standard-library helper starts an unguarded
 subprocess on macOS. It also scans `src/viper` and `tests` and rejects direct
 standard-library subprocess imports outside the facade and that regression
-module. Run it without `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` after changing a
+module. Keep `OBJC_DISABLE_INITIALIZE_FORK_SAFETY` unset when running it after changing a
 repository-owned process boundary.

@@ -1,63 +1,56 @@
 # What VIPER guarantees
 
-VIPER's guarantee is about recorded execution identity and protocol
-relationships. It is not a claim that an experiment's scientific design is
-correct.
+VIPER checks whether a run's saved records agree with its plan and whether the
+referenced files match their recorded identities. A successful verification means those
+checks passed. Scientific conclusions still depend on the data, metrics, and
+experimental design you selected.
 
-## The core claim
+## Checks on a successful run
 
-For one accepted run, let (P) be the frozen plan, (A) the successful
-attempt, (O) the observed artifacts and measurements, and (R) the terminal
-result. VIPER accepts (R) only when:
+The [run verifier](../../src/viper/verification/__init__.py) follows the terminal result
+to its plan, successful attempt, stages, artifacts, and measurements. It checks that:
 
-\[
-\operatorname{Accept}(R)
-\Rightarrow
-\operatorname{Matches}(A,P)
-\land
-\operatorname{Produced}(A,O)
-\land
-\operatorname{Identified}(O)
-\land
-\operatorname{Closes}(R,A,P,O).
-\]
+- the attempt belongs to the selected run and follows the allowed state changes;
+- required stages have completion records and the declared outputs;
+- source, config, inputs, and runtime records agree with the plan;
+- retrieved files match their recorded byte counts and SHA-256 digests;
+- measurements name metrics declared by the stage;
+- metrics configured for recomputation agree with the saved values under their
+  declared comparators.
 
-In plain English: the successful attempt must belong to the frozen plan; its
-declared outputs must be recorded by exact identity; and the terminal result
-must point back to that same attempt and plan.
+The plan checks are implemented in the [plan
+verifier](../../src/viper/_verification/plan.py); attempt and invocation checks are
+implemented in the [attempt verifier](../../src/viper/_verification/attempt.py).
 
-## What is checked
+## Reproducibility
 
-- Frozen source, stage, config, input, environment, and reproducibility
-  records are internally consistent.
-- Referenced files match their recorded paths, byte counts, and SHA-256 digests.
-- Attempt state changes follow the allowed durable transition sequence.
-- Required stages and artifacts are present before terminal success.
-- Recorded measurements belong to metrics authorized by their stage.
-- Restore reads verified bytes before writing a destination.
-- Catalog and knowledge queries derive from verified or explicitly published
-  evidence records.
+A plan identifies source code, input data, config, runtime requirements, and randomness
+settings. The run records the observed runtime and produced files. These records let you
+compare executions and investigate differences.
 
-## What is not proved
+Deterministic settings apply to the supported runtime controls. Results can still differ
+across devices, library versions, and operations. A recorded scalar is the value
+supplied by the selected implementation; only metrics configured with file dependencies
+and a comparator are recomputed.
 
-VIPER does not prove that:
+## Trust and scientific interpretation
 
-- a model is accurate outside the measurements you selected;
-- a dataset is representative, lawful, unbiased, or free of label errors;
-- a metric captures the scientific concept you care about;
-- deterministic settings remove every source of physical nondeterminism;
-- an external service was honest before its returned bytes were checked;
-- two runs support a causal conclusion.
+Verification depends on the recorded evidence and the source repositories you trust to
+supply executable code and loaders. Assessing the truth of external observations, the
+representativeness of a dataset, and the meaning of a metric requires separate review.
 
-Those claims require domain review, experimental design, and evidence beyond
-the execution protocol.
+A causal interpretation of a comparison requires experimental controls and an assessment
+of uncertainty beyond verification of the two runs.
 
-## Why exact identities matter
+## Restoring and searching
 
-A filename alone can be reused for different bytes. A function name alone can
-refer to changed source. VIPER therefore connects human-readable names to byte
-counts and cryptographic digests. That lets later verification detect drift
-instead of assuming that a familiar path still names the original object.
+[Restore](../how-to/retry-restore-compare.md) checks file identities before writing
+missing artifacts. It refuses to overwrite an existing file with different bytes.
 
-See the [formal protocol](../reference/protocol.md) for serialized models and
-[How VIPER works](how-viper-works.md) for one complete execution.
+The [catalog](../how-to/catalog-knowledge-mcp.md) indexes verified run evidence.
+Knowledge records add author-supplied interpretations, such as an effect estimate or an
+assertion. Their publication records identify what was written; the interpretation still
+requires scientific review.
+
+See the [protocol reference](../reference/protocol.md) for record types and [How VIPER
+works](how-viper-works.md) for the execution sequence.

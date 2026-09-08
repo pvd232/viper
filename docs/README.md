@@ -6,13 +6,15 @@ reference pages define exact interfaces and records.
 
 ## Tutorial
 
-[Build your first experiment](tutorials/getting-started.md) runs the checked CPU
-example, shows what VIPER writes, and gives you a small project to modify.
+[Build your first experiment](tutorials/getting-started.md) runs the CPU
+example, shows what VIPER writes, and explains how to modify the experiment.
 
 ## How-to guides
 
 | Task | Guide |
 | --- | --- |
+| Choose and connect stage kinds | [Compose stages](how-to/stages.md) |
+| Execute a saved plan and handle outcomes | [Execute a plan and read its result](how-to/execution.md) |
 | Supply files or download data | [Load local and HTTP inputs](how-to/inputs.md) |
 | Record measurements and acceptance criteria | [Define metrics and benchmarks](how-to/metrics-and-benchmarks.md) |
 | Generate and execute several runs | [Run variants and replicates](how-to/variants-and-replicates.md) |
@@ -25,7 +27,7 @@ example, shows what VIPER writes, and gives you a small project to modify.
 - [How VIPER works](explanation/how-viper-works.md) follows the checked CPU
   example from Python source to a verified terminal result.
 - [What VIPER guarantees](explanation/guarantees.md) separates recorded identity,
-  execution evidence, and verification from claims VIPER does not make.
+  execution evidence, and verification from scientific interpretation.
 
 ## Reference
 
@@ -38,14 +40,13 @@ configuration, formal protocol, and versioning policy.
 - [Testing VIPER](development/testing.md) defines the validation tiers and domains.
 - [Internal engineering index](internal/README.md) is the single entry point for
   the active release contract, maintainer guides, architecture decisions, and
-  release evidence. These documents govern VIPER development; they are not user
-  guides.
+  release evidence. These documents govern VIPER development.
 
 ## Validate these docs
 
 From the repository root, with `.venv` active:
 
 ```bash
+python -m pytest tests/test_documentation.py tests/test_public_inventory.py -q
 python -m pytest tests/test_readme_workflow.py -q
-python -m pytest tests/test_documentation.py -q -k documentation_navigation
 ```

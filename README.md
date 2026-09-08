@@ -1,12 +1,10 @@
 # VIPER
 
-Run reproducible ML experiments and keep machine-readable evidence of what
-actually happened.
+VIPER is a Python library for reproducible ML experiments.
 
-VIPER turns a Python experiment into an immutable run plan, executes each stage,
-records its source, inputs, environment, artifacts, and measurements, then
-verifies the terminal result. People, scripts, and agents can inspect the same
-evidence.
+Declare an experiment in Python, then run it from a saved plan. VIPER checks the
+completed run against that plan and keeps the evidence so you can inspect or
+repeat the experiment later.
 
 ```text
 Python experiment
@@ -28,7 +26,7 @@ verified run evidence
 ## Run the CPU quickstart
 
 VIPER requires Python 3.11 or newer. Clone the repository, create an isolated
-environment, and run the checked example:
+environment, and run the CPU example:
 
 ```bash
 git clone https://github.com/pvd232/viper.git
@@ -39,8 +37,7 @@ python -m pip install -e '.[test]'
 python examples/cpu_quickstart.py
 ```
 
-The example prints a successful terminal status and the verified result it
-wrote:
+The example prints a successful terminal status and the verified result it wrote:
 
 ```text
 status: succeeded
@@ -48,14 +45,13 @@ model: {"weight": 1.999...}
 result: experiments/cpu_quickstart/runs/baseline/<run-id>/resolved.yaml
 ```
 
-This is an executed example. The
-[acceptance test](tests/test_readme_workflow.py) runs the same file in a clean
-Git repository and requires the successful result above.
+The [acceptance test](tests/test_readme_workflow.py) runs this file in a clean Git
+repository and checks its status and output.
 
 ## Follow the execution
 
-The complete [CPU quickstart](examples/cpu_quickstart.py) is one ordinary Python
-file. It defines a metric and a training stage:
+The complete [CPU quickstart](examples/cpu_quickstart.py) is one ordinary Python file.
+It defines a metric and a training stage:
 
 ### Define a stage
 
@@ -126,17 +122,17 @@ def fit(context: Context[TrainConfig]) -> None:
     )
 ```
 
-`mode="stateless"` means `training_loss()` computes each value directly from
-the arguments passed to `record()`. A stateful metric is a `StatefulMetric`
-class that accumulates observations with `update()` and returns its current
-value from `compute()`.
+`mode="stateless"` means `training_loss()` computes each value directly from the
+arguments passed to `record()`. A stateful metric is a `StatefulMetric` class that
+accumulates observations with `update()` and returns its current value from `compute()`.
 
-`Context` gives the stage its validated config, materialized input paths,
-writable output paths, metric handles, run identity, and named random
-generators. The stage owns the scientific computation. VIPER owns the run
-directory and records the produced files. `TrainConfig` and `MetricConfig`
-are VIPER's built-in config records; this small example uses their default
-settings.
+The stage reads its config and input paths from `Context`, then writes to the supplied
+output paths. Metric handles record measurements during the computation. VIPER manages
+the run directory and records the produced files.
+`TrainConfig` and `MetricConfig` are VIPER's built-in config records; this small example
+uses their default settings. Training stages require both `model` and `resume_state`
+outputs; the checkpoint stores the optimizer, random-generator, and data-loader state
+needed for resumption.
 
 ### Connect the experiment
 
@@ -185,11 +181,13 @@ study = experiment(
 )
 ```
 
-Finally, `plan()` identifies the selected source commit and runtime.
-`execution.run()` compiles that draft, runs the stage, and returns the verified
-terminal record:
+Finally, `plan()` identifies the selected source commit and runtime. `execution.run()`
+compiles that draft, runs the stage, and returns the verified terminal record:
 
 ```python
+from viper import execution
+from viper.authoring import plan
+
 draft = plan(
     experiment=study,
     variant="baseline",
@@ -199,19 +197,18 @@ draft = plan(
     reproducibility=reproducibility,
 )
 
-result = execution.run(root, draft)
-print(result.resolved_run.status)
-print(result.resolved_run_path)
+resolved_run = execution.run(root, draft)
+print(resolved_run.status)
+print(resolved_run.path)
 ```
 
-The quickstart keeps the Git and reproducibility setup in small helper
-functions so the experiment remains readable. Open the
-[complete source](examples/cpu_quickstart.py) to see those exact values.
+The quickstart keeps the Git and reproducibility setup in small helper functions so the
+experiment remains readable. Open the [complete source](examples/cpu_quickstart.py) to
+see those exact values.
 
 ## What the run preserves
 
-The terminal result connects one execution to the evidence needed to inspect
-it later:
+The terminal result connects one execution to the evidence needed to inspect it later:
 
 ```text
 source commit
@@ -223,14 +220,13 @@ source commit
   = verified terminal run
 ```
 
-Every referenced file carries its path, byte count, and SHA-256 digest. VIPER
-checks that the plan, stages, inputs, artifacts, measurements, and terminal
-result belong to the same run.
+Resolved file references carry a path, byte count, and SHA-256 digest. VIPER checks that
+the plan, stages, inputs, artifacts, measurements, and terminal result belong to the
+same run.
 
 ## Start your own workspace
 
-Generate a workspace with decorated build, embed, train, and evaluation stages,
-workspace-owned config classes, output loaders, and focused tests:
+Generate a workspace with example stages and tests:
 
 ```bash
 viper init my-workspace --package my_workspace
@@ -239,18 +235,20 @@ python -m pip install -e '.[test]'
 python -m pytest -q
 ```
 
-Commit the workspace before authoring a plan. The commit identifies the exact
-source used by the run.
+Commit the workspace before authoring a plan. The commit identifies the exact source
+used by the run.
 
 ## Continue a workflow
 
-Each workflow starts from a verified run or an immutable plan:
+Continue from a saved plan or run result:
 
 | Goal | Public interface | Guide |
 | --- | --- | --- |
 | Author and execute a plan | `viper.authoring.plan()` and `viper.execution.run()` | [Get started](docs/tutorials/getting-started.md) |
+| Connect stage inputs and outputs | `viper.authoring.stage()` | [Compose stages](docs/how-to/stages.md) |
+| Execute a batch and handle failures | `viper.execution.run_many()` | [Execution outcomes](docs/how-to/execution.md) |
 | Retry a failed run | `viper.execution.retry()` or `viper retry` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
-| Confirm a benchmark | `viper.execution.benchmark()` | [How VIPER works](docs/explanation/how-viper-works.md) |
+| Confirm a benchmark | `viper.execution.benchmark()` | [Metrics and benchmarks](docs/how-to/metrics-and-benchmarks.md) |
 | Restore verified artifacts | `viper.execution.restore()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Inspect lineage or compare runs | `viper lineage` and `viper compare-runs` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Search completed measurements | `viper catalog-refresh` and `viper search-measurements` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
@@ -266,8 +264,8 @@ viper --json verify-run path/to/resolved.yaml \
 
 ## Documentation
 
-Use the [documentation home](docs/README.md) to choose a tutorial, a task-focused
-guide, an explanation, or reference material.
+Use the [documentation home](docs/README.md) to choose a tutorial, a task-focused guide,
+an explanation, or reference material.
 
 - New to VIPER: [build and run the CPU quickstart](docs/tutorials/getting-started.md).
 - Solving a specific task: open the [how-to guides](docs/README.md#how-to-guides).

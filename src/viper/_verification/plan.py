@@ -107,7 +107,7 @@ def _verify_stage_data_roles(
         model_role = input_roles[keys.Eval.MODEL]
         if _DATA_ROLE_RANK[model_role] > _DATA_ROLE_RANK["validation"]:
             raise VerificationError(
-                f"evaluation stage {stage_id!r} parameters must have training "
+                f"evaluation stage {stage_id!r} model must have training "
                 "or validation data_role"
             )
 
