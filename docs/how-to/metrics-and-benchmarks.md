@@ -135,21 +135,21 @@ positive `tolerance` for approximate comparison.
 ## Add benchmark criteria
 
 [`benchmark()`](../../src/viper/benchmark.py) declares a benchmark;
-`execution.benchmark()` runs it. Start with `test_artifact` and `split_artifact`
-selected through `run_artifact()` from a completed run, and a configured recomputed
-metric named `accuracy`. `at_least()` and `at_most()` turn configured metrics into
-explicit pass criteria:
+`execution.benchmark()` runs it. Continue from the complete
+[evaluation example](stages.md#evaluate-against-saved-test-data), which defines
+`test_data`, `test_split`, `evaluation`, and the recomputed `rmse` metric.
+`at_most(rmse, 0.1)` requires root mean squared error to be at most 0.1:
 
 ```python
-from viper.benchmark import at_least, benchmark
+from viper.benchmark import at_most, benchmark
 
 confirmation = benchmark(
     benchmark_id="holdout_v1",
     eval_id="holdout",
-    test=test_artifact,
-    splits={"holdout": split_artifact},
-    metrics=(accuracy,),
-    criteria=(at_least(accuracy, 0.90),),
+    test=test_data,
+    splits={"holdout": test_split},
+    metrics=(rmse,),
+    criteria=(at_most(rmse, 0.1),),
 )
 ```
 
@@ -161,6 +161,7 @@ Execute it against the completed run and the resulting benchmark specification p
 ```python
 from viper import execution
 
+benchmark_spec_path = root / "benchmarks/holdout_v1.spec.yaml"
 confirmation = execution.benchmark(root, resolved_run.path, benchmark_spec_path)
 print(confirmation.status)
 print(confirmation.path)

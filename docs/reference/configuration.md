@@ -14,29 +14,56 @@ work-tree root.
 ## Stage and metric config
 
 Subclass the config class for the operation you are defining. Declare fields with types
-and defaults, then pass an instance to `stage()`:
+and defaults, then pass an instance to `stage()`.
+
+This build stage keeps a configured number of CSV data rows and preserves the
+header. Save the code in an importable workspace module:
 
 ```python
-from viper.config import TrainConfig
-from viper.stages import Context, train
+from pathlib import Path
+
+from pydantic import Field
+
+from viper.authoring import input, stage
+from viper.config import BuildConfig
+from viper.outputs import StageOutputs, output
+from viper.stages import Context, build
 
 
-class TrainingConfig(TrainConfig):
-    epochs: int = 20
-    learning_rate: float = 0.05
+class RowLimit(BuildConfig):
+    rows: int = Field(default=2, ge=1)
 
 
-@train(config=TrainingConfig)
-def fit(context: Context[TrainingConfig]) -> None:
-    epochs = context.config.epochs
-    learning_rate = context.config.learning_rate
-    # Use these values in the training loop, then write the declared outputs.
+def load_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+@build(config=RowLimit)
+def limit_rows(context: Context[RowLimit]) -> None:
+    header, *rows = load_text(context.inputs["dataset"]).splitlines()
+    destination = context.outputs["dataset"]
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        "\n".join([header, *rows[:context.config.rows]]) + "\n",
+        encoding="utf-8",
+    )
+
+
+limited = stage(
+    limit_rows,
+    config=RowLimit(rows=2),
+    inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
+    outputs=StageOutputs(
+        dataset=output(path="limited.csv", loader=load_text, data_role="training")
+    ),
+)
 ```
 
-This excerpt shows config access; the [CPU example](../../examples/cpu_quickstart.py)
-contains the training loop and output writing. In its `stage()` call, pass
-`config=TrainingConfig(epochs=40)` to select a different value. Keep the class and
-decorated function in importable workspace files and commit them before creating a plan.
+With the tutorial's CSV input, this writes `x,y`, `1,2`, and `2,4` on separate
+lines. `RowLimit(rows=1)` keeps only the first data row; zero and negative limits
+are rejected when constructing the config. Add `limited` before training in the
+variant's stages and select `limited.outputs["dataset"]` as the training input.
+Commit the module before creating a plan.
 
 [`viper.config`](../../src/viper/config.py) defines `BuildConfig`, `EmbedConfig`,
 `TrainConfig`, `EvalConfig`, `DiagnosticConfig`, `MetricConfig`, and `HttpConfig`. Use

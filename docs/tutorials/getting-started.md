@@ -33,16 +33,57 @@ result: experiments/cpu_quickstart/runs/baseline/<run-id>/resolved.yaml
 
 Each execution receives a new run ID and writes its own result directory.
 
-## See the three pieces you authored
+## Read the complete program
 
-Open [`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py). The file contains
-one metric, one stage, and one experiment.
+The following four Python blocks form one complete file in order. They contain
+the source of [`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py).
+To reconstruct it, save the blocks to that path, commit the file, and run the
+command above from the repository root. The dataset and `pyproject.toml` come
+from the cloned repository.
 
-### 1. The metric computes prediction error
+### 1. Define the metric and output loaders
+
+Mean squared error measures prediction error. The loaders read the two files
+that the training stage will produce.
 
 ```python
-from viper.config import MetricConfig
-from viper.metrics import MetricContext, metric
+"""Run one complete VIPER training plan on the local CPU."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+from pydantic import HttpUrl, TypeAdapter
+
+from viper import execution
+from viper.authoring import experiment, input, plan, replicate, stage, variant
+from viper.config import MetricConfig, TrainConfig
+from viper.metrics import MetricContext, measure, metric, min
+from viper.outputs import TrainOutputs, output
+from viper.randomness import capture_main_process_rng
+from viper.references import GitFileRef, GitSource
+from viper.repository import resolve_root
+from viper.resume import (
+    DataLoaderConfiguration,
+    DataLoaderResumeState,
+    ResumeState,
+    load_resume_state,
+    save_resume_state,
+)
+from viper.runtime import LocalEnvSpec, ReproducibilitySpec, observe_python_env
+from viper.stages import Context, train
+
+
+def load_json(path: Path) -> dict[str, float | int]:
+    """Load one model or checkpoint written by the training stage."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_state(path: Path) -> ResumeState:
+    """Load and validate the terminal training state."""
+    return load_resume_state(path)
 
 
 @metric(metric_id="mean_squared_error", mode="stateless")
@@ -51,6 +92,7 @@ def mean_squared_error(
     predictions: tuple[float, ...],
     targets: tuple[float, ...],
 ) -> float:
+    """Compute mean squared error over matching predictions and targets."""
     if not targets:
         raise ValueError("mean_squared_error requires at least one target")
     return sum(
@@ -59,95 +101,188 @@ def mean_squared_error(
     ) / len(targets)
 ```
 
-The function computes mean squared error: square each prediction error and average
-the results. The training loop passes its predictions and targets to
-`context.metrics["mean_squared_error"].record(...)`. VIPER calls the function, saves the
-returned value, and returns a measurement whose `.value` is the computed loss.
+### 2. Train the model and write its outputs
 
-`stateless` means each call computes from its current inputs. A stateful metric
-accumulates observations through `update()` and returns their combined result
-from `compute()`.
-
-### 2. The stage performs the scientific work
+The stage reads the CSV, performs twenty gradient-descent updates, and records
+mean squared error before each update. It writes both the model and the training
+state required by `TrainOutputs`.
 
 ```python
-from viper.config import TrainConfig
-from viper.stages import Context, train
-
-
 @train(config=TrainConfig)
 def fit(context: Context[TrainConfig]) -> None:
-    rows = context.inputs["dataset"].read_text(encoding="utf-8")
-    model = context.outputs["model"]
-    # The complete example parses the rows, trains the model, records loss,
-    # and writes the declared model and state artifacts.
-```
-
-Read the dataset through `context.inputs` and write the model through
-`context.outputs`. Your function owns the computation. VIPER supplies those paths
-and records the resulting files and measurements.
-
-### 3. The experiment connects a stage to a variant and seed
-
-```python
-from viper.authoring import experiment, input, replicate, stage, variant
-from viper.metrics import measure, min
-from viper.outputs import TrainOutputs
-
-mse = measure(mean_squared_error, config=MetricConfig())
-training = stage(
-    fit,
-    config=TrainConfig(),
-    inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
-    outputs=TrainOutputs(...),
-    metrics=(mse,),
-    objective=min(mse),
-)
-
-study = experiment(
-    experiment_id="cpu_quickstart",
-    variants={
-        "baseline": variant(
-            levels={},
-            stages={"train": training},
-            estimator=training.outputs["model"],
+    """Fit ``y = weight * x`` with gradient descent on the local CPU."""
+    rows = [
+        tuple(float(value) for value in line.split(","))
+        for line in context.inputs["dataset"]
+        .read_text(encoding="utf-8")
+        .splitlines()[1:]
+    ]
+    targets = tuple(y for _, y in rows)
+    weight = 0.0
+    loss = 0.0
+    epoch = 0
+    for epoch in range(1, 21):
+        predictions = tuple(weight * x for x, _ in rows)
+        measurement = context.metrics["mean_squared_error"].record(
+            predictions, targets, epoch=epoch, step=epoch
         )
-    },
-    replicates={"seed_7": replicate(seed=7)},
-)
+        loss = measurement.value
+        errors = tuple(
+            prediction - target for prediction, target in zip(predictions, targets)
+        )
+        gradient = 2 * sum(error * x for error, (x, _) in zip(errors, rows)) / len(rows)
+        weight -= 0.05 * gradient
+
+    model = context.outputs["model"]
+    model.parent.mkdir(parents=True, exist_ok=True)
+    model.write_text(json.dumps({"weight": weight}) + "\n", encoding="utf-8")
+    save_resume_state(
+        context.outputs["resume_state"],
+        ResumeState(
+            optimizer_state={"weight": weight, "loss": loss},
+            main_process_rng=capture_main_process_rng(
+                context.numpy_generators,
+                capture_legacy_global=True,
+            ),
+            dataloader=DataLoaderResumeState(
+                configuration=DataLoaderConfiguration(workers=0),
+                state_dict={"epoch": epoch},
+            ),
+        ),
+    )
 ```
 
-The ellipsis marks an abbreviated output declaration. The complete example declares both
-output paths and selects the model as the variant's estimator.
+### 3. Identify the source and execution settings
 
-## Follow the call that runs it
-
-`plan()` creates an immutable Python draft tied to a Git commit, an observed
-environment, and reproducibility settings. `execution.run()` compiles that draft into
-protocol files, executes the stage, verifies the evidence, and returns the terminal
-result.
+The Git helper reads the source commit and repository URL. The reproducibility
+settings select deterministic, single-process CPU execution.
 
 ```python
-from viper import execution
-from viper.authoring import plan
+def _git(root: Path, *arguments: str) -> str:
+    """Return one Git value required to identify the checked-out source."""
+    completed = subprocess.run(
+        ("git", "-C", str(root), *arguments),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
 
-draft = plan(
-    experiment=study,
-    variant="baseline",
-    replicate="seed_7",
-    source=source,
-    env=environment,
-    reproducibility=_reproducibility(),
-)
 
-resolved_run = execution.run(root, draft)
-print(resolved_run.status)
-print(resolved_run.path)
+def _reproducibility() -> ReproducibilitySpec:
+    """Use deterministic, single-process CPU settings for the example."""
+    return ReproducibilitySpec.model_validate(
+        {
+            "determinism": {
+                "deterministic_algorithms": True,
+                "deterministic_warn_only": False,
+                "cudnn_deterministic": True,
+                "cudnn_benchmark": False,
+                "cublas_workspace_config": ":4096:8",
+            },
+            "precision": {
+                "float32_matmul_precision": "highest",
+                "cudnn_allow_tf32": False,
+                "autocast_enabled": False,
+                "autocast_dtype": None,
+            },
+            "parallelism": {
+                "process_count": 1,
+                "torch_intraop_threads": 1,
+                "torch_interop_threads": 1,
+                "dataloader": {
+                    "workers": 0,
+                    "prefetch_factor": None,
+                    "persistent_workers": False,
+                    "in_order": True,
+                },
+            },
+            "numpy_randomness": {
+                "generators": {"training": "PCG64"},
+                "capture_legacy_global": True,
+            },
+        }
+    )
 ```
 
-`execution.run()` freezes the draft before starting the run. Use `freeze_run_plan()`
-when you need to save the plan for later execution; the [batch
-guide](../how-to/variants-and-replicates.md#expand-the-experiment) shows that workflow.
+### 4. Declare and run the experiment
+
+`main()` connects the dataset, stage, outputs, and metric. It selects one
+variant and seed, declares the source and runtime, and executes the plan.
+
+```python
+def main() -> None:
+    """Author, execute, and report one locally verified run."""
+    root = resolve_root(Path(__file__).parent)
+    commit = _git(root, "rev-parse", "HEAD")
+    repository = TypeAdapter(HttpUrl).validate_python(
+        _git(root, "remote", "get-url", "origin")
+    )
+    source = GitSource(repository=repository, commit=commit)
+    environment = LocalEnvSpec(
+        lockfile=GitFileRef(
+            repository=repository,
+            commit=commit,
+            path="pyproject.toml",
+        ),
+        python_env=observe_python_env(),
+    )
+
+    mse = measure(mean_squared_error, config=MetricConfig())
+    training = stage(
+        fit,
+        config=TrainConfig(),
+        inputs={
+            "dataset": input(
+                "examples/data/tiny.csv",
+                data_role="training",
+            )
+        },
+        outputs=TrainOutputs(
+            model=output(
+                path="model.json",
+                loader=load_json,
+                data_role="training",
+            ),
+            resume_state=output(
+                path="resume_state.pt",
+                loader=load_state,
+                data_role="training",
+            ),
+        ),
+        metrics=(mse,),
+        objective=min(mse),
+    )
+    study = experiment(
+        experiment_id="cpu_quickstart",
+        variants={
+            "baseline": variant(
+                levels={},
+                stages={"train": training},
+                estimator=training.outputs["model"],
+            )
+        },
+        replicates={"seed_7": replicate(seed=7)},
+    )
+    draft = plan(
+        experiment=study,
+        variant="baseline",
+        replicate="seed_7",
+        source=source,
+        env=environment,
+        reproducibility=_reproducibility(),
+    )
+
+    resolved_run = execution.run(root, draft)
+    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+    print(f"status: {resolved_run.status}")
+    print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
+    print(f"result: {resolved_run.path.relative_to(root)}")
+
+
+if __name__ == "__main__":
+    main()
+```
 
 ## Inspect the result
 
@@ -159,7 +294,7 @@ evidence. The model itself is under:
 experiments/cpu_quickstart/runs/baseline/<run-id>/artifacts/train/model/model.json
 ```
 
-The example is guarded by
+Both the example file and the Python blocks printed on this page are executed by
 [`tests/test_readme_workflow.py`](../../tests/test_readme_workflow.py), which runs it in
 a clean temporary Git repository and requires the output shown above.
 

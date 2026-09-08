@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace incomplete documentation examples with working implementations and
+  execute the README and tutorial code blocks in acceptance tests.
 - Name example metrics for their quantities: `mean_squared_error` and
   `mean_absolute_error`. Separate metric identity from its use as a training loss.
 - Make the introductory metric compute mean squared error from predictions and

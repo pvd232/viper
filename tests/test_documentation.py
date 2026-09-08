@@ -209,6 +209,38 @@ def test_training_examples_name_the_project_owned_training_function() -> None:
         assert all(call not in text for call in undefined_calls)
 
 
+def test_public_examples_omit_placeholder_calls_and_function_bodies() -> None:
+    """Reject omitted constructor arguments and empty implementations in examples."""
+    paths = (
+        ROOT / "README.md",
+        *sorted((ROOT / "docs/tutorials").glob("*.md")),
+        *sorted((ROOT / "docs/how-to").glob("*.md")),
+        *sorted((ROOT / "docs/reference").glob("*.md")),
+    )
+    for path in paths:
+        for block in python_blocks(path.read_text()):
+            for node in ast.walk(ast.parse(block)):
+                if isinstance(node, ast.Call):
+                    arguments = [*node.args, *(item.value for item in node.keywords)]
+                    assert not any(
+                        isinstance(item, ast.Constant) and item.value is Ellipsis
+                        for item in arguments
+                    ), path
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    body = list(node.body)
+                    if ast.get_docstring(node) is not None:
+                        body = body[1:]
+                    assert any(
+                        not isinstance(item, ast.Pass)
+                        and not (
+                            isinstance(item, ast.Expr)
+                            and isinstance(item.value, ast.Constant)
+                            and item.value.value is Ellipsis
+                        )
+                        for item in body
+                    ), (path, node.name)
+
+
 def test_public_guides_import_modules_owned_by_the_api_reference() -> None:
     """Require user-facing examples to import only documented public modules."""
     allowed_modules = set(

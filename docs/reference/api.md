@@ -100,22 +100,11 @@ For example, use `optimizer_study`. Hyphens are rejected. Run IDs use a separate
 inputs and outputs.
 
 `build`, `embed`, `train`, `eval`, and `diagnostic` bind a top-level workspace function
-to one stage kind and config class:
+to one stage kind and config class.
 
-```python
-from viper.config import TrainConfig
-from viper.stages import Context, train
-
-
-class TrainingConfig(TrainConfig):
-    epochs: int = 20
-
-
-@train(config=TrainingConfig)
-def fit(context: Context[TrainingConfig]) -> None:
-    dataset = context.inputs["dataset"]
-    model = context.outputs["model"]
-```
+The complete [`@train(config=TrainConfig)` implementation](../tutorials/getting-started.md#2-train-the-model-and-write-its-outputs)
+reads `context.inputs`, computes predictions and gradients, records mean squared
+error, and writes both files through `context.outputs`.
 
 `Context` provides validated config, materialized input paths, writable output paths,
 metric handles, run identity, and named NumPy generators.

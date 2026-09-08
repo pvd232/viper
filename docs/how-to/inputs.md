@@ -10,12 +10,12 @@ Pass the repository-relative path and its role to `input()`:
 ```python
 from viper.authoring import input
 
-dataset = input("data/train.csv", data_role="training")
+dataset = input("examples/data/tiny.csv", data_role="training")
 ```
 
-Using the function, outputs, and metric declared in the [CPU
-tutorial](../tutorials/getting-started.md), connect the file under the name the stage
-function reads:
+Continue inside `main()` from the [CPU tutorial](../tutorials/getting-started.md),
+after its `training` declaration. Reuse its function, outputs, and configured metric
+to connect a different input:
 
 ```python
 from viper.authoring import stage
@@ -27,7 +27,7 @@ training = stage(
     fit,
     config=TrainConfig(),
     inputs={"dataset": dataset},
-    outputs=training_outputs,
+    outputs=training.spec.outputs,
     metrics=(mse,),
     objective=min(mse),
 )
@@ -42,21 +42,31 @@ HTTP retrieval is a stage because the response is observed during execution. The
 records the expected body identity; the policy limits where the runner may connect and
 how much it may accept.
 
-The following template requires a workspace loader named `load_rows` and the actual
-dataset URL, digest, and byte count.
+This declaration retrieves the quickstart CSV from a fixed VIPER source commit.
+The expected digest and size identify that committed file.
 
 ```python
+from pathlib import Path
+
 from viper.outputs import StageOutputs, output
 from viper.authoring import download
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
+def load_rows(path: Path) -> list[tuple[float, float]]:
+    lines = path.read_text(encoding="utf-8").splitlines()[1:]
+    return [(float(x), float(y)) for x, y in (line.split(",") for line in lines)]
+
+
 fetch_data = download(
     inputs={
         "dataset": HttpRequestSpec(
-            url="https://data.example.org/train.csv",
-            version="2026-09-05",
-            expected_body_sha256="<64 lowercase hex characters>",
-            expected_body_bytes=12345,
+            url=(
+                "https://raw.githubusercontent.com/pvd232/viper/"
+                "327d1f89ad38d855e500f5386bdd2894d049a899/examples/data/tiny.csv"
+            ),
+            version="327d1f89ad38d855e500f5386bdd2894d049a899",
+            expected_body_sha256="5962ba6c35b56dabeb8121dd6656aba7b1e60afe0d2ddec498feb191057d15fe",
+            expected_body_bytes=16,
         )
     },
     outputs=StageOutputs.model_validate({
@@ -68,7 +78,7 @@ fetch_data = download(
     }),
     policy=HttpRetrievalPolicy(
         allowed_schemes=frozenset({"https"}),
-        allowed_hosts=frozenset({"data.example.org"}),
+        allowed_hosts=frozenset({"raw.githubusercontent.com"}),
         allowed_ports=frozenset({443}),
         max_redirects=0,
         max_body_bytes=20_000,
@@ -91,7 +101,7 @@ training = stage(
     fit,
     config=TrainConfig(),
     inputs={"dataset": fetch_data.outputs["dataset"]},
-    outputs=training_outputs,
+    outputs=training.spec.outputs,
     metrics=(mse,),
     objective=min(mse),
 )

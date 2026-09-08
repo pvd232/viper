@@ -51,7 +51,8 @@ repository and checks its status and output.
 ## Follow the execution
 
 The complete [CPU quickstart](examples/cpu_quickstart.py) is one ordinary Python file.
-It defines a metric and a training stage:
+The three Python blocks below form a complete program in order. Save them as
+`examples/cpu_quickstart.py`, commit the file, and run it with the command above.
 
 ### Define a stage
 
@@ -200,26 +201,96 @@ Finally, `plan()` identifies the selected source commit and runtime. `execution.
 compiles that draft, runs the stage, and returns the verified terminal record:
 
 ```python
+import subprocess
+
+from pydantic import HttpUrl, TypeAdapter
+
 from viper import execution
 from viper.authoring import plan
+from viper.references import GitFileRef, GitSource
+from viper.repository import resolve_root
+from viper.runtime import LocalEnvSpec, ReproducibilitySpec, observe_python_env
 
-draft = plan(
-    experiment=study,
-    variant="baseline",
-    replicate="seed_7",
-    source=source,
-    env=environment,
-    reproducibility=reproducibility,
-)
 
-resolved_run = execution.run(root, draft)
-print(resolved_run.status)
-print(resolved_run.path)
+def _git(root: Path, *arguments: str) -> str:
+    """Return one Git value required to identify the checked-out source."""
+    completed = subprocess.run(
+        ("git", "-C", str(root), *arguments),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def _reproducibility() -> ReproducibilitySpec:
+    """Use deterministic, single-process CPU settings for the example."""
+    return ReproducibilitySpec.model_validate(
+        {
+            "determinism": {
+                "deterministic_algorithms": True,
+                "deterministic_warn_only": False,
+                "cudnn_deterministic": True,
+                "cudnn_benchmark": False,
+                "cublas_workspace_config": ":4096:8",
+            },
+            "precision": {
+                "float32_matmul_precision": "highest",
+                "cudnn_allow_tf32": False,
+                "autocast_enabled": False,
+                "autocast_dtype": None,
+            },
+            "parallelism": {
+                "process_count": 1,
+                "torch_intraop_threads": 1,
+                "torch_interop_threads": 1,
+                "dataloader": {
+                    "workers": 0,
+                    "prefetch_factor": None,
+                    "persistent_workers": False,
+                    "in_order": True,
+                },
+            },
+            "numpy_randomness": {
+                "generators": {"training": "PCG64"},
+                "capture_legacy_global": True,
+            },
+        }
+    )
+
+
+if __name__ == "__main__":
+    root = resolve_root(Path(__file__).parent)
+    commit = _git(root, "rev-parse", "HEAD")
+    repository = TypeAdapter(HttpUrl).validate_python(
+        _git(root, "remote", "get-url", "origin")
+    )
+    source = GitSource(repository=repository, commit=commit)
+    environment = LocalEnvSpec(
+        lockfile=GitFileRef(repository=repository, commit=commit, path="pyproject.toml"),
+        python_env=observe_python_env(),
+    )
+    reproducibility = _reproducibility()
+
+    draft = plan(
+        experiment=study,
+        variant="baseline",
+        replicate="seed_7",
+        source=source,
+        env=environment,
+        reproducibility=reproducibility,
+    )
+
+    resolved_run = execution.run(root, draft)
+    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+    print(f"status: {resolved_run.status}")
+    print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
+    print(f"result: {resolved_run.path.relative_to(root)}")
 ```
 
-The quickstart keeps the Git and reproducibility setup in small helper functions so the
-experiment remains readable. Open the [complete source](examples/cpu_quickstart.py) to
-see those exact values.
+The Git commit identifies the source used by this run. Commit code or data changes
+before executing another run. The [tutorial](docs/tutorials/getting-started.md)
+explains each part of the program.
 
 ## What the run preserves
 

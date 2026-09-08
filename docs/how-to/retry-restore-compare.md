@@ -104,24 +104,73 @@ For a completed run, select both files with `run_artifact()` and pass them under
 those same input names. Include the dataset and any other inputs your function
 uses in the new stage's `inputs` mapping.
 
-Inside a PyTorch training function, restore state in this order:
+This complete PyTorch example performs one update, saves a checkpoint, and
+restores it into a new model, optimizer, and loader. It verifies that the next
+batch and model values match. Run it in the environment where VIPER is installed:
 
 ```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
 import torch
+from torch.utils.data import TensorDataset
+from torchdata.stateful_dataloader import StatefulDataLoader
 
-from viper.resume import load_resume_state, restore_resume_state
+from viper.resume import (
+    capture_resume_state, load_resume_state, restore_resume_state, save_resume_state,
+)
 
-model.load_state_dict(torch.load(context.inputs["model"], weights_only=True))
-resume_state = load_resume_state(context.inputs["resume_state"])
-restore_resume_state(resume_state, optimizer, dataloader, context.numpy_generators)
+
+def make_loader() -> StatefulDataLoader:
+    return StatefulDataLoader(
+        TensorDataset(torch.arange(6, dtype=torch.float32).reshape(-1, 1)),
+        batch_size=2,
+        shuffle=False,
+        num_workers=0,
+    )
+
+
+torch.manual_seed(7)
+model = torch.nn.Linear(1, 1)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+loader = make_loader()
+iterator = iter(loader)
+values = next(iterator)[0]
+optimizer.zero_grad()
+loss = torch.nn.functional.mse_loss(model(values), 2 * values)
+loss.backward()
+optimizer.step()
+
+with TemporaryDirectory() as directory:
+    model_path = Path(directory) / "model.pt"
+    state_path = Path(directory) / "resume_state.pt"
+    torch.save(model.state_dict(), model_path)
+    save_resume_state(
+        state_path,
+        capture_resume_state(optimizer, loader, {}, capture_legacy_global=True),
+    )
+    expected_batch = next(iterator)[0]
+
+    resumed_model = torch.nn.Linear(1, 1)
+    resumed_optimizer = torch.optim.Adam(resumed_model.parameters(), lr=0.01)
+    resumed_loader = make_loader()
+    resumed_model.load_state_dict(torch.load(model_path, weights_only=True))
+    restore_resume_state(
+        load_resume_state(state_path), resumed_optimizer, resumed_loader, {},
+    )
+    actual_batch = next(iter(resumed_loader))[0]
+    assert torch.equal(actual_batch, expected_batch)
+    assert torch.equal(resumed_model(actual_batch), model(expected_batch))
+    print("Restored model and next batch match.")
 ```
 
-This excerpt assumes you have constructed `model`, `optimizer`, and a
-`StatefulDataLoader` with the same configuration as the checkpoint. Restore the
-state before creating the data-loader iterator or starting another training
-step. The resumed function is responsible for using the restored state and
-writing a new model and resume-state pair.
+Within a VIPER stage, write the checkpoint to `context.outputs["model"]` and
+`context.outputs["resume_state"]`; a resumed stage reads the corresponding
+`context.inputs` paths. Pass `context.numpy_generators` to capture and restore
+when the plan declares named NumPy generators. Construct the matching model,
+optimizer, and loader before restoring, and restore before creating the next
+loader iterator. This example uses PyTorch state dictionaries; the introductory
+CPU model uses its own JSON representation.
 
-`capture_resume_state()` collects the optimizer, data-loader, and random-generator
-state; `save_resume_state()` writes it. These functions and the loader-configuration
-checks are defined in [`viper.resume`](../../src/viper/resume.py).
+The loader-configuration checks are defined in
+[`viper.resume`](../../src/viper/resume.py).

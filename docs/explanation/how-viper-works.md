@@ -58,18 +58,11 @@ The decorated `fit()` function remains ordinary workspace code. The call to
 inputs may be read, which outputs may be written, which metric IDs may be recorded, and
 which objective is attached to the stage.
 
-The stage receives those values through [`Context`](../../src/viper/stages.py). For the
-quickstart:
+The stage receives those values through [`Context`](../../src/viper/stages.py).
 
-```python
-from viper.config import TrainConfig
-from viper.stages import Context, train
-
-
-@train(config=TrainConfig)
-def fit(context: Context[TrainConfig]) -> None:
-    model = context.outputs["model"]
-```
+The complete [`@train(config=TrainConfig)` implementation](../tutorials/getting-started.md#2-train-the-model-and-write-its-outputs)
+reads `context.inputs`, computes predictions and gradients, records mean squared
+error, and writes both files through `context.outputs`.
 
 - `context.inputs["dataset"]` is the materialized CSV path;
 - `context.outputs["model"]` and `context.outputs["resume_state"]` are writable

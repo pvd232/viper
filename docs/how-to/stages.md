@@ -52,7 +52,7 @@ def sort_rows(context: Context[BuildConfig]) -> None:
 prepared = stage(
     sort_rows,
     config=BuildConfig(),
-    inputs={"source": input("data/train.csv", data_role="training")},
+    inputs={"source": input("examples/data/tiny.csv", data_role="training")},
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
     ),
@@ -125,15 +125,60 @@ role `eval` or `benchmark`. The model can come from an earlier stage in the
 current run or a completed run.
 
 Select the test and split using `run_artifact()` as shown in
-[stored inputs](inputs.md#use-an-artifact-from-a-completed-run). Assuming
-`test_data` and `test_split` are those selections, connect your decorated
-`predict` function:
+[stored inputs](inputs.md#use-an-artifact-from-a-completed-run). The `test_data`
+artifact must contain a CSV with an `x,y` header; `test_split` must contain a
+JSON list of zero-based row indices, such as `[0, 2]`. Use the tutorial's
+`training` stage, which writes a JSON model containing `weight`.
+
+This evaluation selects those rows, predicts their targets, writes the paired
+predictions and targets, and computes root mean squared error from that file:
 
 ```python
-from viper.config import EvalConfig
-from viper.metrics import max
-from viper.outputs import EvalOutputs
+import json
 
+from viper.config import EvalConfig, MetricConfig
+from viper.metrics import (
+    FloatComparator, MetricContext, MetricDependency, measure, metric, min,
+)
+from viper.outputs import EvalOutputs
+from viper.stages import eval
+
+
+@eval(config=EvalConfig)
+def predict(context: Context[EvalConfig]) -> None:
+    model = json.loads(load_text(context.inputs["model"]))
+    rows = [
+        tuple(float(value) for value in row.split(","))
+        for row in load_text(context.inputs["test"]).splitlines()[1:]
+    ]
+    indices = json.loads(load_text(context.inputs["holdout"]))
+    pairs = [
+        [model["weight"] * rows[index][0], rows[index][1]]
+        for index in indices
+    ]
+    destination = context.outputs["predictions"]
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(pairs), encoding="utf-8")
+
+
+@metric(metric_id="root_mean_squared_error", mode="stateless")
+def root_mean_squared_error(context: MetricContext[MetricConfig]) -> float:
+    pairs = json.loads(load_text(context.artifacts["predictions"]))
+    if not pairs:
+        raise ValueError("root_mean_squared_error requires at least one prediction")
+    squared_errors = [(prediction - target) ** 2 for prediction, target in pairs]
+    return (sum(squared_errors) / len(pairs)) ** 0.5
+
+
+rmse = measure(
+    root_mean_squared_error,
+    dependencies=(
+        MetricDependency(
+            source="artifact", name="predictions", required_data_role="eval"
+        ),
+    ),
+    comparator=FloatComparator(mode="absolute", tolerance=1e-12),
+)
 
 evaluation = stage(
     predict,
@@ -152,14 +197,14 @@ evaluation = stage(
             data_role="eval",
         )
     ),
-    metrics=(accuracy,),
-    objective=max(accuracy),
+    metrics=(rmse,),
+    objective=min(rmse),
 )
 ```
 
-Here, `predict` must be decorated with `@eval(config=EvalConfig)`, and
-`accuracy` must be a configured recomputed metric that reads the predictions.
-The function reads its three input paths and writes `context.outputs["predictions"]`.
+Add `evaluation` after `training` in the variant's stages. VIPER computes `rmse`
+after `predict` has written the predictions file. The metric reads that saved
+file again during verification.
 The split's data role must match the test dataset's role. Use a predictions
 role compatible with those inputs; benchmark data remains `benchmark`.
 

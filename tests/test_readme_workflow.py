@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -10,8 +11,14 @@ from pathlib import Path
 
 import pytest
 
+from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
+from viper.artifacts import StageArtifactRef
+from viper.authoring import run_artifact
+from viper.metrics import MetricContext
+from viper.references import LocalFileRef, ResolvedRunRef
 from viper.resume import load_resume_state
+from viper.stages import Context
 
 
 def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
@@ -22,14 +29,24 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
         check=True,
         capture_output=True,
         text=True,
+        timeout=120,
     )
 
 
-def test_cpu_quickstart_executes_and_verifies_one_run(tmp_path: Path) -> None:
-    """Produce the successful terminal result promised by the README."""
+@pytest.mark.parametrize(
+    "document", (None, "README.md", "docs/tutorials/getting-started.md")
+)
+def test_cpu_quickstart_executes_and_verifies_one_run(
+    tmp_path: Path, document: str | None
+) -> None:
+    """Execute the example file and the actual programs printed in the docs."""
     root = tmp_path / "quickstart"
     (root / "examples" / "data").mkdir(parents=True)
-    shutil.copy("examples/cpu_quickstart.py", root / "examples/cpu_quickstart.py")
+    if document is None:
+        shutil.copy("examples/cpu_quickstart.py", root / "examples/cpu_quickstart.py")
+    else:
+        code = "\n\n".join(python_blocks(Path(document).read_text())) + "\n"
+        (root / "examples/cpu_quickstart.py").write_text(code)
     shutil.copy("examples/data/tiny.csv", root / "examples/data/tiny.csv")
     shutil.copy("pyproject.toml", root / "pyproject.toml")
     (root / "viper.toml").write_text(
@@ -53,6 +70,7 @@ def test_cpu_quickstart_executes_and_verifies_one_run(tmp_path: Path) -> None:
         check=False,
         capture_output=True,
         text=True,
+        timeout=120,
     )
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
@@ -83,3 +101,101 @@ def test_cpu_quickstart_executes_and_verifies_one_run(tmp_path: Path) -> None:
         result_path.parent / "artifacts/train/resume_state/resume_state.pt"
     )
     assert checkpoint.optimizer_state["loss"] == measurements[-1]["value"]
+
+
+def test_documented_config_stage_writes_the_selected_rows(tmp_path: Path) -> None:
+    """Run the printed stage with two configs and inspect its actual output."""
+    namespace = {}
+    exec(
+        python_blocks(Path("docs/reference/configuration.md").read_text())[0], namespace
+    )
+    source = tmp_path / "source.csv"
+    source.write_text("x,y\n1,2\n2,4\n3,6\n")
+    destination = tmp_path / "limited.csv"
+    for count in (1, 2):
+        namespace["limit_rows"](
+            Context(
+                run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                attempt_id=1,
+                stage_id="build",
+                config=namespace["RowLimit"](rows=count),
+                inputs={"dataset": source},
+                outputs={"dataset": destination},
+                metrics={},
+                numpy_generators={},
+            )
+        )
+        assert (
+            destination.read_text().splitlines() == ["x,y", "1,2", "2,4"][: count + 1]
+        )
+    with pytest.raises(ValueError):
+        namespace["RowLimit"](rows=0)
+
+
+def test_documented_http_request_identifies_the_example_file() -> None:
+    """Validate the printed request and loader against the committed CSV bytes."""
+    namespace = {}
+    exec(python_blocks(Path("docs/how-to/inputs.md").read_text())[2], namespace)
+    request = namespace["fetch_data"].spec.inputs["dataset"]
+    source = Path("examples/data/tiny.csv")
+    assert (
+        request.expected_body_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
+    )
+    assert request.expected_body_bytes == source.stat().st_size
+    assert namespace["load_rows"](source) == [(1.0, 2.0), (2.0, 4.0), (3.0, 6.0)]
+
+
+def test_documented_checkpoint_round_trip(capsys: pytest.CaptureFixture[str]) -> None:
+    """Execute the complete checkpoint example as printed in the recovery guide."""
+    blocks = python_blocks(Path("docs/how-to/retry-restore-compare.md").read_text())
+    exec(blocks[-1], {})
+    assert "Restored model and next batch match." in capsys.readouterr().out
+
+
+def test_documented_evaluation_writes_predictions_and_computes_rmse(
+    tmp_path: Path,
+) -> None:
+    """Execute the printed evaluation and recompute its metric from the output."""
+    namespace = {}
+    for block in python_blocks(Path("README.md").read_text())[:2]:
+        exec(block, namespace)
+    blocks = python_blocks(Path("docs/how-to/stages.md").read_text())
+    exec(blocks[0], namespace)
+    # Constructor inputs stand in for the earlier run; this check executes evaluation.
+    reference = ResolvedRunRef(
+        sha256="a" * 64,
+        bytes=1,
+        stored_at=LocalFileRef(commit="b" * 64, path="runs/data/resolved.yaml"),
+    )
+    for name in ("test_data", "test_split"):
+        namespace[name] = run_artifact(
+            reference,
+            StageArtifactRef(stage_id="build", artifact_name=name),
+            path=f"inputs/{name}.json",
+            data_role="eval",
+        )
+    exec(blocks[2], namespace)
+    model = tmp_path / "model.json"
+    data = tmp_path / "test.csv"
+    split = tmp_path / "split.json"
+    predictions = tmp_path / "predictions.json"
+    model.write_text('{"weight": 2.0}')
+    data.write_text("x,y\n1,3\n2,4\n3,7\n")
+    split.write_text("[0, 2]")
+    namespace["predict"](
+        Context(
+            run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            attempt_id=1,
+            stage_id="eval",
+            config=namespace["EvalConfig"](),
+            inputs={"model": model, "test": data, "holdout": split},
+            outputs={"predictions": predictions},
+            metrics={},
+            numpy_generators={},
+        )
+    )
+    assert json.loads(predictions.read_text()) == [[2.0, 3.0], [6.0, 7.0]]
+    metric_context = MetricContext(
+        config=namespace["MetricConfig"](), artifacts={"predictions": predictions}
+    )
+    assert namespace["rmse"].implementation(metric_context) == 1.0

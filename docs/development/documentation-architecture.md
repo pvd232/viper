@@ -23,8 +23,13 @@ interfaces in release notes or clearly marked archived documents.
 
 [`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py) owns the complete
 introductory workflow. Public excerpts use the same imports, names, and calls.
-Mark abbreviated examples and identify any values the reader must supply.
-Parsing checks syntax. Also validate constructor
+Include complete function bodies and constructor arguments. Define values before
+use, or identify the preceding example that creates them. Keep all setup required
+to execute a tutorial on that page. Reference pages can explain fields in prose
+and link to a complete example.
+
+Execute the code printed in tutorials and the README. A working source file alone
+leaves omissions in its documentation undetected. Also validate constructor
 arguments, identifiers, CLI commands, and required setup against the package.
 
 The primary Python workflow is `plan() -> execution.run()`. The batch guide
@@ -41,5 +46,6 @@ python -m pytest tests/test_readme_workflow.py -q
 
 The documentation tests check local links and anchors, navigation, Python
 syntax, public imports, API operations, CLI commands, and release references.
-The quickstart test executes the example in a temporary Git repository and
-checks its terminal status and model output.
+The quickstart tests assemble the README and tutorial's Python blocks in order
+and execute each program in a temporary Git repository. They check terminal
+status, model output, every recorded measurement, and the saved checkpoint.
