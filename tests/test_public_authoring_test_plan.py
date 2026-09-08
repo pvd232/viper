@@ -84,3 +84,23 @@ def test_plan_documents_activation_without_running_dormant_tests() -> None:
     assert "Move its planned file" in readme
     assert "confirm the relevant tests fail" in readme
     assert "temporary `xfail`" in readme
+
+
+def test_first_pair_block_has_an_executable_boundary() -> None:
+    """Make PAC-01 activatable without discovering scope or gates mid-block."""
+    plan = json.loads(PLAN_PATH.read_text())
+    first = plan["blocks"][0]
+    assert first["pair_block_id"] == "P0-PAC-01"
+    assert first["activation"] == {
+        "tier": "contract",
+        "domain": "domain_protocol",
+    }
+    assert first["planned_destination"] in first["allowed_paths"]
+    assert "tests/conftest.py" in first["allowed_paths"]
+    assert first["focused_gate"][:4] == [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+    ]
+    assert first["planned_destination"] in first["focused_gate"]

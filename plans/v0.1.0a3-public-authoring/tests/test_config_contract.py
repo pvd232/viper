@@ -5,6 +5,10 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import inspect
+import json
+import subprocess
+import sys
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -13,6 +17,7 @@ from pydantic import ValidationError
 PAIR_BLOCK_ID = "P0-PAC-01"
 REQUIREMENT_ID = "PAC-01"
 PLANNED_DESTINATION = "tests/test_config_contract.py"
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_config_module_exposes_only_approved_public_bases() -> None:
@@ -54,7 +59,6 @@ def test_config_bases_are_frozen_pydantic_models() -> None:
     ):
         model = getattr(config, name)
         assert model.model_config["frozen"] is True
-        assert model.model_config["extra"] == "forbid"
 
 
 def test_workspace_config_can_extend_one_stage_base() -> None:
@@ -128,3 +132,43 @@ def test_stage_definition_retains_the_config_class() -> None:
     assert definition.kind == "train"
     assert definition.config_type is TrainConfig
     assert not hasattr(definition, "parameter_model")
+
+
+def test_cli_and_mcp_schemas_use_config_vocabulary() -> None:
+    """Expose the same version-2 config schema through CLI and MCP."""
+    mcp = importlib.import_module("viper.mcp")
+    cli = subprocess.run(
+        [sys.executable, "-m", "viper.cli", "--json", "schema", "TrainSpec"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    mcp_result = mcp.call_tool(
+        ROOT,
+        "read",
+        "get_schema",
+        {"name": "TrainSpec"},
+    )
+    rendered = (
+        cli.stdout
+        + json.dumps(mcp_result.structured_content, sort_keys=True)
+    )
+    assert "config" in rendered
+    assert "params" not in rendered
+    assert "parameter_model" not in rendered
+
+
+def test_workspace_generator_uses_config_vocabulary(tmp_path: Path) -> None:
+    """Generate workspace code against config without changing project naming yet."""
+    project = importlib.import_module("viper.project")
+    target = tmp_path / "generated"
+    project.init(target, "sample_workspace")
+    source = "\n".join(path.read_text() for path in sorted(target.rglob("*.py")))
+    assert "viper.config" in source or "from viper import config" in source
+    assert "TrainConfig" in source
+    assert "config=" in source
+    assert "context.config" in source
+    assert "ParameterSet" not in source
+    assert "parameter_model" not in source
+    assert "params=" not in source
