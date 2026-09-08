@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
+from typing import Generic, TypeVar
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
@@ -20,6 +21,7 @@ import viper.stages as stages
 PAIR_BLOCK_ID = "P2-PAC-04"
 REQUIREMENT_ID = "PAC-04"
 PLANNED_DESTINATION = "tests/test_diagnostic_stage.py"
+OutputT = TypeVar("OutputT")
 
 
 def test_diagnostic_has_one_public_identifier() -> None:
@@ -71,11 +73,11 @@ def test_diagnostic_is_excluded_from_estimator_and_benchmark_selection() -> None
 def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
     """Reject downstream computation from a terminal diagnostic output."""
 
-    class DiagnosticOutputs(outputs.StageOutputs[outputs.OutputDraft]):
-        report: outputs.OutputDraft
+    class DiagnosticOutputs(outputs.StageOutputs[OutputT], Generic[OutputT]):
+        report: OutputT
 
-    class BuildOutputs(outputs.StageOutputs[outputs.OutputDraft]):
-        result: outputs.OutputDraft
+    class BuildOutputs(outputs.StageOutputs[OutputT], Generic[OutputT]):
+        result: OutputT
 
     class DiagnosticConfig(config.DiagnosticConfig):
         pass
@@ -100,7 +102,7 @@ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
         inputs={
             "model": authoring.input("model.json", data_role="training"),
         },
-        outputs=DiagnosticOutputs(
+        outputs=DiagnosticOutputs[outputs.OutputDraft](
             report=outputs.output(
                 path="report.json",
                 loader=load_bytes,
@@ -117,7 +119,7 @@ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
             consume_report,
             config=BuildConfig(),
             inputs={"report": diagnostic_stage.outputs.report},
-            outputs=BuildOutputs(
+            outputs=BuildOutputs[outputs.OutputDraft](
                 result=outputs.output(
                     path="result.json",
                     loader=load_bytes,
