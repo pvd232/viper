@@ -14,7 +14,7 @@ from viper.authoring import StageDraftOutputRef, download, stage
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 from viper.ids import OutputName
 from viper.outputs import EvalOutputs, OutputDraft, StageOutputs, TrainOutputs, output
-from viper.stages import DownloadSpec, ResolvedDownloadSpec
+from viper.stages import BaseSpec, DownloadSpec, ResolvedDownloadSpec
 
 PAIR_BLOCK_ID = "P1-PAC-02"
 REQUIREMENT_ID = "PAC-02"
@@ -130,6 +130,8 @@ def test_download_authoring_accepts_outputs_not_artifacts() -> None:
 
 def test_download_spec_declares_outputs_before_execution() -> None:
     """Keep download promises separate from completed artifacts."""
+    assert "outputs" in BaseSpec.model_fields
+    assert "artifacts" not in BaseSpec.model_fields
     assert "outputs" in DownloadSpec.model_fields
     assert "artifacts" not in DownloadSpec.model_fields
     assert "artifacts" in ResolvedDownloadSpec.model_fields
