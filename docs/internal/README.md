@@ -9,6 +9,7 @@ tutorials.
 | Document | Purpose |
 | --- | --- |
 | [0.1.0a3 core release contract](../development/v0.1.0a3-core-release.md) | Defines the cleanup boundary, release gates, and completion evidence for the next candidate. |
+| [0.1.0a3 public authoring contract](../development/v0.1.0a3-public-authoring-contract.md) | Defines the final config, output, diagnostic-stage, workspace, and release-validation migration. |
 | [Documentation architecture](../development/documentation-architecture.md) | Keeps user learning, reference, and internal engineering routes distinct. |
 
 ## Maintainer guides

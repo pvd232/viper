@@ -1,0 +1,289 @@
+{
+  "schema_version": 2,
+  "checklist_id": "viper-v0.1.0a3-public-authoring",
+  "project": "VIPER",
+  "revision": "working-tree",
+  "contracts": [
+    {
+      "contract_id": "public-authoring",
+      "path": "docs/development/v0.1.0a3-public-authoring-contract.md",
+      "revision": "working-tree",
+      "sha256": "9970a0f76ff3ac1095cfb3714003db6a7657b56ec35c6212fcf2e6c0610ed5a4",
+      "requirement_ids": [
+        "PAC-01",
+        "PAC-02",
+        "PAC-03",
+        "PAC-04",
+        "PAC-05",
+        "PAC-06",
+        "PAC-07",
+        "PAC-08",
+        "PAC-09"
+      ],
+      "state": "planned"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement_id": "PAC-01",
+      "contract_id": "public-authoring",
+      "phase": 0,
+      "order": 0,
+      "depends_on": [],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.config.only plus focused config and protocol tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-02",
+      "contract_id": "public-authoring",
+      "phase": 1,
+      "order": 0,
+      "depends_on": [
+        "PAC-01"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.output.lifecycle and authoring.output.required"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-03",
+      "contract_id": "public-authoring",
+      "phase": 1,
+      "order": 1,
+      "depends_on": [
+        "PAC-02"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.category.absent plus path, pointer, promotion, reuse, and restoration tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-04",
+      "contract_id": "public-authoring",
+      "phase": 2,
+      "order": 0,
+      "depends_on": [
+        "PAC-03"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.diagnostic.terminal plus schema, execution, reuse, and verifier tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-05",
+      "contract_id": "public-authoring",
+      "phase": 2,
+      "order": 1,
+      "depends_on": [
+        "PAC-04"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.workspace.vocabulary plus repository, HTTP, storage, and generated-workspace tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-06",
+      "contract_id": "public-authoring",
+      "phase": 2,
+      "order": 2,
+      "depends_on": [
+        "PAC-05"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.dispatch.exhaustive plus complete schema and protocol tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-07",
+      "contract_id": "public-authoring",
+      "phase": 3,
+      "order": 0,
+      "depends_on": [
+        "PAC-06"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "public inventory, documentation checks, generated-workspace acceptance, and CPU quickstart"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-08",
+      "contract_id": "public-authoring",
+      "phase": 3,
+      "order": 1,
+      "depends_on": [
+        "PAC-07"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "external",
+        "target": "authoring.clean.install and authoring.mantra.accepted for the same wheel digest"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-09",
+      "contract_id": "public-authoring",
+      "phase": 4,
+      "order": 0,
+      "depends_on": [
+        "PAC-08"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "external",
+        "target": "authoring.publication.held and explicit user approval"
+      },
+      "completion_evidence": []
+    }
+  ],
+  "pair_blocks": [
+    {
+      "pair_block_id": "P0-PAC-01",
+      "contract_id": "public-authoring",
+      "section": "Phase 0: Contract baseline",
+      "requirement_ids": [
+        "PAC-01"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.config.only plus focused config and protocol tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P1-PAC-02",
+      "contract_id": "public-authoring",
+      "section": "Phase 1: Output lifecycle",
+      "requirement_ids": [
+        "PAC-02"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.output.lifecycle and authoring.output.required"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P1-PAC-03",
+      "contract_id": "public-authoring",
+      "section": "Phase 1: Output lifecycle",
+      "requirement_ids": [
+        "PAC-03"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.category.absent plus path, pointer, promotion, reuse, and restoration tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P2-PAC-04",
+      "contract_id": "public-authoring",
+      "section": "Phase 2: Stage and terminology completion",
+      "requirement_ids": [
+        "PAC-04"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.diagnostic.terminal plus schema, execution, reuse, and verifier tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P2-PAC-05",
+      "contract_id": "public-authoring",
+      "section": "Phase 2: Stage and terminology completion",
+      "requirement_ids": [
+        "PAC-05"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.workspace.vocabulary plus repository, HTTP, storage, and generated-workspace tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P2-PAC-06",
+      "contract_id": "public-authoring",
+      "section": "Phase 2: Stage and terminology completion",
+      "requirement_ids": [
+        "PAC-06"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.dispatch.exhaustive plus complete schema and protocol tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P3-PAC-07",
+      "contract_id": "public-authoring",
+      "section": "Phase 3: Public release candidate",
+      "requirement_ids": [
+        "PAC-07"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "public inventory, documentation checks, generated-workspace acceptance, and CPU quickstart"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P3-PAC-08",
+      "contract_id": "public-authoring",
+      "section": "Phase 3: Public release candidate",
+      "requirement_ids": [
+        "PAC-08"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "external",
+        "target": "authoring.clean.install and authoring.mantra.accepted for the same wheel digest"
+      },
+      "completion_evidence": []
+    },
+    {
+      "pair_block_id": "P4-PAC-09",
+      "contract_id": "public-authoring",
+      "section": "Phase 4: Publication hold",
+      "requirement_ids": [
+        "PAC-09"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "external",
+        "target": "authoring.publication.held and explicit user approval"
+      },
+      "completion_evidence": []
+    }
+  ]
+}
