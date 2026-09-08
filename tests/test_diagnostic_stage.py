@@ -63,7 +63,7 @@ def test_diagnostic_spec_has_no_optimization_objective() -> None:
 
 def test_diagnostic_is_excluded_from_estimator_and_benchmark_selection() -> None:
     """Prevent a terminal report stage from becoming a selected model result."""
-    run_source = inspect.getsource(runs.RunSpec.validate_common_invariants)
+    run_source = inspect.getsource(runs.RunSpec)
     benchmark_schema = benchmark.BenchmarkSpec.model_json_schema()
     assert "model" in run_source
     assert "diagnostic" not in str(benchmark_schema)
@@ -110,7 +110,7 @@ def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
         authoring.stage(
             consume_report,
             config=BuildConfig(),
-            inputs={"report": diagnostic_stage.outputs.report},
+            inputs={"report": diagnostic_stage.outputs["report"]},
             outputs=BuildOutputs[outputs.OutputDraft](
                 result=outputs.output(
                     path="result.json", loader=load_bytes, data_role="eval"

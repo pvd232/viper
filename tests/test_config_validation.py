@@ -15,14 +15,11 @@ from viper._config.validation import (
     validate_stage_config,
     verify_config_type_bytes,
 )
-from viper._schema import (
-    PARAMETERS,
-    RESUME_STATE,
-)
-from viper.artifacts import SingleFileArtifactSpec
 from viper.config import ConfigTypeRef
 from viper.inputs import StoredInputRef
+from viper.keys import Train as TrainKeys
 from viper.metrics import MetricObjectiveSpec
+from viper.outputs import OutputSpec
 from viper.references import ArtifactPointerRef
 from viper.serialization import serialize_document
 from viper.stages import (
@@ -47,7 +44,7 @@ def _model_file(tmp_path: Path) -> tuple[Path, bytes]:
 def _reference(raw: bytes) -> ConfigTypeRef:
     """Identify the exact config-type bytes written by the test."""
     return ConfigTypeRef(
-        owner="project",
+        owner="workspace",
         path="project/config/tiny_train.py",
         symbol="TinyTrainConfig",
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -94,7 +91,7 @@ def test_config_type_rejects_implicit_defaults(tmp_path: Path) -> None:
     path = tmp_path / "defaulted.py"
     path.write_bytes(raw)
     reference = ConfigTypeRef(
-        owner="project",
+        owner="workspace",
         path="project/config/defaulted.py",
         symbol="DefaultedTrainConfig",
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -177,7 +174,11 @@ def test_stage_config_validation_runs_in_a_worker(tmp_path: Path) -> None:
                     {
                         "repository": "https://github.com/example/project",
                         "commit": "a" * 40,
-                        "path": "inputs/datasets/example/current.pointer.yaml",
+                        "path": (
+                            ".viper/pointers/"
+                            + "a" * 64
+                            + "/download/dataset.pointer.yaml"
+                        ),
                     }
                 ),
                 path="inputs/datasets/example/data.bin",
@@ -185,16 +186,17 @@ def test_stage_config_validation_runs_in_a_worker(tmp_path: Path) -> None:
             )
         },
         config=config.TrainConfig.model_validate({"epochs": 2, "learning_rate": 0.1}),
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: OutputSpec(
                 path="experiments/example/runs/baseline/"
-                "01JABCDEFGHJKMNPQRSTVWXYZ0/artifacts/models/main/parameters.bin",
+                "01JABCDEFGHJKMNPQRSTVWXYZ0/artifacts/train/model/parameters.bin",
                 loader=artifact_loader_ref("project/loaders/parameters.py"),
                 data_role="training",
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
+            TrainKeys.RESUME_STATE: OutputSpec(
                 path="experiments/example/runs/baseline/"
-                "01JABCDEFGHJKMNPQRSTVWXYZ0/artifacts/models/main/resume.bin",
+                "01JABCDEFGHJKMNPQRSTVWXYZ0/artifacts/train/"
+                "resume_state/resume.bin",
                 loader=artifact_loader_ref("project/loaders/resume.py"),
                 data_role="training",
             ),

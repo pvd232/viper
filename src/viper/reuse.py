@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, Self, cast
+from typing import Annotated, Any, Literal, Protocol, Self, cast
 
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
@@ -18,6 +18,7 @@ from ._schema import (
     RepoRelPath,
     RNGSeed,
 )
+from .experiments import ExperimentSpec
 from .ids import InputName, MetricId, StageId
 from .metrics import MetricSpec
 from .references import (
@@ -28,7 +29,7 @@ from .references import (
     ResolvedStageRef,
     SnapshotFileRef,
 )
-from .runs import ResolvedAttemptRef
+from .runs import ResolvedAttemptRef, ResolvedRun, RunAttempt, RunSpec
 from .runtime import (
     EnvSpec,
     ExecutionContext,
@@ -37,11 +38,81 @@ from .runtime import (
     ResolvedEnv,
 )
 
-if TYPE_CHECKING:
-    from .stages import ParameterizedSpec
-    from .verification.models import VerifiedInput, VerifiedRunResult
-
 StageReuseMode = Literal["never", "verified"]
+
+
+class _ParameterizedStage(Protocol):
+    """Expose the stage fields needed to compute a reuse identity."""
+
+    @property
+    def metric_ids(self) -> tuple[MetricId, ...]: ...
+
+    @property
+    def env(self) -> EnvSpec | None: ...
+
+    @property
+    def inputs(self) -> Mapping[InputName, object]: ...
+
+    def model_dump(self, *, mode: Literal["json"]) -> dict[str, Any]: ...
+
+
+class _VerifiedSnapshot(Protocol):
+    """Expose one verified file reference used by input identity."""
+
+    @property
+    def reference(self) -> SnapshotFileRef: ...
+
+
+class _VerifiedInput(Protocol):
+    """Expose verified input evidence used by reuse-key construction."""
+
+    @property
+    def path(self) -> RepoRelPath: ...
+
+    @property
+    def data_role(self) -> DataRole: ...
+
+    @property
+    def files(self) -> tuple[_VerifiedSnapshot, ...]: ...
+
+
+class _VerifiedPlan(Protocol):
+    """Expose the frozen run and experiment selected for reuse."""
+
+    @property
+    def run(self) -> RunSpec: ...
+
+    @property
+    def experiment(self) -> ExperimentSpec: ...
+
+
+class _ResolvedStage(Protocol):
+    """Expose one resolved stage result used by reuse discovery."""
+
+    @property
+    def spec(self) -> object: ...
+
+    @property
+    def completed_at(self) -> AwareDatetime: ...
+
+
+class _VerifiedRun(Protocol):
+    """Expose terminal evidence needed to discover reusable stages."""
+
+    @property
+    def result(self) -> ResolvedRun: ...
+
+    @property
+    def plan(self) -> _VerifiedPlan: ...
+
+    @property
+    def attempts(self) -> tuple[RunAttempt, ...]: ...
+
+    @property
+    def resolved_stages(self) -> Mapping[StageId, _ResolvedStage]: ...
+
+    @property
+    def inputs(self) -> Mapping[StageId, Mapping[InputName, _VerifiedInput]]: ...
 
 
 class ReuseFileIdentity(ProtocolModel):
@@ -161,21 +232,21 @@ def _canonical_sha256(value: BaseModel | dict[str, object]) -> SHA256:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _normalized_stage(stage: ParameterizedSpec) -> dict[str, object]:
+def _normalized_stage(stage: _ParameterizedStage) -> dict[str, object]:
     """Remove run-specific paths and the permission flag from a stage spec."""
     payload = stage.model_dump(mode="json")
     payload.pop("reuse", None)
-    artifacts = payload["artifacts"]
-    if not isinstance(artifacts, dict):
-        raise ValueError("stage artifacts are invalid")
-    for artifact in artifacts.values():
-        if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str):
-            raise ValueError("stage artifact path is invalid")
-        path = artifact["path"]
+    outputs = payload["outputs"]
+    if not isinstance(outputs, dict):
+        raise ValueError("stage outputs are invalid")
+    for output in outputs.values():
+        if not isinstance(output, dict) or not isinstance(output.get("path"), str):
+            raise ValueError("stage output path is invalid")
+        path = output["path"]
         marker = "/artifacts/"
         if marker not in path:
-            raise ValueError("stage artifact path has no run-relative boundary")
-        artifact["path"] = f"artifacts/{path.split(marker, 1)[1]}"
+            raise ValueError("stage output path has no run-relative boundary")
+        output["path"] = f"artifacts/{path.split(marker, 1)[1]}"
     return payload
 
 
@@ -213,7 +284,7 @@ def input_identity(
 
 def verified_input_identity(
     input_name: InputName,
-    value: VerifiedInput,
+    value: _VerifiedInput,
 ) -> ReuseInputIdentity:
     """Build one reuse identity from input bytes already accepted by verification."""
     files = []
@@ -241,7 +312,7 @@ def verified_input_identity(
 def build_stage_reuse_key(
     *,
     stage_id: StageId,
-    stage: ParameterizedSpec,
+    stage: _ParameterizedStage,
     inputs: Sequence[ReuseInputIdentity],
     seed: RNGSeed,
     env: EnvSpec,
@@ -268,7 +339,7 @@ def stage_reuse_key_sha256(key: StageReuseKey) -> SHA256:
 
 def catalog_reuse_candidates(
     source_run: ResolvedRunRef,
-    verified: VerifiedRunResult,
+    verified: _VerifiedRun,
 ) -> tuple[StageReuseCandidate, ...]:
     """Build catalog candidates from one fully verified successful run."""
     successful_id = verified.result.successful_attempt_id
@@ -293,7 +364,7 @@ def catalog_reuse_candidates(
         completion = getattr(resolved, "completion", None)
         if not isinstance(completion, ExecutedStageCompletion):
             continue
-        stage = cast("ParameterizedSpec", resolved.spec)
+        stage = cast("_ParameterizedStage", resolved.spec)
         source_stage = stage_references.get(stage_id)
         if source_stage is None:
             raise ValueError("verified stage has no successful attempt reference")

@@ -9,6 +9,7 @@ import math
 import os
 import sqlite3
 import tempfile
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Generic, Literal, TypeVar
@@ -816,7 +817,7 @@ class Catalog:
         statement = statements.get(table)
         if statement is None:
             raise ValueError("unknown catalog table")
-        with sqlite3.connect(self.path) as connection:
+        with closing(sqlite3.connect(self.path)) as connection:
             rows = connection.execute(statement).fetchall()
         return tuple(model.model_validate_json(row[0]) for row in rows)
 
@@ -836,7 +837,7 @@ class Catalog:
         statement = statements.get(table)
         if statement is None:
             raise ValueError("unknown catalog digest table")
-        with sqlite3.connect(self.path) as connection:
+        with closing(sqlite3.connect(self.path)) as connection:
             rows = connection.execute(statement).fetchall()
         grouped: dict[str, set[str]] = {}
         for key, digest in rows:
@@ -1072,7 +1073,7 @@ class Catalog:
     def lineage(self, run: ResolvedRunRef) -> RunLineage:
         """Return the stored lineage graph for one immutable run reference."""
         key = _reference_key(run)
-        with sqlite3.connect(self.path) as connection:
+        with closing(sqlite3.connect(self.path)) as connection:
             row = connection.execute(
                 "SELECT lineage_json FROM runs WHERE source_key = ?",
                 (key,),
@@ -1086,7 +1087,7 @@ class Catalog:
         if not self.path.is_file():
             return None
         try:
-            with sqlite3.connect(self.path) as connection:
+            with closing(sqlite3.connect(self.path)) as connection:
                 row = connection.execute(
                     """
                     SELECT payload_json
@@ -1121,7 +1122,7 @@ class KnowledgeCatalog:
 
     def _records(self) -> tuple[CatalogKnowledgeRecord, ...]:
         """Load every typed knowledge row in stable reference order."""
-        with sqlite3.connect(self.path) as connection:
+        with closing(sqlite3.connect(self.path)) as connection:
             rows = connection.execute(
                 "SELECT payload_json FROM knowledge_records ORDER BY reference_key"
             ).fetchall()
@@ -1183,7 +1184,7 @@ class KnowledgeCatalog:
 
     def primitives(self, query: PrimitiveQuery = PrimitiveQuery()) -> PrimitivePage:
         """Return ontology primitives matching every exact filter."""
-        with sqlite3.connect(self.path) as connection:
+        with closing(sqlite3.connect(self.path)) as connection:
             rows = connection.execute(
                 "SELECT payload_json FROM knowledge_primitives"
             ).fetchall()

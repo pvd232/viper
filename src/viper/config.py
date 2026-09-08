@@ -5,9 +5,18 @@ import inspect
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    model_validator,
+)
 
 from ._schema import SHA256, ProtocolModel, PythonSourceRelPath, PythonSymbol
+
+JSON_VALUE = TypeAdapter(JsonValue)
 
 
 class Config(BaseModel):
@@ -15,11 +24,15 @@ class Config(BaseModel):
 
     model_config = ConfigDict(extra="allow", frozen=True)
 
-    __pydantic_extra__: dict[str, JsonValue] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
-        init=False,
-        exclude=True,
-    )
     schema_version: Literal[2] = 2
+
+    @model_validator(mode="after")
+    def validate_extra_values(self) -> Self:
+        """Keep workspace-defined config fields JSON serializable."""
+        if self.model_extra is not None:
+            for name, value in self.model_extra.items():
+                self.model_extra[name] = JSON_VALUE.validate_python(value)
+        return self
 
 
 class BuildConfig(Config):

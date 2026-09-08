@@ -47,7 +47,7 @@ def test_prior_run_input_publishes_verified_pointer(tmp_path) -> None:
         artifact=draft.artifact,
     )
     assert frozen.pointer.stored_at.path == (
-        f"inputs/datasets/toy/dataset_{run.sha256}.pointer.yaml"
+        f".viper/pointers/{run.sha256}/download/dataset.pointer.yaml"
     )
 
 
@@ -58,7 +58,7 @@ def test_prior_run_pointer_uses_the_selected_cloud_destination(tmp_path) -> None
         bytes=10,
         stored_at=ViperCloudFileRef(
             owner="machina",
-            project="source_models",
+            workspace="source_models",
             revision="b" * 64,
             path="experiments/source/runs/base/run/resolved.yaml",
         ),
@@ -69,7 +69,7 @@ def test_prior_run_pointer_uses_the_selected_cloud_destination(tmp_path) -> None
         path="inputs/datasets/toy/current.bin",
         data_role="training",
     )
-    destination = ViperCloudDestination(owner="machina", project="weekend_models")
+    destination = ViperCloudDestination(owner="machina", workspace="weekend_models")
     client = InMemoryViperCloudClient()
 
     frozen = _freeze_input(
@@ -85,7 +85,7 @@ def test_prior_run_pointer_uses_the_selected_cloud_destination(tmp_path) -> None
     assert isinstance(pointer, ResolvedArtifactPointerRef)
     assert isinstance(pointer.stored_at, ViperCloudFileRef)
     assert pointer.stored_at.owner == destination.owner
-    assert pointer.stored_at.project == destination.project
+    assert pointer.stored_at.workspace == destination.workspace
 
 
 def test_cloud_pointer_rejects_a_local_producer(tmp_path) -> None:
@@ -111,7 +111,7 @@ def test_cloud_pointer_rejects_a_local_producer(tmp_path) -> None:
             draft,
             destination=ViperCloudDestination(
                 owner="machina",
-                project="weekend_models",
+                workspace="weekend_models",
             ),
             cloud_client=InMemoryViperCloudClient(),
         )

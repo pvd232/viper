@@ -552,6 +552,8 @@ class CapabilitiesSuccess(SuccessModel):
     operations: tuple[OperationName, ...]
     schemas: tuple[str, ...]
     execution_backends: tuple[str, ...]
+    stage_kinds: tuple[str, ...]
+    authoring_vocabulary: tuple[str, ...]
 
 
 class InitWorkspaceRequest(APIModel):
@@ -1427,10 +1429,12 @@ def get_capabilities(request: CapabilitiesRequest) -> CapabilitiesSuccess:
     """Return installed operations and available execution backends."""
     del request
     return CapabilitiesSuccess(
-        protocol_version=1,
+        protocol_version=2,
         operations=OPERATIONS,
         schemas=tuple(sorted(SCHEMA_REGISTRY)),
         execution_backends=("trusted_local",),
+        stage_kinds=("download", "build", "embed", "train", "eval", "diagnostic"),
+        authoring_vocabulary=("config", "outputs", "workspace", "repository"),
     )
 
 

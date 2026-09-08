@@ -2,7 +2,7 @@
 
 VIPER exposes two Python surfaces:
 
-- project authors use domain modules to declare and execute experiments;
+- workspace authors use domain modules to declare and execute experiments;
 - tools and agents use typed request and result models from `viper.api`.
 
 Import each public object from the module that defines it.
@@ -54,7 +54,7 @@ restored = execution.restore(repository_root, run_reference)
 | `input()` | `ExternalInputDraft` | Select one repository file as a stage input. |
 | `download()` | `StageDraft` | Declare a runner-owned HTTP retrieval stage. |
 | `run_artifact()` | `RunArtifactDraft` | Select an artifact from a verified prior run. |
-| `stage()` | `StageDraft` | Connect a decorated function to parameters, inputs, artifacts, metrics, and an objective. |
+| `stage()` | `StageDraft` | Connect a decorated function to config, inputs, outputs, metrics, and an objective. |
 | `factor()` | `FactorDraft` | Declare the permitted levels of one experimental factor. |
 | `variant()` | `VariantDraft` | Declare one reusable stage graph and estimator artifact. |
 | `replicate()` | `ReplicateDraft` | Declare one reproducible seed. |
@@ -64,31 +64,31 @@ restored = execution.restore(repository_root, run_reference)
 
 ## Stage decorators and context
 
-`build`, `embed`, `train`, and `eval` bind a top-level project function to one
-stage kind and parameter class:
+`build`, `embed`, `train`, `eval`, and `diagnostic` bind a top-level workspace
+function to one stage kind and config class:
 
 ```python
-from viper import params
+from viper.config import TrainConfig
 from viper.stages import Context, train
 
 
-class TrainingParams(params.Train):
+class TrainingConfig(TrainConfig):
     epochs: int = 20
 
 
-@train(params=TrainingParams)
-def fit(context: Context[TrainingParams]) -> None:
+@train(config=TrainingConfig)
+def fit(context: Context[TrainingConfig]) -> None:
     dataset = context.inputs["dataset"]
-    model = context.artifacts["model"]
+    model = context.outputs["model"]
 ```
 
-`Context` provides validated parameters, materialized input paths, writable
-artifact paths, metric handles, run identity, and named NumPy generators.
+`Context` provides validated config, materialized input paths, writable output
+paths, metric handles, run identity, and named NumPy generators.
 
 ## Metrics and benchmarks
 
-`metric()` declares a `stateful` or `stateless` metric. `measure()` configures
-its parameter values and optional recomputation dependencies. `min()` and
+`metric()` declares a `stateful` or `stateless` metric. `measure()` supplies
+its config values and optional recomputation dependencies. `min()` and
 `max()` select an objective direction. `benchmark()`, `at_least()`, and
 `at_most()` declare independent benchmark confirmation and criteria.
 
@@ -96,10 +96,10 @@ See [Define metrics and benchmarks](../how-to/metrics-and-benchmarks.md).
 
 ## Inputs, artifacts, and HTTP
 
-`viper.artifacts.artifact()` declares an output path, loader, role, and file or
+`viper.outputs.output()` declares an output path, loader, role, and file or
 bundle kind. `viper.authoring.input()` selects local bytes.
 `viper.authoring.download()` combines `HttpRequestSpec`,
-`HttpRetrievalPolicy`, artifacts, and an optional project HTTP implementation.
+`HttpRetrievalPolicy`, outputs, and an optional workspace HTTP implementation.
 
 See [Load local and HTTP inputs](../how-to/inputs.md).
 
@@ -117,11 +117,12 @@ knowledge records.
 | --- | --- |
 | `viper.api` | Typed operations, dispatch, discovery, and JSON encoding |
 | `viper.authoring` | Experiment, variant, stage, input, and immutable plan construction |
-| `viper.params` | Built-in extensible parameter categories |
+| `viper.config` | Built-in extensible stage and metric config classes |
+| `viper.outputs` | Typed output declarations and built-in output roles |
 | `viper.stages` | Stage specifications, decorators, contexts, and invocation evidence |
 | `viper.experiments` | Frozen experiments, variants, factors, levels, and replicates |
 | `viper.runs` | Run plans, attempts, and terminal run records |
-| `viper.artifacts` | Artifact declarations, resolved artifacts, loaders, and pointers |
+| `viper.artifacts` | Resolved artifacts, loaders, and pointers |
 | `viper.references` | Hash-bound references to separately stored values |
 | `viper.metrics` | Metric decorators, specifications, measurements, and receipts |
 | `viper.benchmark` | Benchmark specifications, criteria, comparisons, and results |
@@ -166,7 +167,7 @@ the same operations.
 | `verify_pointer` | `VerifyPointerRequest` | `VerifyPointerSuccess` | `verify-pointer` |
 | `get_schema` | `SchemaRequest` | `SchemaSuccess` | `schema` |
 | `get_capabilities` | `CapabilitiesRequest` | `CapabilitiesSuccess` | `capabilities` |
-| `init_project` | `InitProjectRequest` | `InitProjectSuccess` | `init` |
+| `init_workspace` | `InitWorkspaceRequest` | `InitWorkspaceSuccess` | `init` |
 | `catalog_refresh` | `CatalogRefreshRequest` | `CatalogRefreshSuccess` | `catalog-refresh` |
 | `search_runs` | `SearchRunsRequest` | `SearchRunsSuccess` | `search-runs` |
 | `search_artifacts` | `SearchArtifactsRequest` | `SearchArtifactsSuccess` | `search-artifacts` |

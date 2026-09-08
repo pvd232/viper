@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Generic, Literal, Self, TypeVar, cast
 
@@ -46,6 +46,18 @@ class StageOutputs(BaseModel, Generic[OutputT]):
 
     model_config = ConfigDict(extra="allow", frozen=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def validate_output_values(cls, value: Any) -> Any:
+        """Validate extra fields through the concrete generic output type."""
+        if not isinstance(value, Mapping):
+            return value
+        arguments = cls.__pydantic_generic_metadata__.get("args", ())
+        if not arguments or isinstance(arguments[0], TypeVar):
+            return value
+        adapter = TypeAdapter(arguments[0])
+        return {name: adapter.validate_python(output) for name, output in value.items()}
+
     @model_validator(mode="after")
     def validate_output_names(self) -> Self:
         """Require at least one stable Python identifier."""
@@ -86,6 +98,10 @@ class StageOutputs(BaseModel, Generic[OutputT]):
     def __len__(self) -> int:
         """Return the number of declared outputs."""
         return len(self.keys())
+
+    def __contains__(self, name: object) -> bool:
+        """Report whether an output name is declared."""
+        return name in self.keys()
 
 
 class TrainOutputs(StageOutputs[OutputT], Generic[OutputT]):

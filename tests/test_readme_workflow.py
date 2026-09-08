@@ -29,7 +29,7 @@ def test_cpu_quickstart_executes_and_verifies_one_run(tmp_path: Path) -> None:
     shutil.copy("examples/data/tiny.csv", root / "examples/data/tiny.csv")
     shutil.copy("pyproject.toml", root / "pyproject.toml")
     (root / "viper.toml").write_text(
-        "[project]\nschema_version = 1\n",
+        "[workspace]\nschema_version = 2\n",
         encoding="utf-8",
     )
 

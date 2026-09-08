@@ -28,10 +28,11 @@ import viper.keys as keys
 import viper.knowledge as knowledge
 import viper.mcp as mcp
 import viper.metrics as metrics
+import viper.outputs as outputs
 import viper.preflight as preflight
-import viper.project as project
 import viper.randomness as randomness
 import viper.references as references
+import viper.repository as repository
 import viper.restoration as restoration
 import viper.resume as resume
 import viper.reuse as reuse
@@ -92,8 +93,9 @@ PUBLIC_MODULES_BY_NAME = {
         knowledge,
         mcp,
         metrics,
+        outputs,
         preflight,
-        project,
+        repository,
         randomness,
         references,
         restoration,

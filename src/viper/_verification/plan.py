@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import inspect
 from collections.abc import Mapping
 from pathlib import Path
 
 import yaml
 from pydantic import TypeAdapter
 
-from .. import config, keys
+from .. import keys
 from .._config.validation import (
     ConfigValidationError,
     verify_config_type_bytes,
 )
 from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
 from ..benchmark import BenchmarkSpec
+from ..config import Config
 from ..experiments import ExperimentSpec, VariantSpec
 from ..ids import InputName, StageId
 from ..inputs import (
@@ -511,7 +513,9 @@ def verify_config_type_references(
             continue
         reference = stage.config_type
         try:
-            installed_path = Path(config.__file__).resolve().parent / reference.path
+            installed_path = (
+                Path(inspect.getfile(Config)).resolve().parent / reference.path
+            )
             raw = (
                 retrieve(_source_file(run, reference.path))
                 if reference.owner == "workspace"

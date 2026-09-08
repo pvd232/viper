@@ -16,7 +16,6 @@ from typing import Any, Generic, Literal, TypeVar, cast
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from . import config
 from ._schema import (
     SHA256,
     DataRole,
@@ -33,7 +32,7 @@ MetricKind = Literal["training", "evaluation", "diagnostic"]
 
 
 MetricMode = Literal["stateful", "stateless"]
-MetricConfigT = TypeVar("MetricConfigT", bound=config.MetricConfig)
+MetricConfigT = TypeVar("MetricConfigT", bound=MetricConfig)
 
 
 class FloatComparator(ProtocolModel):
@@ -76,7 +75,7 @@ class MetricSpec(ProtocolModel):
     metric_id: MetricId
     implementation: MetricImplementationRef
     config_type: ConfigTypeRef
-    config: config.MetricConfig
+    config: MetricConfig
     mode: MetricMode
     dependencies: tuple[MetricDependency, ...] = ()
     comparator: FloatComparator | None = None
@@ -120,7 +119,7 @@ class MetricExecutionReceipt(ProtocolModel):
     purpose: Literal["measurement", "verification"]
     implementation: MetricImplementationRef
     config_type: ConfigTypeRef
-    config: config.MetricConfig
+    config: MetricConfig
     dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
     startup: ProcessStartupReceipt
     execution_context: ExecutionContext

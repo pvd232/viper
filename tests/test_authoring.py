@@ -12,10 +12,6 @@ from pydantic import TypeAdapter, ValidationError
 
 import viper.config as config
 from viper import _subprocess as subprocess
-from viper._schema import (
-    PARAMETERS,
-    RESUME_STATE,
-)
 from viper.artifacts import (
     ArtifactLoaderRef,
     BundleArtifactDraft,
@@ -59,6 +55,7 @@ from viper.http import (
     ObservedHttpResponse,
     http,
 )
+from viper.keys import Train as TrainKeys
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
@@ -68,6 +65,7 @@ from viper.metrics import (
     metric,
     min,
 )
+from viper.outputs import output
 from viper.preflight import preflight_plan
 from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 from viper.runs import RunSpec
@@ -187,27 +185,33 @@ def training_spec(
                         "kind": "git",
                         "repository": "https://github.com/example/viper-project",
                         "commit": commit,
-                        "path": "inputs/datasets/replogle/current.pointer.yaml",
+                        "path": (
+                            ".viper/pointers/"
+                            + "a" * 64
+                            + "/download/training_dataset.pointer.yaml"
+                        ),
                     },
                     "path": "inputs/datasets/replogle/dataset.h5ad",
                     "data_role": "training",
                 }
             },
-            "config": {"schema_version": 1, "epochs": 2},
-            "artifacts": {
-                PARAMETERS: {
+            "config": {"schema_version": 2, "epochs": 2},
+            "outputs": {
+                TrainKeys.MODEL: {
                     "kind": "file",
                     "path": (
-                        f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors"
+                        f"{RUN_ROOT}/artifacts/train/model/parameters.safetensors"
                     ),
                     "loader": loader_ref(
                         "project_code/loaders/parameters.py"
                     ).model_dump(mode="json"),
                     "data_role": "training",
                 },
-                RESUME_STATE: {
+                TrainKeys.RESUME_STATE: {
                     "kind": "file",
-                    "path": (f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt"),
+                    "path": (
+                        f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.pt"
+                    ),
                     "loader": loader_ref(
                         "project_code/loaders/resume_state.py"
                     ).model_dump(mode="json"),
@@ -270,7 +274,7 @@ class RunPlanAuthoringTests(unittest.TestCase):
             _git(root, "commit", "--quiet", "-m", "source")
             source_commit = _git(root, "rev-parse", "HEAD")
             config_type = ConfigTypeRef(
-                owner="project",
+                owner="workspace",
                 path="project/config/train.py",
                 symbol="StrandTrainConfig",
                 sha256=hashlib.sha256(parameter_raw).hexdigest(),
@@ -440,10 +444,10 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
 
     @train(config=config.TrainConfig)
     def fit(context: Context[config.TrainConfig]) -> None:
-        context.artifacts["model"].write_bytes(b"model")
+        context.outputs["model"].write_bytes(b"model")
 
-    model = artifact(
-        path="artifacts/model.bin",
+    model = output(
+        path="model.bin",
         loader=lambda path: path.read_bytes(),
         data_role="training",
     )
@@ -456,14 +460,21 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         fit,
         config=config.TrainConfig(),
         inputs={"dataset": dataset},
-        artifacts={"model": model},
+        outputs={  # pyright: ignore[reportArgumentType]
+            "model": model,
+            "resume_state": output(
+                path="resume_state.bin",
+                loader=lambda path: path.read_bytes(),
+                data_role="training",
+            ),
+        },
         metrics=(loss,),
         objective=min(loss),
     )
 
     assert isinstance(draft.spec, TrainSpecDraft)
     assert draft.spec.implementation is fit
-    assert draft.artifacts["model"].producer is draft
+    assert draft.outputs["model"].producer is draft
 
 
 def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
@@ -475,7 +486,7 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
 
     @train(config=config.TrainConfig)
     def fit(context: Context[config.TrainConfig]) -> None:
-        context.artifacts["model"].write_bytes(b"model")
+        context.outputs["model"].write_bytes(b"model")
 
     loss = measure(training_loss, config=config.MetricConfig())
     train_stage = stage(
@@ -487,12 +498,17 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
                 data_role="training",
             )
         },
-        artifacts={
-            "model": artifact(
-                path="artifacts/model.bin",
+        outputs={  # pyright: ignore[reportArgumentType]
+            "model": output(
+                path="model.bin",
                 loader=lambda path: path.read_bytes(),
                 data_role="training",
-            )
+            ),
+            "resume_state": output(
+                path="resume_state.bin",
+                loader=lambda path: path.read_bytes(),
+                data_role="training",
+            ),
         },
         metrics=(loss,),
         objective=min(loss),
@@ -501,7 +517,7 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
         "baseline": variant(
             levels={"rank": "full"},
             stages={"train": train_stage},
-            estimator=train_stage.artifacts["model"],
+            estimator=train_stage.outputs["model"],
         )
     }
     authored = experiment(
@@ -554,7 +570,7 @@ def test_plan_rejects_every_nested_mutator() -> None:
 
 def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
     """Compile one plan whose callables live inside a temporary project."""
-    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
     _git(tmp_path, "init", "--quiet")
     _git(tmp_path, "config", "user.email", "viper@example.com")
     _git(tmp_path, "config", "user.name", "VIPER Test")
@@ -580,7 +596,7 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
         "    return 1.0\n\n"
         "@train(config=config.TrainConfig)\n"
         "def fit(context: Context[config.TrainConfig]):\n"
-        "    context.artifacts['model'].write_bytes(b'model')\n\n"
+        "    context.outputs['model'].write_bytes(b'model')\n\n"
         "def load(path):\n"
         "    return path.read_bytes()\n"
     )
@@ -601,14 +617,14 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
                 data_role="training",
             )
         },
-        artifacts={
-            "model": artifact(
-                path="artifacts/models/model/model.bin",
+        outputs={  # pyright: ignore[reportArgumentType]
+            "model": output(
+                path="model.bin",
                 loader=module.load,
                 data_role="training",
             ),
-            "state": artifact(
-                path="artifacts/models/state/state.bin",
+            "resume_state": output(
+                path="resume_state.bin",
                 loader=module.load,
                 data_role="training",
             ),
@@ -623,7 +639,7 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
             "baseline": variant(
                 levels={"rank": "full"},
                 stages={"train": train_stage},
-                estimator=train_stage.artifacts["model"],
+                estimator=train_stage.outputs["model"],
             )
         },
         replicates={"replicate_01": replicate(seed=42)},

@@ -26,11 +26,7 @@ from tests.fixtures import (
 )
 from viper import _subprocess as subprocess
 from viper import config
-from viper._schema import (
-    PARAMETERS,
-    RESUME_STATE,
-    NonEmptyStr,
-)
+from viper._schema import NonEmptyStr
 from viper._verification.attempt import verify_attempt_files
 from viper._verification.plan import (
     verify_config_type_references,
@@ -49,7 +45,6 @@ from viper.artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
     ResolvedSingleFileArtifact,
-    SingleFileArtifactSpec,
     StageArtifactRef,
 )
 from viper.benchmark import (
@@ -72,7 +67,9 @@ from viper.inputs import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
+from viper.keys import Train as TrainKeys
 from viper.metrics import MetricDependency, MetricObjectiveSpec, MetricSpec
+from viper.outputs import OutputSpec
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -144,6 +141,7 @@ from viper.verification.models import (
 GIT_COMMIT = "a" * 40
 PLAN_COMMIT = "b" * 40
 SNAPSHOT_COMMIT = "c" * 40
+SHA_A = "a" * 64
 REPOSITORY = HttpUrl("https://github.com/example/viper-project")
 HF_REPOSITORY: NonEmptyStr = "example/viper-runs"
 RUN_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -225,10 +223,11 @@ def git_file(path: str, *, commit: str = GIT_COMMIT) -> GitFileRef:
 
 def artifact_pointer(path: str) -> ArtifactPointerRef:
     """Build one canonical promoted-artifact pointer reference."""
+    output_name = Path(path).parent.name
     return ArtifactPointerRef(
         repository=REPOSITORY,
         commit=GIT_COMMIT,
-        path=path,
+        path=f".viper/pointers/{SHA_A}/download/{output_name}.pointer.yaml",
     )
 
 
@@ -386,7 +385,7 @@ def run_spec(stage_specs: list[tuple[str, object]]) -> tuple[RunSpec, dict[str, 
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id="train",
-            artifact_name=PARAMETERS,
+            artifact_name=TrainKeys.MODEL,
         ),
     )
     return run, documents
@@ -425,16 +424,16 @@ def train_spec(*, future_prior: bool = False) -> TrainSpec:
         config=config.TrainConfig.model_validate(
             {"epochs": 10, "batch_size": 64, "learning_rate": 0.001}
         ),
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: OutputSpec(
                 kind="file",
-                path=(f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors"),
+                path=(f"{RUN_ROOT}/artifacts/train/model/parameters.safetensors"),
                 loader=loader_ref("parameters"),
                 data_role="training",
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
+            TrainKeys.RESUME_STATE: OutputSpec(
                 kind="file",
-                path=f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt",
+                path=f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.pt",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -460,10 +459,10 @@ def build_spec() -> BuildSpec:
             )
         },
         config=config.BuildConfig(),
-        artifacts={
-            "prior": SingleFileArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            "prior": OutputSpec(
                 kind="file",
-                path=f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt",
+                path=f"{RUN_ROOT}/artifacts/build/prior/prior.pt",
                 loader=loader_ref("prior"),
                 data_role="training",
             )
@@ -546,7 +545,7 @@ def invocation_evidence(
         config_type=stage.config_type,
         config_digest=document_digest(stage.config),
         inputs=inputs,
-        artifacts={name: artifact.path for name, artifact in stage.artifacts.items()},
+        outputs={name: output.path for name, output in stage.outputs.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
             sorted(run.reproducibility.numpy_randomness.generators)
@@ -587,15 +586,18 @@ class FileVerificationTests(unittest.TestCase):
             b"    return path.read_bytes()\n"
         )
         base = train_spec()
-        artifacts = dict(base.artifacts)
-        artifacts[PARAMETERS] = artifacts[PARAMETERS].model_copy(
+        outputs = dict(base.outputs)
+        outputs[TrainKeys.MODEL] = outputs[TrainKeys.MODEL].model_copy(
             update={"loader": loader_ref("parameters", loader_raw)}
         )
         spec = base.model_copy(
-            update={"metric_ids": ("training_loss",), "artifacts": artifacts}
+            update={
+                "metric_ids": ("training_loss",),
+                "outputs": type(base.outputs).model_validate(outputs),
+            }
         )
         run, _ = run_spec([("train", spec)])
-        declaration = spec.artifacts[PARAMETERS]
+        declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
             file=SnapshotFileRef(
@@ -619,7 +621,7 @@ class FileVerificationTests(unittest.TestCase):
         validation = load_verified_artifact(
             run,
             declaration,
-            PARAMETERS,
+            TrainKeys.MODEL,
             verified,
             policy=POLICY,
             materialization_path=consumer_path,
@@ -632,7 +634,7 @@ class FileVerificationTests(unittest.TestCase):
         """Reject loader execution when the source repository is not trusted."""
         spec = train_spec()
         run, _ = run_spec([("train", spec)])
-        declaration = spec.artifacts[PARAMETERS]
+        declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
             file=SnapshotFileRef(
@@ -656,7 +658,7 @@ class FileVerificationTests(unittest.TestCase):
             load_verified_artifact(
                 run,
                 declaration,
-                PARAMETERS,
+                TrainKeys.MODEL,
                 verified,
                 policy=VerificationPolicy(trusted_source_repositories=frozenset()),
                 fetcher=lambda _: b"def load(path): return path.read_bytes()\n",
@@ -666,7 +668,7 @@ class FileVerificationTests(unittest.TestCase):
         """Reject loader bytes whose SHA-256 differs at the same byte count."""
         spec = train_spec()
         run, _ = run_spec([("train", spec)])
-        declaration = spec.artifacts[PARAMETERS]
+        declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
             file=SnapshotFileRef(
@@ -687,7 +689,7 @@ class FileVerificationTests(unittest.TestCase):
             load_verified_artifact(
                 run,
                 declaration,
-                PARAMETERS,
+                TrainKeys.MODEL,
                 verified,
                 policy=POLICY,
                 fetcher=lambda _: bytes(tampered),
@@ -697,13 +699,15 @@ class FileVerificationTests(unittest.TestCase):
         """Reject a verified representation that its frozen loader cannot load."""
         loader_raw = b"def load(path):\n    raise ValueError('broken')\n"
         base = train_spec()
-        artifacts = dict(base.artifacts)
-        artifacts[PARAMETERS] = artifacts[PARAMETERS].model_copy(
+        outputs = dict(base.outputs)
+        outputs[TrainKeys.MODEL] = outputs[TrainKeys.MODEL].model_copy(
             update={"loader": loader_ref("parameters", loader_raw)}
         )
-        spec = base.model_copy(update={"artifacts": artifacts})
+        spec = base.model_copy(
+            update={"outputs": type(base.outputs).model_validate(outputs)}
+        )
         run, _ = run_spec([("train", spec)])
-        declaration = spec.artifacts[PARAMETERS]
+        declaration = spec.outputs[TrainKeys.MODEL]
         content = b"model parameters"
         resolved = ResolvedSingleFileArtifact(
             file=SnapshotFileRef(
@@ -722,7 +726,7 @@ class FileVerificationTests(unittest.TestCase):
             load_verified_artifact(
                 run,
                 declaration,
-                PARAMETERS,
+                TrainKeys.MODEL,
                 verified,
                 policy=POLICY,
                 fetcher=lambda _: loader_raw,
@@ -732,13 +736,15 @@ class FileVerificationTests(unittest.TestCase):
         """Reject a loadable resume_state value outside the reserved schema."""
         loader_raw = b"def load(path):\n    return {}\n"
         base = train_spec()
-        artifacts = dict(base.artifacts)
-        artifacts[RESUME_STATE] = artifacts[RESUME_STATE].model_copy(
+        outputs = dict(base.outputs)
+        outputs[TrainKeys.RESUME_STATE] = outputs[TrainKeys.RESUME_STATE].model_copy(
             update={"loader": loader_ref("resume_state", loader_raw)}
         )
-        spec = base.model_copy(update={"artifacts": artifacts})
+        spec = base.model_copy(
+            update={"outputs": type(base.outputs).model_validate(outputs)}
+        )
         run, _ = run_spec([("train", spec)])
-        declaration = spec.artifacts[RESUME_STATE]
+        declaration = spec.outputs[TrainKeys.RESUME_STATE]
         content = b"resume state"
         resolved = ResolvedSingleFileArtifact(
             file=SnapshotFileRef(
@@ -760,7 +766,7 @@ class FileVerificationTests(unittest.TestCase):
             load_verified_artifact(
                 run,
                 declaration,
-                RESUME_STATE,
+                TrainKeys.RESUME_STATE,
                 verified,
                 policy=POLICY,
                 fetcher=lambda _: loader_raw,
@@ -770,7 +776,7 @@ class FileVerificationTests(unittest.TestCase):
         """Verify that resume state must match run dataloader."""
         spec = train_spec()
         run, _ = run_spec([("train", spec)])
-        declaration = spec.artifacts[RESUME_STATE]
+        declaration = spec.outputs[TrainKeys.RESUME_STATE]
         content = b"resume state"
 
         resolved = ResolvedSingleFileArtifact(
@@ -807,7 +813,7 @@ class FileVerificationTests(unittest.TestCase):
             load_verified_artifact(
                 run,
                 declaration,
-                RESUME_STATE,
+                TrainKeys.RESUME_STATE,
                 verified,
                 policy=POLICY,
                 fetcher=lambda _: loader_raw,
@@ -817,7 +823,7 @@ class FileVerificationTests(unittest.TestCase):
         """Verify that resume state must match run numpy controls."""
         spec = train_spec()
         run, _ = run_spec([("train", spec)])
-        declaration = spec.artifacts[RESUME_STATE]
+        declaration = spec.outputs[TrainKeys.RESUME_STATE]
         content = b"resume state"
         resolved = ResolvedSingleFileArtifact(
             file=SnapshotFileRef(
@@ -860,7 +866,7 @@ class FileVerificationTests(unittest.TestCase):
                 )
                 value = mismatched.model_dump(mode="python")
                 loader_raw = (f"def load(path):\n    return {value!r}\n").encode()
-                declaration = spec.artifacts[RESUME_STATE].model_copy(
+                declaration = spec.outputs[TrainKeys.RESUME_STATE].model_copy(
                     update={"loader": loader_ref("resume_state", loader_raw)}
                 )
 
@@ -868,7 +874,7 @@ class FileVerificationTests(unittest.TestCase):
                     load_verified_artifact(
                         run,
                         declaration,
-                        RESUME_STATE,
+                        TrainKeys.RESUME_STATE,
                         verified,
                         policy=POLICY,
                         fetcher=lambda _: loader_raw,
@@ -1037,7 +1043,7 @@ class RunAndStageVerificationTests(unittest.TestCase):
         )
 
         self.assertEqual(set(loaded), {"build", "train"})
-        self.assertIn("prior", loaded["build"].artifacts)
+        self.assertIn("prior", loaded["build"].outputs)
 
         outside_ref = run.stages[0].model_copy(
             update={"spec": "stages/build/spec.yaml"}
@@ -1078,12 +1084,12 @@ class RunAndStageVerificationTests(unittest.TestCase):
             "first_model": {
                 "kind": "future",
                 "producer_stage_id": "train",
-                "name": PARAMETERS,
+                "name": TrainKeys.MODEL,
             },
             "second_model": {
                 "kind": "future",
                 "producer_stage_id": "train_02",
-                "name": PARAMETERS,
+                "name": TrainKeys.MODEL,
             },
         }
         consumer = BuildSpec.model_validate(consumer_payload)
@@ -1119,14 +1125,16 @@ class RunAndStageVerificationTests(unittest.TestCase):
             f"        return {resume_value!r}\n"
             "    return path.read_bytes()\n"
         ).encode()
-        artifacts = dict(spec.artifacts)
-        artifacts[PARAMETERS] = artifacts[PARAMETERS].model_copy(
+        outputs = dict(spec.outputs)
+        outputs[TrainKeys.MODEL] = outputs[TrainKeys.MODEL].model_copy(
             update={"loader": loader_ref("parameters", loader_raw)}
         )
-        artifacts[RESUME_STATE] = artifacts[RESUME_STATE].model_copy(
+        outputs[TrainKeys.RESUME_STATE] = outputs[TrainKeys.RESUME_STATE].model_copy(
             update={"loader": loader_ref("resume_state", loader_raw)}
         )
-        spec = spec.model_copy(update={"artifacts": artifacts})
+        spec = spec.model_copy(
+            update={"outputs": type(spec.outputs).model_validate(outputs)}
+        )
         run, _ = run_spec([("train", spec)])
 
         invocation, invocation_raw = invocation_evidence(
@@ -1156,18 +1164,18 @@ class RunAndStageVerificationTests(unittest.TestCase):
                 )
             },
             artifacts={
-                PARAMETERS: ResolvedSingleFileArtifact(
+                TrainKeys.MODEL: ResolvedSingleFileArtifact(
                     kind="file",
                     file=SnapshotFileRef(
-                        path=f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors",
+                        path=str(spec.outputs[TrainKeys.MODEL].path),
                         sha256=sha256(model_raw),
                         bytes=len(model_raw),
                     ),
                 ),
-                RESUME_STATE: ResolvedSingleFileArtifact(
+                TrainKeys.RESUME_STATE: ResolvedSingleFileArtifact(
                     kind="file",
                     file=SnapshotFileRef(
-                        path=f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt",
+                        path=str(spec.outputs[TrainKeys.RESUME_STATE].path),
                         sha256=sha256(resume_raw),
                         bytes=len(resume_raw),
                     ),
@@ -1204,8 +1212,8 @@ class RunAndStageVerificationTests(unittest.TestCase):
             str(spec.implementation.path): source_raw,
             invocation.stored_at.path: invocation_raw,
             "uv.lock": lock_raw,
-            (f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors"): model_raw,
-            (f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt"): resume_raw,
+            str(spec.outputs[TrainKeys.MODEL].path): model_raw,
+            str(spec.outputs[TrainKeys.RESUME_STATE].path): resume_raw,
             "project/loaders/parameters.py": loader_raw,
             "project/loaders/resume_state.py": loader_raw,
             attempt_ref.stored_at.path: attempt_raw,
@@ -1431,10 +1439,12 @@ class RunPlanRelationshipTests(unittest.TestCase):
                         data_role="validation",
                     ),
                 },
-                "artifacts": {
-                    name: artifact.model_copy(update={"data_role": "validation"})
-                    for name, artifact in train.artifacts.items()
-                },
+                "outputs": type(train.outputs).model_validate(
+                    {
+                        name: output.model_copy(update={"data_role": "validation"})
+                        for name, output in train.outputs.items()
+                    }
+                ),
             }
         )
         run, _ = run_spec([("train", train)])
@@ -1510,10 +1520,12 @@ class RunPlanRelationshipTests(unittest.TestCase):
     def test_training_inherits_a_future_artifact_data_role(self) -> None:
         """Reject a restricted future artifact supplied to a training stage."""
         build = build_spec()
-        prior = build.artifacts["prior"]
+        prior = build.outputs["prior"]
         build = build.model_copy(
             update={
-                "artifacts": {"prior": prior.model_copy(update={"data_role": "eval"})}
+                "outputs": type(build.outputs).model_validate(
+                    {"prior": prior.model_copy(update={"data_role": "eval"})}
+                )
             }
         )
         train = train_spec(future_prior=True)
@@ -1634,7 +1646,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 )
             }
         )
-        with self.assertRaisesRegex(VerificationError, "parameters do not match"):
+        with self.assertRaisesRegex(VerificationError, "config does not match"):
             verify_run_plan_relationships(
                 run,
                 experiment,
@@ -1749,7 +1761,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 "model": FutureInputRef(
                     kind="future",
                     producer_stage_id="train",
-                    name=PARAMETERS,
+                    name=TrainKeys.MODEL,
                 ),
                 "test": StoredInputRef(
                     kind="stored",
@@ -1769,12 +1781,11 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 ),
             },
             config=config.EvalConfig(),
-            artifacts={
-                "preds": SingleFileArtifactSpec(
+            outputs={  # pyright: ignore[reportArgumentType]
+                "predictions": OutputSpec(
                     kind="file",
                     path=(
-                        f"{RUN_ROOT}/artifacts/evals/"
-                        "replogle_predictions/predictions.json"
+                        f"{RUN_ROOT}/artifacts/evaluate/predictions/predictions.json"
                     ),
                     loader=loader_ref("json_file"),
                     data_role="benchmark",
@@ -1864,7 +1875,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
         ordinary_payload = evaluation.model_dump(mode="python")
         ordinary_payload["inputs"]["test"]["data_role"] = "eval"
         ordinary_payload["inputs"]["perturbation_split"]["data_role"] = "eval"
-        ordinary_payload["artifacts"]["preds"]["data_role"] = "eval"
+        ordinary_payload["outputs"]["predictions"]["data_role"] = "eval"
         ordinary_evaluation = EvalSpec.model_validate(ordinary_payload)
         with self.assertRaisesRegex(VerificationError, "must use 'benchmark'"):
             verify_run_plan_relationships(
@@ -1956,7 +1967,7 @@ class StoredInputSelectionTests(unittest.TestCase):
         payload = train_spec().model_dump(mode="python")
         payload["inputs"].update(
             {
-                "model": {
+                TrainKeys.MODEL: {
                     "kind": "stored",
                     "data_role": "training",
                     "pointer": artifact_pointer(
@@ -1964,7 +1975,7 @@ class StoredInputSelectionTests(unittest.TestCase):
                     ),
                     "path": "inputs/models/toy/parameters.bin",
                 },
-                "state": {
+                TrainKeys.RESUME_STATE: {
                     "kind": "stored",
                     "data_role": "training",
                     "pointer": artifact_pointer(
@@ -1988,19 +1999,22 @@ class StoredInputSelectionTests(unittest.TestCase):
         )
         model_pointer = ArtifactPointer(
             run=run_reference,
-            artifact=StageArtifactRef(stage_id="train", artifact_name=PARAMETERS),
+            artifact=StageArtifactRef(stage_id="train", artifact_name=TrainKeys.MODEL),
         )
         state_pointer = ArtifactPointer(
             run=run_reference,
-            artifact=StageArtifactRef(stage_id="train", artifact_name=RESUME_STATE),
+            artifact=StageArtifactRef(
+                stage_id="train",
+                artifact_name=TrainKeys.RESUME_STATE,
+            ),
         )
 
         verify_stored_input_selections(
             "train_resume",
             spec,
             {
-                "model": model_pointer,
-                "state": state_pointer,
+                TrainKeys.MODEL: model_pointer,
+                TrainKeys.RESUME_STATE: state_pointer,
             },
         )
 
@@ -2016,8 +2030,10 @@ class StoredInputSelectionTests(unittest.TestCase):
                 "train_resume",
                 spec,
                 {
-                    "model": model_pointer,
-                    "state": state_pointer.model_copy(update={"run": other_run}),
+                    TrainKeys.MODEL: model_pointer,
+                    TrainKeys.RESUME_STATE: state_pointer.model_copy(
+                        update={"run": other_run}
+                    ),
                 },
             )
 
@@ -2066,7 +2082,7 @@ class FutureInputVerificationTests(unittest.TestCase):
             run,
             "train",
             train,
-            inputs={"prior": f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt"},
+            inputs={"prior": str(build.outputs["prior"].path)},
             started_at=datetime(2026, 8, 21, 12, 25, tzinfo=UTC),
             completed_at=datetime(2026, 8, 21, 12, 35, tzinfo=UTC),
         )
@@ -2095,7 +2111,7 @@ class FutureInputVerificationTests(unittest.TestCase):
                 "prior": ResolvedSingleFileArtifact(
                     kind="file",
                     file=SnapshotFileRef(
-                        path=f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt",
+                        path=str(build.outputs["prior"].path),
                         sha256=sha256(prior_raw),
                         bytes=len(prior_raw),
                     ),
@@ -2120,18 +2136,18 @@ class FutureInputVerificationTests(unittest.TestCase):
                 "prior": ResolvedFutureInputRef(producer=producer_stage),
             },
             artifacts={
-                PARAMETERS: ResolvedSingleFileArtifact(
+                TrainKeys.MODEL: ResolvedSingleFileArtifact(
                     kind="file",
                     file=SnapshotFileRef(
-                        path=f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors",
+                        path=str(train.outputs[TrainKeys.MODEL].path),
                         sha256="1" * 64,
                         bytes=1,
                     ),
                 ),
-                RESUME_STATE: ResolvedSingleFileArtifact(
+                TrainKeys.RESUME_STATE: ResolvedSingleFileArtifact(
                     kind="file",
                     file=SnapshotFileRef(
-                        path=f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt",
+                        path=str(train.outputs[TrainKeys.RESUME_STATE].path),
                         sha256="2" * 64,
                         bytes=1,
                     ),
@@ -2168,9 +2184,9 @@ class FutureInputVerificationTests(unittest.TestCase):
             failed_attempt,
             run,
             {"build": resolved_build, "train": resolved_train},
-            fetcher=lambda location: {
-                f"{RUN_ROOT}/artifacts/priors/depmap/prior.pt": prior_raw
-            }[location.path],
+            fetcher=lambda location: {str(build.outputs["prior"].path): prior_raw}[
+                location.path
+            ],
         )
         self.assertEqual(
             failed_verified["train"]["prior"].files[0].content,

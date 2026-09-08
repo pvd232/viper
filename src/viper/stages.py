@@ -16,7 +16,7 @@ from typing import Annotated, Any, Generic, Literal, TypeVar, cast
 import numpy as np
 from pydantic import AwareDatetime, Field, model_validator
 
-from . import config, keys
+from . import keys
 from ._schema import (
     SHA256,
     ArtifactName,
@@ -30,7 +30,15 @@ from .artifacts import (
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
 )
-from .config import ConfigTypeRef
+from .config import (
+    BuildConfig,
+    Config,
+    ConfigTypeRef,
+    DiagnosticConfig,
+    EmbedConfig,
+    EvalConfig,
+    TrainConfig,
+)
 from .http import (
     BuiltinHttpImplementationSpec,
     HttpImplementationSpec,
@@ -56,7 +64,7 @@ from .runtime import (
     ResolvedGCEEnv,
 )
 
-ConfigT = TypeVar("ConfigT", bound=config.Config)
+ConfigT = TypeVar("ConfigT", bound=Config)
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,7 +245,7 @@ class BuildSpec(InternalSpec):
     """Request construction of a workspace-defined prior artifact."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
-    config: config.BuildConfig
+    config: BuildConfig
 
 
 class EmbedSpec(InternalSpec):
@@ -245,7 +253,7 @@ class EmbedSpec(InternalSpec):
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveSpec | None = None
-    config: config.EmbedConfig
+    config: EmbedConfig
 
     @model_validator(mode="after")
     def validate_objective(self) -> EmbedSpec:
@@ -262,7 +270,7 @@ class DiagnosticSpec(InternalSpec):
     """Request a terminal descriptive diagnostic operation."""
 
     kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
-    config: config.DiagnosticConfig
+    config: DiagnosticConfig
 
 
 class TrainSpec(InternalSpec):
@@ -271,7 +279,7 @@ class TrainSpec(InternalSpec):
     kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
     objective: MetricObjectiveSpec
-    config: config.TrainConfig
+    config: TrainConfig
 
     @model_validator(mode="after")
     def validate_training_contract(self) -> TrainSpec:
@@ -319,7 +327,7 @@ class EvalSpec(InternalSpec):
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
     objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    config: config.EvalConfig
+    config: EvalConfig
 
     @model_validator(mode="after")
     def validate_eval_contract(self) -> EvalSpec:
@@ -691,7 +699,7 @@ def _stage_decorator(
     config_type: type[ConfigT],
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Create one stage decorator with fixed authoring metadata."""
-    if not issubclass(config_type, config.Config):
+    if not issubclass(config_type, Config):
         raise TypeError("stage config type must subclass Config")
 
     definition = StageDefinition(kind=kind, config_type=config_type)
@@ -707,37 +715,29 @@ def _stage_decorator(
     return decorate
 
 
-def build(
-    *, config: type[config.BuildConfig]
-) -> Callable[[DecoratedStage], DecoratedStage]:
+def build(*, config: type[BuildConfig]) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one build-stage callable."""
     return _stage_decorator("build", config)
 
 
-def embed(
-    *, config: type[config.EmbedConfig]
-) -> Callable[[DecoratedStage], DecoratedStage]:
+def embed(*, config: type[EmbedConfig]) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one embedding-stage callable."""
     return _stage_decorator("embed", config)
 
 
 def diagnostic(
-    *, config: type[config.DiagnosticConfig]
+    *, config: type[DiagnosticConfig]
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one terminal diagnostic-stage callable."""
     return _stage_decorator("diagnostic", config)
 
 
-def train(
-    *, config: type[config.TrainConfig]
-) -> Callable[[DecoratedStage], DecoratedStage]:
+def train(*, config: type[TrainConfig]) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one training-stage callable."""
     return _stage_decorator("train", config)
 
 
-def eval(
-    *, config: type[config.EvalConfig]
-) -> Callable[[DecoratedStage], DecoratedStage]:
+def eval(*, config: type[EvalConfig]) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one eval-stage callable."""
     return _stage_decorator("eval", config)
 
@@ -869,7 +869,7 @@ def validate_stage_definition(
         != (
             root / stage.config_type.path
             if stage.config_type.owner == "workspace"
-            else Path(config.__file__).resolve().parent / stage.config_type.path
+            else Path(inspect.getfile(Config)).resolve().parent / stage.config_type.path
         ).resolve()
     ):
         raise StageDefinitionError(

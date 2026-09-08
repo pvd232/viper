@@ -28,7 +28,7 @@ must point back to that same attempt and plan.
 
 ## What is checked
 
-- Frozen source, stage, parameter, input, environment, and reproducibility
+- Frozen source, stage, config, input, environment, and reproducibility
   records are internally consistent.
 - Referenced files match their recorded paths, byte counts, and SHA-256 digests.
 - Attempt state changes follow the allowed durable transition sequence.

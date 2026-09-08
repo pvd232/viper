@@ -23,7 +23,6 @@ from viper._schema import DataRole
 from viper.artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
-    SingleFileArtifactSpec,
     StageArtifactRef,
 )
 from viper.authoring import (
@@ -56,7 +55,7 @@ from viper.metrics import (
     MetricObjectiveSpec,
     MetricSpec,
 )
-from viper.project import init
+from viper.outputs import OutputSpec
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -64,6 +63,7 @@ from viper.references import (
     ResolvedArtifactPointerRef,
     ResolvedRunRef,
 )
+from viper.repository import init_workspace
 from viper.runs import ResolvedRun, RunSpec, RunStageRef
 from viper.runtime import (
     CPUComputeSpec,
@@ -105,7 +105,7 @@ def _config_type(root: Path, symbol: str) -> ConfigTypeRef:
     path = "src/sample_project/config.py"
     raw = (root / path).read_bytes()
     return ConfigTypeRef(
-        owner="project",
+        owner="workspace",
         path=path,
         symbol=symbol,
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -131,9 +131,9 @@ def _artifact(
     role: DataRole,
     *,
     loader_name: str = "bytes_file",
-) -> SingleFileArtifactSpec:
+) -> OutputSpec:
     """Declare one generated file artifact and its reconstruction function."""
-    return SingleFileArtifactSpec(
+    return OutputSpec(
         path=path,
         loader=_loader(root, loader_name),
         data_role=role,
@@ -269,7 +269,7 @@ def test_generated_project_uses_runner_owned_downloads(
 ) -> None:
     """Run generated code through acquisition, training, and confirmation."""
     root = tmp_path / "generated"
-    init(root, "sample_project")
+    init_workspace(root, "sample_project")
     assert not (root / "src/sample_project/stages/download.py").exists()
     assert "DownloadConfig" not in (root / "src/sample_project/config.py").read_text(
         encoding="utf-8"
@@ -331,20 +331,20 @@ def test_generated_project_uses_runner_owned_downloads(
         },
         http=builtin_http(),
         policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
-        artifacts={
+        outputs={  # pyright: ignore[reportArgumentType]
             "seed_training": _artifact(
                 root,
-                f"{acquisition_root}/artifacts/datasets/starter/seed.bin",
+                f"{acquisition_root}/artifacts/download/seed_training/seed.bin",
                 "training",
             ),
             "evaluation_dataset": _artifact(
                 root,
-                f"{acquisition_root}/artifacts/datasets/starter/evaluation.bin",
+                f"{acquisition_root}/artifacts/download/evaluation_dataset/evaluation.bin",
                 "benchmark",
             ),
             "test_split": _artifact(
                 root,
-                f"{acquisition_root}/artifacts/datasets/starter/test_split.bin",
+                f"{acquisition_root}/artifacts/download/test_split/test_split.bin",
                 "benchmark",
             ),
         },
@@ -364,15 +364,15 @@ def test_generated_project_uses_runner_owned_downloads(
             )
         },
         config=train_config,
-        artifacts={
+        outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: _artifact(
                 root,
-                f"{acquisition_root}/artifacts/models/starter/parameters.bin",
+                f"{acquisition_root}/artifacts/train/model/model.bin",
                 "training",
             ),
-            TrainKeys.STATE: _artifact(
+            TrainKeys.RESUME_STATE: _artifact(
                 root,
-                f"{acquisition_root}/artifacts/models/starter/resume_state.bin",
+                f"{acquisition_root}/artifacts/train/resume_state/resume_state.bin",
                 "training",
                 loader_name="resume_state",
             ),
@@ -416,8 +416,13 @@ def test_generated_project_uses_runner_owned_downloads(
         {acquisition_result_path.relative_to(root).as_posix(): resolved_run_raw}
     )[0]
     producer = ResolvedRunRef.model_validate(resolved_run_file.model_dump())
-    evaluation_pointer_path = "inputs/datasets/starter/evaluation.pointer.yaml"
-    split_pointer_path = "inputs/benchmarks/starter/test_split.pointer.yaml"
+    evaluation_pointer_path = (
+        f".viper/pointers/{producer.sha256}/download/"
+        "evaluation_dataset.pointer.yaml"
+    )
+    split_pointer_path = (
+        f".viper/pointers/{producer.sha256}/download/test_split.pointer.yaml"
+    )
     pointer_documents = {
         evaluation_pointer_path: ArtifactPointer(
             run=producer,
@@ -460,7 +465,7 @@ def test_generated_project_uses_runner_owned_downloads(
         dependencies=(
             MetricDependency(
                 source="artifact",
-                name=EvalKeys.PREDS,
+                name=EvalKeys.PREDICTIONS,
                 required_data_role="benchmark",
             ),
         ),
@@ -527,10 +532,10 @@ def test_generated_project_uses_runner_owned_downloads(
         },
         http=builtin_http(),
         policy=http_policy(hosts=frozenset({host}), ports=frozenset({port})),
-        artifacts={
+        outputs={  # pyright: ignore[reportArgumentType]
             "dataset": _artifact(
                 root,
-                f"{candidate_root}/artifacts/datasets/starter/dataset.bin",
+                f"{candidate_root}/artifacts/download/dataset/dataset.bin",
                 "training",
             )
         },
@@ -545,10 +550,10 @@ def test_generated_project_uses_runner_owned_downloads(
             )
         },
         config=build_params,
-        artifacts={
-            "prior": _artifact(
+        outputs={  # pyright: ignore[reportArgumentType]
+            "result": _artifact(
                 root,
-                f"{candidate_root}/artifacts/priors/starter/prior.bin",
+                f"{candidate_root}/artifacts/build/result/result.bin",
                 "training",
             )
         },
@@ -559,14 +564,14 @@ def test_generated_project_uses_runner_owned_downloads(
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="build",
-                name="prior",
+                name="result",
             )
         },
         config=embed_params,
-        artifacts={
+        outputs={  # pyright: ignore[reportArgumentType]
             "embedding": _artifact(
                 root,
-                f"{candidate_root}/artifacts/models/starter/embedding.bin",
+                f"{candidate_root}/artifacts/embed/embedding/embedding.bin",
                 "training",
             )
         },
@@ -586,15 +591,15 @@ def test_generated_project_uses_runner_owned_downloads(
             )
         },
         config=train_config,
-        artifacts={
+        outputs={  # pyright: ignore[reportArgumentType]
             TrainKeys.MODEL: _artifact(
                 root,
-                f"{candidate_root}/artifacts/models/starter/parameters.bin",
+                f"{candidate_root}/artifacts/train/model/model.bin",
                 "training",
             ),
-            TrainKeys.STATE: _artifact(
+            TrainKeys.RESUME_STATE: _artifact(
                 root,
-                f"{candidate_root}/artifacts/models/starter/resume_state.bin",
+                f"{candidate_root}/artifacts/train/resume_state/resume_state.bin",
                 "training",
                 loader_name="resume_state",
             ),
@@ -627,10 +632,10 @@ def test_generated_project_uses_runner_owned_downloads(
             ),
         },
         config=evaluate_params,
-        artifacts={
-            EvalKeys.PREDS: _artifact(
+        outputs={  # pyright: ignore[reportArgumentType]
+            EvalKeys.PREDICTIONS: _artifact(
                 root,
-                (f"{candidate_root}/artifacts/evals/starter_eval/predictions.bin"),
+                (f"{candidate_root}/artifacts/eval/predictions/predictions.bin"),
                 "benchmark",
             )
         },
@@ -666,7 +671,9 @@ def test_generated_project_uses_runner_owned_downloads(
         check=False,
         capture_output=True,
     )
-    assert candidate_process.returncode == 0, candidate_process.stderr.decode()
+    assert candidate_process.returncode == 0, (
+        candidate_process.stdout + candidate_process.stderr
+    ).decode()
     candidate_result_path = root / candidate_root / "resolved.yaml"
     candidate_result = ResolvedRun.model_validate(
         parse_yaml_bytes(candidate_result_path.read_bytes())

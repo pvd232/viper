@@ -88,7 +88,7 @@ class InMemoryViperCloudClient(ViperCloudClient):
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
         path: RepoRelPath,
         source: PublicationSource,
@@ -99,7 +99,7 @@ class InMemoryViperCloudClient(ViperCloudClient):
         raw = source.read_bytes() if isinstance(source, Path) else source
         assert len(raw) == bytes
         assert hashlib.sha256(raw).hexdigest() == sha256
-        key = (owner, project, revision, path)
+        key = (owner, workspace, revision, path)
         self.upload_calls.append(key)
         existing = self.uploads.setdefault(key, raw)
         assert existing == raw
@@ -113,18 +113,22 @@ class InMemoryViperCloudClient(ViperCloudClient):
         bytes: int,
     ) -> None:
         """Reuse one sealed payload under a target revision and path."""
-        assert (source.owner, source.project, source.revision) in self.sealed
-        raw = self.uploads[(source.owner, source.project, source.revision, source.path)]
+        assert (source.owner, source.workspace, source.revision) in self.sealed
+        raw = self.uploads[
+            (source.owner, source.workspace, source.revision, source.path)
+        ]
         assert len(raw) == bytes
         assert hashlib.sha256(raw).hexdigest() == sha256
-        self.uploads[(target.owner, target.project, target.revision, target.path)] = raw
+        self.uploads[(target.owner, target.workspace, target.revision, target.path)] = (
+            raw
+        )
         self.copy_calls.append((source, target))
 
     def seal(
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
         files: tuple[SnapshotFileRef, ...],
     ) -> None:
@@ -132,30 +136,30 @@ class InMemoryViperCloudClient(ViperCloudClient):
         self.seal_calls += 1
         if self.seal_calls <= self.rejected_seals:
             raise RuntimeError("seal unavailable")
-        self.sealed[(owner, project, revision)] = files
+        self.sealed[(owner, workspace, revision)] = files
 
     def fetch(
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
         path: RepoRelPath,
     ) -> bytes:
         """Read a file only when its revision is sealed."""
-        if (owner, project, revision) not in self.sealed:
+        if (owner, workspace, revision) not in self.sealed:
             raise FileNotFoundError("revision is not sealed")
-        return self.uploads[(owner, project, revision, path)]
+        return self.uploads[(owner, workspace, revision, path)]
 
     def list_files(
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
     ) -> tuple[SnapshotFileRef, ...]:
         """List the files exposed by a sealed revision."""
-        return self.sealed[(owner, project, revision)]
+        return self.sealed[(owner, workspace, revision)]
 
 
 def test_cloud_publication_is_atomic_and_retryable(tmp_path: Path) -> None:
@@ -163,7 +167,7 @@ def test_cloud_publication_is_atomic_and_retryable(tmp_path: Path) -> None:
     artifact = tmp_path / "artifacts" / "model.bin"
     artifact.parent.mkdir()
     artifact.write_bytes(b"parameters")
-    destination = ViperCloudDestination(owner="machina", project="weekend_models")
+    destination = ViperCloudDestination(owner="machina", workspace="weekend_models")
     client = InMemoryViperCloudClient(rejected_seals=1)
 
     publisher = create_snapshot_publisher(
@@ -182,7 +186,7 @@ def test_cloud_publication_is_atomic_and_retryable(tmp_path: Path) -> None:
     assert client.seal_calls == 2
     listed = client.list_files(
         owner=snapshot.owner,
-        project=snapshot.project,
+        workspace=snapshot.workspace,
         revision=snapshot.revision,
     )
     assert tuple(file.path for file in listed) == (
@@ -203,7 +207,7 @@ def test_cloud_publication_is_atomic_and_retryable(tmp_path: Path) -> None:
     assert (
         client.fetch(
             owner=location.owner,
-            project=location.project,
+            workspace=location.workspace,
             revision=location.revision,
             path=location.path,
         )
@@ -217,13 +221,13 @@ def test_cloud_fetcher_retrieves_the_selected_sealed_file(tmp_path: Path) -> Non
     raw = b"evidence"
     location = ViperCloudFileRef(
         owner="machina",
-        project="weekend_models",
+        workspace="weekend_models",
         revision="0" * 64,
         path="runs/example/evidence.yaml",
     )
     client.upload(
         owner=location.owner,
-        project=location.project,
+        workspace=location.workspace,
         revision=location.revision,
         path=location.path,
         source=raw,
@@ -232,7 +236,7 @@ def test_cloud_fetcher_retrieves_the_selected_sealed_file(tmp_path: Path) -> Non
     )
     client.seal(
         owner=location.owner,
-        project=location.project,
+        workspace=location.workspace,
         revision=location.revision,
         files=(),
     )
@@ -252,7 +256,7 @@ def test_cloud_verification_rejects_local_references() -> None:
         spec=ResolvedRunSpecRef.model_construct(
             stored_at=ViperCloudFileRef(
                 owner="machina",
-                project="weekend_models",
+                workspace="weekend_models",
                 revision="0" * 64,
                 path="runs/example/spec.yaml",
             )
@@ -316,26 +320,26 @@ def test_store_uses_selected_project_root(tmp_path: Path) -> None:
 def test_storage_settings_parse_local_and_cloud_destinations(tmp_path: Path) -> None:
     """Parse the two destination forms and preserve their closed model shape."""
     marker = tmp_path / "viper.toml"
-    marker.write_text("[project]\nschema_version = 1\n", encoding="utf-8")
+    marker.write_text("[workspace]\nschema_version = 2\n", encoding="utf-8")
 
     local = load_storage_settings(tmp_path)
     assert local == StorageSettings(destination=LocalStorageDestination())
     assert StorageSettings.model_validate_json(local.model_dump_json()) == local
 
     marker.write_text(
-        "[project]\nschema_version = 1\n"
+        "[workspace]\nschema_version = 2\n"
         '[storage]\ndestination = "viper://machina/weekend_models"\n',
         encoding="utf-8",
     )
     cloud = load_storage_settings(tmp_path)
     assert cloud.destination == ViperCloudDestination(
         owner="machina",
-        project="weekend_models",
+        workspace="weekend_models",
     )
     assert StorageSettings.model_validate_json(cloud.model_dump_json()) == cloud
 
     marker.write_text(
-        "[project]\nschema_version = 1\n"
+        "[workspace]\nschema_version = 2\n"
         '[storage]\ndestination = "https://example.com/project"\n',
         encoding="utf-8",
     )
@@ -348,7 +352,7 @@ def test_local_publishers_share_destination_neutral_interface(
 ) -> None:
     """Publish stage and standalone bytes through the local destination boundary."""
     marker = tmp_path / "viper.toml"
-    marker.write_text("[project]\nschema_version = 1\n", encoding="utf-8")
+    marker.write_text("[workspace]\nschema_version = 2\n", encoding="utf-8")
     artifact = tmp_path / "artifacts" / "model.bin"
     artifact.parent.mkdir()
     artifact.write_bytes(b"parameters")
@@ -388,7 +392,7 @@ def test_bind_run_destination_is_idempotent_and_rejects_change(
 ) -> None:
     """Persist the first run destination and reject a later different value."""
     (tmp_path / "viper.toml").write_text(
-        "[project]\nschema_version = 1\n",
+        "[workspace]\nschema_version = 2\n",
         encoding="utf-8",
     )
     local = LocalStorageDestination()
@@ -404,7 +408,7 @@ def test_bind_run_destination_is_idempotent_and_rejects_change(
         bind_run_destination(
             tmp_path,
             RUN_ID,
-            ViperCloudDestination(owner="machina", project="weekend_models"),
+            ViperCloudDestination(owner="machina", workspace="weekend_models"),
         )
 
 
@@ -502,7 +506,7 @@ def test_cloud_snapshot_reuse_copies_existing_payload(tmp_path: Path) -> None:
     artifact = tmp_path / "source" / "model.bin"
     artifact.parent.mkdir()
     artifact.write_bytes(b"parameters")
-    destination = ViperCloudDestination(owner="machina", project="weekend_models")
+    destination = ViperCloudDestination(owner="machina", workspace="weekend_models")
     client = InMemoryViperCloudClient()
     publisher = ViperCloudSnapshotPublisher(tmp_path, destination, client)
     source_snapshot = publisher.publish(
@@ -512,7 +516,7 @@ def test_cloud_snapshot_reuse_copies_existing_payload(tmp_path: Path) -> None:
     )
     source_files = client.list_files(
         owner=source_snapshot.owner,
-        project=source_snapshot.project,
+        workspace=source_snapshot.workspace,
         revision=source_snapshot.revision,
     )
     source_file = next(
@@ -534,13 +538,15 @@ def test_cloud_snapshot_reuse_copies_existing_payload(tmp_path: Path) -> None:
     assert source.path == "runs/source/artifacts/model.bin"
     assert target.path == "runs/target/artifacts/model.bin"
     assert (
-        client.uploads[(target.owner, target.project, target.revision, target.path)]
-        is client.uploads[(source.owner, source.project, source.revision, source.path)]
+        client.uploads[(target.owner, target.workspace, target.revision, target.path)]
+        is client.uploads[
+            (source.owner, source.workspace, source.revision, source.path)
+        ]
     )
     assert (
         client.fetch(
             owner=target_snapshot.owner,
-            project=target_snapshot.project,
+            workspace=target_snapshot.workspace,
             revision=target_snapshot.revision,
             path=target.path,
         )

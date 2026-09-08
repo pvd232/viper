@@ -65,22 +65,21 @@ Verification accepts referenced bytes \(b\) only when:
 where \(n\) and \(h\) are the recorded count and digest. Storage revisions add
 the identity of the immutable publication that owns the path.
 
-## Frozen plan
+## Run plan
 
-`RunSpec` identifies one experiment, variant, replicate, source revision,
-environment, reproducibility specification, estimator artifact, optional
-benchmark, and ordered set of stage specifications.
+`RunSpec` records the complete request for a run. It selects the experiment
+variant and replicate, source revision, runtime, reproducibility settings,
+estimator output, optional benchmark, and stages in execution order.
 
-Each stage specification declares:
+Each stage record gives VIPER the information it needs to execute and verify
+that stage:
 
-- one stage kind;
-- the project implementation and parameter model selected by exact source
-  identity;
-- parameter values;
-- input references;
-- artifact declarations;
-- metric IDs and, where required, an objective;
-- an optional stage-specific environment and reuse policy.
+- the stage kind;
+- the workspace function and config class, each tied to its exact source;
+- the validated config values;
+- the inputs to read and outputs to write;
+- the metrics to record and, when applicable, the objective;
+- any stage-specific runtime or reuse policy.
 
 The source models live in [`viper.runs`](../../src/viper/runs.py),
 [`viper.stages`](../../src/viper/stages.py), and
@@ -100,11 +99,11 @@ HTTP requests belong to a download stage. The request fixes the expected body
 identity; the retrieval receipt records what the server returned and the
 artifact preserves the accepted bytes.
 
-## Artifacts and measurements
+## Outputs, artifacts, and measurements
 
-An artifact declaration reserves a file or bundle path, loader, and data role.
-A resolved artifact replaces that declaration with the observed files and their
-exact identities.
+Before execution, an output declaration tells VIPER where the stage will write
+a file or directory, how to load it, and what role its data serves. After the
+stage finishes, an artifact record identifies the bytes written there.
 
 A measurement belongs to a declared metric ID and stage. A stateless metric
 computes one value from its current arguments or declared files. A stateful
@@ -165,14 +164,7 @@ List every available schema and operation:
 viper --json capabilities
 ```
 
-This keeps exact field definitions synchronized with the installed code instead
-of copying Python model declarations into prose. The [Python API](api.md) names
-the authoring interfaces, and [What VIPER guarantees](../explanation/guarantees.md)
-states the claim boundary in reader-facing terms.
-
-## Historical formalism
-
-The original model-family, estimator, training-transition, and DataLoader/RNG
-formalism is retained for maintainers in
-[Archived foundational reproducibility formalism](../internal/foundational-reproducibility-formalism.md).
-It is design history, not current field reference.
+These commands read the schemas from the installed package, so this page does
+not duplicate field-by-field model definitions. See the [Python API](api.md)
+for authoring interfaces and [What VIPER guarantees](../explanation/guarantees.md)
+for the checks applied to a completed run.

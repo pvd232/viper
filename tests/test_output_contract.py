@@ -33,11 +33,13 @@ def _draft(path: str) -> OutputDraft:
 
 def _request() -> HttpRequestSpec:
     """Declare one deterministic HTTP response for download validation."""
-    return HttpRequestSpec(
-        url="https://data.example.org/train.csv",
-        version="2026-09-08",
-        expected_body_sha256="0" * 64,
-        expected_body_bytes=1,
+    return HttpRequestSpec.model_validate(
+        {
+            "url": "https://data.example.org/train.csv",
+            "version": "2026-09-08",
+            "expected_body_sha256": "0" * 64,
+            "expected_body_bytes": 1,
+        }
     )
 
 
@@ -167,3 +169,11 @@ def test_resolved_results_remain_artifacts() -> None:
     """Retain artifact terminology after VIPER observes completed bytes."""
     assert hasattr(artifacts, "ResolvedArtifact")
     assert hasattr(artifacts, "ResolvedSingleFileArtifact")
+
+
+def test_generic_output_extras_deserialize_to_the_declared_value_type() -> None:
+    """Validate workspace-defined output fields during protocol loading."""
+    declared = StageOutputs[OutputDraft].model_validate(
+        {"report": {"path": "report.json", "loader": _load_bytes, "data_role": "eval"}}
+    )
+    assert isinstance(declared["report"], OutputDraft)

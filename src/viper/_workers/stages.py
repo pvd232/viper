@@ -11,8 +11,8 @@ from types import MappingProxyType
 
 from viper.workspace import captured_input_path
 
-from .. import config
 from .._config.validation import config_type_path, instantiate_config
+from ..config import MetricConfig
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
@@ -140,7 +140,7 @@ def _stage_metric_handles(
             config_type_path(root, spec.config_type),
             spec.config_type,
             spec.config,
-            config.MetricConfig,
+            MetricConfig,
         )
         path = (
             root
@@ -255,13 +255,16 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise ValueError("startup.callable: config type source differs")
 
+        output_paths = _workspace_paths(root, binding.outputs)
+        for output_path in output_paths.values():
+            output_path.parent.mkdir(parents=True, exist_ok=True)
         context = Context(
             run_id=binding.run_id,
             attempt_id=binding.attempt_id,
             stage_id=binding.stage_id,
             config=config,
             inputs=MappingProxyType(_workspace_paths(root, binding.inputs)),
-            outputs=MappingProxyType(_workspace_paths(root, binding.outputs)),
+            outputs=MappingProxyType(output_paths),
             metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )

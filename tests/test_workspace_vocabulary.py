@@ -41,6 +41,8 @@ def test_viper_owned_python_identifiers_do_not_use_project() -> None:
         "google_project_id",
         "project_id",
         "pyproject.toml",
+        "[project]",
+        "[project.optional-dependencies]",
         "projects/",
         'parts[0] != "projects"',
         "project: nonemptystr",

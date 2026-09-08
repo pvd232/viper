@@ -1,6 +1,6 @@
 # Load local and HTTP inputs
 
-Use a local input when the bytes already live in the project. Use a download
+Use a local input when the bytes already live in the workspace. Use a download
 stage when execution must retrieve bytes over HTTP and record the response.
 
 ## Select a local file
@@ -16,11 +16,14 @@ dataset = input("data/train.csv", data_role="training")
 Connect it to a stage under the name the stage function reads:
 
 ```python
+from viper.config import TrainConfig
+
+
 training = stage(
     fit,
-    params=params.Train(),
+    config=TrainConfig(),
     inputs={"dataset": dataset},
-    artifacts={...},
+    outputs=training_outputs,
     metrics=(loss,),
     objective=min(loss),
 )
@@ -36,7 +39,7 @@ The request records the expected body identity; the policy limits where the
 runner may connect and how much it may accept.
 
 ```python
-from viper.artifacts import artifact
+from viper.outputs import StageOutputs, output
 from viper.authoring import download
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
@@ -49,13 +52,13 @@ fetch_data = download(
             expected_body_bytes=12345,
         )
     },
-    artifacts={
-        "dataset": artifact(
-            path="inputs/downloads/train.csv",
+    outputs=StageOutputs.model_validate({
+        "dataset": output(
+            path="train.csv",
             loader=load_rows,
             data_role="training",
         )
-    },
+    }),
     policy=HttpRetrievalPolicy(
         allowed_schemes=frozenset({"https"}),
         allowed_hosts=frozenset({"data.example.org"}),

@@ -18,9 +18,9 @@ developing this checkout.
 
 Check these in order:
 
-1. The project is a Git repository with a committed source state.
-2. Every decorated function and project parameter model lives under the project root.
-3. Every local input path exists and remains inside the project.
+1. The workspace is a Git repository with a committed source state.
+2. Every decorated function and workspace config class lives under the workspace root.
+3. Every local input path exists and remains inside the workspace.
 4. Every stage objective names a metric attached to that stage.
 5. Every downstream artifact handle comes from a stage in the selected variant.
 
@@ -33,13 +33,13 @@ the plan from the intended commit or restore the source it names.
 ## A stage failed
 
 Use `viper status path/to/attempt.journal.jsonl` to inspect the latest durable
-attempt state. Fix the project code or runtime condition, then use `viper retry`
+attempt state. Fix the workspace code or runtime condition, then use `viper retry`
 with the same frozen plan when the intended experiment has not changed.
 
 ## Verification failed after the function returned
 
-Check the declared artifact names and paths first. A stage can return normally
-while omitting an artifact, writing outside its assigned path, or recording a
+Check the declared output names and paths first. A stage can return normally
+while omitting an output, writing outside its assigned path, or recording a
 metric not attached to the stage. VIPER reports the run as successful only
 after terminal verification closes these relationships.
 

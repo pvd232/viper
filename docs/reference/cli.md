@@ -10,14 +10,14 @@ receive one typed success or failure document:
 ```bash
 viper --json verify-run path/to/resolved.yaml \
   --root . \
-  --trust-source https://github.com/example/project
+  --trust-source https://github.com/example/workspace
 ```
 
 ## Command groups
 
 | Goal | Commands |
 | --- | --- |
-| Create and inspect a project | `init`, `capabilities`, `schema` |
+| Create and inspect a workspace | `init`, `capabilities`, `schema` |
 | Validate or execute plans | `validate-stage`, `validate-resolved-stage`, `validate-run`, `freeze-run`, `preflight`, `execute-stage`, `run`, `run-many`, `retry` |
 | Verify evidence | `verify-run`, `verify-benchmark`, `verify-pointer`, `execute-benchmark` |
 | Inspect and recover runs | `status`, `plan-diff`, `compare-runs`, `lineage`, `restore` |

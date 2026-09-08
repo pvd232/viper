@@ -64,7 +64,7 @@ def config_type_ref(kind: str) -> ConfigTypeRef:
     raw = config_type_source(kind)
     class_name = f"{kind.title()}Config"
     return ConfigTypeRef(
-        owner="project",
+        owner="workspace",
         path=f"project/config/{kind}.py",
         symbol=class_name,
         sha256=hashlib.sha256(raw).hexdigest(),
@@ -226,7 +226,7 @@ def metric_spec(
             dependencies=(
                 MetricDependency(
                     source="artifact",
-                    name="preds",
+                    name="predictions",
                     required_data_role=required_data_role,
                 ),
             ),

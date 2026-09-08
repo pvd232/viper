@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast, get_type_hints
@@ -95,24 +96,25 @@ def test_mcp_resources_are_stateless_inside_startup_root(tmp_path: Path) -> None
     database.parent.mkdir()
     key = "a" * 64
     reference = json.dumps({"path": "runs/final.yaml", "sha256": "b" * 64})
-    with sqlite3.connect(database) as connection:
-        connection.executescript(
-            """
-            CREATE TABLE sources (
-                source_key TEXT PRIMARY KEY,
-                reference_json TEXT NOT NULL,
-                accepted INTEGER NOT NULL,
-                error TEXT
-            );
-            CREATE TABLE runs (source_key TEXT PRIMARY KEY);
-            CREATE TABLE benchmarks (source_key TEXT PRIMARY KEY);
-            """
-        )
-        connection.execute(
-            "INSERT INTO sources VALUES (?, ?, 1, NULL)",
-            (key, reference),
-        )
-        connection.execute("INSERT INTO runs VALUES (?)", (key,))
+    with closing(sqlite3.connect(database)) as connection:
+        with connection:
+            connection.executescript(
+                """
+                CREATE TABLE sources (
+                    source_key TEXT PRIMARY KEY,
+                    reference_json TEXT NOT NULL,
+                    accepted INTEGER NOT NULL,
+                    error TEXT
+                );
+                CREATE TABLE runs (source_key TEXT PRIMARY KEY);
+                CREATE TABLE benchmarks (source_key TEXT PRIMARY KEY);
+                """
+            )
+            connection.execute(
+                "INSERT INTO sources VALUES (?, ?, 1, NULL)",
+                (key, reference),
+            )
+            connection.execute("INSERT INTO runs VALUES (?)", (key,))
 
     first = resource_registry(tmp_path)
     second = resource_registry(tmp_path)
@@ -138,7 +140,7 @@ def test_knowledge_operations_match_python_cli_and_mcp(
 ) -> None:
     """Route one exact knowledge query through every public surface."""
     monkeypatch.setattr("viper.api.resolve_root", lambda root: root.resolve())
-    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
     ontology = OntologySpec(
         ontology_id="viper-core",
         version="1",
@@ -213,7 +215,7 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "preflight" in capabilities.operations
     assert "run" in capabilities.operations
     assert "execute_benchmark" in capabilities.operations
-    assert "init_project" in capabilities.operations
+    assert "init_workspace" in capabilities.operations
     assert "plan_diff" in capabilities.operations
     assert "lineage" in capabilities.operations
     assert "status" in capabilities.operations
@@ -225,7 +227,7 @@ def test_api_schema_and_capability_discovery() -> None:
     assert "RunSpec" in capabilities.schemas
     assert "CompareRunsRequest" in capabilities.schemas
     assert "ExecuteBenchmarkRequest" in capabilities.schemas
-    assert "InitProjectRequest" in capabilities.schemas
+    assert "InitWorkspaceRequest" in capabilities.schemas
     assert "ExplainImpactRequest" not in capabilities.schemas
     assert "AnalyzeImpactRequest" not in capabilities.schemas
     assert "CatalogRefreshRequest" in capabilities.schemas
@@ -312,7 +314,7 @@ def test_restore_result_matches_python_api_and_cli(
 ) -> None:
     """Route typed and command restore requests through one execution result."""
     (tmp_path / "viper.toml").write_text(
-        "[project]\nschema_version = 1\n",
+        "[workspace]\nschema_version = 2\n",
         encoding="utf-8",
     )
     selector = ArtifactRestoreSelector(stage_id="train", artifact_name="model")
@@ -400,7 +402,7 @@ def test_run_many_result_matches_python_api_and_cli(
 ) -> None:
     """Route typed and command batch requests through one execution result."""
     (tmp_path / "viper.toml").write_text(
-        "[project]\nschema_version = 1\n",
+        "[workspace]\nschema_version = 2\n",
         encoding="utf-8",
     )
     run_spec = Path("experiments/example/runs/baseline/run/spec.yaml")
@@ -481,7 +483,7 @@ def test_catalog_result_matches_python_api_and_cli(
 ) -> None:
     """Route catalog refresh and search through the same typed operations."""
     (tmp_path / "viper.toml").write_text(
-        "[project]\nschema_version = 1\n",
+        "[workspace]\nschema_version = 2\n",
         encoding="utf-8",
     )
     run_path = Path("runs/example/resolved.yaml")

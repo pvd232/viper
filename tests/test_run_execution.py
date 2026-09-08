@@ -27,19 +27,13 @@ from tests.fixtures import (
 )
 from tests.git_repository import REPOSITORY, run_git
 from viper import config
-from viper._schema import (
-    PARAMETERS,
-    RESUME_STATE,
-)
 from viper._verification.storage import read_attempt_reference, snapshot_identity
 from viper.api import CompareRunsRequest, RunSuccess
 from viper.api import compare_runs as compare_runs_application
 from viper.api import run as run_stage
 from viper.artifacts import (
     ArtifactLoaderRef,
-    SingleFileArtifactSpec,
     StageArtifactRef,
-    artifact,
 )
 from viper.authoring import (
     FrozenPlanFiles,
@@ -80,6 +74,7 @@ from viper.inputs import (
     ResolvedExternalInputRef,
 )
 from viper.journal import DurableJournal
+from viper.keys import Train as TrainKeys
 from viper.metrics import (
     FloatComparator,
     Measurement,
@@ -92,6 +87,7 @@ from viper.metrics import (
 from viper.metrics import (
     min as minimize,
 )
+from viper.outputs import OutputSpec, output
 from viper.references import (
     GitFileRef,
     GitSource,
@@ -164,7 +160,7 @@ def freeze_protocol_plan(
         env=env,
         reproducibility=reproducibility(),
         stages=tuple(references),
-        estimator=StageArtifactRef(stage_id="train", artifact_name=PARAMETERS),
+        estimator=StageArtifactRef(stage_id="train", artifact_name=TrainKeys.MODEL),
     )
     run_path = f"{RUN_ROOT}/spec.yaml"
     run_raw = serialize_document(run)
@@ -295,7 +291,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         dependencies=(
             MetricDependency(
                 source="artifact",
-                name=PARAMETERS,
+                name=TrainKeys.MODEL,
                 required_data_role="training",
             ),
         ),
@@ -327,7 +323,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         stage_configs=(TrainVariantStageConfig(stage_id="train", config=train_config),),
     )
     source_files = {
-        "viper.toml": b"[project]\nschema_version = 1\n",
+        "viper.toml": b"[workspace]\nschema_version = 2\n",
         "environment.yml": b"name: viper-test\n",
         "project/loaders/bytes_file.py": (
             b"def load(path):\n    return path.read_bytes()\n"
@@ -355,11 +351,11 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             b"    assert context.config.batch_size == 1\n"
             b"    assert context.config.learning_rate == 0.1\n"
             b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
-            b"    context.artifacts['model'].parent.mkdir(\n"
+            b"    context.outputs['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
             b"    )\n"
-            b"    context.artifacts['model'].write_bytes(b'parameters')\n"
-            b"    context.artifacts['state'].write_bytes(b'resume')\n"
+            b"    context.outputs['model'].write_bytes(b'parameters')\n"
+            b"    context.outputs['resume_state'].write_bytes(b'resume')\n"
             b"    live_metric = context.metrics['epoch_mean']\n"
             b"    live_metric.update(1.0)\n"
             b"    live_metric.update(3.0)\n"
@@ -412,9 +408,9 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             hosts=frozenset({host}),
             ports=frozenset({port}),
         ),
-        artifacts={
-            "prior": SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/datasets/tiny/prior.bin",
+        outputs={  # pyright: ignore[reportArgumentType]
+            "prior": OutputSpec(
+                path=f"{RUN_ROOT}/artifacts/download/prior/prior.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/bytes_file.py",
                     symbol="load",
@@ -435,7 +431,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             bytes=len(source_files["jobs/train.py"]),
         ),
         config_type=ConfigTypeRef(
-            owner="project",
+            owner="workspace",
             path="project/config/train.py",
             symbol="TinyTrainConfig",
             sha256=hashlib.sha256(source_files["project/config/train.py"]).hexdigest(),
@@ -453,9 +449,9 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             )
         },
         config=train_config,
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: OutputSpec(
+                path=f"{RUN_ROOT}/artifacts/train/model/model.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/bytes_file.py",
                     symbol="load",
@@ -466,8 +462,8 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
                 ),
                 data_role="training",
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/models/tiny/resume_state.bin",
+            TrainKeys.RESUME_STATE: OutputSpec(
+                path=f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/resume_state.py",
                     symbol="load",
@@ -677,7 +673,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         root
         / first_snapshot.store
         / first_snapshot.commit
-        / f"{RUN_ROOT}/artifacts/datasets/tiny/prior.bin"
+        / f"{RUN_ROOT}/artifacts/download/prior/prior.bin"
     )
     stored_artifact.write_bytes(b"tampered")
     with pytest.raises(VerificationError, match="byte-count mismatch"):
@@ -737,7 +733,7 @@ def test_train_stage_captures_local_external_input(
         dependencies=(
             MetricDependency(
                 source="artifact",
-                name=PARAMETERS,
+                name=TrainKeys.MODEL,
                 required_data_role="training",
             ),
         ),
@@ -769,7 +765,7 @@ def test_train_stage_captures_local_external_input(
         stage_configs=(TrainVariantStageConfig(stage_id="train", config=train_config),),
     )
     source_files = {
-        "viper.toml": b"[project]\nschema_version = 1\n",
+        "viper.toml": b"[workspace]\nschema_version = 2\n",
         "environment.yml": b"name: viper-test\n",
         "project/loaders/bytes_file.py": (
             b"def load(path):\n    return path.read_bytes()\n"
@@ -797,11 +793,11 @@ def test_train_stage_captures_local_external_input(
             b"    assert context.config.batch_size == 1\n"
             b"    assert context.config.learning_rate == 0.1\n"
             b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
-            b"    context.artifacts['model'].parent.mkdir(\n"
+            b"    context.outputs['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
             b"    )\n"
-            b"    context.artifacts['model'].write_bytes(b'parameters')\n"
-            b"    context.artifacts['state'].write_bytes(b'resume')\n"
+            b"    context.outputs['model'].write_bytes(b'parameters')\n"
+            b"    context.outputs['resume_state'].write_bytes(b'resume')\n"
             b"    live_metric = context.metrics['epoch_mean']\n"
             b"    live_metric.update(1.0)\n"
             b"    live_metric.update(3.0)\n"
@@ -851,7 +847,7 @@ def test_train_stage_captures_local_external_input(
             bytes=len(source_files["jobs/train.py"]),
         ),
         config_type=ConfigTypeRef(
-            owner="project",
+            owner="workspace",
             path="project/config/train.py",
             symbol="TinyTrainConfig",
             sha256=hashlib.sha256(source_files["project/config/train.py"]).hexdigest(),
@@ -869,9 +865,9 @@ def test_train_stage_captures_local_external_input(
             )
         },
         config=train_config,
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: OutputSpec(
+                path=f"{RUN_ROOT}/artifacts/train/model/model.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/bytes_file.py",
                     symbol="load",
@@ -882,8 +878,8 @@ def test_train_stage_captures_local_external_input(
                 ),
                 data_role="training",
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
-                path=f"{RUN_ROOT}/artifacts/models/tiny/resume_state.bin",
+            TrainKeys.RESUME_STATE: OutputSpec(
+                path=f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.bin",
                 loader=ArtifactLoaderRef(
                     path="project/loaders/resume_state.py",
                     symbol="load",
@@ -1146,10 +1142,10 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
         "    marker = Path('worker_calls.txt')\n"
         "    marker.write_text(marker.read_text() + '1\\n' if marker.exists() "
         "else '1\\n')\n"
-        "    model = context.artifacts['model']\n"
+        "    model = context.outputs['model']\n"
         "    model.parent.mkdir(parents=True, exist_ok=True)\n"
         "    model.write_bytes(context.inputs['dataset'].read_bytes())\n"
-        "    context.artifacts['state'].write_bytes(b'state')\n"
+        "    context.outputs['resume_state'].write_bytes(b'state')\n"
         "    context.metrics['loss'].record([1.0], epoch=0, step=1)\n\n"
         "def load(path):\n"
         "    return path.read_bytes()\n\n"
@@ -1161,7 +1157,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     dataset.parent.mkdir(parents=True)
     dataset.write_bytes(b"dataset")
     (root / "environment.yml").write_text("name: viper-test\n", encoding="utf-8")
-    (root / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
     run_git(root, "add", ".")
     run_git(root, "commit", "--quiet", "-m", "source")
     source_commit = run_git(root, "rev-parse", "HEAD")
@@ -1180,14 +1176,14 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
                 data_role="training",
             )
         },
-        artifacts={
-            "model": artifact(
-                path="artifacts/models/toy/model.bin",
+        outputs={  # pyright: ignore[reportArgumentType]
+            "model": output(
+                path="model.bin",
                 loader=module.load,
                 data_role="training",
             ),
-            "state": artifact(
-                path="artifacts/models/toy/state.bin",
+            "resume_state": output(
+                path="resume_state.bin",
                 loader=module.load_state,
                 data_role="training",
             ),
@@ -1202,7 +1198,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
             "baseline": variant(
                 levels={},
                 stages={"train": trained},
-                estimator=trained.artifacts["model"],
+                estimator=trained.outputs["model"],
             )
         },
         replicates={"r1": replicate(seed=7)},

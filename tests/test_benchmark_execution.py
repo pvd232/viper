@@ -43,10 +43,14 @@ def _file(path: str) -> ResolvedFileRef:
 
 def _pointer(path: str) -> ResolvedArtifactPointerRef:
     """Build one resolved benchmark-input pointer."""
+    output_name = Path(path).name.removesuffix(".pointer.yaml")
     return ResolvedArtifactPointerRef(
         sha256="a" * 64,
         bytes=1,
-        stored_at=LocalFileRef(commit="b" * 64, path=path),
+        stored_at=LocalFileRef(
+            commit="b" * 64,
+            path=f".viper/pointers/{'a' * 64}/benchmark/{output_name}.pointer.yaml",
+        ),
     )
 
 
@@ -171,7 +175,7 @@ def test_api_returns_the_verified_benchmark_result(
 ) -> None:
     """Return the result and canonical path produced by the benchmark executor."""
     (tmp_path / "viper.toml").write_text(
-        "[project]\nschema_version = 1\n",
+        "[workspace]\nschema_version = 2\n",
         encoding="utf-8",
     )
     run_git(tmp_path, "init")

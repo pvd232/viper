@@ -12,13 +12,10 @@ from tests.fixtures import (
     stage_implementation_ref,
 )
 from viper import config
-from viper._schema import (
-    PARAMETERS,
-    RESUME_STATE,
-)
-from viper.artifacts import SingleFileArtifactSpec
 from viper.inputs import FutureInputRef
+from viper.keys import Train as TrainKeys
 from viper.metrics import MetricObjectiveSpec
+from viper.outputs import OutputSpec
 from viper.preflight import preflight_plan
 from viper.runs import (
     RunSpec,
@@ -31,9 +28,9 @@ from viper.stages import (
 )
 
 
-def _artifact(path: str) -> SingleFileArtifactSpec:
-    """Build one training-role file artifact for local preflight tests."""
-    return SingleFileArtifactSpec(
+def _output(path: str) -> OutputSpec:
+    """Build one training-role file output for local preflight tests."""
+    return OutputSpec(
         path=path,
         loader=artifact_loader_ref("project/loaders/bytes_file.py"),
         data_role="training",
@@ -57,10 +54,12 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
                 name="dataset",
             )
         },
-        artifacts={
-            PARAMETERS: _artifact(f"{run_root}/artifacts/models/main/parameters.bin"),
-            RESUME_STATE: _artifact(
-                f"{run_root}/artifacts/models/main/resume_state.bin"
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: _output(
+                f"{run_root}/artifacts/train/model/parameters.bin"
+            ),
+            TrainKeys.RESUME_STATE: _output(
+                f"{run_root}/artifacts/train/resume_state/resume_state.bin"
             ),
         },
         config=config.TrainConfig(),
@@ -143,7 +142,7 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
             ],
             "estimator": {
                 "stage_id": "train",
-                "artifact_name": PARAMETERS,
+                "artifact_name": TrainKeys.MODEL,
             },
         }
     )
@@ -177,13 +176,13 @@ def test_future_input_uses_canonical_producer_path(tmp_path: Path) -> None:
         inputs={"dataset": http_request(url="https://example.com/data")},
         http=builtin_http(),
         policy=http_policy(),
-        artifacts={
-            "dataset": _artifact(
+        outputs={  # pyright: ignore[reportArgumentType]
+            "dataset": _output(
                 "experiments/example/runs/baseline/01JABCDEFGHJKMNPQRSTVWXYZ0/"
-                "artifacts/datasets/main/data.bin"
+                "artifacts/download/dataset/data.bin"
             )
         },
     )
-    path = tmp_path / producer.artifacts["dataset"].path
+    path = tmp_path / producer.outputs["dataset"].path
     path.parent.mkdir(parents=True)
     path.write_bytes(b"dataset")

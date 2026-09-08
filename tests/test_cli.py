@@ -168,7 +168,7 @@ class CommandLineTests(unittest.TestCase):
 
             self.assertEqual(process.returncode, 0)
             result = json.loads(process.stdout)
-            self.assertEqual(result["operation"], "init_project")
+            self.assertEqual(result["operation"], "init_workspace")
             self.assertTrue((target / "src/sample_project/stages/train.py").is_file())
 
     def test_every_command_emits_one_json_document_and_stable_exit_status(

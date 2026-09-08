@@ -22,7 +22,7 @@ python -m pip install --editable '.[test]'
 python examples/cpu_quickstart.py
 ```
 
-The command fits a one-parameter model to
+The command fits a one-config class to
 [`examples/data/tiny.csv`](../../examples/data/tiny.csv) and prints:
 
 ```text
@@ -42,9 +42,12 @@ contains one metric, one stage, and one experiment.
 ### 1. The metric names a measurement
 
 ```python
+from viper.config import MetricConfig
+
+
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
-    _context: MetricContext[params.Metric],
+    _context: MetricContext[MetricConfig],
     loss: float,
 ) -> float:
     return loss
@@ -58,28 +61,31 @@ returns the current value from `compute()`.
 ### 2. The stage performs the scientific work
 
 ```python
-@train(params=params.Train)
-def fit(context: Context[params.Train]) -> None:
+from viper.config import TrainConfig
+
+
+@train(config=TrainConfig)
+def fit(context: Context[TrainConfig]) -> None:
     rows = context.inputs["dataset"].read_text(encoding="utf-8")
-    model = context.artifacts["model"]
+    model = context.outputs["model"]
     # The complete example parses the rows, trains the model, records loss,
     # and writes the declared model and state artifacts.
 ```
 
-`Context` supplies the stage's validated parameters, readable input paths,
-writable artifact paths, metric handles, run identity, and random generators.
+`Context` supplies the stage's validated config, readable input paths,
+writable output paths, metric handles, run identity, and random generators.
 Your function owns the model computation. VIPER owns the paths and records the
 files and measurements produced there.
 
 ### 3. The experiment connects a stage to a variant and seed
 
 ```python
-loss = measure(training_loss, params=params.Metric())
+loss = measure(training_loss, config=MetricConfig())
 training = stage(
     fit,
-    params=params.Train(),
+    config=TrainConfig(),
     inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
-    artifacts={...},
+    outputs=TrainOutputs(...),
     metrics=(loss,),
     objective=min(loss),
 )
@@ -90,7 +96,7 @@ study = experiment(
         "baseline": variant(
             levels={},
             stages={"train": training},
-            estimator=training.artifacts["model"],
+            estimator=training.outputs["model"],
         )
     },
     replicates={"seed_7": replicate(seed=7)},
@@ -98,7 +104,7 @@ study = experiment(
 ```
 
 The ellipses shorten the excerpt; they are not copied into the runnable file.
-The complete example declares both artifact paths and selects the model as the
+The complete example declares both output paths and selects the model as the
 variant's estimator.
 
 ## Follow the call that runs it
@@ -131,7 +137,7 @@ successful attempt, and the immutable references that connect the result to its
 plan and produced evidence. The model itself is under:
 
 ```text
-experiments/cpu_quickstart/runs/baseline/<run-id>/artifacts/models/tiny/model.json
+experiments/cpu_quickstart/runs/baseline/<run-id>/artifacts/train/model/model.json
 ```
 
 The example is guarded by
@@ -144,7 +150,7 @@ Change one thing at a time:
 
 1. Add a row to `examples/data/tiny.csv` and rerun the example.
 2. Change the learning rate or epoch count inside `fit()`.
-3. Add another `variant()` with a different training stage or parameter set.
+3. Add another `variant()` with a different training stage or config.
 4. Add another `replicate()` with a different seed.
 
 Then continue with [metrics and benchmarks](../how-to/metrics-and-benchmarks.md)

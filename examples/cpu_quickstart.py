@@ -6,13 +6,16 @@ import json
 import subprocess
 from pathlib import Path
 
-from viper import execution, params
-from viper.artifacts import artifact
+from pydantic import HttpUrl, TypeAdapter
+
+from viper import execution
 from viper.authoring import experiment, input, plan, replicate, stage, variant
+from viper.config import MetricConfig, TrainConfig
 from viper.metrics import MetricContext, measure, metric, min
-from viper.project import resolve_root
+from viper.outputs import TrainOutputs, output
 from viper.randomness import capture_main_process_rng
 from viper.references import GitFileRef, GitSource
+from viper.repository import resolve_root
 from viper.resume import (
     DataLoaderConfiguration,
     DataLoaderResumeState,
@@ -36,15 +39,15 @@ def load_state(path: Path) -> ResumeState:
 
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
-    _context: MetricContext[params.Metric],
+    _context: MetricContext[MetricConfig],
     loss: float,
 ) -> float:
     """Record the training loss computed for one epoch."""
     return loss
 
 
-@train(params=params.Train)
-def fit(context: Context[params.Train]) -> None:
+@train(config=TrainConfig)
+def fit(context: Context[TrainConfig]) -> None:
     """Fit ``y = weight * x`` with gradient descent on the local CPU."""
     rows = [
         tuple(float(value) for value in line.split(","))
@@ -54,6 +57,7 @@ def fit(context: Context[params.Train]) -> None:
     ]
     weight = 0.0
     loss = 0.0
+    epoch = 0
     for epoch in range(1, 21):
         errors = tuple(weight * x - y for x, y in rows)
         loss = sum(error**2 for error in errors) / len(rows)
@@ -61,11 +65,11 @@ def fit(context: Context[params.Train]) -> None:
         weight -= 0.05 * gradient
         context.metrics["training_loss"].record(loss, epoch=epoch, step=epoch)
 
-    model = context.artifacts["model"]
+    model = context.outputs["model"]
     model.parent.mkdir(parents=True, exist_ok=True)
     model.write_text(json.dumps({"weight": weight}) + "\n", encoding="utf-8")
     save_resume_state(
-        context.artifacts["state"],
+        context.outputs["resume_state"],
         ResumeState(
             optimizer_state={"weight": weight, "loss": loss},
             main_process_rng=capture_main_process_rng(
@@ -131,7 +135,9 @@ def main() -> None:
     """Author, execute, and report one locally verified run."""
     root = resolve_root(Path(__file__).parent)
     commit = _git(root, "rev-parse", "HEAD")
-    repository = _git(root, "remote", "get-url", "origin")
+    repository = TypeAdapter(HttpUrl).validate_python(
+        _git(root, "remote", "get-url", "origin")
+    )
     source = GitSource(repository=repository, commit=commit)
     environment = LocalEnvSpec(
         lockfile=GitFileRef(
@@ -142,28 +148,28 @@ def main() -> None:
         python_env=observe_python_env(),
     )
 
-    loss = measure(training_loss, params=params.Metric())
+    loss = measure(training_loss, config=MetricConfig())
     training = stage(
         fit,
-        params=params.Train(),
+        config=TrainConfig(),
         inputs={
             "dataset": input(
                 "examples/data/tiny.csv",
                 data_role="training",
             )
         },
-        artifacts={
-            "model": artifact(
-                path="artifacts/models/tiny/model.json",
+        outputs=TrainOutputs(
+            model=output(
+                path="model.json",
                 loader=load_json,
                 data_role="training",
             ),
-            "state": artifact(
-                path="artifacts/models/tiny/state.pt",
+            resume_state=output(
+                path="resume_state.pt",
                 loader=load_state,
                 data_role="training",
             ),
-        },
+        ),
         metrics=(loss,),
         objective=min(loss),
     )
@@ -173,7 +179,7 @@ def main() -> None:
             "baseline": variant(
                 levels={},
                 stages={"train": training},
-                estimator=training.artifacts["model"],
+                estimator=training.outputs["model"],
             )
         },
         replicates={"seed_7": replicate(seed=7)},
@@ -188,7 +194,7 @@ def main() -> None:
     )
 
     result = execution.run(root, draft)
-    model_path = result.resolved_run_path.parent / "artifacts/models/tiny/model.json"
+    model_path = result.resolved_run_path.parent / "artifacts/train/model/model.json"
     print(f"status: {result.resolved_run.status}")
     print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
     print(f"result: {result.resolved_run_path.relative_to(root)}")

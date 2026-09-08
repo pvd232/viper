@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -152,9 +153,9 @@ def _write_plan(root: Path, *, seed: int) -> Path:
     """Write one complete frozen plan beneath a temporary repository root."""
     stage_data = parse_yaml_bytes(EXAMPLE_STAGE.read_bytes())
     stage_data.pop("env", None)
-    for artifact in stage_data["artifacts"].values():
-        if artifact["data_role"] == "evaluation":
-            artifact["data_role"] = "eval"
+    for output in stage_data["outputs"].values():
+        if output["data_role"] == "evaluation":
+            output["data_role"] = "eval"
     stage_raw = serialize_document(DownloadSpec.model_validate(stage_data))
     stage_path = root / RUN_ROOT / "stages/download/spec.yaml"
     stage_path.parent.mkdir(parents=True)
@@ -402,7 +403,7 @@ def test_catalog_results_retain_immutable_sources(tmp_path: Path) -> None:
 def _reuse_receipt() -> StageReuseReceipt:
     """Build one valid reuse receipt for inspection tests."""
     resolved_file = SnapshotFileRef(
-        path=f"{RUN_ROOT}/artifacts/datasets/toy/dataset.bin",
+        path=f"{RUN_ROOT}/artifacts/download/dataset/dataset.bin",
         sha256="c" * 64,
         bytes=1,
     )
@@ -514,18 +515,19 @@ def test_catalog_returns_an_exact_stage_reuse_candidate(tmp_path: Path) -> None:
     catalog = Catalog(root)
 
     catalog.refresh(runs=(source,))
-    with sqlite3.connect(catalog.path) as connection:
-        connection.execute(
-            "INSERT INTO stage_reuse_keys VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                stage_reuse_key_sha256(key),
-                "source",
-                candidate.completed_at.isoformat(),
-                RUN_ID,
-                1,
-                candidate.model_dump_json(),
-            ),
-        )
+    with closing(sqlite3.connect(catalog.path)) as connection:
+        with connection:
+            connection.execute(
+                "INSERT INTO stage_reuse_keys VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    stage_reuse_key_sha256(key),
+                    "source",
+                    candidate.completed_at.isoformat(),
+                    RUN_ID,
+                    1,
+                    candidate.model_dump_json(),
+                ),
+            )
 
     assert catalog.reuse_candidate(key) == candidate
     assert catalog.reuse_candidate(key.model_copy(update={"seed": 43})) is None
@@ -535,7 +537,7 @@ def test_knowledge_retrieval_keeps_exact_indexes_authoritative(
     tmp_path: Path,
 ) -> None:
     """Filter exact records before ranking vectors inside one declared view."""
-    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
     store = knowledge(root=tmp_path)
     created = datetime(2026, 1, 1, tzinfo=UTC)
     ontology = OntologySpec(

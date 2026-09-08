@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import get_args
@@ -18,8 +17,9 @@ import viper.experiments as experiments
 import viper.http as http
 import viper.mcp as mcp
 import viper.metrics as metrics
-import viper.project as project
+import viper.repository as repository
 import viper.stages as stages
+from viper import _subprocess as subprocess
 
 PAIR_BLOCK_ID = "P0-PAC-01"
 REQUIREMENT_ID = "PAC-01"
@@ -68,20 +68,27 @@ def test_config_bases_are_frozen_pydantic_models() -> None:
 
 def test_workspace_config_can_extend_one_stage_base() -> None:
     """Allow a workspace to add typed fields to a stage-specific config."""
+
     class TrainConfig(config.TrainConfig):
         epochs: int
 
     selected = TrainConfig(epochs=3)
     assert selected.epochs == 3
     with pytest.raises(ValidationError):
-        TrainConfig(epochs="three")
+        TrainConfig.model_validate({"epochs": "three"})
+
+
+def test_untyped_config_fields_still_require_json_values() -> None:
+    """Reject arbitrary Python objects stored in open config fields."""
+    with pytest.raises(ValidationError):
+        config.TrainConfig.model_validate({"optimizer": object()})
 
 
 def test_config_type_reference_preserves_current_owner_vocabulary() -> None:
     """Keep ownership terminology stable until PAC-05 migrates it."""
     fields = config.ConfigTypeRef.model_fields
     assert "owner" in fields
-    assert set(get_args(fields["owner"].annotation)) == {"project", "viper"}
+    assert set(get_args(fields["owner"].annotation)) == {"workspace", "viper"}
 
 
 def test_stage_decorators_accept_config_not_params() -> None:
@@ -111,7 +118,7 @@ def test_serialized_protocol_uses_config_fields_only() -> None:
         stages: ("ParameterizedSpec", "StageContextBinding"),
         metrics: ("MetricSpec", "MetricExecutionReceipt"),
         experiments: ("VariantSpec",),
-        http: ("ProjectHttpImplementationSpec",),
+        http: ("WorkspaceHttpImplementationSpec",),
     }
     retired = {"params", "parameter_model", "stage_params"}
     for module, model_names in modules_and_models.items():
@@ -123,6 +130,7 @@ def test_serialized_protocol_uses_config_fields_only() -> None:
 
 def test_stage_definition_retains_the_config_class() -> None:
     """Bind a decorated callable to its exact config class."""
+
     class TrainConfig(config.TrainConfig):
         epochs: int
 
@@ -160,7 +168,7 @@ def test_cli_and_mcp_schemas_use_config_vocabulary() -> None:
 def test_workspace_generator_uses_config_vocabulary(tmp_path: Path) -> None:
     """Generate workspace code against config without changing project naming yet."""
     target = tmp_path / "generated"
-    project.init(target, "sample_workspace")
+    repository.init_workspace(target, "sample_workspace")
     source = "\n".join(path.read_text() for path in sorted(target.rglob("*.py")))
     assert "viper.config" in source or "from viper import config" in source
     assert "TrainConfig" in source

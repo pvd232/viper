@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -29,7 +29,7 @@ def test_runtime_context_rejects_field_reassignment() -> None:
     """Preserve the logical immutability supplied by frozen dataclasses."""
     context = stages.Context.__new__(stages.Context)
     with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
-        context.stage_id = "other"
+        context.stage_id = "other"  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def _stateful_metric_type(metrics_module: Any) -> type[Any]:
@@ -73,11 +73,13 @@ def test_metric_update_does_not_validate_or_persist(
 
     monkeypatch.setattr(metrics, "Measurement", reject_measurement)
     handle = metrics.MetricHandle(
-        _stateful_metric_type(metrics), _ExplodingSink(), object()
+        _stateful_metric_type(metrics),
+        cast("Any", _ExplodingSink()),
+        cast("Any", object()),
     )
     handle.update(2.5)
     assert handle._stateful is not None
-    assert handle._stateful.total == 2.5
+    assert getattr(handle._stateful, "total") == 2.5
 
 
 class _RecordingSink:
@@ -95,7 +97,9 @@ class _RecordingSink:
 def test_metric_record_persists_one_measurement() -> None:
     """Publish exactly one measurement at an explicit reporting boundary."""
     sink = _RecordingSink()
-    handle = metrics.MetricHandle(_stateful_metric_type(metrics), sink, object())
+    handle = metrics.MetricHandle(
+        _stateful_metric_type(metrics), cast("Any", sink), cast("Any", object())
+    )
     handle.update(1.25)
     handle.update(2.75)
     handle.record(epoch=2, step=40)

@@ -9,7 +9,7 @@ an agent over local standard input and output.
 ```bash
 viper catalog-refresh experiments/example/runs/baseline/<run-id>/resolved.yaml \
   --root . \
-  --trust-source https://github.com/example/project
+  --trust-source https://github.com/example/workspace
 ```
 
 The command verifies each supplied terminal run before indexing it. The derived

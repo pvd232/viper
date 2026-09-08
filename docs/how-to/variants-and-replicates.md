@@ -15,12 +15,12 @@ study = experiment(
         "adam": variant(
             levels={"optimizer": "adam"},
             stages={"train": adam_training},
-            estimator=adam_training.artifacts["model"],
+            estimator=adam_training.outputs["model"],
         ),
         "sgd": variant(
             levels={"optimizer": "sgd"},
             stages={"train": sgd_training},
-            estimator=sgd_training.artifacts["model"],
+            estimator=sgd_training.outputs["model"],
         ),
     },
     replicates={

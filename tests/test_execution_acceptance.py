@@ -74,7 +74,7 @@ def test_attempt_publishes_evidence_to_selected_destination(tmp_path: Path) -> N
 
     journal_ref, measurements, verifications, logs = publish_attempt_files(
         tmp_path,
-        ViperCloudDestination(owner="machina", project="weekend_models"),
+        ViperCloudDestination(owner="machina", workspace="weekend_models"),
         run_root,
         1,
         journal,

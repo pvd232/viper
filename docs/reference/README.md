@@ -8,7 +8,7 @@ workflow.
 | --- | --- |
 | [Python API](api.md) | Public constructors, execution operations, typed application operations, and result models. |
 | [CLI](cli.md) | Command groups, argument conventions, JSON mode, and discovery commands. |
-| [Configuration and schemas](configuration.md) | Project root, environment, storage, reproducibility, and schema discovery. |
+| [Configuration and schemas](configuration.md) | Workspace root, environment, storage, reproducibility, and schema discovery. |
 | [Formal protocol](protocol.md) | Serialized records, identities, state transitions, and verification relationships. |
 | [Versioning](versioning.md) | Package, schema, and compatibility policy. |
 

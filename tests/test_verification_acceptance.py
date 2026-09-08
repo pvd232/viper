@@ -34,23 +34,16 @@ from tests.fixtures import (
 )
 from viper import config
 from viper import config as current_config
-from viper._schema import (
-    PARAMETERS,
-    PREDICTIONS,
-    RESUME_STATE,
-    DataRole,
-)
+from viper._schema import DataRole
 from viper._verification.attempt import verify_external_inputs
 from viper._workers.stages import _planned_stage_context
 from viper.artifacts import (
     ArtifactLoaderRef,
     ArtifactPointer,
-    BundleArtifactSpec,
     ResolvedArtifact,
     ResolvedBundleArtifact,
     ResolvedBundleMember,
     ResolvedSingleFileArtifact,
-    SingleFileArtifactSpec,
     StageArtifactRef,
 )
 from viper.benchmark import (
@@ -84,6 +77,8 @@ from viper.inputs import (
     ResolvedStoredInputRef,
     StoredInputRef,
 )
+from viper.keys import Eval as EvalKeys
+from viper.keys import Train as TrainKeys
 from viper.knowledge import (
     DeclaredPrimitiveAssignment,
     KnowledgeManifest,
@@ -106,6 +101,7 @@ from viper.metrics import (
     ResolvedMetricDependency,
     is_recomputed_metric,
 )
+from viper.outputs import EvalOutputs, OutputSpec
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -290,7 +286,7 @@ class DocumentStore:
         if isinstance(location, ViperCloudFileRef):
             return (
                 location.kind,
-                f"{location.owner}/{location.project}",
+                f"{location.owner}/{location.workspace}",
                 location.revision,
                 str(location.path),
                 "",
@@ -578,7 +574,7 @@ def publish_invocation(
         config_type=stage.config_type,
         config_digest=document_digest(stage.config),
         inputs=input_paths,
-        artifacts={name: artifact.path for name, artifact in stage.artifacts.items()},
+        outputs={name: output.path for name, output in stage.outputs.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
             sorted(run.reproducibility.numpy_randomness.generators)
@@ -848,7 +844,7 @@ def make_run(
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id=estimator_stage_id,
-            artifact_name=PARAMETERS,
+            artifact_name=TrainKeys.MODEL,
         ),
     )
 
@@ -955,22 +951,24 @@ def publish_producer_run(
         },
         http=builtin_http(),
         policy=http_policy(),
-        artifacts={
-            "dataset": SingleFileArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            "dataset": OutputSpec(
                 kind="file",
-                path=f"{run_root}/artifacts/datasets/toy/dataset.bin",
+                path=f"{run_root}/artifacts/download/dataset/dataset.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
-            "evaluation_dataset": SingleFileArtifactSpec(
+            "evaluation_dataset": OutputSpec(
                 kind="file",
-                path=f"{run_root}/artifacts/datasets/toy/evaluation.bin",
+                path=(
+                    f"{run_root}/artifacts/download/evaluation_dataset/evaluation.bin"
+                ),
                 loader=loader_ref("bytes_file"),
                 data_role=evaluation_role,
             ),
-            "split": SingleFileArtifactSpec(
+            "split": OutputSpec(
                 kind="file",
-                path=f"{run_root}/artifacts/datasets/toy/split.json",
+                path=f"{run_root}/artifacts/download/split/split.json",
                 loader=loader_ref("bytes_file"),
                 data_role=evaluation_role,
             ),
@@ -998,16 +996,16 @@ def publish_producer_run(
         config=config.TrainConfig.model_validate(
             {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
         ),
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: OutputSpec(
                 kind="file",
-                path=f"{run_root}/artifacts/models/toy/parameters.bin",
+                path=f"{run_root}/artifacts/train/model/parameters.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
+            TrainKeys.RESUME_STATE: OutputSpec(
                 kind="file",
-                path=f"{run_root}/artifacts/models/toy/resume_state.bin",
+                path=f"{run_root}/artifacts/train/resume_state/resume_state.bin",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -1072,19 +1070,19 @@ def publish_producer_run(
         "dataset": add_single_artifact(
             store,
             download_commit,
-            str(download.artifacts["dataset"].path),
+            str(download.outputs["dataset"].path),
             training_dataset_raw,
         ),
         "evaluation_dataset": add_single_artifact(
             store,
             download_commit,
-            str(download.artifacts["evaluation_dataset"].path),
+            str(download.outputs["evaluation_dataset"].path),
             evaluation_dataset_raw,
         ),
         "split": add_single_artifact(
             store,
             download_commit,
-            str(download.artifacts["split"].path),
+            str(download.outputs["split"].path),
             split_raw,
         ),
     }
@@ -1127,7 +1125,7 @@ def publish_producer_run(
         stage_id="train",
         stage=train,
         input_paths={
-            "training_dataset": str(download.artifacts["dataset"].path),
+            "training_dataset": str(download.outputs["dataset"].path),
         },
         started_at=datetime(2026, 8, 20, 20, 11, tzinfo=UTC),
         completed_at=datetime(2026, 8, 20, 20, 29, tzinfo=UTC),
@@ -1147,16 +1145,16 @@ def publish_producer_run(
             "training_dataset": ResolvedFutureInputRef(producer=download_stage),
         },
         artifacts={
-            PARAMETERS: add_single_artifact(
+            TrainKeys.MODEL: add_single_artifact(
                 store,
                 train_commit,
-                str(train.artifacts[PARAMETERS].path),
+                str(train.outputs[TrainKeys.MODEL].path),
                 b"producer model",
             ),
-            RESUME_STATE: add_single_artifact(
+            TrainKeys.RESUME_STATE: add_single_artifact(
                 store,
                 train_commit,
-                str(train.artifacts[RESUME_STATE].path),
+                str(train.outputs[TrainKeys.RESUME_STATE].path),
                 resume_state_bytes(),
             ),
         },
@@ -1252,9 +1250,16 @@ def build_complete_fixture(
         run=producer_run_ref,
         artifact=StageArtifactRef(stage_id="download", artifact_name="split"),
     )
-    training_dataset_pointer_path = "inputs/datasets/toy/training.pointer.yaml"
-    evaluation_dataset_pointer_path = "inputs/datasets/toy/evaluation.pointer.yaml"
-    split_pointer_path = "inputs/benchmarks/toy/test_split.pointer.yaml"
+    training_dataset_pointer_path = (
+        f".viper/pointers/{producer_run_ref.sha256}/download/dataset.pointer.yaml"
+    )
+    evaluation_dataset_pointer_path = (
+        f".viper/pointers/{producer_run_ref.sha256}/download/"
+        "evaluation_dataset.pointer.yaml"
+    )
+    split_pointer_path = (
+        f".viper/pointers/{producer_run_ref.sha256}/download/split.pointer.yaml"
+    )
     resolved_training_dataset_pointer = resolved_pointer(
         store,
         MAIN_SOURCE_COMMIT,
@@ -1292,10 +1297,10 @@ def build_complete_fixture(
             )
         },
         config=config.BuildConfig(),
-        artifacts={
-            "prior": BundleArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            "prior": OutputSpec(
                 kind="bundle",
-                path=f"{run_root}/artifacts/priors/toy",
+                path=f"{run_root}/artifacts/build/prior/toy",
                 loader=loader_ref("prior_bundle", bundle=True),
                 data_role="training",
             )
@@ -1323,16 +1328,16 @@ def build_complete_fixture(
         config=config.TrainConfig.model_validate(
             {"epochs": 2, "batch_size": 2, "learning_rate": 0.01}
         ),
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: OutputSpec(
                 kind="file",
-                path=f"{run_root}/artifacts/models/toy/parameters.bin",
+                path=f"{run_root}/artifacts/train/model/parameters.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
+            TrainKeys.RESUME_STATE: OutputSpec(
                 kind="file",
-                path=f"{run_root}/artifacts/models/toy/resume_state.bin",
+                path=f"{run_root}/artifacts/train/resume_state/resume_state.bin",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -1356,7 +1361,7 @@ def build_complete_fixture(
             "model": FutureInputRef(
                 kind="future",
                 producer_stage_id="train",
-                name=PARAMETERS,
+                name=TrainKeys.MODEL,
             ),
             "test": StoredInputRef(
                 kind="stored",
@@ -1372,10 +1377,10 @@ def build_complete_fixture(
             ),
         },
         config=current_config.EvalConfig(),
-        artifacts={
-            "preds": SingleFileArtifactSpec(
+        outputs={  # pyright: ignore[reportArgumentType]
+            "predictions": OutputSpec(
                 kind="file",
-                path=(f"{run_root}/artifacts/evals/toy_predictions/predictions.json"),
+                path=(f"{run_root}/artifacts/evaluate/predictions/predictions.json"),
                 loader=loader_ref("json_file"),
                 data_role=evaluation_role,
             )
@@ -1492,7 +1497,7 @@ def build_complete_fixture(
     prior_artifact = add_bundle_artifact(
         store,
         build_commit,
-        str(build.artifacts["prior"].path),
+        str(build.outputs["prior"].path),
         prior_members,
     )
     build_invocation = publish_invocation(
@@ -1537,7 +1542,7 @@ def build_complete_fixture(
         run=run,
         stage_id="train",
         stage=train,
-        input_paths={"prior": str(build.artifacts["prior"].path)},
+        input_paths={"prior": str(build.outputs["prior"].path)},
         started_at=datetime(2026, 8, 20, 21, 11, tzinfo=UTC),
         completed_at=datetime(2026, 8, 20, 21, 29, tzinfo=UTC),
         commit=MAIN_FILES_COMMIT,
@@ -1554,16 +1559,16 @@ def build_complete_fixture(
         ),
         inputs={"prior": ResolvedFutureInputRef(producer=build_stage)},
         artifacts={
-            PARAMETERS: add_single_artifact(
+            TrainKeys.MODEL: add_single_artifact(
                 store,
                 train_commit,
-                str(train.artifacts[PARAMETERS].path),
+                str(train.outputs[TrainKeys.MODEL].path),
                 b"final model parameters",
             ),
-            RESUME_STATE: add_single_artifact(
+            TrainKeys.RESUME_STATE: add_single_artifact(
                 store,
                 train_commit,
-                str(train.artifacts[RESUME_STATE].path),
+                str(train.outputs[TrainKeys.RESUME_STATE].path),
                 resume_state_bytes(),
             ),
         },
@@ -1584,7 +1589,7 @@ def build_complete_fixture(
         stage_id="evaluate",
         stage=evaluate,
         input_paths={
-            "model": str(train.artifacts[PARAMETERS].path),
+            "model": str(train.outputs[TrainKeys.MODEL].path),
             "test": "inputs/datasets/toy/evaluation.bin",
             "test_split": "inputs/benchmarks/toy/test_split.json",
         },
@@ -1613,10 +1618,10 @@ def build_complete_fixture(
             ),
         },
         artifacts={
-            "preds": add_single_artifact(
+            "predictions": add_single_artifact(
                 store,
                 evaluate_commit,
-                str(evaluate.artifacts["preds"].path),
+                str(evaluate.outputs["predictions"].path),
                 b"fixed predictions",
             )
         },
@@ -1646,7 +1651,7 @@ def build_complete_fixture(
         bytes=len(measurement_raw),
         stored_at=measurement_location,
     )
-    predictions = resolved_evaluate.artifacts["preds"]
+    predictions = resolved_evaluate.artifacts["predictions"]
     assert isinstance(predictions, ResolvedSingleFileArtifact)
     metric_verification_reference = publish_metric_verification(
         store,
@@ -1700,7 +1705,7 @@ def build_complete_fixture(
     )
     tamper_location = hf_file(
         build_commit,
-        f"{build.artifacts['prior'].path}/adjacency.bin",
+        f"{build.outputs['prior'].path}/adjacency.bin",
     )
     return resolved_run, store, tamper_location
 
@@ -1802,7 +1807,7 @@ def build_benchmark_fixture(
             )
         )
     )
-    candidate_configs = resolved_train.artifacts[PARAMETERS]
+    candidate_configs = resolved_train.artifacts[TrainKeys.MODEL]
     resolved_train = resolved_train.model_copy(
         update={
             "inputs": {"prior": ResolvedFutureInputRef(producer=confirmation_build)}
@@ -1813,7 +1818,7 @@ def build_benchmark_fixture(
         run=run,
         stage_id="train",
         stage=resolved_train.spec,
-        input_paths={"prior": str(resolved_build.spec.artifacts["prior"].path)},
+        input_paths={"prior": str(resolved_build.spec.outputs["prior"].path)},
         started_at=datetime(2026, 8, 20, 21, 11, tzinfo=UTC),
         completed_at=datetime(2026, 8, 20, 21, 29, tzinfo=UTC),
         commit="f" * 40,
@@ -1848,7 +1853,7 @@ def build_benchmark_fixture(
             )
         )
     )
-    candidate_predictions = resolved_evaluate.artifacts[PREDICTIONS]
+    candidate_predictions = resolved_evaluate.artifacts[EvalKeys.PREDICTIONS]
     resolved_evaluate = resolved_evaluate.model_copy(
         update={
             "inputs": {
@@ -1863,7 +1868,7 @@ def build_benchmark_fixture(
         stage_id="evaluate",
         stage=resolved_evaluate.spec,
         input_paths={
-            "model": str(resolved_train.spec.artifacts[PARAMETERS].path),
+            "model": str(resolved_train.spec.outputs[TrainKeys.MODEL].path),
             "test": "inputs/datasets/toy/evaluation.bin",
             "test_split": "inputs/benchmarks/toy/test_split.json",
         },
@@ -1909,7 +1914,7 @@ def build_benchmark_fixture(
             )
         )
     )
-    predictions = resolved_evaluate.artifacts["preds"]
+    predictions = resolved_evaluate.artifacts["predictions"]
     assert isinstance(predictions, ResolvedSingleFileArtifact)
     metric_verification_reference = publish_metric_verification(
         store,
@@ -1991,20 +1996,20 @@ def build_benchmark_fixture(
                 confirmation_stage=confirmation_train,
                 candidate_digest=document_digest(candidate_configs),
                 confirmation_digest=document_digest(
-                    resolved_train.artifacts[PARAMETERS]
+                    resolved_train.artifacts[TrainKeys.MODEL]
                 ),
                 passed=True,
             ),
             ArtifactComparisonReceipt(
                 artifact=StageArtifactRef(
                     stage_id="evaluate",
-                    artifact_name=PREDICTIONS,
+                    artifact_name=EvalKeys.PREDICTIONS,
                 ),
                 candidate_stage=original_evaluate,
                 confirmation_stage=confirmation_evaluate,
                 candidate_digest=document_digest(candidate_predictions),
                 confirmation_digest=document_digest(
-                    resolved_evaluate.artifacts[PREDICTIONS]
+                    resolved_evaluate.artifacts[EvalKeys.PREDICTIONS]
                 ),
                 passed=True,
             ),
@@ -2171,14 +2176,14 @@ def test_worker_startup_derives_attempt_owned_external_input_path(
         config=config.TrainConfig.model_validate(
             {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
         ),
-        artifacts={
-            PARAMETERS: SingleFileArtifactSpec(
-                path=f"{run_root}/artifacts/models/model/parameters.bin",
+        outputs={  # pyright: ignore[reportArgumentType]
+            TrainKeys.MODEL: OutputSpec(
+                path=f"{run_root}/artifacts/train/model/parameters.bin",
                 loader=loader_ref("bytes_file"),
                 data_role="training",
             ),
-            RESUME_STATE: SingleFileArtifactSpec(
-                path=f"{run_root}/artifacts/models/model/resume_state.bin",
+            TrainKeys.RESUME_STATE: OutputSpec(
+                path=f"{run_root}/artifacts/train/resume_state/resume_state.bin",
                 loader=loader_ref("resume_state"),
                 data_role="training",
             ),
@@ -2238,7 +2243,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         build_stage = fetch_attempt(store, resolved_run.attempts[0]).resolved_stages[0]
         extra_path = (
             "experiments/model_eval/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAB/"
-            "artifacts/priors/toy/unrecorded.bin"
+            "artifacts/build/prior/toy/unrecorded.bin"
         )
         store.put(
             hf_file(snapshot_revision(build_stage.snapshot), extra_path), b"extra"
@@ -2253,7 +2258,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         build_stage = fetch_attempt(store, resolved_run.attempts[0]).resolved_stages[0]
         missing_path = (
             "experiments/model_eval/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAB/"
-            "artifacts/priors/toy/metadata.json"
+            "artifacts/build/prior/toy/metadata.json"
         )
         del store.documents[
             DocumentStore.key(
@@ -2769,7 +2774,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
             run=run_reference.model_copy(
                 update={"sha256": sha256(tampered_raw), "bytes": len(tampered_raw)}
             ),
-            artifact=StageArtifactRef(stage_id="train", artifact_name=PARAMETERS),
+            artifact=StageArtifactRef(stage_id="train", artifact_name=TrainKeys.MODEL),
         )
 
         with self.assertRaisesRegex(
@@ -2783,7 +2788,7 @@ class CompleteProvenanceAcceptanceTests(unittest.TestCase):
         result, _, store = build_benchmark_fixture()
         pointer = ArtifactPointer(
             run=result.run,
-            artifact=StageArtifactRef(stage_id="train", artifact_name=PARAMETERS),
+            artifact=StageArtifactRef(stage_id="train", artifact_name=TrainKeys.MODEL),
         )
 
         with self.assertRaisesRegex(VerificationError, "requires a benchmark result"):
@@ -2822,7 +2827,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
     )
     artifact = ResolvedSingleFileArtifact(file=artifact_file)
     config_type = CurrentConfigTypeRef(
-        owner="project",
+        owner="workspace",
         path="project/config/eval.py",
         symbol="EvalConfig",
         sha256="b" * 64,
@@ -2854,13 +2859,13 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
         kind="eval",
         env=None,
         metric_ids=(metric.metric_id,),
-        artifacts={
-            "predictions": SingleFileArtifactSpec(
+        outputs=EvalOutputs(
+            predictions=OutputSpec(
                 path=artifact_file.path,
                 loader=loader_ref("json_file"),
                 data_role="eval",
             )
-        },
+        ),
         implementation=stage_implementation_ref(
             "evaluation/predict.py",
             EVALUATE_SOURCE,
@@ -3067,7 +3072,7 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
 
 def test_knowledge_records_preserve_immutable_evidence(tmp_path: Path) -> None:
     """Publish records and an immutable manifest chain before advancing the head."""
-    (tmp_path / "viper.toml").write_text("[project]\nschema_version = 1\n")
+    (tmp_path / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
     store = knowledge(root=tmp_path)
     created = datetime(2026, 1, 1, tzinfo=UTC)
     ontology = OntologySpec(

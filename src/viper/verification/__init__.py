@@ -60,7 +60,6 @@ from ..serialization import document_digest, parse_yaml_bytes
 from ..stages import (
     EvalSpec,
     InternalSpec,
-    ParameterizedSpec,
     ResolvedBaseSpec,
     ResolvedInternalSpec,
     ResolvedParameterizedSpec,
@@ -166,8 +165,8 @@ def _rebuilt_reuse_key(
 ) -> StageReuseKey:
     """Rebuild one stage key from its verified plan values and input files."""
     stage = plan.stages.get(stage_id)
-    if not isinstance(stage, ParameterizedSpec):
-        raise VerificationError("stage reuse requires a parameterized stage")
+    if not isinstance(stage, InternalSpec):
+        raise VerificationError("stage reuse requires an internal stage")
     metrics = {metric.metric_id: metric for metric in plan.experiment.metrics}
     try:
         return build_stage_reuse_key(

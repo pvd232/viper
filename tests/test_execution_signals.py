@@ -30,7 +30,6 @@ from viper import _subprocess as subprocess
 from viper import config
 from viper._verification.attempt import _verify_stage_invocation, verify_attempt_stages
 from viper._verification.storage import read_attempt_reference
-from viper.artifacts import SingleFileArtifactDraft, artifact
 from viper.authoring import (
     RunPlanDraft,
     download,
@@ -44,6 +43,7 @@ from viper.execution import run as execute_run
 from viper.execution._source import RunFetcher
 from viper.journal import DurableJournal
 from viper.metrics import measure, min
+from viper.outputs import OutputDraft, output
 from viper.preflight import preflight_plan
 from viper.references import (
     GitFileRef,
@@ -122,7 +122,7 @@ def _git(root: Path, *arguments: str) -> str:
 def _write_source_files(root: Path, *, blocking: bool = True) -> None:
     """Write the two stage callables and their supporting project code."""
     train_operation = (
-        b"    output_root = context.artifacts['model'].parent\n"
+        b"    output_root = context.outputs['model'].parent\n"
         b"    output_root.mkdir(parents=True, exist_ok=True)\n"
         b"    child = subprocess.Popen(\n"
         b"        [sys.executable, '-c', 'import time; time.sleep(300)']\n"
@@ -141,20 +141,20 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> None:
             b"    device = 'cuda' if torch.cuda.is_available() else 'cpu'\n"
             b"    values = torch.tensor([2.0, 3.0], device=device)\n"
             b"    result = values.square().sum().item()\n"
-            b"    context.artifacts['model'].parent.mkdir(\n"
+            b"    context.outputs['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
             b"    )\n"
-            b"    context.artifacts['model'].write_bytes(\n"
+            b"    context.outputs['model'].write_bytes(\n"
             b"        f'{device}:{result}'.encode()\n"
             b"    )\n"
-            b"    context.artifacts['state'].write_bytes(b'resume')\n"
+            b"    context.outputs['resume_state'].write_bytes(b'resume')\n"
             b"    context.metrics['signal_objective'].record(\n"
             b"        result, epoch=1, step=1\n"
             b"    )\n"
         )
     )
     source_files = {
-        "viper.toml": b"[project]\nschema_version = 1\n",
+        "viper.toml": b"[workspace]\nschema_version = 2\n",
         "environment.yml": b"name: viper-signal-test\n",
         "jobs/train.py": (
             b"import os\n"
@@ -208,12 +208,12 @@ def _freeze_signal_plan(
     source_commit = _git(root, "rev-parse", "HEAD")
 
     fixture = _load_fixture_module(root / "jobs/train.py")
-    prior_artifact = artifact(
-        path="artifacts/datasets/tiny/prior.bin",
+    prior_artifact = output(
+        path="prior.bin",
         loader=fixture.load_bytes,
         data_role="training",
     )
-    assert isinstance(prior_artifact, SingleFileArtifactDraft)
+    assert isinstance(prior_artifact, OutputDraft)
     acquisition = download(
         inputs={
             "prior": http_request(
@@ -226,21 +226,21 @@ def _freeze_signal_plan(
             hosts=frozenset({host}),
             ports=frozenset({port}),
         ),
-        artifacts={"prior": prior_artifact},
+        outputs={"prior": prior_artifact},  # pyright: ignore[reportArgumentType]
     )
     objective = measure(fixture.signal_objective, config=config.MetricConfig())
     training = stage(
         fixture.train,
         config=config.TrainConfig(),
-        inputs={"prior": acquisition.artifacts["prior"]},
-        artifacts={
-            "model": artifact(
-                path="artifacts/models/tiny/parameters.bin",
+        inputs={"prior": acquisition.outputs["prior"]},
+        outputs={  # pyright: ignore[reportArgumentType]
+            "model": output(
+                path="model.bin",
                 loader=fixture.load_bytes,
                 data_role="training",
             ),
-            "state": artifact(
-                path="artifacts/models/tiny/resume_state.bin",
+            "resume_state": output(
+                path="resume_state.bin",
                 loader=fixture.load_resume_state,
                 data_role="training",
             ),
@@ -254,7 +254,7 @@ def _freeze_signal_plan(
             "baseline": variant(
                 levels={},
                 stages={"download": acquisition, "train": training},
-                estimator=training.artifacts["model"],
+                estimator=training.outputs["model"],
             )
         },
         replicates={"r1": replicate(seed=7)},
@@ -366,7 +366,7 @@ def test_live_l4_stage_records_requested_backend(
         assert len(backend.gpu_devices) == 1
         assert backend.gpu_devices[0].model == "NVIDIA L4"
 
-    parameters_path = root / RUN_ROOT / "artifacts/models/tiny/parameters.bin"
+    parameters_path = root / RUN_ROOT / "artifacts/train/model/model.bin"
     assert parameters_path.read_bytes() == expected_artifact
 
 
@@ -419,7 +419,7 @@ def test_signal_closes_attempt_with_active_stage_evidence(
         root,
         *signal_http_source,
     )
-    pid_path = root / RUN_ROOT / "artifacts/models/tiny/worker-pids.txt"
+    pid_path = root / RUN_ROOT / "artifacts/train/model/worker-pids.txt"
     process = subprocess.Popen(
         (
             sys.executable,

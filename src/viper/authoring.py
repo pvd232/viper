@@ -18,7 +18,6 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
 
-from . import config
 from ._schema import DataRole, RepoRelPath, RNGSeed
 from .artifacts import (
     ArtifactLoaderRef,
@@ -31,7 +30,16 @@ from .benchmark import (
     MetricCriterion,
     RunArtifactDraft,
 )
-from .config import ConfigTypeRef
+from .config import (
+    BuildConfig,
+    Config,
+    ConfigTypeRef,
+    DiagnosticConfig,
+    EmbedConfig,
+    EvalConfig,
+    TrainConfig,
+    type_ref,
+)
 from .experiments import (
     BuildVariantStageConfig,
     DiagnosticVariantStageConfig,
@@ -197,7 +205,7 @@ class ParameterizedSpecDraft(BaseSpecDraft):
     """Hold one decorated workspace stage and its config values."""
 
     implementation: Callable[[Context[Any]], None]
-    config: config.Config
+    config: Config
     metrics: tuple[MetricDraft[Any], ...] = ()
     reuse: StageReuseMode = "never"
 
@@ -230,14 +238,14 @@ class BuildSpecDraft(InternalSpecDraft):
     """Hold one workspace-defined prior builder."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
-    config: config.BuildConfig  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: BuildConfig  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class EmbedSpecDraft(InternalSpecDraft):
     """Hold one configured embedding stage."""
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
-    config: config.EmbedConfig  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: EmbedConfig  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft | None = None
 
 
@@ -245,14 +253,14 @@ class DiagnosticSpecDraft(InternalSpecDraft):
     """Hold one terminal descriptive diagnostic stage."""
 
     kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
-    config: config.DiagnosticConfig  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: DiagnosticConfig  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class TrainSpecDraft(InternalSpecDraft):
     """Hold one configured training stage and required objective."""
 
     kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
-    config: config.TrainConfig  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: TrainConfig  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft
 
 
@@ -261,7 +269,7 @@ class EvalSpecDraft(InternalSpecDraft):
 
     kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
     eval_id: EvalId
-    config: config.EvalConfig  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: EvalConfig  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
 
@@ -868,8 +876,8 @@ def _freeze_stage(
     config_path = Path(config_source).resolve()
     source_raw = source_path.read_bytes()
     config_raw = config_path.read_bytes()
-    if definition.config_type.__module__ == config.__name__:
-        config_reference = config.type_ref(definition.config_type)
+    if definition.config_type.__module__ == Config.__module__:
+        config_reference = type_ref(definition.config_type)
     else:
         if not config_path.is_relative_to(root):
             raise ValueError("stage config type is outside the workspace root")
@@ -976,7 +984,7 @@ def download(
 def stage(
     implementation: Callable[[Context[Any]], None],
     *,
-    config: config.Config,
+    config: Config,
     inputs: dict[InputName, StageInputDraft | StageDraftOutputRef],
     outputs: StageOutputs[OutputDraft],
     metrics: tuple[MetricDraft[Any], ...] = (),
@@ -1048,8 +1056,8 @@ def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
     implementation_raw = implementation_path.read_bytes()
     if not implementation_path.is_relative_to(root):
         raise ValueError("metric callable is outside the workspace root")
-    if config_type.__module__ == config.__name__:
-        config_reference = config.type_ref(config_type)
+    if config_type.__module__ == Config.__module__:
+        config_reference = type_ref(config_type)
     else:
         config_path = Path(config_source).resolve()
         config_raw = config_path.read_bytes()

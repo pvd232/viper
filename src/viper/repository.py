@@ -123,14 +123,21 @@ def validate_package_name(package: str) -> None:
 def workspace_files(package: str) -> dict[str, str]:
     """Return the complete starter-workspace file mapping."""
     stage_definitions = {
-        "build": ("BuildConfig", "build", "prior"),
+        "build": ("BuildConfig", "build", "result"),
         "embed": ("EmbedConfig", "embed", "embedding"),
         "train": ("TrainConfig", "train", "model"),
-        "eval": ("EvalConfig", "eval", "preds"),
+        "eval": ("EvalConfig", "eval", "predictions"),
+        "diagnostic": ("DiagnosticConfig", "diagnostic", "report"),
     }
     files: dict[str, str] = {
         **ROOT_FILES,
-        ".gitignore": ".viper/\n__pycache__/\n*.egg-info/\n",
+        ".gitignore": (
+            ".viper/*\n"
+            "!.viper/pointers/\n"
+            "!.viper/pointers/**\n"
+            "__pycache__/\n"
+            "*.egg-info/\n"
+        ),
         "README.md": f"""# {package}
 
 This workspace contains one decorated callable for each VIPER stage kind.
@@ -148,13 +155,13 @@ Benchmark specifications belong under `benchmarks/`.
 requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
-[workspace]
+[project]
 name = "{package.replace("_", "-")}"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = ["viper-provenance>=0.1.0a3"]
 
-[workspace.optional-dependencies]
+[project.optional-dependencies]
 test = ["pytest>=9,<10"]
 
 [tool.setuptools.packages.find]
@@ -170,31 +177,43 @@ pythonpath = ["src"]
             '''"""Define workspace-owned stage config types."""
 
 from pydantic import Field
-from viper import config
+from viper.config import (
+    BuildConfig as ViperBuildConfig,
+    DiagnosticConfig as ViperDiagnosticConfig,
+    EmbedConfig as ViperEmbedConfig,
+    EvalConfig as ViperEvalConfig,
+    TrainConfig as ViperTrainConfig,
+)
 
 
-class BuildConfig(config.BuildConfig):
+class BuildConfig(ViperBuildConfig):
     """Select the delimiter consumed by the prior builder."""
 
     delimiter: str = ","
 
 
-class EmbedConfig(config.EmbedConfig):
+class EmbedConfig(ViperEmbedConfig):
     """Select the dimension of the example embedding."""
 
     dimensions: int = Field(default=2, gt=0)
 
 
-class TrainConfig(config.TrainConfig):
+class TrainConfig(ViperTrainConfig):
     """Select the number of example training passes."""
 
     epochs: int = Field(default=1, gt=0)
 
 
-class EvalConfig(config.EvalConfig):
+class EvalConfig(ViperEvalConfig):
     """Select the label written beside the example predictions."""
 
     label: str = "baseline"
+
+
+class DiagnosticConfig(ViperDiagnosticConfig):
+    """Configure the example terminal diagnostic report."""
+
+    include_summary: bool = True
 '''
         ),
         f"src/{package}/artifact_loaders/__init__.py": (
@@ -279,7 +298,7 @@ from viper.metrics import metric
 @metric(metric_id="prediction_bytes", mode="stateless")
 def prediction_bytes(context) -> float:
     """Return the byte count of the verified prediction artifact."""
-    return float(len(context.artifacts["preds"].read_bytes()))
+    return float(len(context.artifacts["predictions"].read_bytes()))
 '''
         ),
         "experiments/README.md": """# Experiments
@@ -305,12 +324,50 @@ def execute(root: Path, draft: RunPlanDraft):
     """Compile and execute one authored plan."""
     return execution.run(root, draft)
 ''',
+        f"src/{package}/declarations.py": (
+            f'''"""Connect workspace stages to typed output declarations."""
+
+from {package}.artifact_loaders.bytes_file import load as load_bytes
+from {package}.artifact_loaders.resume_state import load as load_resume_state
+from {package}.config import TrainConfig
+from {package}.stages.train import train, training_loss
+from viper.authoring import input, stage
+from viper.config import MetricConfig
+from viper.metrics import measure, min
+from viper.outputs import TrainOutputs, output
+
+
+def declare_training():
+    """Declare the example training stage and its required outputs."""
+    loss = measure(training_loss, config=MetricConfig())
+    return stage(
+        train,
+        config=TrainConfig(),
+        inputs={{"dataset": input("inputs/train.csv", data_role="training")}},
+        outputs=TrainOutputs(
+            model=output(
+                path="model.bin",
+                loader=load_bytes,
+                data_role="training",
+            ),
+            resume_state=output(
+                path="resume_state.pt",
+                loader=load_resume_state,
+                data_role="training",
+            ),
+        ),
+        metrics=(loss,),
+        objective=min(loss),
+    )
+'''
+        ),
         "tests/test_stage_definitions.py": (
             f'''"""Verify generated stages expose their VIPER definitions."""
 
 from {package}.stages.build import build
 from {package}.stages.embed import embed
 from {package}.stages.eval import eval
+from {package}.stages.diagnostic import diagnostic
 from {package}.stages.train import train
 
 from viper.stages import stage_definition
@@ -318,13 +375,14 @@ from viper.stages import stage_definition
 
 def test_stage_kinds() -> None:
     """Match each callable with the stage kind fixed by its decorator."""
-    stages = (build, embed, train, eval)
+    stages = (build, embed, train, eval, diagnostic)
 
     assert tuple(stage_definition(stage).kind for stage in stages) == (
         "build",
         "embed",
         "train",
         "eval",
+        "diagnostic",
     )
 '''
         ),
@@ -344,12 +402,12 @@ def test_stage_kinds() -> None:
                 "    source = next(iter(context.inputs.values()))\n"
                 "    payload = source.read_bytes()\n"
             )
-        extra_artifact = ""
+        extra_output = ""
         metric_import = ""
         metric_definition = ""
         if stage == "train":
-            extra_artifact = (
-                "    context.artifacts['state'].write_bytes(b'resume')\n"
+            extra_output = (
+                "    context.outputs['resume_state'].write_bytes(b'resume')\n"
                 "    context.metrics['training_loss'].record([0.0], epoch=0, step=1)\n"
             )
             metric_import = "from viper.metrics import metric\n"
@@ -360,11 +418,11 @@ def training_loss(context, values) -> float:
     """Return the mean loss recorded by the example training stage."""
     return float(sum(values) / len(values))
 '''
-        destination_line = f'    destination = context.artifacts["{artifact}"]\n'
+        destination_line = f'    destination = context.outputs["{artifact}"]\n'
         stage_body = f"""{input_read}{destination_line}\
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(payload)
-{extra_artifact}"""
+{extra_output}"""
         files[
             f"src/{package}/stages/{stage}.py"
         ] = f'''"""Execute the example {stage} stage."""
@@ -376,7 +434,7 @@ from viper.stages import {decorator}
 
 @{decorator}(config={config_class})
 def {stage}(context) -> None:
-    """Write the declared {artifact} artifact from verified inputs."""
+    """Write the declared {artifact} output from verified inputs."""
 {stage_body}'''
     files[f"src/{package}/stages/__init__.py"] = (
         '"""Workspace-owned decorated stage callables."""\n'
@@ -384,7 +442,7 @@ def {stage}(context) -> None:
     return files
 
 
-def init_workspace(path: Path, package: str) -> tuple[Path, ...]:
+def init_workspace(path: Path, package: str = "workspace") -> tuple[Path, ...]:
     """Write the starter workspace into one absent or empty directory."""
     validate_package_name(package)
     target = path.resolve()

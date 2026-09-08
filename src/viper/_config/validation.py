@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -13,11 +14,33 @@ from typing import TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from .. import config
-from ..config import ConfigTypeRef
+from ..config import (
+    BuildConfig,
+    Config,
+    ConfigTypeRef,
+    DiagnosticConfig,
+    EmbedConfig,
+    EvalConfig,
+    HttpConfig,
+    MetricConfig,
+    TrainConfig,
+)
 from ..worker import ExecutionPolicy, WorkerRequest, execute_worker
 
-ConfigT = TypeVar("ConfigT", bound=config.Config)
+ConfigT = TypeVar("ConfigT", bound=Config)
+BUILTIN_CONFIG_TYPES = {
+    model.__name__: model
+    for model in (
+        Config,
+        BuildConfig,
+        EmbedConfig,
+        TrainConfig,
+        EvalConfig,
+        MetricConfig,
+        HttpConfig,
+        DiagnosticConfig,
+    )
+}
 
 
 class ConfigValidationError(RuntimeError):
@@ -47,8 +70,8 @@ def verify_config_type_bytes(
 def load_config_type(
     path: Path,
     symbol: str,
-    expected_base: type[config.Config],
-) -> type[config.Config]:
+    expected_base: type[Config],
+) -> type[Config]:
     """Load one top-level Pydantic class and enforce its stage-specific base."""
     module_name = f"_viper_config_type_{path.stem}_{abs(hash(path.resolve()))}"
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -64,14 +87,14 @@ def load_config_type(
         raise ConfigValidationError(
             f"config type must subclass {expected_base.__name__}"
         )
-    return cast(type[config.Config], value)
+    return cast(type[Config], value)
 
 
 def validate_config(
     path: Path,
     reference: ConfigTypeRef,
-    config: config.Config,
-    expected_base: type[config.Config],
+    config: Config,
+    expected_base: type[Config],
 ) -> dict[str, JsonValue]:
     """Validate one frozen config mapping with its selected workspace class."""
     raw = path.read_bytes()
@@ -94,9 +117,9 @@ def validate_config(
 def instantiate_config(
     path: Path,
     reference: ConfigTypeRef,
-    config: config.Config,
-    expected_base: type[config.Config],
-) -> config.Config:
+    config: Config,
+    expected_base: type[Config],
+) -> Config:
     """Construct the exact workspace config class from one frozen mapping."""
     raw = path.read_bytes()
     verify_config_type_bytes(reference, raw)
@@ -177,7 +200,7 @@ def config_type_path(
     base = (
         repository_root.resolve()
         if reference.owner == "workspace"
-        else Path(config.__file__).resolve().parent
+        else Path(inspect.getfile(Config)).resolve().parent
     )
     path = (base / reference.path).resolve()
     if not path.is_relative_to(base):
@@ -187,12 +210,12 @@ def config_type_path(
 
 def _installed_config_type(
     symbol: str,
-    expected_base: type[config.Config],
-) -> type[config.Config]:
+    expected_base: type[Config],
+) -> type[Config]:
     """Resolve a built-in config type from the installed VIPER package."""
-    value = getattr(config, symbol, None)
+    value = BUILTIN_CONFIG_TYPES.get(symbol)
     if not isinstance(value, type) or not issubclass(value, expected_base):
         raise ConfigValidationError(
             f"config type must subclass {expected_base.__name__}"
         )
-    return cast(type[config.Config], value)
+    return cast(type[Config], value)

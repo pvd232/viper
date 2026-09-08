@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from .ids import HumanId, InputName
+from .ids import HumanId
 
 
 def validate_repo_rel_path(value: str) -> str:
@@ -60,14 +60,6 @@ BenchmarkId = HumanId
 SelectionName = HumanId
 RNGSeed = Annotated[int, Field(ge=0, le=2**32 - 1)]
 DataRole = Literal["training", "validation", "eval", "benchmark"]
-
-PARAMETERS: ArtifactName = "model"
-RESUME_STATE: ArtifactName = "state"
-PARAMETERS_INPUT: InputName = "model"
-RESUME_STATE_INPUT: InputName = "state"
-
-PREDICTIONS: ArtifactName = "preds"
-
 
 class ProtocolModel(BaseModel):
     """Closed, frozen protocol object."""

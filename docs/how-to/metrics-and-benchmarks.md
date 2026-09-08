@@ -8,15 +8,18 @@ Benchmarks independently evaluate artifacts from a completed run.
 Use a stateless metric when the stage already computes the value:
 
 ```python
+from viper.config import MetricConfig
+
+
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
-    _context: MetricContext[params.Metric],
+    _context: MetricContext[MetricConfig],
     loss: float,
 ) -> float:
     return loss
 
 
-loss = measure(training_loss, params=params.Metric())
+loss = measure(training_loss, config=MetricConfig())
 ```
 
 Attach `loss` to the stage, then record values from the stage function:

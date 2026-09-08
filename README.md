@@ -63,8 +63,9 @@ file. It defines a metric and a training stage:
 import json
 from pathlib import Path
 
-from viper import params
+from viper.config import MetricConfig, TrainConfig
 from viper.metrics import MetricContext, metric
+from viper.outputs import TrainOutputs, output
 from viper.randomness import capture_main_process_rng
 from viper.resume import (
     DataLoaderConfiguration,
@@ -86,14 +87,14 @@ def load_state(path: Path) -> ResumeState:
 
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
-    _context: MetricContext[params.Metric],
+    _context: MetricContext[MetricConfig],
     loss: float,
 ) -> float:
     return loss
 
 
-@train(params=params.Train)
-def fit(context: Context[params.Train]) -> None:
+@train(config=TrainConfig)
+def fit(context: Context[TrainConfig]) -> None:
     rows = [
         tuple(float(value) for value in line.split(","))
         for line in context.inputs["dataset"].read_text(encoding="utf-8").splitlines()[1:]
@@ -106,11 +107,11 @@ def fit(context: Context[params.Train]) -> None:
         weight -= 0.05 * gradient
         context.metrics["training_loss"].record(loss, epoch=epoch, step=epoch)
 
-    model = context.artifacts["model"]
+    model = context.outputs["model"]
     model.parent.mkdir(parents=True, exist_ok=True)
     model.write_text(json.dumps({"weight": weight}) + "\n", encoding="utf-8")
     save_resume_state(
-        context.artifacts["state"],
+        context.outputs["resume_state"],
         ResumeState(
             optimizer_state={"weight": weight, "loss": loss},
             main_process_rng=capture_main_process_rng(
@@ -130,11 +131,11 @@ the arguments passed to `record()`. A stateful metric is a `StatefulMetric`
 class that accumulates observations with `update()` and returns its current
 value from `compute()`.
 
-`Context` gives the stage its validated parameters, materialized input paths,
-writable artifact paths, metric handles, run identity, and named random
+`Context` gives the stage its validated config, materialized input paths,
+writable output paths, metric handles, run identity, and named random
 generators. The stage owns the scientific computation. VIPER owns the run
-directory and records the produced files. `params.Train` and `params.Metric`
-are VIPER's built-in parameter records; this small example uses their default
+directory and records the produced files. `TrainConfig` and `MetricConfig`
+are VIPER's built-in config records; this small example uses their default
 settings.
 
 ### Connect the experiment
@@ -142,31 +143,31 @@ settings.
 The same file connects the stage to one experiment variant and replicate:
 
 ```python
-from viper import params
-from viper.artifacts import artifact
+from viper.config import MetricConfig, TrainConfig
+from viper.outputs import TrainOutputs, output
 from viper.authoring import experiment, input, replicate, stage, variant
 from viper.metrics import measure, min
 
 
-loss = measure(training_loss, params=params.Metric())
+loss = measure(training_loss, config=MetricConfig())
 training = stage(
     fit,
-    params=params.Train(),
+    config=TrainConfig(),
     inputs={
         "dataset": input("examples/data/tiny.csv", data_role="training")
     },
-    artifacts={
-        "model": artifact(
-            path="artifacts/models/tiny/model.json",
+    outputs=TrainOutputs(
+        model=output(
+            path="model.json",
             loader=load_json,
             data_role="training",
         ),
-        "state": artifact(
-            path="artifacts/models/tiny/state.pt",
+        resume_state=output(
+            path="resume_state.pt",
             loader=load_state,
             data_role="training",
         ),
-    },
+    ),
     metrics=(loss,),
     objective=min(loss),
 )
@@ -177,7 +178,7 @@ study = experiment(
         "baseline": variant(
             levels={},
             stages={"train": training},
-            estimator=training.artifacts["model"],
+            estimator=training.outputs["model"],
         )
     },
     replicates={"seed_7": replicate(seed=7)},
@@ -215,7 +216,7 @@ it later:
 ```text
 source commit
   + stage and metric implementations
-  + parameter values and input identities
+  + config values and input identities
   + requested and observed runtime
   + artifact and measurement bytes
   + stage and attempt receipts
@@ -226,19 +227,19 @@ Every referenced file carries its path, byte count, and SHA-256 digest. VIPER
 checks that the plan, stages, inputs, artifacts, measurements, and terminal
 result belong to the same run.
 
-## Start your own project
+## Start your own workspace
 
-Generate a project with decorated build, embed, train, and evaluation stages,
-project-owned parameters, artifact loaders, and focused tests:
+Generate a workspace with decorated build, embed, train, and evaluation stages,
+workspace-owned config classes, output loaders, and focused tests:
 
 ```bash
-viper init my-project --package my_project
-cd my-project
+viper init my-workspace --package my_workspace
+cd my-workspace
 python -m pip install -e '.[test]'
 python -m pytest -q
 ```
 
-Commit the project before authoring a plan. The commit identifies the exact
+Commit the workspace before authoring a plan. The commit identifies the exact
 source used by the run.
 
 ## Continue a workflow
@@ -260,7 +261,7 @@ document:
 
 ```bash
 viper --json verify-run path/to/resolved.yaml \
-  --trust-source https://github.com/example/my-project
+  --trust-source https://github.com/example/my-workspace
 ```
 
 ## Documentation

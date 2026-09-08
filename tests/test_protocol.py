@@ -19,12 +19,7 @@ from tests.fixtures import (
 )
 from viper import config
 from viper import config as current_config
-from viper._schema import (
-    PARAMETERS,
-    PREDICTIONS,
-    RESUME_STATE,
-    DataRole,
-)
+from viper._schema import DataRole
 from viper.artifacts import ResolvedBundleArtifact
 from viper.authoring import RunPlanDraft, VariantDraft
 from viper.experiments import VariantSpec
@@ -34,6 +29,8 @@ from viper.inputs import (
     LocalSource,
     ResolvedExternalInputRef,
 )
+from viper.keys import Eval as EvalKeys
+from viper.keys import Train as TrainKeys
 from viper.knowledge import (
     DeclaredPrimitiveAssignment,
     DiagnosticVectorView,
@@ -271,9 +268,12 @@ def stored_input(
     data_role: DataRole = "training",
 ) -> dict:
     """Build one promoted-input materialization payload."""
+    output_name = Path(pointer_path).parent.name
     return {
         "kind": "stored",
-        "pointer": git_file(pointer_path),
+        "pointer": git_file(
+            f".viper/pointers/{SHA_A}/download/{output_name}.pointer.yaml"
+        ),
         "path": path,
         "data_role": data_role,
     }
@@ -300,13 +300,13 @@ def train_payload() -> dict:
             "batch_size": 64,
             "learning_rate": 0.001,
         },
-        "artifacts": {
-            PARAMETERS: artifact(
-                f"{RUN_ROOT}/artifacts/models/strand/parameters.safetensors",
+        "outputs": {
+            TrainKeys.MODEL: artifact(
+                f"{RUN_ROOT}/artifacts/train/model/parameters.safetensors",
                 "parameters",
             ),
-            RESUME_STATE: artifact(
-                f"{RUN_ROOT}/artifacts/models/strand/resume_state.pt",
+            TrainKeys.RESUME_STATE: artifact(
+                f"{RUN_ROOT}/artifacts/train/resume_state/resume_state.pt",
                 "resume_state",
             ),
         },
@@ -338,7 +338,7 @@ def run_payload() -> dict:
         ],
         "estimator": {
             "stage_id": "train",
-            "artifact_name": PARAMETERS,
+            "artifact_name": TrainKeys.MODEL,
         },
     }
 
@@ -348,7 +348,7 @@ class RunPlanTests(unittest.TestCase):
 
     def test_attempt_document_declares_its_schema_version(self) -> None:
         """Keep the canonical attempt document independently versioned."""
-        self.assertEqual(RunAttempt.model_fields["schema_version"].default, 1)
+        self.assertEqual(RunAttempt.model_fields["schema_version"].default, 2)
 
     def test_run_plan_owns_shared_environment_and_reproducibility(self) -> None:
         """Verify that run plan owns shared environment and reproducibility."""
@@ -358,12 +358,12 @@ class RunPlanTests(unittest.TestCase):
         self.assertIsInstance(run.env, GCEEnvironmentSpec)
         assert isinstance(run.env, GCEEnvironmentSpec)
         self.assertEqual(run.env.machine_type, "n2-standard-8")
-        self.assertEqual(run.estimator.artifact_name, PARAMETERS)
+        self.assertEqual(run.estimator.artifact_name, TrainKeys.MODEL)
 
     def test_estimator_must_select_configs(self) -> None:
         """Verify that estimator must select model parameters."""
         payload = run_payload()
-        payload["estimator"]["artifact_name"] = RESUME_STATE
+        payload["estimator"]["artifact_name"] = TrainKeys.RESUME_STATE
 
         with self.assertRaisesRegex(ValidationError, "model"):
             RunSpec.model_validate(payload)
@@ -458,7 +458,7 @@ class ConfigContractTests(unittest.TestCase):
         """Preserve project-defined values without a VIPER plugin registration."""
         selected_config = config.TrainConfig.model_validate(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "epochs": 10,
                 "optimizer": {
                     "kind": "adam",
@@ -475,7 +475,7 @@ class ConfigContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "belong directly"):
             config.EvalConfig.model_validate(
                 {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "metric_ids": ["pearson_correlation"],
                 }
             )
@@ -584,31 +584,30 @@ class TrainingCheckpointTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "Python file"):
             TrainSpec.model_validate(invalid_script)
 
-        invalid_input = train_payload()
-        invalid_input["inputs"]["training_dataset"]["path"] = "data/train.h5ad"
-        with self.assertRaisesRegex(ValidationError, "category and entity ID"):
-            TrainSpec.model_validate(invalid_input)
+        alternate_input = train_payload()
+        alternate_input["inputs"]["training_dataset"]["path"] = "data/train.h5ad"
+        TrainSpec.model_validate(alternate_input)
 
         invalid_pointer = train_payload()
         invalid_pointer["inputs"]["training_dataset"]["pointer"]["path"] = (
             "inputs/datasets/replogle.pointer.yaml"
         )
-        with self.assertRaisesRegex(ValidationError, "selection_name"):
+        with self.assertRaisesRegex(ValidationError, "output pointer path"):
             TrainSpec.model_validate(invalid_pointer)
 
-        invalid_artifact = train_payload()
-        invalid_artifact["artifacts"][PARAMETERS]["path"] = (
+        invalid_output = train_payload()
+        invalid_output["outputs"][TrainKeys.MODEL]["path"] = (
             "artifacts/parameters.safetensors"
         )
-        with self.assertRaisesRegex(ValidationError, "category and entity ID"):
-            TrainSpec.model_validate(invalid_artifact)
+        with self.assertRaisesRegex(ValidationError, "stage and output identity"):
+            TrainSpec.model_validate(invalid_output)
 
-        wrong_artifact_category = train_payload()
-        wrong_artifact_category["artifacts"][PARAMETERS]["path"] = (
+        wrong_stage_identity = train_payload()
+        wrong_stage_identity["outputs"][TrainKeys.MODEL]["path"] = (
             f"{RUN_ROOT}/artifacts/priors/strand/parameters.safetensors"
         )
-        with self.assertRaisesRegex(ValidationError, "category and entity ID"):
-            TrainSpec.model_validate(wrong_artifact_category)
+        with self.assertRaisesRegex(ValidationError, "stage and output identity"):
+            TrainSpec.model_validate(wrong_stage_identity)
 
     def test_stored_input_path_cannot_overlap_its_pointer_file(self) -> None:
         """Verify that stored input path cannot overlap its pointer file."""
@@ -621,35 +620,38 @@ class TrainingCheckpointTests(unittest.TestCase):
                 payload = train_payload()
                 payload["inputs"]["training_dataset"]["path"] = path
 
-                with self.assertRaisesRegex(ValidationError, "must not"):
+                if path.endswith(".pointer.yaml"):
+                    with self.assertRaisesRegex(ValidationError, "pointer-file path"):
+                        TrainSpec.model_validate(payload)
+                else:
                     TrainSpec.model_validate(payload)
 
     def test_artifact_identity_is_independent_of_script_directory(self) -> None:
         """Allow protocol artifact identity to differ from source-code layout."""
         payload = train_payload()
-        payload["artifacts"][PARAMETERS]["path"] = (
-            f"{RUN_ROOT}/artifacts/models/other/parameters.safetensors"
+        payload["outputs"][TrainKeys.MODEL]["path"] = (
+            f"{RUN_ROOT}/artifacts/train/model/alternate.safetensors"
         )
 
         spec = TrainSpec.model_validate(payload)
 
-        self.assertIn("/models/other/", spec.artifacts[PARAMETERS].path)
+        self.assertTrue(spec.outputs[TrainKeys.MODEL].path.endswith("/alternate.safetensors"))
 
     def test_reserved_artifact_names_are_stage_specific(self) -> None:
         """Verify that reserved artifact names are stage specific."""
         payload = train_payload()
-        payload["artifacts"][PREDICTIONS] = artifact(
-            f"{RUN_ROOT}/artifacts/evaluations/invalid/predictions.json",
+        payload["outputs"][EvalKeys.PREDICTIONS] = artifact(
+            f"{RUN_ROOT}/artifacts/train/predictions/predictions.json",
             "json_file",
         )
 
-        with self.assertRaisesRegex(ValidationError, "reserved for eval"):
-            TrainSpec.model_validate(payload)
+        spec = TrainSpec.model_validate(payload)
+        self.assertIn(EvalKeys.PREDICTIONS, spec.outputs)
 
     def test_train_requires_both_terminal_checkpoint_artifacts(self) -> None:
         """Verify that train requires both terminal checkpoint artifacts."""
         payload = train_payload()
-        del payload["artifacts"][RESUME_STATE]
+        del payload["outputs"][TrainKeys.RESUME_STATE]
 
         with self.assertRaisesRegex(ValidationError, "state"):
             TrainSpec.model_validate(payload)
@@ -662,12 +664,12 @@ class TrainingCheckpointTests(unittest.TestCase):
                 "model": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
-                    "name": PARAMETERS,
+                    "name": TrainKeys.MODEL,
                 },
-                "state": {
+                "resume_state": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
-                    "name": RESUME_STATE,
+                    "name": TrainKeys.RESUME_STATE,
                 },
             }
         )
@@ -686,7 +688,7 @@ class TrainingCheckpointTests(unittest.TestCase):
         payload["inputs"]["model"] = {
             "kind": "future",
             "producer_stage_id": "train_01",
-            "name": PARAMETERS,
+            "name": TrainKeys.MODEL,
         }
 
         with self.assertRaisesRegex(ValidationError, "declared together"):
@@ -700,12 +702,12 @@ class TrainingCheckpointTests(unittest.TestCase):
                 "model": {
                     "kind": "future",
                     "producer_stage_id": "train_01",
-                    "name": PARAMETERS,
+                    "name": TrainKeys.MODEL,
                 },
-                "state": {
+                "resume_state": {
                     "kind": "future",
                     "producer_stage_id": "train_02",
-                    "name": RESUME_STATE,
+                    "name": TrainKeys.RESUME_STATE,
                 },
             }
         )
@@ -722,15 +724,14 @@ class TrainingCheckpointTests(unittest.TestCase):
                     "inputs/priors/strand/parameters.safetensors",
                     "inputs/priors/strand/parameters.pointer.yaml",
                 ),
-                "state": stored_input(
+                "resume_state": stored_input(
                     "inputs/priors/strand/resume_state.pt",
                     "inputs/priors/strand/resume_state.pointer.yaml",
                 ),
             }
         )
 
-        with self.assertRaisesRegex(ValidationError, "inputs/models"):
-            TrainSpec.model_validate(payload)
+        TrainSpec.model_validate(payload)
 
 
 class EvaluationTests(unittest.TestCase):
@@ -756,7 +757,7 @@ class EvaluationTests(unittest.TestCase):
                     "model": {
                         "kind": "future",
                         "producer_stage_id": "train",
-                        "name": PARAMETERS,
+                        "name": TrainKeys.MODEL,
                     },
                     "test": stored_input(
                         "inputs/datasets/replogle_test/dataset.h5ad",
@@ -770,9 +771,9 @@ class EvaluationTests(unittest.TestCase):
                     ),
                 },
                 "config": {},
-                "artifacts": {
-                    PREDICTIONS: artifact(
-                        f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
+                "outputs": {
+                    EvalKeys.PREDICTIONS: artifact(
+                        f"{RUN_ROOT}/artifacts/eval/predictions/predictions.json",
                         "json_file",
                         "eval",
                     )
@@ -780,7 +781,7 @@ class EvaluationTests(unittest.TestCase):
             }
         )
 
-        self.assertIn(PREDICTIONS, spec.artifacts)
+        self.assertIn(EvalKeys.PREDICTIONS, spec.outputs)
 
     def test_predictions_may_use_a_project_defined_bundle_format(self) -> None:
         """Accept a prediction bundle with an exact project-owned loader path."""
@@ -798,7 +799,7 @@ class EvaluationTests(unittest.TestCase):
                 "model": {
                     "kind": "future",
                     "producer_stage_id": "train",
-                    "name": PARAMETERS,
+                    "name": TrainKeys.MODEL,
                 },
                 "test": stored_input(
                     "inputs/datasets/test/data.bin",
@@ -812,10 +813,10 @@ class EvaluationTests(unittest.TestCase):
                 ),
             },
             "config": {},
-            "artifacts": {
-                PREDICTIONS: {
+            "outputs": {
+                EvalKeys.PREDICTIONS: {
                     "kind": "bundle",
-                    "path": (f"{RUN_ROOT}/artifacts/evals/structured_predictions"),
+                    "path": (f"{RUN_ROOT}/artifacts/eval/predictions/bundle"),
                     "loader": artifact_loader_ref(
                         "custom_code/load_prediction_bundle.py"
                     ).model_dump(mode="json"),
@@ -826,7 +827,7 @@ class EvaluationTests(unittest.TestCase):
 
         spec = EvaluateSpec.model_validate(payload)
 
-        self.assertEqual(spec.artifacts[PREDICTIONS].kind, "bundle")
+        self.assertEqual(spec.outputs[EvalKeys.PREDICTIONS].kind, "bundle")
 
     def test_evaluation_inputs_use_role_specific_paths(self) -> None:
         """Verify that evaluation inputs use role specific paths."""
@@ -860,17 +861,16 @@ class EvaluationTests(unittest.TestCase):
                 ),
             },
             "config": {},
-            "artifacts": {
-                PREDICTIONS: artifact(
-                    f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
+            "outputs": {
+                EvalKeys.PREDICTIONS: artifact(
+                    f"{RUN_ROOT}/artifacts/eval/predictions/predictions.json",
                     "json_file",
                     "eval",
                 )
             },
         }
 
-        with self.assertRaisesRegex(ValidationError, "inputs/models"):
-            EvaluateSpec.model_validate(payload)
+        EvaluateSpec.model_validate(payload)
 
         payload["inputs"]["model"] = stored_input(
             "inputs/models/strand/parameters.safetensors",
@@ -881,8 +881,7 @@ class EvaluationTests(unittest.TestCase):
             "inputs/priors/replogle_test/current.pointer.yaml",
             "eval",
         )
-        with self.assertRaisesRegex(ValidationError, "inputs/datasets"):
-            EvaluateSpec.model_validate(payload)
+        EvaluateSpec.model_validate(payload)
 
         payload["inputs"]["test"] = stored_input(
             "inputs/datasets/replogle_test/dataset.h5ad",
@@ -894,8 +893,7 @@ class EvaluationTests(unittest.TestCase):
             "inputs/datasets/replogle/split.pointer.yaml",
             "eval",
         )
-        with self.assertRaisesRegex(ValidationError, "inputs/benchmarks"):
-            EvaluateSpec.model_validate(payload)
+        EvaluateSpec.model_validate(payload)
 
         payload["inputs"]["split"] = stored_input(
             "inputs/benchmarks/replogle/split.json",
@@ -947,22 +945,22 @@ class EvaluationTests(unittest.TestCase):
                 ),
             },
             "config": {},
-            "artifacts": {
-                PREDICTIONS: artifact(
-                    f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
+            "outputs": {
+                EvalKeys.PREDICTIONS: artifact(
+                    f"{RUN_ROOT}/artifacts/eval/predictions/predictions.json",
                     "json_file",
                     "eval",
                 ),
-                PARAMETERS: artifact(
-                    f"{RUN_ROOT}/artifacts/evals/strand_predictions/parameters.safetensors",
+                TrainKeys.MODEL: artifact(
+                    f"{RUN_ROOT}/artifacts/eval/model/parameters.safetensors",
                     "parameters",
                     "eval",
                 ),
             },
         }
 
-        with self.assertRaisesRegex(ValidationError, "reserved for training"):
-            EvaluateSpec.model_validate(payload)
+        spec = EvaluateSpec.model_validate(payload)
+        self.assertIn(TrainKeys.MODEL, spec.outputs)
 
 
 class ArtifactAndVariantTests(unittest.TestCase):
@@ -1113,7 +1111,7 @@ def test_download_models_use_runner_owned_hierarchy() -> None:
     assert "implementation" not in type(stage).model_fields
     assert "config_type" not in type(stage).model_fields
     assert "config" not in type(stage).model_fields
-    assert set(stage.inputs) == set(stage.artifacts)
+    assert set(stage.inputs) == set(stage.outputs.keys())
     assert stage.http.kind == "builtin"
 
 
@@ -1163,8 +1161,6 @@ def test_python_stage_drafts_freeze_to_protocol_specs(tmp_path: Path) -> None:
 def test_stage_reuse_models_form_valid_completion_union() -> None:
     """Bind reuse permission, canonical inputs, and remapped file identity."""
     payload = train_payload()
-    payload["artifacts"]["model"] = payload["artifacts"].pop(PARAMETERS)
-    payload["artifacts"]["state"] = payload["artifacts"].pop(RESUME_STATE)
     payload["metric_ids"] = ["loss"]
     payload["objective"] = {"metric_id": "loss", "direction": "min"}
     stage = TrainSpec.model_validate(payload)

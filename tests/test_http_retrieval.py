@@ -22,9 +22,9 @@ from viper.http import (
     HttpRetrievalError,
     HttpRetrievalPolicy,
     ObservedHttpResponse,
-    ProjectHttpImplementationSpec,
     ResolvedHttpImplementation,
     ResolvedHttpRetrieval,
+    WorkspaceHttpImplementationSpec,
     invoke_http,
     resolve_http,
 )
@@ -178,7 +178,7 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
         implementation_path.write_bytes(implementation_raw)
         return resolve_http(
             root,
-            ProjectHttpImplementationSpec(
+            WorkspaceHttpImplementationSpec(
                 id="conforming",
                 implementation=HttpImplementationRef(
                     path="project/conforming_transport.py",
@@ -187,7 +187,7 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
                     bytes=len(implementation_raw),
                 ),
                 config_type=ConfigTypeRef(
-                    owner="project",
+                    owner="workspace",
                     path="project/transport_params.py",
                     symbol="ConformingTransportConfig",
                     sha256=hashlib.sha256(config_raw).hexdigest(),
@@ -491,7 +491,7 @@ def test_project_http_receives_typed_configs_and_exact_destination(
     config_path.parent.mkdir(parents=True)
     config_path.write_bytes(config_raw)
     implementation_path.write_bytes(implementation_raw)
-    spec = ProjectHttpImplementationSpec(
+    spec = WorkspaceHttpImplementationSpec(
         id="project_http",
         implementation=HttpImplementationRef(
             path="project/transport.py",
@@ -500,7 +500,7 @@ def test_project_http_receives_typed_configs_and_exact_destination(
             bytes=len(implementation_raw),
         ),
         config_type=ConfigTypeRef(
-            owner="project",
+                owner="workspace",
             path="project/transport_params.py",
             symbol="ProjectTransportConfig",
             sha256=hashlib.sha256(config_raw).hexdigest(),
@@ -699,7 +699,7 @@ def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
     config_path.parent.mkdir(parents=True)
     config_path.write_bytes(config_raw)
     implementation_path.write_bytes(implementation_raw)
-    spec = ProjectHttpImplementationSpec(
+    spec = WorkspaceHttpImplementationSpec(
         id="escape",
         implementation=HttpImplementationRef(
             path="project/escape.py",
@@ -708,7 +708,7 @@ def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
             bytes=len(implementation_raw),
         ),
         config_type=ConfigTypeRef(
-            owner="project",
+                owner="workspace",
             path="project/config.py",
             symbol="EscapeConfig",
             sha256=hashlib.sha256(config_raw).hexdigest(),

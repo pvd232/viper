@@ -30,7 +30,6 @@ from pydantic import (
     model_validator,
 )
 
-from . import config
 from ._config.validation import (
     instantiate_config,
     verify_config_type_bytes,
@@ -42,7 +41,7 @@ from ._schema import (
     PythonRepoRelPath,
     PythonSymbol,
 )
-from .config import Config, ConfigTypeRef
+from .config import Config, ConfigTypeRef, HttpConfig
 from .ids import HumanId, InputName
 from .references import SnapshotFileRef
 
@@ -187,7 +186,7 @@ class WorkspaceHttpImplementationSpec(ProtocolModel):
     id: HumanId
     implementation: HttpImplementationRef
     config_type: ConfigTypeRef
-    config: config.HttpConfig
+    config: HttpConfig
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
     @model_validator(mode="after")
@@ -281,7 +280,7 @@ class ResolvedHttpRetrieval(ProtocolModel):
         return self
 
 
-HttpConfigT = TypeVar("HttpConfigT", bound=config.HttpConfig)
+HttpConfigT = TypeVar("HttpConfigT", bound=HttpConfig)
 DecoratedHttp = TypeVar("DecoratedHttp", bound=Callable[..., object])
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -368,7 +367,7 @@ class HttpCallable(Protocol[HttpConfigT]):
 def http(
     *,
     id: HumanId,
-    config: type[HttpConfigT] = config.HttpConfig,
+    config: type[HttpConfigT] = HttpConfig,
     executables: tuple[ExternalExecutableSpec, ...] = (),
 ) -> Callable[[DecoratedHttp], DecoratedHttp]:
     """Declare one workspace-owned HTTP callable with its config type."""
@@ -535,7 +534,7 @@ def resolve_http(
         config_path,
         spec.config_type,
         spec.config,
-        config.HttpConfig,
+        HttpConfig,
     )
     executables = tuple(_resolve_executable(value) for value in spec.executables)
     return ResolvedHttpImplementation(spec=spec, external_executables=executables)
@@ -565,7 +564,7 @@ def _persisted_headers(response: httpx.Response) -> dict[str, str]:
 
 
 def _httpx_request(
-    context: HttpContext[config.HttpConfig],
+    context: HttpContext[HttpConfig],
 ) -> HttpResult:
     """Retrieve one exact response body through a bounded HTTPX client."""
     started = time.monotonic()
@@ -685,17 +684,17 @@ def invoke_http(
     if destination.is_symlink():
         raise HttpRetrievalError("HTTP destination must not be a symlink")
     if isinstance(implementation.spec, BuiltinHttpImplementationSpec):
-        values = config.HttpConfig()
+        values = HttpConfig()
         function: HttpCallable[Any] = _httpx_request
     else:
         workspace_spec = implementation.spec
         values = cast(
-            config.HttpConfig,
+            HttpConfig,
             instantiate_config(
                 root / workspace_spec.config_type.path,
                 workspace_spec.config_type,
                 workspace_spec.config,
-                config.HttpConfig,
+                HttpConfig,
             ),
         )
         function = _load_workspace_http(root, workspace_spec)

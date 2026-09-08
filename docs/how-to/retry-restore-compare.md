@@ -48,7 +48,7 @@ recorded artifact.
 viper status path/to/attempt.journal.jsonl
 viper lineage path/to/resolved.yaml \
   --root . \
-  --trust-source https://github.com/example/project
+  --trust-source https://github.com/example/workspace
 ```
 
 Status reads the durable attempt journal. Lineage verifies the run and returns
@@ -58,9 +58,9 @@ the stages, inputs, artifacts, and production or reuse relationships.
 
 ```bash
 viper compare-runs left/resolved.yaml right/resolved.yaml \
-  --left-root left-project \
-  --right-root right-project \
-  --trust-source https://github.com/example/project
+  --left-root left-workspace \
+  --right-root right-workspace \
+  --trust-source https://github.com/example/workspace
 ```
 
 Put `--json` before the command when a script or agent needs one typed result

@@ -6,8 +6,8 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from . import config
 from ._schema import ProtocolModel, RNGSeed
+from .config import BuildConfig, DiagnosticConfig, EmbedConfig, EvalConfig, TrainConfig
 from .ids import ExperimentId, FactorId, LevelId, ReplicateId, StageId, VariantId
 from .metrics import MetricSpec
 
@@ -74,7 +74,7 @@ class BuildVariantStageConfig(ProtocolModel):
 
     kind: Literal["build"] = "build"
     stage_id: StageId
-    config: config.BuildConfig
+    config: BuildConfig
 
 
 class EmbedVariantStageConfig(ProtocolModel):
@@ -82,7 +82,7 @@ class EmbedVariantStageConfig(ProtocolModel):
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     stage_id: StageId
-    config: config.EmbedConfig
+    config: EmbedConfig
 
 
 class DiagnosticVariantStageConfig(ProtocolModel):
@@ -90,7 +90,7 @@ class DiagnosticVariantStageConfig(ProtocolModel):
 
     kind: Literal["diagnostic"] = "diagnostic"  # pyright: ignore[reportIncompatibleVariableOverride]
     stage_id: StageId
-    config: config.DiagnosticConfig
+    config: DiagnosticConfig
 
 
 class TrainVariantStageConfig(ProtocolModel):
@@ -98,7 +98,7 @@ class TrainVariantStageConfig(ProtocolModel):
 
     kind: Literal["train"] = "train"
     stage_id: StageId
-    config: config.TrainConfig
+    config: TrainConfig
 
 
 class EvalVariantStageConfig(ProtocolModel):
@@ -106,7 +106,7 @@ class EvalVariantStageConfig(ProtocolModel):
 
     kind: Literal["eval"] = "eval"
     stage_id: StageId
-    config: config.EvalConfig
+    config: EvalConfig
 
 
 VariantStageConfig = Annotated[

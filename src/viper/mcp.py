@@ -7,6 +7,7 @@ import json
 import sqlite3
 from argparse import ArgumentParser
 from collections.abc import Iterator, Mapping
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Literal, get_type_hints
 
@@ -193,7 +194,7 @@ def _catalog_sources(root: Path) -> tuple[tuple[str, str, str], ...]:
     database = root / ".viper/catalog.sqlite3"
     if not database.is_file():
         return ()
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         rows = connection.execute(
             """
             SELECT sources.source_key, sources.reference_json,

@@ -1,11 +1,11 @@
 # Configuration and schemas
 
-VIPER combines a project root with explicit plan records. Most execution
+VIPER combines a workspace root with explicit plan records. Most execution
 settings belong to the plan rather than ambient process state.
 
-## Project root
+## Workspace root
 
-A VIPER project contains `viper.toml`. Commands accept `--root`; Python APIs
+A VIPER workspace contains `viper.toml`. Commands accept `--root`; Python APIs
 accept a `Path`. Root discovery prevents inputs, artifacts, and protocol files
 from silently resolving against an unrelated working directory.
 

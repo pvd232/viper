@@ -25,7 +25,7 @@ The rest of this page explains how VIPER produces it.
 | --- | --- |
 | `training_loss` | Gives the recorded scalar a stable metric ID. |
 | `fit` | Reads the dataset, trains the model, records loss, and writes artifacts. |
-| `training` | Connects `fit` to its parameters, inputs, outputs, metric, and objective. |
+| `training` | Connects `fit` to its config, inputs, outputs, metric, and objective. |
 | `study` | Names the variant graph and reproducible seed. |
 | `draft` | Selects one variant and replicate plus exact source, environment, and reproducibility settings. |
 | `result` | Returns the verified terminal run and its stored path. |
@@ -53,22 +53,25 @@ RunResult + resolved.yaml
 
 ### 1. Python declares the intended work
 
-The decorated `fit()` function remains ordinary project code. The call to
+The decorated `fit()` function remains ordinary workspace code. The call to
 [`stage()`](../../src/viper/authoring.py) adds the information execution needs:
-which inputs may be read, which artifacts may be written, which metric IDs may
+which inputs may be read, which outputs may be written, which metric IDs may
 be recorded, and which objective is attached to the stage.
 
 The stage receives those values through [`Context`](../../src/viper/stages.py).
 For the quickstart:
 
 ```python
-@train(params=params.Train)
-def fit(context: Context[params.Train]) -> None:
-    model = context.artifacts["model"]
+from viper.config import TrainConfig
+
+
+@train(config=TrainConfig)
+def fit(context: Context[TrainConfig]) -> None:
+    model = context.outputs["model"]
 ```
 
 - `context.inputs["dataset"]` is the materialized CSV path;
-- `context.artifacts["model"]` and `context.artifacts["state"]` are writable
+- `context.outputs["model"]` and `context.outputs["resume_state"]` are writable
   paths declared before execution;
 - `context.metrics["training_loss"]` is the handle authorized to record loss.
 
@@ -91,8 +94,8 @@ protocol.
 [`execution.run()`](../../src/viper/execution/__init__.py) accepts either a
 `RunPlanDraft` or a path to an already frozen plan. With a draft, it first calls
 the internal plan compiler. That compiler resolves Python
-functions and parameter models to their source files and digests, resolves
-input and artifact references, and writes canonical run and stage documents.
+functions and config classs to their source files and digests, resolves
+input and output references, and writes canonical run and stage documents.
 
 The same call then executes the stored plan. This is why the public workflow is
 `plan() -> execution.run()` rather than a separate user-visible freeze step.
@@ -119,8 +122,8 @@ successful VIPER run.
 ### 6. Verification closes the run
 
 Terminal verification reconnects the observed attempt to the frozen plan. It
-checks that required stages completed, declared artifacts exist with recorded
-identities, measurements belong to declared metrics, and the terminal record
+checks that required stages completed, declared outputs exist as artifacts with
+recorded identities, measurements belong to declared metrics, and the terminal record
 references one coherent run. Only then does the returned result report
 `status: succeeded`.
 

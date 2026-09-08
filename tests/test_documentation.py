@@ -64,7 +64,6 @@ def test_protocol_uses_live_schemas_instead_of_repeated_source_models() -> None:
 
     assert "viper --json schema RunSpec" in text
     assert "viper --json capabilities" in text
-    assert "../internal/foundational-reproducibility-formalism.md" in text
     assert not python_blocks(text)
 
 
@@ -179,8 +178,8 @@ def test_public_examples_distinguish_weights_from_the_artifact_key() -> None:
         _TRACEABILITY_MODEL_FENCE.sub("", path.read_text()) for path in PUBLIC_MARKDOWN
     )
 
-    assert 'model = context.artifacts["model"]' in public_text
-    assert 'context.artifacts["weights"]' not in public_text
+    assert 'model = context.outputs["model"]' in public_text
+    assert 'context.outputs["weights"]' not in public_text
 
 
 def test_training_examples_name_the_project_owned_training_function() -> None:
@@ -195,7 +194,7 @@ def test_training_examples_name_the_project_owned_training_function() -> None:
     for path in TRAINING_GUIDES:
         text = path.read_text()
         assert "@train(" in text
-        assert "context.artifacts" in text
+        assert "context.outputs" in text
         assert all(call not in text for call in undefined_calls)
 
 

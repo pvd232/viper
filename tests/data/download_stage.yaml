@@ -1,10 +1,10 @@
 kind: download
-schema_version: 1
+schema_version: 2
 metric_ids: []
-artifacts:
+outputs:
   dataset:
     kind: file
-    path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/datasets/synthetic/dataset.txt
+    path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/download/dataset/dataset.txt
     loader:
       path: src/sample_project/artifact_loaders/bytes_file.py
       symbol: load
@@ -13,7 +13,7 @@ artifacts:
     data_role: training
   split:
     kind: file
-    path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/datasets/synthetic/split.txt
+    path: experiments/example/runs/baseline/01ARZ3NDEKTSV4RRFFQ69G5FAE/artifacts/download/split/split.txt
     loader:
       path: src/sample_project/artifact_loaders/bytes_file.py
       symbol: load

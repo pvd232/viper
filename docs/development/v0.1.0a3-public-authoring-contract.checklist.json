@@ -8,7 +8,7 @@
       "contract_id": "public-authoring",
       "path": "docs/development/v0.1.0a3-public-authoring-contract.md",
       "revision": "working-tree",
-      "sha256": "32099ea6850a16821f21a6d9ef7931ff3130c3948b3d56334a2f0eb5120a6264",
+      "sha256": "1e32ff3aef242062b81831e276524f886e144c59f8d26d12535a596390a4a7c9",
       "requirement_ids": [
         "PAC-01",
         "PAC-02",
@@ -142,12 +142,17 @@
       "depends_on": [
         "PAC-10"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "documentation checks, generated-workspace acceptance, CPU quickstart, and the final repository-wide public inventory"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "PAC-07 focused authoring and generated-workspace gate: 130 passed and 5 subtests passed",
+        "Repository-wide suite: 413 passed, 6 skipped, and 29 subtests passed",
+        "Ruff: all checks passed; Pyright: 0 errors",
+        "CPU quickstart: succeeded against committed PAC-07 source"
+      ]
     },
     {
       "requirement_id": "PAC-08",
@@ -292,12 +297,17 @@
       "requirement_ids": [
         "PAC-07"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "documentation checks, generated-workspace acceptance, CPU quickstart, and the final repository-wide public inventory"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "PAC-07 focused authoring and generated-workspace gate: 130 passed and 5 subtests passed",
+        "Repository-wide suite: 413 passed, 6 skipped, and 29 subtests passed",
+        "Ruff: all checks passed; Pyright: 0 errors",
+        "CPU quickstart: succeeded against committed PAC-07 source"
+      ]
     },
     {
       "pair_block_id": "P3-PAC-08",

@@ -49,7 +49,7 @@ def test_stage_context_keeps_live_values_outside_pydantic() -> None:
         stage_id="train",
         config=ExampleTrainConfig(epochs=3),
         inputs=MappingProxyType({"dataset": Path("inputs/data.bin")}),
-        artifacts=MappingProxyType({"parameters": Path("artifacts/model.bin")}),
+        outputs=MappingProxyType({"parameters": Path("artifacts/model.bin")}),
         metrics=MappingProxyType({}),
         numpy_generators=MappingProxyType({"augmentation": generator}),
     )

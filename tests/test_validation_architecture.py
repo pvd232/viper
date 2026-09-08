@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import DOMAIN_BY_MODULE, TIER_BY_MODULE
-from viper.project import PathError, resolve_path
+from viper.repository import PathError, resolve_path
 
 ROOT = Path(__file__).parents[1]
 
