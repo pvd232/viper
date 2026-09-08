@@ -52,8 +52,7 @@ def output_pointer_path(
 ) -> RepoRelPath:
     """Generate the pointer path for one completed run output."""
     path = (
-        f".viper/pointers/{run_digest}/{producer_stage_id}/"
-        f"{output_name}.pointer.yaml"
+        f".viper/pointers/{run_digest}/{producer_stage_id}/{output_name}.pointer.yaml"
     )
     _validate_pointer_path(path)
     return path
@@ -110,7 +109,7 @@ class ViperCloudFileRef(ProtocolModel):
 
     kind: Literal["viper_cloud"] = "viper_cloud"
     owner: HumanId
-    project: HumanId
+    workspace: HumanId
     revision: SHA256
     path: RepoRelPath
 
@@ -120,7 +119,7 @@ class ViperCloudStageResultSnapshotRef(ProtocolModel):
 
     kind: Literal["viper_cloud"] = "viper_cloud"
     owner: HumanId
-    project: HumanId
+    workspace: HumanId
     revision: SHA256
 
 
@@ -267,7 +266,7 @@ def resolve_snapshot_file_ref(
     else:
         stored_at = ViperCloudFileRef(
             owner=snapshot.owner,
-            project=snapshot.project,
+            workspace=snapshot.workspace,
             revision=snapshot.revision,
             path=file.path,
         )

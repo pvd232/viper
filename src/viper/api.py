@@ -94,8 +94,15 @@ from .knowledge import (
 )
 from .knowledge import knowledge as open_knowledge
 from .preflight import PreflightCheck, preflight_plan
-from .project import InitError, RootError, init, resolve_root
 from .references import LocalFileRef, ResolvedFileRef, ResolvedRunRef
+from .repository import (
+    InitError,
+    RootError,
+    resolve_root,
+)
+from .repository import (
+    init_workspace as create_workspace,
+)
 from .restoration import (
     ArtifactRestoreSelector,
     RestoreResult,
@@ -146,7 +153,7 @@ OperationName = Literal[
     "verify_pointer",
     "get_schema",
     "get_capabilities",
-    "init_project",
+    "init_workspace",
     "catalog_refresh",
     "search_runs",
     "search_artifacts",
@@ -302,7 +309,7 @@ class ValidateRunSpecSuccess(SuccessModel):
 
 
 class FreezeRunRequest(APIModel):
-    """Select one run-plan draft and its project root."""
+    """Select one run-plan draft and its workspace root."""
 
     draft: Path
     root: Path
@@ -547,23 +554,23 @@ class CapabilitiesSuccess(SuccessModel):
     execution_backends: tuple[str, ...]
 
 
-class InitProjectRequest(APIModel):
-    """Select an absent or empty project root and its import package name."""
+class InitWorkspaceRequest(APIModel):
+    """Select an absent or empty workspace root and its import package name."""
 
     path: Path
     package: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
 
 
-class InitProjectSuccess(SuccessModel):
-    """Report the root and files written for one starter project."""
+class InitWorkspaceSuccess(SuccessModel):
+    """Report the root and files written for one starter workspace."""
 
-    operation: Literal["init_project"] = "init_project"  # pyright: ignore[reportIncompatibleVariableOverride]
-    project_root: Path
+    operation: Literal["init_workspace"] = "init_workspace"  # pyright: ignore[reportIncompatibleVariableOverride]
+    repository_root: Path
     files: tuple[Path, ...]
 
 
 class LocalRunPath(APIModel):
-    """Select a terminal run document beneath the project root."""
+    """Select a terminal run document beneath the workspace root."""
 
     kind: Literal["local_path"] = "local_path"
     path: Path
@@ -631,7 +638,7 @@ class CatalogRefreshSuccess(SuccessModel):
 
 
 class SearchRunsRequest(APIModel):
-    """Select one project catalog and exact run query."""
+    """Select one workspace catalog and exact run query."""
 
     root: Path
     query: RunQuery = RunQuery()
@@ -645,7 +652,7 @@ class SearchRunsSuccess(SuccessModel):
 
 
 class SearchArtifactsRequest(APIModel):
-    """Select one project catalog and exact artifact query."""
+    """Select one workspace catalog and exact artifact query."""
 
     root: Path
     query: ArtifactQuery = ArtifactQuery()
@@ -659,7 +666,7 @@ class SearchArtifactsSuccess(SuccessModel):
 
 
 class SearchMeasurementsRequest(APIModel):
-    """Select one project catalog and exact measurement query."""
+    """Select one workspace catalog and exact measurement query."""
 
     root: Path
     query: MeasurementQuery = MeasurementQuery()
@@ -673,7 +680,7 @@ class SearchMeasurementsSuccess(SuccessModel):
 
 
 class SearchBenchmarksRequest(APIModel):
-    """Select one project catalog and exact benchmark query."""
+    """Select one workspace catalog and exact benchmark query."""
 
     root: Path
     query: BenchmarkQuery = BenchmarkQuery()
@@ -701,7 +708,7 @@ class KnowledgeRefreshSuccess(SuccessModel):
 
 
 class KnowledgeSearchRequest(APIModel):
-    """Select one project and one exact knowledge query payload."""
+    """Select one workspace and one exact knowledge query payload."""
 
     root: Path
     query: dict[str, Any] = Field(default_factory=dict)
@@ -714,7 +721,7 @@ class KnowledgeSearchSuccess(SuccessModel):
 
 
 class PublishKnowledgeRequest(APIModel):
-    """Select one project and one typed knowledge record."""
+    """Select one workspace and one typed knowledge record."""
 
     root: Path
     record: KnowledgeRecordEnvelope
@@ -748,8 +755,8 @@ SCHEMA_REGISTRY: dict[str, Any] = {
     "RestoreSuccess": RestoreSuccess,
     "FreezeRunRequest": FreezeRunRequest,
     "FreezeRunSuccess": FreezeRunSuccess,
-    "InitProjectRequest": InitProjectRequest,
-    "InitProjectSuccess": InitProjectSuccess,
+    "InitWorkspaceRequest": InitWorkspaceRequest,
+    "InitWorkspaceSuccess": InitWorkspaceSuccess,
     "LineageRequest": LineageRequest,
     "LineageSuccess": LineageSuccess,
     "CompareRunsRequest": CompareRunsRequest,
@@ -815,7 +822,7 @@ OPERATIONS: tuple[OperationName, ...] = (
     "verify_pointer",
     "get_schema",
     "get_capabilities",
-    "init_project",
+    "init_workspace",
     "catalog_refresh",
     "search_runs",
     "search_artifacts",
@@ -885,7 +892,7 @@ def _root(root: Path, operation: OperationName) -> Path:
                 operation=operation,
                 origin="application",
                 code="invalid_document",
-                message="project root is invalid",
+                message="workspace root is invalid",
                 details={
                     "root": root.as_posix(),
                 },
@@ -894,13 +901,13 @@ def _root(root: Path, operation: OperationName) -> Path:
 
 
 def _local_fetcher(
-    project_root: Path,
+    repository_root: Path,
     fetcher: StorageFetcher | None,
 ) -> StorageFetcher:
-    """Use an injected fetcher or bind the selected project's local store."""
+    """Use an injected fetcher or bind the selected workspace's local store."""
     if fetcher is not None:
         return fetcher
-    return LocalArtifactStore(project_root).fetch
+    return LocalArtifactStore(repository_root).fetch
 
 
 def validate_stage(request: ValidateStageRequest) -> ValidateStageSuccess:
@@ -939,10 +946,10 @@ def validate_run_spec(request: ValidateRunSpecRequest) -> ValidateRunSpecSuccess
 
 def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
     """Freeze one draft into canonical stage and run documents."""
-    project_root = _root(request.root, "freeze_run")
+    repository_root = _root(request.root, "freeze_run")
     try:
         draft = load_run_plan_draft(request.draft)
-        frozen = freeze_run_plan(project_root, draft)
+        frozen = freeze_run_plan(repository_root, draft)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise _document_error("freeze_run", request.draft, exc) from exc
     return FreezeRunSuccess(run_id=frozen.run.run_id, files=frozen.files)
@@ -950,8 +957,8 @@ def freeze_run(request: FreezeRunRequest) -> FreezeRunSuccess:
 
 def preflight(request: PreflightRequest) -> PreflightSuccess:
     """Inspect one complete local plan before allocating a run attempt."""
-    project_root = _root(request.root, "preflight")
-    report = preflight_plan(project_root, request.run_spec)
+    repository_root = _root(request.root, "preflight")
+    report = preflight_plan(repository_root, request.run_spec)
     return PreflightSuccess(
         run_id=report.run_id,
         ready=report.ready,
@@ -961,7 +968,7 @@ def preflight(request: PreflightRequest) -> PreflightSuccess:
 
 def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
     """Execute one selected stage and identify its declared outputs."""
-    project_root = _root(request.root, "execute_stage")
+    repository_root = _root(request.root, "execute_stage")
     try:
         run = _load_model(request.run_spec, RunSpec)
         assert isinstance(run, RunSpec)
@@ -971,11 +978,11 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
         )
         if reference is None:
             raise ValueError("selected stage is absent from the run plan")
-        stage = load_stage_spec(project_root / reference.spec)
+        stage = load_stage_spec(repository_root / reference.spec)
         if not isinstance(stage, ParameterizedSpec):
             raise ValueError("runner-owned download stages require execute_attempt")
         result = execute_stage_process(
-            project_root,
+            repository_root,
             run,
             reference,
             stage,
@@ -1004,10 +1011,10 @@ def execute_stage(request: ExecuteStageRequest) -> ExecuteStageSuccess:
 
 def run_request(request: RunRequest) -> RunSuccess:
     """Execute, publish, and verify one complete run on the active host."""
-    project_root = _root(request.root, "run")
+    repository_root = _root(request.root, "run")
     try:
         result = execute_run(
-            project_root,
+            repository_root,
             request.run_spec,
             timeout_seconds=request.timeout_seconds,
         )
@@ -1050,10 +1057,10 @@ def run_request(request: RunRequest) -> RunSuccess:
 
 def retry_request(request: RetryRequest) -> RetrySuccess:
     """Append one attempt to a failed frozen run and verify its terminal result."""
-    project_root = _root(request.root, "retry")
+    repository_root = _root(request.root, "retry")
     try:
         result = execute_run(
-            project_root,
+            repository_root,
             request.run_spec,
             timeout_seconds=request.timeout_seconds,
             retry=True,
@@ -1093,10 +1100,10 @@ def execute_benchmark(
     request: ExecuteBenchmarkRequest,
 ) -> ExecuteBenchmarkSuccess:
     """Execute and verify one independent benchmark confirmation."""
-    project_root = _root(request.root, "execute_benchmark")
+    repository_root = _root(request.root, "execute_benchmark")
     try:
         execution = execute_benchmark_run(
-            project_root,
+            repository_root,
             request.resolved_run,
             request.benchmark_spec,
             timeout_seconds=request.timeout_seconds,
@@ -1197,8 +1204,8 @@ def verify_run(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyRunSuccess:
     """Verify one terminal run and summarize the connected evidence."""
-    project_root = _root(request.root, "verify_run")
-    fetcher = _local_fetcher(project_root, fetcher)
+    repository_root = _root(request.root, "verify_run")
+    fetcher = _local_fetcher(repository_root, fetcher)
     try:
         resolved = _load_model(request.path, ResolvedRun)
         assert isinstance(resolved, ResolvedRun)
@@ -1233,8 +1240,8 @@ def lineage(
     fetcher: StorageFetcher | None = None,
 ) -> LineageSuccess:
     """Verify one terminal run and return its upstream lineage graph."""
-    project_root = _root(request.root, "lineage")
-    fetcher = _local_fetcher(project_root, fetcher)
+    repository_root = _root(request.root, "lineage")
+    fetcher = _local_fetcher(repository_root, fetcher)
     try:
         resolved = _load_model(request.path, ResolvedRun)
         assert isinstance(resolved, ResolvedRun)
@@ -1336,8 +1343,8 @@ def verify_benchmark(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyBenchmarkSuccess:
     """Verify one benchmark result and summarize its confirmation."""
-    project_root = _root(request.root, "verify_benchmark")
-    fetcher = _local_fetcher(project_root, fetcher)
+    repository_root = _root(request.root, "verify_benchmark")
+    fetcher = _local_fetcher(repository_root, fetcher)
     try:
         result = _load_model(request.path, BenchmarkResult)
         assert isinstance(result, BenchmarkResult)
@@ -1373,8 +1380,8 @@ def verify_pointer(
     fetcher: StorageFetcher | None = None,
 ) -> VerifyPointerSuccess:
     """Verify one promoted artifact and report its physical file count."""
-    project_root = _root(request.root, "verify_pointer")
-    fetcher = _local_fetcher(project_root, fetcher)
+    repository_root = _root(request.root, "verify_pointer")
+    fetcher = _local_fetcher(repository_root, fetcher)
     try:
         pointer = _load_model(request.path, ArtifactPointer)
         assert isinstance(pointer, ArtifactPointer)
@@ -1427,10 +1434,10 @@ def get_capabilities(request: CapabilitiesRequest) -> CapabilitiesSuccess:
     )
 
 
-def init_project(request: InitProjectRequest) -> InitProjectSuccess:
-    """Generate one runnable five-stage starter project."""
+def init_workspace(request: InitWorkspaceRequest) -> InitWorkspaceSuccess:
+    """Generate one runnable five-stage starter workspace."""
     try:
-        files = init(request.path, request.package)
+        files = create_workspace(request.path, request.package)
     except InitError as exc:
         occupied = request.path.exists() and (
             not request.path.is_dir() or any(request.path.iterdir())
@@ -1438,15 +1445,15 @@ def init_project(request: InitProjectRequest) -> InitProjectSuccess:
         code: ErrorCode = "write_conflict" if occupied else "io_failed"
         raise ViperError(
             ViperFailure(
-                operation="init_project",
+                operation="init_workspace",
                 origin="application",
                 code=code,
                 message=str(exc),
                 details={"path": request.path.as_posix()},
             )
         ) from exc
-    return InitProjectSuccess(
-        project_root=request.path.resolve(),
+    return InitWorkspaceSuccess(
+        repository_root=request.path.resolve(),
         files=files,
     )
 
@@ -1457,7 +1464,7 @@ Handler = Callable[[Any], SuccessModel]
 
 def restore_artifacts(request: RestoreRequest) -> RestoreSuccess:
     """Restore selected artifacts through the shared execution engine."""
-    project_root = _root(request.repository_root, "restore")
+    repository_root = _root(request.repository_root, "restore")
     selected = request.run_reference
     if isinstance(selected, LocalRunPath):
         run_reference = selected.path
@@ -1467,7 +1474,7 @@ def restore_artifacts(request: RestoreRequest) -> RestoreSuccess:
         run_reference = selected
     try:
         result = restore_run_artifacts(
-            project_root,
+            repository_root,
             run_reference,
             artifacts=request.artifacts,
             output=request.output,
@@ -1482,17 +1489,17 @@ def restore_artifacts(request: RestoreRequest) -> RestoreSuccess:
             )
         ) from exc
     except (OSError, ValueError, yaml.YAMLError) as exc:
-        path = selected.path if isinstance(selected, LocalRunPath) else project_root
+        path = selected.path if isinstance(selected, LocalRunPath) else repository_root
         raise _document_error("restore", path, exc) from exc
     return RestoreSuccess(result=result)
 
 
 def run_many(request: RunManyRequest) -> RunManySuccess:
     """Execute several frozen plans through the shared batch scheduler."""
-    project_root = _root(request.root, "run_many")
+    repository_root = _root(request.root, "run_many")
     try:
         result = execute_many(
-            project_root,
+            repository_root,
             request.run_specs,
             max_concurrency=request.max_concurrency,
             timeout_seconds=request.timeout_seconds,
@@ -1505,18 +1512,18 @@ def run_many(request: RunManyRequest) -> RunManySuccess:
 
 
 def _catalog_run_source(
-    project_root: Path,
+    repository_root: Path,
     path: Path,
     repositories: frozenset[str],
     fetcher: StorageFetcher,
 ) -> CatalogRunSource:
     """Verify one local terminal file and recover its immutable store reference."""
-    selected = path if path.is_absolute() else project_root / path
+    selected = path if path.is_absolute() else repository_root / path
     selected = selected.resolve(strict=True)
     try:
-        relative = selected.relative_to(project_root).as_posix()
+        relative = selected.relative_to(repository_root).as_posix()
     except ValueError as error:
-        raise ValueError("catalog run path is outside the project root") from error
+        raise ValueError("catalog run path is outside the workspace root") from error
     raw = selected.read_bytes()
     resolved = ResolvedRun.model_validate(parse_yaml_bytes(raw))
     verified = verify_run_result(
@@ -1545,19 +1552,19 @@ def catalog_refresh(
     fetcher: StorageFetcher | None = None,
 ) -> CatalogRefreshSuccess:
     """Verify selected terminal runs and atomically rebuild the local catalog."""
-    project_root = _root(request.root, "catalog_refresh")
-    fetcher = _local_fetcher(project_root, fetcher)
+    repository_root = _root(request.root, "catalog_refresh")
+    fetcher = _local_fetcher(repository_root, fetcher)
     try:
         sources = tuple(
             _catalog_run_source(
-                project_root,
+                repository_root,
                 path,
                 request.trusted_source_repositories,
                 fetcher,
             )
             for path in request.run_paths
         )
-        result = catalog(root=project_root).refresh(runs=sources)
+        result = catalog(root=repository_root).refresh(runs=sources)
     except VerificationError as error:
         raise ViperError(
             ViperFailure(
@@ -1580,99 +1587,99 @@ def catalog_refresh(
 
 
 def search_runs(request: SearchRunsRequest) -> SearchRunsSuccess:
-    """Return one exact page from the selected project's run catalog."""
-    project_root = _root(request.root, "search_runs")
-    return SearchRunsSuccess(page=catalog(root=project_root).runs(request.query))
+    """Return one exact page from the selected workspace's run catalog."""
+    repository_root = _root(request.root, "search_runs")
+    return SearchRunsSuccess(page=catalog(root=repository_root).runs(request.query))
 
 
 def search_artifacts(request: SearchArtifactsRequest) -> SearchArtifactsSuccess:
-    """Return one exact page from the selected project's artifact catalog."""
-    project_root = _root(request.root, "search_artifacts")
+    """Return one exact page from the selected workspace's artifact catalog."""
+    repository_root = _root(request.root, "search_artifacts")
     return SearchArtifactsSuccess(
-        page=catalog(root=project_root).artifacts(request.query)
+        page=catalog(root=repository_root).artifacts(request.query)
     )
 
 
 def search_measurements(
     request: SearchMeasurementsRequest,
 ) -> SearchMeasurementsSuccess:
-    """Return one exact page from the selected project's measurement catalog."""
-    project_root = _root(request.root, "search_measurements")
+    """Return one exact page from the selected workspace's measurement catalog."""
+    repository_root = _root(request.root, "search_measurements")
     return SearchMeasurementsSuccess(
-        page=catalog(root=project_root).measurements(request.query)
+        page=catalog(root=repository_root).measurements(request.query)
     )
 
 
 def search_benchmarks(
     request: SearchBenchmarksRequest,
 ) -> SearchBenchmarksSuccess:
-    """Return one exact page from the selected project's benchmark catalog."""
-    project_root = _root(request.root, "search_benchmarks")
+    """Return one exact page from the selected workspace's benchmark catalog."""
+    repository_root = _root(request.root, "search_benchmarks")
     return SearchBenchmarksSuccess(
-        page=catalog(root=project_root).benchmarks(request.query)
+        page=catalog(root=repository_root).benchmarks(request.query)
     )
 
 
 def knowledge_refresh(request: KnowledgeRefreshRequest) -> KnowledgeRefreshSuccess:
     """Rebuild the knowledge projection from local and supplied manifest heads."""
-    project_root = _root(request.root, "knowledge_refresh")
-    result = catalog(root=project_root).refresh(knowledge=request.heads)
+    repository_root = _root(request.root, "knowledge_refresh")
+    result = catalog(root=repository_root).refresh(knowledge=request.heads)
     return KnowledgeRefreshSuccess(result=result)
 
 
 def search_primitives(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Return ontology primitives matching one exact query."""
-    project_root = _root(request.root, "search_primitives")
+    repository_root = _root(request.root, "search_primitives")
     query = PrimitiveQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.primitives(query)
+    page = catalog(root=repository_root).knowledge.primitives(query)
     return KnowledgeSearchSuccess(operation="search_primitives", page=page)
 
 
 def search_assignments(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Return primitive assignments matching one exact query."""
-    project_root = _root(request.root, "search_assignments")
+    repository_root = _root(request.root, "search_assignments")
     query = AssignmentQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.assignments(query)
+    page = catalog(root=repository_root).knowledge.assignments(query)
     return KnowledgeSearchSuccess(operation="search_assignments", page=page)
 
 
 def search_modulations(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Return controlled modulations matching one exact query."""
-    project_root = _root(request.root, "search_modulations")
+    repository_root = _root(request.root, "search_modulations")
     query = ModulationQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.modulations(query)
+    page = catalog(root=repository_root).knowledge.modulations(query)
     return KnowledgeSearchSuccess(operation="search_modulations", page=page)
 
 
 def search_effects(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Return effect estimates matching one exact query."""
-    project_root = _root(request.root, "search_effects")
+    repository_root = _root(request.root, "search_effects")
     query = EffectQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.effects(query)
+    page = catalog(root=repository_root).knowledge.effects(query)
     return KnowledgeSearchSuccess(operation="search_effects", page=page)
 
 
 def search_impacts(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Return impact assessments matching one exact query."""
-    project_root = _root(request.root, "search_impacts")
+    repository_root = _root(request.root, "search_impacts")
     query = ImpactQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.impacts(query)
+    page = catalog(root=repository_root).knowledge.impacts(query)
     return KnowledgeSearchSuccess(operation="search_impacts", page=page)
 
 
 def search_diagnostics(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Return diagnostic signatures matching one exact query."""
-    project_root = _root(request.root, "search_diagnostics")
+    repository_root = _root(request.root, "search_diagnostics")
     query = DiagnosticQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.diagnostics(query)
+    page = catalog(root=repository_root).knowledge.diagnostics(query)
     return KnowledgeSearchSuccess(operation="search_diagnostics", page=page)
 
 
 def search_assertions(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Return journal assertions matching one exact query."""
-    project_root = _root(request.root, "search_assertions")
+    repository_root = _root(request.root, "search_assertions")
     query = AssertionQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.assertions(query)
+    page = catalog(root=repository_root).knowledge.assertions(query)
     return KnowledgeSearchSuccess(operation="search_assertions", page=page)
 
 
@@ -1680,9 +1687,9 @@ def search_retrieval_judgments(
     request: KnowledgeSearchRequest,
 ) -> KnowledgeSearchSuccess:
     """Return retrieval judgments matching one exact query."""
-    project_root = _root(request.root, "search_retrieval_judgments")
+    repository_root = _root(request.root, "search_retrieval_judgments")
     query = RetrievalJudgmentQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.retrieval_judgments(query)
+    page = catalog(root=repository_root).knowledge.retrieval_judgments(query)
     return KnowledgeSearchSuccess(
         operation="search_retrieval_judgments",
         page=page,
@@ -1691,9 +1698,9 @@ def search_retrieval_judgments(
 
 def search_similar(request: KnowledgeSearchRequest) -> KnowledgeSearchSuccess:
     """Rank vectors inside one exact view."""
-    project_root = _root(request.root, "search_similar")
+    repository_root = _root(request.root, "search_similar")
     query = SimilarityQuery.model_validate(request.query)
-    page = catalog(root=project_root).knowledge.similar(query)
+    page = catalog(root=repository_root).knowledge.similar(query)
     return KnowledgeSearchSuccess(operation="search_similar", page=page)
 
 
@@ -1702,8 +1709,8 @@ def _publish_knowledge(
     request: PublishKnowledgeRequest,
 ) -> PublishKnowledgeSuccess:
     """Route one typed envelope through its matching store method."""
-    project_root = _root(request.root, operation)
-    store = open_knowledge(root=project_root)
+    repository_root = _root(request.root, operation)
+    store = open_knowledge(root=repository_root)
     value = request.record.value
     if operation == "publish_ontology" and isinstance(value, OntologySpec):
         result = store.publish_ontology(value)
@@ -1816,7 +1823,7 @@ REQUEST_REGISTRY: dict[OperationName, RequestType] = {
     "verify_pointer": VerifyPointerRequest,
     "get_schema": SchemaRequest,
     "get_capabilities": CapabilitiesRequest,
-    "init_project": InitProjectRequest,
+    "init_workspace": InitWorkspaceRequest,
     "catalog_refresh": CatalogRefreshRequest,
     "search_runs": SearchRunsRequest,
     "search_artifacts": SearchArtifactsRequest,
@@ -1865,7 +1872,7 @@ HANDLER_REGISTRY: dict[OperationName, Handler] = {
     "verify_pointer": verify_pointer,
     "get_schema": get_schema,
     "get_capabilities": get_capabilities,
-    "init_project": init_project,
+    "init_workspace": init_workspace,
     "catalog_refresh": catalog_refresh,
     "search_runs": search_runs,
     "search_artifacts": search_artifacts,
@@ -1983,7 +1990,7 @@ class PythonRunError(RuntimeError):
 
 
 def _stage_parser() -> ArgumentParser:
-    """Build the argument parser used by a project stage entrypoint."""
+    """Build the argument parser used by a workspace stage entrypoint."""
     parser = ArgumentParser(add_help=True)
     parser.add_argument("--run", required=True, dest="run_spec", type=Path)
     parser.add_argument("--stage", required=True)
@@ -1999,15 +2006,15 @@ def run(
 ) -> RunSuccess:
     """Bind one launched callable to a frozen stage and execute its complete run."""
     arguments = _stage_parser().parse_args(None if argv is None else list(argv))
-    project_root = resolve_root(arguments.root)
+    repository_root = resolve_root(arguments.root)
     run_spec_path = arguments.run_spec
 
     if not run_spec_path.is_absolute():
-        run_spec_path = project_root / run_spec_path
+        run_spec_path = repository_root / run_spec_path
 
     run_spec_path = run_spec_path.resolve()
-    if not run_spec_path.is_relative_to(project_root):
-        raise PythonRunError("run specification is outside the project root")
+    if not run_spec_path.is_relative_to(repository_root):
+        raise PythonRunError("run specification is outside the workspace root")
 
     run_spec = RunSpec.model_validate(parse_yaml_bytes(run_spec_path.read_bytes()))
     selected = next(
@@ -2018,7 +2025,7 @@ def run(
     if selected is None:
         raise PythonRunError("selected stage ID is absent from the run plan")
 
-    stage_path = (project_root / selected.spec).resolve()
+    stage_path = (repository_root / selected.spec).resolve()
     stage_raw = stage_path.read_bytes()
     if len(stage_raw) != selected.bytes or hashlib.sha256(stage_raw).hexdigest() != (
         selected.sha256
@@ -2037,10 +2044,10 @@ def run(
         raise PythonRunError("launched stage callable has no source file")
 
     source_path = Path(source_file).resolve()
-    if not source_path.is_relative_to(project_root):
-        raise PythonRunError("launched stage callable is outside the project root")
+    if not source_path.is_relative_to(repository_root):
+        raise PythonRunError("launched stage callable is outside the workspace root")
 
-    relative_source = source_path.relative_to(project_root).as_posix()
+    relative_source = source_path.relative_to(repository_root).as_posix()
     if relative_source != stage.implementation.path:
         raise PythonRunError("launched stage callable path differs from the plan")
 
@@ -2058,7 +2065,7 @@ def run(
     return run_request(
         RunRequest(
             run_spec=run_spec_path,
-            root=project_root,
+            root=repository_root,
             timeout_seconds=arguments.timeout_seconds,
         )
     )
@@ -2071,15 +2078,15 @@ def retry(
     timeout_seconds: float | None = None,
 ) -> RetrySuccess:
     """Append one attempt to a failed frozen run."""
-    project_root = resolve_root(root)
-    selected = run_spec if run_spec.is_absolute() else project_root / run_spec
+    repository_root = resolve_root(root)
+    selected = run_spec if run_spec.is_absolute() else repository_root / run_spec
     selected = selected.resolve()
-    if not selected.is_relative_to(project_root):
-        raise PythonRunError("run specification is outside the project root")
+    if not selected.is_relative_to(repository_root):
+        raise PythonRunError("run specification is outside the workspace root")
     return retry_request(
         RetryRequest(
             run_spec=selected,
-            root=project_root,
+            root=repository_root,
             timeout_seconds=timeout_seconds,
         )
     )
@@ -2101,8 +2108,8 @@ __all__ = [
     "FailureOrigin",
     "FreezeRunRequest",
     "FreezeRunSuccess",
-    "InitProjectRequest",
-    "InitProjectSuccess",
+    "InitWorkspaceRequest",
+    "InitWorkspaceSuccess",
     "LineageRequest",
     "LineageSuccess",
     "KnowledgeRefreshRequest",
@@ -2163,7 +2170,7 @@ __all__ = [
     "restore_artifacts",
     "freeze_run",
     "get_capabilities",
-    "init_project",
+    "init_workspace",
     "get_schema",
     "knowledge_refresh",
     "lineage",

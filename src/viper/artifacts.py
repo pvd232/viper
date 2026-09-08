@@ -50,7 +50,7 @@ class ArtifactPointer(ProtocolModel):
 
 
 class ArtifactLoaderRef(ProtocolModel):
-    """Identify one project-owned artifact loader by exact file bytes."""
+    """Identify one workspace-owned artifact loader by exact file bytes."""
 
     path: PythonRepoRelPath
     symbol: PythonSymbol = "load"

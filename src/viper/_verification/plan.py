@@ -69,7 +69,7 @@ _DATA_ROLE_RANK: dict[DataRole, int] = {
 
 
 def _source_file(run: RunSpec, path: RepoRelPath) -> GitFileRef:
-    """Address one project definition in the run's source commit."""
+    """Address one workspace definition in the run's source commit."""
     return GitFileRef(
         repository=run.source.repository,
         commit=run.source.commit,
@@ -514,7 +514,7 @@ def verify_config_type_references(
             installed_path = Path(config.__file__).resolve().parent / reference.path
             raw = (
                 retrieve(_source_file(run, reference.path))
-                if reference.owner == "project"
+                if reference.owner == "workspace"
                 else installed_path.read_bytes()
             )
             verify_config_type_bytes(reference, raw)

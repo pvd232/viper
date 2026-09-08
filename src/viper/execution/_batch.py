@@ -21,7 +21,7 @@ def _load_run_spec(root: Path, path: Path) -> tuple[Path, RunSpec]:
     selected = path if path.is_absolute() else root / path
     selected = selected.resolve()
     if not selected.is_relative_to(root):
-        raise ValueError("run specification is outside the project root")
+        raise ValueError("run specification is outside the workspace root")
     return selected, RunSpec.model_validate(parse_yaml_bytes(selected.read_bytes()))
 
 

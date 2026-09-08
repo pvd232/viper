@@ -1,4 +1,4 @@
-"""Define project metric authoring, invocation, comparison, and measurement."""
+"""Define workspace metric authoring, invocation, comparison, and measurement."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class FloatComparator(ProtocolModel):
 
 
 class MetricImplementationRef(ProtocolModel):
-    """Identify one project-owned metric callable by exact file bytes."""
+    """Identify one workspace-owned metric callable by exact file bytes."""
 
     path: PythonRepoRelPath
     symbol: PythonSymbol

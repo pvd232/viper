@@ -156,7 +156,7 @@ def http_origin(url: HttpUrl) -> HttpOrigin:
 
 
 class HttpImplementationRef(ProtocolModel):
-    """Identify one project-owned HTTP callable by exact file bytes."""
+    """Identify one workspace-owned HTTP callable by exact file bytes."""
 
     path: PythonRepoRelPath
     symbol: PythonSymbol
@@ -165,7 +165,7 @@ class HttpImplementationRef(ProtocolModel):
 
 
 class ExternalExecutableSpec(ProtocolModel):
-    """Freeze the exact executable selected by one project HTTP implementation."""
+    """Freeze the exact executable selected by one workspace HTTP implementation."""
 
     executable_id: HumanId
     command: NonEmptyStr
@@ -180,10 +180,10 @@ class BuiltinHttpImplementationSpec(ProtocolModel):
     id: Literal["httpx"] = "httpx"
 
 
-class ProjectHttpImplementationSpec(ProtocolModel):
-    """Select one frozen project-owned HTTP implementation."""
+class WorkspaceHttpImplementationSpec(ProtocolModel):
+    """Select one frozen workspace-owned HTTP implementation."""
 
-    kind: Literal["project"] = "project"
+    kind: Literal["workspace"] = "workspace"
     id: HumanId
     implementation: HttpImplementationRef
     config_type: ConfigTypeRef
@@ -191,7 +191,7 @@ class ProjectHttpImplementationSpec(ProtocolModel):
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
     @model_validator(mode="after")
-    def validate_unique_executables(self) -> ProjectHttpImplementationSpec:
+    def validate_unique_executables(self) -> WorkspaceHttpImplementationSpec:
         """Require one external executable requirement per identifier."""
         identifiers = tuple(value.executable_id for value in self.executables)
         if len(set(identifiers)) != len(identifiers):
@@ -200,7 +200,7 @@ class ProjectHttpImplementationSpec(ProtocolModel):
 
 
 HttpImplementationSpec = Annotated[
-    BuiltinHttpImplementationSpec | ProjectHttpImplementationSpec,
+    BuiltinHttpImplementationSpec | WorkspaceHttpImplementationSpec,
     Field(discriminator="kind"),
 ]
 
@@ -244,7 +244,7 @@ class ResolvedHttpImplementation(ProtocolModel):
 
     @model_validator(mode="after")
     def validate_executable_resolution(self) -> ResolvedHttpImplementation:
-        """Resolve every project executable exactly once and none for HTTPX."""
+        """Resolve every workspace executable exactly once and none for HTTPX."""
         if isinstance(self.spec, BuiltinHttpImplementationSpec):
             if self.external_executables:
                 raise ValueError("built-in HTTP implementation cannot use executables")
@@ -333,7 +333,7 @@ class HttpResult:
 
 
 class CustomHttpDraft(BaseModel, Generic[HttpConfigT]):
-    """Hold one configured project HTTP callable before freezing."""
+    """Hold one configured workspace HTTP callable before freezing."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
@@ -347,7 +347,7 @@ HttpDraft = BuiltinHttpImplementationSpec | CustomHttpDraft[Any]
 
 @dataclass(frozen=True)
 class HttpDefinition(Generic[HttpConfigT]):
-    """Store authoring metadata attached to one project HTTP callable."""
+    """Store authoring metadata attached to one workspace HTTP callable."""
 
     id: HumanId
     config_type: type[HttpConfigT]
@@ -355,7 +355,7 @@ class HttpDefinition(Generic[HttpConfigT]):
 
 
 class HttpCallable(Protocol[HttpConfigT]):
-    """Describe the callable interface shared by project HTTP implementations."""
+    """Describe the callable interface shared by workspace HTTP implementations."""
 
     def __call__(
         self,
@@ -371,7 +371,7 @@ def http(
     config: type[HttpConfigT] = config.HttpConfig,
     executables: tuple[ExternalExecutableSpec, ...] = (),
 ) -> Callable[[DecoratedHttp], DecoratedHttp]:
-    """Declare one project-owned HTTP callable with its config type."""
+    """Declare one workspace-owned HTTP callable with its config type."""
     if not issubclass(config, Config):
         raise TypeError("HTTP config type must subclass viper.config.Config")
     definition = HttpDefinition(
@@ -395,16 +395,16 @@ def _verify_implementation_bytes(
     reference: HttpImplementationRef,
     raw: bytes,
 ) -> None:
-    """Compare one project HTTP file with its frozen identity."""
+    """Compare one workspace HTTP file with its frozen identity."""
     if len(raw) != reference.bytes:
         raise HttpRetrievalError("HTTP implementation byte count differs")
     if hashlib.sha256(raw).hexdigest() != reference.sha256:
         raise HttpRetrievalError("HTTP implementation SHA-256 differs")
 
 
-def _load_project_http(
+def _load_workspace_http(
     repository_root: Path,
-    spec: ProjectHttpImplementationSpec,
+    spec: WorkspaceHttpImplementationSpec,
 ) -> HttpCallable[Any]:
     """Load the exact decorated top-level callable selected by one stage."""
     root = repository_root.resolve()
@@ -420,7 +420,7 @@ def _load_project_http(
     sys.modules[module_name] = module
     inserted_path = str(root)
     saved_modules: dict[str, ModuleType] = {}
-    project_prefixes = {
+    workspace_prefixes = {
         child.stem
         for child in root.iterdir()
         if child.is_dir() or child.suffix == ".py"
@@ -428,7 +428,7 @@ def _load_project_http(
     for name in tuple(sys.modules):
         if any(
             name == prefix or name.startswith(f"{prefix}.")
-            for prefix in project_prefixes
+            for prefix in workspace_prefixes
         ):
             saved_modules[name] = sys.modules.pop(name)
     sys.path.insert(0, inserted_path)
@@ -462,7 +462,7 @@ def _load_project_http(
         for name in tuple(sys.modules):
             if any(
                 name == prefix or name.startswith(f"{prefix}.")
-                for prefix in project_prefixes
+                for prefix in workspace_prefixes
             ):
                 sys.modules.pop(name, None)
         sys.modules.update(saved_modules)
@@ -530,7 +530,7 @@ def resolve_http(
     _verify_implementation_bytes(spec.implementation, implementation_path.read_bytes())
     config_path = root / spec.config_type.path
     verify_config_type_bytes(spec.config_type, config_path.read_bytes())
-    _load_project_http(root, spec)
+    _load_workspace_http(root, spec)
     instantiate_config(
         config_path,
         spec.config_type,
@@ -688,17 +688,17 @@ def invoke_http(
         values = config.HttpConfig()
         function: HttpCallable[Any] = _httpx_request
     else:
-        project = implementation.spec
+        workspace_spec = implementation.spec
         values = cast(
             config.HttpConfig,
             instantiate_config(
-                root / project.config_type.path,
-                project.config_type,
-                project.config,
+                root / workspace_spec.config_type.path,
+                workspace_spec.config_type,
+                workspace_spec.config,
                 config.HttpConfig,
             ),
         )
-        function = _load_project_http(root, project)
+        function = _load_workspace_http(root, workspace_spec)
     context = HttpContext(
         request=request,
         credential=credential,

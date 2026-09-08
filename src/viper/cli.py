@@ -36,14 +36,14 @@ class ViperArgumentParser(ArgumentParser):
 
 
 def add_root(parser: ArgumentParser, name: RootArg = "root") -> None:
-    """Add one project-root option with current-directory discovery."""
+    """Add one workspace-root option with current-directory discovery."""
     option = f"--{name.replace('_', '-')}"
     parser.add_argument(
         option,
         dest=name,
         type=Path,
         default=Path.cwd(),
-        help="VIPER project root; defaults to discovery from the current directory",
+        help="VIPER workspace root; defaults to discovery from the current directory",
     )
 
 
@@ -309,7 +309,7 @@ def build_parser() -> ArgumentParser:
     commands.add_parser("capabilities", help="list installed VIPER capabilities")
     initialize = commands.add_parser(
         "init",
-        help="create a five-stage starter project",
+        help="create a five-stage starter workspace",
     )
     initialize.add_argument("path", type=Path)
     initialize.add_argument("--package", required=True)
@@ -376,7 +376,7 @@ def _operation_and_payload(
         "verify-pointer": "verify_pointer",
         "schema": "get_schema",
         "capabilities": "get_capabilities",
-        "init": "init_project",
+        "init": "init_workspace",
     }
     operation = mapping[command]
     if operation == "restore":
@@ -485,8 +485,8 @@ def _human_success(result: SuccessModel) -> str:
         return f"verified artifact with {getattr(result, 'file_count')} files"
     if result.operation == "get_schema":
         return result.model_dump_json(indent=2)
-    if result.operation == "init_project":
-        return f"created project at {getattr(result, 'project_root')}"
+    if result.operation == "init_workspace":
+        return f"created workspace at {getattr(result, 'repository_root')}"
     capabilities = getattr(result, "operations")
     return "\n".join(capabilities)
 

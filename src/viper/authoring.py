@@ -51,7 +51,7 @@ from .http import (
     HttpImplementationSpec,
     HttpRequestSpec,
     HttpRetrievalPolicy,
-    ProjectHttpImplementationSpec,
+    WorkspaceHttpImplementationSpec,
 )
 from .ids import (
     EvalId,
@@ -81,7 +81,6 @@ from .metrics import (
     metric_definition,
 )
 from .outputs import OutputDraft, OutputSpec, StageOutputs, run_output_path
-from .project import resolve_path, resolve_root
 from .references import (
     GitSource,
     LocalFileRef,
@@ -90,6 +89,7 @@ from .references import (
     ResolvedRunSpecRef,
     output_pointer_path,
 )
+from .repository import resolve_path, resolve_root
 from .reuse import StageReuseMode
 from .runs import (
     RunSpec,
@@ -125,7 +125,7 @@ UrlValue = str | int | float | bool
 
 
 def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
-    """Freeze one built-in selection or decorated project HTTP callable."""
+    """Freeze one built-in selection or decorated workspace HTTP callable."""
     if isinstance(draft, BuiltinHttpImplementationSpec):
         return draft
     definition = getattr(draft.implementation, "__viper_http__", None)
@@ -138,12 +138,12 @@ def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
     implementation_path = Path(source).resolve()
     config_path = Path(config_source).resolve()
     if not implementation_path.is_relative_to(root):
-        raise ValueError("HTTP callable is outside the project root")
+        raise ValueError("HTTP callable is outside the workspace root")
     if not config_path.is_relative_to(root):
-        raise ValueError("HTTP config type is outside the project root")
+        raise ValueError("HTTP config type is outside the workspace root")
     implementation_raw = implementation_path.read_bytes()
     config_raw = config_path.read_bytes()
-    return ProjectHttpImplementationSpec(
+    return WorkspaceHttpImplementationSpec(
         id=definition.id,
         implementation=HttpImplementationRef(
             path=implementation_path.relative_to(root).as_posix(),
@@ -152,7 +152,7 @@ def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
             bytes=len(implementation_raw),
         ),
         config_type=ConfigTypeRef(
-            owner="project",
+            owner="workspace",
             path=config_path.relative_to(root).as_posix(),
             symbol=definition.config_type.__name__,
             sha256=hashlib.sha256(config_raw).hexdigest(),
@@ -194,7 +194,7 @@ class BaseSpecDraft(BaseModel):
 
 
 class ParameterizedSpecDraft(BaseSpecDraft):
-    """Hold one decorated project stage and its config values."""
+    """Hold one decorated workspace stage and its config values."""
 
     implementation: Callable[[Context[Any]], None]
     config: config.Config
@@ -221,13 +221,13 @@ class DownloadSpecDraft(BaseSpecDraft):
 
 
 class InternalSpecDraft(ParameterizedSpecDraft):
-    """Hold a project stage that consumes authored inputs."""
+    """Hold a workspace stage that consumes authored inputs."""
 
     inputs: dict[InputName, StageInputDraft] = Field(min_length=1)
 
 
 class BuildSpecDraft(InternalSpecDraft):
-    """Hold one project-defined prior builder."""
+    """Hold one workspace-defined prior builder."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
     config: config.BuildConfig  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -872,9 +872,9 @@ def _freeze_stage(
         config_reference = config.type_ref(definition.config_type)
     else:
         if not config_path.is_relative_to(root):
-            raise ValueError("stage config type is outside the project root")
+            raise ValueError("stage config type is outside the workspace root")
         config_reference = ConfigTypeRef(
-            owner="project",
+            owner="workspace",
             path=config_path.relative_to(root).as_posix(),
             symbol=definition.config_type.__name__,
             sha256=hashlib.sha256(config_raw).hexdigest(),
@@ -1047,16 +1047,16 @@ def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
     implementation_path = Path(implementation_source).resolve()
     implementation_raw = implementation_path.read_bytes()
     if not implementation_path.is_relative_to(root):
-        raise ValueError("metric callable is outside the project root")
+        raise ValueError("metric callable is outside the workspace root")
     if config_type.__module__ == config.__name__:
         config_reference = config.type_ref(config_type)
     else:
         config_path = Path(config_source).resolve()
         config_raw = config_path.read_bytes()
         if not config_path.is_relative_to(root):
-            raise ValueError("metric config type is outside the project root")
+            raise ValueError("metric config type is outside the workspace root")
         config_reference = ConfigTypeRef(
-            owner="project",
+            owner="workspace",
             path=config_path.relative_to(root).as_posix(),
             symbol=config_type.__name__,
             sha256=hashlib.sha256(config_raw).hexdigest(),
@@ -1129,7 +1129,7 @@ def _compile_variant(
                 EvalVariantStageConfig(stage_id=stage_id, config=spec.config)
             )
     if not stage_configs:
-        raise ValueError("variant requires one project stage")
+        raise ValueError("variant requires one workspace stage")
     return VariantSpec(
         experiment_id=experiment_id,
         variant_id=variant_id,
@@ -1146,11 +1146,11 @@ def _compile_plan(
     cloud_client: ViperCloudClient | None = None,
 ) -> _CompiledPlan:
     """Compile one immutable draft into a complete in-memory protocol graph."""
-    project_root = resolve_root(root)
+    repository_root = resolve_root(root)
     experiment_draft = draft.experiment
     variant_draft = experiment_draft.variants[draft.variant]
     replicate_draft = experiment_draft.replicates[draft.replicate]
-    metrics = _compile_metrics(project_root, experiment_draft)
+    metrics = _compile_metrics(repository_root, experiment_draft)
     experiment_spec = ExperimentSpec(
         experiment_id=experiment_draft.experiment_id,
         factors=tuple(
@@ -1189,7 +1189,7 @@ def _compile_plan(
     input_cache: dict[int, InputRef] = {}
     for stage_id, stage_draft in variant_draft.stages.items():
         stage_spec = _freeze_stage(
-            project_root,
+            repository_root,
             run_root,
             stage_id,
             variant_draft.stages,
@@ -1224,7 +1224,7 @@ def _compile_plan(
     if draft.benchmark is not None:
         benchmark_draft = draft.benchmark
         test = _freeze_input(
-            project_root,
+            repository_root,
             variant_draft.stages,
             benchmark_draft.test,
             input_cache,
@@ -1233,7 +1233,7 @@ def _compile_plan(
         )
         splits = {
             name: _freeze_input(
-                project_root,
+                repository_root,
                 variant_draft.stages,
                 split,
                 input_cache,
@@ -1328,20 +1328,20 @@ def freeze_run_plan(
     cloud_client: ViperCloudClient | None = None,
 ) -> FrozenPlanFiles:
     """Publish one compiled plan and materialize its working files."""
-    project_root = resolve_root(root)
+    repository_root = resolve_root(root)
     destination = bind_run_destination(
-        project_root,
+        repository_root,
         draft.run_id,
-        load_storage_settings(project_root).destination,
+        load_storage_settings(repository_root).destination,
     )
     compiled = _compile_plan(
-        project_root,
+        repository_root,
         draft,
         destination=destination,
         cloud_client=cloud_client,
     )
-    commit = LocalArtifactStore(project_root).publish(compiled.files)
-    paths = tuple(_target_path(project_root, path) for path in compiled.files)
+    commit = LocalArtifactStore(repository_root).publish(compiled.files)
+    paths = tuple(_target_path(repository_root, path) for path in compiled.files)
     for path, raw in zip(paths, compiled.files.values(), strict=True):
         _write_exact_file(path, raw)
     run_raw = compiled.files[compiled.run_path]

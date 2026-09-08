@@ -1,4 +1,4 @@
-"""Define built-in and project-owned stage config types."""
+"""Define built-in and workspace-owned stage config types."""
 
 import hashlib
 import inspect
@@ -11,7 +11,7 @@ from ._schema import SHA256, ProtocolModel, PythonSourceRelPath, PythonSymbol
 
 
 class Config(BaseModel):
-    """A versioned JSON config mapping that project classes may specialize."""
+    """A versioned JSON config mapping that workspace classes may specialize."""
 
     model_config = ConfigDict(extra="allow", frozen=True)
 
@@ -23,15 +23,15 @@ class Config(BaseModel):
 
 
 class BuildConfig(Config):
-    """Config consumed by one project-defined build stage."""
+    """Config consumed by one workspace-defined build stage."""
 
 
 class EmbedConfig(Config):
-    """Config consumed by one project-defined embedding stage."""
+    """Config consumed by one workspace-defined embedding stage."""
 
 
 class TrainConfig(Config):
-    """Config consumed by one project-defined training procedure."""
+    """Config consumed by one workspace-defined training procedure."""
 
 
 class EvalConfig(Config):
@@ -47,18 +47,18 @@ class EvalConfig(Config):
 
 
 class MetricConfig(Config):
-    """Config consumed by one project-defined metric."""
+    """Config consumed by one workspace-defined metric."""
 
 
 class HttpConfig(Config):
-    """Config consumed by one project-defined HTTP implementation."""
+    """Config consumed by one workspace-defined HTTP implementation."""
 
 
 class DiagnosticConfig(Config):
-    """Config consumed by one project-defined diagnostic stage."""
+    """Config consumed by one workspace-defined diagnostic stage."""
 
 
-ConfigOwner = Literal["project", "viper"]
+ConfigOwner = Literal["workspace", "viper"]
 
 
 class ConfigTypeRef(ProtocolModel):

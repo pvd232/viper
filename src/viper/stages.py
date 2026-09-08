@@ -1,4 +1,4 @@
-"""Define the project-facing stage callable and its live invocation context."""
+"""Define the workspace-facing stage callable and its live invocation context."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ ConfigT = TypeVar("ConfigT", bound=config.Config)
 
 @dataclass(frozen=True)
 class Context(Generic[ConfigT]):
-    """Carry one validated project-stage invocation inside the controlled child."""
+    """Carry one validated workspace-stage invocation inside the controlled child."""
 
     run_id: RunId
     attempt_id: int
@@ -74,7 +74,7 @@ class Context(Generic[ConfigT]):
 
 
 class StageImplementationRef(ProtocolModel):
-    """Identify one project-owned top-level stage callable by exact file bytes."""
+    """Identify one workspace-owned top-level stage callable by exact file bytes."""
 
     path: PythonRepoRelPath
     symbol: PythonSymbol
@@ -160,7 +160,7 @@ class BaseSpec(ProtocolModel):
 
 
 class ParameterizedSpec(BaseSpec):
-    """Request an operation governed by one project-defined config type."""
+    """Request an operation governed by one workspace-defined config type."""
 
     implementation: StageImplementationRef
     config_type: ConfigTypeRef
@@ -168,7 +168,7 @@ class ParameterizedSpec(BaseSpec):
 
     @model_validator(mode="after")
     def validate_implementation_path(self) -> ParameterizedSpec:
-        """Keep the project callable outside every declared artifact root."""
+        """Keep the workspace callable outside every declared artifact root."""
         for name, artifact in self.outputs.items():
             if repo_file_paths_overlap(artifact.path, self.implementation.path):
                 raise ValueError(
@@ -234,14 +234,14 @@ class InternalSpec(ParameterizedSpec):
 
 
 class BuildSpec(InternalSpec):
-    """Request construction of a project-defined prior artifact."""
+    """Request construction of a workspace-defined prior artifact."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
     config: config.BuildConfig
 
 
 class EmbedSpec(InternalSpec):
-    """Request construction of a project-defined embedding artifact."""
+    """Request construction of a workspace-defined embedding artifact."""
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveSpec | None = None
@@ -547,7 +547,7 @@ class ResolvedDownloadSpec(ResolvedExecutedSpec):
 
 
 class ResolvedParameterizedSpec(ResolvedBaseSpec):
-    """Record an executed or verified-reused project stage."""
+    """Record an executed or verified-reused workspace stage."""
 
     spec: ParameterizedSpec  # pyright: ignore[reportIncompatibleVariableOverride]
     completion: StageCompletion
@@ -576,8 +576,8 @@ class ResolvedParameterizedSpec(ResolvedBaseSpec):
         return payload
 
     @model_validator(mode="after")
-    def validate_project_invocation(self) -> ResolvedParameterizedSpec:
-        """Match the resolved source to the selected project callable."""
+    def validate_workspace_invocation(self) -> ResolvedParameterizedSpec:
+        """Match the resolved source to the selected workspace callable."""
         if self.completion.kind == "reused":
             return self
         if self.completion.source.stored_at.path != self.spec.implementation.path:
@@ -782,9 +782,9 @@ def load_stage_callable(
         )
     inserted_paths = tuple(str(root) for root in import_roots)
     saved_modules: dict[str, ModuleType] = {}
-    project_prefixes: set[str] = set()
+    workspace_prefixes: set[str] = set()
     if import_roots:
-        project_prefixes = {
+        workspace_prefixes = {
             child.stem
             for root in import_roots
             for child in root.iterdir()
@@ -792,11 +792,11 @@ def load_stage_callable(
         }
         # An example can run from VIPER's own repository. Keep the framework
         # module loaded so decorators use the same StageDefinition class.
-        project_prefixes.discard(__name__.partition(".")[0])
+        workspace_prefixes.discard(__name__.partition(".")[0])
         for name in tuple(sys.modules):
             if any(
                 name == prefix or name.startswith(f"{prefix}.")
-                for prefix in project_prefixes
+                for prefix in workspace_prefixes
             ):
                 saved_modules[name] = sys.modules.pop(name)
         for inserted_path in reversed(inserted_paths):
@@ -828,7 +828,7 @@ def load_stage_callable(
             for name in tuple(sys.modules):
                 if any(
                     name == prefix or name.startswith(f"{prefix}.")
-                    for prefix in project_prefixes
+                    for prefix in workspace_prefixes
                 ):
                     sys.modules.pop(name, None)
             sys.modules.update(saved_modules)
@@ -868,7 +868,7 @@ def validate_stage_definition(
         or Path(source_file).resolve()
         != (
             root / stage.config_type.path
-            if stage.config_type.owner == "project"
+            if stage.config_type.owner == "workspace"
             else Path(config.__file__).resolve().parent / stage.config_type.path
         ).resolve()
     ):

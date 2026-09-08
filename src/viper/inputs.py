@@ -80,10 +80,9 @@ class StoredInputRef(ProtocolModel):
     def validate_materialization_path(self) -> StoredInputRef:
         """Keep materialized bytes separate from the immutable pointer file."""
         selected_pointer_path = pointer_path(self.pointer)
-        if (
-            repo_file_paths_overlap(self.path, selected_pointer_path)
-            or self.path.endswith(".pointer.yaml")
-        ):
+        if repo_file_paths_overlap(
+            self.path, selected_pointer_path
+        ) or self.path.endswith(".pointer.yaml"):
             raise ValueError(
                 "stored input path must not use or overlap a pointer-file path"
             )

@@ -371,7 +371,7 @@ def read_snapshot_file(
     else:
         location = ViperCloudFileRef(
             owner=snapshot.owner,
-            project=snapshot.project,
+            workspace=snapshot.workspace,
             revision=snapshot.revision,
             path=reference.path,
         )
@@ -403,7 +403,7 @@ def snapshot_identity(
         )
     if isinstance(snapshot, LocalStageResultSnapshotRef):
         return (snapshot.kind, snapshot.store, snapshot.commit)
-    return (snapshot.kind, snapshot.owner, snapshot.project, snapshot.revision)
+    return (snapshot.kind, snapshot.owner, snapshot.workspace, snapshot.revision)
 
 
 def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None:
@@ -421,7 +421,7 @@ def artifact_revision_identity(location: StorageModel) -> tuple[str, ...] | None
         return (
             location.kind,
             location.owner,
-            location.project,
+            location.workspace,
             location.revision,
         )
     return None

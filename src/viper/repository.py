@@ -1,4 +1,4 @@
-"""Discover and validate the root of a Git-backed VIPER project."""
+"""Discover and validate the root of a Git-backed VIPER workspace."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from ._schema import ProtocolModel, RepoRelPath
 
 PACKAGE_PATTERN = re.compile(r"[a-z][a-z0-9_]*\Z")
 ROOT_FILES: dict[str, str] = {
-    "viper.toml": "[project]\nschema_version = 1\n",
+    "viper.toml": "[workspace]\nschema_version = 2\n",
     "inputs/.gitkeep": "",
 }
 
@@ -26,20 +26,20 @@ class InitError(RuntimeError):
     """Report an invalid target or a failed scaffold write."""
 
 
-class Settings(ProtocolModel):
-    """Represent the ``[project]`` table stored in ``viper.toml``."""
+class RepositorySettings(ProtocolModel):
+    """Represent the ``[workspace]`` table stored in ``viper.toml``."""
 
-    schema_version: Literal[1] = Field(
-        description="Version of the project-marker schema."
+    schema_version: Literal[2] = Field(
+        description="Version of the workspace-marker schema."
     )
 
 
 class RootError(ValueError):
-    """Report failure to discover or validate a VIPER project root."""
+    """Report failure to discover or validate a VIPER workspace root."""
 
 
 class PathError(RootError):
-    """Report a project path that escapes its root or uses a symlink."""
+    """Report a workspace path that escapes its root or uses a symlink."""
 
 
 PathOperation = Literal["read", "write"]
@@ -66,51 +66,51 @@ def _require_git_work_tree(root: Path) -> None:
     )
 
     if completed.returncode != 0:
-        raise RootError(f"project root is not in a Git work tree: {root}")
+        raise RootError(f"workspace root is not in a Git work tree: {root}")
     if Path(completed.stdout.strip()).resolve() != root:
         raise RootError(f"viper.toml must be a Git work-tree root: {root}")
 
 
 def resolve_root(root: Path | None = None) -> Path:
-    """Return a project root with a valid marker at its Git work-tree boundary."""
+    """Return a workspace root with a valid marker at its Git work-tree boundary."""
     resolved = find_root(root if root is not None else Path.cwd())
     marker = resolved / "viper.toml"
     try:
         data = tomllib.loads(marker.read_text(encoding="utf-8"))
-        Settings.model_validate(data.get("project", {}))
+        RepositorySettings.model_validate(data.get("workspace", {}))
     except (OSError, tomllib.TOMLDecodeError, ValidationError) as error:
-        raise RootError(f"invalid project marker: {marker}") from error
+        raise RootError(f"invalid workspace marker: {marker}") from error
 
     _require_git_work_tree(resolved)
     return resolved
 
 
 def resolve_path(
-    project_root: Path,
+    repository_root: Path,
     path: RepoRelPath,
     *,
     operation: PathOperation,
 ) -> Path:
-    """Resolve one symlink-free project path for a local read or write."""
-    root = project_root.resolve(strict=True)
+    """Resolve one symlink-free workspace path for a local read or write."""
+    root = repository_root.resolve(strict=True)
     relative = Path(path)
     if relative.is_absolute() or ".." in relative.parts:
-        raise PathError(f"project path escapes ROOT: {path}")
+        raise PathError(f"workspace path escapes ROOT: {path}")
 
     candidate = root / relative
     current = root
     for part in relative.parts:
         current = current / part
         if current.is_symlink():
-            raise PathError(f"project path contains a symlink: {path}")
+            raise PathError(f"workspace path contains a symlink: {path}")
         if not current.exists():
             break
 
     resolved = candidate.resolve(strict=False)
     if not resolved.is_relative_to(root):
-        raise PathError(f"resolved project path escapes ROOT: {path}")
+        raise PathError(f"resolved workspace path escapes ROOT: {path}")
     if operation == "read" and not resolved.is_file():
-        raise PathError(f"project file is missing: {path}")
+        raise PathError(f"workspace file is missing: {path}")
     return resolved
 
 
@@ -120,8 +120,8 @@ def validate_package_name(package: str) -> None:
         raise InitError("package must match ^[a-z][a-z0-9_]*$")
 
 
-def _project_files(package: str) -> dict[str, str]:
-    """Return the complete starter-project file mapping."""
+def workspace_files(package: str) -> dict[str, str]:
+    """Return the complete starter-workspace file mapping."""
     stage_definitions = {
         "build": ("BuildConfig", "build", "prior"),
         "embed": ("EmbedConfig", "embed", "embedding"),
@@ -133,13 +133,13 @@ def _project_files(package: str) -> dict[str, str]:
         ".gitignore": ".viper/\n__pycache__/\n*.egg-info/\n",
         "README.md": f"""# {package}
 
-This project contains one decorated callable for each VIPER stage kind.
+This workspace contains one decorated callable for each VIPER stage kind.
 
-Run the focused project tests:
+Run the focused workspace tests:
 
     python -m pytest -q
 
-After replacing the stage templates, commit the project and build a plan with
+After replacing the stage templates, commit the workspace and build a plan with
 `viper.authoring.plan()`. Pass that plan directly to `viper.execution.run()`.
 
 Benchmark specifications belong under `benchmarks/`.
@@ -148,13 +148,13 @@ Benchmark specifications belong under `benchmarks/`.
 requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
-[project]
+[workspace]
 name = "{package.replace("_", "-")}"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = ["viper-provenance>=0.1.0a3"]
 
-[project.optional-dependencies]
+[workspace.optional-dependencies]
 test = ["pytest>=9,<10"]
 
 [tool.setuptools.packages.find]
@@ -164,10 +164,10 @@ where = ["src"]
 pythonpath = ["src"]
 ''',
         f"src/{package}/__init__.py": (
-            f'"""Project-owned stages and provenance extensions for {package}."""\n'
+            f'"""Workspace-owned stages and provenance extensions for {package}."""\n'
         ),
         f"src/{package}/config.py": (
-            '''"""Define project-owned stage config types."""
+            '''"""Define workspace-owned stage config types."""
 
 from pydantic import Field
 from viper import config
@@ -198,7 +198,7 @@ class EvalConfig(config.EvalConfig):
 '''
         ),
         f"src/{package}/artifact_loaders/__init__.py": (
-            '"""Project-owned artifact reconstruction functions."""\n'
+            '"""Workspace-owned artifact reconstruction functions."""\n'
         ),
         f"src/{package}/artifact_loaders/bytes_file.py": (
             '''"""Load one file artifact as exact bytes."""
@@ -268,7 +268,7 @@ def load(path: Path) -> ResumeState:
 '''
         ),
         f"src/{package}/metrics/__init__.py": (
-            '"""Project-owned metric implementations."""\n'
+            '"""Workspace-owned metric implementations."""\n'
         ),
         f"src/{package}/metrics/eval.py": (
             '''"""Define one recomputed eval metric."""
@@ -293,7 +293,7 @@ source identity.
 A benchmark governs one eval contract across candidate run plans and
 requires an independently executed confirmation.
 """,
-        "run.py": '''"""Run one authored project plan."""
+        "run.py": '''"""Run one authored workspace plan."""
 
 from pathlib import Path
 
@@ -379,19 +379,19 @@ def {stage}(context) -> None:
     """Write the declared {artifact} artifact from verified inputs."""
 {stage_body}'''
     files[f"src/{package}/stages/__init__.py"] = (
-        '"""Project-owned decorated stage callables."""\n'
+        '"""Workspace-owned decorated stage callables."""\n'
     )
     return files
 
 
-def init(path: Path, package: str) -> tuple[Path, ...]:
-    """Write the starter project into one absent or empty directory."""
+def init_workspace(path: Path, package: str) -> tuple[Path, ...]:
+    """Write the starter workspace into one absent or empty directory."""
     validate_package_name(package)
     target = path.resolve()
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise InitError("target directory must be absent or empty")
 
-    files = _project_files(package)
+    files = workspace_files(package)
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{target.name}-", dir=target.parent))
     try:
@@ -404,5 +404,5 @@ def init(path: Path, package: str) -> tuple[Path, ...]:
         staging.replace(target)
     except Exception as exc:
         shutil.rmtree(staging, ignore_errors=True)
-        raise InitError("project scaffold could not be written") from exc
+        raise InitError("workspace scaffold could not be written") from exc
     return tuple(target / relative_path for relative_path in sorted(files))

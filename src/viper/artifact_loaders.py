@@ -1,4 +1,4 @@
-"""Validate verified artifact representations through project-owned loaders."""
+"""Validate verified artifact representations through workspace-owned loaders."""
 
 from __future__ import annotations
 

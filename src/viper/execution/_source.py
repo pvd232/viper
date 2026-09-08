@@ -72,7 +72,7 @@ class RunFetcher:
                 raise RunError("Viper Cloud retrieval requires a client")
             return self.cloud_client.fetch(
                 owner=location.owner,
-                project=location.project,
+                workspace=location.workspace,
                 revision=location.revision,
                 path=location.path,
             )
@@ -92,7 +92,7 @@ class RunFetcher:
                 file.path
                 for file in self.cloud_client.list_files(
                     owner=snapshot.owner,
-                    project=snapshot.project,
+                    workspace=snapshot.workspace,
                     revision=snapshot.revision,
                 )
             )

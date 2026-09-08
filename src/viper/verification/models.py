@@ -28,12 +28,12 @@ class VerificationError(ValueError):
 
 @dataclass(frozen=True)
 class VerificationPolicy:
-    """Define which source repositories may execute project-owned code."""
+    """Define which source repositories may execute workspace-owned code."""
 
     trusted_source_repositories: frozenset[str]
 
     def permits_source(self, repository: object) -> bool:
-        """Return whether project code from one repository may execute."""
+        """Return whether workspace code from one repository may execute."""
         normalized = str(repository).rstrip("/")
         return normalized in {
             trusted.rstrip("/") for trusted in self.trusted_source_repositories

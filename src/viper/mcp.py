@@ -246,20 +246,20 @@ def resource_templates() -> tuple[types.ResourceTemplate, ...]:
 
 def read_resource(root: Path, uri: str) -> types.ReadResourceResult:
     """Read one catalog-backed resource without changing server state."""
-    project_root = root.resolve()
+    repository_root = root.resolve()
     if uri == "viper://catalog/head":
-        database = project_root / ".viper/catalog.sqlite3"
+        database = repository_root / ".viper/catalog.sqlite3"
         if not database.is_file():
             raise ValueError("catalog head is unavailable")
         payload = {
             "sha256": hashlib.sha256(database.read_bytes()).hexdigest(),
-            "sources": len(_catalog_sources(project_root)),
+            "sources": len(_catalog_sources(repository_root)),
         }
         ttl = 1_000
     else:
         matches = [
             reference
-            for key, reference, kind in _catalog_sources(project_root)
+            for key, reference, kind in _catalog_sources(repository_root)
             if uri == f"viper://{kind}/{key}"
         ]
         if len(matches) != 1:

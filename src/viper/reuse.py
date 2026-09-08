@@ -119,7 +119,7 @@ class ResolvedStageReuseRef(ResolvedFileRef):
 
 
 class ExecutedStageCompletion(ProtocolModel):
-    """Record evidence created by an actual project stage process."""
+    """Record evidence created by an actual workspace stage process."""
 
     kind: Literal["executed"] = "executed"
     source: ResolvedGitFileRef
@@ -131,7 +131,7 @@ class ExecutedStageCompletion(ProtocolModel):
 
 
 class ReusedStageCompletion(ProtocolModel):
-    """Record that a project stage selected verified prior output."""
+    """Record that a workspace stage selected verified prior output."""
 
     kind: Literal["reused"] = "reused"
     receipt: ResolvedStageReuseRef

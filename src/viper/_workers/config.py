@@ -1,4 +1,4 @@
-"""Validate project config in a dedicated worker process."""
+"""Validate workspace config in a dedicated worker process."""
 
 from __future__ import annotations
 

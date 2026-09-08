@@ -23,7 +23,7 @@ from ..artifacts import ResolvedSingleFileArtifact
 from ..experiments import ExperimentSpec
 from ..http import (
     HttpRetrievalError,
-    ProjectHttpImplementationSpec,
+    WorkspaceHttpImplementationSpec,
     validate_request_policy,
 )
 from ..ids import InputName, StageId
@@ -189,9 +189,9 @@ def _verify_effective_env(
 def _executed_completion(
     resolved: ResolvedParameterizedSpec,
 ) -> ExecutedStageCompletion:
-    """Return project-process evidence or reject a reused stage on this path."""
+    """Return workspace-process evidence or reject a reused stage on this path."""
     if not isinstance(resolved.completion, ExecutedStageCompletion):
-        raise VerificationError("project stage did not execute")
+        raise VerificationError("workspace stage did not execute")
     return resolved.completion
 
 
@@ -494,7 +494,7 @@ def _verify_download_retrievals(
             )
 
         http = retrieval.http
-        if isinstance(http.spec, ProjectHttpImplementationSpec):
+        if isinstance(http.spec, WorkspaceHttpImplementationSpec):
             implementation = http.spec.implementation
             implementation_raw = retrieve(
                 GitFileRef(
@@ -617,12 +617,12 @@ def verify_attempt_stages(
 
         if isinstance(stage_spec, ParameterizedSpec):
             if not isinstance(resolved_spec, ResolvedParameterizedSpec):
-                raise VerificationError("project stage omitted invocation evidence")
+                raise VerificationError("workspace stage omitted invocation evidence")
             if resolved_spec.completion.kind == "reused":
                 invocation_reference = None
             elif invocation_index >= len(attempt.invocations):
                 raise VerificationError(
-                    "executed project stage omitted its invocation receipt"
+                    "executed workspace stage omitted its invocation receipt"
                 )
             else:
                 invocation_reference = attempt.invocations[invocation_index]

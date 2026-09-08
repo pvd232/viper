@@ -614,7 +614,7 @@ class Catalog:
     """Refresh and query one derived SQLite catalog."""
 
     def __init__(self, root: Path):
-        """Bind the catalog to one project root."""
+        """Bind the catalog to one workspace root."""
         self.root = root.resolve()
         self.path = self.root / ".viper/catalog.sqlite3"
 
@@ -1530,7 +1530,7 @@ class KnowledgeCatalog:
 
 
 def catalog(*, root: Path | None = None) -> Catalog:
-    """Open the derived catalog beneath one project root."""
+    """Open the derived catalog beneath one workspace root."""
     return Catalog(Path.cwd() if root is None else root)
 
 

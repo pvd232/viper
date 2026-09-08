@@ -25,7 +25,7 @@ from ._verification.plan import (
 from ._verification.storage import fetch_storage_bytes
 from .http import (
     HttpRetrievalError,
-    ProjectHttpImplementationSpec,
+    WorkspaceHttpImplementationSpec,
     resolve_http,
     validate_request_policy,
 )
@@ -403,7 +403,7 @@ def preflight_plan(
                     "config_type.validation",
                     reference.stage_id,
                     config_validation_valid,
-                    "stage config failed its project config type",
+                    "stage config failed its workspace config type",
                 )
             )
 
@@ -438,7 +438,7 @@ def preflight_plan(
             implementation_valid = True
             try:
                 resolve_http(root, stage.http)
-                if isinstance(stage.http, ProjectHttpImplementationSpec):
+                if isinstance(stage.http, WorkspaceHttpImplementationSpec):
                     implementation_valid = (
                         root / stage.http.implementation.path
                     ).read_bytes() == _git_bytes(

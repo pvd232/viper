@@ -1,4 +1,4 @@
-"""Verify project config classes and validate frozen config values."""
+"""Verify workspace config classes and validate frozen config values."""
 
 from __future__ import annotations
 
@@ -73,12 +73,12 @@ def validate_config(
     config: config.Config,
     expected_base: type[config.Config],
 ) -> dict[str, JsonValue]:
-    """Validate one frozen config mapping with its selected project class."""
+    """Validate one frozen config mapping with its selected workspace class."""
     raw = path.read_bytes()
     verify_config_type_bytes(reference, raw)
     model = (
         load_config_type(path, reference.symbol, expected_base)
-        if reference.owner == "project"
+        if reference.owner == "workspace"
         else _installed_config_type(reference.symbol, expected_base)
     )
     frozen = cast(dict[str, JsonValue], config.model_dump(mode="json"))
@@ -86,7 +86,7 @@ def validate_config(
     effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
     if effective != frozen:
         raise ConfigValidationError(
-            "frozen config must contain every effective project-model value"
+            "frozen config must contain every effective workspace-model value"
         )
     return effective
 
@@ -97,12 +97,12 @@ def instantiate_config(
     config: config.Config,
     expected_base: type[config.Config],
 ) -> config.Config:
-    """Construct the exact project config class from one frozen mapping."""
+    """Construct the exact workspace config class from one frozen mapping."""
     raw = path.read_bytes()
     verify_config_type_bytes(reference, raw)
     model = (
         load_config_type(path, reference.symbol, expected_base)
-        if reference.owner == "project"
+        if reference.owner == "workspace"
         else _installed_config_type(reference.symbol, expected_base)
     )
     frozen = cast(dict[str, JsonValue], config.model_dump(mode="json"))
@@ -110,7 +110,7 @@ def instantiate_config(
     effective = cast(dict[str, JsonValue], validated.model_dump(mode="json"))
     if effective != frozen:
         raise ConfigValidationError(
-            "frozen config must contain every effective project-model value"
+            "frozen config must contain every effective workspace-model value"
         )
     return validated
 
@@ -170,13 +170,13 @@ def validate_stage_config(
 
 
 def config_type_path(
-    project_root: Path,
+    repository_root: Path,
     reference: ConfigTypeRef,
 ) -> Path:
     """Resolve a config-type path against its declared source owner."""
     base = (
-        project_root.resolve()
-        if reference.owner == "project"
+        repository_root.resolve()
+        if reference.owner == "workspace"
         else Path(config.__file__).resolve().parent
     )
     path = (base / reference.path).resolve()

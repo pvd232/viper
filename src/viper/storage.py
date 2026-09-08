@@ -15,7 +15,6 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from ._schema import SHA256, ProtocolModel, RepoRelPath
 from .ids import HumanId, RunId
-from .project import PathError, resolve_path
 from .references import (
     LocalFileRef,
     LocalStageResultSnapshotRef,
@@ -26,6 +25,7 @@ from .references import (
     ViperCloudFileRef,
     ViperCloudStageResultSnapshotRef,
 )
+from .repository import PathError, resolve_path
 
 
 class LocalStoreError(RuntimeError):
@@ -46,14 +46,14 @@ class LocalStorageDestination(ProtocolModel):
 
 
 class ViperCloudDestination(ProtocolModel):
-    """Select one Viper Cloud project for immutable publication."""
+    """Select one Viper Cloud workspace for immutable publication."""
 
     kind: Literal["viper_cloud"] = Field(
         default="viper_cloud",
         description="Discriminator selecting Viper Cloud publication.",
     )
-    owner: HumanId = Field(description="Viper Cloud account owning the project.")
-    project: HumanId = Field(description="Viper Cloud project receiving the files.")
+    owner: HumanId = Field(description="Viper Cloud account owning the workspace.")
+    workspace: HumanId = Field(description="Viper Cloud workspace receiving the files.")
 
 
 StorageDestination = Annotated[
@@ -115,14 +115,16 @@ def content_revision(files: Mapping[RepoRelPath, bytes]) -> str:
 class LocalArtifactStore:
     """Manage content-addressed output revisions beneath one repository root."""
 
-    def __init__(self, project_root: Path, store: RepoRelPath = ".viper/store"):
-        """Bind the immutable store beneath one canonical project root."""
-        self.project_root = project_root.resolve(strict=True)
+    def __init__(self, repository_root: Path, store: RepoRelPath = ".viper/store"):
+        """Bind the immutable store beneath one canonical workspace root."""
+        self.repository_root = repository_root.resolve(strict=True)
         self.store = store
         try:
-            self.store_root = resolve_path(self.project_root, store, operation="write")
+            self.store_root = resolve_path(
+                self.repository_root, store, operation="write"
+            )
         except PathError as error:
-            raise LocalStoreError("local store escapes the project root") from error
+            raise LocalStoreError("local store escapes the workspace root") from error
 
     def publish(self, files: Mapping[RepoRelPath, bytes]) -> str:
         """Write one immutable revision and return its content-derived identity."""
@@ -224,7 +226,7 @@ class LocalSnapshotPublisher:
     """Publish stage snapshots through one repository-local artifact store."""
 
     def __init__(self, root: Path):
-        """Bind publication to the selected project root."""
+        """Bind publication to the selected workspace root."""
         self.root = root.resolve(strict=True)
         self.store = LocalArtifactStore(self.root)
 
@@ -274,13 +276,13 @@ def _parse_storage_destination(value: object) -> StorageDestination:
     if len(parts) != 2 or not all(parts):
         raise StorageConfigurationError("storage destination is invalid")
     try:
-        return ViperCloudDestination(owner=parts[0], project=parts[1])
+        return ViperCloudDestination(owner=parts[0], workspace=parts[1])
     except ValidationError as error:
         raise StorageConfigurationError("storage destination is invalid") from error
 
 
 def load_storage_settings(root: Path) -> StorageSettings:
-    """Load the storage table from the selected project's viper.toml file."""
+    """Load the storage table from the selected workspace's viper.toml file."""
     try:
         marker = resolve_path(root, "viper.toml", operation="read")
         document = tomllib.loads(marker.read_text(encoding="utf-8"))
@@ -300,11 +302,11 @@ def _read_publication_source(root: Path, source: PublicationSource) -> bytes:
     """Return bytes from one in-memory or root-confined publication source."""
     if isinstance(source, bytes):
         return source
-    project_root = root.resolve(strict=True)
-    candidate = source if source.is_absolute() else project_root / source
+    repository_root = root.resolve(strict=True)
+    candidate = source if source.is_absolute() else repository_root / source
     try:
-        relative = candidate.relative_to(project_root).as_posix()
-        validated = resolve_path(project_root, relative, operation="read")
+        relative = candidate.relative_to(repository_root).as_posix()
+        validated = resolve_path(repository_root, relative, operation="read")
     except (OSError, ValueError, PathError) as error:
         raise StorageConfigurationError(
             "storage publication source is invalid"
@@ -319,7 +321,7 @@ class ViperCloudClient(Protocol):
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
         path: RepoRelPath,
         source: PublicationSource,
@@ -344,7 +346,7 @@ class ViperCloudClient(Protocol):
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
         files: tuple[SnapshotFileRef, ...],
     ) -> None:
@@ -355,7 +357,7 @@ class ViperCloudClient(Protocol):
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
         path: RepoRelPath,
     ) -> bytes:
@@ -366,7 +368,7 @@ class ViperCloudClient(Protocol):
         self,
         *,
         owner: HumanId,
-        project: HumanId,
+        workspace: HumanId,
         revision: SHA256,
     ) -> tuple[SnapshotFileRef, ...]:
         """List every verified file in a sealed revision."""
@@ -418,7 +420,7 @@ def _cloud_upload_file(
         try:
             client.upload(
                 owner=destination.owner,
-                project=destination.project,
+                workspace=destination.workspace,
                 revision=revision,
                 path=path,
                 source=source,
@@ -444,7 +446,7 @@ def _cloud_seal(
         try:
             client.seal(
                 owner=destination.owner,
-                project=destination.project,
+                workspace=destination.workspace,
                 revision=revision,
                 files=files,
             )
@@ -493,7 +495,7 @@ def _cloud_publish(
 
 
 class ViperCloudSnapshotPublisher:
-    """Publish stage snapshots directly to one Viper Cloud project."""
+    """Publish stage snapshots directly to one Viper Cloud workspace."""
 
     def __init__(
         self,
@@ -530,7 +532,7 @@ class ViperCloudSnapshotPublisher:
         )
         return ViperCloudStageResultSnapshotRef(
             owner=self.destination.owner,
-            project=self.destination.project,
+            workspace=self.destination.workspace,
             revision=revision,
         )
 
@@ -550,7 +552,7 @@ class ViperCloudSnapshotPublisher:
                 file.path: file
                 for file in self.client.list_files(
                     owner=source_snapshot.owner,
-                    project=source_snapshot.project,
+                    workspace=source_snapshot.workspace,
                     revision=source_snapshot.revision,
                 )
             }
@@ -586,13 +588,13 @@ class ViperCloudSnapshotPublisher:
             ):
                 source = ViperCloudFileRef(
                     owner=source_snapshot.owner,
-                    project=source_snapshot.project,
+                    workspace=source_snapshot.workspace,
                     revision=source_snapshot.revision,
                     path=source_file.path,
                 )
                 target = ViperCloudFileRef(
                     owner=self.destination.owner,
-                    project=self.destination.project,
+                    workspace=self.destination.workspace,
                     revision=revision,
                     path=target_path,
                 )
@@ -634,7 +636,7 @@ class ViperCloudSnapshotPublisher:
         )
         return ViperCloudStageResultSnapshotRef(
             owner=self.destination.owner,
-            project=self.destination.project,
+            workspace=self.destination.workspace,
             revision=revision,
         )
 
@@ -687,7 +689,7 @@ def publish_resolved_files(
             bytes=identity.bytes,
             stored_at=ViperCloudFileRef(
                 owner=destination.owner,
-                project=destination.project,
+                workspace=destination.workspace,
                 revision=revision,
                 path=identity.path,
             ),

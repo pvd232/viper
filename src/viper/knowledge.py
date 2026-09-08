@@ -972,9 +972,11 @@ def knowledge(
     destination: StorageDestination | None = None,
 ) -> KnowledgeStore:
     """Open the knowledge store for one repository."""
-    project_root = Path.cwd().resolve() if root is None else root.resolve(strict=True)
-    selected = destination or load_storage_settings(project_root).destination
-    return KnowledgeStore(project_root, selected)
+    repository_root = (
+        Path.cwd().resolve() if root is None else root.resolve(strict=True)
+    )
+    selected = destination or load_storage_settings(repository_root).destination
+    return KnowledgeStore(repository_root, selected)
 
 
 __all__ = [

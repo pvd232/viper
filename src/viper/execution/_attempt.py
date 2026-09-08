@@ -314,7 +314,7 @@ def execute_attempt(
                 )
             else:
                 if not isinstance(stage, ParameterizedSpec):
-                    raise RunError("project stage lacks its parameterized contract")
+                    raise RunError("workspace stage lacks its parameterized contract")
                 source_location = GitFileRef(
                     repository=run.source.repository,
                     commit=run.source.commit,

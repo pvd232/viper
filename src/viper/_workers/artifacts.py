@@ -1,4 +1,4 @@
-"""Run one project-owned artifact loader and write its validation result."""
+"""Run one workspace-owned artifact loader and write its validation result."""
 
 from __future__ import annotations
 

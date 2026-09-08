@@ -1,4 +1,4 @@
-"""Execute project commands through the VIPER worker interface."""
+"""Execute workspace commands through the VIPER worker interface."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class ExecutionPolicy(BaseModel):
 
 
 class WorkerRequest(BaseModel):
-    """Describe one project command and its bounded local context."""
+    """Describe one workspace command and its bounded local context."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

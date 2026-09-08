@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .._schema import repo_file_paths_overlap
 from ..artifacts import ResolvedBundleArtifact, ResolvedSingleFileArtifact
-from ..project import PathError, resolve_path
 from ..references import (
     LocalFileRef,
     ResolvedFileRef,
@@ -18,6 +17,7 @@ from ..references import (
     ViperCloudFileRef,
     resolve_snapshot_file_ref,
 )
+from ..repository import PathError, resolve_path
 from ..restoration import (
     ArtifactRestoreSelector,
     RestoredArtifact,
@@ -89,13 +89,13 @@ def _cloud_run_reference(
         raise RestoreError("Viper Cloud restore requires a client")
     address = uri.removeprefix("viper://")
     owner, remainder = address.split("/", maxsplit=1)
-    project_revision, path = remainder.split("/", maxsplit=1)
-    project, revision = project_revision.split("@", maxsplit=1)
+    workspace_revision, path = remainder.split("/", maxsplit=1)
+    workspace, revision = workspace_revision.split("@", maxsplit=1)
     files = tuple(
         file
         for file in client.list_files(
             owner=owner,
-            project=project,
+            workspace=workspace,
             revision=revision,
         )
         if file.path == path
@@ -108,7 +108,7 @@ def _cloud_run_reference(
         bytes=file.bytes,
         stored_at=ViperCloudFileRef(
             owner=owner,
-            project=project,
+            workspace=workspace,
             revision=revision,
             path=file.path,
         ),
@@ -191,7 +191,9 @@ def _destination(
         relative = candidate.resolve().relative_to(root).as_posix()
         return resolve_path(root, relative, operation="write")
     except (OSError, ValueError, PathError) as error:
-        raise RestoreError("restore destination is outside the project root") from error
+        raise RestoreError(
+            "restore destination is outside the workspace root"
+        ) from error
 
 
 def _plan_files(

@@ -99,7 +99,7 @@ def resolve_stage(
     inputs: dict[InputName, ResolvedInputRef] | None,
     completed_at: datetime,
 ) -> ResolvedSpec:
-    """Construct the resolved subtype for one completed project stage."""
+    """Construct the resolved subtype for one completed workspace stage."""
     result = process
     common = {
         "spec": stage,

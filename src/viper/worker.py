@@ -1,4 +1,4 @@
-"""Execute project commands through one bounded worker interface."""
+"""Execute workspace commands through one bounded worker interface."""
 
 from __future__ import annotations
 
