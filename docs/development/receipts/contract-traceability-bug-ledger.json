@@ -11,7 +11,7 @@
       "focused_gate_would_catch": false,
       "pair_block_id": "P0-PAC-01",
       "regression_test": "tests/test_public_authoring_test_plan.py::test_first_pair_block_has_an_executable_boundary",
-      "repair_commit": null,
+      "repair_commit": "25fef3c",
       "requirement_id": "PAC-01",
       "summary": "PAC-01 excluded its required completion-evidence files from its allowed path boundary."
     },
