@@ -16,16 +16,16 @@ from pydantic import HttpUrl, TypeAdapter
 from tests.fixtures import (
     DEFAULT_ARTIFACT_LOADER_SOURCE,
     artifact_loader_ref,
+    config_type_ref,
+    config_type_source,
     metric_spec,
-    parameter_model_ref,
-    parameter_model_source,
     python_environment,
     resume_state,
     stage_implementation_ref,
     verification_policy,
 )
 from viper import _subprocess as subprocess
-from viper import parameters
+from viper import config
 from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
@@ -33,7 +33,7 @@ from viper._schema import (
 )
 from viper._verification.attempt import verify_attempt_files
 from viper._verification.plan import (
-    verify_parameter_model_references,
+    verify_config_type_references,
     verify_run_plan_relationships,
     verify_run_spec,
     verify_stage_objectives,
@@ -57,11 +57,11 @@ from viper.benchmark import (
     MetricCriterion,
 )
 from viper.experiments import (
-    BuildVariantStageParams,
-    EvalVariantStageParams,
+    BuildVariantStageConfig,
+    EvalVariantStageConfig,
     ExperimentSpec,
     ReplicateSpec,
-    TrainVariantStageParams,
+    TrainVariantStageConfig,
     VariantSpec,
 )
 from viper.ids import InputName
@@ -420,9 +420,9 @@ def train_spec(*, future_prior: bool = False) -> TrainSpec:
             b"def fit(context):\n    pass\n",
             symbol="fit",
         ),
-        parameter_model=parameter_model_ref("train"),
+        config_type=config_type_ref("train"),
         inputs=inputs,
-        params=parameters.Train.model_validate(
+        config=config.TrainConfig.model_validate(
             {"epochs": 10, "batch_size": 64, "learning_rate": 0.001}
         ),
         artifacts={
@@ -450,7 +450,7 @@ def build_spec() -> BuildSpec:
             b"def build_prior(context):\n    pass\n",
             symbol="build_prior",
         ),
-        parameter_model=parameter_model_ref("build"),
+        config_type=config_type_ref("build"),
         inputs={
             "depmap": StoredInputRef(
                 kind="stored",
@@ -459,7 +459,7 @@ def build_spec() -> BuildSpec:
                 data_role="training",
             )
         },
-        params=parameters.Build(),
+        config=config.BuildConfig(),
         artifacts={
             "prior": SingleFileArtifactSpec(
                 kind="file",
@@ -543,8 +543,8 @@ def invocation_evidence(
         run_id=run.run_id,
         attempt_id=1,
         stage_id=stage_id,
-        parameter_model=stage.parameter_model,
-        parameter_digest=document_digest(stage.params),
+        config_type=stage.config_type,
+        config_digest=document_digest(stage.config),
         inputs=inputs,
         artifacts={name: artifact.path for name, artifact in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
@@ -1449,9 +1449,9 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
+            stage_configs=(
+                TrainVariantStageConfig(
+                    kind="train", stage_id="train", config=train.config
                 ),
             ),
         )
@@ -1491,9 +1491,9 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
+            stage_configs=(
+                TrainVariantStageConfig(
+                    kind="train", stage_id="train", config=train.config
                 ),
             ),
         )
@@ -1529,12 +1529,12 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                BuildVariantStageParams(
-                    kind="build", stage_id="build", params=build.params
+            stage_configs=(
+                BuildVariantStageConfig(
+                    kind="build", stage_id="build", config=build.config
                 ),
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
+                TrainVariantStageConfig(
+                    kind="train", stage_id="train", config=train.config
                 ),
             ),
         )
@@ -1572,12 +1572,12 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                BuildVariantStageParams(
-                    kind="build", stage_id="build", params=build.params
+            stage_configs=(
+                BuildVariantStageConfig(
+                    kind="build", stage_id="build", config=build.config
                 ),
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
+                TrainVariantStageConfig(
+                    kind="train", stage_id="train", config=train.config
                 ),
             ),
         )
@@ -1591,7 +1591,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 {"build": build, "train": train},
             )
 
-    def test_variant_parameters_match_the_loaded_training_stage(self) -> None:
+    def test_variant_configs_match_the_loaded_training_stage(self) -> None:
         """Verify that variant parameters match the loaded training stage."""
         train = train_spec()
         run, _ = run_spec([("train", train)])
@@ -1606,11 +1606,11 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                TrainVariantStageParams(
+            stage_configs=(
+                TrainVariantStageConfig(
                     kind="train",
                     stage_id="train",
-                    params=train.params,
+                    config=train.config,
                 ),
             ),
         )
@@ -1625,10 +1625,10 @@ class RunPlanRelationshipTests(unittest.TestCase):
 
         mismatched_variant = variant.model_copy(
             update={
-                "stage_params": (
-                    variant.stage_params[0].model_copy(
+                "stage_configs": (
+                    variant.stage_configs[0].model_copy(
                         update={
-                            "params": train.params.model_copy(update={"epochs": 11})
+                            "config": train.config.model_copy(update={"epochs": 11})
                         }
                     ),
                 )
@@ -1658,9 +1658,9 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
+            stage_configs=(
+                TrainVariantStageConfig(
+                    kind="train", stage_id="train", config=train.config
                 ),
             ),
         )
@@ -1700,11 +1700,11 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                TrainVariantStageParams(
+            stage_configs=(
+                TrainVariantStageConfig(
                     kind="train",
                     stage_id="train",
-                    params=train.params,
+                    config=train.config,
                 ),
             ),
         )
@@ -1737,7 +1737,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                 b"def predict(context):\n    pass\n",
                 symbol="predict",
             ),
-            parameter_model=parameter_model_ref("evaluate"),
+            config_type=config_type_ref("evaluate"),
             eval_id="replogle_predictions",
             metric_ids=("pearson_correlation",),
             objective=MetricObjectiveSpec(
@@ -1768,7 +1768,7 @@ class RunPlanRelationshipTests(unittest.TestCase):
                     data_role="benchmark",
                 ),
             },
-            params=parameters.Evaluate(),
+            config=config.EvalConfig(),
             artifacts={
                 "preds": SingleFileArtifactSpec(
                     kind="file",
@@ -1802,12 +1802,12 @@ class RunPlanRelationshipTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                TrainVariantStageParams(
-                    kind="train", stage_id="train", params=train.params
+            stage_configs=(
+                TrainVariantStageConfig(
+                    kind="train", stage_id="train", config=train.config
                 ),
-                EvalVariantStageParams(
-                    kind="eval", stage_id="evaluate", params=evaluation.params
+                EvalVariantStageConfig(
+                    kind="eval", stage_id="evaluate", config=evaluation.config
                 ),
             ),
         )
@@ -1898,12 +1898,12 @@ class RunPlanRelationshipTests(unittest.TestCase):
         )
         wrong_run = wrong_run.model_copy(update={"benchmark_id": "replogle_strict"})
         wrong_variant_payload = variant.model_dump(mode="python")
-        wrong_variant_payload["stage_params"] = (
-            *wrong_variant_payload["stage_params"],
+        wrong_variant_payload["stage_configs"] = (
+            *wrong_variant_payload["stage_configs"],
             {
                 "kind": "train",
                 "stage_id": "other_train",
-                "params": other_train.params,
+                "config": other_train.config,
             },
         )
         wrong_variant = VariantSpec.model_validate(wrong_variant_payload)
@@ -1921,27 +1921,27 @@ class RunPlanRelationshipTests(unittest.TestCase):
             )
 
 
-class ParameterModelReferenceTests(unittest.TestCase):
+class ConfigTypeReferenceTests(unittest.TestCase):
     """Verify project parameter classes against the run source snapshot."""
 
-    def test_parameter_model_matches_frozen_source(self) -> None:
+    def test_config_type_matches_frozen_source(self) -> None:
         """Accept the exact class file selected by an internal stage."""
         stage = train_spec()
         run, _ = run_spec([("train", stage)])
 
-        verify_parameter_model_references(
+        verify_config_type_references(
             run,
             {"train": stage},
-            fetcher=lambda _: parameter_model_source("train"),
+            fetcher=lambda _: config_type_source("train"),
         )
 
-    def test_parameter_model_rejects_changed_source_bytes(self) -> None:
+    def test_config_type_rejects_changed_source_bytes(self) -> None:
         """Reject source bytes that differ from the frozen class identity."""
         stage = train_spec()
         run, _ = run_spec([("train", stage)])
 
         with self.assertRaisesRegex(VerificationError, "source verification"):
-            verify_parameter_model_references(
+            verify_config_type_references(
                 run,
                 {"train": stage},
                 fetcher=lambda _: b'class Changed:\n    """Changed bytes."""\n',

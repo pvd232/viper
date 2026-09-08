@@ -2,9 +2,10 @@
 
 import hashlib
 
-from viper import parameters
+from viper import config
 from viper._schema import DataRole
 from viper.artifacts import ArtifactLoaderRef
+from viper.config import ConfigTypeRef
 from viper.http import (
     BuiltinHttpImplementationSpec,
     HttpRequestSpec,
@@ -17,7 +18,6 @@ from viper.metrics import (
     MetricKind,
     MetricSpec,
 )
-from viper.parameters import ParameterModelRef
 from viper.randomness import (
     LegacyNumPyRNGState,
     MainProcessRNGState,
@@ -59,27 +59,36 @@ def metric_source(metric_id: str, kind: MetricKind) -> bytes:
     ).encode()
 
 
-def parameter_model_ref(kind: str) -> ParameterModelRef:
-    """Build one exact synthetic parameter-model identity for model tests."""
-    raw = parameter_model_source(kind)
-    class_name = f"{kind.title()}Parameters"
-    return ParameterModelRef(
+def config_type_ref(kind: str) -> ConfigTypeRef:
+    """Build one exact synthetic config-type identity for model tests."""
+    raw = config_type_source(kind)
+    class_name = f"{kind.title()}Config"
+    return ConfigTypeRef(
         owner="project",
-        path=f"project/parameters/{kind}.py",
+        path=f"project/config/{kind}.py",
         symbol=class_name,
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
     )
 
 
-def parameter_model_source(kind: str) -> bytes:
-    """Build the source bytes matched by ``parameter_model_ref``."""
-    class_name = f"{kind.title()}Parameters"
-    base_name = kind.title()
+def config_type_source(kind: str) -> bytes:
+    """Build the source bytes matched by ``config_type_ref``."""
+    class_name = f"{kind.title()}Config"
+    base_name = {
+        "build": "BuildConfig",
+        "embed": "EmbedConfig",
+        "train": "TrainConfig",
+        "evaluate": "EvalConfig",
+        "eval": "EvalConfig",
+        "metric": "MetricConfig",
+        "http": "HttpConfig",
+        "diagnostic": "DiagnosticConfig",
+    }[kind]
     return (
-        "from viper import parameters\n\n"
-        f"class {class_name}(parameters.{base_name}):\n"
-        f'    """Validate the {kind} parameters used by this fixture."""\n'
+        "from viper import config\n\n"
+        f"class {class_name}(config.{base_name}):\n"
+        f'    """Validate the {kind} config used by this fixture."""\n'
     ).encode()
 
 
@@ -209,10 +218,10 @@ def metric_spec(
     )
     if kind == "evaluation":
         return MetricSpec(
-            parameter_model=parameters.model_ref(parameters.Metric),
+            config_type=config.type_ref(config.MetricConfig),
             metric_id=metric_id,
             implementation=implementation,
-            params=parameters.Metric(),
+            config=config.MetricConfig(),
             mode="stateless",
             dependencies=(
                 MetricDependency(
@@ -224,10 +233,10 @@ def metric_spec(
             comparator=FloatComparator(),
         )
     return MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id=metric_id,
         implementation=implementation,
-        params=parameters.Metric(),
+        config=config.MetricConfig(),
         mode="stateless",
     )
 

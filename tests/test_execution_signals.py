@@ -27,7 +27,7 @@ from tests.fixtures import (
     resume_state,
 )
 from viper import _subprocess as subprocess
-from viper import params
+from viper import config
 from viper._verification.attempt import _verify_stage_invocation, verify_attempt_stages
 from viper._verification.storage import read_attempt_reference
 from viper.artifacts import SingleFileArtifactDraft, artifact
@@ -161,7 +161,7 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> None:
             b"import subprocess\n"
             b"import sys\n"
             b"import time\n\n"
-            b"from viper import params\n"
+            b"from viper import config\n"
             b"from viper.api import run\n"
             b"from viper.metrics import metric\n"
             b"from viper.stages import train\n\n"
@@ -172,7 +172,7 @@ def _write_source_files(root: Path, *, blocking: bool = True) -> None:
             + b"@metric(metric_id='signal_objective', mode='stateless')\n"
             b"def signal_objective(_context, value):\n"
             b"    return value\n\n"
-            b"@train(params=params.Train)\n"
+            b"@train(config=config.TrainConfig)\n"
             b"def train(context):\n"
             + train_operation
             + b"\nif __name__ == '__main__':\n"
@@ -228,10 +228,10 @@ def _freeze_signal_plan(
         ),
         artifacts={"prior": prior_artifact},
     )
-    objective = measure(fixture.signal_objective, params=params.Metric())
+    objective = measure(fixture.signal_objective, config=config.MetricConfig())
     training = stage(
         fixture.train,
-        params=params.Train(),
+        config=config.TrainConfig(),
         inputs={"prior": acquisition.artifacts["prior"]},
         artifacts={
             "model": artifact(
@@ -635,18 +635,18 @@ def test_python_adapter_and_cli_share_verification_boundary(
             fetcher=fetcher,
         )
 
-    changed_parameter_binding = original_receipt.context.model_copy(
-        update={"parameter_digest": "f" * 64}
+    changed_config_binding = original_receipt.context.model_copy(
+        update={"config_digest": "f" * 64}
     )
-    changed_parameters = original_receipt.model_copy(
+    changed_configs = original_receipt.model_copy(
         update={
-            "context": changed_parameter_binding,
-            "context_digest": document_digest(changed_parameter_binding),
+            "context": changed_config_binding,
+            "context_digest": document_digest(changed_config_binding),
         }
     )
     with pytest.raises(VerificationError, match="context differs"):
         _verify_stage_invocation(
-            publish_receipt(changed_parameters),
+            publish_receipt(changed_configs),
             attempt=attempt,
             run=verified.plan.run,
             stage_id="train",

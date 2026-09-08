@@ -21,19 +21,19 @@ from pydantic import HttpUrl, TypeAdapter
 
 from tests.fixtures import (
     builtin_http,
+    config_type_ref,
+    config_type_source,
     http_policy,
     http_request,
     metric_source,
     metric_spec,
-    parameter_model_ref,
-    parameter_model_source,
     python_environment,
     resume_state,
     stage_implementation_ref,
     verification_policy,
 )
-from viper import parameters
-from viper import params as current_params
+from viper import config
+from viper import config as current_config
 from viper._schema import (
     PARAMETERS,
     PREDICTIONS,
@@ -61,12 +61,13 @@ from viper.benchmark import (
     MetricCriterion,
     MetricCriterionResult,
 )
+from viper.config import ConfigTypeRef as CurrentConfigTypeRef
 from viper.experiments import (
-    BuildVariantStageParams,
-    EvalVariantStageParams,
+    BuildVariantStageConfig,
+    EvalVariantStageConfig,
     ExperimentSpec,
     ReplicateSpec,
-    TrainVariantStageParams,
+    TrainVariantStageConfig,
     VariantSpec,
 )
 from viper.http import (
@@ -105,7 +106,6 @@ from viper.metrics import (
     ResolvedMetricDependency,
     is_recomputed_metric,
 )
-from viper.params import ParameterModelRef as CurrentParameterModelRef
 from viper.references import (
     ArtifactPointerRef,
     GitFileRef,
@@ -516,8 +516,8 @@ def publish_metric_verification(
         stage_id=stage_id,
         purpose="measurement",
         implementation=metric.implementation,
-        parameter_model=metric.parameter_model,
-        params=metric.params,
+        config_type=metric.config_type,
+        config=metric.config,
         dependencies=dependencies,
         startup=startup_receipt(run),
         execution_context=execution_context(),
@@ -575,8 +575,8 @@ def publish_invocation(
         run_id=run.run_id,
         attempt_id=attempt_id,
         stage_id=stage_id,
-        parameter_model=stage.parameter_model,
-        parameter_digest=document_digest(stage.params),
+        config_type=stage.config_type,
+        config_digest=document_digest(stage.config),
         inputs=input_paths,
         artifacts={name: artifact.path for name, artifact in stage.artifacts.items()},
         metric_ids=stage.metric_ids,
@@ -987,7 +987,7 @@ def publish_producer_run(
             TRAIN_SOURCE,
             symbol="fit",
         ),
-        parameter_model=parameter_model_ref("train"),
+        config_type=config_type_ref("train"),
         inputs={
             "training_dataset": FutureInputRef(
                 kind="future",
@@ -995,7 +995,7 @@ def publish_producer_run(
                 name="dataset",
             )
         },
-        params=parameters.Train.model_validate(
+        config=config.TrainConfig.model_validate(
             {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
         ),
         artifacts={
@@ -1036,9 +1036,9 @@ def publish_producer_run(
         experiment_id="source_data",
         variant_id="baseline",
         levels={},
-        stage_params=(
-            TrainVariantStageParams(
-                kind="train", stage_id="train", params=train.params
+        stage_configs=(
+            TrainVariantStageConfig(
+                kind="train", stage_id="train", config=train.config
             ),
         ),
     )
@@ -1056,8 +1056,8 @@ def publish_producer_run(
     add_source_file(
         store,
         PRODUCER_SOURCE_COMMIT,
-        parameter_model_ref("train").path,
-        parameter_model_source("train"),
+        config_type_ref("train").path,
+        config_type_source("train"),
     )
     resolved_env = resolved_environment(store, PRODUCER_SOURCE_COMMIT)
     train_source = add_source_file(
@@ -1282,7 +1282,7 @@ def build_complete_fixture(
             BUILD_SOURCE,
             symbol="build_prior",
         ),
-        parameter_model=parameter_model_ref("build"),
+        config_type=config_type_ref("build"),
         inputs={
             "dataset": StoredInputRef(
                 kind="stored",
@@ -1291,7 +1291,7 @@ def build_complete_fixture(
                 data_role="training",
             )
         },
-        params=parameters.Build(),
+        config=config.BuildConfig(),
         artifacts={
             "prior": BundleArtifactSpec(
                 kind="bundle",
@@ -1312,7 +1312,7 @@ def build_complete_fixture(
             TRAIN_SOURCE,
             symbol="fit",
         ),
-        parameter_model=parameter_model_ref("train"),
+        config_type=config_type_ref("train"),
         inputs={
             "prior": FutureInputRef(
                 kind="future",
@@ -1320,7 +1320,7 @@ def build_complete_fixture(
                 name="prior",
             )
         },
-        params=parameters.Train.model_validate(
+        config=config.TrainConfig.model_validate(
             {"epochs": 2, "batch_size": 2, "learning_rate": 0.01}
         ),
         artifacts={
@@ -1344,7 +1344,7 @@ def build_complete_fixture(
             EVALUATE_SOURCE,
             symbol="predict",
         ),
-        parameter_model=current_params.model_ref(current_params.Eval),
+        config_type=current_config.type_ref(current_config.EvalConfig),
         eval_id="toy_predictions",
         metric_ids=("pearson_correlation",),
         objective=MetricObjectiveSpec(
@@ -1371,7 +1371,7 @@ def build_complete_fixture(
                 data_role=evaluation_role,
             ),
         },
-        params=current_params.Eval(),
+        config=current_config.EvalConfig(),
         artifacts={
             "preds": SingleFileArtifactSpec(
                 kind="file",
@@ -1429,17 +1429,17 @@ def build_complete_fixture(
         experiment_id="model_eval",
         variant_id="baseline",
         levels={},
-        stage_params=(
-            BuildVariantStageParams(
-                kind="build", stage_id="build", params=build.params
+        stage_configs=(
+            BuildVariantStageConfig(
+                kind="build", stage_id="build", config=build.config
             ),
-            TrainVariantStageParams(
-                kind="train", stage_id="train", params=train.params
+            TrainVariantStageConfig(
+                kind="train", stage_id="train", config=train.config
             ),
-            EvalVariantStageParams(
+            EvalVariantStageConfig(
                 kind="eval",
                 stage_id="evaluate",
-                params=evaluate.params,
+                config=evaluate.config,
             ),
         ),
     )
@@ -1461,8 +1461,8 @@ def build_complete_fixture(
         add_source_file(
             store,
             MAIN_SOURCE_COMMIT,
-            parameter_model_ref(parameter_kind).path,
-            parameter_model_source(parameter_kind),
+            config_type_ref(parameter_kind).path,
+            config_type_source(parameter_kind),
         )
     resolved_env = resolved_environment(store, MAIN_SOURCE_COMMIT)
     build_source = add_source_file(
@@ -1802,7 +1802,7 @@ def build_benchmark_fixture(
             )
         )
     )
-    candidate_parameters = resolved_train.artifacts[PARAMETERS]
+    candidate_configs = resolved_train.artifacts[PARAMETERS]
     resolved_train = resolved_train.model_copy(
         update={
             "inputs": {"prior": ResolvedFutureInputRef(producer=confirmation_build)}
@@ -1989,7 +1989,7 @@ def build_benchmark_fixture(
                 artifact=run.estimator,
                 candidate_stage=original_train,
                 confirmation_stage=confirmation_train,
-                candidate_digest=document_digest(candidate_parameters),
+                candidate_digest=document_digest(candidate_configs),
                 confirmation_digest=document_digest(
                     resolved_train.artifacts[PARAMETERS]
                 ),
@@ -2161,14 +2161,14 @@ def test_worker_startup_derives_attempt_owned_external_input_path(
             TRAIN_SOURCE,
             symbol="fit",
         ),
-        parameter_model=parameter_model_ref("train"),
+        config_type=config_type_ref("train"),
         inputs={
             "dataset": ExternalInputRef(
                 source=LocalSource(path="inputs/raw/dataset.bin"),
                 data_role="training",
             )
         },
-        params=parameters.Train.model_validate(
+        config=config.TrainConfig.model_validate(
             {"epochs": 1, "batch_size": 2, "learning_rate": 0.01}
         ),
         artifacts={
@@ -2821,10 +2821,10 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
         bytes=1,
     )
     artifact = ResolvedSingleFileArtifact(file=artifact_file)
-    parameter_model = CurrentParameterModelRef(
+    config_type = CurrentConfigTypeRef(
         owner="project",
-        path="project/params/eval.py",
-        symbol="EvalParameters",
+        path="project/config/eval.py",
+        symbol="EvalConfig",
         sha256="b" * 64,
         bytes=1,
     )
@@ -2837,8 +2837,8 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
             sha256="c" * 64,
             bytes=1,
         ),
-        parameter_model=parameter_model,
-        params=current_params.Metric(),
+        config_type=config_type,
+        config=current_config.MetricConfig(),
         mode="stateless",
         dependencies=(
             MetricDependency(
@@ -2866,12 +2866,12 @@ def test_stage_reuse_rejects_each_severed_relationship() -> None:
             EVALUATE_SOURCE,
             symbol="predict",
         ),
-        parameter_model=parameter_model,
+        config_type=config_type,
         inputs={},
         eval_id="reuse_score",
         split_inputs=(),
         objective=MetricObjectiveSpec(metric_id=metric.metric_id, direction="max"),
-        params=current_params.Eval(),
+        config=current_config.EvalConfig(),
     )
     env = GCEEnvironmentSpec(
         provisioning=GCEBootImageRef(

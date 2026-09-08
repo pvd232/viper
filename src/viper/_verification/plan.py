@@ -10,10 +10,10 @@ from pathlib import Path
 import yaml
 from pydantic import TypeAdapter
 
-from .. import keys, params
-from .._parameter.validation import (
-    ParameterValidationError,
-    verify_parameter_model_bytes,
+from .. import config, keys
+from .._config.validation import (
+    ConfigValidationError,
+    verify_config_type_bytes,
 )
 from .._schema import DataRole, RepoRelPath, repo_file_paths_overlap
 from ..benchmark import BenchmarkSpec
@@ -381,19 +381,17 @@ def verify_run_plan_relationships(
             (BuildSpec, EmbedSpec, TrainSpec, EvalSpec),
         )
     }
-    variant_params = {stage.stage_id: stage for stage in variant.stage_params}
+    variant_configs = {stage.stage_id: stage for stage in variant.stage_configs}
 
-    if set(variant_params) != set(parameterized_stages):
+    if set(variant_configs) != set(parameterized_stages):
         raise VerificationError(
-            "variant stage parameters must match all parameterized run stages"
+            "variant stage configs must match all parameterized run stages"
         )
 
     for stage_id, stage in parameterized_stages.items():
-        selected = variant_params[stage_id]
-        if selected.kind != stage.kind or selected.params != stage.params:
-            raise VerificationError(
-                f"variant parameters do not match stage {stage_id!r}"
-            )
+        selected = variant_configs[stage_id]
+        if selected.kind != stage.kind or selected.config != stage.config:
+            raise VerificationError(f"variant config does not match stage {stage_id!r}")
 
     estimator_stage = stages.get(run.estimator.stage_id)
     if not isinstance(estimator_stage, TrainSpec):
@@ -491,7 +489,7 @@ def verify_run_plan_relationships(
             )
 
 
-def verify_parameter_model_references(
+def verify_config_type_references(
     run: RunSpec,
     stages: Mapping[StageId, BaseSpec],
     *,
@@ -502,26 +500,26 @@ def verify_parameter_model_references(
     for stage_id, stage in stages.items():
         if not isinstance(stage, ParameterizedSpec):
             continue
-        reference = stage.parameter_model
+        reference = stage.config_type
         try:
-            installed_path = Path(params.__file__).resolve().parent / reference.path
+            installed_path = Path(config.__file__).resolve().parent / reference.path
             raw = (
                 retrieve(_source_file(run, reference.path))
                 if reference.owner == "project"
                 else installed_path.read_bytes()
             )
-            verify_parameter_model_bytes(reference, raw)
+            verify_config_type_bytes(reference, raw)
             tree = ast.parse(raw, filename=reference.path)
-        except (KeyError, OSError, SyntaxError, ParameterValidationError) as exc:
+        except (KeyError, OSError, SyntaxError, ConfigValidationError) as exc:
             raise VerificationError(
-                f"parameter model of stage {stage_id!r} failed source verification"
+                f"config type of stage {stage_id!r} failed source verification"
             ) from exc
         if not any(
             isinstance(node, ast.ClassDef) and node.name == reference.symbol
             for node in tree.body
         ):
             raise VerificationError(
-                f"parameter model of stage {stage_id!r} must define {reference.symbol}"
+                f"config type of stage {stage_id!r} must define {reference.symbol}"
             )
 
 
@@ -694,7 +692,7 @@ def verify_run_plan(
         benchmark,
         stages,
     )
-    verify_parameter_model_references(run, stages, fetcher=fetcher)
+    verify_config_type_references(run, stages, fetcher=fetcher)
     return VerifiedRunPlan(
         run=run,
         experiment=experiment,

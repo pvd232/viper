@@ -16,7 +16,7 @@ from typing import Any, Generic, Literal, TypeVar, cast
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from . import params
+from . import config
 from ._schema import (
     SHA256,
     DataRole,
@@ -24,9 +24,8 @@ from ._schema import (
     PythonRepoRelPath,
     PythonSymbol,
 )
+from .config import ConfigTypeRef, MetricConfig
 from .ids import HumanId, MetricId, RunId, StageId
-from .params import Metric as MetricParams
-from .params import ParameterModelRef
 from .references import ResolvedFileRef
 from .runtime import ExecutionContext, ProcessStartupReceipt, PythonEnvSpec
 
@@ -34,7 +33,7 @@ MetricKind = Literal["training", "evaluation", "diagnostic"]
 
 
 MetricMode = Literal["stateful", "stateless"]
-MetricParamsT = TypeVar("MetricParamsT", bound=params.Metric)
+MetricConfigT = TypeVar("MetricConfigT", bound=config.MetricConfig)
 
 
 class FloatComparator(ProtocolModel):
@@ -71,13 +70,13 @@ class MetricDependency(ProtocolModel):
 
 
 class MetricSpec(ProtocolModel):
-    """Bind one metric identity to its implementation and frozen params."""
+    """Bind one metric identity to its implementation and frozen config."""
 
     schema_version: Literal[1] = 1
     metric_id: MetricId
     implementation: MetricImplementationRef
-    parameter_model: ParameterModelRef
-    params: params.Metric
+    config_type: ConfigTypeRef
+    config: config.MetricConfig
     mode: MetricMode
     dependencies: tuple[MetricDependency, ...] = ()
     comparator: FloatComparator | None = None
@@ -120,8 +119,8 @@ class MetricExecutionReceipt(ProtocolModel):
     stage_id: StageId
     purpose: Literal["measurement", "verification"]
     implementation: MetricImplementationRef
-    parameter_model: ParameterModelRef
-    params: params.Metric
+    config_type: ConfigTypeRef
+    config: config.MetricConfig
     dependencies: tuple[ResolvedMetricDependency, ...] = Field(min_length=1)
     startup: ProcessStartupReceipt
     execution_context: ExecutionContext
@@ -188,8 +187,8 @@ class MetricVerificationReceipt(ProtocolModel):
             raise ValueError("recomputation receipt must use verification purpose")
         bindings = (
             "implementation",
-            "parameter_model",
-            "params",
+            "config_type",
+            "config",
             "dependencies",
         )
         if any(
@@ -211,14 +210,14 @@ class MetricError(RuntimeError):
     """Report an invalid metric definition, invocation, or result."""
 
 
-class MetricContext(BaseModel, Generic[MetricParamsT]):
-    """Supply verified paths and frozen parameters to one metric invocation."""
+class MetricContext(BaseModel, Generic[MetricConfigT]):
+    """Supply verified paths and frozen config to one metric invocation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     inputs: Mapping[str, Path] = Field(default_factory=dict)
     artifacts: Mapping[str, Path] = Field(default_factory=dict)
-    params: MetricParamsT
+    config: MetricConfigT
 
 
 @dataclass(frozen=True)
@@ -254,11 +253,11 @@ def metric(
     return decorate
 
 
-class StatefulMetric(ABC, Generic[MetricParamsT]):
+class StatefulMetric(ABC, Generic[MetricConfigT]):
     """Accumulate metric state under one frozen invocation context."""
 
     @abstractmethod
-    def __init__(self, context: MetricContext[MetricParamsT]) -> None:
+    def __init__(self, context: MetricContext[MetricConfigT]) -> None:
         """Bind the frozen invocation context once."""
 
     @abstractmethod
@@ -448,13 +447,13 @@ ObjectiveDirection = Literal["min", "max"]
 DecoratedMetric = Callable[..., Any] | type[Any]
 
 
-class MetricDraft(BaseModel, Generic[MetricParamsT]):
+class MetricDraft(BaseModel, Generic[MetricConfigT]):
     """Hold one configured metric before protocol freezing."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
     implementation: DecoratedMetric
-    params: MetricParamsT
+    config: MetricConfigT
     dependencies: tuple[MetricDependency, ...] = ()
     comparator: FloatComparator | None = None
 
@@ -481,13 +480,13 @@ class MetricCriterionDraft(BaseModel):
 def measure(
     implementation: DecoratedMetric,
     *,
-    params: MetricParamsT | None = None,
+    config: MetricConfigT | None = None,
     dependencies: tuple[MetricDependency, ...] = (),
     comparator: FloatComparator | None = None,
-) -> MetricDraft[MetricParamsT | MetricParams]:
+) -> MetricDraft[MetricConfigT | MetricConfig]:
     """Configure one decorated metric for later freezing."""
     definition = metric_definition(implementation)
-    selected_params = MetricParams() if params is None else params
+    selected_config = MetricConfig() if config is None else config
     identities = tuple((item.source, item.name) for item in dependencies)
     if len(set(identities)) != len(identities):
         raise MetricError("metric dependencies must be unique")
@@ -503,7 +502,7 @@ def measure(
         )
     return MetricDraft(
         implementation=implementation,
-        params=selected_params,
+        config=selected_config,
         dependencies=dependencies,
         comparator=comparator,
     )

@@ -122,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
                     MetricContext(
                         inputs=input_paths,
                         artifacts=artifact_paths,
-                        params=context.metric.params,
+                        config=context.metric.config,
                     )
                 )
             )
@@ -134,8 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             stage_id=context.stage_id,
             purpose=context.purpose,
             implementation=context.metric.implementation,
-            parameter_model=context.metric.parameter_model,
-            params=context.metric.params,
+            config_type=context.metric.config_type,
+            config=context.metric.config,
             dependencies=context.dependencies,
             startup=initialization.receipt,
             execution_context=execution_context,

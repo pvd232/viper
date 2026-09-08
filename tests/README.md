@@ -12,7 +12,7 @@ loaders, metric implementations, and exact training resume behavior.
 | [verifier tests](test_verification.py) | The verifier retrieves referenced bytes and enforces relationships among run plans, stages, inputs, artifacts, attempts, measurements, and benchmarks. |
 | [verifier acceptance tests](test_verification_acceptance.py) | A complete synthetic provenance chain passes through the public verifier; targeted mutations prove that broken hashes, timing, snapshots, and lineage fail. |
 | [authoring tests](test_authoring.py) | Canonical experiment, variant, stage, and run-plan files are written at identity-based paths, and each frozen stage reference matches the exact serialized bytes. |
-| [parameter-validation tests](test_parameter_validation.py) | Project Pydantic classes are byte-bound, loaded from a top-level symbol, checked against the correct parameter category, and invoked in a dedicated worker. |
+| [config-validation tests](test_config_validation.py) | Project Pydantic classes are byte-bound, loaded from a top-level symbol, checked against the correct config base, and invoked in a dedicated worker. |
 | [command tests](test_cli.py) | The installed command dispatches to the public validation surface and reports the validated protocol type. |
 | [execution acceptance test](test_execution_acceptance.py) | A real stage entrypoint runs with the canonical command and every declared output file receives an exact hash and byte count. |
 | [run execution test](test_run_execution.py) | A real two-stage local run freezes a project parameter model, preflights, executes, publishes, verifies, and rejects a tampered artifact. |

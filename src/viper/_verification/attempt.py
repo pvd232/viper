@@ -14,9 +14,9 @@ from pydantic import TypeAdapter
 
 from viper.workspace import captured_input_path
 
-from .._parameter.validation import (
-    ParameterValidationError,
-    verify_parameter_model_bytes,
+from .._config.validation import (
+    ConfigValidationError,
+    verify_config_type_bytes,
 )
 from .._schema import RepoRelPath, repo_file_paths_overlap
 from ..artifacts import ResolvedSingleFileArtifact
@@ -224,8 +224,8 @@ def _verify_stage_invocation(
         run_id=run.run_id,
         attempt_id=attempt.attempt_id,
         stage_id=stage_id,
-        parameter_model=stage.parameter_model,
-        parameter_digest=document_digest(stage.params),
+        config_type=stage.config_type,
+        config_digest=document_digest(stage.config),
         inputs=_logical_input_paths(
             run,
             attempt.attempt_id,
@@ -395,8 +395,8 @@ def _verify_unresolved_stage_invocation(
         run_id=run.run_id,
         attempt_id=attempt.attempt_id,
         stage_id=stage_id,
-        parameter_model=stage.parameter_model,
-        parameter_digest=document_digest(stage.params),
+        config_type=stage.config_type,
+        config_digest=document_digest(stage.config),
         inputs=_logical_input_paths(
             run, attempt.attempt_id, stage_id, stage, stage_specs
         ),
@@ -511,19 +511,19 @@ def _verify_download_retrievals(
                 raise VerificationError(
                     f"HTTP retrieval {input_name!r} implementation source differs"
                 )
-            parameter_reference = http.spec.parameter_model
-            parameter_raw = retrieve(
+            config_reference = http.spec.config_type
+            config_raw = retrieve(
                 GitFileRef(
                     repository=run.source.repository,
                     commit=run.source.commit,
-                    path=parameter_reference.path,
+                    path=config_reference.path,
                 )
             )
             try:
-                verify_parameter_model_bytes(parameter_reference, parameter_raw)
-            except ParameterValidationError as exc:
+                verify_config_type_bytes(config_reference, config_raw)
+            except ConfigValidationError as exc:
                 raise VerificationError(
-                    f"HTTP retrieval {input_name!r} HTTP parameter model differs"
+                    f"HTTP retrieval {input_name!r} HTTP config type differs"
                 ) from exc
             for executable in http.external_executables:
                 try:
@@ -563,12 +563,12 @@ def verify_attempt_stages(
 
     if set(stage_specs) != set(expected_stage_ids):
         raise VerificationError("loaded stage specs do not match the run stage plan")
-    planned_parameterized_ids = tuple(
+    planned_configized_ids = tuple(
         stage_id
         for stage_id in expected_stage_ids
         if isinstance(stage_specs[stage_id], ParameterizedSpec)
     )
-    if len(attempt.invocations) > len(planned_parameterized_ids):
+    if len(attempt.invocations) > len(planned_configized_ids):
         raise VerificationError("attempt contains more invocations than planned stages")
 
     verified_stages: dict[StageId, ResolvedBaseSpec] = {}

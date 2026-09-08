@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-import viper.params as current_params
+import viper.config as current_config
 from tests.fixtures import (
     builtin_http,
     http_policy,
@@ -26,7 +26,7 @@ from tests.fixtures import (
     resume_state,
 )
 from tests.git_repository import REPOSITORY, run_git
-from viper import parameters
+from viper import config
 from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
@@ -52,6 +52,7 @@ from viper.authoring import (
 )
 from viper.authoring import input as external_input
 from viper.catalog import Catalog, CatalogRunSource
+from viper.config import ConfigTypeRef
 from viper.execution import _batch
 from viper.execution import retry as execute_retry
 from viper.execution import run as execute_run
@@ -69,7 +70,7 @@ from viper.execution.results import RunResult
 from viper.experiments import (
     ExperimentSpec,
     ReplicateSpec,
-    TrainVariantStageParams,
+    TrainVariantStageConfig,
     VariantSpec,
 )
 from viper.inputs import (
@@ -91,7 +92,6 @@ from viper.metrics import (
 from viper.metrics import (
     min as minimize,
 )
-from viper.parameters import ParameterModelRef
 from viper.references import (
     GitFileRef,
     GitSource,
@@ -260,7 +260,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
     run_git(root, "config", "user.name", "VIPER Test")
     run_git(root, "remote", "add", "origin", REPOSITORY)
 
-    train_params = parameters.Train.model_validate(
+    train_config = config.TrainConfig.model_validate(
         {"epochs": 1, "batch_size": 1, "learning_rate": 0.1}
     )
     metric_source = (
@@ -282,7 +282,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         b"        return sum(self.values) / len(self.values)\n"
     )
     parameter_bytes = MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id="parameter_bytes",
         implementation=MetricImplementationRef(
             path="project/metrics/parameter_bytes.py",
@@ -290,7 +290,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             sha256=hashlib.sha256(metric_source).hexdigest(),
             bytes=len(metric_source),
         ),
-        params=parameters.Metric(),
+        config=config.MetricConfig(),
         mode="stateless",
         dependencies=(
             MetricDependency(
@@ -302,7 +302,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         comparator=FloatComparator(),
     )
     epoch_mean = MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id="epoch_mean",
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
@@ -310,7 +310,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             sha256=hashlib.sha256(stateful_metric_source).hexdigest(),
             bytes=len(stateful_metric_source),
         ),
-        params=parameters.Metric(),
+        config=config.MetricConfig(),
         mode="stateful",
     )
     experiment = ExperimentSpec(
@@ -324,7 +324,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         experiment_id="example",
         variant_id="baseline",
         levels={},
-        stage_params=(TrainVariantStageParams(stage_id="train", params=train_params),),
+        stage_configs=(TrainVariantStageConfig(stage_id="train", config=train_config),),
     )
     source_files = {
         "viper.toml": b"[project]\nschema_version = 1\n",
@@ -338,22 +338,22 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
         "project/metrics/epoch_mean.py": stateful_metric_source,
-        "project/parameters/train.py": (
+        "project/config/train.py": (
             b"from pydantic import Field\n"
-            b"from viper import parameters\n\n"
-            b"class TinyTrainParameters(parameters.Train):\n"
+            b"from viper import config\n\n"
+            b"class TinyTrainConfig(config.TrainConfig):\n"
             b"    epochs: int = Field(gt=0)\n"
             b"    batch_size: int = Field(gt=0)\n"
             b"    learning_rate: float = Field(gt=0)\n"
         ),
         "jobs/train.py": (
-            b"from project.parameters.train import TinyTrainParameters\n"
+            b"from project.config.train import TinyTrainConfig\n"
             b"from viper.stages import train\n\n"
-            b"@train(params=TinyTrainParameters)\n"
+            b"@train(config=TinyTrainConfig)\n"
             b"def train(context):\n"
-            b"    assert context.params.epochs == 1\n"
-            b"    assert context.params.batch_size == 1\n"
-            b"    assert context.params.learning_rate == 0.1\n"
+            b"    assert context.config.epochs == 1\n"
+            b"    assert context.config.batch_size == 1\n"
+            b"    assert context.config.learning_rate == 0.1\n"
             b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
             b"    context.artifacts['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
@@ -434,14 +434,12 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
             sha256=hashlib.sha256(source_files["jobs/train.py"]).hexdigest(),
             bytes=len(source_files["jobs/train.py"]),
         ),
-        parameter_model=ParameterModelRef(
+        config_type=ConfigTypeRef(
             owner="project",
-            path="project/parameters/train.py",
-            symbol="TinyTrainParameters",
-            sha256=hashlib.sha256(
-                source_files["project/parameters/train.py"]
-            ).hexdigest(),
-            bytes=len(source_files["project/parameters/train.py"]),
+            path="project/config/train.py",
+            symbol="TinyTrainConfig",
+            sha256=hashlib.sha256(source_files["project/config/train.py"]).hexdigest(),
+            bytes=len(source_files["project/config/train.py"]),
         ),
         metric_ids=("parameter_bytes", "epoch_mean"),
         objective=MetricObjectiveSpec(
@@ -454,7 +452,7 @@ def test_two_stage_local_run_writes_and_verifies_terminal_result(
                 name="prior",
             )
         },
-        params=train_params,
+        config=train_config,
         artifacts={
             PARAMETERS: SingleFileArtifactSpec(
                 path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
@@ -704,7 +702,7 @@ def test_train_stage_captures_local_external_input(
     run_git(root, "config", "user.name", "VIPER Test")
     run_git(root, "remote", "add", "origin", REPOSITORY)
 
-    train_params = parameters.Train.model_validate(
+    train_config = config.TrainConfig.model_validate(
         {"epochs": 1, "batch_size": 1, "learning_rate": 0.1}
     )
     metric_source = (
@@ -726,7 +724,7 @@ def test_train_stage_captures_local_external_input(
         b"        return sum(self.values) / len(self.values)\n"
     )
     parameter_bytes = MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id="parameter_bytes",
         implementation=MetricImplementationRef(
             path="project/metrics/parameter_bytes.py",
@@ -734,7 +732,7 @@ def test_train_stage_captures_local_external_input(
             sha256=hashlib.sha256(metric_source).hexdigest(),
             bytes=len(metric_source),
         ),
-        params=parameters.Metric(),
+        config=config.MetricConfig(),
         mode="stateless",
         dependencies=(
             MetricDependency(
@@ -746,7 +744,7 @@ def test_train_stage_captures_local_external_input(
         comparator=FloatComparator(),
     )
     epoch_mean = MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id="epoch_mean",
         implementation=MetricImplementationRef(
             path="project/metrics/epoch_mean.py",
@@ -754,7 +752,7 @@ def test_train_stage_captures_local_external_input(
             sha256=hashlib.sha256(stateful_metric_source).hexdigest(),
             bytes=len(stateful_metric_source),
         ),
-        params=parameters.Metric(),
+        config=config.MetricConfig(),
         mode="stateful",
     )
     experiment = ExperimentSpec(
@@ -768,7 +766,7 @@ def test_train_stage_captures_local_external_input(
         experiment_id="example",
         variant_id="baseline",
         levels={},
-        stage_params=(TrainVariantStageParams(stage_id="train", params=train_params),),
+        stage_configs=(TrainVariantStageConfig(stage_id="train", config=train_config),),
     )
     source_files = {
         "viper.toml": b"[project]\nschema_version = 1\n",
@@ -782,22 +780,22 @@ def test_train_stage_captures_local_external_input(
         ).encode(),
         "project/metrics/parameter_bytes.py": metric_source,
         "project/metrics/epoch_mean.py": stateful_metric_source,
-        "project/parameters/train.py": (
+        "project/config/train.py": (
             b"from pydantic import Field\n"
-            b"from viper import parameters\n\n"
-            b"class TinyTrainParameters(parameters.Train):\n"
+            b"from viper import config\n\n"
+            b"class TinyTrainConfig(config.TrainConfig):\n"
             b"    epochs: int = Field(gt=0)\n"
             b"    batch_size: int = Field(gt=0)\n"
             b"    learning_rate: float = Field(gt=0)\n"
         ),
         "jobs/train.py": (
-            b"from project.parameters.train import TinyTrainParameters\n"
+            b"from project.config.train import TinyTrainConfig\n"
             b"from viper.stages import train\n\n"
-            b"@train(params=TinyTrainParameters)\n"
+            b"@train(config=TinyTrainConfig)\n"
             b"def train(context):\n"
-            b"    assert context.params.epochs == 1\n"
-            b"    assert context.params.batch_size == 1\n"
-            b"    assert context.params.learning_rate == 0.1\n"
+            b"    assert context.config.epochs == 1\n"
+            b"    assert context.config.batch_size == 1\n"
+            b"    assert context.config.learning_rate == 0.1\n"
             b"    assert context.inputs['prior'].read_bytes() == b'prior'\n"
             b"    context.artifacts['model'].parent.mkdir(\n"
             b"        parents=True, exist_ok=True\n"
@@ -852,14 +850,12 @@ def test_train_stage_captures_local_external_input(
             sha256=hashlib.sha256(source_files["jobs/train.py"]).hexdigest(),
             bytes=len(source_files["jobs/train.py"]),
         ),
-        parameter_model=ParameterModelRef(
+        config_type=ConfigTypeRef(
             owner="project",
-            path="project/parameters/train.py",
-            symbol="TinyTrainParameters",
-            sha256=hashlib.sha256(
-                source_files["project/parameters/train.py"]
-            ).hexdigest(),
-            bytes=len(source_files["project/parameters/train.py"]),
+            path="project/config/train.py",
+            symbol="TinyTrainConfig",
+            sha256=hashlib.sha256(source_files["project/config/train.py"]).hexdigest(),
+            bytes=len(source_files["project/config/train.py"]),
         ),
         metric_ids=("parameter_bytes", "epoch_mean"),
         objective=MetricObjectiveSpec(
@@ -872,7 +868,7 @@ def test_train_stage_captures_local_external_input(
                 data_role="training",
             )
         },
-        params=train_params,
+        config=train_config,
         artifacts={
             PARAMETERS: SingleFileArtifactSpec(
                 path=f"{RUN_ROOT}/artifacts/models/tiny/parameters.bin",
@@ -1139,14 +1135,14 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     source.parent.mkdir()
     source.write_text(
         "from pathlib import Path\n"
-        "from viper import params\n"
+        "from viper import config\n"
         "from viper.metrics import metric\n"
         "from viper.stages import Context, train\n\n"
         "@metric(metric_id='loss', mode='stateless')\n"
         "def loss(context, values):\n"
         "    return sum(values) / len(values)\n\n"
-        "@train(params=params.Train)\n"
-        "def train_model(context: Context[params.Train]):\n"
+        "@train(config=config.TrainConfig)\n"
+        "def train_model(context: Context[config.TrainConfig]):\n"
         "    marker = Path('worker_calls.txt')\n"
         "    marker.write_text(marker.read_text() + '1\\n' if marker.exists() "
         "else '1\\n')\n"
@@ -1174,10 +1170,10 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
     assert module_spec is not None and module_spec.loader is not None
     module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
-    loss = measure(module.loss, params=current_params.Metric())
+    loss = measure(module.loss, config=current_config.MetricConfig())
     trained = stage(
         module.train_model,
-        params=current_params.Train(),
+        config=current_config.TrainConfig(),
         inputs={
             "dataset": external_input(
                 path="inputs/raw/dataset.bin",

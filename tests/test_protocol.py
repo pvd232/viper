@@ -14,11 +14,11 @@ from pydantic import ValidationError
 
 from tests.fixtures import (
     artifact_loader_ref,
-    parameter_model_ref,
+    config_type_ref,
     stage_implementation_ref,
 )
-from viper import parameters
-from viper import params as current_params
+from viper import config
+from viper import config as current_config
 from viper._schema import (
     PARAMETERS,
     PREDICTIONS,
@@ -288,14 +288,14 @@ def train_payload() -> dict:
         "implementation": stage_implementation_ref(
             "project/training/fit.py", symbol="fit"
         ).model_dump(mode="json"),
-        "parameter_model": parameter_model_ref("train").model_dump(mode="json"),
+        "config_type": config_type_ref("train").model_dump(mode="json"),
         "inputs": {
             "training_dataset": stored_input(
                 "inputs/datasets/replogle/dataset.h5ad",
                 "inputs/datasets/replogle/current.pointer.yaml",
             ),
         },
-        "params": {
+        "config": {
             "epochs": 10,
             "batch_size": 64,
             "learning_rate": 0.001,
@@ -360,7 +360,7 @@ class RunPlanTests(unittest.TestCase):
         self.assertEqual(run.env.machine_type, "n2-standard-8")
         self.assertEqual(run.estimator.artifact_name, PARAMETERS)
 
-    def test_estimator_must_select_parameters(self) -> None:
+    def test_estimator_must_select_configs(self) -> None:
         """Verify that estimator must select model parameters."""
         payload = run_payload()
         payload["estimator"]["artifact_name"] = RESUME_STATE
@@ -451,12 +451,12 @@ class RunPlanTests(unittest.TestCase):
             RunAttempt.model_validate(payload)
 
 
-class ParameterContractTests(unittest.TestCase):
-    """Verify extensible stage and metric parameter records."""
+class ConfigContractTests(unittest.TestCase):
+    """Verify extensible stage and metric config records."""
 
-    def test_training_parameters_preserve_project_defined_json_fields(self) -> None:
+    def test_training_configs_preserve_project_defined_json_fields(self) -> None:
         """Preserve project-defined values without a VIPER plugin registration."""
-        params = parameters.Train.model_validate(
+        selected_config = config.TrainConfig.model_validate(
             {
                 "schema_version": 1,
                 "epochs": 10,
@@ -467,13 +467,13 @@ class ParameterContractTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(params.model_dump()["epochs"], 10)
-        self.assertEqual(params.model_dump()["optimizer"]["kind"], "adam")
+        self.assertEqual(selected_config.model_dump()["epochs"], 10)
+        self.assertEqual(selected_config.model_dump()["optimizer"]["kind"], "adam")
 
-    def test_evaluation_parameters_reject_shared_evaluation_fields(self) -> None:
+    def test_evaluation_configs_reject_shared_evaluation_fields(self) -> None:
         """Keep metrics and split identities on EvaluateSpec."""
         with self.assertRaisesRegex(ValidationError, "belong directly"):
-            parameters.Evaluate.model_validate(
+            config.EvalConfig.model_validate(
                 {
                     "schema_version": 1,
                     "metric_ids": ["pearson_correlation"],
@@ -484,7 +484,7 @@ class ParameterContractTests(unittest.TestCase):
         """Bind a metric to any exact Python file in the user repository."""
         source = b"def compute(context):\n    return 0.0\n"
         metric = MetricSpec(
-            parameter_model=parameters.model_ref(parameters.Metric),
+            config_type=config.type_ref(config.MetricConfig),
             metric_id="pearson_correlation",
             implementation=MetricImplementationRef(
                 path="analysis/quality/correlation.py",
@@ -492,7 +492,7 @@ class ParameterContractTests(unittest.TestCase):
                 sha256=hashlib.sha256(source).hexdigest(),
                 bytes=len(source),
             ),
-            params=parameters.Metric.model_validate({"dim": 1}),
+            config=config.MetricConfig.model_validate({"dim": 1}),
             mode="stateless",
             dependencies=(
                 MetricDependency(
@@ -504,13 +504,13 @@ class ParameterContractTests(unittest.TestCase):
             comparator=FloatComparator(mode="exact", tolerance=0),
         )
 
-        self.assertEqual(metric.params.model_dump()["dim"], 1)
+        self.assertEqual(metric.config.model_dump()["dim"], 1)
 
     def test_metric_implementation_requires_python_file(self) -> None:
         """Reject a metric path that does not identify a Python file."""
         with self.assertRaisesRegex(ValidationError, "Python file"):
             MetricSpec(
-                parameter_model=parameters.model_ref(parameters.Metric),
+                config_type=config.type_ref(config.MetricConfig),
                 metric_id="pearson_correlation",
                 implementation=MetricImplementationRef(
                     path="analysis/quality/correlation.yaml",
@@ -518,7 +518,7 @@ class ParameterContractTests(unittest.TestCase):
                     sha256="a" * 64,
                     bytes=1,
                 ),
-                params=parameters.Metric(),
+                config=config.MetricConfig(),
                 mode="stateless",
                 dependencies=(
                     MetricDependency(
@@ -744,9 +744,7 @@ class EvaluationTests(unittest.TestCase):
                 "implementation": stage_implementation_ref(
                     "project/evaluation/predict.py", symbol="predict"
                 ).model_dump(mode="json"),
-                "parameter_model": parameter_model_ref("evaluate").model_dump(
-                    mode="json"
-                ),
+                "config_type": config_type_ref("evaluate").model_dump(mode="json"),
                 "eval_id": "strand_predictions",
                 "metric_ids": ["pearson_correlation"],
                 "objective": {
@@ -771,7 +769,7 @@ class EvaluationTests(unittest.TestCase):
                         "eval",
                     ),
                 },
-                "params": {},
+                "config": {},
                 "artifacts": {
                     PREDICTIONS: artifact(
                         f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
@@ -791,7 +789,7 @@ class EvaluationTests(unittest.TestCase):
             "implementation": stage_implementation_ref(
                 "evaluation/predict.py", symbol="predict"
             ).model_dump(mode="json"),
-            "parameter_model": parameter_model_ref("evaluate").model_dump(mode="json"),
+            "config_type": config_type_ref("evaluate").model_dump(mode="json"),
             "eval_id": "structured_predictions",
             "metric_ids": ["accuracy"],
             "objective": {"metric_id": "accuracy", "direction": "max"},
@@ -813,7 +811,7 @@ class EvaluationTests(unittest.TestCase):
                     "eval",
                 ),
             },
-            "params": {},
+            "config": {},
             "artifacts": {
                 PREDICTIONS: {
                     "kind": "bundle",
@@ -837,7 +835,7 @@ class EvaluationTests(unittest.TestCase):
             "implementation": stage_implementation_ref(
                 "project/evaluation/predict.py", symbol="predict"
             ).model_dump(mode="json"),
-            "parameter_model": parameter_model_ref("evaluate").model_dump(mode="json"),
+            "config_type": config_type_ref("evaluate").model_dump(mode="json"),
             "eval_id": "strand_predictions",
             "metric_ids": ["pearson_correlation"],
             "objective": {
@@ -861,7 +859,7 @@ class EvaluationTests(unittest.TestCase):
                     "eval",
                 ),
             },
-            "params": {},
+            "config": {},
             "artifacts": {
                 PREDICTIONS: artifact(
                     f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
@@ -924,7 +922,7 @@ class EvaluationTests(unittest.TestCase):
             "implementation": stage_implementation_ref(
                 "project/evaluation/predict.py", symbol="predict"
             ).model_dump(mode="json"),
-            "parameter_model": parameter_model_ref("evaluate").model_dump(mode="json"),
+            "config_type": config_type_ref("evaluate").model_dump(mode="json"),
             "eval_id": "strand_predictions",
             "metric_ids": ["pearson_correlation"],
             "objective": {
@@ -948,7 +946,7 @@ class EvaluationTests(unittest.TestCase):
                     "eval",
                 ),
             },
-            "params": {},
+            "config": {},
             "artifacts": {
                 PREDICTIONS: artifact(
                     f"{RUN_ROOT}/artifacts/evals/strand_predictions/predictions.json",
@@ -1024,11 +1022,11 @@ class ArtifactAndVariantTests(unittest.TestCase):
                     "experiment_id": "e001_strand",
                     "variant_id": "baseline",
                     "levels": {"embedding": "learned"},
-                    "stage_params": [
+                    "stage_configs": [
                         {
                             "kind": "train",
                             "stage_id": "train",
-                            "params": {
+                            "config": {
                                 "epochs": 10,
                                 "batch_size": 64,
                                 "learning_rate": 0.001,
@@ -1037,7 +1035,7 @@ class ArtifactAndVariantTests(unittest.TestCase):
                         {
                             "kind": "train",
                             "stage_id": "train",
-                            "params": {
+                            "config": {
                                 "epochs": 20,
                                 "batch_size": 64,
                                 "learning_rate": 0.001,
@@ -1047,7 +1045,7 @@ class ArtifactAndVariantTests(unittest.TestCase):
                 }
             )
 
-    def test_variant_requires_stage_parameters(self) -> None:
+    def test_variant_requires_stage_configs(self) -> None:
         """Verify that variant requires stage parameters."""
         with self.assertRaisesRegex(ValidationError, "at least 1 item"):
             VariantSpec.model_validate(
@@ -1055,7 +1053,7 @@ class ArtifactAndVariantTests(unittest.TestCase):
                     "experiment_id": "e001_strand",
                     "variant_id": "baseline",
                     "levels": {},
-                    "stage_params": [],
+                    "stage_configs": [],
                 }
             )
 
@@ -1113,8 +1111,8 @@ def test_download_models_use_runner_owned_hierarchy() -> None:
     assert isinstance(stage, DownloadSpec)
     assert not isinstance(stage, ParameterizedSpec)
     assert "implementation" not in type(stage).model_fields
-    assert "parameter_model" not in type(stage).model_fields
-    assert "params" not in type(stage).model_fields
+    assert "config_type" not in type(stage).model_fields
+    assert "config" not in type(stage).model_fields
     assert set(stage.inputs) == set(stage.artifacts)
     assert stage.http.kind == "builtin"
 
@@ -1184,7 +1182,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
     )
     source = b"def compute(context):\n    return 0.0\n"
     metric = MetricSpec(
-        parameter_model=current_params.model_ref(current_params.Metric),
+        config_type=current_config.type_ref(current_config.MetricConfig),
         metric_id="loss",
         implementation=MetricImplementationRef(
             path="analysis/loss.py",
@@ -1192,7 +1190,7 @@ def test_stage_reuse_models_form_valid_completion_union() -> None:
             sha256=hashlib.sha256(source).hexdigest(),
             bytes=len(source),
         ),
-        params=current_params.Metric(),
+        config=current_config.MetricConfig(),
         mode="stateless",
     )
     env_payload = environment()

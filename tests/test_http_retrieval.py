@@ -12,7 +12,8 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
-from viper import params as parameters
+from viper import config
+from viper.config import ConfigTypeRef
 from viper.http import (
     BuiltinHttpImplementationSpec,
     ExternalExecutableSpec,
@@ -28,7 +29,6 @@ from viper.http import (
     resolve_http,
 )
 from viper.http import EnvSecretRef as EnvironmentSecretRef
-from viper.params import ParameterModelRef
 from viper.references import SnapshotFileRef
 
 
@@ -126,14 +126,14 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
     if request.param == "builtin":
         return lambda root: resolve_http(root, BuiltinHttpImplementationSpec())
 
-    parameter_raw = (
-        b"from viper import parameters\n\n"
-        b"class ConformingTransportParameters(parameters.Http):\n"
-        b'    """Validate the conformance transport parameters."""\n'
+    config_raw = (
+        b"from viper import config\n\n"
+        b"class ConformingTransportConfig(config.HttpConfig):\n"
+        b'    """Validate the conformance transport config."""\n'
     )
     implementation_raw = (
         b"import httpx\n"
-        b"from project.transport_params import ConformingTransportParameters\n"
+        b"from project.transport_params import ConformingTransportConfig\n"
         b"from viper.http import (\n"
         b"    HttpRetrievalError,\n"
         b"    HttpResult,\n"
@@ -141,7 +141,7 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
         b"    http,\n"
         b")\n\n"
         b"@http(id='conforming', "
-        b"parameter_model=ConformingTransportParameters)\n"
+        b"config=ConformingTransportConfig)\n"
         b"def transfer(context):\n"
         b"    try:\n"
         b"        response = httpx.get(\n"
@@ -171,10 +171,10 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
 
     def create(root: Path) -> ResolvedHttpImplementation:
         """Write and resolve one exact project-owned HTTP implementation."""
-        parameter_path = root / "project/transport_params.py"
+        config_path = root / "project/transport_params.py"
         implementation_path = root / "project/conforming_transport.py"
-        parameter_path.parent.mkdir(parents=True, exist_ok=True)
-        parameter_path.write_bytes(parameter_raw)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_bytes(config_raw)
         implementation_path.write_bytes(implementation_raw)
         return resolve_http(
             root,
@@ -186,14 +186,14 @@ def conforming_http(request: pytest.FixtureRequest) -> TransportFactory:
                     sha256=hashlib.sha256(implementation_raw).hexdigest(),
                     bytes=len(implementation_raw),
                 ),
-                parameter_model=ParameterModelRef(
+                config_type=ConfigTypeRef(
                     owner="project",
                     path="project/transport_params.py",
-                    symbol="ConformingTransportParameters",
-                    sha256=hashlib.sha256(parameter_raw).hexdigest(),
-                    bytes=len(parameter_raw),
+                    symbol="ConformingTransportConfig",
+                    sha256=hashlib.sha256(config_raw).hexdigest(),
+                    bytes=len(config_raw),
                 ),
-                params=parameters.Http(),
+                config=config.HttpConfig(),
             ),
         )
 
@@ -446,31 +446,31 @@ def test_httpx_request_follows_policy_and_strips_cross_origin_secret(
     ]
 
 
-def test_project_http_receives_typed_parameters_and_exact_destination(
+def test_project_http_receives_typed_configs_and_exact_destination(
     tmp_path: Path,
     local_http_server: tuple[str, int, list[tuple[str, str | None]]],
 ) -> None:
     """Load one decorated project HTTP callable and verify its completed body."""
     host, port, _ = local_http_server
     body = b"verified response"
-    parameter_raw = (
+    config_raw = (
         b"from pydantic import Field\n"
-        b"from viper import params as parameters\n\n"
-        b"class ProjectTransportParameters(parameters.Http):\n"
+        b"from viper import config\n\n"
+        b"class ProjectTransportConfig(config.HttpConfig):\n"
         b"    chunk_size: int = Field(gt=0)\n"
     )
     implementation_raw = (
         b"import httpx\n"
-        b"from project.transport_params import ProjectTransportParameters\n"
+        b"from project.transport_params import ProjectTransportConfig\n"
         b"from viper.http import (\n"
         b"    HttpResult,\n"
         b"    ObservedHttpResponse,\n"
         b"    http,\n"
         b")\n\n"
         b"@http(id='project_http', "
-        b"params=ProjectTransportParameters)\n"
+        b"config=ProjectTransportConfig)\n"
         b"def transfer(context):\n"
-        b"    assert context.params.chunk_size == 4\n"
+        b"    assert context.config.chunk_size == 4\n"
         b"    response = httpx.get(str(context.request.url), "
         b"headers={'Range': 'bytes=0-'}, "
         b"follow_redirects=False, trust_env=False)\n"
@@ -486,10 +486,10 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
         b"        ),\n"
         b"    )\n"
     )
-    parameter_path = tmp_path / "project/transport_params.py"
+    config_path = tmp_path / "project/transport_params.py"
     implementation_path = tmp_path / "project/transport.py"
-    parameter_path.parent.mkdir(parents=True)
-    parameter_path.write_bytes(parameter_raw)
+    config_path.parent.mkdir(parents=True)
+    config_path.write_bytes(config_raw)
     implementation_path.write_bytes(implementation_raw)
     spec = ProjectHttpImplementationSpec(
         id="project_http",
@@ -499,14 +499,14 @@ def test_project_http_receives_typed_parameters_and_exact_destination(
             sha256=hashlib.sha256(implementation_raw).hexdigest(),
             bytes=len(implementation_raw),
         ),
-        parameter_model=ParameterModelRef(
+        config_type=ConfigTypeRef(
             owner="project",
             path="project/transport_params.py",
-            symbol="ProjectTransportParameters",
-            sha256=hashlib.sha256(parameter_raw).hexdigest(),
-            bytes=len(parameter_raw),
+            symbol="ProjectTransportConfig",
+            sha256=hashlib.sha256(config_raw).hexdigest(),
+            bytes=len(config_raw),
         ),
-        params=parameters.Http.model_validate({"chunk_size": 4}),
+        config=config.HttpConfig.model_validate({"chunk_size": 4}),
     )
     request = _request(
         url=f"http://{host}:{port}/body",
@@ -669,19 +669,19 @@ def test_http_rejects_policy_secret_and_same_length_body_failures(
 
 def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
     """Reject a project HTTP callable that returns a file outside its workspace."""
-    parameter_raw = (
-        b"from viper import parameters\n\n"
-        b"class EscapeParameters(parameters.Http):\n"
-        b'    """Validate the empty escape-test parameter mapping."""\n'
+    config_raw = (
+        b"from viper import config\n\n"
+        b"class EscapeConfig(config.HttpConfig):\n"
+        b'    """Validate the empty escape-test config mapping."""\n'
     )
     implementation_raw = (
-        b"from project.params import EscapeParameters\n"
+        b"from project.config import EscapeConfig\n"
         b"from viper.http import (\n"
         b"    HttpResult,\n"
         b"    ObservedHttpResponse,\n"
         b"    http,\n"
         b")\n\n"
-        b"@http(id='escape', parameter_model=EscapeParameters)\n"
+        b"@http(id='escape', config=EscapeConfig)\n"
         b"def transfer(context):\n"
         b"    escaped = context.workspace.parent / 'escaped'\n"
         b"    escaped.write_bytes(b'x')\n"
@@ -694,10 +694,10 @@ def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
         b"        ),\n"
         b"    )\n"
     )
-    parameter_path = tmp_path / "project/params.py"
+    config_path = tmp_path / "project/config.py"
     implementation_path = tmp_path / "project/escape.py"
-    parameter_path.parent.mkdir(parents=True)
-    parameter_path.write_bytes(parameter_raw)
+    config_path.parent.mkdir(parents=True)
+    config_path.write_bytes(config_raw)
     implementation_path.write_bytes(implementation_raw)
     spec = ProjectHttpImplementationSpec(
         id="escape",
@@ -707,14 +707,14 @@ def test_project_http_rejects_returned_path_escape(tmp_path: Path) -> None:
             sha256=hashlib.sha256(implementation_raw).hexdigest(),
             bytes=len(implementation_raw),
         ),
-        parameter_model=ParameterModelRef(
+        config_type=ConfigTypeRef(
             owner="project",
-            path="project/params.py",
-            symbol="EscapeParameters",
-            sha256=hashlib.sha256(parameter_raw).hexdigest(),
-            bytes=len(parameter_raw),
+            path="project/config.py",
+            symbol="EscapeConfig",
+            sha256=hashlib.sha256(config_raw).hexdigest(),
+            bytes=len(config_raw),
         ),
-        params=parameters.Http(),
+        config=config.HttpConfig(),
     )
     workspace = tmp_path / "retrieval"
     workspace.mkdir()

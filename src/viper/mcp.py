@@ -327,10 +327,10 @@ class MCPAdapter:
     async def call_tool(
         self,
         _context: Any,
-        params: types.CallToolRequestParams,
+        config: types.CallToolRequestParams,
     ) -> types.CallToolResult:
         """Dispatch one tool request through VIPER's API."""
-        return call_tool(self.root, self.access, params.name, params.arguments)
+        return call_tool(self.root, self.access, config.name, config.arguments)
 
     async def list_resources(
         self, _context: Any, _params: Any
@@ -355,10 +355,10 @@ class MCPAdapter:
     async def read_resource(
         self,
         _context: Any,
-        params: types.ReadResourceRequestParams,
+        config: types.ReadResourceRequestParams,
     ) -> types.ReadResourceResult:
         """Return one immutable resource or the derived catalog head."""
-        return read_resource(self.root, str(params.uri))
+        return read_resource(self.root, str(config.uri))
 
     async def list_prompts(
         self, _context: Any, _params: Any
@@ -373,10 +373,10 @@ class MCPAdapter:
     async def get_prompt(
         self,
         _context: Any,
-        params: types.GetPromptRequestParams,
+        config: types.GetPromptRequestParams,
     ) -> types.GetPromptResult:
         """Return one user-selected review prompt."""
-        return get_prompt(params.name, params.arguments)
+        return get_prompt(config.name, config.arguments)
 
 
 def build_server(root: Path, access: AccessMode = "read") -> Server[None]:

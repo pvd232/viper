@@ -6,12 +6,12 @@ from pathlib import Path
 from tests.fixtures import (
     artifact_loader_ref,
     builtin_http,
+    config_type_ref,
     http_policy,
     http_request,
-    parameter_model_ref,
     stage_implementation_ref,
 )
-from viper import parameters
+from viper import config
 from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
@@ -50,7 +50,7 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
             direction="min",
         ),
         implementation=stage_implementation_ref("project/build.py"),
-        parameter_model=parameter_model_ref("train"),
+        config_type=config_type_ref("train"),
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
@@ -63,7 +63,7 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
                 f"{run_root}/artifacts/models/main/resume_state.bin"
             ),
         },
-        params=parameters.Train(),
+        config=config.TrainConfig(),
     )
     stage_path = f"{run_root}/stages/train/spec.yaml"
     raw = serialize_document(stage)
@@ -159,8 +159,8 @@ def test_preflight_reports_all_plan_failures(tmp_path: Path) -> None:
         "env.python",
         "input.future",
         "metric.implementation",
-        "parameter_model.identity",
-        "parameter_model.validation",
+        "config_type.identity",
+        "config_type.validation",
         "plan.git_identity",
         "plan.records",
         "plan.relationships",

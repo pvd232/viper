@@ -22,7 +22,7 @@ from tests.test_verification_acceptance import (
     sha256,
     yaml_bytes,
 )
-from viper import parameters
+from viper import config
 from viper.metrics import (
     MeasurementSink,
     MetricContext,
@@ -100,20 +100,20 @@ def test_metric_receipt_rejects_worker_ownership_tampering() -> None:
         verify_run_result(invalid_run, policy=POLICY, fetcher=store.fetch)
 
 
-def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> None:
-    """Pass one custom parameter instance through both metric invocation paths."""
+def test_metric_config_reaches_live_and_recomputed_execution(tmp_path: Path) -> None:
+    """Pass one custom config instance through both metric invocation paths."""
 
-    class Scale(parameters.Metric):
+    class Scale(config.MetricConfig):
         factor: float = Field(gt=0)
 
     received: list[Scale] = []
 
     def scaled(context: MetricContext[Scale], value: float) -> float:
-        received.append(context.params)
-        return value * context.params.factor
+        received.append(context.config)
+        return value * context.config.factor
 
-    params = Scale(factor=2.0)
-    context = MetricContext(params=params)
+    selected_config = Scale(factor=2.0)
+    context = MetricContext(config=selected_config)
     sink = MeasurementSink(
         tmp_path / "scaled.jsonl",
         run_id="01JABCDEFGHJKMNPQRSTVWXYZ0",
@@ -124,7 +124,7 @@ def test_metric_params_reach_live_and_recomputed_execution(tmp_path: Path) -> No
 
     assert MetricHandle(scaled, sink, context).record(3.0).value == 6.0
     assert invoke_metric(scaled, context, 4.0) == 8.0
-    assert received == [params, params]
+    assert received == [selected_config, selected_config]
 
 
 def test_metric_dependencies_reuse_snapshot_references() -> None:

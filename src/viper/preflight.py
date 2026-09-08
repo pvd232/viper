@@ -11,11 +11,11 @@ from pydantic import BaseModel, ConfigDict
 
 import viper._subprocess as subprocess
 
-from ._parameter.validation import (
-    ParameterValidationError,
-    parameter_model_path,
-    validate_stage_parameters,
-    verify_parameter_model_bytes,
+from ._config.validation import (
+    ConfigValidationError,
+    config_type_path,
+    validate_stage_config,
+    verify_config_type_bytes,
 )
 from ._verification.plan import (
     verify_benchmark_spec,
@@ -69,8 +69,8 @@ PreflightCheckCode = Literal[
     "http.implementation",
     "input.future",
     "metric.implementation",
-    "parameter_model.identity",
-    "parameter_model.validation",
+    "config_type.identity",
+    "config_type.validation",
     "plan.document",
     "plan.git_identity",
     "plan.records",
@@ -363,47 +363,47 @@ def preflight_plan(
         )
 
         if isinstance(stage, ParameterizedSpec):
-            parameter_identity_valid = False
-            parameter_validation_valid = False
-            parameter_reference = stage.parameter_model
-            model_path = parameter_model_path(root, parameter_reference)
+            config_identity_valid = False
+            config_validation_valid = False
+            config_reference = stage.config_type
+            model_path = config_type_path(root, config_reference)
             try:
                 local_raw = model_path.read_bytes()
-                verify_parameter_model_bytes(parameter_reference, local_raw)
-                parameter_identity_valid = parameter_reference.owner == "viper" or (
+                verify_config_type_bytes(config_reference, local_raw)
+                config_identity_valid = config_reference.owner == "viper" or (
                     local_raw
                     == _git_bytes(
                         root,
                         run.source.commit,
-                        parameter_reference.path,
+                        config_reference.path,
                     )
                 )
             except (
                 OSError,
                 subprocess.CalledProcessError,
-                ParameterValidationError,
+                ConfigValidationError,
             ):
-                parameter_identity_valid = False
-            if parameter_identity_valid:
+                config_identity_valid = False
+            if config_identity_valid:
                 try:
-                    validate_stage_parameters(root, target, stage)
-                    parameter_validation_valid = True
-                except (ParameterValidationError, OSError):
-                    parameter_validation_valid = False
+                    validate_stage_config(root, target, stage)
+                    config_validation_valid = True
+                except (ConfigValidationError, OSError):
+                    config_validation_valid = False
             checks.append(
                 _check(
-                    "parameter_model.identity",
+                    "config_type.identity",
                     reference.stage_id,
-                    parameter_identity_valid,
-                    "parameter model differs from its frozen source identity",
+                    config_identity_valid,
+                    "config type differs from its frozen source identity",
                 )
             )
             checks.append(
                 _check(
-                    "parameter_model.validation",
+                    "config_type.validation",
                     reference.stage_id,
-                    parameter_validation_valid,
-                    "stage parameters failed their project parameter model",
+                    config_validation_valid,
+                    "stage config failed its project config type",
                 )
             )
 
@@ -446,11 +446,11 @@ def preflight_plan(
                         run.source.commit,
                         stage.http.implementation.path,
                     ) and (
-                        root / stage.http.parameter_model.path
+                        root / stage.http.config_type.path
                     ).read_bytes() == _git_bytes(
                         root,
                         run.source.commit,
-                        stage.http.parameter_model.path,
+                        stage.http.config_type.path,
                     )
             except (
                 HttpRetrievalError,

@@ -123,10 +123,10 @@ def validate_package_name(package: str) -> None:
 def _project_files(package: str) -> dict[str, str]:
     """Return the complete starter-project file mapping."""
     stage_definitions = {
-        "build": ("BuildParameters", "build", "prior"),
-        "embed": ("EmbedParameters", "embed", "embedding"),
-        "train": ("TrainParameters", "train", "model"),
-        "eval": ("EvalParameters", "eval", "preds"),
+        "build": ("BuildConfig", "build", "prior"),
+        "embed": ("EmbedConfig", "embed", "embedding"),
+        "train": ("TrainConfig", "train", "model"),
+        "eval": ("EvalConfig", "eval", "preds"),
     }
     files: dict[str, str] = {
         **ROOT_FILES,
@@ -166,32 +166,32 @@ pythonpath = ["src"]
         f"src/{package}/__init__.py": (
             f'"""Project-owned stages and provenance extensions for {package}."""\n'
         ),
-        f"src/{package}/params.py": (
-            '''"""Define project-owned stage parameter models."""
+        f"src/{package}/config.py": (
+            '''"""Define project-owned stage config types."""
 
 from pydantic import Field
-from viper import params
+from viper import config
 
 
-class BuildParameters(params.Build):
+class BuildConfig(config.BuildConfig):
     """Select the delimiter consumed by the prior builder."""
 
     delimiter: str = ","
 
 
-class EmbedParameters(params.Embed):
+class EmbedConfig(config.EmbedConfig):
     """Select the dimension of the example embedding."""
 
     dimensions: int = Field(default=2, gt=0)
 
 
-class TrainParameters(params.Train):
+class TrainConfig(config.TrainConfig):
     """Select the number of example training passes."""
 
     epochs: int = Field(default=1, gt=0)
 
 
-class EvalParameters(params.Eval):
+class EvalConfig(config.EvalConfig):
     """Select the label written beside the example predictions."""
 
     label: str = "baseline"
@@ -329,9 +329,16 @@ def test_stage_kinds() -> None:
 '''
         ),
     }
-    for stage, (parameter_class, decorator, artifact) in stage_definitions.items():
+    for stage, (config_class, decorator, artifact) in stage_definitions.items():
         if stage == "eval":
             input_read = "    payload = context.inputs['model'].read_bytes()\n"
+        elif stage == "train":
+            input_read = (
+                "    source = next(iter(context.inputs.values()))\n"
+                "    payload = b''\n"
+                "    for _ in range(context.config.epochs):\n"
+                "        payload = source.read_bytes()\n"
+            )
         else:
             input_read = (
                 "    source = next(iter(context.inputs.values()))\n"
@@ -362,12 +369,12 @@ def training_loss(context, values) -> float:
             f"src/{package}/stages/{stage}.py"
         ] = f'''"""Execute the example {stage} stage."""
 
-from {package}.params import {parameter_class}
+from {package}.config import {config_class}
 {metric_import}\
 from viper.stages import {decorator}
 {metric_definition}
 
-@{decorator}(params={parameter_class})
+@{decorator}(config={config_class})
 def {stage}(context) -> None:
     """Write the declared {artifact} artifact from verified inputs."""
 {stage_body}'''

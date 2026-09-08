@@ -204,9 +204,9 @@ def verify_recomputed_metrics(
                 raise VerificationError(
                     f"metric {metric_id!r} production implementation differs"
                 )
-            if receipt.production.params != metric.params:
+            if receipt.production.config != metric.config:
                 raise VerificationError(
-                    f"metric {metric_id!r} production parameters differ"
+                    f"metric {metric_id!r} production config differs"
                 )
             if receipt.comparator != metric.comparator:
                 raise VerificationError(

@@ -18,7 +18,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
 
-from . import params
+from . import config
 from ._schema import ArtifactName, DataRole, RepoRelPath, RNGSeed
 from .artifacts import (
     ArtifactDraft,
@@ -37,14 +37,15 @@ from .benchmark import (
     MetricCriterion,
     RunArtifactDraft,
 )
+from .config import ConfigTypeRef
 from .experiments import (
-    BuildVariantStageParams,
-    EmbedVariantStageParams,
-    EvalVariantStageParams,
+    BuildVariantStageConfig,
+    EmbedVariantStageConfig,
+    EvalVariantStageConfig,
     ExperimentSpec,
     FactorSpec,
     ReplicateSpec,
-    TrainVariantStageParams,
+    TrainVariantStageConfig,
     VariantSpec,
 )
 from .http import (
@@ -83,7 +84,6 @@ from .metrics import (
     MetricSpec,
     metric_definition,
 )
-from .params import ParameterModelRef
 from .project import resolve_path, resolve_root
 from .references import (
     GitSource,
@@ -162,17 +162,17 @@ def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
     if not isinstance(definition, HttpDefinition):
         raise ValueError("HTTP callable lacks a VIPER decorator")
     source = inspect.getsourcefile(draft.implementation)
-    parameter_source = inspect.getsourcefile(definition.parameter_model)
-    if source is None or parameter_source is None:
-        raise ValueError("HTTP callable or parameter model has no Python source")
+    config_source = inspect.getsourcefile(definition.config_type)
+    if source is None or config_source is None:
+        raise ValueError("HTTP callable or config type has no Python source")
     implementation_path = Path(source).resolve()
-    parameter_path = Path(parameter_source).resolve()
+    config_path = Path(config_source).resolve()
     if not implementation_path.is_relative_to(root):
         raise ValueError("HTTP callable is outside the project root")
-    if not parameter_path.is_relative_to(root):
-        raise ValueError("HTTP parameter model is outside the project root")
+    if not config_path.is_relative_to(root):
+        raise ValueError("HTTP config type is outside the project root")
     implementation_raw = implementation_path.read_bytes()
-    parameter_raw = parameter_path.read_bytes()
+    config_raw = config_path.read_bytes()
     return ProjectHttpImplementationSpec(
         id=definition.id,
         implementation=HttpImplementationRef(
@@ -181,14 +181,14 @@ def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
             sha256=hashlib.sha256(implementation_raw).hexdigest(),
             bytes=len(implementation_raw),
         ),
-        parameter_model=ParameterModelRef(
+        config_type=ConfigTypeRef(
             owner="project",
-            path=parameter_path.relative_to(root).as_posix(),
-            symbol=definition.parameter_model.__name__,
-            sha256=hashlib.sha256(parameter_raw).hexdigest(),
-            bytes=len(parameter_raw),
+            path=config_path.relative_to(root).as_posix(),
+            symbol=definition.config_type.__name__,
+            sha256=hashlib.sha256(config_raw).hexdigest(),
+            bytes=len(config_raw),
         ),
-        params=draft.params,
+        config=draft.config,
         executables=definition.executables,
     )
 
@@ -224,10 +224,10 @@ class BaseSpecDraft(BaseModel):
 
 
 class ParameterizedSpecDraft(BaseSpecDraft):
-    """Hold one decorated project stage and its parameter values."""
+    """Hold one decorated project stage and its config values."""
 
     implementation: Callable[[Context[Any]], None]
-    params: params.ParameterSet
+    config: config.Config
     metrics: tuple[MetricDraft[Any], ...] = ()
     reuse: StageReuseMode = "never"
 
@@ -251,14 +251,14 @@ class BuildSpecDraft(InternalSpecDraft):
     """Hold one project-defined prior builder."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: params.Build  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: config.BuildConfig  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 class EmbedSpecDraft(InternalSpecDraft):
     """Hold one configured embedding stage."""
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: params.Embed  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: config.EmbedConfig  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft | None = None
 
 
@@ -266,7 +266,7 @@ class TrainSpecDraft(InternalSpecDraft):
     """Hold one configured training stage and required objective."""
 
     kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: params.Train  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: config.TrainConfig  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft
 
 
@@ -275,7 +275,7 @@ class EvalSpecDraft(InternalSpecDraft):
 
     kind: Literal["eval"] = "eval"  # pyright: ignore[reportIncompatibleVariableOverride]
     eval_id: EvalId
-    params: params.Eval  # pyright: ignore[reportIncompatibleVariableOverride]
+    config: config.EvalConfig  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveDraft
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
 
@@ -812,24 +812,24 @@ def _freeze_stage(
         )
     definition = stage_definition(draft.implementation)
     source = inspect.getsourcefile(draft.implementation)
-    parameter_source = inspect.getsourcefile(definition.parameter_model)
-    if source is None or parameter_source is None:
-        raise ValueError("stage callable or parameter model has no Python source")
+    config_source = inspect.getsourcefile(definition.config_type)
+    if source is None or config_source is None:
+        raise ValueError("stage callable or config type has no Python source")
     source_path = Path(source).resolve()
-    parameter_path = Path(parameter_source).resolve()
+    config_path = Path(config_source).resolve()
     source_raw = source_path.read_bytes()
-    parameter_raw = parameter_path.read_bytes()
-    if definition.parameter_model.__module__ == params.__name__:
-        parameter = params.model_ref(definition.parameter_model)
+    config_raw = config_path.read_bytes()
+    if definition.config_type.__module__ == config.__name__:
+        config_reference = config.type_ref(definition.config_type)
     else:
-        if not parameter_path.is_relative_to(root):
-            raise ValueError("stage parameter model is outside the project root")
-        parameter = ParameterModelRef(
+        if not config_path.is_relative_to(root):
+            raise ValueError("stage config type is outside the project root")
+        config_reference = ConfigTypeRef(
             owner="project",
-            path=parameter_path.relative_to(root).as_posix(),
-            symbol=definition.parameter_model.__name__,
-            sha256=hashlib.sha256(parameter_raw).hexdigest(),
-            bytes=len(parameter_raw),
+            path=config_path.relative_to(root).as_posix(),
+            symbol=definition.config_type.__name__,
+            sha256=hashlib.sha256(config_raw).hexdigest(),
+            bytes=len(config_raw),
         )
     common = {
         "artifacts": artifacts,
@@ -840,8 +840,8 @@ def _freeze_stage(
             sha256=hashlib.sha256(source_raw).hexdigest(),
             bytes=len(source_raw),
         ),
-        "parameter_model": parameter,
-        "params": draft.params,
+        "config_type": config_reference,
+        "config": draft.config,
         "reuse": draft.reuse,
         "inputs": {
             name: _freeze_input(
@@ -925,7 +925,7 @@ def download(
 def stage(
     implementation: Callable[[Context[Any]], None],
     *,
-    params: params.ParameterSet,
+    config: config.Config,
     inputs: dict[InputName, StageInputDraft],
     artifacts: dict[ArtifactName, ArtifactDraft],
     metrics: tuple[MetricDraft[Any], ...] = (),
@@ -939,7 +939,7 @@ def stage(
     definition = stage_definition(implementation)
     values = {
         "implementation": implementation,
-        "params": params,
+        "config": config,
         "inputs": inputs,
         "artifacts": artifacts,
         "metrics": metrics,
@@ -969,28 +969,28 @@ def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
     """Compile one configured metric from its exact Python definitions."""
     definition = metric_definition(draft.implementation)
     implementation_source = inspect.getsourcefile(draft.implementation)
-    parameter_model = type(draft.params)
-    parameter_source = inspect.getsourcefile(parameter_model)
-    if implementation_source is None or parameter_source is None:
-        raise ValueError("metric callable or parameter model has no Python source")
+    config_type = type(draft.config)
+    config_source = inspect.getsourcefile(config_type)
+    if implementation_source is None or config_source is None:
+        raise ValueError("metric callable or config type has no Python source")
 
     implementation_path = Path(implementation_source).resolve()
     implementation_raw = implementation_path.read_bytes()
     if not implementation_path.is_relative_to(root):
         raise ValueError("metric callable is outside the project root")
-    if parameter_model.__module__ == params.__name__:
-        parameter = params.model_ref(parameter_model)
+    if config_type.__module__ == config.__name__:
+        config_reference = config.type_ref(config_type)
     else:
-        parameter_path = Path(parameter_source).resolve()
-        parameter_raw = parameter_path.read_bytes()
-        if not parameter_path.is_relative_to(root):
-            raise ValueError("metric parameter model is outside the project root")
-        parameter = ParameterModelRef(
+        config_path = Path(config_source).resolve()
+        config_raw = config_path.read_bytes()
+        if not config_path.is_relative_to(root):
+            raise ValueError("metric config type is outside the project root")
+        config_reference = ConfigTypeRef(
             owner="project",
-            path=parameter_path.relative_to(root).as_posix(),
-            symbol=parameter_model.__name__,
-            sha256=hashlib.sha256(parameter_raw).hexdigest(),
-            bytes=len(parameter_raw),
+            path=config_path.relative_to(root).as_posix(),
+            symbol=config_type.__name__,
+            sha256=hashlib.sha256(config_raw).hexdigest(),
+            bytes=len(config_raw),
         )
     return MetricSpec(
         metric_id=definition.metric_id,
@@ -1000,8 +1000,8 @@ def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
             sha256=hashlib.sha256(implementation_raw).hexdigest(),
             bytes=len(implementation_raw),
         ),
-        parameter_model=parameter,
-        params=draft.params,
+        config_type=config_reference,
+        config=draft.config,
         mode=definition.mode,
         dependencies=draft.dependencies,
         comparator=draft.comparator,
@@ -1034,33 +1034,33 @@ def _compile_variant(
     variant_id: VariantId,
     draft: VariantDraft,
 ) -> VariantSpec:
-    """Compile the typed parameter selection for one variant."""
-    stage_params = []
+    """Compile the typed config selection for one variant."""
+    stage_configs = []
     for stage_id, stage_draft in draft.stages.items():
         spec = stage_draft.spec
         if isinstance(spec, BuildSpecDraft):
-            stage_params.append(
-                BuildVariantStageParams(stage_id=stage_id, params=spec.params)
+            stage_configs.append(
+                BuildVariantStageConfig(stage_id=stage_id, config=spec.config)
             )
         elif isinstance(spec, EmbedSpecDraft):
-            stage_params.append(
-                EmbedVariantStageParams(stage_id=stage_id, params=spec.params)
+            stage_configs.append(
+                EmbedVariantStageConfig(stage_id=stage_id, config=spec.config)
             )
         elif isinstance(spec, TrainSpecDraft):
-            stage_params.append(
-                TrainVariantStageParams(stage_id=stage_id, params=spec.params)
+            stage_configs.append(
+                TrainVariantStageConfig(stage_id=stage_id, config=spec.config)
             )
         elif isinstance(spec, EvalSpecDraft):
-            stage_params.append(
-                EvalVariantStageParams(stage_id=stage_id, params=spec.params)
+            stage_configs.append(
+                EvalVariantStageConfig(stage_id=stage_id, config=spec.config)
             )
-    if not stage_params:
+    if not stage_configs:
         raise ValueError("variant requires one project stage")
     return VariantSpec(
         experiment_id=experiment_id,
         variant_id=variant_id,
         levels=draft.levels,
-        stage_params=tuple(stage_params),
+        stage_configs=tuple(stage_configs),
     )
 
 

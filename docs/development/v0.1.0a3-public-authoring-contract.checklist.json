@@ -8,7 +8,7 @@
       "contract_id": "public-authoring",
       "path": "docs/development/v0.1.0a3-public-authoring-contract.md",
       "revision": "working-tree",
-      "sha256": "c30736174487a1290dd4b20a0175dc42ee195480efac2955ce24b058690ae64d",
+      "sha256": "09e9558299a0cb87c1af5b318e127ef460efbd523b26938988ed01bcd7f2dba6",
       "requirement_ids": [
         "PAC-01",
         "PAC-02",
@@ -31,12 +31,17 @@
       "phase": 0,
       "order": 0,
       "depends_on": [],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.config.only across Python, serialized, CLI/MCP protocol, and workspace-generator surfaces plus focused config and protocol tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "PAC-01 focused gate: 168 passed and 23 subtests passed",
+        "Post-cleanup impacted tests: 71 passed; final HTTP and authoring regression: 50 passed",
+        "Contract digest, link, and plan guards: 6 passed",
+        "Ruff: all checks passed; Pyright: 0 errors"
+      ]
     },
     {
       "requirement_id": "PAC-02",
@@ -182,12 +187,17 @@
       "requirement_ids": [
         "PAC-01"
       ],
-      "state": "planned",
+      "state": "complete",
       "gate": {
         "kind": "test",
         "target": "authoring.config.only across Python, serialized, CLI/MCP protocol, and workspace-generator surfaces plus focused config and protocol tests"
       },
-      "completion_evidence": []
+      "completion_evidence": [
+        "PAC-01 focused gate: 168 passed and 23 subtests passed",
+        "Post-cleanup impacted tests: 71 passed; final HTTP and authoring regression: 50 passed",
+        "Contract digest, link, and plan guards: 6 passed",
+        "Ruff: all checks passed; Pyright: 0 errors"
+      ]
     },
     {
       "pair_block_id": "P1-PAC-02",

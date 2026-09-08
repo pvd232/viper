@@ -30,10 +30,10 @@ from pydantic import (
     model_validator,
 )
 
-from . import params
-from ._parameter.validation import (
-    instantiate_parameters,
-    verify_parameter_model_bytes,
+from . import config
+from ._config.validation import (
+    instantiate_config,
+    verify_config_type_bytes,
 )
 from ._schema import (
     SHA256,
@@ -42,8 +42,8 @@ from ._schema import (
     PythonRepoRelPath,
     PythonSymbol,
 )
+from .config import Config, ConfigTypeRef
 from .ids import HumanId, InputName
-from .params import ParameterModelRef, ParameterSet
 from .references import SnapshotFileRef
 
 HttpHeaderName = Annotated[
@@ -186,8 +186,8 @@ class ProjectHttpImplementationSpec(ProtocolModel):
     kind: Literal["project"] = "project"
     id: HumanId
     implementation: HttpImplementationRef
-    parameter_model: ParameterModelRef
-    params: params.Http
+    config_type: ConfigTypeRef
+    config: config.HttpConfig
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
     @model_validator(mode="after")
@@ -281,7 +281,7 @@ class ResolvedHttpRetrieval(ProtocolModel):
         return self
 
 
-HttpParamsT = TypeVar("HttpParamsT", bound=params.Http)
+HttpConfigT = TypeVar("HttpConfigT", bound=config.HttpConfig)
 DecoratedHttp = TypeVar("DecoratedHttp", bound=Callable[..., object])
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -312,7 +312,7 @@ class RuntimeHttpCredential:
 
 
 @dataclass(frozen=True)
-class HttpContext(Generic[HttpParamsT]):
+class HttpContext(Generic[HttpConfigT]):
     """Supply one HTTP implementation with its request and destination."""
 
     request: HttpRequestSpec
@@ -320,7 +320,7 @@ class HttpContext(Generic[HttpParamsT]):
     workspace: Path
     destination: Path
     policy: HttpRetrievalPolicy
-    params: HttpParamsT
+    config: HttpConfigT
     executables: Mapping[HumanId, Path]
 
 
@@ -332,13 +332,13 @@ class HttpResult:
     response: ObservedHttpResponse
 
 
-class CustomHttpDraft(BaseModel, Generic[HttpParamsT]):
+class CustomHttpDraft(BaseModel, Generic[HttpConfigT]):
     """Hold one configured project HTTP callable before freezing."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
-    implementation: Callable[[HttpContext[HttpParamsT]], HttpResult]
-    params: HttpParamsT
+    implementation: Callable[[HttpContext[HttpConfigT]], HttpResult]
+    config: HttpConfigT
     executables: tuple[ExternalExecutableSpec, ...] = ()
 
 
@@ -346,20 +346,20 @@ HttpDraft = BuiltinHttpImplementationSpec | CustomHttpDraft[Any]
 
 
 @dataclass(frozen=True)
-class HttpDefinition(Generic[HttpParamsT]):
+class HttpDefinition(Generic[HttpConfigT]):
     """Store authoring metadata attached to one project HTTP callable."""
 
     id: HumanId
-    parameter_model: type[HttpParamsT]
+    config_type: type[HttpConfigT]
     executables: tuple[ExternalExecutableSpec, ...]
 
 
-class HttpCallable(Protocol[HttpParamsT]):
+class HttpCallable(Protocol[HttpConfigT]):
     """Describe the callable interface shared by project HTTP implementations."""
 
     def __call__(
         self,
-        context: HttpContext[HttpParamsT],
+        context: HttpContext[HttpConfigT],
     ) -> HttpResult:
         """Transfer one request into the assigned destination."""
         ...
@@ -368,17 +368,15 @@ class HttpCallable(Protocol[HttpParamsT]):
 def http(
     *,
     id: HumanId,
-    params: type[HttpParamsT] = params.Http,
-    parameter_model: type[HttpParamsT] | None = None,
+    config: type[HttpConfigT] = config.HttpConfig,
     executables: tuple[ExternalExecutableSpec, ...] = (),
 ) -> Callable[[DecoratedHttp], DecoratedHttp]:
-    """Declare one project-owned HTTP callable with its parameter model."""
-    selected_params = params if parameter_model is None else parameter_model
-    if not issubclass(selected_params, ParameterSet):
-        raise TypeError("HTTP parameter model must subclass viper.params.ParameterSet")
+    """Declare one project-owned HTTP callable with its config type."""
+    if not issubclass(config, Config):
+        raise TypeError("HTTP config type must subclass viper.config.Config")
     definition = HttpDefinition(
         id=id,
-        parameter_model=selected_params,
+        config_type=config,
         executables=executables,
     )
 
@@ -446,15 +444,14 @@ def _load_project_http(
             raise HttpRetrievalError("HTTP callable lacks a VIPER decorator")
         if definition.id != spec.id:
             raise HttpRetrievalError("HTTP decorator ID differs")
-        if definition.parameter_model.__name__ != spec.parameter_model.symbol:
-            raise HttpRetrievalError("HTTP parameter class differs")
-        parameter_source = inspect.getsourcefile(definition.parameter_model)
+        if definition.config_type.__name__ != spec.config_type.symbol:
+            raise HttpRetrievalError("HTTP config class differs")
+        config_source = inspect.getsourcefile(definition.config_type)
         if (
-            parameter_source is None
-            or Path(parameter_source).resolve()
-            != (root / spec.parameter_model.path).resolve()
+            config_source is None
+            or Path(config_source).resolve() != (root / spec.config_type.path).resolve()
         ):
-            raise HttpRetrievalError("HTTP parameter source differs")
+            raise HttpRetrievalError("HTTP config source differs")
     except Exception as exc:
         if isinstance(exc, HttpRetrievalError):
             raise
@@ -531,14 +528,14 @@ def resolve_http(
     root = repository_root.resolve()
     implementation_path = root / spec.implementation.path
     _verify_implementation_bytes(spec.implementation, implementation_path.read_bytes())
-    parameter_path = root / spec.parameter_model.path
-    verify_parameter_model_bytes(spec.parameter_model, parameter_path.read_bytes())
+    config_path = root / spec.config_type.path
+    verify_config_type_bytes(spec.config_type, config_path.read_bytes())
     _load_project_http(root, spec)
-    instantiate_parameters(
-        parameter_path,
-        spec.parameter_model,
-        spec.params,
-        params.Http,
+    instantiate_config(
+        config_path,
+        spec.config_type,
+        spec.config,
+        config.HttpConfig,
     )
     executables = tuple(_resolve_executable(value) for value in spec.executables)
     return ResolvedHttpImplementation(spec=spec, external_executables=executables)
@@ -568,7 +565,7 @@ def _persisted_headers(response: httpx.Response) -> dict[str, str]:
 
 
 def _httpx_request(
-    context: HttpContext[params.Http],
+    context: HttpContext[config.HttpConfig],
 ) -> HttpResult:
     """Retrieve one exact response body through a bounded HTTPX client."""
     started = time.monotonic()
@@ -688,17 +685,17 @@ def invoke_http(
     if destination.is_symlink():
         raise HttpRetrievalError("HTTP destination must not be a symlink")
     if isinstance(implementation.spec, BuiltinHttpImplementationSpec):
-        values = params.Http()
+        values = config.HttpConfig()
         function: HttpCallable[Any] = _httpx_request
     else:
         project = implementation.spec
         values = cast(
-            params.Http,
-            instantiate_parameters(
-                root / project.parameter_model.path,
-                project.parameter_model,
-                project.params,
-                params.Http,
+            config.HttpConfig,
+            instantiate_config(
+                root / project.config_type.path,
+                project.config_type,
+                project.config,
+                config.HttpConfig,
             ),
         )
         function = _load_project_http(root, project)
@@ -708,7 +705,7 @@ def invoke_http(
         workspace=resolved_workspace,
         destination=resolved_destination,
         policy=policy,
-        params=values,
+        config=values,
         executables={
             value.spec.executable_id: value.path
             for value in implementation.external_executables

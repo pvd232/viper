@@ -18,7 +18,7 @@ from tests.fixtures import (
 from tests.git_repository import REPOSITORY, run_git
 from tests.test_run_execution import http_source as execution_http_source
 from viper import _subprocess as subprocess
-from viper import params
+from viper import config
 from viper._schema import DataRole
 from viper.artifacts import (
     ArtifactLoaderRef,
@@ -36,13 +36,14 @@ from viper.benchmark import (
     BenchmarkSpec,
     MetricCriterion,
 )
+from viper.config import ConfigTypeRef
 from viper.experiments import (
-    BuildVariantStageParams,
-    EmbedVariantStageParams,
-    EvalVariantStageParams,
+    BuildVariantStageConfig,
+    EmbedVariantStageConfig,
+    EvalVariantStageConfig,
     ExperimentSpec,
     ReplicateSpec,
-    TrainVariantStageParams,
+    TrainVariantStageConfig,
     VariantSpec,
 )
 from viper.inputs import FutureInputRef, StoredInputRef
@@ -55,7 +56,6 @@ from viper.metrics import (
     MetricObjectiveSpec,
     MetricSpec,
 )
-from viper.params import ParameterModelRef
 from viper.project import init
 from viper.references import (
     ArtifactPointerRef,
@@ -100,11 +100,11 @@ def _stage_implementation(root: Path, stage: str) -> StageImplementationRef:
     )
 
 
-def _parameter_model(root: Path, symbol: str) -> ParameterModelRef:
+def _config_type(root: Path, symbol: str) -> ConfigTypeRef:
     """Identify one class in the generated parameter module."""
-    path = "src/sample_project/params.py"
+    path = "src/sample_project/config.py"
     raw = (root / path).read_bytes()
-    return ParameterModelRef(
+    return ConfigTypeRef(
         owner="project",
         path=path,
         symbol=symbol,
@@ -271,20 +271,20 @@ def test_generated_project_uses_runner_owned_downloads(
     root = tmp_path / "generated"
     init(root, "sample_project")
     assert not (root / "src/sample_project/stages/download.py").exists()
-    assert "DownloadParameters" not in (
-        root / "src/sample_project/params.py"
-    ).read_text(encoding="utf-8")
+    assert "DownloadConfig" not in (root / "src/sample_project/config.py").read_text(
+        encoding="utf-8"
+    )
     run_git(root, "init", "--quiet")
     run_git(root, "config", "user.email", "viper@example.com")
     run_git(root, "config", "user.name", "VIPER Test")
     run_git(root, "remote", "add", "origin", REPOSITORY)
     host, port = http_source
 
-    train_params = params.Train.model_validate({"epochs": 1})
+    train_config = config.TrainConfig.model_validate({"epochs": 1})
     training_metric_path = "src/sample_project/stages/train.py"
     training_metric_raw = (root / training_metric_path).read_bytes()
     training_metric = MetricSpec(
-        parameter_model=params.model_ref(params.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id="training_loss",
         implementation=MetricImplementationRef(
             path=training_metric_path,
@@ -292,7 +292,7 @@ def test_generated_project_uses_runner_owned_downloads(
             sha256=hashlib.sha256(training_metric_raw).hexdigest(),
             bytes=len(training_metric_raw),
         ),
-        params=params.Metric(),
+        config=config.MetricConfig(),
         mode="stateless",
     )
     write_experiment_spec(
@@ -311,8 +311,8 @@ def test_generated_project_uses_runner_owned_downloads(
             experiment_id="acquisition",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                TrainVariantStageParams(stage_id="train", params=train_params),
+            stage_configs=(
+                TrainVariantStageConfig(stage_id="train", config=train_config),
             ),
         ),
     )
@@ -351,7 +351,7 @@ def test_generated_project_uses_runner_owned_downloads(
     )
     acquisition_train = TrainSpec(
         implementation=_stage_implementation(root, "train"),
-        parameter_model=_parameter_model(root, "TrainParameters"),
+        config_type=_config_type(root, "TrainConfig"),
         metric_ids=("training_loss",),
         objective=MetricObjectiveSpec(
             metric_id="training_loss",
@@ -363,7 +363,7 @@ def test_generated_project_uses_runner_owned_downloads(
                 name="seed_training",
             )
         },
-        params=train_params,
+        config=train_config,
         artifacts={
             TrainKeys.MODEL: _artifact(
                 root,
@@ -447,7 +447,7 @@ def test_generated_project_uses_runner_owned_downloads(
     metric_path = "src/sample_project/metrics/eval.py"
     metric_raw = (root / metric_path).read_bytes()
     metric = MetricSpec(
-        parameter_model=params.model_ref(params.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id="prediction_bytes",
         implementation=MetricImplementationRef(
             path=metric_path,
@@ -455,7 +455,7 @@ def test_generated_project_uses_runner_owned_downloads(
             sha256=hashlib.sha256(metric_raw).hexdigest(),
             bytes=len(metric_raw),
         ),
-        params=params.Metric(),
+        config=config.MetricConfig(),
         mode="stateless",
         dependencies=(
             MetricDependency(
@@ -466,9 +466,9 @@ def test_generated_project_uses_runner_owned_downloads(
         ),
         comparator=FloatComparator(),
     )
-    build_params = params.Build.model_validate({"delimiter": ","})
-    embed_params = params.Embed.model_validate({"dimensions": 2})
-    evaluate_params = params.Eval.model_validate({"label": "baseline"})
+    build_params = config.BuildConfig.model_validate({"delimiter": ","})
+    embed_params = config.EmbedConfig.model_validate({"dimensions": 2})
+    evaluate_params = config.EvalConfig.model_validate({"label": "baseline"})
     write_experiment_spec(
         root,
         ExperimentSpec(
@@ -485,13 +485,13 @@ def test_generated_project_uses_runner_owned_downloads(
             experiment_id="starter",
             variant_id="baseline",
             levels={},
-            stage_params=(
-                BuildVariantStageParams(stage_id="build", params=build_params),
-                EmbedVariantStageParams(stage_id="embed", params=embed_params),
-                TrainVariantStageParams(stage_id="train", params=train_params),
-                EvalVariantStageParams(
+            stage_configs=(
+                BuildVariantStageConfig(stage_id="build", config=build_params),
+                EmbedVariantStageConfig(stage_id="embed", config=embed_params),
+                TrainVariantStageConfig(stage_id="train", config=train_config),
+                EvalVariantStageConfig(
                     stage_id="evaluate",
-                    params=evaluate_params,
+                    config=evaluate_params,
                 ),
             ),
         ),
@@ -537,14 +537,14 @@ def test_generated_project_uses_runner_owned_downloads(
     )
     candidate_build = BuildSpec(
         implementation=_stage_implementation(root, "build"),
-        parameter_model=_parameter_model(root, "BuildParameters"),
+        config_type=_config_type(root, "BuildConfig"),
         inputs={
             "dataset": FutureInputRef(
                 producer_stage_id="download",
                 name="dataset",
             )
         },
-        params=build_params,
+        config=build_params,
         artifacts={
             "prior": _artifact(
                 root,
@@ -555,14 +555,14 @@ def test_generated_project_uses_runner_owned_downloads(
     )
     candidate_embed = EmbedSpec(
         implementation=_stage_implementation(root, "embed"),
-        parameter_model=_parameter_model(root, "EmbedParameters"),
+        config_type=_config_type(root, "EmbedConfig"),
         inputs={
             "prior": FutureInputRef(
                 producer_stage_id="build",
                 name="prior",
             )
         },
-        params=embed_params,
+        config=embed_params,
         artifacts={
             "embedding": _artifact(
                 root,
@@ -573,7 +573,7 @@ def test_generated_project_uses_runner_owned_downloads(
     )
     candidate_train = TrainSpec(
         implementation=_stage_implementation(root, "train"),
-        parameter_model=_parameter_model(root, "TrainParameters"),
+        config_type=_config_type(root, "TrainConfig"),
         metric_ids=("training_loss",),
         objective=MetricObjectiveSpec(
             metric_id="training_loss",
@@ -585,7 +585,7 @@ def test_generated_project_uses_runner_owned_downloads(
                 name="embedding",
             )
         },
-        params=train_params,
+        config=train_config,
         artifacts={
             TrainKeys.MODEL: _artifact(
                 root,
@@ -602,7 +602,7 @@ def test_generated_project_uses_runner_owned_downloads(
     )
     candidate_evaluate = EvalSpec(
         implementation=_stage_implementation(root, "eval"),
-        parameter_model=_parameter_model(root, "EvalParameters"),
+        config_type=_config_type(root, "EvalConfig"),
         eval_id="starter_eval",
         metric_ids=("prediction_bytes",),
         objective=MetricObjectiveSpec(
@@ -626,7 +626,7 @@ def test_generated_project_uses_runner_owned_downloads(
                 data_role="benchmark",
             ),
         },
-        params=evaluate_params,
+        config=evaluate_params,
         artifacts={
             EvalKeys.PREDS: _artifact(
                 root,

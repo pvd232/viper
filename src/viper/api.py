@@ -2052,8 +2052,8 @@ def run(
     if definition.kind != stage.kind:
         raise PythonRunError("launched stage decorator kind differs from the plan")
 
-    if definition.parameter_model.__name__ != stage.parameter_model.symbol:
-        raise PythonRunError("launched parameter class differs from the plan")
+    if definition.config_type.__name__ != stage.config_type.symbol:
+        raise PythonRunError("launched config class differs from the plan")
 
     return run_request(
         RunRequest(

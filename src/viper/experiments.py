@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from . import params
+from . import config
 from ._schema import ProtocolModel, RNGSeed
 from .ids import ExperimentId, FactorId, LevelId, ReplicateId, StageId, VariantId
 from .metrics import MetricSpec
@@ -69,60 +69,60 @@ class ExperimentSpec(ProtocolModel):
         return self
 
 
-class BuildVariantStageParams(ProtocolModel):
-    """Bind one build stage to its selected variant params."""
+class BuildVariantStageConfig(ProtocolModel):
+    """Bind one build stage to its selected variant config."""
 
     kind: Literal["build"] = "build"
     stage_id: StageId
-    params: params.Build
+    config: config.BuildConfig
 
 
-class EmbedVariantStageParams(ProtocolModel):
-    """Bind one embedding stage to its selected variant params."""
+class EmbedVariantStageConfig(ProtocolModel):
+    """Bind one embedding stage to its selected variant config."""
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     stage_id: StageId
-    params: params.Embed
+    config: config.EmbedConfig
 
 
-class TrainVariantStageParams(ProtocolModel):
-    """Bind one training stage to its selected variant params."""
+class TrainVariantStageConfig(ProtocolModel):
+    """Bind one training stage to its selected variant config."""
 
     kind: Literal["train"] = "train"
     stage_id: StageId
-    params: params.Train
+    config: config.TrainConfig
 
 
-class EvalVariantStageParams(ProtocolModel):
-    """Bind one eval stage to its selected variant params."""
+class EvalVariantStageConfig(ProtocolModel):
+    """Bind one eval stage to its selected variant config."""
 
     kind: Literal["eval"] = "eval"
     stage_id: StageId
-    params: params.Eval
+    config: config.EvalConfig
 
 
-VariantStageParams = Annotated[
-    BuildVariantStageParams
-    | EmbedVariantStageParams
-    | TrainVariantStageParams
-    | EvalVariantStageParams,
+VariantStageConfig = Annotated[
+    BuildVariantStageConfig
+    | EmbedVariantStageConfig
+    | TrainVariantStageConfig
+    | EvalVariantStageConfig,
     Field(discriminator="kind"),
 ]
 
 
 class VariantSpec(ProtocolModel):
-    """Assign factor levels and typed stage parameters to one variant."""
+    """Assign factor levels and typed stage config to one variant."""
 
     schema_version: Literal[1] = 1
     experiment_id: ExperimentId
     variant_id: VariantId
     levels: dict[FactorId, LevelId]
-    stage_params: tuple[VariantStageParams, ...] = Field(min_length=1)
+    stage_configs: tuple[VariantStageConfig, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_unique_stage_ids(self) -> VariantSpec:
-        """Require one variant-parameter record per stage."""
-        stage_ids = tuple(stage.stage_id for stage in self.stage_params)
+        """Require one variant-config record per stage."""
+        stage_ids = tuple(stage.stage_id for stage in self.stage_configs)
         if len(set(stage_ids)) != len(stage_ids):
             raise ValueError("variant stage IDs must be unique")
         return self

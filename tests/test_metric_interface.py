@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from viper import params as parameters
+from viper import config
 from viper.benchmark import at_least
 from viper.metrics import (
     FloatComparator,
@@ -30,7 +30,7 @@ from viper.metrics import (
 @metric(metric_id="mean_value", mode="stateless")
 def mean_value(context: MetricContext) -> float:
     """Return the frozen scalar supplied through metric parameters."""
-    return float(context.params.model_dump()["value"])
+    return float(context.config.model_dump()["value"])
 
 
 @metric(metric_id="running_mean", mode="stateful")
@@ -56,7 +56,7 @@ def test_decorators_define_stateless_and_stateful_metrics() -> None:
     """Match each declared mode to its function or accumulator shape."""
     assert mean_value.__viper_metric__.mode == "stateless"  # type: ignore[attr-defined]
     assert RunningMean.__viper_metric__.mode == "stateful"  # type: ignore[attr-defined]
-    metric_value = RunningMean(MetricContext(params=parameters.Metric()))
+    metric_value = RunningMean(MetricContext(config=config.MetricConfig()))
     metric_value.update(1.0)
     metric_value.update(3.0)
     assert metric_value.compute() == 2.0
@@ -88,12 +88,12 @@ def test_metric_loader_invokes_top_level_symbol(tmp_path: Path) -> None:
     """Load and invoke a metric from one selected repository-relative file."""
     implementation = tmp_path / "project_metric.py"
     implementation.write_text(
-        "def compute(context):\n    return float(context.params.value)\n",
+        "def compute(context):\n    return float(context.config.value)\n",
         encoding="utf-8",
     )
     loaded = load_metric(implementation, "compute")
     context = MetricContext(
-        params=parameters.Metric.model_validate({"schema_version": 1, "value": 4.5})
+        config=config.MetricConfig.model_validate({"schema_version": 1, "value": 4.5})
     )
 
     assert loaded(context) == 4.5
@@ -110,7 +110,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
     path = tmp_path / "accuracy.py"
     path.write_bytes(source)
     spec = MetricSpec(
-        parameter_model=parameters.model_ref(parameters.Metric),
+        config_type=config.type_ref(config.MetricConfig),
         metric_id="accuracy",
         implementation=MetricImplementationRef(
             path="accuracy.py",
@@ -118,7 +118,7 @@ def test_frozen_metric_matches_decorator_metadata(tmp_path: Path) -> None:
             sha256=hashlib.sha256(source).hexdigest(),
             bytes=len(source),
         ),
-        params=parameters.Metric(),
+        config=config.MetricConfig(),
         mode="stateless",
         dependencies=(
             MetricDependency(
@@ -168,12 +168,12 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
     """Build metric, objective, and criterion drafts from one decorated callable."""
 
     @metric(metric_id="accuracy", mode="stateless")
-    def accuracy(context: MetricContext[parameters.Metric]) -> float:
-        return float(context.params.model_dump()["value"])
+    def accuracy(context: MetricContext[config.MetricConfig]) -> float:
+        return float(context.config.model_dump()["value"])
 
     draft = measure(
         accuracy,
-        params=parameters.Metric.model_validate({"value": 0.9}),
+        config=config.MetricConfig.model_validate({"value": 0.9}),
         dependencies=(
             MetricDependency(
                 source="artifact",
@@ -183,8 +183,8 @@ def test_metric_drafts_freeze_through_public_constructors() -> None:
         ),
         comparator=FloatComparator(),
     )
-    recorded = measure(mean_value, params=parameters.Metric())
-    stateful = measure(RunningMean, params=parameters.Metric())
+    recorded = measure(mean_value, config=config.MetricConfig())
+    stateful = measure(RunningMean, config=config.MetricConfig())
 
     assert is_recomputed_metric(draft)
     assert not is_recomputed_metric(recorded)

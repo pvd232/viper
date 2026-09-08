@@ -15,7 +15,10 @@
       },
       "allowed_paths": [
         "docs/development/receipts/contract-traceability-bug-ledger.json",
+        "docs/development/v0.1.0a3-public-authoring-contract.md",
         "docs/development/v0.1.0a3-public-authoring-contract.checklist.json",
+        "plans/v0.1.0a3-public-authoring/plan.json",
+        "plans/v0.1.0a3-public-authoring/tests/test_config_contract.py",
         "src/viper/_config/__init__.py",
         "src/viper/_config/validation.py",
         "src/viper/_parameter/__init__.py",
@@ -42,6 +45,7 @@
         "src/viper/stages.py",
         "tests/conftest.py",
         "tests/fixtures.py",
+        "tests/README.md",
         "tests/test_api.py",
         "tests/test_authoring.py",
         "tests/test_cli.py",

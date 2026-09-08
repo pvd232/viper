@@ -16,9 +16,9 @@ from pydantic import BaseModel, ConfigDict
 
 import viper._subprocess as subprocess
 
-from .._parameter.validation import (
-    ParameterValidationError,
-    validate_stage_parameters,
+from .._config.validation import (
+    ConfigValidationError,
+    validate_stage_config,
 )
 from .._schema import ArtifactName
 from ..artifacts import (
@@ -237,14 +237,14 @@ def execute_stage_process(
 
     parameterized_stage = cast(ParameterizedStageSpec, stage_spec)
     try:
-        validate_stage_parameters(
+        validate_stage_config(
             root,
             spec_path,
             parameterized_stage,
             timeout_seconds=timeout_seconds,
         )
-    except ParameterValidationError as exc:
-        raise StageExecutionError("stage parameter validation failed") from exc
+    except ConfigValidationError as exc:
+        raise StageExecutionError("stage config validation failed") from exc
 
     run_spec_path = (
         f"experiments/{run.experiment_id}/runs/{run.variant_id}/{run.run_id}/spec.yaml"
@@ -260,8 +260,8 @@ def execute_stage_process(
         run_id=run.run_id,
         attempt_id=attempt_id,
         stage_id=stage_reference.stage_id,
-        parameter_model=parameterized_stage.parameter_model,
-        parameter_digest=document_digest(parameterized_stage.params),
+        config_type=parameterized_stage.config_type,
+        config_digest=document_digest(parameterized_stage.config),
         inputs=logical_inputs,
         artifacts={
             name: artifact.path for name, artifact in stage_spec.artifacts.items()

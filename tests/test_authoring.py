@@ -10,9 +10,8 @@ import pytest
 import yaml
 from pydantic import TypeAdapter, ValidationError
 
-import viper.params as params
+import viper.config as config
 from viper import _subprocess as subprocess
-from viper import parameters
 from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
@@ -45,11 +44,12 @@ from viper.authoring import (
 )
 from viper.authoring import input as external_input
 from viper.benchmark import RunArtifactDraft, at_least, benchmark
+from viper.config import ConfigTypeRef
 from viper.experiments import (
     ExperimentSpec,
     FactorSpec,
     ReplicateSpec,
-    TrainVariantStageParams,
+    TrainVariantStageConfig,
     VariantSpec,
 )
 from viper.http import (
@@ -68,7 +68,6 @@ from viper.metrics import (
     metric,
     min,
 )
-from viper.parameters import ParameterModelRef
 from viper.preflight import preflight_plan
 from viper.references import GitSource, LocalFileRef, ResolvedRunRef
 from viper.runs import RunSpec
@@ -168,7 +167,7 @@ def reproducibility_payload() -> dict[str, object]:
 
 
 def training_spec(
-    parameter_model: ParameterModelRef,
+    config_type: ConfigTypeRef,
     implementation: StageImplementationRef,
     *,
     commit: str = COMMIT,
@@ -180,7 +179,7 @@ def training_spec(
             "metric_ids": ["training_loss"],
             "objective": {"metric_id": "training_loss", "direction": "min"},
             "implementation": implementation.model_dump(mode="json"),
-            "parameter_model": parameter_model.model_dump(mode="json"),
+            "config_type": config_type.model_dump(mode="json"),
             "inputs": {
                 "training_dataset": {
                     "kind": "stored",
@@ -194,7 +193,7 @@ def training_spec(
                     "data_role": "training",
                 }
             },
-            "params": {"schema_version": 1, "epochs": 2},
+            "config": {"schema_version": 1, "epochs": 2},
             "artifacts": {
                 PARAMETERS: {
                     "kind": "file",
@@ -238,17 +237,17 @@ class RunPlanAuthoringTests(unittest.TestCase):
             )
             parameter_raw = (
                 b"from pydantic import Field\n"
-                b"from viper import parameters\n\n"
-                b"class StrandTrainParameters(parameters.Train):\n"
+                b"from viper import config\n\n"
+                b"class StrandTrainConfig(config.TrainConfig):\n"
                 b"    epochs: int = Field(gt=0)\n"
             )
-            parameter_path = root / "project/parameters/train.py"
-            parameter_path.parent.mkdir(parents=True)
-            parameter_path.write_bytes(parameter_raw)
+            config_path = root / "project/config/train.py"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_bytes(parameter_raw)
             implementation_raw = (
-                b"from project.parameters.train import StrandTrainParameters\n"
+                b"from project.config.train import StrandTrainConfig\n"
                 b"from viper.stages import train\n\n"
-                b"@train(params=StrandTrainParameters)\n"
+                b"@train(config=StrandTrainConfig)\n"
                 b"def fit(context):\n"
                 b"    pass\n"
             )
@@ -270,10 +269,10 @@ class RunPlanAuthoringTests(unittest.TestCase):
             _git(root, "add", ".")
             _git(root, "commit", "--quiet", "-m", "source")
             source_commit = _git(root, "rev-parse", "HEAD")
-            parameter_model = ParameterModelRef(
+            config_type = ConfigTypeRef(
                 owner="project",
-                path="project/parameters/train.py",
-                symbol="StrandTrainParameters",
+                path="project/config/train.py",
+                symbol="StrandTrainConfig",
                 sha256=hashlib.sha256(parameter_raw).hexdigest(),
                 bytes=len(parameter_raw),
             )
@@ -288,7 +287,7 @@ class RunPlanAuthoringTests(unittest.TestCase):
             draft_stage.write_bytes(
                 serialize_document(
                     training_spec(
-                        parameter_model,
+                        config_type,
                         implementation,
                         commit=source_commit,
                     )
@@ -323,7 +322,7 @@ class RunPlanAuthoringTests(unittest.TestCase):
     def test_experiment_and_variant_writers_use_identity_paths(self) -> None:
         """Write experiment and variant records under one experiment identity."""
         metric = MetricSpec(
-            parameter_model=parameters.model_ref(parameters.Metric),
+            config_type=config.type_ref(config.MetricConfig),
             metric_id="training_loss",
             implementation=MetricImplementationRef(
                 path="project_code/metrics/training_loss.py",
@@ -331,7 +330,7 @@ class RunPlanAuthoringTests(unittest.TestCase):
                 sha256="a" * 64,
                 bytes=1,
             ),
-            params=parameters.Metric(),
+            config=config.MetricConfig(),
             mode="stateless",
         )
         experiment = ExperimentSpec(
@@ -345,10 +344,10 @@ class RunPlanAuthoringTests(unittest.TestCase):
             experiment_id="e001_strand",
             variant_id="baseline",
             levels={"rank": "full"},
-            stage_params=(
-                TrainVariantStageParams(
+            stage_configs=(
+                TrainVariantStageConfig(
                     stage_id="train",
-                    params=parameters.Train.model_validate({"epochs": 2}),
+                    config=config.TrainConfig.model_validate({"epochs": 2}),
                 ),
             ),
         )
@@ -394,7 +393,7 @@ def test_artifact_and_http_drafts_preserve_callable_identity() -> None:
         return path.read_bytes()
 
     @http(id="dataset")
-    def fetch(context: HttpContext[params.Http]) -> HttpResult:
+    def fetch(context: HttpContext[config.HttpConfig]) -> HttpResult:
         return HttpResult(
             body=context.destination,
             response=ObservedHttpResponse(
@@ -407,7 +406,7 @@ def test_artifact_and_http_drafts_preserve_callable_identity() -> None:
     artifact_draft = artifact(
         path="artifacts/data.csv", loader=load, data_role="training"
     )
-    http_draft = CustomHttpDraft(implementation=fetch, params=params.Http())
+    http_draft = CustomHttpDraft(implementation=fetch, config=config.HttpConfig())
 
     assert artifact_draft.loader is load
     assert http_draft.implementation is fetch
@@ -439,8 +438,8 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         """Return one stable loss for the authoring boundary."""
         return 1.0
 
-    @train(params=params.Train)
-    def fit(context: Context[params.Train]) -> None:
+    @train(config=config.TrainConfig)
+    def fit(context: Context[config.TrainConfig]) -> None:
         context.artifacts["model"].write_bytes(b"model")
 
     model = artifact(
@@ -452,10 +451,10 @@ def test_python_stage_drafts_replace_yaml_authoring() -> None:
         path="inputs/raw/dataset.csv",
         data_role="training",
     )
-    loss = measure(training_loss, params=params.Metric())
+    loss = measure(training_loss, config=config.MetricConfig())
     draft = stage(
         fit,
-        params=params.Train(),
+        config=config.TrainConfig(),
         inputs={"dataset": dataset},
         artifacts={"model": model},
         metrics=(loss,),
@@ -474,14 +473,14 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
     def training_loss(context) -> float:
         return 1.0
 
-    @train(params=params.Train)
-    def fit(context: Context[params.Train]) -> None:
+    @train(config=config.TrainConfig)
+    def fit(context: Context[config.TrainConfig]) -> None:
         context.artifacts["model"].write_bytes(b"model")
 
-    loss = measure(training_loss, params=params.Metric())
+    loss = measure(training_loss, config=config.MetricConfig())
     train_stage = stage(
         fit,
-        params=params.Train(),
+        config=config.TrainConfig(),
         inputs={
             "dataset": external_input(
                 path="inputs/raw/dataset.csv",
@@ -573,14 +572,14 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
     source = tmp_path / "project/plan.py"
     source.parent.mkdir()
     source.write_text(
-        "from viper import params\n"
+        "from viper import config\n"
         "from viper.metrics import metric\n"
         "from viper.stages import Context, train\n\n"
         "@metric(metric_id='training_loss', mode='stateless')\n"
         "def training_loss(context):\n"
         "    return 1.0\n\n"
-        "@train(params=params.Train)\n"
-        "def fit(context: Context[params.Train]):\n"
+        "@train(config=config.TrainConfig)\n"
+        "def fit(context: Context[config.TrainConfig]):\n"
         "    context.artifacts['model'].write_bytes(b'model')\n\n"
         "def load(path):\n"
         "    return path.read_bytes()\n"
@@ -592,10 +591,10 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    loss = measure(module.training_loss, params=params.Metric())
+    loss = measure(module.training_loss, config=config.MetricConfig())
     train_stage = stage(
         module.fit,
-        params=params.Train(),
+        config=config.TrainConfig(),
         inputs={
             "dataset": external_input(
                 path="inputs/raw/dataset.csv",

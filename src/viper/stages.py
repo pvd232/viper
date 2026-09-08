@@ -16,7 +16,7 @@ from typing import Annotated, Any, Generic, Literal, TypeVar, cast
 import numpy as np
 from pydantic import AwareDatetime, Field, model_validator
 
-from . import keys, params
+from . import config, keys
 from ._schema import (
     SHA256,
     ArtifactName,
@@ -32,6 +32,7 @@ from .artifacts import (
     ResolvedSingleFileArtifact,
     SingleFileArtifactSpec,
 )
+from .config import ConfigTypeRef
 from .http import (
     BuiltinHttpImplementationSpec,
     HttpImplementationSpec,
@@ -47,7 +48,6 @@ from .inputs import (
     pointer_path,
 )
 from .metrics import MetricHandle, MetricObjectiveSpec
-from .params import ParameterModelRef
 from .reuse import StageCompletion, StageReuseMode
 from .runtime import (
     EnvSpec,
@@ -58,17 +58,17 @@ from .runtime import (
     ResolvedGCEEnv,
 )
 
-ParamsT = TypeVar("ParamsT", bound=params.ParameterSet)
+ConfigT = TypeVar("ConfigT", bound=config.Config)
 
 
 @dataclass(frozen=True)
-class Context(Generic[ParamsT]):
+class Context(Generic[ConfigT]):
     """Carry one validated project-stage invocation inside the controlled child."""
 
     run_id: RunId
     attempt_id: int
     stage_id: StageId
-    params: ParamsT
+    config: ConfigT
     inputs: Mapping[InputName, Path]
     artifacts: Mapping[ArtifactName, Path]
     metrics: Mapping[MetricId, MetricHandle]
@@ -91,8 +91,8 @@ class StageContextBinding(ProtocolModel):
     run_id: RunId
     attempt_id: int = Field(ge=1)
     stage_id: StageId
-    parameter_model: ParameterModelRef
-    parameter_digest: SHA256
+    config_type: ConfigTypeRef
+    config_digest: SHA256
     inputs: dict[InputName, RepoRelPath]
     artifacts: dict[ArtifactName, RepoRelPath]
     metric_ids: tuple[MetricId, ...]
@@ -184,10 +184,10 @@ class BaseSpec(ProtocolModel):
 
 
 class ParameterizedSpec(BaseSpec):
-    """Request an operation governed by one project-defined parameter model."""
+    """Request an operation governed by one project-defined config type."""
 
     implementation: StageImplementationRef
-    parameter_model: ParameterModelRef
+    config_type: ConfigTypeRef
     reuse: StageReuseMode = "never"
 
     @model_validator(mode="after")
@@ -264,7 +264,7 @@ class BuildSpec(InternalSpec):
     """Request construction of a project-defined prior artifact."""
 
     kind: Literal["build"] = "build"  # pyright: ignore[reportIncompatibleVariableOverride]
-    params: params.Build
+    config: config.BuildConfig
 
 
 class EmbedSpec(InternalSpec):
@@ -272,7 +272,7 @@ class EmbedSpec(InternalSpec):
 
     kind: Literal["embed"] = "embed"  # pyright: ignore[reportIncompatibleVariableOverride]
     objective: MetricObjectiveSpec | None = None
-    params: params.Embed
+    config: config.EmbedConfig
 
     @model_validator(mode="after")
     def validate_objective(self) -> EmbedSpec:
@@ -291,7 +291,7 @@ class TrainSpec(InternalSpec):
     kind: Literal["train"] = "train"  # pyright: ignore[reportIncompatibleVariableOverride]
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
     objective: MetricObjectiveSpec
-    params: params.Train
+    config: config.TrainConfig
 
     @model_validator(mode="after")
     def validate_training_contract(self) -> TrainSpec:
@@ -337,7 +337,7 @@ class EvalSpec(InternalSpec):
     metric_ids: tuple[MetricId, ...] = Field(min_length=1)  # pyright: ignore[reportGeneralTypeIssues]
     objective: MetricObjectiveSpec
     split_inputs: tuple[InputName, ...] = Field(min_length=1)
-    params: params.Eval
+    config: config.EvalConfig
 
     @model_validator(mode="after")
     def validate_eval_contract(self) -> EvalSpec:
@@ -691,11 +691,11 @@ DecoratedStage = TypeVar("DecoratedStage", bound=Callable[..., None])
 
 
 @dataclass(frozen=True)
-class StageDefinition(Generic[ParamsT]):
-    """Store the stage kind and parameter class attached by one decorator."""
+class StageDefinition(Generic[ConfigT]):
+    """Store the stage kind and config class attached by one decorator."""
 
     kind: str
-    parameter_model: type[ParamsT]
+    config_type: type[ConfigT]
 
 
 class StageDefinitionError(RuntimeError):
@@ -704,13 +704,13 @@ class StageDefinitionError(RuntimeError):
 
 def _stage_decorator(
     kind: str,
-    parameter_model: type[ParamsT],
+    config_type: type[ConfigT],
 ) -> Callable[[DecoratedStage], DecoratedStage]:
     """Create one stage decorator with fixed authoring metadata."""
-    if not issubclass(parameter_model, params.ParameterSet):
-        raise TypeError("stage parameter model must subclass ParameterSet")
+    if not issubclass(config_type, config.Config):
+        raise TypeError("stage config type must subclass Config")
 
-    definition = StageDefinition(kind=kind, parameter_model=parameter_model)
+    definition = StageDefinition(kind=kind, config_type=config_type)
 
     def decorate(function: DecoratedStage) -> DecoratedStage:
         """Validate the callable interface and attach its immutable definition."""
@@ -723,24 +723,32 @@ def _stage_decorator(
     return decorate
 
 
-def build(*, params: type[params.Build]) -> Callable[[DecoratedStage], DecoratedStage]:
+def build(
+    *, config: type[config.BuildConfig]
+) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one build-stage callable."""
-    return _stage_decorator("build", params)
+    return _stage_decorator("build", config)
 
 
-def embed(*, params: type[params.Embed]) -> Callable[[DecoratedStage], DecoratedStage]:
+def embed(
+    *, config: type[config.EmbedConfig]
+) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one embedding-stage callable."""
-    return _stage_decorator("embed", params)
+    return _stage_decorator("embed", config)
 
 
-def train(*, params: type[params.Train]) -> Callable[[DecoratedStage], DecoratedStage]:
+def train(
+    *, config: type[config.TrainConfig]
+) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one training-stage callable."""
-    return _stage_decorator("train", params)
+    return _stage_decorator("train", config)
 
 
-def eval(*, params: type[params.Eval]) -> Callable[[DecoratedStage], DecoratedStage]:
+def eval(
+    *, config: type[config.EvalConfig]
+) -> Callable[[DecoratedStage], DecoratedStage]:
     """Declare one eval-stage callable."""
-    return _stage_decorator("eval", params)
+    return _stage_decorator("eval", config)
 
 
 def verify_stage_implementation_bytes(
@@ -812,8 +820,8 @@ def load_stage_callable(
         definition = getattr(value, "__viper_stage__", None)
         if not isinstance(definition, StageDefinition):
             raise StageDefinitionError("stage implementation lacks a VIPER decorator")
-        parameter_source = inspect.getsourcefile(definition.parameter_model)
-        setattr(value, "__viper_parameter_source__", parameter_source)
+        config_source = inspect.getsourcefile(definition.config_type)
+        setattr(value, "__viper_config_source__", config_source)
         setattr(value, "__viper_source_path__", str(path.resolve()))
     except Exception as exc:
         if isinstance(exc, StageDefinitionError):
@@ -848,7 +856,7 @@ def validate_stage_definition(
     repository_root: Path,
     stage: ParameterizedSpec,
 ) -> None:
-    """Match one decorated callable with its frozen stage and parameter class."""
+    """Match one decorated callable with its frozen stage and config class."""
     root = repository_root.resolve()
     implementation_path = root / stage.implementation.path
     function = load_stage_callable(
@@ -859,20 +867,20 @@ def validate_stage_definition(
     definition = stage_definition(function)
     if definition.kind != stage.kind:
         raise StageDefinitionError("stage decorator kind differs from the stage spec")
-    if definition.parameter_model.__name__ != stage.parameter_model.symbol:
+    if definition.config_type.__name__ != stage.config_type.symbol:
         raise StageDefinitionError(
-            "stage decorator parameter class differs from ParameterModelRef"
+            "stage decorator config class differs from ConfigTypeRef"
         )
-    source_file = getattr(function, "__viper_parameter_source__", None)
+    source_file = getattr(function, "__viper_config_source__", None)
     if (
         source_file is None
         or Path(source_file).resolve()
         != (
-            root / stage.parameter_model.path
-            if stage.parameter_model.owner == "project"
-            else Path(params.__file__).resolve().parent / stage.parameter_model.path
+            root / stage.config_type.path
+            if stage.config_type.owner == "project"
+            else Path(config.__file__).resolve().parent / stage.config_type.path
         ).resolve()
     ):
         raise StageDefinitionError(
-            "stage decorator parameter class comes from a different source file"
+            "stage decorator config class comes from a different source file"
         )

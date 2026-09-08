@@ -2,6 +2,47 @@
   "bugs": [
     {
       "affected_paths": [
+        "docs/development/v0.1.0a3-public-authoring-contract.md",
+        "tests/README.md"
+      ],
+      "confirmation_evidence": "The repository link check found references to removed src/viper/params.py and tests/test_parameter_validation.py after their PAC-01 renames.",
+      "first_detecting_check": "cross-cutting checkpoint after the P0-PAC-01 focused gate",
+      "focused_gate_would_catch": false,
+      "pair_block_id": "P0-PAC-01",
+      "regression_test": "tests/test_documentation.py::test_public_markdown_links_resolve",
+      "repair_commit": null,
+      "requirement_id": "PAC-01",
+      "summary": "PAC-01 file renames left two repository-relative documentation links unresolved."
+    },
+    {
+      "affected_paths": [
+        "tests/test_http_retrieval.py"
+      ],
+      "confirmation_evidence": "The config rename changed pytest.fixture(params=...) to the unsupported pytest.fixture(config=...), which stopped test collection.",
+      "first_detecting_check": "P0-PAC-01 focused gate",
+      "focused_gate_would_catch": true,
+      "pair_block_id": "P0-PAC-01",
+      "regression_test": "tests/test_http_retrieval.py shared implementation fixture collection",
+      "repair_commit": null,
+      "requirement_id": "PAC-01",
+      "summary": "A mechanical vocabulary rename altered pytest's external params keyword."
+    },
+    {
+      "affected_paths": [
+        "plans/v0.1.0a3-public-authoring/tests/test_config_contract.py",
+        "tests/test_config_contract.py"
+      ],
+      "confirmation_evidence": "The activated PAC-01 test required the diagnostic decorator assigned to PAC-04 and workspace ownership names assigned to PAC-05.",
+      "first_detecting_check": "P0-PAC-01 red acceptance run",
+      "focused_gate_would_catch": true,
+      "pair_block_id": "P0-PAC-01",
+      "regression_test": "tests/test_config_contract.py",
+      "repair_commit": null,
+      "requirement_id": "PAC-01",
+      "summary": "PAC-01 acceptance assertions reached into two dependency-blocked requirements."
+    },
+    {
+      "affected_paths": [
         "plans/v0.1.0a3-public-authoring/plan.json",
         "docs/development/v0.1.0a3-public-authoring-contract.checklist.json",
         "docs/development/receipts/contract-traceability-bug-ledger.json"
@@ -32,6 +73,24 @@
     }
   ],
   "checks": [
+    {
+      "check": "run the repository link checker after PAC-01 file renames",
+      "outcome": "confirmed_bug",
+      "pair_block_id": "P0-PAC-01",
+      "requirement_id": "PAC-01"
+    },
+    {
+      "check": "collect the full PAC-01 focused gate after the config rename",
+      "outcome": "confirmed_bug",
+      "pair_block_id": "P0-PAC-01",
+      "requirement_id": "PAC-01"
+    },
+    {
+      "check": "activate PAC-01 acceptance tests before production changes",
+      "outcome": "confirmed_bug",
+      "pair_block_id": "P0-PAC-01",
+      "requirement_id": "PAC-01"
+    },
     {
       "check": "trace PAC-01 completion evidence to an allowed path",
       "outcome": "confirmed_bug",

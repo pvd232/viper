@@ -9,9 +9,9 @@ from pathlib import Path
 
 import viper
 import viper.api as api
+import viper.config as config
 import viper.execution as execution
 import viper.keys as keys
-import viper.params as params
 import viper.runtime as runtime
 import viper.stages as stages
 import viper.verification as verification
@@ -28,7 +28,7 @@ PUBLIC_MODULES = (
     "experiments",
     "http",
     "metrics",
-    "parameters",
+    "config",
     "randomness",
     "references",
     "resume",
@@ -201,19 +201,23 @@ def test_verification_namespace_separates_operations_and_models() -> None:
     assert not package.joinpath("verification.py").exists()
 
 
-def test_parameter_categories_form_the_public_extension_namespace() -> None:
-    """Expose one parameter category for each supported extension role."""
-    parameters = importlib.import_module("viper.parameters")
-    assert tuple(parameters.__all__) == (
-        "Build",
-        "Embed",
-        "Evaluate",
-        "Http",
-        "Metric",
-        "ParameterModelRef",
-        "Train",
+def test_config_categories_form_the_public_extension_namespace() -> None:
+    """Expose one config base for each supported extension role."""
+    config_module = importlib.import_module("viper.config")
+    assert tuple(config_module.__all__) == (
+        "BuildConfig",
+        "ConfigOwner",
+        "ConfigTypeRef",
+        "Config",
+        "DiagnosticConfig",
+        "EmbedConfig",
+        "EvalConfig",
+        "HttpConfig",
+        "MetricConfig",
+        "TrainConfig",
+        "type_ref",
     )
-    assert issubclass(parameters.Train, parameters.ParameterSet)
+    assert issubclass(config.TrainConfig, config.Config)
 
 
 def test_installed_package_declares_inline_type_information() -> None:
@@ -228,7 +232,7 @@ def test_stage_api_uses_target_decorators_params_and_keys() -> None:
     assert keys.Eval.MODEL == "model"
     assert keys.Eval.TEST == "test"
     assert keys.Eval.PREDS == "preds"
-    assert issubclass(params.Eval, params.ParameterSet)
+    assert issubclass(config.EvalConfig, config.Config)
     assert callable(eval)
 
 

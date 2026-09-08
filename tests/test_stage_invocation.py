@@ -7,7 +7,7 @@ from types import MappingProxyType
 import numpy as np
 import pytest
 
-from viper import params as parameters
+from viper import config
 from viper.stages import (
     Context,
     StageDefinitionError,
@@ -20,24 +20,24 @@ from viper.stages import (
 )
 
 
-class ExampleTrainParameters(parameters.Train):
+class ExampleTrainConfig(config.TrainConfig):
     """Define one project-owned parameter field for decorator tests."""
 
     epochs: int
 
 
-@train_stage(params=ExampleTrainParameters)
-def train(context: Context[ExampleTrainParameters]) -> None:
+@train_stage(config=ExampleTrainConfig)
+def train(context: Context[ExampleTrainConfig]) -> None:
     """Consume one typed context in the direct decorator fixture."""
-    assert context.params.epochs > 0
+    assert context.config.epochs > 0
 
 
-def test_train_decorator_exposes_stage_kind_and_parameter_model() -> None:
+def test_train_decorator_exposes_stage_kind_and_config_type() -> None:
     """Expose the exact authoring metadata attached to one callable."""
     definition = stage_definition(train)
 
     assert definition.kind == "train"
-    assert definition.parameter_model is ExampleTrainParameters
+    assert definition.config_type is ExampleTrainConfig
 
 
 def test_stage_context_keeps_live_values_outside_pydantic() -> None:
@@ -47,14 +47,14 @@ def test_stage_context_keeps_live_values_outside_pydantic() -> None:
         run_id="01JABCDEFGHJKMNPQRSTVWXYZ0",
         attempt_id=1,
         stage_id="train",
-        params=ExampleTrainParameters(epochs=3),
+        config=ExampleTrainConfig(epochs=3),
         inputs=MappingProxyType({"dataset": Path("inputs/data.bin")}),
         artifacts=MappingProxyType({"parameters": Path("artifacts/model.bin")}),
         metrics=MappingProxyType({}),
         numpy_generators=MappingProxyType({"augmentation": generator}),
     )
 
-    assert context.params.epochs == 3
+    assert context.config.epochs == 3
     assert context.numpy_generators["augmentation"] is generator
 
 
@@ -64,10 +64,10 @@ def test_stage_loader_requires_exact_decorated_top_level_callable(
     """Load the selected symbol only when its bytes and decorator agree."""
     raw = (
         b"from viper.stages import train\n"
-        b"from viper import params\n\n"
-        b"class Params(params.Train):\n"
+        b"from viper import config\n\n"
+        b"class Params(config.TrainConfig):\n"
         b"    epochs: int\n\n"
-        b"@train(params=Params)\n"
+        b"@train(config=Params)\n"
         b"def fit(context):\n"
         b"    return None\n"
     )
@@ -102,16 +102,16 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
         '"""Example project package."""\n',
         encoding="utf-8",
     )
-    (package_root / "parameters.py").write_text(
-        "from viper import params\n\n"
-        "class ProjectParameters(params.Train):\n"
+    (package_root / "config.py").write_text(
+        "from viper import config\n\n"
+        "class ProjectConfig(config.TrainConfig):\n"
         "    epochs: int\n",
         encoding="utf-8",
     )
     raw = (
-        b"from example_project.parameters import ProjectParameters\n"
+        b"from example_project.config import ProjectConfig\n"
         b"from viper.stages import train\n\n"
-        b"@train(params=ProjectParameters)\n"
+        b"@train(config=ProjectConfig)\n"
         b"def fit(context):\n"
         b"    return None\n"
     )
@@ -126,16 +126,25 @@ def test_stage_loader_resolves_standard_src_layout(tmp_path: Path) -> None:
 
     loaded = load_stage_callable(path, reference, import_root=tmp_path)
 
-    assert stage_definition(loaded).parameter_model.__name__ == "ProjectParameters"
+    assert stage_definition(loaded).config_type.__name__ == "ProjectConfig"
 
 
-def test_stage_loader_keeps_framework_identity_in_viper_repository() -> None:
-    """Load the README stage without replacing the running VIPER package."""
+def test_stage_loader_keeps_framework_identity_in_viper_repository(
+    tmp_path: Path,
+) -> None:
+    """Load a stage without replacing the running VIPER package."""
     root = Path(__file__).parents[1]
-    path = root / "examples/cpu_quickstart.py"
-    raw = path.read_bytes()
+    path = tmp_path / "stage.py"
+    raw = (
+        b"from viper.config import TrainConfig\n"
+        b"from viper.stages import train\n\n"
+        b"@train(config=TrainConfig)\n"
+        b"def fit(context):\n"
+        b"    return None\n"
+    )
+    path.write_bytes(raw)
     reference = StageImplementationRef(
-        path="examples/cpu_quickstart.py",
+        path="stage.py",
         symbol="fit",
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),

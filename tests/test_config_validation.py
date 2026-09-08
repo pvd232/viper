@@ -1,4 +1,4 @@
-"""Tests for project-owned parameter identity and value validation."""
+"""Tests for project-owned config identity and value validation."""
 
 import hashlib
 from pathlib import Path
@@ -7,22 +7,22 @@ import pytest
 from pydantic import ValidationError
 
 from tests.fixtures import artifact_loader_ref, stage_implementation_ref
-from viper import parameters
-from viper._parameter.validation import (
-    ParameterValidationError,
-    load_parameter_model,
-    validate_parameters,
-    validate_stage_parameters,
-    verify_parameter_model_bytes,
+from viper import config
+from viper._config.validation import (
+    ConfigValidationError,
+    load_config_type,
+    validate_config,
+    validate_stage_config,
+    verify_config_type_bytes,
 )
 from viper._schema import (
     PARAMETERS,
     RESUME_STATE,
 )
 from viper.artifacts import SingleFileArtifactSpec
+from viper.config import ConfigTypeRef
 from viper.inputs import StoredInputRef
 from viper.metrics import MetricObjectiveSpec
-from viper.parameters import ParameterModelRef
 from viper.references import ArtifactPointerRef
 from viper.serialization import serialize_document
 from viper.stages import (
@@ -31,111 +31,111 @@ from viper.stages import (
 
 
 def _model_file(tmp_path: Path) -> tuple[Path, bytes]:
-    """Write one constrained training-parameter class for focused tests."""
+    """Write one constrained training-config class for focused tests."""
     raw = (
         b"from pydantic import Field\n"
-        b"from viper import parameters\n\n"
-        b"class TinyTrainParameters(parameters.Train):\n"
+        b"from viper import config\n\n"
+        b"class TinyTrainConfig(config.TrainConfig):\n"
         b"    epochs: int = Field(gt=0)\n"
         b"    learning_rate: float = Field(gt=0)\n"
     )
-    path = tmp_path / "tiny_train_params.py"
+    path = tmp_path / "tiny_train_config.py"
     path.write_bytes(raw)
     return path, raw
 
 
-def _reference(raw: bytes) -> ParameterModelRef:
-    """Identify the exact parameter-model bytes written by the test."""
-    return ParameterModelRef(
+def _reference(raw: bytes) -> ConfigTypeRef:
+    """Identify the exact config-type bytes written by the test."""
+    return ConfigTypeRef(
         owner="project",
-        path="project/parameters/tiny_train.py",
-        symbol="TinyTrainParameters",
+        path="project/config/tiny_train.py",
+        symbol="TinyTrainConfig",
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
     )
 
 
-def test_parameter_model_validates_project_fields(tmp_path: Path) -> None:
+def test_config_type_validates_project_fields(tmp_path: Path) -> None:
     """Validate supplied values through the selected training category."""
     path, raw = _model_file(tmp_path)
 
-    validated = validate_parameters(
+    validated = validate_config(
         path,
         _reference(raw),
-        parameters.Train.model_validate({"epochs": 2, "learning_rate": 0.1}),
-        parameters.Train,
+        config.TrainConfig.model_validate({"epochs": 2, "learning_rate": 0.1}),
+        config.TrainConfig,
     )
 
     assert validated["epochs"] == 2
     assert validated["learning_rate"] == 0.1
 
 
-def test_parameter_model_rejects_invalid_project_values(tmp_path: Path) -> None:
-    """Propagate project Pydantic constraints for an invalid parameter value."""
+def test_config_type_rejects_invalid_project_values(tmp_path: Path) -> None:
+    """Propagate project Pydantic constraints for an invalid config value."""
     path, raw = _model_file(tmp_path)
 
     with pytest.raises(ValidationError, match="greater than 0"):
-        validate_parameters(
+        validate_config(
             path,
             _reference(raw),
-            parameters.Train.model_validate({"epochs": 0, "learning_rate": 0.1}),
-            parameters.Train,
+            config.TrainConfig.model_validate({"epochs": 0, "learning_rate": 0.1}),
+            config.TrainConfig,
         )
 
 
-def test_parameter_model_rejects_implicit_defaults(tmp_path: Path) -> None:
+def test_config_type_rejects_implicit_defaults(tmp_path: Path) -> None:
     """Require every effective project-model value in the frozen mapping."""
     raw = (
-        b"from viper import parameters\n\n"
-        b"class DefaultedTrainParameters(parameters.Train):\n"
+        b"from viper import config\n\n"
+        b"class DefaultedTrainConfig(config.TrainConfig):\n"
         b"    epochs: int\n"
         b"    dropout: float = 0.1\n"
     )
     path = tmp_path / "defaulted.py"
     path.write_bytes(raw)
-    reference = ParameterModelRef(
+    reference = ConfigTypeRef(
         owner="project",
-        path="project/parameters/defaulted.py",
-        symbol="DefaultedTrainParameters",
+        path="project/config/defaulted.py",
+        symbol="DefaultedTrainConfig",
         sha256=hashlib.sha256(raw).hexdigest(),
         bytes=len(raw),
     )
 
-    with pytest.raises(ParameterValidationError, match="every effective"):
-        validate_parameters(
+    with pytest.raises(ConfigValidationError, match="every effective"):
+        validate_config(
             path,
             reference,
-            parameters.Train.model_validate({"epochs": 2}),
-            parameters.Train,
+            config.TrainConfig.model_validate({"epochs": 2}),
+            config.TrainConfig,
         )
 
 
-def test_parameter_model_rejects_type_coercion(tmp_path: Path) -> None:
+def test_config_type_rejects_type_coercion(tmp_path: Path) -> None:
     """Keep project field types identical to the frozen JSON value types."""
     path, raw = _model_file(tmp_path)
 
     with pytest.raises(ValidationError):
-        validate_parameters(
+        validate_config(
             path,
             _reference(raw),
-            parameters.Train.model_validate({"epochs": "2", "learning_rate": 0.1}),
-            parameters.Train,
+            config.TrainConfig.model_validate({"epochs": "2", "learning_rate": 0.1}),
+            config.TrainConfig,
         )
 
 
-def test_parameter_model_requires_the_stage_specific_base(tmp_path: Path) -> None:
-    """Reject a selected class outside the training parameter category."""
+def test_config_type_requires_the_stage_specific_base(tmp_path: Path) -> None:
+    """Reject a selected class outside the training config category."""
     path = tmp_path / "wrong.py"
     path.write_text(
-        'class WrongParameters:\n    """Uses no VIPER parameter category."""\n',
+        'class WrongConfig:\n    """Uses no VIPER config category."""\n',
         encoding="utf-8",
     )
 
-    with pytest.raises(ParameterValidationError, match="subclass Train"):
-        load_parameter_model(path, "WrongParameters", parameters.Train)
+    with pytest.raises(ConfigValidationError, match="subclass TrainConfig"):
+        load_config_type(path, "WrongConfig", config.TrainConfig)
 
 
-def test_parameter_model_reports_import_failure(tmp_path: Path) -> None:
+def test_config_type_reports_import_failure(tmp_path: Path) -> None:
     """Report an exception raised while importing the selected project file."""
     path = tmp_path / "broken.py"
     path.write_text(
@@ -143,20 +143,20 @@ def test_parameter_model_reports_import_failure(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ParameterValidationError, match="raised during import"):
-        load_parameter_model(path, "BrokenParams", parameters.Train)
+    with pytest.raises(ConfigValidationError, match="raised during import"):
+        load_config_type(path, "BrokenConfig", config.TrainConfig)
 
 
-def test_parameter_model_rejects_tampered_bytes(tmp_path: Path) -> None:
+def test_config_type_rejects_tampered_bytes(tmp_path: Path) -> None:
     """Reject implementation bytes that differ from the frozen reference."""
     _, raw = _model_file(tmp_path)
     reference = _reference(raw)
 
-    with pytest.raises(ParameterValidationError, match="byte count"):
-        verify_parameter_model_bytes(reference, raw + b"# changed\n")
+    with pytest.raises(ConfigValidationError, match="byte count"):
+        verify_config_type_bytes(reference, raw + b"# changed\n")
 
 
-def test_stage_parameter_validation_runs_in_a_worker(tmp_path: Path) -> None:
+def test_stage_config_validation_runs_in_a_worker(tmp_path: Path) -> None:
     """Validate a stage while keeping project imports outside this process."""
     _, raw = _model_file(tmp_path)
     reference = _reference(raw)
@@ -170,7 +170,7 @@ def test_stage_parameter_validation_runs_in_a_worker(tmp_path: Path) -> None:
             direction="min",
         ),
         implementation=stage_implementation_ref("project/train.py"),
-        parameter_model=reference,
+        config_type=reference,
         inputs={
             "dataset": StoredInputRef(
                 pointer=ArtifactPointerRef.model_validate(
@@ -184,7 +184,7 @@ def test_stage_parameter_validation_runs_in_a_worker(tmp_path: Path) -> None:
                 data_role="training",
             )
         },
-        params=parameters.Train.model_validate({"epochs": 2, "learning_rate": 0.1}),
+        config=config.TrainConfig.model_validate({"epochs": 2, "learning_rate": 0.1}),
         artifacts={
             PARAMETERS: SingleFileArtifactSpec(
                 path="experiments/example/runs/baseline/"
@@ -204,18 +204,18 @@ def test_stage_parameter_validation_runs_in_a_worker(tmp_path: Path) -> None:
     stage_path.parent.mkdir(parents=True)
     stage_path.write_bytes(serialize_document(stage))
 
-    validated = validate_stage_parameters(tmp_path, stage_path, stage)
+    validated = validate_stage_config(tmp_path, stage_path, stage)
 
     assert validated["epochs"] == 2
     assert validated["learning_rate"] == 0.1
 
     invalid_stage = stage.model_copy(
         update={
-            "params": parameters.Train.model_validate(
+            "config": config.TrainConfig.model_validate(
                 {"epochs": 0, "learning_rate": 0.1}
             )
         }
     )
     stage_path.write_bytes(serialize_document(invalid_stage))
-    with pytest.raises(ParameterValidationError, match="worker failed"):
-        validate_stage_parameters(tmp_path, stage_path, invalid_stage)
+    with pytest.raises(ConfigValidationError, match="worker failed"):
+        validate_stage_config(tmp_path, stage_path, invalid_stage)

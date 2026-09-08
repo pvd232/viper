@@ -11,8 +11,8 @@ from types import MappingProxyType
 
 from viper.workspace import captured_input_path
 
-from .. import params
-from .._parameter.validation import instantiate_parameters, parameter_model_path
+from .. import config
+from .._config.validation import config_type_path, instantiate_config
 from ..execution._stage import StageWorkerContext, StageWorkerResult
 from ..experiments import ExperimentSpec
 from ..inputs import ExternalInputRef, FutureInputRef, StoredInputRef
@@ -116,7 +116,7 @@ def _stage_metric_handles(
     stage: ParameterizedSpec,
     binding: StageContextBinding,
 ) -> dict[str, MetricHandle]:
-    """Bind every stage-recorded metric to frozen parameters and stage paths."""
+    """Bind every stage-recorded metric to frozen config and stage paths."""
     if not stage.metric_ids:
         return {}
 
@@ -136,11 +136,11 @@ def _stage_metric_handles(
             raise ValueError("startup.plan: stage selects an undeclared metric")
         if is_recomputed_metric(spec):
             continue
-        values = instantiate_parameters(
-            parameter_model_path(root, spec.parameter_model),
-            spec.parameter_model,
-            spec.params,
-            params.Metric,
+        values = instantiate_config(
+            config_type_path(root, spec.config_type),
+            spec.config_type,
+            spec.config,
+            config.MetricConfig,
         )
         path = (
             root
@@ -158,7 +158,7 @@ def _stage_metric_handles(
                 stage_id=binding.stage_id,
                 metric_id=metric_id,
             ),
-            MetricContext(inputs=inputs, artifacts=artifacts, params=values),
+            MetricContext(inputs=inputs, artifacts=artifacts, config=values),
         )
     return handles
 
@@ -209,10 +209,10 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("startup.plan: selected stage path differs")
         if binding.run_id != run.run_id:
             raise ValueError("startup.plan: context run ID differs from RunSpec")
-        if binding.parameter_model != stage.parameter_model:
-            raise ValueError("startup.context: parameter model differs")
-        if binding.parameter_digest != document_digest(stage.params):
-            raise ValueError("startup.context: parameter digest differs")
+        if binding.config_type != stage.config_type:
+            raise ValueError("startup.context: config type differs")
+        if binding.config_digest != document_digest(stage.config):
+            raise ValueError("startup.context: config digest differs")
         if binding.inputs != expected_inputs:
             raise ValueError("startup.context: input paths differ")
         expected_artifacts = {
@@ -233,11 +233,11 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("startup.python: installed Python env differs")
         execution_context = observe_execution(effective_environment)
 
-        params = instantiate_parameters(
-            parameter_model_path(root, stage.parameter_model),
-            stage.parameter_model,
-            stage.params,
-            type(stage.params),
+        config = instantiate_config(
+            config_type_path(root, stage.config_type),
+            stage.config_type,
+            stage.config,
+            type(stage.config),
         )
         function = load_stage_callable(
             root / stage.implementation.path,
@@ -247,19 +247,19 @@ def main(argv: list[str] | None = None) -> int:
         definition = stage_definition(function)
         if definition.kind != stage.kind:
             raise ValueError("startup.callable: decorator kind differs")
-        if definition.parameter_model.__name__ != stage.parameter_model.symbol:
-            raise ValueError("startup.callable: decorator parameter class differs")
-        parameter_source = getattr(function, "__viper_parameter_source__", None)
-        if parameter_source is None or Path(
-            parameter_source
-        ).resolve() != parameter_model_path(root, stage.parameter_model):
-            raise ValueError("startup.callable: parameter model source differs")
+        if definition.config_type.__name__ != stage.config_type.symbol:
+            raise ValueError("startup.callable: decorator config class differs")
+        config_source = getattr(function, "__viper_config_source__", None)
+        if config_source is None or Path(config_source).resolve() != config_type_path(
+            root, stage.config_type
+        ):
+            raise ValueError("startup.callable: config type source differs")
 
         context = Context(
             run_id=binding.run_id,
             attempt_id=binding.attempt_id,
             stage_id=binding.stage_id,
-            params=params,
+            config=config,
             inputs=MappingProxyType(_workspace_paths(root, binding.inputs)),
             artifacts=MappingProxyType(_workspace_paths(root, binding.artifacts)),
             metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),

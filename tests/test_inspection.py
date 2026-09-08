@@ -201,7 +201,7 @@ def _verified_result(root: Path, run_path: Path) -> VerifiedRunResult:
                 experiment_id="inspection",
                 variant_id="baseline",
                 levels={},
-                stage_params=(),
+                stage_configs=(),
             ),
             benchmark=None,
             stages={run.stages[0].stage_id: stage},
