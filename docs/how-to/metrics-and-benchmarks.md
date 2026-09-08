@@ -1,7 +1,9 @@
 # Define metrics and benchmarks
 
-Metrics record scalar evidence. Objectives say which direction is better. Benchmarks
-independently evaluate artifacts from a completed run.
+A metric defines the quantity being measured, such as mean squared error or
+classification accuracy. An objective selects a metric and the direction to
+optimize. A measurement records its value in a particular stage and run.
+Benchmarks independently evaluate artifacts from a completed run.
 
 ## Record a stateless metric
 
@@ -13,27 +15,27 @@ from viper.config import MetricConfig
 from viper.metrics import MetricContext, measure, metric, min, max
 
 
-@metric(metric_id="training_loss", mode="stateless")
-def training_loss(
+@metric(metric_id="mean_squared_error", mode="stateless")
+def mean_squared_error(
     _context: MetricContext[MetricConfig],
     predictions: tuple[float, ...],
     targets: tuple[float, ...],
 ) -> float:
     if not targets:
-        raise ValueError("training_loss requires at least one target")
+        raise ValueError("mean_squared_error requires at least one target")
     return sum(
         (prediction - target) ** 2
         for prediction, target in zip(predictions, targets, strict=True)
     ) / len(targets)
 
 
-loss = measure(training_loss, config=MetricConfig())
+mse = measure(mean_squared_error, config=MetricConfig())
 ```
 
-Attach `loss` to the stage, then pass the metric's inputs from the stage function:
+Attach `mse` to the stage, then pass the metric's inputs from the stage function:
 
 ```python
-measurement = context.metrics["training_loss"].record(
+measurement = context.metrics["mean_squared_error"].record(
     predictions=(1.0, 3.0),
     targets=(2.0, 5.0),
     epoch=1,
@@ -51,7 +53,12 @@ This records a calculation made during training. To check a value again from
 saved files, configure [recomputation](#recompute-a-stateless-metric). Live
 prediction and target arguments are absent from the saved measurement.
 
-Use `min(loss)` or `max(score)` to select the direction of the stage objective.
+Use `min(mse)` or `max(score)` to select the direction of the stage objective.
+
+Name the metric for its calculation. Mean squared error can serve as a training
+loss or an evaluation score; the stage records where it was measured, and the
+objective records how it is used. VIPER uses “metric” for scalar measures,
+including scores that lack the mathematical properties of a distance metric.
 
 ## Accumulate a stateful metric
 
@@ -64,28 +71,29 @@ dependencies and comparators apply only to stateless metrics.
 from viper.metrics import StatefulMetric
 
 
-@metric(metric_id="mean_loss", mode="stateful")
-class MeanLoss(StatefulMetric[MetricConfig]):
+@metric(metric_id="mean_absolute_error", mode="stateful")
+class MeanAbsoluteError(StatefulMetric[MetricConfig]):
     def __init__(self, context: MetricContext[MetricConfig]) -> None:
         self.total = 0.0
         self.count = 0
 
-    def update(self, value: float) -> None:
-        self.total += value
+    def update(self, prediction: float, target: float) -> None:
+        self.total += abs(prediction - target)
         self.count += 1
 
     def compute(self) -> float:
         if self.count == 0:
-            raise ValueError("mean_loss requires at least one observation")
+            raise ValueError("mean_absolute_error requires at least one observation")
         return self.total / self.count
 
 
-mean_loss = measure(MeanLoss, config=MetricConfig())
+mae = measure(MeanAbsoluteError, config=MetricConfig())
 ```
 
-Attach `mean_loss` to the stage. Call `context.metrics["mean_loss"].update(value)` for
-each observation, then call `context.metrics["mean_loss"].record(step=step)` to save the
-current mean. Accumulated state persists after recording.
+Attach `mae` to the stage. Call
+`context.metrics["mean_absolute_error"].update(prediction, target)` for each pair,
+then call `context.metrics["mean_absolute_error"].record(step=step)` to save the
+mean absolute error. Accumulated state persists after recording.
 
 ## Recompute a stateless metric
 

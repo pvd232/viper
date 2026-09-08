@@ -21,7 +21,7 @@ Check the accepted and rejected source counts in the result.
 ```bash
 viper --json search-measurements \
   --root . \
-  --query '{"metric_ids":["training_loss"],"limit":20}'
+  --query '{"metric_ids":["mean_squared_error"],"limit":20}'
 ```
 
 Equivalent Python code opens the same catalog:
@@ -30,7 +30,7 @@ Equivalent Python code opens the same catalog:
 from viper.catalog import MeasurementQuery, catalog
 
 page = catalog(root=root).measurements(
-    MeasurementQuery(metric_ids=("training_loss",), limit=20)
+    MeasurementQuery(metric_ids=("mean_squared_error",), limit=20)
 )
 ```
 
@@ -146,7 +146,7 @@ Catalog and knowledge pages contain `items` and `next_cursor`. For exact queries
 pass the returned cursor with the same filters to fetch the next page:
 
 ```python
-query = MeasurementQuery(metric_ids=("training_loss",), limit=20)
+query = MeasurementQuery(metric_ids=("mean_squared_error",), limit=20)
 index = catalog(root=root)
 page = index.measurements(query)
 while True:

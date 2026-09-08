@@ -81,14 +81,14 @@ def load_state(path: Path) -> ResumeState:
     return load_resume_state(path)
 
 
-@metric(metric_id="training_loss", mode="stateless")
-def training_loss(
+@metric(metric_id="mean_squared_error", mode="stateless")
+def mean_squared_error(
     _context: MetricContext[MetricConfig],
     predictions: tuple[float, ...],
     targets: tuple[float, ...],
 ) -> float:
     if not targets:
-        raise ValueError("training_loss requires at least one target")
+        raise ValueError("mean_squared_error requires at least one target")
     return sum(
         (prediction - target) ** 2
         for prediction, target in zip(predictions, targets, strict=True)
@@ -105,7 +105,7 @@ def fit(context: Context[TrainConfig]) -> None:
     weight = 0.0
     for epoch in range(1, 21):
         predictions = tuple(weight * x for x, _ in rows)
-        measurement = context.metrics["training_loss"].record(
+        measurement = context.metrics["mean_squared_error"].record(
             predictions, targets, epoch=epoch, step=epoch
         )
         loss = measurement.value
@@ -134,7 +134,8 @@ def fit(context: Context[TrainConfig]) -> None:
     )
 ```
 
-`training_loss()` computes mean squared error from the predictions and targets
+The metric is mean squared error; minimizing it makes it the training objective.
+`mean_squared_error()` computes that quantity from the predictions and targets
 passed to `record()`. The call saves that value and returns a measurement; `.value`
 gives the training loop the computed loss. `mode="stateless"` means each call
 computes a fresh value. A stateful metric is a `StatefulMetric` class that
@@ -159,7 +160,7 @@ from viper.authoring import experiment, input, replicate, stage, variant
 from viper.metrics import measure, min
 
 
-loss = measure(training_loss, config=MetricConfig())
+mse = measure(mean_squared_error, config=MetricConfig())
 training = stage(
     fit,
     config=TrainConfig(),
@@ -178,8 +179,8 @@ training = stage(
             data_role="training",
         ),
     ),
-    metrics=(loss,),
-    objective=min(loss),
+    metrics=(mse,),
+    objective=min(mse),
 )
 
 study = experiment(

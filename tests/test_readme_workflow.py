@@ -66,7 +66,8 @@ def test_cpu_quickstart_executes_and_verifies_one_run(tmp_path: Path) -> None:
     measurements = [
         json.loads(line)
         for line in (
-            result_path.parent / "attempts/1/measurements/train.training_loss.jsonl"
+            result_path.parent
+            / "attempts/1/measurements/train.mean_squared_error.jsonl"
         )
         .read_text()
         .splitlines()

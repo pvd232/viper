@@ -28,8 +28,8 @@ training = stage(
     config=TrainConfig(),
     inputs={"dataset": dataset},
     outputs=training_outputs,
-    metrics=(loss,),
-    objective=min(loss),
+    metrics=(mse,),
+    objective=min(mse),
 )
 ```
 
@@ -92,8 +92,8 @@ training = stage(
     config=TrainConfig(),
     inputs={"dataset": fetch_data.outputs["dataset"]},
     outputs=training_outputs,
-    metrics=(loss,),
-    objective=min(loss),
+    metrics=(mse,),
+    objective=min(mse),
 )
 ```
 

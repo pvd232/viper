@@ -45,14 +45,14 @@ from viper.config import MetricConfig
 from viper.metrics import MetricContext, metric
 
 
-@metric(metric_id="training_loss", mode="stateless")
-def training_loss(
+@metric(metric_id="mean_squared_error", mode="stateless")
+def mean_squared_error(
     _context: MetricContext[MetricConfig],
     predictions: tuple[float, ...],
     targets: tuple[float, ...],
 ) -> float:
     if not targets:
-        raise ValueError("training_loss requires at least one target")
+        raise ValueError("mean_squared_error requires at least one target")
     return sum(
         (prediction - target) ** 2
         for prediction, target in zip(predictions, targets, strict=True)
@@ -61,7 +61,7 @@ def training_loss(
 
 The function computes mean squared error: square each prediction error and average
 the results. The training loop passes its predictions and targets to
-`context.metrics["training_loss"].record(...)`. VIPER calls the function, saves the
+`context.metrics["mean_squared_error"].record(...)`. VIPER calls the function, saves the
 returned value, and returns a measurement whose `.value` is the computed loss.
 
 `stateless` means each call computes from its current inputs. A stateful metric
@@ -94,14 +94,14 @@ from viper.authoring import experiment, input, replicate, stage, variant
 from viper.metrics import measure, min
 from viper.outputs import TrainOutputs
 
-loss = measure(training_loss, config=MetricConfig())
+mse = measure(mean_squared_error, config=MetricConfig())
 training = stage(
     fit,
     config=TrainConfig(),
     inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
     outputs=TrainOutputs(...),
-    metrics=(loss,),
-    objective=min(loss),
+    metrics=(mse,),
+    objective=min(mse),
 )
 
 study = experiment(

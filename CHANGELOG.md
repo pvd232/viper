@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Name example metrics for their quantities: `mean_squared_error` and
+  `mean_absolute_error`. Separate metric identity from its use as a training loss.
 - Make the introductory metric compute mean squared error from predictions and
   targets, and show how training reads the measurement returned by `record()`.
 - Give Python run and benchmark results direct `status` and `path` access, with

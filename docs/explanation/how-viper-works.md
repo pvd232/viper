@@ -23,7 +23,7 @@ The rest of this page explains how VIPER produces it.
 
 | Object | Role in this run |
 | --- | --- |
-| `training_loss` | Computes mean squared error from predictions and targets. |
+| `mean_squared_error` | Computes mean squared error from predictions and targets. |
 | `fit` | Reads the dataset, trains the model, records loss, and writes artifacts. |
 | `training` | Connects `fit` to its config, inputs, outputs, metric, and objective. |
 | `study` | Names the variant graph and reproducible seed. |
@@ -74,7 +74,7 @@ def fit(context: Context[TrainConfig]) -> None:
 - `context.inputs["dataset"]` is the materialized CSV path;
 - `context.outputs["model"]` and `context.outputs["resume_state"]` are writable
   paths declared before execution;
-- `context.metrics["training_loss"]` is the handle authorized to record loss.
+- `context.metrics["mean_squared_error"]` records mean squared error for this stage.
 
 The function reads the CSV, performs gradient descent, records twenty loss values, then
 writes the model and checkpoint. The workspace function implements that computation.
