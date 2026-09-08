@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make the introductory metric compute mean squared error from predictions and
+  targets, and show how training reads the measurement returned by `record()`.
 - Give Python run and benchmark results direct `status` and `path` access, with
   the stored `record` and immutable `reference` available for inspection.
 - Add guides for stage composition, execution outcomes, checkpoint resumption,

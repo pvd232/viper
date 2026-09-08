@@ -40,10 +40,16 @@ def load_state(path: Path) -> ResumeState:
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
     _context: MetricContext[MetricConfig],
-    loss: float,
+    predictions: tuple[float, ...],
+    targets: tuple[float, ...],
 ) -> float:
-    """Record the training loss computed for one epoch."""
-    return loss
+    """Compute mean squared error over matching predictions and targets."""
+    if not targets:
+        raise ValueError("training_loss requires at least one target")
+    return sum(
+        (prediction - target) ** 2
+        for prediction, target in zip(predictions, targets, strict=True)
+    ) / len(targets)
 
 
 @train(config=TrainConfig)
@@ -55,15 +61,21 @@ def fit(context: Context[TrainConfig]) -> None:
         .read_text(encoding="utf-8")
         .splitlines()[1:]
     ]
+    targets = tuple(y for _, y in rows)
     weight = 0.0
     loss = 0.0
     epoch = 0
     for epoch in range(1, 21):
-        errors = tuple(weight * x - y for x, y in rows)
-        loss = sum(error**2 for error in errors) / len(rows)
+        predictions = tuple(weight * x for x, _ in rows)
+        measurement = context.metrics["training_loss"].record(
+            predictions, targets, epoch=epoch, step=epoch
+        )
+        loss = measurement.value
+        errors = tuple(
+            prediction - target for prediction, target in zip(predictions, targets)
+        )
         gradient = 2 * sum(error * x for error, (x, _) in zip(errors, rows)) / len(rows)
         weight -= 0.05 * gradient
-        context.metrics["training_loss"].record(loss, epoch=epoch, step=epoch)
 
     model = context.outputs["model"]
     model.parent.mkdir(parents=True, exist_ok=True)

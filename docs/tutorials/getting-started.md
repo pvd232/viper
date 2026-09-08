@@ -38,7 +38,7 @@ Each execution receives a new run ID and writes its own result directory.
 Open [`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py). The file contains
 one metric, one stage, and one experiment.
 
-### 1. The metric names a measurement
+### 1. The metric computes prediction error
 
 ```python
 from viper.config import MetricConfig
@@ -48,15 +48,25 @@ from viper.metrics import MetricContext, metric
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
     _context: MetricContext[MetricConfig],
-    loss: float,
+    predictions: tuple[float, ...],
+    targets: tuple[float, ...],
 ) -> float:
-    return loss
+    if not targets:
+        raise ValueError("training_loss requires at least one target")
+    return sum(
+        (prediction - target) ** 2
+        for prediction, target in zip(predictions, targets, strict=True)
+    ) / len(targets)
 ```
 
-The training loop already computes `loss`. This stateless metric returns the supplied
-value; VIPER validates it when recording the measurement. A stateful metric owns
-accumulated state: it subclasses `StatefulMetric`, receives observations through
-`update()`, and returns the current value from `compute()`.
+The function computes mean squared error: square each prediction error and average
+the results. The training loop passes its predictions and targets to
+`context.metrics["training_loss"].record(...)`. VIPER calls the function, saves the
+returned value, and returns a measurement whose `.value` is the computed loss.
+
+`stateless` means each call computes from its current inputs. A stateful metric
+accumulates observations through `update()` and returns their combined result
+from `compute()`.
 
 ### 2. The stage performs the scientific work
 

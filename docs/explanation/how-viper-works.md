@@ -23,7 +23,7 @@ The rest of this page explains how VIPER produces it.
 
 | Object | Role in this run |
 | --- | --- |
-| `training_loss` | Gives the recorded scalar a stable metric ID. |
+| `training_loss` | Computes mean squared error from predictions and targets. |
 | `fit` | Reads the dataset, trains the model, records loss, and writes artifacts. |
 | `training` | Connects `fit` to its config, inputs, outputs, metric, and objective. |
 | `study` | Names the variant graph and reproducible seed. |

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
 from pathlib import Path
 
+import pytest
+
 from viper import _subprocess as subprocess
+from viper.resume import load_resume_state
 
 
 def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
@@ -57,4 +61,24 @@ def test_cpu_quickstart_executes_and_verifies_one_run(tmp_path: Path) -> None:
     result_line = next(
         line for line in completed.stdout.splitlines() if line.startswith("result: ")
     )
-    assert (root / result_line.removeprefix("result: ")).is_file()
+    result_path = root / result_line.removeprefix("result: ")
+    assert result_path.is_file()
+    measurements = [
+        json.loads(line)
+        for line in (
+            result_path.parent / "attempts/1/measurements/train.training_loss.jsonl"
+        )
+        .read_text()
+        .splitlines()
+    ]
+    assert [item["epoch"] for item in measurements] == list(range(1, 21))
+    assert [item["step"] for item in measurements] == list(range(1, 21))
+    # For x=(1,2,3), y=2x, each update scales the residual by 8/15.
+    expected_losses = [(56 / 3) * (8 / 15) ** (2 * epoch) for epoch in range(20)]
+    assert [item["value"] for item in measurements] == pytest.approx(
+        expected_losses, rel=1e-8, abs=1e-14
+    )
+    checkpoint = load_resume_state(
+        result_path.parent / "artifacts/train/resume_state/resume_state.pt"
+    )
+    assert checkpoint.optimizer_state["loss"] == measurements[-1]["value"]

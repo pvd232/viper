@@ -84,9 +84,15 @@ def load_state(path: Path) -> ResumeState:
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
     _context: MetricContext[MetricConfig],
-    loss: float,
+    predictions: tuple[float, ...],
+    targets: tuple[float, ...],
 ) -> float:
-    return loss
+    if not targets:
+        raise ValueError("training_loss requires at least one target")
+    return sum(
+        (prediction - target) ** 2
+        for prediction, target in zip(predictions, targets, strict=True)
+    ) / len(targets)
 
 
 @train(config=TrainConfig)
@@ -95,13 +101,19 @@ def fit(context: Context[TrainConfig]) -> None:
         tuple(float(value) for value in line.split(","))
         for line in context.inputs["dataset"].read_text(encoding="utf-8").splitlines()[1:]
     ]
+    targets = tuple(y for _, y in rows)
     weight = 0.0
     for epoch in range(1, 21):
-        errors = tuple(weight * x - y for x, y in rows)
-        loss = sum(error**2 for error in errors) / len(rows)
+        predictions = tuple(weight * x for x, _ in rows)
+        measurement = context.metrics["training_loss"].record(
+            predictions, targets, epoch=epoch, step=epoch
+        )
+        loss = measurement.value
+        errors = tuple(
+            prediction - target for prediction, target in zip(predictions, targets)
+        )
         gradient = 2 * sum(error * x for error, (x, _) in zip(errors, rows)) / len(rows)
         weight -= 0.05 * gradient
-        context.metrics["training_loss"].record(loss, epoch=epoch, step=epoch)
 
     model = context.outputs["model"]
     model.parent.mkdir(parents=True, exist_ok=True)
@@ -122,8 +134,10 @@ def fit(context: Context[TrainConfig]) -> None:
     )
 ```
 
-`mode="stateless"` means `training_loss()` computes each value directly from the
-arguments passed to `record()`. A stateful metric is a `StatefulMetric` class that
+`training_loss()` computes mean squared error from the predictions and targets
+passed to `record()`. The call saves that value and returns a measurement; `.value`
+gives the training loop the computed loss. `mode="stateless"` means each call
+computes a fresh value. A stateful metric is a `StatefulMetric` class that
 accumulates observations with `update()` and returns its current value from `compute()`.
 
 The stage reads its config and input paths from `Context`, then writes to the supplied

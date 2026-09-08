@@ -5,7 +5,8 @@ independently evaluate artifacts from a completed run.
 
 ## Record a stateless metric
 
-Use a stateless metric when the stage already computes the value:
+Use a stateless metric to calculate one measurement from the current inputs.
+This function computes mean squared error from predictions and targets:
 
 ```python
 from viper.config import MetricConfig
@@ -15,19 +16,40 @@ from viper.metrics import MetricContext, measure, metric, min, max
 @metric(metric_id="training_loss", mode="stateless")
 def training_loss(
     _context: MetricContext[MetricConfig],
-    loss: float,
+    predictions: tuple[float, ...],
+    targets: tuple[float, ...],
 ) -> float:
-    return loss
+    if not targets:
+        raise ValueError("training_loss requires at least one target")
+    return sum(
+        (prediction - target) ** 2
+        for prediction, target in zip(predictions, targets, strict=True)
+    ) / len(targets)
 
 
 loss = measure(training_loss, config=MetricConfig())
 ```
 
-Attach `loss` to the stage, then record values from the stage function:
+Attach `loss` to the stage, then pass the metric's inputs from the stage function:
 
 ```python
-context.metrics["training_loss"].record(loss_value, epoch=epoch, step=step)
+measurement = context.metrics["training_loss"].record(
+    predictions=(1.0, 3.0),
+    targets=(2.0, 5.0),
+    epoch=1,
+    step=1,
+)
+print(measurement.value)  # 2.5
 ```
+
+`record()` calls the metric, saves its result, and returns the measurement.
+The metric receives the prediction and target arguments; `epoch` and `step`
+label the saved measurement. Here the squared errors are 1 and 4, so their
+mean is 2.5. The function rejects empty inputs and unequal sequence lengths.
+
+This records a calculation made during training. To check a value again from
+saved files, configure [recomputation](#recompute-a-stateless-metric). Live
+prediction and target arguments are absent from the saved measurement.
 
 Use `min(loss)` or `max(score)` to select the direction of the stage objective.
 
