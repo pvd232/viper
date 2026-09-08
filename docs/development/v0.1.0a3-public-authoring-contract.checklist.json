@@ -8,7 +8,7 @@
       "contract_id": "public-authoring",
       "path": "docs/development/v0.1.0a3-public-authoring-contract.md",
       "revision": "working-tree",
-      "sha256": "77c91b4312e484f1dcb050f5d616329784b863a03171208478be5144789336d4",
+      "sha256": "b0f076d2a01a6df58363cc15f05a51c8a9f4725e8011da932b889fc4ca507720",
       "requirement_ids": [
         "PAC-01",
         "PAC-02",
@@ -16,6 +16,7 @@
         "PAC-04",
         "PAC-05",
         "PAC-06",
+        "PAC-10",
         "PAC-07",
         "PAC-08",
         "PAC-09"
@@ -113,12 +114,27 @@
       "completion_evidence": []
     },
     {
-      "requirement_id": "PAC-07",
+      "requirement_id": "PAC-10",
       "contract_id": "public-authoring",
       "phase": 3,
       "order": 0,
       "depends_on": [
         "PAC-06"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.runtime.boundary plus focused stage, metric, and resume tests"
+      },
+      "completion_evidence": []
+    },
+    {
+      "requirement_id": "PAC-07",
+      "contract_id": "public-authoring",
+      "phase": 3,
+      "order": 1,
+      "depends_on": [
+        "PAC-10"
       ],
       "state": "planned",
       "gate": {
@@ -131,14 +147,14 @@
       "requirement_id": "PAC-08",
       "contract_id": "public-authoring",
       "phase": 3,
-      "order": 1,
+      "order": 2,
       "depends_on": [
         "PAC-07"
       ],
       "state": "planned",
       "gate": {
         "kind": "external",
-        "target": "authoring.clean.install and authoring.mantra.accepted for the same wheel digest"
+        "target": "authoring.clean.install, authoring.mantra.accepted, and authoring.resume.profiled for the same wheel digest"
       },
       "completion_evidence": []
     },
@@ -244,6 +260,20 @@
       "completion_evidence": []
     },
     {
+      "pair_block_id": "P3-PAC-10",
+      "contract_id": "public-authoring",
+      "section": "Phase 3: Public release candidate",
+      "requirement_ids": [
+        "PAC-10"
+      ],
+      "state": "planned",
+      "gate": {
+        "kind": "test",
+        "target": "authoring.runtime.boundary plus focused stage, metric, and resume tests"
+      },
+      "completion_evidence": []
+    },
+    {
       "pair_block_id": "P3-PAC-07",
       "contract_id": "public-authoring",
       "section": "Phase 3: Public release candidate",
@@ -267,7 +297,7 @@
       "state": "planned",
       "gate": {
         "kind": "external",
-        "target": "authoring.clean.install and authoring.mantra.accepted for the same wheel digest"
+        "target": "authoring.clean.install, authoring.mantra.accepted, and authoring.resume.profiled for the same wheel digest"
       },
       "completion_evidence": []
     },
