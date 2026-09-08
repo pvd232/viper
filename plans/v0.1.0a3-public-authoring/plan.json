@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "contract": "docs/development/v0.1.0a3-public-authoring-contract.md",
+  "checklist": "docs/development/v0.1.0a3-public-authoring-contract.checklist.json",
+  "blocks": [
+    {
+      "pair_block_id": "P0-PAC-01",
+      "requirement_id": "PAC-01",
+      "depends_on": [],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_config_contract.py",
+      "planned_destination": "tests/test_config_contract.py"
+    },
+    {
+      "pair_block_id": "P1-PAC-02",
+      "requirement_id": "PAC-02",
+      "depends_on": ["PAC-01"],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_output_contract.py",
+      "planned_destination": "tests/test_output_contract.py"
+    },
+    {
+      "pair_block_id": "P1-PAC-03",
+      "requirement_id": "PAC-03",
+      "depends_on": ["PAC-02"],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_output_paths.py",
+      "planned_destination": "tests/test_output_paths.py"
+    },
+    {
+      "pair_block_id": "P2-PAC-04",
+      "requirement_id": "PAC-04",
+      "depends_on": ["PAC-03"],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_diagnostic_stage.py",
+      "planned_destination": "tests/test_diagnostic_stage.py"
+    },
+    {
+      "pair_block_id": "P2-PAC-05",
+      "requirement_id": "PAC-05",
+      "depends_on": ["PAC-04"],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_workspace_vocabulary.py",
+      "planned_destination": "tests/test_workspace_vocabulary.py"
+    },
+    {
+      "pair_block_id": "P2-PAC-06",
+      "requirement_id": "PAC-06",
+      "depends_on": ["PAC-05"],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_dispatch_migration.py",
+      "planned_destination": "tests/test_dispatch_migration.py"
+    },
+    {
+      "pair_block_id": "P3-PAC-10",
+      "requirement_id": "PAC-10",
+      "depends_on": ["PAC-06"],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_runtime_boundary.py",
+      "planned_destination": "tests/test_runtime_boundary.py"
+    },
+    {
+      "pair_block_id": "P3-PAC-07",
+      "requirement_id": "PAC-07",
+      "depends_on": ["PAC-10"],
+      "source": "plans/v0.1.0a3-public-authoring/tests/test_public_inventory.py",
+      "planned_destination": "tests/test_public_inventory.py"
+    }
+  ]
+}
