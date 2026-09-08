@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+import viper.authoring as authoring
 import viper.benchmark as benchmark
 import viper.config as config
 import viper.execution._resolution as resolution
 import viper.metrics as metrics
+import viper.outputs as outputs
 import viper.runs as runs
 import viper.stages as stages
 
@@ -67,26 +70,60 @@ def test_diagnostic_is_excluded_from_estimator_and_benchmark_selection() -> None
 
 def test_diagnostic_output_cannot_feed_a_later_stage() -> None:
     """Reject downstream computation from a terminal diagnostic output."""
-    validator = getattr(stages, "validate_stage_order")
+
+    class DiagnosticOutputs(outputs.StageOutputs[outputs.OutputDraft]):
+        report: outputs.OutputDraft
+
+    class BuildOutputs(outputs.StageOutputs[outputs.OutputDraft]):
+        result: outputs.OutputDraft
+
+    class DiagnosticConfig(config.DiagnosticConfig):
+        pass
+
+    class BuildConfig(config.BuildConfig):
+        pass
+
+    @stages.diagnostic(config=DiagnosticConfig)
+    def inspect_model(context: object) -> None:
+        del context
+
+    @stages.build(config=BuildConfig)
+    def consume_report(context: object) -> None:
+        del context
+
+    def load_bytes(path: Path) -> bytes:
+        return path.read_bytes()
+
+    diagnostic_stage = authoring.stage(
+        inspect_model,
+        config=DiagnosticConfig(),
+        inputs={
+            "model": authoring.input("model.json", data_role="training"),
+        },
+        outputs=DiagnosticOutputs(
+            report=outputs.output(
+                path="report.json",
+                loader=load_bytes,
+                data_role="eval",
+            )
+        ),
+    )
+
     with pytest.raises(
         ValueError,
-        match=r"diagnostic.+report.+downstream",
+        match=r"diagnostic.+report.+terminal",
     ):
-        validator(
-            (
-                {"stage_id": "diagnostic", "kind": "diagnostic"},
-                {
-                    "stage_id": "downstream",
-                    "kind": "build",
-                    "inputs": {
-                        "report": {
-                            "kind": "future",
-                            "producer_stage_id": "diagnostic",
-                            "name": "report",
-                        }
-                    },
-                },
-            )
+        authoring.stage(
+            consume_report,
+            config=BuildConfig(),
+            inputs={"report": diagnostic_stage.outputs.report},
+            outputs=BuildOutputs(
+                result=outputs.output(
+                    path="result.json",
+                    loader=load_bytes,
+                    data_role="eval",
+                )
+            ),
         )
 
 
