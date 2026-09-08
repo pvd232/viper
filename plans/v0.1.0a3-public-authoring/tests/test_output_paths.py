@@ -40,6 +40,7 @@ def test_output_paths_reject_escape_from_generated_root(path: str) -> None:
 
 def test_two_build_outputs_do_not_require_categories() -> None:
     """Accept unrelated workspace outputs without build-to-priors coupling."""
+
     class BuildOutputs(StageOutputs[OutputDraft]):
         features: OutputDraft
         index: OutputDraft
@@ -54,9 +55,9 @@ def test_two_build_outputs_do_not_require_categories() -> None:
 def test_generated_run_paths_use_stage_and_output_identity() -> None:
     """Place bytes under the stage ID, output name, and relative path."""
     path = run_output_path(
-        stage_id="train", output_name="parameters", relative_path="model.json"
+        stage_id="train", output_name="model", relative_path="model.json"
     )
-    assert path == "artifacts/train/parameters/model.json"
+    assert path == "artifacts/train/model/model.json"
 
 
 def test_generated_pointer_paths_use_run_stage_and_output_identity() -> None:
@@ -64,13 +65,9 @@ def test_generated_pointer_paths_use_run_stage_and_output_identity() -> None:
     path = output_pointer_path(
         run_digest="a" * 64,
         producer_stage_id="train",
-        output_name="parameters",
+        output_name="model",
     )
-    assert path == (
-        ".viper/pointers/"
-        + "a" * 64
-        + "/train/parameters.pointer.yaml"
-    )
+    assert path == (".viper/pointers/" + "a" * 64 + "/train/model.pointer.yaml")
 
 
 def test_generated_paths_do_not_contain_retired_categories() -> None:

@@ -7,10 +7,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-import viper.outputs as outputs
 import viper.repository as repository
 
 import viper.config as config
+import viper.outputs as outputs
 import viper.stages as stages
 
 PAIR_BLOCK_ID = "P3-PAC-07"
@@ -77,9 +77,7 @@ def test_public_examples_use_direct_owner_module_imports() -> None:
 def test_generated_workspace_uses_final_public_names(tmp_path: Path) -> None:
     """Generate examples with the same vocabulary users read in the docs."""
     repository.init_workspace(tmp_path)
-    generated = "\n".join(
-        path.read_text() for path in sorted(tmp_path.rglob("*.py"))
-    )
+    generated = "\n".join(path.read_text() for path in sorted(tmp_path.rglob("*.py")))
     assert "TrainConfig" in generated
     assert "TrainOutputs" in generated
     assert "config=" in generated

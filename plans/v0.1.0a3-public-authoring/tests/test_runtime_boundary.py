@@ -67,6 +67,7 @@ def test_metric_update_does_not_validate_or_persist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Forward raw batch values only to the in-memory metric state."""
+
     def reject_measurement(*args: object, **kwargs: object) -> object:
         del args, kwargs
         raise AssertionError("MetricHandle.update constructed Measurement")

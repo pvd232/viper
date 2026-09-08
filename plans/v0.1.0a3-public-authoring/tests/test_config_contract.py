@@ -68,6 +68,7 @@ def test_config_bases_are_frozen_pydantic_models() -> None:
 
 def test_workspace_config_can_extend_one_stage_base() -> None:
     """Allow a workspace to add typed fields to a stage-specific config."""
+
     class TrainConfig(config.TrainConfig):
         epochs: int
 
@@ -123,6 +124,7 @@ def test_serialized_protocol_uses_config_fields_only() -> None:
 
 def test_stage_definition_retains_the_config_class() -> None:
     """Bind a decorated callable to its exact config class."""
+
     class TrainConfig(config.TrainConfig):
         epochs: int
 

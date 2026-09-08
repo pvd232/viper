@@ -29,6 +29,7 @@ def test_diagnostic_has_one_public_identifier() -> None:
 
 def test_diagnostic_decorator_binds_the_diagnostic_kind() -> None:
     """Attach diagnostic identity to one workspace callable."""
+
     class DiagnosticConfig(config.DiagnosticConfig):
         top_k: int
 
@@ -44,9 +45,9 @@ def test_diagnostic_decorator_binds_the_diagnostic_kind() -> None:
 def test_diagnostic_spec_is_in_frozen_and_resolved_unions() -> None:
     """Deserialize diagnostic documents through both stage unions."""
     spec_mapping = TypeAdapter(stages.Spec).json_schema()["discriminator"]["mapping"]
-    resolved_mapping = TypeAdapter(stages.ResolvedSpec).json_schema()[
-        "discriminator"
-    ]["mapping"]
+    resolved_mapping = TypeAdapter(stages.ResolvedSpec).json_schema()["discriminator"][
+        "mapping"
+    ]
     assert "DiagnosticSpec" in spec_mapping["diagnostic"]
     assert "ResolvedDiagnosticSpec" in resolved_mapping["diagnostic"]
 
@@ -60,7 +61,7 @@ def test_diagnostic_is_excluded_from_estimator_and_benchmark_selection() -> None
     """Prevent a terminal report stage from becoming a selected model result."""
     run_source = inspect.getsource(runs.RunSpec.validate_common_invariants)
     benchmark_schema = benchmark.BenchmarkSpec.model_json_schema()
-    assert "parameters" in run_source
+    assert "model" in run_source
     assert "diagnostic" not in str(benchmark_schema)
 
 

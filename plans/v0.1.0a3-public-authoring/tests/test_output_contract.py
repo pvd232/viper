@@ -34,6 +34,7 @@ def test_output_constructor_returns_an_output_draft() -> None:
 
 def test_flexible_stage_outputs_accept_workspace_names() -> None:
     """Allow flexible stages to choose semantic output field names."""
+
     class BuildOutputs(StageOutputs[OutputDraft]):
         features: OutputDraft
         index: OutputDraft
