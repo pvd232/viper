@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 from pydantic import ValidationError
 
 import viper.artifacts as artifacts
-from viper.authoring import stage
+from viper.authoring import StageDraftOutputRef, stage
+from viper.ids import OutputName
 from viper.outputs import EvalOutputs, OutputDraft, StageOutputs, TrainOutputs, output
 
 PAIR_BLOCK_ID = "P1-PAC-02"
@@ -51,6 +53,13 @@ def test_output_names_must_be_identifiers() -> None:
     """Reject names that cannot become stable Python field access."""
     with pytest.raises(ValidationError, match="output name"):
         StageOutputs.model_validate({"not-a-name": _draft("value.bin")})
+
+
+def test_draft_output_references_use_output_name() -> None:
+    """Keep pre-execution output identity distinct from recorded artifacts."""
+    annotations = get_type_hints(StageDraftOutputRef, include_extras=True)
+    assert annotations["output_name"] == OutputName
+    assert "artifact_name" not in annotations
 
 
 @pytest.mark.parametrize("missing", ["model", "resume_state"])
