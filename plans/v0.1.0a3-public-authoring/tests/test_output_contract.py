@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-from viper.outputs import EvalOutputs, OutputDraft, StageOutputs, TrainOutputs, output
 
 import viper.artifacts as artifacts
 from viper.authoring import stage
+from viper.outputs import EvalOutputs, OutputDraft, StageOutputs, TrainOutputs, output
 
 PAIR_BLOCK_ID = "P1-PAC-02"
 REQUIREMENT_ID = "PAC-02"
@@ -34,7 +34,11 @@ def test_output_constructor_returns_an_output_draft() -> None:
 
 def test_flexible_stage_outputs_accept_workspace_names() -> None:
     """Allow flexible stages to choose semantic output field names."""
-    selected = StageOutputs(
+    class BuildOutputs(StageOutputs[OutputDraft]):
+        features: OutputDraft
+        index: OutputDraft
+
+    selected = BuildOutputs(
         features=_draft("features.parquet"),
         index=_draft("search.index"),
     )

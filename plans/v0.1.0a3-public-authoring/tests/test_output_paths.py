@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 from pydantic import ValidationError
-from viper.outputs import StageOutputs, output, run_output_path
 
+from viper.outputs import OutputDraft, StageOutputs, output, run_output_path
 from viper.references import output_pointer_path
 
 PAIR_BLOCK_ID = "P1-PAC-03"
@@ -21,7 +20,7 @@ def _load_bytes(path: Path) -> bytes:
     return path.read_bytes()
 
 
-def _output(path: str) -> Any:
+def _output(path: str) -> OutputDraft:
     """Build one future output declaration."""
     return output(path=path, loader=_load_bytes, data_role="training")
 
@@ -41,11 +40,15 @@ def test_output_paths_reject_escape_from_generated_root(path: str) -> None:
 
 def test_two_build_outputs_do_not_require_categories() -> None:
     """Accept unrelated workspace outputs without build-to-priors coupling."""
-    declared = StageOutputs(
+    class BuildOutputs(StageOutputs[OutputDraft]):
+        features: OutputDraft
+        index: OutputDraft
+
+    declared = BuildOutputs(
         features=_output("customers.parquet"),
         index=_output("customers.usearch"),
     )
-    assert set(declared) == {"features", "index"}
+    assert set(declared.keys()) == {"features", "index"}
 
 
 def test_generated_run_paths_use_stage_and_output_identity() -> None:
