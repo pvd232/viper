@@ -119,7 +119,7 @@ def test_measurement_sink_writes_one_json_record(
     path = tmp_path / "measurements.jsonl"
     sink = metrics.MeasurementSink(
         path,
-        run_id="run",
+        run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
         attempt_id=1,
         stage_id="train",
         metric_id="loss",
