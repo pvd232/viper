@@ -443,7 +443,7 @@ def _artifact_rows(source: CatalogRunSource) -> tuple[CatalogArtifact, ...]:
     for stage_id, resolved in sorted(source.verified.resolved_stages.items()):
         snapshot = snapshots[stage_id]
         for name, artifact in sorted(resolved.artifacts.items()):
-            declared = resolved.spec.artifacts[name]
+            declared = resolved.spec.outputs[name]
             if artifact.kind == "file":
                 files = (CatalogFile(snapshot=snapshot, file=artifact.file),)
             else:

@@ -195,7 +195,7 @@ def execute_metric_process(
 
 def _artifact_paths(root: Path, stage: BaseSpec) -> dict[str, Path]:
     """Return the materialized path of each artifact declared by one stage."""
-    return {name: root / artifact.path for name, artifact in stage.artifacts.items()}
+    return {name: root / output.path for name, output in stage.outputs.items()}
 
 
 def _artifact_files(artifact: ResolvedArtifact) -> tuple[SnapshotFileRef, ...]:

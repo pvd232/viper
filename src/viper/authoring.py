@@ -13,22 +13,16 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, Never
+from typing import Annotated, Any, Literal, Never, cast
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
 
 from . import config
-from ._schema import ArtifactName, DataRole, RepoRelPath, RNGSeed
+from ._schema import DataRole, RepoRelPath, RNGSeed
 from .artifacts import (
-    ArtifactDraft,
     ArtifactLoaderRef,
     ArtifactPointer,
-    ArtifactSpec,
-    BundleArtifactDraft,
-    BundleArtifactSpec,
-    SingleFileArtifactDraft,
-    SingleFileArtifactSpec,
     StageArtifactRef,
 )
 from .benchmark import (
@@ -64,6 +58,7 @@ from .ids import (
     FactorId,
     InputName,
     LevelId,
+    OutputName,
     ReplicateId,
     RunId,
     StageId,
@@ -84,6 +79,7 @@ from .metrics import (
     MetricSpec,
     metric_definition,
 )
+from .outputs import OutputDraft, OutputSpec, StageOutputs
 from .project import resolve_path, resolve_root
 from .references import (
     GitSource,
@@ -123,35 +119,6 @@ from .storage import (
 
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 UrlValue = str | int | float | bool
-
-
-def _freeze_artifact(
-    root: Path,
-    run_root: str,
-    draft: ArtifactDraft,
-) -> ArtifactSpec:
-    """Freeze one artifact loader and prefix its run-relative path."""
-    source = inspect.getsourcefile(draft.loader)
-    if source is None:
-        raise ValueError("artifact loader has no Python source")
-    path = Path(source).resolve()
-    if not path.is_relative_to(root):
-        raise ValueError("artifact loader is outside the project root")
-    raw = path.read_bytes()
-    loader = ArtifactLoaderRef(
-        path=path.relative_to(root).as_posix(),
-        symbol=draft.loader.__name__,
-        sha256=hashlib.sha256(raw).hexdigest(),
-        bytes=len(raw),
-    )
-    fields = {
-        "path": f"{run_root}/{draft.path}",
-        "loader": loader,
-        "data_role": draft.data_role,
-    }
-    if isinstance(draft, BundleArtifactDraft):
-        return BundleArtifactSpec(**fields)
-    return SingleFileArtifactSpec(**fields)
 
 
 def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
@@ -194,11 +161,11 @@ def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
 
 
 @dataclass(frozen=True)
-class StageDraftArtifactRef:
-    """Select one artifact produced by an in-memory stage draft."""
+class StageDraftOutputRef:
+    """Select one output promised by an in-memory stage draft."""
 
     producer: StageDraft
-    artifact_name: ArtifactName
+    output_name: OutputName
 
 
 class ExternalInputDraft(BaseModel):
@@ -210,7 +177,7 @@ class ExternalInputDraft(BaseModel):
     data_role: DataRole
 
 
-StageInputDraft = ExternalInputDraft | RunArtifactDraft | StageDraftArtifactRef
+StageInputDraft = ExternalInputDraft | RunArtifactDraft | StageDraftOutputRef
 
 
 class BaseSpecDraft(BaseModel):
@@ -219,7 +186,7 @@ class BaseSpecDraft(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
     kind: str
-    artifacts: dict[ArtifactName, ArtifactDraft] = Field(min_length=1)
+    outputs: StageOutputs[OutputDraft]
     env: EnvSpec | None = None
 
 
@@ -233,12 +200,21 @@ class ParameterizedSpecDraft(BaseSpecDraft):
 
 
 class DownloadSpecDraft(BaseSpecDraft):
-    """Hold runner-owned HTTP requests and their output artifacts."""
+    """Hold runner-owned HTTP requests and their promised outputs."""
 
     kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
     http: HttpDraft = Field(default_factory=BuiltinHttpImplementationSpec)
     policy: HttpRetrievalPolicy
+
+    @model_validator(mode="after")
+    def validate_download_outputs(self) -> DownloadSpecDraft:
+        """Require one same-named file output for every HTTP request."""
+        if set(self.inputs) != set(self.outputs.keys()):
+            raise ValueError("download input and output names must match")
+        if any(output.kind != "file" for output in self.outputs.values()):
+            raise ValueError("download outputs must be single files")
+        return self
 
 
 class InternalSpecDraft(ParameterizedSpecDraft):
@@ -298,12 +274,23 @@ class StageDraft(BaseModel):
     spec: StageSpecDraft
 
     @property
-    def artifacts(self) -> dict[ArtifactName, StageDraftArtifactRef]:
-        """Return opaque handles for every artifact produced by this stage."""
-        return {
-            name: StageDraftArtifactRef(producer=self, artifact_name=name)
-            for name in self.spec.artifacts
+    def outputs(self) -> StageOutputs[StageDraftOutputRef]:
+        """Return typed handles for every output promised by this stage."""
+        declared_type = type(self.spec.outputs)
+        origin = declared_type.__pydantic_generic_metadata__.get("origin")
+        output_type = (
+            StageOutputs[StageDraftOutputRef]
+            if origin is None
+            else origin[StageDraftOutputRef]
+        )
+        references = {
+            name: StageDraftOutputRef(producer=self, output_name=name)
+            for name in self.spec.outputs.keys()
         }
+        return cast(
+            "StageOutputs[StageDraftOutputRef]",
+            output_type.model_validate(references),
+        )
 
 
 class FactorDraft(BaseModel):
@@ -328,7 +315,7 @@ class VariantDraft(BaseModel):
 
     levels: dict[FactorId, LevelId]
     stages: dict[StageId, StageDraft] = Field(min_length=1)
-    estimator: StageDraftArtifactRef
+    estimator: StageDraftOutputRef
 
     @model_validator(mode="after")
     def validate_estimator(self) -> VariantDraft:
@@ -452,10 +439,10 @@ def _deep_freeze(
 
     visiting.add(identity)
     try:
-        if isinstance(value, StageDraftArtifactRef):
-            result = StageDraftArtifactRef(
+        if isinstance(value, StageDraftOutputRef):
+            result = StageDraftOutputRef(
                 producer=_deep_freeze(value.producer, frozen, visiting),
-                artifact_name=value.artifact_name,
+                output_name=value.output_name,
             )
         elif isinstance(value, BaseModel):
             updates = {
@@ -494,7 +481,7 @@ def variant(
     *,
     levels: dict[FactorId, LevelId],
     stages: dict[StageId, StageDraft],
-    estimator: StageDraftArtifactRef,
+    estimator: StageDraftOutputRef,
 ) -> VariantDraft:
     """Declare one reusable variant graph."""
     return VariantDraft(levels=levels, stages=stages, estimator=estimator)
@@ -746,13 +733,13 @@ def _freeze_input(
             source=LocalSource(path=path.relative_to(root).as_posix()),
             data_role=draft.data_role,
         )
-    if isinstance(draft, StageDraftArtifactRef):
+    if isinstance(draft, StageDraftOutputRef):
         owners = [name for name, stage in stages.items() if stage is draft.producer]
         if len(owners) != 1:
             raise ValueError("stage artifact must have one producer in this plan")
         return FutureInputRef(
             producer_stage_id=owners[0],
-            name=draft.artifact_name,
+            name=draft.output_name,
         )
     if isinstance(selected_destination, ViperCloudDestination) and isinstance(
         draft.run.stored_at,
@@ -787,6 +774,51 @@ def _freeze_input(
     return stored
 
 
+def _freeze_output(
+    root: Path,
+    run_root: str,
+    draft: OutputDraft,
+) -> OutputSpec:
+    """Freeze one promised output into its pre-execution declaration."""
+    source = inspect.getsourcefile(draft.loader)
+    if source is None:
+        raise ValueError("output loader has no Python source")
+    path = Path(source).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("output loader is outside the workspace root")
+    raw = path.read_bytes()
+    return OutputSpec(
+        kind=draft.kind,
+        path=f"{run_root}/{draft.path}",
+        loader=ArtifactLoaderRef(
+            path=path.relative_to(root).as_posix(),
+            symbol=draft.loader.__name__,
+            sha256=hashlib.sha256(raw).hexdigest(),
+            bytes=len(raw),
+        ),
+        data_role=draft.data_role,
+    )
+
+
+def _freeze_declared_outputs(
+    root: Path,
+    run_root: str,
+    declared: StageOutputs[OutputDraft],
+) -> StageOutputs[OutputSpec]:
+    """Freeze output values while retaining their declared output class."""
+    declared_type = type(declared)
+    origin = declared_type.__pydantic_generic_metadata__.get("origin")
+    output_type = StageOutputs[OutputSpec] if origin is None else origin[OutputSpec]
+    values = {
+        name: _freeze_output(root, run_root, output)
+        for name, output in declared.items()
+    }
+    return cast(
+        "StageOutputs[OutputSpec]",
+        output_type.model_validate(values),
+    )
+
+
 def _freeze_stage(
     root: Path,
     run_root: str,
@@ -798,13 +830,10 @@ def _freeze_stage(
     cloud_client: ViperCloudClient | None = None,
 ) -> Spec:
     """Freeze one Python stage draft into its protocol declaration."""
-    artifacts: dict[ArtifactName, ArtifactSpec] = {
-        name: _freeze_artifact(root, run_root, artifact)
-        for name, artifact in draft.artifacts.items()
-    }
+    outputs = _freeze_declared_outputs(root, run_root, draft.outputs)
     if isinstance(draft, DownloadSpecDraft):
         return DownloadSpec(
-            artifacts=artifacts,
+            outputs=outputs,
             env=draft.env,
             inputs=draft.inputs,
             http=_freeze_http(root, draft.http),
@@ -832,7 +861,7 @@ def _freeze_stage(
             bytes=len(config_raw),
         )
     common = {
-        "artifacts": artifacts,
+        "outputs": outputs,
         "env": draft.env,
         "implementation": StageImplementationRef(
             path=source_path.relative_to(root).as_posix(),
@@ -904,7 +933,7 @@ def run_artifact(
 def download(
     *,
     inputs: dict[InputName, HttpRequestSpec],
-    artifacts: Mapping[ArtifactName, SingleFileArtifactDraft],
+    outputs: StageOutputs[OutputDraft],
     policy: HttpRetrievalPolicy,
     http: HttpDraft | None = None,
     env: EnvSpec | None = None,
@@ -914,7 +943,7 @@ def download(
     return StageDraft(
         spec=DownloadSpecDraft(
             inputs=inputs,
-            artifacts=dict(artifacts),
+            outputs=outputs,
             policy=policy,
             http=selected_http,
             env=env,
@@ -926,8 +955,8 @@ def stage(
     implementation: Callable[[Context[Any]], None],
     *,
     config: config.Config,
-    inputs: dict[InputName, StageInputDraft],
-    artifacts: dict[ArtifactName, ArtifactDraft],
+    inputs: dict[InputName, StageInputDraft | StageDraftOutputRef],
+    outputs: StageOutputs[OutputDraft],
     metrics: tuple[MetricDraft[Any], ...] = (),
     objective: MetricObjectiveDraft | None = None,
     env: EnvSpec | None = None,
@@ -935,19 +964,20 @@ def stage(
     split_inputs: tuple[InputName, ...] = (),
     reuse: StageReuseMode = "never",
 ) -> StageDraft:
-    """Build the draft class selected by one decorated project callable."""
+    """Build the draft selected by one decorated workspace callable."""
     definition = stage_definition(implementation)
     values = {
         "implementation": implementation,
         "config": config,
         "inputs": inputs,
-        "artifacts": artifacts,
+        "outputs": outputs,
         "metrics": metrics,
         "env": env,
         "reuse": reuse,
     }
+    spec: StageSpecDraft
     if definition.kind == "build":
-        spec: StageSpecDraft = BuildSpecDraft(**values)
+        spec = BuildSpecDraft(**values)
     elif definition.kind == "embed":
         spec = EmbedSpecDraft(**values, objective=objective)
     elif definition.kind == "train":
@@ -955,10 +985,15 @@ def stage(
             raise ValueError("training stages require an objective")
         spec = TrainSpecDraft(**values, objective=objective)
     elif definition.kind == "eval":
-        if objective is None or eval_id is None:
-            raise ValueError("evaluation stages require an ID and objective")
+        if objective is None:
+            raise ValueError("evaluation stages require an objective")
+        if eval_id is None:
+            raise ValueError("evaluation stages require eval_id")
         spec = EvalSpecDraft(
-            **values, objective=objective, eval_id=eval_id, split_inputs=split_inputs
+            **values,
+            objective=objective,
+            eval_id=eval_id,
+            split_inputs=split_inputs,
         )
     else:
         raise ValueError(f"unsupported stage kind: {definition.kind}")
@@ -1238,7 +1273,7 @@ def _compile_plan(
         stages=tuple(stage_refs),
         estimator=StageArtifactRef(
             stage_id=estimator_stage,
-            artifact_name=variant_draft.estimator.artifact_name,
+            artifact_name=variant_draft.estimator.output_name,
         ),
     )
     run_path = f"{run_root}/spec.yaml"

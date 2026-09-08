@@ -6,14 +6,8 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from ._schema import (
-    ArtifactName,
-    DataRole,
-    ProtocolModel,
-    RepoRelPath,
-    repo_file_paths_overlap,
-)
-from .ids import StageId
+from ._schema import DataRole, ProtocolModel, RepoRelPath, repo_file_paths_overlap
+from .ids import OutputName, StageId
 from .references import (
     ArtifactPointerRef,
     ResolvedArtifactPointerRef,
@@ -106,7 +100,7 @@ class FutureInputRef(ProtocolModel):
 
     kind: Literal["future"] = "future"
     producer_stage_id: StageId
-    name: ArtifactName
+    name: OutputName
 
 
 InputRef = Annotated[

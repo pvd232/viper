@@ -363,7 +363,7 @@ def lineage(
                 input_node = f"input:{stage_id}:{input_name}"
                 if isinstance(input_ref, FutureInputRef):
                     producer_stage = verified.plan.stages[input_ref.producer_stage_id]
-                    producer_artifact = producer_stage.artifacts[input_ref.name]
+                    producer_artifact = producer_stage.outputs[input_ref.name]
                     data_role = producer_artifact.data_role
                     input_path = producer_artifact.path
                 elif isinstance(input_ref, ExternalInputRef):
@@ -405,7 +405,7 @@ def lineage(
                     )
                 )
 
-        for artifact_name, artifact in sorted(stage.artifacts.items()):
+        for artifact_name, artifact in sorted(stage.outputs.items()):
             artifact_node = f"artifact:{stage_id}:{artifact_name}"
             nodes[artifact_node] = LineageNode(
                 node_id=artifact_node,

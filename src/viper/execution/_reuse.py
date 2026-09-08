@@ -76,13 +76,13 @@ def _remap_artifacts(
     dict[RepoRelPath, SnapshotFileRef],
 ]:
     """Map source artifact bytes onto the target run's declared paths."""
-    if set(source.artifacts) != set(target.artifacts):
+    if set(source.artifacts) != set(target.outputs.keys()):
         raise ValueError("reuse source artifact names differ from the target")
     artifacts: dict[ArtifactName, ResolvedArtifact] = {}
     receipt_files = []
     publication_files: dict[RepoRelPath, SnapshotFileRef] = {}
     for name, source_artifact in source.artifacts.items():
-        target_spec = target.artifacts[name]
+        target_spec = target.outputs[name]
         if source_artifact.kind != target_spec.kind:
             raise ValueError("reuse source artifact kind differs from the target")
         if isinstance(source_artifact, ResolvedSingleFileArtifact):

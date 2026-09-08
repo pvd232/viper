@@ -126,7 +126,7 @@ def _verify_stage_data_roles(
     highest_input_rank = max(_DATA_ROLE_RANK[role] for role in input_roles.values())
     downgraded_outputs = {
         name
-        for name, artifact in stage.artifacts.items()
+        for name, artifact in stage.outputs.items()
         if _DATA_ROLE_RANK[artifact.data_role] < highest_input_rank
     }
     if downgraded_outputs:
@@ -158,7 +158,11 @@ def _stage_input_roles(
                 f"future input {input_name!r} of stage {stage_id!r} must select "
                 "an earlier stage"
             )
-        declaration = producer.artifacts.get(input_ref.name)
+        declaration = (
+            producer.outputs[input_ref.name]
+            if input_ref.name in producer.outputs.keys()
+            else None
+        )
         if declaration is None:
             raise VerificationError(
                 f"future input {input_name!r} of stage {stage_id!r} selects an "
@@ -425,7 +429,11 @@ def verify_run_plan_relationships(
                 if dependency.source == "input":
                     role = input_roles.get(dependency.name)
                 else:
-                    artifact = stage.artifacts.get(dependency.name)
+                    artifact = (
+                        stage.outputs[dependency.name]
+                        if dependency.name in stage.outputs.keys()
+                        else None
+                    )
                     role = None if artifact is None else artifact.data_role
                 if role is None:
                     raise VerificationError(
@@ -581,7 +589,7 @@ def verify_stage_plan(
                 )
 
         artifact_root = f"{run_root(run)}/artifacts/"
-        for artifact_name, artifact in spec.artifacts.items():
+        for artifact_name, artifact in spec.outputs.items():
             if not str(artifact.path).startswith(artifact_root):
                 raise VerificationError(
                     f"artifact {artifact_name!r} of stage {stage.stage_id!r} "
@@ -618,7 +626,11 @@ def verify_stage_plan(
                     )
 
                 producer_spec = loaded_stages[producer_stage_id]
-                producer_artifact = producer_spec.artifacts.get(input_ref.name)
+                producer_artifact = (
+                    producer_spec.outputs[input_ref.name]
+                    if input_ref.name in producer_spec.outputs.keys()
+                    else None
+                )
                 if producer_artifact is None:
                     raise VerificationError(
                         f"future input {input_name!r} of stage {stage.stage_id!r} "
@@ -645,7 +657,7 @@ def verify_stage_plan(
                         f"implementation of stage {stage.stage_id!r}"
                     )
 
-                for artifact_name, artifact in spec.artifacts.items():
+                for artifact_name, artifact in spec.outputs.items():
                     if repo_file_paths_overlap(producer_path, artifact.path):
                         raise VerificationError(
                             f"future input {input_name!r} path collides with "

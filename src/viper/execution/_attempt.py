@@ -100,7 +100,7 @@ def _reuse_input_identities(
             role = reference.data_role
         elif isinstance(reference, FutureInputRef):
             producer = loaded_stages[reference.producer_stage_id]
-            role = producer.artifacts[reference.name].data_role
+            role = producer.outputs[reference.name].data_role
         else:
             raise RunError("stage input has no reuse role")
         identities.append(input_identity(name, role, paths[str(name)]))

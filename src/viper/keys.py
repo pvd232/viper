@@ -1,24 +1,23 @@
-"""Define canonical input and artifact names for built-in stage roles."""
+"""Define canonical input and output names for built-in stage roles."""
 
 from typing import Final
 
-from ._schema import ArtifactName
-from .ids import InputName
+from .ids import InputName, OutputName
 
 
 class Train:
-    """Canonical artifact and input names used by training stages."""
+    """Canonical input and output names used by training stages."""
 
-    MODEL: Final[ArtifactName] = "model"
-    STATE: Final[ArtifactName] = "state"
+    MODEL: Final[OutputName] = "model"
+    RESUME_STATE: Final[OutputName] = "resume_state"
 
 
 class Eval:
-    """Canonical input and artifact names used by evaluation stages."""
+    """Canonical input and output names used by evaluation stages."""
 
     MODEL: Final[InputName] = "model"
     TEST: Final[InputName] = "test"
-    PREDS: Final[ArtifactName] = "preds"
+    PREDICTIONS: Final[OutputName] = "predictions"
 
 
 __all__ = ["Eval", "Train"]

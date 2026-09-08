@@ -339,7 +339,7 @@ def preflight_plan(
             )
         )
         loaders_exist = True
-        for artifact in stage.artifacts.values():
+        for artifact in stage.outputs.values():
             loader = artifact.loader
             loader_path = root / loader.path
             try:
@@ -476,7 +476,7 @@ def preflight_plan(
                 if (
                     input_ref.producer_stage_id not in prior
                     or producer is None
-                    or input_ref.name not in producer.artifacts
+                    or input_ref.name not in producer.outputs.keys()
                 ):
                     valid_future_inputs = False
         checks.append(

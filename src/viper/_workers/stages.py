@@ -101,7 +101,7 @@ def _planned_stage_context(
                     elif isinstance(input_reference, FutureInputRef):
                         producer = loaded[input_reference.producer_stage_id]
                         expected_inputs[name] = str(
-                            producer.artifacts[input_reference.name].path
+                            producer.outputs[input_reference.name].path
                         )
             break
         loaded[reference.stage_id] = candidate
@@ -128,7 +128,7 @@ def _stage_metric_handles(
         raise ValueError("startup.plan: experiment ID differs from RunSpec")
     metrics = {metric.metric_id: metric for metric in experiment.metrics}
     inputs = MappingProxyType(_workspace_paths(root, binding.inputs))
-    artifacts = MappingProxyType(_workspace_paths(root, binding.artifacts))
+    outputs = MappingProxyType(_workspace_paths(root, binding.outputs))
     handles: dict[str, MetricHandle] = {}
     for metric_id in stage.metric_ids:
         spec = metrics.get(metric_id)
@@ -158,7 +158,7 @@ def _stage_metric_handles(
                 stage_id=binding.stage_id,
                 metric_id=metric_id,
             ),
-            MetricContext(inputs=inputs, artifacts=artifacts, config=values),
+            MetricContext(inputs=inputs, artifacts=outputs, config=values),
         )
     return handles
 
@@ -215,11 +215,11 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("startup.context: config digest differs")
         if binding.inputs != expected_inputs:
             raise ValueError("startup.context: input paths differ")
-        expected_artifacts = {
-            name: str(artifact.path) for name, artifact in stage.artifacts.items()
+        expected_outputs = {
+            name: str(output.path) for name, output in stage.outputs.items()
         }
-        if binding.artifacts != expected_artifacts:
-            raise ValueError("startup.context: artifact paths differ")
+        if binding.outputs != expected_outputs:
+            raise ValueError("startup.context: output paths differ")
         if binding.metric_ids != stage.metric_ids:
             raise ValueError("startup.context: metric IDs differ")
 
@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             stage_id=binding.stage_id,
             config=config,
             inputs=MappingProxyType(_workspace_paths(root, binding.inputs)),
-            artifacts=MappingProxyType(_workspace_paths(root, binding.artifacts)),
+            outputs=MappingProxyType(_workspace_paths(root, binding.outputs)),
             metrics=MappingProxyType(_stage_metric_handles(root, run, stage, binding)),
             numpy_generators=MappingProxyType(initialization.numpy_generators),
         )

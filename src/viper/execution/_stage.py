@@ -22,13 +22,12 @@ from .._config.validation import (
 )
 from .._schema import ArtifactName
 from ..artifacts import (
-    BundleArtifactSpec,
     ResolvedArtifact,
     ResolvedBundleArtifact,
     ResolvedBundleMember,
     ResolvedSingleFileArtifact,
-    SingleFileArtifactSpec,
 )
+from ..outputs import OutputSpec
 from ..references import SnapshotFileRef
 from ..runs import (
     RunSpec,
@@ -164,10 +163,10 @@ def _snapshot_file(repository_root: Path, relative_path: str) -> SnapshotFileRef
 
 def _resolve_artifact(
     repository_root: Path,
-    declaration: SingleFileArtifactSpec | BundleArtifactSpec,
+    declaration: OutputSpec,
 ) -> ResolvedArtifact:
     """Convert one materialized artifact into exact file records."""
-    if isinstance(declaration, SingleFileArtifactSpec):
+    if declaration.kind == "file":
         return ResolvedSingleFileArtifact(
             file=_snapshot_file(repository_root, declaration.path)
         )
@@ -263,9 +262,7 @@ def execute_stage_process(
         config_type=parameterized_stage.config_type,
         config_digest=document_digest(parameterized_stage.config),
         inputs=logical_inputs,
-        artifacts={
-            name: artifact.path for name, artifact in stage_spec.artifacts.items()
-        },
+        outputs={name: output.path for name, output in stage_spec.outputs.items()},
         metric_ids=stage_spec.metric_ids,
         numpy_generator_names=tuple(
             sorted(run.reproducibility.numpy_randomness.generators)
@@ -390,7 +387,7 @@ def execute_stage_process(
 
     artifacts = {
         name: _resolve_artifact(root, declaration)
-        for name, declaration in stage_spec.artifacts.items()
+        for name, declaration in stage_spec.outputs.items()
     }
     return StageProcessResult(
         command=command,

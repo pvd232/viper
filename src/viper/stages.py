@@ -27,10 +27,8 @@ from ._schema import (
     repo_file_paths_overlap,
 )
 from .artifacts import (
-    ArtifactSpec,
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
-    SingleFileArtifactSpec,
 )
 from .config import ConfigTypeRef
 from .http import (
@@ -40,7 +38,7 @@ from .http import (
     HttpRetrievalPolicy,
     ResolvedHttpRetrieval,
 )
-from .ids import EvalId, HumanId, InputName, MetricId, RunId, StageId
+from .ids import EvalId, HumanId, InputName, MetricId, OutputName, RunId, StageId
 from .inputs import (
     InputRef,
     ResolvedInputRef,
@@ -48,6 +46,7 @@ from .inputs import (
     pointer_path,
 )
 from .metrics import MetricHandle, MetricObjectiveSpec
+from .outputs import OutputSpec, StageOutputs
 from .reuse import StageCompletion, StageReuseMode
 from .runtime import (
     EnvSpec,
@@ -70,7 +69,7 @@ class Context(Generic[ConfigT]):
     stage_id: StageId
     config: ConfigT
     inputs: Mapping[InputName, Path]
-    artifacts: Mapping[ArtifactName, Path]
+    outputs: Mapping[OutputName, Path]
     metrics: Mapping[MetricId, MetricHandle]
     numpy_generators: Mapping[HumanId, np.random.Generator]
 
@@ -94,7 +93,7 @@ class StageContextBinding(ProtocolModel):
     config_type: ConfigTypeRef
     config_digest: SHA256
     inputs: dict[InputName, RepoRelPath]
-    artifacts: dict[ArtifactName, RepoRelPath]
+    outputs: dict[OutputName, RepoRelPath]
     metric_ids: tuple[MetricId, ...]
     numpy_generator_names: tuple[HumanId, ...]
 
@@ -126,59 +125,57 @@ class BaseSpec(ProtocolModel):
     env: EnvSpec | None = None
     metric_ids: tuple[MetricId, ...] = ()
 
-    artifacts: dict[ArtifactName, ArtifactSpec] = Field(min_length=1)
+    outputs: StageOutputs[OutputSpec]
 
     @model_validator(mode="after")
-    def validate_artifact_paths(self) -> BaseSpec:
-        """Enforce entrypoint, artifact, and metric declarations."""
+    def validate_output_paths(self) -> BaseSpec:
+        """Enforce output-path and metric declarations."""
         if len(set(self.metric_ids)) != len(self.metric_ids):
             raise ValueError("stage metric IDs must be unique")
 
-        artifact_categories = {
+        output_categories = {
             "download": "datasets",
             "build": "priors",
             "embed": "models",
             "train": "models",
             "eval": "evals",
         }
-        artifact_category = artifact_categories.get(self.kind)
-        if artifact_category is None:
-            raise ValueError("stage kind has no artifact category contract")
+        output_category = output_categories.get(self.kind)
+        if output_category is None:
+            raise ValueError("stage kind has no output category contract")
 
-        checkpoint_artifacts = {keys.Train.MODEL, keys.Train.STATE}
-        if self.kind != "train" and checkpoint_artifacts & set(self.artifacts):
+        checkpoint_outputs = {keys.Train.MODEL, keys.Train.RESUME_STATE}
+        if self.kind != "train" and checkpoint_outputs & set(self.outputs.keys()):
             raise ValueError(
-                "parameters and resume_state are reserved for training stages"
+                "model and resume_state are reserved for training stages"
             )
-        if self.kind != "eval" and keys.Eval.PREDS in self.artifacts:
+        if self.kind != "eval" and keys.Eval.PREDICTIONS in self.outputs.keys():
             raise ValueError("predictions is reserved for eval stages")
 
-        artifact_roots: dict[RepoRelPath, ArtifactName] = {}
-
-        for name, artifact in self.artifacts.items():
-            parts = artifact.path.split("/")
+        output_roots: dict[RepoRelPath, OutputName] = {}
+        for name, output in self.outputs.items():
+            parts = output.path.split("/")
             if (
                 len(parts) < 8
                 or parts[0] != "experiments"
                 or parts[2] != "runs"
                 or parts[5] != "artifacts"
-                or parts[6] != artifact_category
+                or parts[6] != output_category
                 or re.fullmatch(r"[a-z][a-z0-9_]*", parts[7]) is None
-                or (artifact.kind == "file" and len(parts) < 9)
+                or (output.kind == "file" and len(parts) < 9)
             ):
                 raise ValueError(
-                    f"artifact {name!r} path must use a run artifact category "
+                    f"output {name!r} path must use a run output category "
                     "and entity ID"
                 )
 
-            for previous_path, previous_name in artifact_roots.items():
-                if repo_file_paths_overlap(artifact.path, previous_path):
+            for previous_path, previous_name in output_roots.items():
+                if repo_file_paths_overlap(output.path, previous_path):
                     raise ValueError(
-                        f"artifact roots for {previous_name!r} and {name!r} "
-                        f"overlap: {previous_path} and {artifact.path}"
+                        f"output roots for {previous_name!r} and {name!r} "
+                        f"overlap: {previous_path} and {output.path}"
                     )
-
-            artifact_roots[artifact.path] = name
+            output_roots[output.path] = name
 
         return self
 
@@ -193,7 +190,7 @@ class ParameterizedSpec(BaseSpec):
     @model_validator(mode="after")
     def validate_implementation_path(self) -> ParameterizedSpec:
         """Keep the project callable outside every declared artifact root."""
-        for name, artifact in self.artifacts.items():
+        for name, artifact in self.outputs.items():
             if repo_file_paths_overlap(artifact.path, self.implementation.path):
                 raise ValueError(
                     f"artifact {name!r} path collides with the stage implementation"
@@ -202,7 +199,7 @@ class ParameterizedSpec(BaseSpec):
 
 
 class DownloadSpec(BaseSpec):
-    """Request runner-owned HTTP retrievals into same-named file artifacts."""
+    """Request HTTP retrievals into same-named single-file outputs."""
 
     kind: Literal["download"] = "download"  # pyright: ignore[reportIncompatibleVariableOverride]
     inputs: dict[InputName, HttpRequestSpec] = Field(min_length=1)
@@ -210,15 +207,12 @@ class DownloadSpec(BaseSpec):
     policy: HttpRetrievalPolicy
 
     @model_validator(mode="after")
-    def validate_download_artifacts(self) -> DownloadSpec:
-        """Require one same-named single-file artifact for each HTTP request."""
-        if set(self.inputs) != set(self.artifacts):
-            raise ValueError("download input and artifact names must match")
-        if any(
-            not isinstance(artifact, SingleFileArtifactSpec)
-            for artifact in self.artifacts.values()
-        ):
-            raise ValueError("download artifacts must be single files")
+    def validate_download_outputs(self) -> DownloadSpec:
+        """Require one same-named file output for every HTTP request."""
+        if set(self.inputs) != set(self.outputs.keys()):
+            raise ValueError("download input and output names must match")
+        if any(output.kind != "file" for output in self.outputs.values()):
+            raise ValueError("download outputs must be single files")
         return self
 
 
@@ -251,10 +245,10 @@ class InternalSpec(ParameterizedSpec):
                     f"input {name!r} path collides with the stage implementation"
                 )
 
-            for artifact_name, artifact in self.artifacts.items():
-                if repo_file_paths_overlap(artifact.path, ref.path):
+            for output_name, output in self.outputs.items():
+                if repo_file_paths_overlap(output.path, ref.path):
                     raise ValueError(
-                        f"artifact {artifact_name!r} path collides with input {name!r}"
+                        f"output {output_name!r} path collides with input {name!r}"
                     )
 
         return self
@@ -298,15 +292,15 @@ class TrainSpec(InternalSpec):
         """Require the objective and canonical terminal checkpoint contract."""
         if self.objective.metric_id not in self.metric_ids:
             raise ValueError("training objective must occur in stage metric IDs")
-        required_artifacts = {keys.Train.MODEL, keys.Train.STATE}
-        missing = required_artifacts - set(self.artifacts)
+        required_outputs = {keys.Train.MODEL, keys.Train.RESUME_STATE}
+        missing = required_outputs - set(self.outputs.keys())
         if missing:
             raise ValueError(
                 "training stages must declare terminal checkpoint artifacts: "
                 + ", ".join(sorted(missing))
             )
         model_input = self.inputs.get(keys.Train.MODEL)
-        state_input = self.inputs.get(keys.Train.STATE)
+        state_input = self.inputs.get(keys.Train.RESUME_STATE)
         if (model_input is None) != (state_input is None):
             raise ValueError("checkpoint inputs must be declared together")
         if model_input is None or state_input is None:
@@ -324,7 +318,7 @@ class TrainSpec(InternalSpec):
                 raise ValueError("checkpoint inputs must select one producer stage")
             if model_input.name != keys.Train.MODEL:
                 raise ValueError("parameters input must select parameters")
-            if state_input.name != keys.Train.STATE:
+            if state_input.name != keys.Train.RESUME_STATE:
                 raise ValueError("resume_state input must select resume_state")
         return self
 
@@ -392,7 +386,11 @@ class EvalSpec(InternalSpec):
                 "external evaluation parameters data_role must be training "
                 "or validation"
             )
-        predictions = self.artifacts.get(keys.Eval.PREDS)
+        predictions = (
+            self.outputs[keys.Eval.PREDICTIONS]
+            if keys.Eval.PREDICTIONS in self.outputs.keys()
+            else None
+        )
         if predictions is None:
             raise ValueError("eval requires a predictions artifact")
         return self
@@ -420,13 +418,11 @@ class ResolvedBaseSpec(ProtocolModel):
     @model_validator(mode="after")
     def validate_common_invariants(self) -> ResolvedBaseSpec:
         """Match realized source, artifacts, env, and context to the request."""
-        if set(self.artifacts) != set(self.spec.artifacts):
-            raise ValueError(
-                "resolved artifact names must match declared artifact names"
-            )
+        if set(self.artifacts) != set(self.spec.outputs.keys()):
+            raise ValueError("resolved artifact names must match declared output names")
 
         for name, resolved_artifact in self.artifacts.items():
-            declared_artifact = self.spec.artifacts[name]
+            declared_artifact = self.spec.outputs[name]
 
             if resolved_artifact.kind != declared_artifact.kind:
                 raise ValueError(

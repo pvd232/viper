@@ -218,7 +218,7 @@ def verify_recomputed_metrics(
                 name: verify_snapshot_artifact(
                     stage_ref,
                     resolved_artifact,
-                    data_role=stage.artifacts[name].data_role,
+                    data_role=stage.outputs[name].data_role,
                     fetcher=fetcher,
                 )
                 for name, resolved_artifact in resolved_stage.artifacts.items()

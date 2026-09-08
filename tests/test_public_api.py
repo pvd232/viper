@@ -297,10 +297,10 @@ def test_installed_package_declares_inline_type_information() -> None:
 def test_stage_api_uses_target_decorators_params_and_keys() -> None:
     """Expose the concise parameter, key, and evaluation vocabulary."""
     assert keys.Train.MODEL == "model"
-    assert keys.Train.STATE == "state"
+    assert keys.Train.RESUME_STATE == "resume_state"
     assert keys.Eval.MODEL == "model"
     assert keys.Eval.TEST == "test"
-    assert keys.Eval.PREDS == "preds"
+    assert keys.Eval.PREDICTIONS == "predictions"
     assert issubclass(config.EvalConfig, config.Config)
     assert callable(eval)
 

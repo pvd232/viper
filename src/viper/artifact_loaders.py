@@ -140,7 +140,7 @@ def validate_artifact_context(
 ) -> ArtifactValidationResult:
     """Invoke one loader and apply the reserved validator when applicable."""
     value = _load_artifact_value(context)
-    if context.artifact_name == keys.Train.STATE:
+    if context.artifact_name == keys.Train.RESUME_STATE:
         _validate_resume_state(value, context.run)
         return ArtifactValidationResult(guarantee="artifact.semantic.resume_state")
     return ArtifactValidationResult(guarantee="artifact.loadability")

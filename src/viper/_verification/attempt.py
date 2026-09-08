@@ -116,7 +116,7 @@ def _logical_input_paths(
     for name, reference in stage.inputs.items():
         if isinstance(reference, FutureInputRef):
             producer = stage_specs[reference.producer_stage_id]
-            paths[name] = producer.artifacts[reference.name].path
+            paths[name] = producer.outputs[reference.name].path
         elif isinstance(reference, ExternalInputRef):
             paths[name] = captured_input_path(
                 run_id=run.run_id,
@@ -233,7 +233,7 @@ def _verify_stage_invocation(
             stage,
             stage_specs,
         ),
-        artifacts={name: value.path for name, value in stage.artifacts.items()},
+        outputs={name: value.path for name, value in stage.outputs.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
             sorted(run.reproducibility.numpy_randomness.generators)
@@ -400,7 +400,7 @@ def _verify_unresolved_stage_invocation(
         inputs=_logical_input_paths(
             run, attempt.attempt_id, stage_id, stage, stage_specs
         ),
-        artifacts={name: value.path for name, value in stage.artifacts.items()},
+        outputs={name: value.path for name, value in stage.outputs.items()},
         metric_ids=stage.metric_ids,
         numpy_generator_names=tuple(
             sorted(run.reproducibility.numpy_randomness.generators)
@@ -460,7 +460,7 @@ def _verify_download_retrievals(
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} has an unaccepted status"
             )
-        expected_path = resolved.spec.artifacts[input_name].path
+        expected_path = resolved.spec.outputs[input_name].path
         if retrieval.body.path != expected_path:
             raise VerificationError(
                 f"HTTP retrieval {input_name!r} body uses another path"
@@ -600,7 +600,7 @@ def verify_attempt_stages(
 
         stage_spec = stage_specs[stage_reference.stage_id]
 
-        for artifact_name, artifact_spec in stage_spec.artifacts.items():
+        for artifact_name, artifact_spec in stage_spec.outputs.items():
             if repo_file_paths_overlap(
                 stage_reference.resolved_spec.path,
                 artifact_spec.path,
@@ -735,7 +735,7 @@ def verify_attempt_stages(
                 )
 
         for artifact_name, artifact in resolved_spec.artifacts.items():
-            declaration = stage_spec.artifacts[artifact_name]
+            declaration = stage_spec.outputs[artifact_name]
             verified_artifact = verify_snapshot_artifact(
                 stage_reference,
                 artifact,

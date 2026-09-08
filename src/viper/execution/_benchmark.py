@@ -272,7 +272,7 @@ def benchmark(
         plan.run.estimator,
         StageArtifactRef(
             stage_id=eval_stage_id,
-            artifact_name=keys.Eval.PREDS,
+            artifact_name=keys.Eval.PREDICTIONS,
         ),
     )
     artifact_receipts: list[ArtifactComparisonReceipt] = []

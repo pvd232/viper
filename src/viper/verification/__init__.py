@@ -428,7 +428,7 @@ def verify_promoted_artifact(
     artifact = producer_spec.artifacts.get(pointer.artifact.artifact_name)
     if artifact is None:
         raise VerificationError("artifact pointer selects an undeclared artifact")
-    declaration = producer_spec.spec.artifacts[pointer.artifact.artifact_name]
+    declaration = producer_spec.spec.outputs[pointer.artifact.artifact_name]
 
     if pointer.benchmark_result is not None:
         benchmark_result_raw = _storage.read_resolved_file(
@@ -512,13 +512,13 @@ def verify_stored_input_selections(
     """Verify relationships among stored pointers consumed by one stage."""
     if isinstance(stage_spec, TrainSpec):
         model_input = stage_spec.inputs.get(keys.Train.MODEL)
-        state_input = stage_spec.inputs.get(keys.Train.STATE)
+        state_input = stage_spec.inputs.get(keys.Train.RESUME_STATE)
         if isinstance(model_input, StoredInputRef) and isinstance(
             state_input,
             StoredInputRef,
         ):
             model_pointer = pointers[keys.Train.MODEL]
-            state_pointer = pointers[keys.Train.STATE]
+            state_pointer = pointers[keys.Train.RESUME_STATE]
             if model_pointer.run != state_pointer.run:
                 raise VerificationError(
                     f"stored checkpoint inputs of stage {stage_id!r} must select "
@@ -534,7 +534,7 @@ def verify_stored_input_selections(
                     f"stored checkpoint model input of stage {stage_id!r} must "
                     "select parameters"
                 )
-            if state_pointer.artifact.artifact_name != keys.Train.STATE:
+            if state_pointer.artifact.artifact_name != keys.Train.RESUME_STATE:
                 raise VerificationError(
                     f"stored checkpoint state input of stage {stage_id!r} must "
                     "select resume_state"
@@ -709,7 +709,11 @@ def verify_attempt_future_inputs(
                     f"named {artifact_name!r}"
                 )
 
-            declared_artifact = resolved_producer_spec.spec.artifacts.get(artifact_name)
+            declared_artifact = (
+                resolved_producer_spec.spec.outputs[artifact_name]
+                if artifact_name in resolved_producer_spec.spec.outputs.keys()
+                else None
+            )
             if declared_artifact is None:
                 raise VerificationError(
                     f"producer stage {producer_stage_id!r} did not declare "
@@ -920,10 +924,10 @@ def verify_benchmark_result(
         raise VerificationError("benchmark verification requires one eval stage")
     eval_stage_id = eval_stage_ids[0]
     selected_predictions = verified_run.resolved_stages[eval_stage_id].artifacts[
-        keys.Eval.PREDS
+        keys.Eval.PREDICTIONS
     ]
     confirmation_predictions = confirmation_stages[eval_stage_id].artifacts[
-        keys.Eval.PREDS
+        keys.Eval.PREDICTIONS
     ]
     prediction_parity = selected_predictions == confirmation_predictions
 
@@ -943,10 +947,10 @@ def verify_benchmark_result(
             selected_estimator,
             confirmation_estimator,
         ),
-        (eval_stage_id, keys.Eval.PREDS): (
+        (eval_stage_id, keys.Eval.PREDICTIONS): (
             StageArtifactRef(
                 stage_id=eval_stage_id,
-                artifact_name=keys.Eval.PREDS,
+                artifact_name=keys.Eval.PREDICTIONS,
             ),
             next(
                 stage

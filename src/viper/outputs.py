@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from ._schema import DataRole, ProtocolModel, RepoRelPath
 from .artifacts import ArtifactLoaderRef
+from .ids import OutputName
 
 OutputT = TypeVar("OutputT")
 
@@ -61,11 +62,11 @@ class StageOutputs(BaseModel, Generic[OutputT]):
         """Return Pydantic extras through the collection's generic value type."""
         return cast("dict[str, OutputT]", self.__pydantic_extra__ or {})
 
-    def keys(self) -> tuple[str, ...]:
+    def keys(self) -> tuple[OutputName, ...]:
         """Return declared and workspace-defined output names."""
         declared = tuple(type(self).model_fields)
         extra = tuple(self._extra_outputs())
-        return declared + extra
+        return cast("tuple[OutputName, ...]", declared + extra)
 
     def values(self) -> tuple[OutputT, ...]:
         """Return output values in field order."""

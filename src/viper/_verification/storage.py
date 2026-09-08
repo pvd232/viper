@@ -23,11 +23,11 @@ from ..artifact_loaders import (
     verify_artifact_loader_bytes,
 )
 from ..artifacts import (
-    ArtifactSpec,
     ResolvedArtifact,
     ResolvedBundleArtifact,
     ResolvedSingleFileArtifact,
 )
+from ..outputs import OutputSpec
 from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
@@ -491,7 +491,7 @@ def verify_snapshot_artifact(
 
 def load_verified_artifact(
     run: RunSpec,
-    declaration: ArtifactSpec,
+    declaration: OutputSpec,
     artifact_name: ArtifactName,
     artifact: VerifiedArtifact,
     *,

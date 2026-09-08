@@ -13,7 +13,6 @@ from ..artifacts import (
     ArtifactPointer,
     ResolvedArtifact,
     ResolvedSingleFileArtifact,
-    SingleFileArtifactSpec,
 )
 from ..http import (
     HttpRequestSpec,
@@ -140,7 +139,7 @@ def resolve_inputs(
                 raise RunError("future input producer has not completed")
             resolved[name] = ResolvedFutureInputRef(producer=producer)
             producer_spec = stage_specs[input_ref.producer_stage_id]
-            artifact = producer_spec.artifacts[input_ref.name]
+            artifact = producer_spec.outputs[input_ref.name]
             paths[name] = root / artifact.path
         elif input_ref.kind == "external":
             resolved_input, captured_path = capture_external_input(
@@ -240,8 +239,8 @@ def retrieve_download_inputs(
             input_name=input_name,
         )
         completed_at = datetime.now(UTC)
-        declaration = stage.artifacts[input_name]
-        if not isinstance(declaration, SingleFileArtifactSpec):
+        declaration = stage.outputs[input_name]
+        if declaration.kind != "file":
             raise RunError("download artifact must be a single file")
         body = publish_download_body(
             repository_root=root,
