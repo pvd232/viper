@@ -59,7 +59,7 @@ from .runtime import (
 ConfigT = TypeVar("ConfigT", bound=config.Config)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Context(Generic[ConfigT]):
     """Carry one validated workspace-stage invocation inside the controlled child."""
 

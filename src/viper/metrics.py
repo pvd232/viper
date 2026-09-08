@@ -9,7 +9,7 @@ import math
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Generic, Literal, TypeVar, cast
@@ -210,14 +210,13 @@ class MetricError(RuntimeError):
     """Report an invalid metric definition, invocation, or result."""
 
 
-class MetricContext(BaseModel, Generic[MetricConfigT]):
+@dataclass(frozen=True, slots=True)
+class MetricContext(Generic[MetricConfigT]):
     """Supply verified paths and frozen config to one metric invocation."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    inputs: Mapping[str, Path] = Field(default_factory=dict)
-    artifacts: Mapping[str, Path] = Field(default_factory=dict)
     config: MetricConfigT
+    inputs: Mapping[str, Path] = field(default_factory=dict)
+    artifacts: Mapping[str, Path] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -93,7 +93,7 @@ def test_metric_loader_invokes_top_level_symbol(tmp_path: Path) -> None:
     )
     loaded = load_metric(implementation, "compute")
     context = MetricContext(
-        config=config.MetricConfig.model_validate({"schema_version": 1, "value": 4.5})
+        config=config.MetricConfig.model_validate({"schema_version": 2, "value": 4.5})
     )
 
     assert loaded(context) == 4.5
