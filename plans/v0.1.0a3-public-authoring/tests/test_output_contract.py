@@ -21,14 +21,14 @@ def _load_bytes(path: Path) -> bytes:
 
 def _draft(path: str) -> object:
     """Declare one output through the approved public constructor."""
-    viper = importlib.import_module("viper")
-    return viper.output(path=path, loader=_load_bytes, data_role="training")
+    outputs = importlib.import_module("viper.outputs")
+    return outputs.output(path=path, loader=_load_bytes, data_role="training")
 
 
 def test_output_constructor_returns_an_output_draft() -> None:
     """Name pre-execution writes as outputs rather than artifacts."""
     outputs = importlib.import_module("viper.outputs")
-    assert isinstance(_draft("parameters.json"), outputs.OutputDraft)
+    assert isinstance(_draft("model.json"), outputs.OutputDraft)
 
 
 def test_flexible_stage_outputs_accept_workspace_names() -> None:
@@ -49,12 +49,12 @@ def test_output_names_must_be_identifiers() -> None:
         outputs.StageOutputs.model_validate({"not-a-name": _draft("value.bin")})
 
 
-@pytest.mark.parametrize("missing", ["parameters", "resume_state"])
+@pytest.mark.parametrize("missing", ["model", "resume_state"])
 def test_train_outputs_require_checkpoint_roles(missing: str) -> None:
     """Require both terminal training results by semantic role."""
     outputs = importlib.import_module("viper.outputs")
     values = {
-        "parameters": _draft("parameters.json"),
+        "model": _draft("model.json"),
         "resume_state": _draft("resume_state.pt"),
     }
     del values[missing]
@@ -73,10 +73,10 @@ def test_typed_output_roles_support_attribute_access() -> None:
     """Expose required roles without a second enum or raw dictionary."""
     outputs = importlib.import_module("viper.outputs")
     selected = outputs.TrainOutputs(
-        parameters=_draft("parameters.json"),
+        model=_draft("model.json"),
         resume_state=_draft("resume_state.pt"),
     )
-    assert selected.parameters.path == "parameters.json"
+    assert selected.model.path == "model.json"
     assert selected.resume_state.path == "resume_state.pt"
 
 
