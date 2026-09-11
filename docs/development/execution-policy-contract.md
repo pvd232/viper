@@ -2,15 +2,17 @@
 
 ## 1. Status
 
-**Contract status:** Planned
+**Contract status:** In progress
 **Checklist variant:** Self-contained
 
-Baseline: `da24218f94489d35eb44659433594b6feed7e487`. All changes below
-are proposed. The [checklist](execution-policy-contract.checklist.json) owns
+Original baseline: `da24218f94489d35eb44659433594b6feed7e487`.
+EP-B0 and EP-B1 are implemented; EP-B2 through EP-B4 remain proposed. The [checklist](execution-policy-contract.checklist.json) owns
 implementation status. Later blocks remain planning metadata until we inspect
 and prepare each one.
 
-**Start here: [EP-B0 — proposed code and checks](#ep-b0-resolve-execution-settings).**
+**Next: [EP-B2 — persist policy identity](#ep-b2-persist-policy-identity).**
+Completed: [EP-B0 code](#ep-b0-resolve-execution-settings) and
+[EP-B1 authoring](#ep-b1-authoring-complete).
 Jump directly to the [runtime code](#ep-b0-runtime-code) or
 [tests](#ep-b0-test-code).
 
@@ -236,13 +238,13 @@ cannot pass the new policy-observation check.
 
 ## 11. Master checklist
 
-Each block ends with its focused gate and a reviewed task-scoped commit. All
-requirements and blocks remain planned until their observing tests exist and
-pass; the following test names are proposed, not executed evidence.
+Each block ends with its focused gate and a reviewed task-scoped commit.
+The manifest retains completion evidence for EP-B0 and EP-B1. Later blocks
+remain planned; their proposed test names are not executed evidence.
 
-- [ ] [EP-B0](#ep-b0-resolve-execution-settings) — EP-00; phase 0, order 1; no dependencies; gate: `pytest -q tests/test_runtime_boundary.py -k execution_policy`.
-- [ ] EP-B1 — EP-01; phase 1, order 1; depends on EP-00; gate: `pytest -q tests/test_authoring.py -k execution_policy`.
-- [ ] EP-B2 — EP-02; phase 2, order 1; depends on EP-01; gate: `pytest -q tests/test_authoring.py -k policy_persistence`.
+- [x] [EP-B0](#ep-b0-resolve-execution-settings) — EP-00; phase 0, order 1; no dependencies; gate: `pytest -q tests/test_runtime_boundary.py -k execution_policy`.
+- [x] [EP-B1](#ep-b1-authoring-complete) — EP-01; phase 1, order 1; depends on EP-00; gate: `pytest -q tests/test_authoring.py -k execution_policy`.
+- [ ] [EP-B2](#ep-b2-persist-policy-identity) — EP-02; phase 2, order 1; depends on EP-01; gate: `pytest -q tests/test_authoring.py -k policy_persistence`.
 - [ ] EP-B3 — EP-03, EP-04; phase 3, order 1; depends on EP-02; gate: `pytest -q tests/test_process_startup.py tests/test_runtime_boundary.py tests/test_benchmark_execution.py -k execution_policy`.
 - [ ] EP-B4 — EP-05; phase 4, order 1; depends on EP-03 and EP-04; gate: `pytest -q tests/test_documentation.py tests/test_live_process_startup.py -k execution_policy` on CPU and a supported CUDA host, with retained receipts.
 
@@ -262,8 +264,8 @@ outside this contract.
 | EP-B3 | EP-03 and EP-04; EP-02 | Worker/runtime/verifier/reuse owners; `test_execution_policy_observes_controls`, `test_execution_policy_rejects_tampering`, `test_execution_policy_metric_controls`, `test_execution_policy_reuse` in `tests/test_process_startup.py`; `test_execution_policy_unsupported_operation` in `tests/test_runtime_boundary.py`; `test_execution_policy_preserves_byte_comparison` in `tests/test_benchmark_execution.py`. |
 | EP-B4 | EP-05; EP-03, EP-04 | Documentation/examples; `test_execution_policy_complete_examples` in `tests/test_documentation.py`, `test_execution_policy_cpu_repetition` and `test_execution_policy_cuda_repetition` in `tests/test_live_process_startup.py`. |
 
-Traceability assessment: every requirement has an owner and proposed observing
-tests. None has implementation completion evidence. Before closing each block,
+Traceability assessment: EP-00 and EP-01 have implementation and test evidence.
+Later requirements have owners and proposed observing tests. Before closing each block,
 inspect the resulting diff and retain the actual test node IDs, command result,
 commit, and any CPU/CUDA receipt locations in the adjacent manifest. Zero selected
 tests, skipped CUDA execution, and configuration-only mocks cannot close EP-B4.
@@ -640,8 +642,7 @@ Python blocks match the runtime declarations and test file. Focused runtime test
 Ruff and Pyright validate this block; authoring integration and the fresh-process
 verification acceptance case remain pending in EP-B1 through EP-B4.
 
-**Stop:** Review the applied EP-B0 changes before starting EP-B1. The commands
-below check this block; a failure returns it to editing.
+**Check:** The commands below verify the implemented EP-B0 block.
 
 ```bash
 source .venv/bin/activate
@@ -650,8 +651,42 @@ python -m pyright src/viper/runtime.py tests/test_runtime_boundary.py
 python -m pytest -q tests/test_runtime_boundary.py -k execution_policy
 ```
 
-The remaining blocks above have no execution-ready code yet. Prepare EP-B1 from
-the applied EP-B0 result; do not treat later test names as passing checks.
+EP-B1 is implemented below. EP-B2 through EP-B4 have no execution-ready code yet;
+do not treat their proposed test names as passing checks.
+
+### EP-B1: Authoring complete
+
+Requirement EP-01 depends on completed EP-00. Implementation commit: `50ac550`.
+
+**Context:** `plan()` and `expand()` previously required a fully specified
+`ReproducibilitySpec`. They now accept reproducible, relaxed, or custom settings
+and independent preset parallelism. Each draft freezes the resolved settings and
+policy identity; expansion resolves defaults once for the whole selected batch.
+
+Implementation: [RunPlanDraft, plan(), expand(), and _plan_with_run_id()](../../src/viper/authoring.py).
+Observing tests: [test_authoring.py](../../tests/test_authoring.py):
+`test_execution_policy_plan_defaults_to_reproducible`,
+`test_execution_policy_plan_relaxed_with_parallelism`,
+`test_execution_policy_plan_custom_is_detached`, and
+`test_execution_policy_expand_resolves_once`.
+
+Validation: all 20 authoring tests passed; 14 execution/plan compatibility tests
+passed with 2 skips; 15 documentation tests passed. Ruff passed and Pyright
+reported no errors. The next block owns persistence of policy mode/version:
+version-2 `RunSpec` still stores only the resolved controls.
+
+### EP-B2: Persist policy identity
+
+Requirement EP-02 depends on completed EP-01. Status: planned.
+
+**Context:** The draft now retains both selection and settings, but compilation
+writes only the settings into version-2 `RunSpec`. Introduce versioned policy
+persistence and explicit legacy reading before claiming saved mode identity or
+new observation guarantees. Preserve original legacy bytes and hashes.
+
+Prepare the complete schema/reader change and its round-trip, replay, legacy,
+and unknown-version tests before applying this block. EP-B3 adds observation
+requirements; EP-B4 exercises later verification of a saved relaxed run.
 
 ## 13. ContractTarget
 
