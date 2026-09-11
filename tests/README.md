@@ -12,10 +12,10 @@ loaders, metric implementations, and exact training resume behavior.
 | [verifier tests](test_verification.py) | The verifier retrieves referenced bytes and enforces relationships among run plans, stages, inputs, artifacts, attempts, measurements, and benchmarks. |
 | [verifier acceptance tests](test_verification_acceptance.py) | A complete synthetic provenance chain passes through the public verifier; targeted mutations prove that broken hashes, timing, snapshots, and lineage fail. |
 | [authoring tests](test_authoring.py) | Canonical experiment, variant, stage, and run-plan files are written at identity-based paths, and each frozen stage reference matches the exact serialized bytes. |
-| [config-validation tests](test_config_validation.py) | Project Pydantic classes are byte-bound, loaded from a top-level symbol, checked against the correct config base, and invoked in a dedicated worker. |
+| [config-validation tests](test_config_validation.py) | Workspace config classes are byte-bound, loaded from a top-level symbol, checked against the correct config base, and invoked in a dedicated worker. |
 | [command tests](test_cli.py) | The installed command dispatches to the public validation surface and reports the validated protocol type. |
 | [execution acceptance test](test_execution_acceptance.py) | A real stage entrypoint runs with the canonical command and every declared output file receives an exact hash and byte count. |
-| [run execution test](test_run_execution.py) | A real two-stage local run freezes a project parameter model, preflights, executes, publishes, verifies, and rejects a tampered artifact. |
+| [run execution test](test_run_execution.py) | A real two-stage local run freezes a workspace config class, preflights, executes, publishes, verifies, and rejects a tampered artifact. |
 | [resume tests](test_resume.py) | Python, NumPy, PyTorch, optimizer, and stateful DataLoader state round-trip so resumption selects the same next batch with zero or multiple workers. |
 | [artifact-validation tests](test_artifact_validation.py) | Exact loader identities, isolated loader execution, and typed loadability or semantic-validation outcomes are enforced. |
 | [metric-interface tests](test_metric_interface.py) | Decorated metric functions, stateful metric classes, and live measurement handles follow the public interface. |
@@ -104,7 +104,7 @@ python -m pytest tests/test_run_execution.py -q
 
 Place a test beside the narrowest contract it proves. Reuse
 [shared fixtures](fixtures.py) when several modules need the same valid record.
-Import production classes directly from `viper`. Keep production dependencies
+Import production classes from their defining `viper` modules. Keep production dependencies
 out of test-to-test imports. Give every test a docstring that states the
 accepted behavior or rejected failure. Add the module to both classification
 manifests in `conftest.py`.

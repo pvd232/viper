@@ -56,6 +56,7 @@ def execute_benchmark_confirmation(
     repository_root: Path,
     run_spec_path: Path,
     *,
+    plan: ResolvedRunSpecRef | None = None,
     timeout_seconds: float | None = None,
     cloud_client: ViperCloudClient | None = None,
 ) -> ConfirmationRunResult:
@@ -63,6 +64,7 @@ def execute_benchmark_confirmation(
     result = execute_attempt(
         repository_root,
         run_spec_path,
+        plan=plan,
         timeout_seconds=timeout_seconds,
         purpose="benchmark_confirmation",
         cloud_client=cloud_client,

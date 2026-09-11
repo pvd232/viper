@@ -1,29 +1,3 @@
-# Run variants and replicates
-
-A variant selects the computation and configuration to compare. A replicate
-selects the random seed for one execution of that variant.
-
-## Compare training-set sizes
-
-This example trains the same linear model on either two or three CSV rows,
-with two replicate seeds for each choice. The build function reads the row
-limit from its config and writes the selected data. The training function
-then reads that output.
-
-Run the complete [variants example](../../examples/variants.py) from the
-repository root after following the [installation steps](../tutorials/getting-started.md#install-the-repository):
-
-```bash
-python -m examples.variants
-```
-
-The program imports training from [cpu_quickstart.py](../../examples/cpu_quickstart.py)
-and CSV preparation from [workflow_functions.py](../../examples/workflow_functions.py).
-Keep these files in the `examples` directory and run the command from the
-repository root. `limit_rows()` reads `context.config.rows`, keeps that many
-CSV rows after the header, and writes them to `context.outputs["dataset"]`.
-
-```python
 """Compare training on two or three rows across two replicate seeds."""
 
 from examples.cpu_quickstart import fit, load_json, load_state, mse
@@ -125,48 +99,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-```
-
-Each factor lists the permitted labels for one experimental choice. Here
-`training_rows` permits `two` and `three`. `RowLimit.rows` actually controls
-which rows the function writes; the labels describe that choice. Every variant
-must assign one level to every declared factor.
-
-The program creates four plans and prints one outcome per run. `plan()` assigns
-each plan a new run ID. `run_many()` saves each draft and executes the batch. The two variants learn different weights after twenty
-updates. This training function uses fixed inputs and a fixed initial weight, so changing
-the seed alone preserves its result.
-
-## Supply run IDs with expand
-
-Use `expand()` when your caller already has a run ID for every selected pair.
-Inside `main()` above, replace the `drafts = tuple(...)` assignment with this
-block and add `expand` to the imports from `viper.authoring`:
-
-```python
-drafts = expand(
-    study,
-    run_ids={
-        "two_rows": {
-            "seed_7": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "seed_19": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
-        },
-        "three_rows": {
-            "seed_7": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
-            "seed_19": "01ARZ3NDEKTSV4RRFFQ69G5FAY",
-        },
-    },
-    source=source,
-    env=environment,
-)
-```
-
-These fixed IDs permit one batch; use fresh IDs for another. `expand()` orders
-the drafts by variant declaration, then replicate declaration. To select a
-subset, pass `variants=("two_rows",)` or `replicates=("seed_7",)` and restrict
-`run_ids` to exactly those pairs. Missing pairs, extra pairs, and duplicate IDs
-are rejected.
-
-For either approach, `max_concurrency` limits simultaneous local runs. See
-[batch failures](execution.md#handle-partial-batch-failure) for failure and
-skip outcomes.

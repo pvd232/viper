@@ -41,10 +41,12 @@ and targets.
 
 ### 1. Define the metric and output loaders
 
-VIPER passes a `MetricContext` to the metric function with its config and file
-paths. Here the calculation uses only predictions and targets, so `_context`
-marks that argument as unused. The output loaders read the files the training
-function will write.
+Every metric function must accept a `MetricContext` first. VIPER supplies it
+with the metric's settings and file paths; a metric that reads saved
+predictions uses those paths. Here the training function passes predictions
+and targets through `.record()`, and MSE needs only those numbers. `_context`
+marks the required context argument as unused. The output loaders read the
+files the training function will write.
 
 ```python
 """Run one complete VIPER training plan on the local CPU."""
@@ -265,7 +267,9 @@ example again. VIPER checks the files against the selected commit.
 1. Add a row to [`examples/data/tiny.csv`](../../examples/data/tiny.csv).
 2. Change the learning rate or epoch count inside `fit()`.
 3. Add another `variant()` with a different training stage or config.
-4. Add another `replicate()` with a different seed.
+4. Add another `replicate()` with a different seed. This example uses fixed inputs
+   and a fixed initial weight, so a seed change alone preserves its result. Use a generator from
+   `context.numpy_generators` when adding random sampling to your stage.
 
 Then continue with [metrics and benchmarks](../how-to/metrics-and-benchmarks.md) or
 [variants and replicates](../how-to/variants-and-replicates.md).

@@ -1,14 +1,21 @@
 # Retry, restore, and compare runs
 
-These operations start from persisted evidence. Keep the printed `resolved.yaml` path
-from a successful run and the frozen plan path from a failed run.
+Keep the printed `resolved.yaml` path from a successful run and the saved
+`spec.yaml` path from a failed run. Commands below use example paths; replace
+them with your files. The restoration snippet uses `resolved_run`, returned by `execution.run(draft)`
+in the [CPU tutorial](../tutorials/getting-started.md).
 
 ## Retry a failed run
 
+Replace `YOUR_RUN_ID` with the failed run's ID:
+
 ```python
 from viper import execution
+from viper.repository import resolve_root
 
-retried = execution.retry(root, run_spec_path)
+root = resolve_root()
+plan_path = root / "experiments/cpu_quickstart/runs/baseline/YOUR_RUN_ID/spec.yaml"
+retried = execution.retry(root, plan_path)
 ```
 
 Retry appends a new attempt to the same frozen plan and preserves the earlier attempt
@@ -92,7 +99,8 @@ separate operations. A retry executes another attempt of the original plan.
 To continue from a completed training stage, author a new stage with both
 `model` and `resume_state` inputs from the same producer.
 
-For two training stages in one run, select both output handles:
+For two training stages in one run, start with the `training` declaration in
+the [CPU quickstart](../../examples/cpu_quickstart.py) and select both output handles:
 
 ```python
 checkpoint_inputs = {

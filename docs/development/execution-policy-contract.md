@@ -48,24 +48,15 @@ Existing checks of source, inputs and saved artifacts continue to apply in both
 modes. Comparing the outputs of two runs is a different operation, described in
 Section 7.
 
-## 3. Current gap
+## 3. Runtime settings check
 
-### Inspected path
-
-[Authoring](../../src/viper/authoring.py) now accepts a policy choice or custom
-settings in `plan()` and `expand()`. It freezes the selected settings in
-`RunPlanDraft` and compiles them into [RunSpec](../../src/viper/runs.py).
-[Runtime initialization](../../src/viper/runtime.py) applies controls but stores
-the requested spec in `ProcessStartupReceipt.reproducibility`.
-[Stage verification](../../src/viper/_verification/attempt.py) and
-[metric verification](../../src/viper/_verification/metrics.py) compare that
-copy with the plan. This comparison does not independently observe Torch flags.
-
-### Proposed check
-
-Authors select a preset or supply custom settings. The proposed change adds a
-readback step: after applying the saved settings, VIPER asks PyTorch which
-controls are active, before calling the stage or metric function.
+[Authoring](../../src/viper/authoring.py) resolves the selected policy into
+`RunPlanDraft` and saves both the policy and its settings in
+[RunSpec](../../src/viper/runs.py). [Runtime initialization](../../src/viper/runtime.py)
+applies those settings. Immediately before invoking user code, each worker
+reads PyTorch's active controls inside the selected autocast context.
+[Verification](../../src/viper/_verification/runtime.py) compares those readings
+with the plan.
 
 ```mermaid
 flowchart LR
@@ -83,7 +74,7 @@ flowchart LR
     class V check
 ```
 
-For `deterministic_algorithms`, the proposed settings check works as follows:
+For `deterministic_algorithms`, the settings check works as follows:
 
 | Selected mode | Saved setting | PyTorch reports | Settings check |
 |---|---|---|---|
@@ -111,9 +102,8 @@ can use the saved values even if preset defaults change in a future release.
 | `mode` | `Literal["reproducible", "relaxed", "custom"]` | The selection made when preparing the run. |
 | `version` | `Literal[1]` | The version of the rules used to resolve that selection. |
 
-[Authoring](../../src/viper/authoring.py) already puts this record in
-`RunPlanDraft.execution_policy`. EP-B2 will add `RunSpec.execution_policy` so the
-saved run also retains the choice. EP-B2 makes the record required. Earlier development records must be regenerated.
+Both `RunPlanDraft.execution_policy` and `RunSpec.execution_policy` require
+this record. Earlier development records missing it must be regenerated.
 
 `plan()` prepares one run. `expand()` prepares several variant-replicate pairs.
 Both already accept a preset name or explicit `ReproducibilitySpec`, plus separate
@@ -127,17 +117,16 @@ supported schema shape for this unreleased library, not a compatibility matrix.
 
 ### Record the settings read from PyTorch
 
-Before calling your stage or metric function, VIPER will apply the saved settings
-and then read the active values from PyTorch. It will save those readings in a
-proposed `RuntimeControlsReceipt`, attached as
-`ProcessStartupReceipt.observed_controls`. The verifier will compare the readings
-with the settings saved for that run. This record is not implemented yet.
+Before calling a stage or metric function, VIPER applies the saved settings
+and reads the active values from PyTorch. It saves those readings in
+`RuntimeControlsReceipt`, attached as `ProcessStartupReceipt.observed_controls`.
+The verifier compares the readings with the settings saved for that run.
 
 For example, `deterministic_algorithms` records the boolean returned by
 `torch.are_deterministic_algorithms_enabled()`. If relaxed mode saved `False`
 and the getter returns `False`, that setting passes its check.
 
-The proposed fields are listed individually below. The read operations use
+The fields and their read operations are listed below. The read operations use
 [PyTorch's runtime API](https://docs.pytorch.org/docs/2.6/torch.html) and
 [backend controls](https://docs.pytorch.org/docs/2.6/backends.html).
 
@@ -167,10 +156,10 @@ not which GPU kernel actually executed.
 
 ### Keep existing observations in their existing records
 
-`ProcessStartupReceipt.env` already records process environment values, including
-`CUBLAS_WORKSPACE_CONFIG`. Its `generators` field already records seeded random
-number generator identities and state hashes. Keep those fields; the proposed
-record above adds the PyTorch readings that are currently missing.
+`ProcessStartupReceipt.env` records process environment values, including
+`CUBLAS_WORKSPACE_CONFIG`. Its `generators` field records seeded random number
+generator identities and state hashes. `observed_controls` adds the PyTorch
+readings to those existing observations.
 
 Thread getters do not report how a DataLoader was constructed. Continue checking
 worker and prefetch configuration through the existing DataLoader records.
@@ -323,9 +312,8 @@ production verifier in EP-B4 is library behavior; EP-VB4 tests that behavior.
 
 ## 11. Master checklist
 
-Implementation and verification have separate blocks. Existing completion
-records for EP-B0 and EP-B1 remain in the manifest. Later blocks remain open
-until their working-checkout results are recorded.
+The checklist records implementation and test results separately. The remaining
+acceptance requirement is the live CUDA run.
 
 - [x] EP-B0 — EP-00: preset resolver. Verification: EP-VB0.
 - [x] EP-B1 — EP-01: authoring selection. Verification: EP-VB1.
@@ -342,17 +330,15 @@ until their working-checkout results are recorded.
 - [x] EP-VB4 — saved stage, metric, reuse, and byte-comparison checks.
 - [ ] EP-VB5 — public workflows and CPU acceptance pass; CUDA acceptance requires the single-L4 host.
 
-CUDA access is required for CUDA acceptance. Source discovery convenience,
-multiprocess execution, and continuous control monitoring remain outside this
-contract. The user applies production code; Codex prepares the contract and
-runs candidate checks when requested.
+CUDA acceptance requires the designated CUDA host. Continuous monitoring of
+controls after startup remains outside this contract.
 
 ## 12. Contract-owned PairBlocks
 
-Start with [EP-B2a](#ep-b2a-schema-and-writer-code), then
-[EP-B2b](#ep-b2b-runtime-code), [EP-B3](#ep-b3-runtime-code),
-[EP-B4](#ep-b4-comparison-code), and [EP-B5](#ep-b5-example-code).
-Test code and acceptance instructions follow in the verification blocks.
+These blocks preserve the implementation sequence used for this contract.
+Their insertion instructions and code describe that revision. Use the linked
+source files for the current implementation and the [public documentation](../README.md)
+for current examples. The completed blocks require no further application.
 
 ### EP-B0: Resolve execution settings
 
@@ -707,9 +693,7 @@ contain their parallelism. Both types are defined in
 
 The returned draft stores the selected mode in `execution_policy` and concrete
 settings in `reproducibility`. Expansion resolves defaults once for the batch.
-Current saved run specifications retain the concrete settings; policy
-mode/version persistence is pending in the
-[execution-policy contract](../development/execution-policy-contract.md).
+Saved run specifications retain both the policy identity and concrete settings.
 ```
 
 **Stop:** Review these changes and run the following commands before changing
@@ -1789,429 +1773,12 @@ if __name__ == "__main__":
 
 #### EP-B5 documentation edits
 
-**File: `README.md`**
-
-Replace the section beginning `## Follow the execution` and ending immediately before
-`## What the run preserves` with:
-
-````markdown
-## Follow the execution
-
-The following blocks form the complete [CPU quickstart](examples/cpu_quickstart.py).
-Save them together as `examples/cpu_quickstart.py`, commit the file, and run it.
-
-### Define the metric and training stage
-
-```python
-"""Run one complete VIPER training plan on the local CPU."""
-
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-from viper import execution
-from viper.authoring import experiment, input, plan, replicate, stage, variant
-from viper.config import MetricConfig, TrainConfig
-from viper.metrics import MetricContext, measure, metric, min
-from viper.outputs import TrainOutputs, output
-from viper.randomness import capture_main_process_rng
-from viper.references import GitFileRef
-from viper.repository import read_source
-from viper.resume import (
-    DataLoaderConfiguration,
-    DataLoaderResumeState,
-    ResumeState,
-    load_resume_state,
-    save_resume_state,
-)
-from viper.runtime import LocalEnvSpec, observe_python_env
-from viper.stages import Context, train
-
-
-def load_json(path: Path) -> dict[str, float | int]:
-    """Load one model or checkpoint written by the training stage."""
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_state(path: Path) -> ResumeState:
-    """Load and validate the terminal training state."""
-    return load_resume_state(path)
-
-
-@metric(metric_id="mean_squared_error", mode="stateless")
-def mean_squared_error(
-    _context: MetricContext[MetricConfig],
-    predictions: tuple[float, ...],
-    targets: tuple[float, ...],
-) -> float:
-    """Compute mean squared error over matching predictions and targets."""
-    if not targets:
-        raise ValueError("mean_squared_error requires at least one target")
-    return sum(
-        (prediction - target) ** 2
-        for prediction, target in zip(predictions, targets, strict=True)
-    ) / len(targets)
-
-@train(config=TrainConfig)
-def fit(context: Context[TrainConfig]) -> None:
-    """Fit ``y = weight * x`` with gradient descent on the local CPU."""
-    rows = [
-        tuple(float(value) for value in line.split(","))
-        for line in context.inputs["dataset"]
-        .read_text(encoding="utf-8")
-        .splitlines()[1:]
-    ]
-    targets = tuple(y for _, y in rows)
-    weight = 0.0
-    loss = 0.0
-    epoch = 0
-    for epoch in range(1, 21):
-        predictions = tuple(weight * x for x, _ in rows)
-        measurement = context.metrics["mean_squared_error"].record(
-            predictions, targets, epoch=epoch, step=epoch
-        )
-        loss = measurement.value
-        errors = tuple(
-            prediction - target for prediction, target in zip(predictions, targets)
-        )
-        gradient = 2 * sum(error * x for error, (x, _) in zip(errors, rows)) / len(rows)
-        weight -= 0.05 * gradient
-
-    model = context.outputs["model"]
-    model.parent.mkdir(parents=True, exist_ok=True)
-    model.write_text(json.dumps({"weight": weight}) + "\n", encoding="utf-8")
-    save_resume_state(
-        context.outputs["resume_state"],
-        ResumeState(
-            optimizer_state={"weight": weight, "loss": loss},
-            main_process_rng=capture_main_process_rng(
-                context.numpy_generators,
-                capture_legacy_global=True,
-            ),
-            dataloader=DataLoaderResumeState(
-                configuration=DataLoaderConfiguration(workers=0),
-                state_dict={"epoch": epoch},
-            ),
-        ),
-    )
-```
-
-### Declare the experiment
-
-```python
-mse = measure(mean_squared_error, config=MetricConfig())
-training = stage(
-    fit,
-    config=TrainConfig(),
-    inputs={
-        "dataset": input(
-            "examples/data/tiny.csv",
-            data_role="training",
-        )
-    },
-    outputs=TrainOutputs(
-        model=output(
-            path="model.json",
-            loader=load_json,
-            data_role="training",
-        ),
-        resume_state=output(
-            path="resume_state.pt",
-            loader=load_state,
-            data_role="training",
-        ),
-    ),
-    metrics=(mse,),
-    objective=min(mse),
-)
-study = experiment(
-    experiment_id="cpu_quickstart",
-    variants={
-        "baseline": variant(
-            levels={},
-            stages={"train": training},
-            estimator=training.outputs["model"],
-        )
-    },
-    replicates={"seed_7": replicate(seed=7)},
-)
-```
-
-### Run the experiment
-
-`read_source()` identifies the checked-out commit and repository URL.
-`plan()` uses the reproducible policy by default.
-
-```python
-def main() -> None:
-    """Run the training experiment with the default reproducible policy."""
-    source = read_source()
-    environment = LocalEnvSpec(
-        lockfile=GitFileRef(
-            repository=source.repository, commit=source.commit, path="pyproject.toml"
-        ),
-        python_env=observe_python_env(),
-    )
-    draft = plan(
-        experiment=study,
-        variant="baseline",
-        replicate="seed_7",
-        source=source,
-        env=environment,
-    )
-    resolved_run = execution.run(draft)
-    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
-    print(f"status: {resolved_run.status}")
-    print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
-    print(f"result: {resolved_run.path}")
-
-
-if __name__ == "__main__":
-    main()
-```
-
-The complete policy example (`examples/execution_policies.py`) runs the same
-experiment with `reproducible`, `relaxed`, or `custom` settings. Relaxed permits
-nondeterministic algorithms. Verification checks each run against its own plan;
-comparing artifacts from two runs is a separate operation.
-````
-
-**File: `docs/tutorials/getting-started.md`**
-
-Replace the section beginning `## Read the complete program` and ending immediately before
-`## Inspect the result` with:
-
-````markdown
-## Read the complete program
-
-These four blocks form [cpu_quickstart.py](../../examples/cpu_quickstart.py).
-The stage fits a linear model and records mean squared error from predictions
-and targets.
-
-### 1. Define the metric and output loaders
-
-```python
-"""Run one complete VIPER training plan on the local CPU."""
-
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-from viper import execution
-from viper.authoring import experiment, input, plan, replicate, stage, variant
-from viper.config import MetricConfig, TrainConfig
-from viper.metrics import MetricContext, measure, metric, min
-from viper.outputs import TrainOutputs, output
-from viper.randomness import capture_main_process_rng
-from viper.references import GitFileRef
-from viper.repository import read_source
-from viper.resume import (
-    DataLoaderConfiguration,
-    DataLoaderResumeState,
-    ResumeState,
-    load_resume_state,
-    save_resume_state,
-)
-from viper.runtime import LocalEnvSpec, observe_python_env
-from viper.stages import Context, train
-
-
-def load_json(path: Path) -> dict[str, float | int]:
-    """Load one model or checkpoint written by the training stage."""
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_state(path: Path) -> ResumeState:
-    """Load and validate the terminal training state."""
-    return load_resume_state(path)
-
-
-@metric(metric_id="mean_squared_error", mode="stateless")
-def mean_squared_error(
-    _context: MetricContext[MetricConfig],
-    predictions: tuple[float, ...],
-    targets: tuple[float, ...],
-) -> float:
-    """Compute mean squared error over matching predictions and targets."""
-    if not targets:
-        raise ValueError("mean_squared_error requires at least one target")
-    return sum(
-        (prediction - target) ** 2
-        for prediction, target in zip(predictions, targets, strict=True)
-    ) / len(targets)
-```
-
-### 2. Train the model and write its outputs
-
-```python
-@train(config=TrainConfig)
-def fit(context: Context[TrainConfig]) -> None:
-    """Fit ``y = weight * x`` with gradient descent on the local CPU."""
-    rows = [
-        tuple(float(value) for value in line.split(","))
-        for line in context.inputs["dataset"]
-        .read_text(encoding="utf-8")
-        .splitlines()[1:]
-    ]
-    targets = tuple(y for _, y in rows)
-    weight = 0.0
-    loss = 0.0
-    epoch = 0
-    for epoch in range(1, 21):
-        predictions = tuple(weight * x for x, _ in rows)
-        measurement = context.metrics["mean_squared_error"].record(
-            predictions, targets, epoch=epoch, step=epoch
-        )
-        loss = measurement.value
-        errors = tuple(
-            prediction - target for prediction, target in zip(predictions, targets)
-        )
-        gradient = 2 * sum(error * x for error, (x, _) in zip(errors, rows)) / len(rows)
-        weight -= 0.05 * gradient
-
-    model = context.outputs["model"]
-    model.parent.mkdir(parents=True, exist_ok=True)
-    model.write_text(json.dumps({"weight": weight}) + "\n", encoding="utf-8")
-    save_resume_state(
-        context.outputs["resume_state"],
-        ResumeState(
-            optimizer_state={"weight": weight, "loss": loss},
-            main_process_rng=capture_main_process_rng(
-                context.numpy_generators,
-                capture_legacy_global=True,
-            ),
-            dataloader=DataLoaderResumeState(
-                configuration=DataLoaderConfiguration(workers=0),
-                state_dict={"epoch": epoch},
-            ),
-        ),
-    )
-```
-
-### 3. Declare the experiment
-
-```python
-mse = measure(mean_squared_error, config=MetricConfig())
-training = stage(
-    fit,
-    config=TrainConfig(),
-    inputs={
-        "dataset": input(
-            "examples/data/tiny.csv",
-            data_role="training",
-        )
-    },
-    outputs=TrainOutputs(
-        model=output(
-            path="model.json",
-            loader=load_json,
-            data_role="training",
-        ),
-        resume_state=output(
-            path="resume_state.pt",
-            loader=load_state,
-            data_role="training",
-        ),
-    ),
-    metrics=(mse,),
-    objective=min(mse),
-)
-study = experiment(
-    experiment_id="cpu_quickstart",
-    variants={
-        "baseline": variant(
-            levels={},
-            stages={"train": training},
-            estimator=training.outputs["model"],
-        )
-    },
-    replicates={"seed_7": replicate(seed=7)},
-)
-```
-
-### 4. Identify the source and run the experiment
-
-`read_source()` returns the checked-out commit and the `origin` repository URL.
-Omitting `reproducibility` selects reproducible execution.
-
-```python
-def main() -> None:
-    """Run the training experiment with the default reproducible policy."""
-    source = read_source()
-    environment = LocalEnvSpec(
-        lockfile=GitFileRef(
-            repository=source.repository, commit=source.commit, path="pyproject.toml"
-        ),
-        python_env=observe_python_env(),
-    )
-    draft = plan(
-        experiment=study,
-        variant="baseline",
-        replicate="seed_7",
-        source=source,
-        env=environment,
-    )
-    resolved_run = execution.run(draft)
-    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
-    print(f"status: {resolved_run.status}")
-    print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
-    print(f"result: {resolved_run.path}")
-
-
-if __name__ == "__main__":
-    main()
-```
-
-Run the [policy example](../../examples/execution_policies.py) to select a policy
-for the same training computation:
-
-```bash
-python examples/execution_policies.py reproducible
-python examples/execution_policies.py relaxed
-python examples/execution_policies.py custom
-```
-
-Only custom mode constructs the complete numerical settings. Its example uses
-two intra-operation CPU threads and permits nondeterministic algorithms.
-````
-
-**File: `docs/reference/api.md`**
-
-In “Author and execute an experiment”, import `read_source` from
-`viper.repository`, assign `source = read_source()` before `plan`, and use
-`execution.run(draft)`. Add this paragraph after the example:
-
-```markdown
-`read_source()` returns a `GitSource` containing the checked-out commit and the
-HTTP(S) URL of `origin`. It discovers the workspace from the current directory.
-Select another remote with `read_source(remote="mirror")`, or another workspace
-with `read_source(root)`. An unavailable workspace, commit, or remote raises
-`RootError`; an invalid source URL fails `GitSource` validation.
-
-`execution.run(draft)` discovers the workspace from the current directory.
-Supply `repository_root=root` to execute in another workspace. A saved plan
-path can be supplied in place of the draft.
-
-`plan()` defaults to reproducible execution. `reproducibility="relaxed"` permits
-nondeterministic algorithms. Pass a `ReproducibilitySpec` for custom settings.
-Saved plans retain both the selected policy and its complete settings. Worker
-receipts record the controls read from PyTorch immediately before user code.
-Verification compares those readings with the saved settings. Comparing artifact
-bytes from separate runs is a separate check.
-```
-
-In the public-module table, describe `viper.repository` as “Workspace
-initialization, source identification, and path resolution”.
-
-**Files: `docs/how-to/execution.md`, `docs/how-to/variants-and-replicates.md`**
-
-Use `execution.run(draft, repository_root=root)` and
-`execution.run(plan_path, repository_root=root)` where these guides supply an
-explicit workspace root.
-
-Stop after the commands in [EP-VB5](#ep-vb5-verify-public-workflows) pass.
+Current examples are maintained in the [README](../../README.md),
+[CPU tutorial](../tutorials/getting-started.md),
+[execution guide](../how-to/execution.md), and
+[policy example](../../examples/execution_policies.py). Execution compiles
+and saves plans internally. User examples call `execution.run()` or
+`execution.run_many()`.
 
 ### EP-VB0: Verification of EP-B0
 

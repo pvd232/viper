@@ -28,12 +28,24 @@ use, or identify the preceding example that creates them. Keep all setup require
 to execute a tutorial on that page. Reference pages can explain fields in prose
 and link to a complete example.
 
+For each example, trace every name back to an import, argument, declaration,
+or explicitly linked setup. Explain runtime-supplied arguments before their
+first use. Show the actual computation and required writes. Test complete
+workflows in a clean workspace to expose missing setup that mocked prerequisites
+would conceal. Keep private imports and plan-publication machinery in
+implementation documentation.
+
+An unused callback parameter may have a leading underscore, as in `_context`.
+This follows the [unused-argument convention](https://docs.astral.sh/ruff/rules/unused-function-argument/)
+and leaves the callback public. Use `context` when the function reads it.
+
 Execute the code printed in tutorials and the README. A working source file alone
 leaves omissions in its documentation undetected. Also validate constructor
 arguments, identifiers, CLI commands, and required setup against the package.
 
-The primary Python workflow is `plan() -> execution.run()`. The batch guide
-also explains `freeze_run_plan()` for saving plans before execution.
+The primary Python workflow is `plan() -> execution.run()`. Batch execution
+passes drafts to `execution.run_many()`. Execution owns plan compilation and
+publication; user examples call the execution API directly.
 
 ## Validation
 

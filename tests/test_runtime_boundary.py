@@ -190,9 +190,7 @@ def test_execution_policy_relaxed_allows_nondeterminism() -> None:
     assert relaxed.precision.autocast_enabled is False
     assert relaxed.numpy_randomness == strict.numpy_randomness
     assert relaxed.parallelism.torch_intraop_threads == torch.get_num_threads()
-    assert (
-        relaxed.parallelism.torch_interop_threads == torch.get_num_interop_threads()
-    )
+    assert relaxed.parallelism.torch_interop_threads == torch.get_num_interop_threads()
 
 
 @pytest.mark.parametrize("mode", ["reproducible", "relaxed"])

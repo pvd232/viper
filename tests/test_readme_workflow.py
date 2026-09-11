@@ -34,6 +34,55 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+@pytest.mark.parametrize("example", ("variants.py", "evaluation.py"))
+def test_extended_examples_execute_complete_workflows(
+    tmp_path: Path, example: str
+) -> None:
+    """Execute batch and benchmark examples with all source and input dependencies."""
+    root = tmp_path / "workspace"
+    shutil.copytree("examples", root / "examples")
+    shutil.copy("pyproject.toml", root / "pyproject.toml")
+    (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
+    _run(root, "git", "init", "--quiet")
+    _run(root, "git", "config", "user.email", "viper@example.com")
+    _run(root, "git", "config", "user.name", "VIPER Examples")
+    _run(root, "git", "remote", "add", "origin", "https://github.com/example/viper")
+    _run(root, "git", "add", ".")
+    _run(root, "git", "commit", "--quiet", "-m", "example source")
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(Path.cwd() / "src")
+    completed = subprocess.run(
+        (sys.executable, "-m", f"examples.{Path(example).stem}"),
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=240,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    if example == "variants.py":
+        assert completed.stdout.count(": succeeded ") == 4, completed.stdout
+        weights = [
+            json.loads(path.read_text())["weight"]
+            for path in root.glob(
+                "experiments/training_rows/runs/*/*/artifacts/train/model/model.json"
+            )
+        ]
+        assert len(weights) == 4
+        assert len(set(weights)) == 2
+    else:
+        assert "benchmark: passed " in completed.stdout
+        predictions = list(
+            root.glob(
+                "experiments/held_out_evaluation/runs/baseline/*/artifacts/eval/predictions/predictions.json"
+            )
+        )
+        assert len(predictions) == 1
+        pairs = json.loads(predictions[0].read_text())
+        assert [pair[1] for pair in pairs] == [8.0, 12.0]
+        assert [pair[0] for pair in pairs] == pytest.approx([8.0, 12.0], abs=0.001)
+
+
 @pytest.mark.parametrize(
     "document", (None, "README.md", "docs/tutorials/getting-started.md")
 )

@@ -9,6 +9,7 @@ archived design documents used to maintain VIPER.
 | --- | --- |
 | [0.1.0a3 core release contract](../development/v0.1.0a3-core-release.md) | Defines the cleanup boundary, release gates, and completion evidence for the next candidate. |
 | [0.1.0a3 public authoring contract](../development/v0.1.0a3-public-authoring-contract.md) | Defines the final config, output, diagnostic-stage, workspace, and release-validation migration. |
+| [Execution policies](../development/execution-policy-contract.md) | Defines reproducible, relaxed, and custom settings; CPU acceptance is recorded and CUDA acceptance remains open. |
 | [Documentation architecture](../development/documentation-architecture.md) | Keeps user learning, reference, and internal engineering routes distinct. |
 
 ## Maintainer guides

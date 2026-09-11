@@ -323,7 +323,7 @@ def test_current_docs_import_public_functions_from_defining_modules() -> None:
 
 
 def test_public_workflow_uses_target_api() -> None:
-    """Document execution from Python drafts and saved plans with current APIs."""
+    """Keep plan publication inside execution and show the public workflow."""
     documents = (
         ROOT / "README.md",
         ROOT / "docs/tutorials/getting-started.md",
@@ -334,12 +334,12 @@ def test_public_workflow_uses_target_api() -> None:
 
     required = {
         "viper.authoring.plan",
-        "freeze_run_plan",
         "viper.execution.run",
         "viper.execution.benchmark",
         "viper.execution.restore",
     }
     retired = {
+        "freeze_run_plan",
         "DownloadContext",
         "download_stage",
         "HttpSource",
@@ -347,6 +347,26 @@ def test_public_workflow_uses_target_api() -> None:
 
     assert required <= {name for name in required if name in text}
     assert retired.isdisjoint({name for name in retired if name in text})
+
+
+def test_reader_examples_keep_private_apis_and_plan_publication_internal() -> None:
+    """Keep user examples on public domain APIs with execution-owned publication."""
+    documents = [ROOT / "README.md"]
+    for directory in ("tutorials", "how-to", "explanation", "reference"):
+        documents.extend((ROOT / "docs" / directory).glob("*.md"))
+    for document in documents:
+        text = document.read_text()
+        assert "freeze_run_plan" not in text, document
+        for block in python_blocks(text):
+            for node in ast.walk(ast.parse(block)):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    if node.module.startswith("viper"):
+                        assert all(
+                            not part.startswith("_") for part in node.module.split(".")
+                        ), (document, node.module)
+                        assert all(
+                            not alias.name.startswith("_") for alias in node.names
+                        ), (document, node.module)
 
 
 def test_documentation_navigation_separates_reader_and_internal_routes() -> None:

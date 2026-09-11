@@ -8,7 +8,7 @@
       "contract_id": "public-authoring",
       "path": "docs/development/v0.1.0a3-public-authoring-contract.md",
       "revision": "working-tree",
-      "sha256": "1e32ff3aef242062b81831e276524f886e144c59f8d26d12535a596390a4a7c9",
+      "sha256": "8cdb72083b1d51aeed3217ffe8e21160f09a460c8aa90b3d746d9cf911e28b0b",
       "requirement_ids": [
         "PAC-01",
         "PAC-02",

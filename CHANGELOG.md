@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Explain stage and metric contexts before use, and provide complete batch and
+  benchmark examples with their data and function definitions.
+- Accept Python drafts in `execution.run_many()` and retain stored plan
+  references for retries and benchmark confirmation.
+- Preserve custom config fields when saving stages, variants, metrics, and
+  HTTP implementations. Serialize concurrent stage imports during batch checks.
 - Replace incomplete documentation examples with working implementations and
   execute the README and tutorial code blocks in acceptance tests.
 - Name example metrics for their quantities: `mean_squared_error` and

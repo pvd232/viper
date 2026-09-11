@@ -12,7 +12,9 @@ def verify_runtime_controls(
 
     # Compare the worker readings with the saved run, including relaxed values.
     expected: dict[str, object] = {
-        "deterministic_algorithms": reproducibility.determinism.deterministic_algorithms,  # noqa: E501
+        "deterministic_algorithms": (
+            reproducibility.determinism.deterministic_algorithms
+        ),
         "deterministic_warn_only": reproducibility.determinism.deterministic_warn_only,
         "float32_matmul_precision": reproducibility.precision.float32_matmul_precision,
         "torch_intraop_threads": reproducibility.parallelism.torch_intraop_threads,

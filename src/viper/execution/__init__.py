@@ -98,13 +98,16 @@ def benchmark(
 
 def run_many(
     repository_root: Path,
-    run_spec_paths: tuple[Path, ...],
+    run_spec_paths: tuple[Path | RunPlanDraft, ...],
     *,
     max_concurrency: int = 1,
     timeout_seconds: float | None = None,
     stop_on_failure: bool = False,
 ) -> ExperimentExecutionResult:
-    """Execute saved plans and return one outcome for each input, in input order.
+    """Execute drafts or Git-committed plans and return outcomes in input order.
+
+    Drafts are frozen before scheduling and retain their immutable store
+    references. Paths select plan files committed to the workspace repository.
 
     Load all plans before scheduling. max_concurrency limits active runs;
     stop_on_failure leaves unscheduled runs marked as skipped after a failure.

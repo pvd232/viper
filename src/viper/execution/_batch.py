@@ -1,6 +1,9 @@
+"""Execute batches of authored or Git-committed plans in input order."""
+
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 
+from ..authoring import RunPlanDraft, freeze_run_plan
 from ..evidence import VerificationError
 from ..runs import RunSpec
 from ..serialization import parse_yaml_bytes
@@ -49,7 +52,7 @@ def _failed_run(path: Path, spec: RunSpec, error: Exception) -> ExperimentRunRes
 
 def run_many(
     repository_root: Path,
-    run_spec_paths: tuple[Path, ...],
+    run_spec_paths: tuple[Path | RunPlanDraft, ...],
     *,
     max_concurrency: int = 1,
     timeout_seconds: float | None = None,
@@ -64,7 +67,18 @@ def run_many(
     if timeout_seconds is not None and timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
 
-    inputs = tuple(_load_run_spec(root, path) for path in run_spec_paths)
+    # Preserve the immutable store reference when freezing a draft. A path-only
+    # request instead identifies a plan committed to Git.
+    inputs = []
+    for item in run_spec_paths:
+        if isinstance(item, RunPlanDraft):
+            frozen = freeze_run_plan(root, item)
+            inputs.append(
+                (root / frozen.reference.stored_at.path, frozen.run, frozen.reference)
+            )
+        else:
+            path, spec = _load_run_spec(root, item)
+            inputs.append((path, spec, None))
     outcomes: list[ExperimentRunResult | None] = [None] * len(inputs)
     next_index = 0
     stop = False
@@ -75,12 +89,13 @@ def run_many(
             while (
                 not stop and len(pending) < max_concurrency and next_index < len(inputs)
             ):
-                path, _ = inputs[next_index]
+                path, _, plan = inputs[next_index]
                 pending[
                     executor.submit(
                         execute_run,
                         root,
                         path,
+                        plan=plan,
                         timeout_seconds=timeout_seconds,
                     )
                 ] = next_index
@@ -89,7 +104,7 @@ def run_many(
             completed, _ = wait(tuple(pending), return_when=FIRST_COMPLETED)
             for future in sorted(completed, key=pending.__getitem__):
                 index = pending.pop(future)
-                path, spec = inputs[index]
+                path, spec, _ = inputs[index]
                 try:
                     result = future.result()
                 except (
@@ -113,7 +128,7 @@ def run_many(
 
     if stop:
         for index in range(next_index, len(inputs)):
-            path, spec = inputs[index]
+            path, spec, _ = inputs[index]
             outcomes[index] = ExperimentRunResult(
                 variant_id=spec.variant_id,
                 replicate_id=spec.replicate_id,

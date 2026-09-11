@@ -13,27 +13,34 @@ from viper.authoring import input
 dataset = input("examples/data/tiny.csv", data_role="training")
 ```
 
-Continue inside `main()` from the [CPU tutorial](../tutorials/getting-started.md),
-after its `training` declaration. Reuse its function, outputs, and configured metric
-to connect a different input:
+In the [CPU tutorial](../tutorials/getting-started.md#3-declare-the-experiment),
+use `dataset` in the training declaration before constructing `study`.
+The tutorial defines `fit`, `mse`, `load_json`, and `load_state`:
 
 ```python
 from viper.authoring import stage
 from viper.config import TrainConfig
 from viper.metrics import min
+from viper.outputs import TrainOutputs, output
 
+training_outputs = TrainOutputs(
+    model=output(path="model.json", loader=load_json, data_role="training"),
+    resume_state=output(
+        path="resume_state.pt", loader=load_state, data_role="training"
+    ),
+)
 
 training = stage(
     fit,
     config=TrainConfig(),
     inputs={"dataset": dataset},
-    outputs=training.spec.outputs,
+    outputs=training_outputs,
     metrics=(mse,),
     objective=min(mse),
 )
 ```
 
-Inside `fit()`, `context.inputs["dataset"]` is the materialized path. The authoring name
+Inside `fit()`, `context.inputs["dataset"]` is the local input path. The authoring name
 and the context lookup must match.
 
 ## Declare an HTTP download
@@ -94,14 +101,15 @@ source you trust before the request runs.
 
 ## Feed downloaded bytes to another stage
 
-Select the download stage's output in the downstream stage:
+Continue with the training function, metric, and `training_outputs` defined
+above. Select the download stage's output in the downstream stage:
 
 ```python
 training = stage(
     fit,
     config=TrainConfig(),
     inputs={"dataset": fetch_data.outputs["dataset"]},
-    outputs=training.spec.outputs,
+    outputs=training_outputs,
     metrics=(mse,),
     objective=min(mse),
 )
@@ -128,7 +136,10 @@ artifact.
 
 ## Use an artifact from a completed run
 
-Use the completed run's `.reference` and the producing stage and output names:
+The [evaluation example](../../examples/evaluation.py) first runs
+`prepare_test_data`, which copies the held-out CSV and writes its split indices.
+It stores the completed result in `data_run`. Inside that example's `main()`,
+the following calls select those outputs for the evaluation run:
 
 ```python
 from viper.artifacts import StageArtifactRef
@@ -138,19 +149,19 @@ test_data = run_artifact(
     data_run.reference,
     StageArtifactRef(stage_id="build", artifact_name="test_data"),
     path="inputs/test.csv",
-    data_role="eval",
+    data_role="benchmark",
 )
 test_split = run_artifact(
     data_run.reference,
     StageArtifactRef(stage_id="build", artifact_name="test_split"),
     path="inputs/holdout.json",
-    data_role="eval",
+    data_role="benchmark",
 )
 ```
 
 Here `data_run` is the result of an earlier `execution.run()` that produced the
-named artifacts. Each `path` is the consuming workspace's materialization path;
-use distinct paths for distinct inputs. Freezing publishes a pointer to the
+named artifacts. Each `path` is the local destination for the retrieved file;
+use distinct paths for distinct inputs. Execution saves a pointer to the
 selected artifact. Execution verifies the pointer and retrieves the bytes
 before invoking the consumer.
 
@@ -172,3 +183,20 @@ and digest checks. See the exact callable and draft signatures in
 [`viper.http`](../../src/viper/http.py), and the custom-client cases in
 [HTTP retrieval tests](../../tests/test_http_retrieval.py). Credentials are supplied
 through the execution environment. Keep versioned URLs free of credentials.
+
+The `HttpContext` fields provide the values needed by the client:
+
+| Field | Use |
+| --- | --- |
+| `request` | Read the URL and expected response identity. |
+| `policy` | Enforce the allowed hosts, redirects, body size, and timeout. |
+| `credential` | Use the resolved header, prefix, and secret value when credentials were requested. |
+| `destination` | Write the response body to this path. |
+| `workspace` | Use this directory for temporary request files. |
+| `config` | Read your validated `HttpConfig` settings. |
+| `executables` | Look up declared external commands by their assigned names. |
+
+Return `HttpResult(body=context.destination, response=observed_response)` after
+writing the body. `observed_response` must be an `ObservedHttpResponse` populated
+from the actual HTTP response. Its schema in [viper.http](../../src/viper/http.py)
+defines the status, headers, redirect history, and body identity to record.

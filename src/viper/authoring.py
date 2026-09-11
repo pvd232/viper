@@ -38,6 +38,8 @@ from .config import (
     DiagnosticConfig,
     EmbedConfig,
     EvalConfig,
+    HttpConfig,
+    MetricConfig,
     TrainConfig,
     type_ref,
 )
@@ -173,7 +175,7 @@ def _freeze_http(root: Path, draft: HttpDraft) -> HttpImplementationSpec:
             sha256=hashlib.sha256(config_raw).hexdigest(),
             bytes=len(config_raw),
         ),
-        config=draft.config,
+        config=HttpConfig.model_validate(draft.config.model_dump(mode="json")),
         executables=definition.executables,
     )
 
@@ -933,7 +935,9 @@ def _freeze_stage(
             bytes=len(source_raw),
         ),
         "config_type": config_reference,
-        "config": draft.config,
+        # Store every workspace-defined field in the protocol's config mapping.
+        # Serializing a subclass through the base type would omit its fields.
+        "config": draft.config.model_dump(mode="json"),
         "reuse": draft.reuse,
         "inputs": {
             name: _freeze_input(
@@ -1133,7 +1137,7 @@ def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
             bytes=len(implementation_raw),
         ),
         config_type=config_reference,
-        config=draft.config,
+        config=MetricConfig.model_validate(draft.config.model_dump(mode="json")),
         mode=definition.mode,
         dependencies=draft.dependencies,
         comparator=draft.comparator,
@@ -1172,23 +1176,48 @@ def _compile_variant(
         spec = stage_draft.spec
         if isinstance(spec, BuildSpecDraft):
             stage_configs.append(
-                BuildVariantStageConfig(stage_id=stage_id, config=spec.config)
+                BuildVariantStageConfig(
+                    stage_id=stage_id,
+                    config=BuildConfig.model_validate(
+                        spec.config.model_dump(mode="json")
+                    ),
+                )
             )
         elif isinstance(spec, EmbedSpecDraft):
             stage_configs.append(
-                EmbedVariantStageConfig(stage_id=stage_id, config=spec.config)
+                EmbedVariantStageConfig(
+                    stage_id=stage_id,
+                    config=EmbedConfig.model_validate(
+                        spec.config.model_dump(mode="json")
+                    ),
+                )
             )
         elif isinstance(spec, DiagnosticSpecDraft):
             stage_configs.append(
-                DiagnosticVariantStageConfig(stage_id=stage_id, config=spec.config)
+                DiagnosticVariantStageConfig(
+                    stage_id=stage_id,
+                    config=DiagnosticConfig.model_validate(
+                        spec.config.model_dump(mode="json")
+                    ),
+                )
             )
         elif isinstance(spec, TrainSpecDraft):
             stage_configs.append(
-                TrainVariantStageConfig(stage_id=stage_id, config=spec.config)
+                TrainVariantStageConfig(
+                    stage_id=stage_id,
+                    config=TrainConfig.model_validate(
+                        spec.config.model_dump(mode="json")
+                    ),
+                )
             )
         elif isinstance(spec, EvalSpecDraft):
             stage_configs.append(
-                EvalVariantStageConfig(stage_id=stage_id, config=spec.config)
+                EvalVariantStageConfig(
+                    stage_id=stage_id,
+                    config=EvalConfig.model_validate(
+                        spec.config.model_dump(mode="json")
+                    ),
+                )
             )
     if not stage_configs:
         raise ValueError("variant requires one workspace stage")

@@ -6,8 +6,11 @@ same operations through MCP.
 
 ## Build the local catalog
 
+After running the [CPU quickstart](../../examples/cpu_quickstart.py), replace
+`YOUR_RUN_ID` with the printed run ID and the trust URL with your Git origin:
+
 ```bash
-viper catalog-refresh experiments/example/runs/baseline/<run-id>/resolved.yaml \
+viper catalog-refresh experiments/cpu_quickstart/runs/baseline/YOUR_RUN_ID/resolved.yaml \
   --root . \
   --trust-source https://github.com/example/workspace
 ```
@@ -24,19 +27,19 @@ viper --json search-measurements \
   --query '{"metric_ids":["mean_squared_error"],"limit":20}'
 ```
 
-Equivalent Python code opens the same catalog:
+From the same workspace directory, Python opens that catalog:
 
 ```python
 from viper.catalog import MeasurementQuery, catalog
 
-page = catalog(root=root).measurements(
+page = catalog().measurements(
     MeasurementQuery(metric_ids=("mean_squared_error",), limit=20)
 )
 ```
 
 ## Publish and search knowledge
 
-`knowledge(root=root)` opens the repository's knowledge store. Its publication methods
+`knowledge()` opens the repository's knowledge store. Its publication methods
 save scientific annotations as typed records. Refresh the catalog with a knowledge head before searching
 those records. A head is the manifest reference returned by publication; it links the
 new record to preceding publications.
@@ -56,7 +59,7 @@ viper --json knowledge search search_assertions --root . --query '{"limit":20}'
 ```
 
 `knowledge refresh` rebuilds the catalog using only knowledge sources. To keep run and
-knowledge rows together, call `catalog(root=root).refresh()` with both `runs` and
+knowledge rows together, call `catalog().refresh()` with both `runs` and
 `knowledge`. The method signature is in [`viper.catalog`](../../src/viper/catalog.py).
 
 ## Give an agent access
@@ -79,23 +82,29 @@ publishing knowledge. The allowed operations are listed in
 
 ## Record an observation
 
-A `JournalAssertion` attaches a claim to immutable evidence. After a run:
+A `JournalAssertion` attaches a claim to a saved result. In
+the [CPU tutorial](../tutorials/getting-started.md#4-identify-the-source-and-run-the-experiment),
+add the imports at module scope. Place the remaining code inside `main()`,
+after `resolved_run = execution.run(draft)`:
 
 ```python
+import json
 from datetime import UTC, datetime
 
 from viper.knowledge import JournalAssertion, JournalEvidence, knowledge
 
+model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+weight = json.loads(model_path.read_text(encoding="utf-8"))["weight"]
 observation = JournalAssertion(
-    assertion_id="baseline_completed",
+    assertion_id="fitted_slope",
     kind="observation",
-    text="The baseline run completed successfully.",
+    text=f"Fitted slope: {weight:.6f} for the simulated y = 2x data.",
     evidence=(JournalEvidence(kind="run", reference=resolved_run.reference),),
     status="proposed",
     authored_by="experiment_author",
     created_at=datetime.now(UTC),
 )
-publication = knowledge(root=root).publish_assertion(observation)
+publication = knowledge().publish_assertion(observation)
 print(publication.record.sha256)
 ```
 
@@ -104,12 +113,15 @@ The manifest links it to earlier publications. To publish a reviewed assertion,
 set `status="reviewed"` and supply both `reviewed_by` and `reviewed_at`.
 Keep the author and reviewer identities accurate for your workflow.
 
-After refreshing the catalog, query the published assertions:
+Refresh with the returned manifest, then query the published assertions.
+This refresh creates a knowledge-only catalog and replaces the previous index:
 
 ```python
 from viper.knowledge import AssertionQuery
 
-page = catalog(root=root).knowledge.assertions(
+index = catalog()
+index.refresh(knowledge=(publication.manifest,))
+page = index.knowledge.assertions(
     AssertionQuery(statuses=("proposed",), limit=20)
 )
 for item in page.items:
@@ -147,7 +159,7 @@ pass the returned cursor with the same filters to fetch the next page:
 
 ```python
 query = MeasurementQuery(metric_ids=("mean_squared_error",), limit=20)
-index = catalog(root=root)
+index = catalog()
 page = index.measurements(query)
 while True:
     for measurement in page.items:

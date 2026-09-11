@@ -5,13 +5,13 @@ per-run outcomes for a batch.
 
 ## Run a Python draft
 
-After declaring the experiment and selecting a variant and replicate with
-`plan()`, execute the returned draft:
+Continue inside `main()` in the [CPU tutorial](../tutorials/getting-started.md#4-identify-the-source-and-run-the-experiment),
+after its `draft = plan(...)` declaration:
 
 ```python
 from viper import execution
 
-resolved_run = execution.run(draft, repository_root=root)
+resolved_run = execution.run(draft)
 print(resolved_run.status)
 print(resolved_run.path)
 ```
@@ -20,25 +20,12 @@ VIPER first saves the plan, then checks it and runs its stages. The call
 returns after the completed run passes verification. The
 [CPU tutorial](../tutorials/getting-started.md) supplies the complete setup.
 
-## Save a plan for later
+## Saved run files
 
-```python
-from viper.authoring import freeze_run_plan
-
-frozen = freeze_run_plan(root, draft)
-plan_path = root / frozen.reference.stored_at.path
-resolved_run = execution.run(plan_path, repository_root=root)
-```
-
-`frozen.files` lists the local files written during freezing. Its `reference`
-identifies the immutable run specification. Passing `plan_path` executes those
-saved declarations. Keep the matching workspace source and environment available.
-
-The equivalent CLI call is:
-
-```bash
-viper run path/to/spec.yaml --root . --timeout-seconds 600
-```
+`execution.run(draft)` saves the plan and runs it. Each run directory contains
+`spec.yaml` for the plan and `resolved.yaml` for the result. Keep the plan path
+when a run fails; [retry](retry-restore-compare.md#retry-a-failed-run) uses it to
+start another attempt.
 
 `timeout_seconds` limits each stage or metric worker invocation. A run with
 several stages can take longer than that limit in total. HTTP requests also
@@ -75,26 +62,17 @@ attempt journal and use the [troubleshooting guide](troubleshooting.md) to locat
 the cause. A transient host failure can be retried with the same plan. A source
 or config change requires a new plan.
 
-The typed API offers structured failures for applications that need stable
-error codes:
-
-```python
-from viper.api import ViperFailure, dispatch
-
-response = dispatch("run", {"root": str(root), "run_spec": str(plan_path)})
-if isinstance(response, ViperFailure):
-    print(response.code, response.message)
-else:
-    print(response)
-```
-
-`dispatch()` returns a success or failure model. Direct domain functions raise
-exceptions; choose the interface that fits your caller.
+Applications that need stable error codes can use the
+[typed API](../reference/api.md#typed-operations). Direct execution functions
+raise exceptions; typed operations return a success or failure model.
 
 ## Handle partial batch failure
 
+The [variants example](../../examples/variants.py) constructs `root` and
+`drafts` for its four variant-replicate pairs. Replace its batch call and result loop with:
+
 ```python
-batch = execution.run_many(root, plan_paths, max_concurrency=2, stop_on_failure=True)
+batch = execution.run_many(root, drafts, max_concurrency=2, stop_on_failure=True)
 for entry in batch.runs:
     if entry.status == "succeeded":
         assert entry.result is not None
@@ -107,13 +85,17 @@ for entry in batch.runs:
 ```
 
 Results retain input order. With `stop_on_failure=True`, VIPER stops scheduling
-new runs after a failure; already-started runs finish. Invalid plan files are
-rejected when loading the batch, before execution begins. The
-[variants guide](variants-and-replicates.md) shows how to construct `plan_paths`.
+new runs after a failure; already-started runs finish. Drafts are saved and validated before scheduling begins. The
+[variants guide](variants-and-replicates.md) shows how to construct the drafts.
 
 ## Read a benchmark outcome
 
+The [evaluation example](../../examples/evaluation.py) creates a benchmark
+named `holdout_v1` and includes it in the plan before execution. Executing that
+plan writes the benchmark specification used here:
+
 ```python
+benchmark_spec_path = root / "benchmarks/holdout_v1.spec.yaml"
 confirmation = execution.benchmark(root, resolved_run.path, benchmark_spec_path)
 print(confirmation.status)
 print(confirmation.path)

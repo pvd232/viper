@@ -6,6 +6,7 @@ import hashlib
 import signal
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import current_thread, main_thread
 from typing import Literal
 
 from .._verification.storage import read_attempt_reference
@@ -133,6 +134,14 @@ def execute_attempt(
     if origin != str(run.source.repository):
         raise RunError("Git origin differs from RunSpec.source.repository")
     relative_run_path = run_path.relative_to(root).as_posix()
+    if plan is None and retry:
+        # A run authored through execution.run() stores its plan outside Git.
+        # Retry follows that saved reference and verifies its bytes below.
+        previous_result = run_path.parent / "resolved.yaml"
+        if previous_result.is_file():
+            plan = ResolvedRun.model_validate(
+                parse_yaml_bytes(previous_result.read_bytes())
+            ).spec
     if plan is None:
         plan_commit = run_git(root, "rev-parse", "HEAD").decode("ascii").strip()
         if run_git(root, "show", f"{plan_commit}:{relative_run_path}") != run_raw:
@@ -246,8 +255,12 @@ def execute_attempt(
         del signum, frame
         raise StageProcessInterrupted("preempted")
 
-    signal.signal(signal.SIGINT, cancel_attempt)
-    signal.signal(signal.SIGTERM, preempt_attempt)
+    # Batch runs execute in threads. Python permits signal-handler changes
+    # only in the main thread; those runs leave the caller's handlers intact.
+    owns_signals = current_thread() is main_thread()
+    if owns_signals:
+        signal.signal(signal.SIGINT, cancel_attempt)
+        signal.signal(signal.SIGTERM, preempt_attempt)
     try:
         journal.append("allocated", "attempt allocated", recorded_at=attempt_started)
         preflight = preflight_plan(root, run_path, plan=plan)
@@ -773,6 +786,7 @@ def execute_attempt(
             f"attempt {attempt_id} failed; evidence written to {terminal_path}"
         ) from exc
     finally:
-        signal.signal(signal.SIGINT, previous_sigint)
-        signal.signal(signal.SIGTERM, previous_sigterm)
+        if owns_signals:
+            signal.signal(signal.SIGINT, previous_sigint)
+            signal.signal(signal.SIGTERM, previous_sigterm)
         run_lock.release()

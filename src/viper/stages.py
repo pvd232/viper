@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from threading import RLock
 from types import ModuleType
 from typing import Annotated, Any, Generic, Literal, TypeVar, cast
 
@@ -65,6 +66,10 @@ from .runtime import (
 )
 
 ConfigT = TypeVar("ConfigT", bound=Config)
+
+# Loading workspace code temporarily edits process-wide import state. Batch
+# preflight calls must finish restoring that state before another load begins.
+_STAGE_IMPORT_LOCK = RLock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -767,75 +772,84 @@ def load_stage_callable(
     import_root: Path | None = None,
 ) -> Callable[[Context[Any]], None]:
     """Load and validate the exact decorated top-level callable in one file."""
-    verify_stage_implementation_bytes(reference, path.read_bytes())
-    module_name = f"_viper_stage_{path.stem}_{abs(hash(path.resolve()))}"
-    module_spec = importlib.util.spec_from_file_location(module_name, path)
-    if module_spec is None or module_spec.loader is None:
-        raise StageDefinitionError("stage implementation module could not be loaded")
-    module = importlib.util.module_from_spec(module_spec)
-    sys.modules[module_name] = module
-    resolved_import_root = None if import_root is None else import_root.resolve()
-    import_roots: tuple[Path, ...] = ()
-    if resolved_import_root is not None:
-        source_root = resolved_import_root / "src"
-        import_roots = (
-            (source_root, resolved_import_root)
-            if source_root.is_dir()
-            else (resolved_import_root,)
-        )
-    inserted_paths = tuple(str(root) for root in import_roots)
-    saved_modules: dict[str, ModuleType] = {}
-    workspace_prefixes: set[str] = set()
-    if import_roots:
-        workspace_prefixes = {
-            child.stem
-            for root in import_roots
-            for child in root.iterdir()
-            if child.is_dir() or child.suffix == ".py"
-        }
-        # An example can run from VIPER's own repository. Keep the framework
-        # module loaded so decorators use the same StageDefinition class.
-        workspace_prefixes.discard(__name__.partition(".")[0])
-        for name in tuple(sys.modules):
-            if any(
-                name == prefix or name.startswith(f"{prefix}.")
-                for prefix in workspace_prefixes
-            ):
-                saved_modules[name] = sys.modules.pop(name)
-        for inserted_path in reversed(inserted_paths):
-            sys.path.insert(0, inserted_path)
-    try:
-        module_spec.loader.exec_module(module)
-        value = getattr(module, reference.symbol, None)
-        if value is None or not callable(value):
-            raise StageDefinitionError("stage implementation symbol is not callable")
-        if getattr(value, "__module__", None) != module_name:
-            raise StageDefinitionError("stage implementation symbol must be top-level")
-        definition = getattr(value, "__viper_stage__", None)
-        if not isinstance(definition, StageDefinition):
-            raise StageDefinitionError("stage implementation lacks a VIPER decorator")
-        config_source = inspect.getsourcefile(definition.config_type)
-        setattr(value, "__viper_config_source__", config_source)
-        setattr(value, "__viper_source_path__", str(path.resolve()))
-    except Exception as exc:
-        if isinstance(exc, StageDefinitionError):
-            raise
-        raise StageDefinitionError(
-            "stage implementation module raised during import"
-        ) from exc
-    finally:
-        sys.modules.pop(module_name, None)
+    with _STAGE_IMPORT_LOCK:
+        verify_stage_implementation_bytes(reference, path.read_bytes())
+        module_name = f"_viper_stage_{path.stem}_{abs(hash(path.resolve()))}"
+        module_spec = importlib.util.spec_from_file_location(module_name, path)
+        if module_spec is None or module_spec.loader is None:
+            raise StageDefinitionError(
+                "stage implementation module could not be loaded"
+            )
+        module = importlib.util.module_from_spec(module_spec)
+        sys.modules[module_name] = module
+        resolved_import_root = None if import_root is None else import_root.resolve()
+        import_roots: tuple[Path, ...] = ()
+        if resolved_import_root is not None:
+            source_root = resolved_import_root / "src"
+            import_roots = (
+                (source_root, resolved_import_root)
+                if source_root.is_dir()
+                else (resolved_import_root,)
+            )
+        inserted_paths = tuple(str(root) for root in import_roots)
+        saved_modules: dict[str, ModuleType] = {}
+        workspace_prefixes: set[str] = set()
         if import_roots:
-            for inserted_path in inserted_paths:
-                sys.path.remove(inserted_path)
+            workspace_prefixes = {
+                child.stem
+                for root in import_roots
+                for child in root.iterdir()
+                if child.is_dir() or child.suffix == ".py"
+            }
+            # An example can run from VIPER's own repository. Keep the framework
+            # module loaded so decorators use the same StageDefinition class.
+            workspace_prefixes.discard(__name__.partition(".")[0])
             for name in tuple(sys.modules):
                 if any(
                     name == prefix or name.startswith(f"{prefix}.")
                     for prefix in workspace_prefixes
                 ):
-                    sys.modules.pop(name, None)
-            sys.modules.update(saved_modules)
-    return cast(Callable[[Context[Any]], None], value)
+                    saved_modules[name] = sys.modules.pop(name)
+            for inserted_path in reversed(inserted_paths):
+                sys.path.insert(0, inserted_path)
+        try:
+            module_spec.loader.exec_module(module)
+            value = getattr(module, reference.symbol, None)
+            if value is None or not callable(value):
+                raise StageDefinitionError(
+                    "stage implementation symbol is not callable"
+                )
+            if getattr(value, "__module__", None) != module_name:
+                raise StageDefinitionError(
+                    "stage implementation symbol must be top-level"
+                )
+            definition = getattr(value, "__viper_stage__", None)
+            if not isinstance(definition, StageDefinition):
+                raise StageDefinitionError(
+                    "stage implementation lacks a VIPER decorator"
+                )
+            config_source = inspect.getsourcefile(definition.config_type)
+            setattr(value, "__viper_config_source__", config_source)
+            setattr(value, "__viper_source_path__", str(path.resolve()))
+        except Exception as exc:
+            if isinstance(exc, StageDefinitionError):
+                raise
+            raise StageDefinitionError(
+                "stage implementation module raised during import"
+            ) from exc
+        finally:
+            sys.modules.pop(module_name, None)
+            if import_roots:
+                for inserted_path in inserted_paths:
+                    sys.path.remove(inserted_path)
+                for name in tuple(sys.modules):
+                    if any(
+                        name == prefix or name.startswith(f"{prefix}.")
+                        for prefix in workspace_prefixes
+                    ):
+                        sys.modules.pop(name, None)
+                sys.modules.update(saved_modules)
+        return cast(Callable[[Context[Any]], None], value)
 
 
 def stage_definition(function: Callable[..., Any]) -> StageDefinition[Any]:

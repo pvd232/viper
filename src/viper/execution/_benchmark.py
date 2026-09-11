@@ -236,6 +236,8 @@ def benchmark(
     confirmation_result = execute_benchmark_confirmation(
         root,
         run_spec_path,
+        # Confirm the same stored plan even when its files were never Git-committed.
+        plan=candidate.spec,
         timeout_seconds=timeout_seconds,
         cloud_client=cloud_client,
     )

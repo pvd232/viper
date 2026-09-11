@@ -21,10 +21,11 @@ used inside `fit`: `context.inputs["dataset"]`, `context.outputs["model"]`,
 
 ## Define a metric
 
-A metric function computes a measured quantity. VIPER supplies its first
-argument, `MetricContext`, with the metric's config and file paths. This
-function uses only the predictions and targets passed by the training code,
-so `_context` marks the unused argument:
+A metric function computes a measured quantity. Every metric function must
+accept a `MetricContext` first; VIPER supplies it with settings and file paths
+for calculations that need them. The training code supplies this function's
+predictions and targets through `.record()`. MSE needs only those numbers,
+so `_context` marks the required context argument as unused:
 
 ```python
 @metric(metric_id="mean_squared_error", mode="stateless")
@@ -187,9 +188,8 @@ selection with the same training experiment.
 requirements, and starts the stage worker. The worker records the active
 runtime controls immediately before calling `fit()`.
 
-To execute a plan later, save it with `freeze_run_plan()`. The
-[execution guide](../how-to/execution.md#save-a-plan-for-later) shows both saved
-plans and batch execution.
+The [execution guide](../how-to/execution.md) explains saved run files and
+batch execution with `execution.run_many()`.
 
 ## Read the result
 

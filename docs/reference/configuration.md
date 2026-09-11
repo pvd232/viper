@@ -17,7 +17,9 @@ Subclass the config class for the operation you are defining. Declare fields wit
 and defaults, then pass an instance to `stage()`.
 
 This build stage keeps a configured number of CSV data rows and preserves the
-header. Save the code in an importable workspace module:
+header. VIPER supplies the running function's `Context`: `config` contains
+`RowLimit`, `inputs` contains the declared input paths, and `outputs` contains
+the destinations to write. Save the code in an importable workspace module:
 
 ```python
 from pathlib import Path
@@ -88,14 +90,29 @@ functions are defined in [`viper.runtime`](../../src/viper/runtime.py).
 
 ## Reproducibility
 
-`ReproducibilitySpec` groups deterministic algorithm settings, numerical precision,
-process and thread counts, data-loader settings, and named NumPy generator families.
-Pass it to `plan()` alongside the environment. The [CPU
-example](../../examples/cpu_quickstart.py) contains a complete single-process
-configuration.
+`plan()` and `expand()` accept `reproducibility` with three choices:
 
-See [What VIPER guarantees](../explanation/guarantees.md#reproducibility) for the limits
-of these controls.
+| Selection | Behavior |
+| --- | --- |
+| `"reproducible"` (default) | Requires deterministic algorithms and deterministic cuDNN execution; disables cuDNN benchmarking and TF32. |
+| `"relaxed"` | Permits nondeterministic algorithms and cuDNN benchmarking while preserving the preset's precision settings. |
+| A `ReproducibilitySpec` instance | Uses your explicit algorithm, precision, parallelism, and generator settings as the `custom` policy. |
+
+Run the [complete policy example](../../examples/execution_policies.py) with
+one selection:
+
+```bash
+python examples/execution_policies.py reproducible
+python examples/execution_policies.py relaxed
+python examples/execution_policies.py custom
+```
+
+The custom branch shows every required setting. For either preset, use the
+separate `parallelism` argument to select thread and data-loader settings.
+Custom specs include parallelism directly. Worker startup records the active
+controls; verification compares them with the plan. See
+[reproducibility guarantees](../explanation/guarantees.md#reproducibility) for
+what that comparison establishes.
 
 ## Storage
 
@@ -129,8 +146,17 @@ constraints.
 On a host with CUDA, select the device model in the environment declaration:
 
 ```python
+import torch
+
+from viper.references import GitFileRef
+from viper.repository import read_source
 from viper.runtime import CUDAComputeSpec, LocalEnvSpec, observe_python_env
 
+source = read_source()
+lockfile_reference = GitFileRef(
+    repository=source.repository, commit=source.commit, path="pyproject.toml"
+)
+device_model = torch.cuda.get_device_name(0)
 gpu_environment = LocalEnvSpec(
     lockfile=lockfile_reference,
     python_env=observe_python_env(),

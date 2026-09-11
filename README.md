@@ -58,9 +58,13 @@ Attaching a metric to the stage makes it available by its `metric_id` through
 `context.metrics`; calling `.record()` computes and saves a measurement.
 See [the context attributes](docs/how-to/stages.md#use-the-stage-context).
 
-The metric function receives a separate `MetricContext` containing its own
-config and file paths. Mean squared error uses the supplied predictions and
-targets, so it leaves that argument unused as `_context`.
+Every metric function must accept a `MetricContext` as its first argument.
+VIPER supplies it with the metric's settings and file paths. The training
+function supplies predictions and targets through `.record()`. This MSE
+calculation needs only those numbers, so `_context` marks the required context
+argument as unused. Metrics that read saved predictions use the context to
+locate those files. The [metric guide](docs/how-to/metrics-and-benchmarks.md)
+shows both approaches, with complete training and saved-prediction examples.
 
 ```python
 """Run one complete VIPER training plan on the local CPU."""

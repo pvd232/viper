@@ -151,11 +151,29 @@ split. The test and splits must be artifacts from a completed run with data
 role `eval` or `benchmark`. The model can come from an earlier stage in the
 current run or a completed run.
 
-Select the test and split using `run_artifact()` as shown in
+Run the complete [evaluation example](../../examples/evaluation.py) from the
+repository root:
+
+```bash
+python -m examples.evaluation
+```
+
+It first trains a baseline and publishes test data and split indices in a separate run, then trains
+and evaluates the model, and finally executes the benchmark confirmation.
+The printed `data`, `result`, and `benchmark` paths identify each saved result.
+
+For the declarations below, select the test and split using `run_artifact()` as shown in
 [stored inputs](inputs.md#use-an-artifact-from-a-completed-run). The `test_data`
 artifact must contain a CSV with an `x,y` header; `test_split` must contain a
 JSON list of zero-based row indices, such as `[0, 2]`. Use the tutorial's
 `training` stage, which writes a JSON model containing `weight`.
+
+The `Context`, `stage`, `output`, and `load_text` imports and definitions come
+from [the build example above](#build-an-input-artifact). `test_data` and
+`test_split` come from the stored-input calls, and `training` comes from the
+CPU quickstart. The complete file includes these dependencies together. It uses `benchmark`
+data roles because the run includes benchmark criteria. The excerpt below
+uses those same roles.
 
 This evaluation selects those rows, predicts their targets, writes the paired
 predictions and targets, and computes root mean squared error from that file:
@@ -201,7 +219,7 @@ rmse = measure(
     root_mean_squared_error,
     dependencies=(
         MetricDependency(
-            source="artifact", name="predictions", required_data_role="eval"
+            source="artifact", name="predictions", required_data_role="benchmark"
         ),
     ),
     comparator=FloatComparator(mode="absolute", tolerance=1e-12),
@@ -221,7 +239,7 @@ evaluation = stage(
         predictions=output(
             path="predictions.json",
             loader=load_text,
-            data_role="eval",
+            data_role="benchmark",
         )
     ),
     metrics=(rmse,),
@@ -235,8 +253,10 @@ file again during verification.
 The split's data role must match the test dataset's role. Use a predictions
 role compatible with those inputs; benchmark data remains `benchmark`.
 
-The [metrics guide](metrics-and-benchmarks.md) explains recomputation and how to
-attach benchmark criteria to this evaluation.
+Include the [benchmark declaration](metrics-and-benchmarks.md#add-benchmark-criteria)
+in the plan, as the complete example does. For an evaluation-only run, use
+stored inputs with the `eval` role and set both the prediction role and the
+metric dependency's required role to `eval`.
 
 ## Add a diagnostic report
 

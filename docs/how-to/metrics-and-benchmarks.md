@@ -5,11 +5,24 @@ classification accuracy. An objective selects a metric and the direction to
 optimize. A measurement records its value in a particular stage and run.
 Benchmarks independently evaluate artifacts from a completed run.
 
+The two stateless examples show different sources for the numbers:
+
+| Use case | How the metric gets its inputs | Complete program |
+| --- | --- | --- |
+| Record MSE during training | The training function passes predictions and targets to `.record()`. | [CPU quickstart](../../examples/cpu_quickstart.py) |
+| Recompute RMSE after evaluation | VIPER supplies the saved prediction file through `context.artifacts`. | [Evaluation and benchmark](../../examples/evaluation.py) |
+
 ## Use the metric context
 
 VIPER passes a `MetricContext` as the first argument to a stateless metric
 function, or to a stateful metric's constructor. `context.config` holds the
 metric settings selected by `measure(config=...)`.
+
+The context argument is required even when a calculation needs only the
+numbers passed by its caller. VIPER uses the same calling convention for
+metrics that need settings or saved files. For example, the
+[recomputed RMSE metric below](#recompute-a-stateless-metric) reads
+`context.artifacts["predictions"]` to locate its prediction file.
 
 For a metric recorded during a stage, `context.inputs` contains the stage's
 input paths and `context.artifacts` contains its output paths. For a recomputed
@@ -28,8 +41,9 @@ arguments; for stateful metrics it calls the instance's `compute()` method.
 
 Use a stateless metric to calculate one measurement from the current inputs.
 This function computes mean squared error from predictions and targets.
-It names its first argument `_context` because it uses only the supplied
-numbers:
+VIPER supplies its first argument; the training function supplies `predictions`
+and `targets` through `.record()`. `_context` marks the required context
+argument as unused because this calculation needs only those numbers:
 
 ```python
 from viper.config import MetricConfig
@@ -84,6 +98,100 @@ loss or an evaluation score; the stage records where it was measured, and the
 objective records how it is used. VIPER uses “metric” for scalar measures,
 including scores that lack the mathematical properties of a distance metric.
 
+## Recompute a stateless metric
+
+A stateless metric can also be recomputed from declared artifacts. Configure it with
+`dependencies` and a `comparator` in `measure()`. VIPER then loads the named files and
+compares the recomputed value with the recorded value. The two arguments are paired:
+supplying only dependencies or only a comparator is invalid. During recomputation, the
+function reads paths from `MetricContext.inputs` or `MetricContext.artifacts`. It must
+be callable with that context alone. Live positional arguments are available only while
+the stage is running.
+
+The [evaluation example](../../examples/evaluation.py) writes a JSON file of
+`[prediction, target]` pairs. Its metric reads that file and computes root mean
+squared error:
+
+```python
+import json
+
+from viper.metrics import FloatComparator, MetricDependency
+
+
+@metric(metric_id="root_mean_squared_error", mode="stateless")
+def root_mean_squared_error(context: MetricContext[MetricConfig]) -> float:
+    pairs = json.loads(context.artifacts["predictions"].read_text(encoding="utf-8"))
+    if not pairs:
+        raise ValueError("root_mean_squared_error requires at least one prediction")
+    squared_errors = [(prediction - target) ** 2 for prediction, target in pairs]
+    return (sum(squared_errors) / len(pairs)) ** 0.5
+
+
+rmse = measure(
+    root_mean_squared_error,
+    dependencies=(
+        MetricDependency(
+            source="artifact",
+            name="predictions",
+            required_data_role="eval",
+        ),
+    ),
+    comparator=FloatComparator(mode="absolute", tolerance=1e-12),
+)
+```
+
+Attach `rmse` to the evaluation stage with `metrics=(rmse,)`. VIPER computes it
+after the stage writes `predictions`, then computes it again during verification.
+A difference of at most `1e-12` passes this comparator. Use `mode="exact"` for
+exact equality or `mode="relative"` with a positive tolerance for relative error.
+The required data role must match the selected artifact.
+
+## Add benchmark criteria
+
+[`benchmark()`](../../src/viper/benchmark.py) declares a benchmark;
+`execution.benchmark()` runs it. Continue inside `main()` in the complete
+[evaluation example](../../examples/evaluation.py), which defines
+`test_data`, `test_split`, `evaluation`, and the recomputed `rmse` metric.
+That example assigns `data_role="benchmark"` to the test data, split, and
+predictions, and `required_data_role="benchmark"` to the metric dependency.
+Use `eval` for a standalone evaluation; use `benchmark` consistently
+when the plan includes benchmark criteria.
+
+`at_most(rmse, 0.1)` requires root mean squared error to be at most 0.1:
+
+```python
+from viper.benchmark import at_most, benchmark
+
+criteria = benchmark(
+    benchmark_id="holdout_v1",
+    eval_id="holdout",
+    test=test_data,
+    splits={"holdout": test_split},
+    metrics=(rmse,),
+    criteria=(at_most(rmse, 0.1),),
+)
+```
+
+The experiment must contain one evaluation stage with the same test input and split
+selections. Add an evaluation stage when extending the CPU training-only quickstart.
+Pass `benchmark=criteria` to `plan()` to include the declaration in the frozen plan.
+`execution.run(draft)` saves the benchmark specification along with the plan.
+In the complete example, `root = resolve_root()` selects the workspace directory
+and `resolved_run = execution.run(draft)` completes training and evaluation.
+Execute the confirmation against that result:
+
+```python
+from viper import execution
+
+benchmark_spec_path = root / "benchmarks/holdout_v1.spec.yaml"
+confirmation = execution.benchmark(root, resolved_run.path, benchmark_spec_path)
+print(confirmation.status)
+print(confirmation.path)
+```
+
+The benchmark result records the independently resolved inputs, metric values, criteria,
+and final status.
+
 ## Accumulate a stateful metric
 
 Use a stateful metric when the metric itself must retain observations between updates.
@@ -118,78 +226,3 @@ Attach `mae` to the stage. Call
 `context.metrics["mean_absolute_error"].update(prediction, target)` for each pair,
 then call `context.metrics["mean_absolute_error"].record(step=step)` to save the
 mean absolute error. Accumulated state persists after recording.
-
-## Recompute a stateless metric
-
-A stateless metric can also be recomputed from declared artifacts. Configure it with
-`dependencies` and a `comparator` in `measure()`. VIPER then loads the named files and
-compares the recomputed value with the recorded value. The two arguments are paired:
-supplying only dependencies or only a comparator is invalid. During recomputation, the
-function reads paths from `MetricContext.inputs` or `MetricContext.artifacts`. It must
-be callable with that context alone. Live positional arguments are available only while
-the stage is running.
-
-```python
-from viper.metrics import FloatComparator, MetricDependency
-
-
-@metric(metric_id="prediction_bytes", mode="stateless")
-def prediction_bytes(context: MetricContext[MetricConfig]) -> float:
-    return float(context.artifacts["predictions"].stat().st_size)
-
-
-size = measure(
-    prediction_bytes,
-    dependencies=(
-        MetricDependency(
-            source="artifact",
-            name="predictions",
-            required_data_role="eval",
-        ),
-    ),
-    comparator=FloatComparator(mode="exact"),
-)
-```
-
-This metric checks a file property to illustrate recomputation. A scientific metric
-would read the predictions and compute the quantity under study. The required data role
-must match the selected artifact. Use `mode="absolute"` or `mode="relative"` with a
-positive `tolerance` for approximate comparison.
-
-## Add benchmark criteria
-
-[`benchmark()`](../../src/viper/benchmark.py) declares a benchmark;
-`execution.benchmark()` runs it. Continue from the complete
-[evaluation example](stages.md#evaluate-against-saved-test-data), which defines
-`test_data`, `test_split`, `evaluation`, and the recomputed `rmse` metric.
-`at_most(rmse, 0.1)` requires root mean squared error to be at most 0.1:
-
-```python
-from viper.benchmark import at_most, benchmark
-
-confirmation = benchmark(
-    benchmark_id="holdout_v1",
-    eval_id="holdout",
-    test=test_data,
-    splits={"holdout": test_split},
-    metrics=(rmse,),
-    criteria=(at_most(rmse, 0.1),),
-)
-```
-
-The experiment must contain one evaluation stage with the same test input and split
-selections. Add an evaluation stage when extending the CPU training-only quickstart.
-Pass `benchmark=confirmation` to `plan()` to include the declaration in the frozen plan.
-Execute it against the completed run and the resulting benchmark specification path:
-
-```python
-from viper import execution
-
-benchmark_spec_path = root / "benchmarks/holdout_v1.spec.yaml"
-confirmation = execution.benchmark(root, resolved_run.path, benchmark_spec_path)
-print(confirmation.status)
-print(confirmation.path)
-```
-
-The benchmark result records the independently resolved inputs, metric values, criteria,
-and terminal status.

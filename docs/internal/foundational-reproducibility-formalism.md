@@ -5,7 +5,7 @@
 > the current serialized API. Use the [public protocol reference](../reference/protocol.md)
 > and installed JSON Schemas for current record fields.
 
-This document defines the VIPER 0.1 protocol: its mathematical objects,
+This document records the original VIPER 0.1 design: its mathematical objects,
 serialized documents, state transitions, and verification relationships.
 
 ## Contents

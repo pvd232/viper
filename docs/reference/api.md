@@ -9,14 +9,25 @@ Import each public object from the module that defines it.
 
 ## Author and execute an experiment
 
-The primary workflow is:
+From the repository root, this example reuses the complete experiment in
+[the CPU quickstart](../../examples/cpu_quickstart.py) and creates its environment:
 
 ```python
+from examples.cpu_quickstart import study
+
 from viper import execution
 from viper.authoring import plan
+from viper.references import GitFileRef
 from viper.repository import read_source
+from viper.runtime import LocalEnvSpec, observe_python_env
 
 source = read_source()
+environment = LocalEnvSpec(
+    lockfile=GitFileRef(
+        repository=source.repository, commit=source.commit, path="pyproject.toml"
+    ),
+    python_env=observe_python_env(),
+)
 
 draft = plan(
     experiment=study,
@@ -24,7 +35,6 @@ draft = plan(
     replicate="seed_7",
     source=source,
     env=environment,
-    reproducibility=reproducibility,
 )
 resolved_run = execution.run(draft)
 print(resolved_run.status)
@@ -32,9 +42,9 @@ print(resolved_run.path)
 ```
 
 `viper.authoring.plan()` returns an immutable `RunPlanDraft`. `viper.execution.run()`
-compiles a draft into protocol files, executes the selected stages, verifies the
-terminal evidence, and returns `RunResult`. Read `.status` and `.path` directly;
-`.record` contains the stored terminal record and `.reference` identifies its
+compiles a draft into protocol files, executes the selected stages, checks the
+completed run, and returns `RunResult`. Read `.status` and `.path` directly;
+`.record` contains the saved run record and `.reference` identifies its
 immutable bytes. See [execution results](../how-to/execution.md).
 
 `read_source()` finds the workspace from the current directory and returns its
@@ -49,22 +59,9 @@ experiment with reproducible, relaxed, or custom settings. Saved plans retain th
 selection and its complete settings. Verification compares the workers' recorded
 controls with those settings. Comparing output bytes between runs is separate.
 
-The execution namespace also provides:
-
-```python
-retry_result = execution.retry(repository_root, run_spec_path)
-benchmark_result = execution.benchmark(
-    repository_root,
-    resolved_run.path,
-    benchmark_spec_path,
-)
-batch = execution.run_many(
-    repository_root,
-    run_spec_paths,
-    max_concurrency=2,
-)
-restored = execution.restore(repository_root, run_reference)
-```
+For saved plans, retries, batch outcomes, and benchmark execution, see
+[Execute a plan](../how-to/execution.md). For artifact retrieval, see
+[Restore from Python](../how-to/retry-restore-compare.md#restore-from-python).
 
 ## Authoring constructors
 
@@ -80,7 +77,6 @@ restored = execution.restore(repository_root, run_reference)
 | `experiment()` | `ExperimentDraft` | Group factors, variants, and replicates. |
 | `plan()` | `RunPlanDraft` | Select one variant-replicate pair and its source and runtime identity. |
 | `expand()` | `tuple[RunPlanDraft, ...]` | Generate plans for selected variant-replicate pairs using caller-supplied run IDs. |
-| `freeze_run_plan()` | `FrozenPlanFiles` | Save a draft as immutable protocol files for later execution. |
 
 These constructors are defined in [`viper.authoring`](../../src/viper/authoring.py).
 `plan()` assigns a new run ID. `expand()` requires a `run_ids` mapping for the selected
@@ -95,9 +91,8 @@ contain their parallelism. Both types are defined in
 
 The returned draft stores the selected mode in `execution_policy` and concrete
 settings in `reproducibility`. Expansion resolves defaults once for the batch.
-Current saved version-2 run specifications retain the concrete settings; policy
-mode/version persistence is pending in the
-[execution-policy contract](../development/execution-policy-contract.md).
+Saved `RunSpec` records require both fields. The verifier checks that the
+selected policy agrees with the saved settings and the worker observations.
 
 ## Naming conventions
 
