@@ -173,14 +173,13 @@ def test_changelog_names_the_package_version_after_unreleased() -> None:
     assert headings[1].startswith(package_version)
 
 
-def test_explanation_names_the_current_release() -> None:
-    """Keep the explanatory guide linked to the package's current release report."""
+def test_internal_index_links_the_current_release_report() -> None:
+    """Keep release information in the maintainer index."""
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text())
     package_version = metadata["project"]["version"]
-    explanation = (ROOT / "docs/explanation/how-viper-works.md").read_text()
+    index = (ROOT / "docs/internal/README.md").read_text()
 
-    assert f"VIPER `{package_version}` is the current release candidate." in explanation
-    assert f"[release report](../releases/{package_version}.md)" in explanation
+    assert f"(../releases/{package_version}.md)" in index
 
 
 def test_public_examples_distinguish_weights_from_the_artifact_key() -> None:
@@ -394,6 +393,6 @@ def test_documentation_navigation_separates_reader_and_internal_routes() -> None
 
     workflow = tutorial + explanation
     assert workflow.count("../../examples/cpu_quickstart.py") >= 2
-    assert "execution.run()" in workflow
+    assert "execution.run(draft)" in workflow
     assert "viper.parameters" not in workflow
     assert "viper.api.run" not in workflow

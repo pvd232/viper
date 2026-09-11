@@ -1,8 +1,6 @@
 # VIPER documentation
 
-Choose the kind of help you need. The tutorial teaches one complete workflow;
-how-to guides solve a specific task; explanations describe why the system works;
-reference pages define exact interfaces and records.
+Run your first experiment with the tutorial, or choose a guide for a specific task.
 
 ## Tutorial
 
@@ -24,10 +22,10 @@ example, shows what VIPER writes, and explains how to modify the experiment.
 
 ## Explanation
 
-- [How VIPER works](explanation/how-viper-works.md) follows the checked CPU
-  example from Python source to a verified terminal result.
-- [What VIPER guarantees](explanation/guarantees.md) separates recorded identity,
-  execution evidence, and verification from scientific interpretation.
+- [How VIPER works](explanation/how-viper-works.md) follows the CPU
+  example from its training function to the saved result.
+- [What VIPER guarantees](explanation/guarantees.md) explains which checks
+  VIPER performs and what a successful result means.
 
 ## Reference
 

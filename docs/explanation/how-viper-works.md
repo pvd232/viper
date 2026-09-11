@@ -1,141 +1,94 @@
 # How VIPER works
 
-VIPER turns one Python experiment into evidence that connects what was planned, what
-ran, and what was produced. This page follows the repository's checked CPU example
-through that complete path.
+VIPER saves an experiment's plan, runs its stages, and checks the results against
+that plan. The [CPU quickstart](../../examples/cpu_quickstart.py) shows this with
+a linear model trained on a small CSV dataset.
 
-## Example
+Run it from the workspace root:
 
-The example is [`examples/cpu_quickstart.py`](../../examples/cpu_quickstart.py). Its
-acceptance test runs the file in a clean Git repository and observes:
-
-```text
-status: succeeded
-model: {"weight": 1.999...}
-result: experiments/cpu_quickstart/runs/baseline/<run-id>/resolved.yaml
+```bash
+python examples/cpu_quickstart.py
 ```
 
-That observation is established by
-[`test_cpu_quickstart_executes_and_verifies_one_run()`](../../tests/test_readme_workflow.py).
-The rest of this page explains how VIPER produces it.
+The model learns a weight close to 2. The program prints the weight, the run's
+status, and the path to `resolved.yaml`, which records the result.
+See the [tutorial](../tutorials/getting-started.md) for the complete program.
 
-## Objects in the example
+## Declare the training stage
 
-| Object | Role in this run |
-| --- | --- |
-| `mean_squared_error` | Computes mean squared error from predictions and targets. |
-| `fit` | Reads the dataset, trains the model, records loss, and writes artifacts. |
-| `training` | Connects `fit` to its config, inputs, outputs, metric, and objective. |
-| `study` | Names the variant graph and reproducible seed. |
-| `draft` | Selects one variant and replicate plus exact source, environment, and reproducibility settings. |
-| `resolved_run` | Gives the run status, local path, and verified record. |
+`fit()` reads the dataset and trains the model. Its `@train(config=TrainConfig)`
+decorator identifies it as a training function. `stage()` connects that function
+to the dataset and declares where it will save the model and checkpoint.
 
-## Execution trace
+VIPER passes a `Context` to `fit()`. The function reads the CSV from
+`context.inputs["dataset"]` and writes the learned weight to
+`context.outputs["model"]`. It saves the training state separately through
+`context.outputs["resume_state"]`.
 
-```text
-Python declarations
-        |
-        v
-RunPlanDraft tied to a Git commit
-        |
-        v
-canonical run and stage files
-        |
-        v
-preflight -> stage attempt -> artifacts and measurements
-        |
-        v
-terminal verification
-        |
-        v
-RunResult + resolved.yaml
-```
+Each of the twenty training steps computes predictions and updates the weight.
+The `mean_squared_error` function calculates the error from those predictions
+and their targets. Calling `context.metrics["mean_squared_error"]` evaluates
+that function and records its value for the current epoch.
 
-### 1. Python declares the intended work
+The experiment declaration, `study`, places this stage in the `baseline`
+variant and defines a replicate with seed 7. Variants select different stage
+configurations; replicates repeat a variant with a selected seed.
 
-The decorated `fit()` function remains ordinary workspace code. The call to
-[`stage()`](../../src/viper/authoring.py) adds the information execution needs: which
-inputs may be read, which outputs may be written, which metric IDs may be recorded, and
-which objective is attached to the stage.
+## Select a run
 
-The stage receives those values through [`Context`](../../src/viper/stages.py).
+`plan()` selects the `baseline` variant and the `seed_7` replicate from `study`.
+It assigns a run ID and returns a `RunPlanDraft`.
 
-The complete [`@train(config=TrainConfig)` implementation](../tutorials/getting-started.md#2-train-the-model-and-write-its-outputs)
-reads `context.inputs`, computes predictions and gradients, records mean squared
-error, and writes both files through `context.outputs`.
+The draft includes the source commit returned by `read_source()`. It also
+records the Python environment and lockfile selected by the example. Omitting
+`reproducibility` selects the reproducible policy; the concrete settings are
+saved in the draft. Later changes to the original configuration objects leave
+the draft unchanged.
 
-- `context.inputs["dataset"]` is the materialized CSV path;
-- `context.outputs["model"]` and `context.outputs["resume_state"]` are writable
-  paths declared before execution;
-- `context.metrics["mean_squared_error"]` records mean squared error for this stage.
+## Save the plan and execute it
 
-The function reads the CSV, performs gradient descent, records twenty loss values, then
-writes the model and checkpoint. The workspace function implements that computation.
+`execution.run(draft)` saves the plan before starting the stage. VIPER records
+the source file and function name for each implementation, together with a hash
+of the file's contents. These references let VIPER check that it uses the code
+selected by the plan.
 
-### 2. `plan()` fixes the selected experiment
+Before starting work, VIPER checks the plan and its source files and confirms
+that the runtime meets the plan's requirements. It then starts a worker process
+for `fit()`. The worker applies the execution settings and records the active
+PyTorch controls immediately before calling the function.
 
-[`plan()`](../../src/viper/authoring.py) selects one experiment, variant, and replicate.
-It also records the source repository and Git commit, local runtime and lockfile,
-deterministic execution settings, and a new run ID.
+A run can have several attempts. Each attempt records stage progress so that a
+failure can be inspected or retried. Retrying keeps the same plan; changing the
+experiment requires a new plan.
 
-The returned `RunPlanDraft` is detached from later mutation of caller-owned lists and
-dictionaries. The compiler will turn this Python object into stored protocol files.
+To execute a plan later, save it with `freeze_run_plan()`. The
+[execution guide](../how-to/execution.md#save-a-plan-for-later) shows how to run
+that saved plan later.
 
-### 3. `execution.run()` compiles before executing
+## Check the output
 
-[`execution.run()`](../../src/viper/execution/__init__.py) accepts either a
-`RunPlanDraft` or a path to an already frozen plan. With a draft, it first calls the
-internal plan compiler. That compiler resolves Python functions and config classes to
-their source files and digests, resolves input and output references, and writes
-canonical run and stage documents.
+After `fit()` returns, VIPER checks its declared outputs and records each file's
+path, size, and SHA-256 hash. A hash lets later verification detect changed
+file contents. The saved measurements identify the stage, metric, and epoch
+that produced each value.
 
-The same call then executes the stored plan. To inspect or queue a plan before
-execution, call `freeze_run_plan()` explicitly and retain its run reference.
+Before returning a successful result, VIPER verifies the completed run against
+its plan. Required stages must have completed, file contents must match their
+recorded hashes, and recorded runtime controls must match the selected settings.
+Measurements must belong to metrics declared by the stage.
 
-### 4. Preflight checks the plan and runtime
+The returned `RunResult` exposes `.status` and `.path`. Its `.record` contains
+the saved run record, and `.reference` identifies the stored copy. The example
+uses `.path` to locate `resolved.yaml` and read the model file beside it.
 
-Before the stage starts, VIPER checks the frozen files and the selected local runtime.
-It rejects a changed or missing source file, invalid input identity, unsupported
-environment, or inconsistent plan relationship before treating the stage as executable.
+## Use the saved run
 
-### 5. The stage attempt records observed work
+The saved records identify which source, data, and settings produced the model.
+You can [restore its artifacts or compare it with another
+run](../how-to/retry-restore-compare.md), or [index it for
+search](../how-to/catalog-knowledge-mcp.md).
 
-The runner creates a durable attempt and starts the stage worker. The worker loads the
-exact declared function, constructs its `Context`, and invokes it. During the call,
-metric records are written through the declared handle, artifact writes land at declared
-paths, and the attempt journal records durable state transitions.
-
-After the function returns, VIPER hashes the produced bytes and records their paths and
-sizes. VIPER then checks the resulting artifact and measurement records before accepting
-the stage.
-
-### 6. Verification checks the result
-
-Terminal verification compares the attempt records with the frozen plan. It checks that
-required stages completed, declared outputs exist as artifacts with recorded identities,
-measurements belong to declared metrics, and the terminal record references the same run
-and attempt. Only then does the returned result report `status: succeeded`.
-
-## What persists
-
-| Question | Recorded evidence |
-| --- | --- |
-| Which code was selected? | Repository, commit, source path, symbol, byte count, and digest. |
-| Which data entered the stage? | Materialized input references and their recorded identities. |
-| Which runtime was requested and observed? | Environment, compute, reproducibility, and startup records. |
-| What did the stage produce? | Artifact and measurement files with paths, sizes, and digests. |
-| Which attempt completed the run? | Attempt journal, resolved stages, and terminal reference. |
-
-This evidence supports later [restore and
-comparison](../how-to/retry-restore-compare.md), [catalog
-searches](../how-to/catalog-knowledge-mcp.md), and independent benchmark confirmation.
-
-## Boundaries
-
-VIPER verifies the identities and relationships represented by its protocol. The
-experiment author and reviewer assess model validity, dataset bias, and whether the
-metric answers the research question. See [What VIPER guarantees](guarantees.md) for the
-exact boundary.
-
-VIPER `0.1.0a3` is the current release candidate. The [release report](../releases/0.1.0a3.md) will record the published files, source identity, and
-validation evidence after the release gates pass.
+Verification checks the recorded execution. Comparing repeated output bytes is
+a separate check, and assessing the experiment's scientific conclusions still
+requires judgment about the data and method. See [What VIPER
+guarantees](guarantees.md) for the scope of these checks.

@@ -1,8 +1,8 @@
 # Use the catalog, knowledge store, and MCP
 
-The catalog is a derived SQLite index over verified evidence. The knowledge store
-publishes typed scientific annotations. MCP exposes the same typed API to an agent over
-local standard input and output.
+Use the catalog to search completed runs and their measurements. Store your
+interpretations of those results in the knowledge store. An agent can use the
+same operations through MCP.
 
 ## Build the local catalog
 
@@ -12,7 +12,7 @@ viper catalog-refresh experiments/example/runs/baseline/<run-id>/resolved.yaml \
   --trust-source https://github.com/example/workspace
 ```
 
-The command verifies each supplied terminal run before indexing it. Refresh rebuilds
+The command verifies each supplied run before indexing it. Refresh rebuilds
 `.viper/catalog.sqlite3`; supply the complete set of runs you want in the new index.
 Check the accepted and rejected source counts in the result.
 

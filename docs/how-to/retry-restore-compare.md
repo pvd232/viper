@@ -50,8 +50,9 @@ viper lineage path/to/resolved.yaml \
   --trust-source https://github.com/example/workspace
 ```
 
-Status reads the durable attempt journal. Lineage verifies the run and returns the
-stages, inputs, artifacts, and production or reuse relationships.
+`status` reports progress from the attempt journal. `lineage` verifies the run
+and shows which stages produced its artifacts, including any results reused
+from earlier runs.
 
 ## Compare two runs
 

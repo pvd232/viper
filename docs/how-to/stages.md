@@ -252,5 +252,3 @@ randomness, and metric identities. A matching candidate is verified and its
 artifacts are copied into the new run's snapshot; otherwise the stage executes.
 The new run records whether each stage executed or reused earlier work. A
 benchmark confirmation executes the candidate stages independently.
-The [reuse acceptance test](../../tests/test_run_execution.py) checks that a
-verified reuse skips the stage worker while preserving the new run's evidence.

@@ -37,16 +37,13 @@ python -m pip install -e '.[test]'
 python examples/cpu_quickstart.py
 ```
 
-The example prints a successful terminal status and the verified result it wrote:
+The example prints the run status, learned weight, and result path:
 
 ```text
 status: succeeded
 model: {"weight": 1.999...}
 result: /path/to/viper/experiments/cpu_quickstart/runs/baseline/<run-id>/resolved.yaml
 ```
-
-The [acceptance test](tests/test_readme_workflow.py) runs this file in a clean Git
-repository and checks its status and output.
 
 ## Follow the execution
 
@@ -231,21 +228,13 @@ comparing artifacts from two runs is a separate operation.
 
 ## What the run preserves
 
-The terminal result connects one execution to the evidence needed to inspect it later:
+Each run saves its plan and the files produced by its stages. The records identify
+which source commit and input data were used. They also record the runtime
+settings requested by the plan and read from the workers.
 
-```text
-source commit
-  + stage and metric implementations
-  + config values and input identities
-  + requested and observed runtime
-  + artifact and measurement bytes
-  + stage and attempt receipts
-  = verified terminal run
-```
-
-Resolved file references carry a path, byte count, and SHA-256 digest. VIPER checks that
-the plan, stages, inputs, artifacts, measurements, and terminal result belong to the
-same run.
+VIPER checks saved files against their recorded hashes when verifying or
+restoring a run. See [How VIPER works](docs/explanation/how-viper-works.md) for
+how the plan, execution, and result fit together.
 
 ## Start your own workspace
 

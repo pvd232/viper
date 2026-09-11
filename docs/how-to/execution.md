@@ -17,7 +17,7 @@ print(resolved_run.path)
 ```
 
 VIPER first saves the plan, then checks it and runs its stages. The call
-returns after terminal verification succeeds. The
+returns after the completed run passes verification. The
 [CPU tutorial](../tutorials/getting-started.md) supplies the complete setup.
 
 ## Save a plan for later

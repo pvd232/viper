@@ -228,17 +228,12 @@ two intra-operation CPU threads and permits nondeterministic algorithms.
 
 ## Inspect the result
 
-Open the printed `resolved.yaml`. It identifies the terminal status, the successful
-attempt, and the immutable references that connect the result to its plan and produced
-evidence. The model itself is under:
+Open the printed `resolved.yaml` to inspect the run status and follow the
+references to its plan and outputs. The model file is under:
 
 ```text
 experiments/cpu_quickstart/runs/baseline/<run-id>/artifacts/train/model/model.json
 ```
-
-Both the example file and the Python blocks printed on this page are executed by
-[`tests/test_readme_workflow.py`](../../tests/test_readme_workflow.py), which runs it in
-a clean temporary Git repository and requires the output shown above.
 
 ## Make it yours
 

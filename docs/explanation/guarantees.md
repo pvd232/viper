@@ -1,14 +1,12 @@
 # What VIPER guarantees
 
-VIPER checks whether a run's saved records agree with its plan and whether the
-referenced files match their recorded identities. A successful verification means those
-checks passed. Scientific conclusions still depend on the data, metrics, and
-experimental design you selected.
+A successful run has passed VIPER's checks against its saved plan. Those checks
+cover the recorded execution and the files it produced. Assessing whether the
+experiment answers your research question requires scientific review.
 
 ## Checks on a successful run
 
-The [run verifier](../../src/viper/verification.py) follows the terminal result
-to its plan, successful attempt, stages, artifacts, and measurements. It checks that:
+VIPER follows the references in the saved result and checks that:
 
 - the attempt belongs to the selected run and follows the allowed state changes;
 - required stages have completion records and the declared outputs;
@@ -18,20 +16,19 @@ to its plan, successful attempt, stages, artifacts, and measurements. It checks 
 - metrics configured for recomputation agree with the saved values under their
   declared comparators.
 
-The plan checks are implemented in the [plan
-verifier](../../src/viper/_verification/plan.py); attempt and invocation checks are
-implemented in the [attempt verifier](../../src/viper/_verification/attempt.py).
-
 ## Reproducibility
 
-A plan identifies source code, input data, config, runtime requirements, and randomness
-settings. The run records the observed runtime and produced files. These records let you
-compare executions and investigate differences.
+The reproducible policy selects deterministic execution settings. The relaxed
+policy permits nondeterministic algorithms. Both policies record the controls
+read from the workers, and verification compares those readings with the plan.
 
-Deterministic settings apply to the supported runtime controls. Results can still differ
-across devices, library versions, and operations. A recorded scalar is the value
-supplied by the selected implementation; only metrics configured with file dependencies
-and a comparator are recomputed.
+Use [benchmark comparisons](../how-to/metrics-and-benchmarks.md) to check
+whether repeated runs produced identical files. Device and library differences
+can affect the results.
+
+A recorded measurement is the value returned by its metric function. Metrics
+configured with file dependencies and a comparator are also recomputed from
+the saved files and checked against their recorded values.
 
 ## Trust and scientific interpretation
 
