@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0a3 — 2026-09-11
+
 - Rename the stage function's `Context` class to `StageContext`. Its fields and
   behavior are unchanged; import it from `viper.stages`.
 - Accept upstream artifacts directly in stage input tuples; use
@@ -53,8 +55,6 @@
 - Fix benchmark compilation to select the evaluation stage's `test` input.
 - Stop scheduling new batch runs after a failure when `stop_on_failure=True`,
   including while other runs are still active.
-
-## 0.1.0a3 — 2026-09-07
 
 - Remove the experimental System Impact, graph-localization, CodeQL,
   scheduling, contract-plan, fixture, and research-work surfaces from the

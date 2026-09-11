@@ -114,6 +114,10 @@ The release commit must pass every job. A live hardware report then identifies
 the exact wheel installed on the designated CUDA host and records the resulting
 stage evidence.
 
+Include `CI-Run: <run-id>` in the signed release tag message. The publishing
+workflow downloads that successful CI run's distributions. Use those same files
+for GPU acceptance and retain their hashes in the release report.
+
 ## Protocol validation
 
 Run the protocol and validation-architecture tests after changing a serialized

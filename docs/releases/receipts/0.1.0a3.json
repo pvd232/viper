@@ -1,0 +1,65 @@
+{
+  "version": "0.1.0a3",
+  "status": "published",
+  "source_commit": "baeaf1261f6ef9e07cbabbae3262a88d5ec6dbf5",
+  "tag": "v0.1.0a3",
+  "tag_object": "d629d9f97054e768e64763bbd312c7259c53ca1a",
+  "tag_signature_verified": true,
+  "ci_run": 34611415601,
+  "publication_run": 34613101043,
+  "distributions": [
+    {
+      "filename": "viper_provenance-0.1.0a3-py3-none-any.whl",
+      "bytes": 235291,
+      "sha256": "443a9ab15732588b07add7e8f658006076558a1366df78fe541e258b05ba11ac"
+    },
+    {
+      "filename": "viper_provenance-0.1.0a3.tar.gz",
+      "bytes": 418398,
+      "sha256": "1745b59cd82427d26df712f95cebee7bee0c6a4f9f301b01c5a99ae0d33bd787"
+    }
+  ],
+  "registry_hashes_match": {
+    "testpypi": true,
+    "pypi": true
+  },
+  "tests": {
+    "unit_contract_per_python": 390,
+    "python_versions": [
+      "3.11",
+      "3.12",
+      "3.13",
+      "3.14"
+    ],
+    "integration": 125,
+    "release": 3,
+    "sdist_installed_public_api": 14,
+    "wheel_installed_workflows": 18,
+    "live_cuda": 9,
+    "pypi_installed_public_api_and_quickstart": 17
+  },
+  "gpu": {
+    "model": "NVIDIA L4",
+    "count": 1,
+    "driver": "580.126.20",
+    "python": "3.13.13",
+    "torch": "2.14.0+cu130",
+    "cuda": "13.0"
+  },
+  "gpu_evidence": {
+    "filename": "viper-0.1.0a3-gpu-evidence.tar.gz",
+    "sha256": "26a290c9570d019e9b85d4aa062a7dae9f0c1c6a382b9b150ebdafbd346e7cdb"
+  },
+  "mantra": {
+    "commit": "6916d01404ecebe4ee21b29ca74724a8a8ced7c2",
+    "max_abs_error_vs_numpy": 1.6689300537109375e-06,
+    "atol": 0.00025,
+    "rtol": 0.00025
+  },
+  "temporary_resources_removed": [
+    "viper-a3-acceptance instance",
+    "viper-a3-acceptance boot disk",
+    "mantra-nat-us-east1 NAT",
+    "mantra-router-us-east1 router"
+  ]
+}
