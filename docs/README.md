@@ -7,6 +7,10 @@ Run your first experiment with the tutorial, or choose a guide for a specific ta
 [Build your first experiment](tutorials/getting-started.md) runs the CPU
 example, shows what VIPER writes, and explains how to modify the experiment.
 
+Continue with [a pipeline of stages](tutorials/stages.md) or
+[inspection and catalog queries](tutorials/inspect-results.md). Both tutorials
+provide complete Python programs.
+
 ## How-to guides
 
 | Task | Guide |
@@ -40,8 +44,9 @@ configuration, formal protocol, and versioning policy.
   the active release contract, maintainer guides, architecture decisions, and
   release evidence. These documents govern VIPER development.
 
-## Validate these docs
+## Documentation checks
 
+See the [workflow coverage map](development/documentation-review.md).
 From the repository root, with `.venv` active:
 
 ```bash

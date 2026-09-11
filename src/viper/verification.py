@@ -1180,6 +1180,7 @@ def _verify_run_result(
         fetcher=fetcher,
     )
     all_measurements: list[Measurement] = []
+    measurement_references: list[ResolvedFileRef] = []
     successful_stages: dict[StageId, ResolvedBaseSpec] = {}
     successful_inputs: dict[StageId, dict[InputName, VerifiedInput]] = {}
     stage_result_snapshots: set[tuple[str, ...]] = set()
@@ -1264,6 +1265,7 @@ def _verify_run_result(
             plan.experiment,
             plan.stages,
             fetcher=fetcher,
+            measurement_references=measurement_references,
         )
         verify_measurement_stage_times(
             verified_stages,
@@ -1309,6 +1311,7 @@ def _verify_run_result(
         attempts=attempts,
         resolved_stages=successful_stages,
         measurements=tuple(all_measurements),
+        measurement_references=tuple(measurement_references),
         inputs=successful_inputs,
         reuse=reuse,
     )

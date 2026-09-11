@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, Never, cast
+from typing import Annotated, Any, Literal, Never, TypeVar, cast
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
@@ -300,6 +300,9 @@ class StageDraft(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
 
     spec: StageSpecDraft
+    stage_id: StageId | None = Field(
+        default=None, description="Name of this stage within a variant."
+    )
 
     @property
     def outputs(self) -> StageOutputs[StageDraftOutputRef]:
@@ -344,6 +347,9 @@ class VariantDraft(BaseModel):
     levels: dict[FactorId, LevelId]
     stages: dict[StageId, StageDraft] = Field(min_length=1)
     estimator: StageDraftOutputRef
+    variant_id: VariantId | None = Field(
+        default=None, description="Name used to select this variant in an experiment."
+    )
 
     @model_validator(mode="after")
     def validate_estimator(self) -> VariantDraft:
@@ -359,6 +365,9 @@ class ReplicateDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     seed: RNGSeed
+    replicate_id: ReplicateId | None = Field(
+        default=None, description="Name used to select this replicate in an experiment."
+    )
 
 
 class ExperimentDraft(BaseModel):
@@ -509,38 +518,76 @@ def factor(*, levels: tuple[LevelId, ...]) -> FactorDraft:
 
 
 def variant(
+    variant_id: VariantId | None = None,
     *,
-    levels: dict[FactorId, LevelId],
-    stages: dict[StageId, StageDraft],
+    levels: dict[FactorId, LevelId] | None = None,
+    stages: tuple[StageDraft, ...] | dict[StageId, StageDraft],
     estimator: StageDraftOutputRef,
 ) -> VariantDraft:
     """Connect an ordered stage graph and select its estimator output.
 
     Insert producers before their consumers in stages. levels selects one
-    declared level for each experiment factor; use an empty mapping for an
-    experiment without factors.
+    declared level for each experiment factor; omit it without factors.
+    A tuple contains stages with stage_id set. A mapping assigns names to
+    unnamed stages. Duplicate or conflicting names are rejected.
     """
-    return VariantDraft(levels=levels, stages=stages, estimator=estimator)
+    return VariantDraft(
+        variant_id=variant_id,
+        levels={} if levels is None else levels,
+        stages=_named_drafts(stages, "stage_id"),
+        estimator=estimator,
+    )
 
 
-def replicate(*, seed: RNGSeed) -> ReplicateDraft:
-    """Declare one reproducible experiment replicate."""
-    return ReplicateDraft(seed=seed)
+def replicate(
+    replicate_id: ReplicateId | None = None, *, seed: RNGSeed
+) -> ReplicateDraft:
+    """Declare a replicate, named seed_<seed> unless a name is supplied."""
+    validated = TypeAdapter(RNGSeed).validate_python(seed)
+    return ReplicateDraft(
+        replicate_id=f"seed_{validated}" if replicate_id is None else replicate_id,
+        seed=validated,
+    )
+
+
+_DraftT = TypeVar("_DraftT", StageDraft, VariantDraft, ReplicateDraft)
+
+
+def _named_drafts(
+    values: tuple[_DraftT, ...] | dict[str, _DraftT], identity: str
+) -> dict[str, _DraftT]:
+    """Index named declarations without silently replacing duplicate names."""
+    result: dict[str, _DraftT] = {}
+    entries = (
+        values.items()
+        if isinstance(values, dict)
+        else ((getattr(value, identity), value) for value in values)
+    )
+    for name, value in entries:
+        declared = getattr(value, identity)
+        if name is None:
+            raise ValueError(f"{identity} is required for a sequence declaration")
+        if declared is not None and declared != name:
+            raise ValueError(f"{identity} conflicts with its mapping key")
+        if name in result:
+            raise ValueError(f"duplicate {identity}: {name!r}")
+        result[name] = value
+    return result
 
 
 def experiment(
     *,
     experiment_id: ExperimentId,
-    variants: dict[VariantId, VariantDraft],
-    replicates: dict[ReplicateId, ReplicateDraft],
+    variants: tuple[VariantDraft, ...] | dict[VariantId, VariantDraft],
+    replicates: tuple[ReplicateDraft, ...] | dict[ReplicateId, ReplicateDraft],
     factors: dict[FactorId, FactorDraft] | None = None,
 ) -> ExperimentDraft:
     """Declare one experiment over reusable variants and replicates."""
     return ExperimentDraft(
         experiment_id=experiment_id,
         factors={} if factors is None else factors,
-        variants=variants,
-        replicates=replicates,
+        variants=_named_drafts(variants, "variant_id"),
+        replicates=_named_drafts(replicates, "replicate_id"),
     )
 
 
@@ -581,8 +628,8 @@ def _plan_with_run_id(
 def plan(
     *,
     experiment: ExperimentDraft,
-    variant: VariantId,
-    replicate: ReplicateId,
+    variant: VariantId | None = None,
+    replicate: ReplicateId | None = None,
     benchmark: BenchmarkDraft | None = None,
     source: GitSource,
     env: EnvSpec,
@@ -594,11 +641,23 @@ def plan(
     """Select a variant and replicate and assign a new run ID.
 
     Copy and freeze the declarations so later caller edits leave this plan
-    unchanged. Compilation and file writes occur when freeze_run_plan() or
-    execution.run() consumes the draft. Both selected names must exist in
-    the experiment. Resolve the numerical policy and resource settings once;
+    unchanged. execution.run() saves and executes the plan. Omit a variant or
+    replicate selection when the experiment contains exactly one of that kind.
+    Explicit names must exist in the experiment. Resolve settings once;
     later execution consumes the frozen settings without consulting defaults.
     """
+    if variant is None:
+        if len(experiment.variants) != 1:
+            raise ValueError(
+                "variant is required when the experiment has multiple variants"
+            )
+        variant = next(iter(experiment.variants))
+    if replicate is None:
+        if len(experiment.replicates) != 1:
+            raise ValueError(
+                "replicate is required when the experiment has multiple replicates"
+            )
+        replicate = next(iter(experiment.replicates))
     execution_policy, settings = resolve_execution_policy(
         reproducibility, parallelism=parallelism
     )
@@ -1006,6 +1065,7 @@ def run_artifact(
 
 def download(
     *,
+    stage_id: StageId | None = None,
     inputs: dict[InputName, HttpRequestSpec],
     outputs: StageOutputs[OutputDraft],
     policy: HttpRetrievalPolicy,
@@ -1020,20 +1080,22 @@ def download(
     """
     selected_http = BuiltinHttpImplementationSpec() if http is None else http
     return StageDraft(
+        stage_id=stage_id,
         spec=DownloadSpecDraft(
             inputs=inputs,
             outputs=outputs,
             policy=policy,
             http=selected_http,
             env=env,
-        )
+        ),
     )
 
 
 def stage(
     implementation: Callable[[Context[Any]], None],
     *,
-    config: Config,
+    stage_id: StageId | None = None,
+    config: Config | None = None,
     inputs: dict[InputName, StageInputDraft | StageDraftOutputRef],
     outputs: StageOutputs[OutputDraft],
     metrics: tuple[MetricDraft[Any], ...] = (),
@@ -1045,8 +1107,9 @@ def stage(
 ) -> StageDraft:
     """Connect a decorated workspace function to its inputs and outputs.
 
-    The decorator selects the stage kind and config class. Training and
-    evaluation require an objective; evaluation also requires eval_id and
+    The decorator selects the stage kind and config class. Omit config to
+    instantiate that class with its defaults; required fields still need values.
+    Training and evaluation require an objective; evaluation also requires eval_id and
     named split_inputs. An embedding objective is optional. Diagnostic outputs
     are terminal and must be omitted from downstream input selections.
 
@@ -1065,7 +1128,7 @@ def stage(
     definition = stage_definition(implementation)
     values = {
         "implementation": implementation,
-        "config": config,
+        "config": definition.config_type() if config is None else config,
         "inputs": inputs,
         "outputs": outputs,
         "metrics": metrics,
@@ -1098,7 +1161,7 @@ def stage(
         )
     else:
         raise ValueError(f"unsupported stage kind: {definition.kind}")
-    return StageDraft(spec=spec)
+    return StageDraft(spec=spec, stage_id=stage_id)
 
 
 def _compile_metric(root: Path, draft: MetricDraft[Any]) -> MetricSpec:
@@ -1453,7 +1516,7 @@ def freeze_run_plan(
 def expand(
     experiment: ExperimentDraft,
     *,
-    run_ids: RunIdMap,
+    run_ids: RunIdMap | None = None,
     benchmark: BenchmarkDraft | None = None,
     source: GitSource,
     env: EnvSpec,
@@ -1466,8 +1529,9 @@ def expand(
 ) -> tuple[RunPlanDraft, ...]:
     """Create plans for selected variant-replicate pairs in declaration order.
 
-    run_ids maps each selected variant to each selected replicate's unique
-    run ID. Omitted filters select all declared names. The returned tuple is
+    Omit run_ids to generate a new ID for each pair. An explicit mapping
+    assigns each selected pair its caller-supplied ID.
+    Omitted filters select all declared names. The returned tuple is
     ordered by variant, then replicate, regardless of filter order. Each plan
     is copied and frozen as in plan(); file writes occur during freezing.
     Resolve policy and resource defaults once for the entire selected set.
@@ -1496,6 +1560,13 @@ def expand(
         for replicate_id in experiment.replicates
         if replicate_filter is None or replicate_id in replicate_filter
     )
+    if run_ids is None:
+        run_ids = {
+            variant_id: {
+                replicate_id: _new_run_id() for replicate_id in selected_replicates
+            }
+            for variant_id in selected_variants
+        }
     if set(run_ids) != set(selected_variants) or any(
         set(run_ids[variant_id]) != set(selected_replicates)
         for variant_id in selected_variants

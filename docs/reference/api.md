@@ -31,8 +31,6 @@ environment = LocalEnvSpec(
 
 draft = plan(
     experiment=study,
-    variant="baseline",
-    replicate="seed_7",
     source=source,
     env=environment,
 )
@@ -40,6 +38,10 @@ resolved_run = execution.run(draft)
 print(resolved_run.status)
 print(resolved_run.path)
 ```
+
+`plan()` selects the sole variant and replicate when each has one choice.
+When there are several, pass their names with `variant=` and `replicate=`;
+omitting an ambiguous selection raises `ValueError`.
 
 `viper.authoring.plan()` returns an immutable `RunPlanDraft`. `viper.execution.run()`
 compiles a draft into protocol files, executes the selected stages, checks the
@@ -61,7 +63,7 @@ controls with those settings. Comparing output bytes between runs is separate.
 
 For saved plans, retries, batch outcomes, and benchmark execution, see
 [Execute a plan](../how-to/execution.md). For artifact retrieval, see
-[Restore from Python](../how-to/retry-restore-compare.md#restore-from-python).
+[Restore from Python](../how-to/retry-restore-compare.md#restore-verified-artifacts).
 
 ## Authoring constructors
 
@@ -76,11 +78,12 @@ For saved plans, retries, batch outcomes, and benchmark execution, see
 | `replicate()` | `ReplicateDraft` | Declare one reproducible seed. |
 | `experiment()` | `ExperimentDraft` | Group factors, variants, and replicates. |
 | `plan()` | `RunPlanDraft` | Select one variant-replicate pair and its source and runtime identity. |
-| `expand()` | `tuple[RunPlanDraft, ...]` | Generate plans for selected variant-replicate pairs using caller-supplied run IDs. |
+| `expand()` | `tuple[RunPlanDraft, ...]` | Generate plans for selected variant-replicate pairs. |
 
 These constructors are defined in [`viper.authoring`](../../src/viper/authoring.py).
-`plan()` assigns a new run ID. `expand()` requires a `run_ids` mapping for the selected
-pairs; see [batch execution](../how-to/variants-and-replicates.md).
+`plan()` and `expand()` assign new run IDs. `expand()` also accepts a `run_ids`
+mapping when callers already have IDs for the selected pairs; see
+[batch execution](../how-to/variants-and-replicates.md).
 
 `plan()` and `expand()` default to `reproducibility="reproducible"`. Pass
 `reproducibility="relaxed"` to permit nondeterministic algorithms while preserving
@@ -93,6 +96,19 @@ The returned draft stores the selected mode in `execution_policy` and concrete
 settings in `reproducibility`. Expansion resolves defaults once for the batch.
 Saved `RunSpec` records require both fields. The verifier checks that the
 selected policy agrees with the saved settings and the worker observations.
+
+## Named declarations
+
+`variant("baseline", stages=(training,), estimator=training.outputs["model"])`
+collects stages whose `stage_id` values identify them in that variant. Omit
+`levels` when the experiment’s factor set is empty. Pass variants as a tuple to
+`experiment(variants=...)`.
+
+`replicate(seed=7)` creates the name `seed_7`. Use
+`replicate("trial_a", seed=7)` when a separate label is useful. Pass replicates
+as a tuple to `experiment(replicates=...)`. Duplicate names are rejected.
+Mappings are also accepted; their keys must agree with explicitly named
+objects. See [the complete declarations](../how-to/variants-and-replicates.md).
 
 ## Naming conventions
 
@@ -134,6 +150,11 @@ VIPER constructs `Context` and passes it to the stage function. The
 lists each field, its value, and the declaration that supplies it.
 
 ## Metrics and benchmarks
+
+`stage()` uses the decorated config class's defaults when `config` is omitted.
+A custom config with required fields still requires an instance supplying them.
+`measure()` defaults to `MetricConfig()`; supply a custom instance when the
+calculation has settings.
 
 `metric()` declares a `stateful` or `stateless` metric. `measure()` supplies its config
 values and optional recomputation dependencies. `min()` and `max()` select an objective

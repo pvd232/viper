@@ -258,7 +258,7 @@ def _freeze_signal_plan(
                 estimator=training.outputs["model"],
             )
         },
-        replicates={"r1": replicate(seed=7)},
+        replicates={"r1": replicate("r1", seed=7)},
     )
 
     def freeze(commit: str):

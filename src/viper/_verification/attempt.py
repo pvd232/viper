@@ -41,6 +41,7 @@ from ..references import (
     GitFileRef,
     HuggingFaceFileRef,
     LocalFileRef,
+    ResolvedFileRef,
     ResolvedStageInvocationRef,
     StageResultSnapshot,
 )
@@ -807,6 +808,7 @@ def verify_attempt_files(
     stage_specs: Mapping[StageId, BaseSpec],
     *,
     fetcher: StorageFetcher | None = None,
+    measurement_references: list[ResolvedFileRef] | None = None,
 ) -> tuple[Measurement, ...]:
     """Verify an attempt's measurements and logs against their file identities."""
     attempt_file_snapshots = {
@@ -901,6 +903,10 @@ def verify_attempt_files(
                     "measurement timestamp falls outside its containing attempt"
                 )
             measurements.append(measurement)
+            # A JSONL file may contain many rows. Retain each row's source
+            # while reading it, so cataloging never guesses file ownership.
+            if measurement_references is not None:
+                measurement_references.append(reference)
 
     if attempt.status == "succeeded":
         for stage_id in completed_stage_ids:

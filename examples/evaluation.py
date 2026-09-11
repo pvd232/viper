@@ -19,7 +19,6 @@ from viper.authoring import (
     variant,
 )
 from viper.benchmark import at_most, benchmark
-from viper.config import BuildConfig, EvalConfig
 from viper.metrics import (
     FloatComparator,
     MetricDependency,
@@ -33,7 +32,7 @@ from viper.runtime import LocalEnvSpec, observe_python_env
 
 data_stage = stage(
     prepare_test_data,
-    config=BuildConfig(),
+    stage_id="build",
     inputs={"source": input("examples/data/held_out.csv", data_role="benchmark")},
     outputs=StageOutputs.model_validate(
         {
@@ -48,14 +47,14 @@ data_stage = stage(
 )
 data_study = experiment(
     experiment_id="held_out_data",
-    variants={
-        "baseline": variant(
-            levels={},
-            stages={"train": training, "build": data_stage},
+    variants=(
+        variant(
+            "baseline",
+            stages=(training, data_stage),
             estimator=training.outputs["model"],
-        )
-    },
-    replicates={"seed_7": replicate(seed=7)},
+        ),
+    ),
+    replicates=(replicate(seed=7),),
 )
 
 
@@ -83,8 +82,6 @@ def main() -> None:
     data_run = execution.run(
         plan(
             experiment=data_study,
-            variant="baseline",
-            replicate="seed_7",
             source=source,
             env=environment,
         )
@@ -103,7 +100,7 @@ def main() -> None:
     )
     evaluation = stage(
         predict,
-        config=EvalConfig(),
+        stage_id="eval",
         eval_id="holdout",
         inputs={
             "model": training.outputs["model"],
@@ -121,14 +118,14 @@ def main() -> None:
     )
     study = experiment(
         experiment_id="held_out_evaluation",
-        variants={
-            "baseline": variant(
-                levels={},
-                stages={"train": training, "eval": evaluation},
+        variants=(
+            variant(
+                "baseline",
+                stages=(training, evaluation),
                 estimator=training.outputs["model"],
-            )
-        },
-        replicates={"seed_7": replicate(seed=7)},
+            ),
+        ),
+        replicates=(replicate(seed=7),),
     )
     criteria = benchmark(
         benchmark_id="holdout_v1",
@@ -140,8 +137,6 @@ def main() -> None:
     )
     draft = plan(
         experiment=study,
-        variant="baseline",
-        replicate="seed_7",
         source=source,
         env=environment,
         benchmark=criteria,

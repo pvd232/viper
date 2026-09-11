@@ -67,6 +67,13 @@ def local_http_server() -> Iterator[tuple[str, int, list[tuple[str, str | None]]
         def do_GET(self) -> None:
             """Record the authorization field and return the selected response."""
             received.append((self.path, self.headers.get("Authorization")))
+            if self.path == "/tiny.csv":
+                body = b"x,y\n1,2\n2,4\n3,6\n"
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if self.path == "/redirect":
                 self.send_response(302)
                 self.send_header(

@@ -416,3 +416,26 @@ def test_documentation_navigation_separates_reader_and_internal_routes() -> None
     assert "execution.run(draft)" in workflow
     assert "viper.parameters" not in workflow
     assert "viper.api.run" not in workflow
+
+
+@pytest.mark.parametrize(
+    ("document", "program", "blocks"),
+    (
+        ("README.md", "examples/cpu_quickstart.py", None),
+        ("docs/tutorials/getting-started.md", "examples/cpu_quickstart.py", None),
+        ("docs/tutorials/inspect-results.md", "examples/inspect_results.py", (0,)),
+        ("docs/tutorials/stages.md", "examples/stages.py", (0,)),
+        ("docs/how-to/variants-and-replicates.md", "examples/variants.py", (0,)),
+    ),
+)
+def test_complete_documented_programs_match_executed_sources(
+    document: str, program: str, blocks: tuple[int, ...] | None
+) -> None:
+    """Prevent a runnable document and its shipped source from drifting apart."""
+    snippets = python_blocks((ROOT / document).read_text())
+    selected = (
+        snippets if blocks is None else tuple(snippets[index] for index in blocks)
+    )
+    documented = ast.parse("\n\n".join(selected))
+    source = ast.parse((ROOT / program).read_text())
+    assert ast.dump(documented) == ast.dump(source), document

@@ -62,8 +62,6 @@ def main() -> None:
     )
     draft = plan(
         experiment=study,
-        variant="baseline",
-        replicate="seed_7",
         source=source,
         env=environment,
         reproducibility=selection,

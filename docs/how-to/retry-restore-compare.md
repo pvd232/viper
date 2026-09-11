@@ -1,87 +1,47 @@
 # Retry, restore, and compare runs
 
-Keep the printed `resolved.yaml` path from a successful run and the saved
-`spec.yaml` path from a failed run. Commands below use example paths; replace
-them with your files. The restoration snippet uses `resolved_run`, returned by `execution.run(draft)`
-in the [CPU tutorial](../tutorials/getting-started.md).
+The [inspection tutorial](../tutorials/inspect-results.md) provides a complete
+Python program for verification, restoration, status, lineage, and comparison.
+Its `left` and `right` variables hold completed runs; `root` identifies their
+workspace, and `trusted` contains the source repository URL.
 
 ## Retry a failed run
 
-Replace `YOUR_RUN_ID` with the failed run's ID:
+Run [the recovery example](../../examples/recovery.py) with
+`python -m examples.recovery`. It deliberately fails its first training attempt,
+retries the same plan, indexes the successful result, and reuses it in a new run.
+The training function computes the model on the second attempt; reuse avoids
+calling it again.
+
+A retry creates another attempt of the saved plan. It preserves earlier
+attempt records. Use it after a transient failure has been resolved. Changes
+to code, inputs, or settings require a new plan.
 
 ```python
+from pathlib import Path
 from viper import execution
 from viper.repository import resolve_root
 
 root = resolve_root()
-plan_path = root / "experiments/cpu_quickstart/runs/baseline/YOUR_RUN_ID/spec.yaml"
+plan_path = Path("experiments/cpu_quickstart/runs/baseline/YOUR_RUN_ID/spec.yaml")
 retried = execution.retry(root, plan_path)
+print(retried.status)
 ```
 
-Retry appends a new attempt to the same frozen plan and preserves the earlier attempt
-records.
-
-From the command line:
-
-```bash
-viper retry path/to/run.yaml --root .
-```
+Replace `YOUR_RUN_ID` with the failed run's ID. The plan is saved before its
+stages execute. The [execution guide](execution.md#handle-a-failed-operation)
+explains failure handling.
 
 ## Restore verified artifacts
 
-Restore all artifacts from one successful local run:
-
-```bash
-viper restore path/to/resolved.yaml --root .
-```
-
-Select one artifact with its `STAGE.ARTIFACT` name:
-
-```bash
-viper restore path/to/resolved.yaml \
-  --root . \
-  --artifacts train.model \
-  --output restored/model.json
-```
-
-VIPER verifies all selected source files and checks the destinations before writing. It
-creates missing files, reuses matching files, and rejects an existing destination
-containing different bytes. Choose a new destination to keep both versions.
-
-## Inspect status and lineage
-
-```bash
-viper status path/to/attempt.journal.jsonl
-viper lineage path/to/resolved.yaml \
-  --root . \
-  --trust-source https://github.com/example/workspace
-```
-
-`status` reports progress from the attempt journal. `lineage` verifies the run
-and shows which stages produced its artifacts, including any results reused
-from earlier runs.
-
-## Compare two runs
-
-```bash
-viper compare-runs left/resolved.yaml right/resolved.yaml \
-  --left-root left-workspace \
-  --right-root right-workspace \
-  --trust-source https://github.com/example/workspace
-```
-
-Put `--json` before the command when a script or agent needs one typed result document.
-
-## Restore from Python
-
-Use a completed run's immutable reference to restore one artifact:
+Inside the complete inspection program, select the model from `left`:
 
 ```python
 from viper.restoration import ArtifactRestoreSelector
 
 restored = execution.restore(
     root,
-    resolved_run.reference,
+    left.reference,
     artifacts=(ArtifactRestoreSelector(stage_id="train", artifact_name="model"),),
 )
 for artifact in restored.artifacts:
@@ -90,7 +50,48 @@ for artifact in restored.artifacts:
 ```
 
 Each file reports `restored` or `already_present`. A bundle reports one entry
-per member. To choose another destination, pass `output=destination_path`.
+per member. Pass `output=destination_path` to select a destination. VIPER
+checks source bytes and destinations before writing; it rejects a destination
+that already contains different bytes.
+
+## Inspect status and lineage
+
+```python
+from viper import api
+from viper.inspection import attempt_status
+
+print(attempt_status(left.journal_path).state)
+graph = api.lineage(
+    api.LineageRequest(
+        root=root, path=left.path, trusted_source_repositories=trusted
+    )
+)
+for edge in graph.edges:
+    print(edge)
+```
+
+The journal reports attempt progress. Lineage verifies the run and identifies
+its stage, artifact, and reuse relationships.
+
+## Compare two runs
+
+```python
+comparison = api.compare_runs(
+    api.CompareRunsRequest(
+        left_root=root, right_root=root,
+        left_path=left.path, right_path=right.path,
+        trusted_source_repositories=trusted,
+    )
+)
+for change in comparison.changes:
+    print(change)
+```
+
+Comparison reports differences in the saved records. Separate executions have
+different IDs and timestamps even when their artifact bytes match. Inspect the
+artifact digests when comparing the produced files.
+
+The [CLI reference](../reference/cli.md) documents equivalent terminal commands.
 
 ## Resume training from a checkpoint
 

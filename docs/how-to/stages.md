@@ -3,6 +3,10 @@
 A stage is a function with declared inputs and outputs. Connect stages by
 passing an earlier stage's output to a later stage's input.
 
+The [complete pipeline](../tutorials/stages.md) connects preparation, feature
+computation, training, and diagnostics. The snippets below explain those stage
+functions; the tutorial includes all imports, declarations, and the entry point.
+
 ## Use the stage context
 
 When VIPER executes a stage, it constructs a `Context` and passes it as the
@@ -20,7 +24,7 @@ validated `BuildConfig` as `context.config`.
 | `numpy_generators` | Mapping from generator names in the run's reproducibility settings to initialized NumPy generators. Use these generators for random sampling and checkpoint their state when saving training progress. |
 | `run_id` | Identifier of the run being executed. |
 | `attempt_id` | Attempt number within that run; retries receive a new attempt number. |
-| `stage_id` | Name assigned to this stage in the variant's `stages` mapping. |
+| `stage_id` | Name assigned to this stage in the variant's `stages` tuple. |
 
 The dictionary keys come from your declarations. In the build example below,
 `inputs={"source": ...}` supplies `context.inputs["source"]`, and
@@ -56,16 +60,12 @@ a plan, and supply the source and runtime records shown in the
 This build stage sorts the rows of a CSV file while preserving its header:
 
 ```python
-from pathlib import Path
+from examples.workflow_functions import load_text
 
 from viper.authoring import input, stage
 from viper.config import BuildConfig
 from viper.outputs import StageOutputs, output
 from viper.stages import Context, build
-
-
-def load_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
 
 
 @build(config=BuildConfig)
@@ -78,7 +78,8 @@ def sort_rows(context: Context[BuildConfig]) -> None:
 
 prepared = stage(
     sort_rows,
-    config=BuildConfig(),
+    stage_id="prepare",
+
     inputs={"source": input("examples/data/tiny.csv", data_role="training")},
     outputs=StageOutputs(
         dataset=output(path="sorted.csv", loader=load_text, data_role="training")
@@ -114,7 +115,8 @@ def polynomial_features(context: Context[EmbedConfig]) -> None:
 
 embedded = stage(
     polynomial_features,
-    config=EmbedConfig(),
+    stage_id="embed",
+
     inputs={"dataset": prepared.outputs["dataset"]},
     outputs=StageOutputs(
         features=output(path="features.json", loader=load_text, data_role="training")
@@ -122,7 +124,7 @@ embedded = stage(
 )
 ```
 
-Include `prepared` before `embedded` in the variant's `stages` mapping. During
+Include `prepared` before `embedded` in the variant's `stages` tuple. During
 execution, VIPER supplies the prepared artifact through
 `context.inputs["dataset"]`. The input name belongs to the receiving function;
 it can differ from the producing output's name.
@@ -227,7 +229,8 @@ rmse = measure(
 
 evaluation = stage(
     predict,
-    config=EvalConfig(),
+    stage_id="eval",
+
     eval_id="holdout",
     inputs={
         "model": training.outputs["model"],
@@ -279,7 +282,8 @@ def count_rows(context: Context[DiagnosticConfig]) -> None:
 
 report = stage(
     count_rows,
-    config=DiagnosticConfig(),
+    stage_id="report",
+
     inputs={"dataset": prepared.outputs["dataset"]},
     outputs=StageOutputs(
         report=output(path="rows.txt", loader=load_text, data_role="training")
@@ -289,9 +293,12 @@ report = stage(
 
 ## Reuse a verified stage result
 
+The [complete recovery example](../../examples/recovery.py) demonstrates a
+successful retry followed by reuse in a new run.
+
 Set `reuse="verified"` in a workspace stage's `stage()` call to allow reuse.
 The default is `reuse="never"`. Index the completed source run through
-[`catalog-refresh`](catalog-knowledge-mcp.md#build-the-local-catalog) before
+[the Python catalog refresh](catalog-knowledge-mcp.md#build-the-local-catalog) before
 executing another plan that might reuse its stages.
 
 VIPER looks for a candidate with matching stage, config, inputs, runtime,

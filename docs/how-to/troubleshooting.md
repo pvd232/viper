@@ -33,9 +33,9 @@ intended commit or restore the source it names.
 
 ## A stage failed
 
-Use `viper status path/to/attempt.journal.jsonl` to inspect the latest attempt
-state. After fixing a transient runtime condition, use `viper retry` with the original
-frozen plan. If you change source code, config, or inputs, commit the changes and create
+Use `viper.inspection.attempt_status(journal_path)` to inspect the latest attempt
+state. After fixing a transient runtime condition, call `execution.retry()` with
+the original frozen plan; see [retry a failed run](retry-restore-compare.md#retry-a-failed-run). If you change source code, config, or inputs, commit the changes and create
 a new plan. A retry checks the original source identity; incorporating a code fix
 requires a new plan.
 

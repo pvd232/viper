@@ -13,6 +13,7 @@ from pydantic import TypeAdapter, ValidationError
 
 import viper.authoring as authoring
 import viper.config as config
+from examples.cpu_quickstart import training as example_training
 from viper import _subprocess as subprocess
 from viper.artifacts import (
     ArtifactLoaderRef,
@@ -532,7 +533,7 @@ def _immutable_plan() -> tuple[RunPlanDraft, dict[str, VariantDraft]]:
         experiment_id="e001_strand",
         factors={"rank": factor(levels=("full", "low"))},
         variants=variants,
-        replicates={"replicate_01": replicate(seed=42)},
+        replicates={"replicate_01": replicate("replicate_01", seed=42)},
     )
     env_payload = environment_payload()
     return (
@@ -650,7 +651,7 @@ def _compiled_plan(tmp_path: Path) -> tuple[_CompiledPlan, RunPlanDraft]:
                 estimator=train_stage.outputs["model"],
             )
         },
-        replicates={"replicate_01": replicate(seed=42)},
+        replicates={"replicate_01": replicate("replicate_01", seed=42)},
     )
     env_payload = environment_payload(commit)
     draft = plan(
@@ -862,8 +863,8 @@ def test_experiment_expansion_is_canonical() -> None:
         factors=single.experiment.factors,
         variants={"baseline": baseline, "l2": baseline},
         replicates={
-            "replicate_01": replicate(seed=42),
-            "replicate_02": replicate(seed=43),
+            "replicate_01": replicate("replicate_01", seed=42),
+            "replicate_02": replicate("replicate_02", seed=43),
         },
     )
     run_ids: RunIdMap = {
@@ -897,6 +898,24 @@ def test_experiment_expansion_is_canonical() -> None:
         "01ARZ3NDEKTSV4RRFFQ69G5FAX",
         "01ARZ3NDEKTSV4RRFFQ69G5FAY",
     )
+
+
+def test_experiment_expansion_generates_unique_ids_and_applies_filters() -> None:
+    """Generate fresh IDs for selected pairs across repeated batch declarations."""
+    single, _ = _immutable_plan()
+    study = single.experiment.model_copy(
+        update={
+            "replicates": {"seed_7": replicate(seed=7), "seed_19": replicate(seed=19)}
+        }
+    )
+    first = expand(study, source=single.source, env=single.env)
+    second = expand(
+        study, source=single.source, env=single.env, replicates=("seed_19",)
+    )
+    assert tuple(item.replicate for item in first) == ("seed_7", "seed_19")
+    assert tuple(item.replicate for item in second) == ("seed_19",)
+    assert len({item.run_id for item in (*first, *second)}) == 3
+    assert all(len(item.run_id) == 26 for item in (*first, *second))
 
 
 def test_experiment_expansion_rejects_invalid_selection() -> None:
@@ -1010,8 +1029,8 @@ def test_execution_policy_expand_resolves_once() -> None:
     declaration = baseline.experiment.model_copy(
         update={
             "replicates": {
-                "replicate_01": replicate(seed=42),
-                "replicate_02": replicate(seed=43),
+                "replicate_01": replicate("replicate_01", seed=42),
+                "replicate_02": replicate("replicate_02", seed=43),
             }
         }
     )
@@ -1102,3 +1121,139 @@ def test_policy_persistence_replay(tmp_path: Path) -> None:
     assert restored.execution_policy == policy
     assert restored.reproducibility == settings
     assert serialize_document(restored) == saved
+
+
+def test_named_experiment_declarations_preserve_order_and_identity() -> None:
+    """Index named objects while preserving output handles and replicate seeds."""
+    training = example_training.model_copy(update={"stage_id": "fit_model"})
+    baseline = variant(
+        "baseline", stages=(training,), estimator=training.outputs["model"]
+    )
+    study = experiment(
+        experiment_id="named",
+        variants=(baseline,),
+        replicates=(replicate("seed_19", seed=19), replicate("seed_7", seed=7)),
+    )
+    assert study.variants["baseline"] is baseline
+    assert baseline.stages["fit_model"] is training
+    assert baseline.estimator.producer is training
+    assert baseline.levels == {}
+    assert tuple(study.replicates) == ("seed_19", "seed_7")
+    assert study.replicates["seed_19"].seed == 19
+
+
+@pytest.mark.parametrize("identity", ("stage", "variant", "replicate"))
+def test_named_declarations_reject_duplicate_names(identity: str) -> None:
+    """Reject duplicate declarations before a dictionary could discard one."""
+    training = example_training.model_copy(update={"stage_id": "train"})
+    baseline = variant(
+        "baseline", stages=(training,), estimator=training.outputs["model"]
+    )
+    seed = replicate("seed_7", seed=7)
+    with pytest.raises(ValueError, match=f"duplicate {identity}_id"):
+        if identity == "stage":
+            variant(
+                "baseline",
+                stages=(training, training),
+                estimator=training.outputs["model"],
+            )
+        else:
+            experiment(
+                experiment_id="named",
+                variants=(baseline, baseline) if identity == "variant" else (baseline,),
+                replicates=(seed, seed) if identity == "replicate" else (seed,),
+            )
+
+
+def test_named_replicates_reject_missing_or_conflicting_names() -> None:
+    """Require a sequence name and prevent a mapping from renaming an object."""
+    baseline = variant(
+        "baseline",
+        stages={"train": example_training},
+        estimator=example_training.outputs["model"],
+    )
+    for replicates, message in (
+        ((authoring.ReplicateDraft(seed=7),), "replicate_id is required"),
+        ({"other": replicate("seed_7", seed=7)}, "replicate_id conflicts"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            experiment(
+                experiment_id="named", variants=(baseline,), replicates=replicates
+            )
+
+
+@pytest.mark.parametrize("seed", (0, 7, 2**32 - 1))
+def test_replicate_derives_its_name_from_the_validated_seed(seed: int) -> None:
+    """Default names are deterministic; explicit names remain available."""
+    assert replicate(seed=seed).replicate_id == f"seed_{seed}"
+    assert replicate("trial_a", seed=seed).replicate_id == "trial_a"
+    with pytest.raises(ValueError):
+        replicate(seed=-1)
+
+
+def test_plan_selects_the_only_variant_and_replicate() -> None:
+    """Omitting unambiguous selections preserves the explicitly authored plan."""
+    explicit, _ = _immutable_plan()
+    automatic = plan(
+        experiment=explicit.experiment,
+        source=explicit.source,
+        env=explicit.env,
+        reproducibility=explicit.reproducibility,
+    )
+    assert automatic.variant == explicit.variant
+    assert automatic.replicate == explicit.replicate
+    assert automatic.experiment == explicit.experiment
+
+
+@pytest.mark.parametrize("selection", ("variant", "replicate"))
+def test_plan_requires_an_explicit_choice_when_ambiguous(selection: str) -> None:
+    """Adding alternatives cannot silently change which experiment is executed."""
+    single, _ = _immutable_plan()
+    study = single.experiment.model_copy(
+        update={
+            "variants": dict(single.experiment.variants),
+            "replicates": dict(single.experiment.replicates),
+        }
+    )
+    if selection == "variant":
+        study.variants["alternative"] = study.variants["baseline"]
+    else:
+        study.replicates["another"] = replicate("another", seed=43)
+    with pytest.raises(ValueError, match=f"{selection} is required"):
+        plan(experiment=study, source=single.source, env=single.env)
+
+
+def test_stage_uses_the_decorators_config_defaults() -> None:
+    """Omitting config preserves the decorator's config class and defaults."""
+    assert isinstance(example_training.spec, TrainSpecDraft)
+    selected = stage(
+        example_training.spec.implementation,
+        inputs=example_training.spec.inputs,
+        outputs=example_training.spec.outputs,
+        metrics=example_training.spec.metrics,
+        objective=example_training.spec.objective,
+    )
+    assert isinstance(selected.spec, TrainSpecDraft)
+    assert type(selected.spec.config) is config.TrainConfig
+    assert selected.spec.config == example_training.spec.config
+
+
+def test_stage_requires_values_for_required_custom_config_fields() -> None:
+    """A missing custom setting fails during declaration, before execution."""
+    assert isinstance(example_training.spec, TrainSpecDraft)
+
+    class RequiredConfig(config.TrainConfig):
+        epochs: int
+
+    @train(config=RequiredConfig)
+    def fit(context: Context[RequiredConfig]) -> None:
+        """Expose a required setting for this declaration test."""
+
+    with pytest.raises(ValidationError, match="epochs"):
+        stage(
+            fit,
+            inputs=example_training.spec.inputs,
+            outputs=example_training.spec.outputs,
+            metrics=example_training.spec.metrics,
+            objective=example_training.spec.objective,
+        )

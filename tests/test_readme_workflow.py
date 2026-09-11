@@ -15,11 +15,13 @@ from tests._documentation import python_blocks
 from viper import _subprocess as subprocess
 from viper.artifacts import StageArtifactRef
 from viper.authoring import run_artifact
-from viper.metrics import MetricContext
+from viper.metrics import MeasurementSink, MetricContext, MetricHandle
 from viper.references import LocalFileRef, ResolvedRunRef
 from viper.repository import RootError, read_source
 from viper.resume import load_resume_state
 from viper.stages import Context
+
+pytest_plugins = ("tests.test_http_retrieval",)
 
 
 def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
@@ -34,14 +36,54 @@ def _run(root: Path, *command: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-@pytest.mark.parametrize("example", ("variants.py", "evaluation.py"))
+@pytest.mark.parametrize(
+    "example",
+    (
+        "variants.py",
+        "evaluation.py",
+        "inspect_results.py",
+        "stages.py",
+        "download_training.py",
+        "recovery.py",
+    ),
+)
 def test_extended_examples_execute_complete_workflows(
-    tmp_path: Path, example: str
+    tmp_path: Path,
+    example: str,
+    local_http_server: tuple[str, int, list[tuple[str, str | None]]],
 ) -> None:
-    """Execute batch and benchmark examples with all source and input dependencies."""
+    """Execute documented Python workflows with their source and input dependencies."""
     root = tmp_path / "workspace"
+    host, port, received = local_http_server
     shutil.copytree("examples", root / "examples")
     shutil.copy("pyproject.toml", root / "pyproject.toml")
+    documents = {
+        "variants.py": "docs/how-to/variants-and-replicates.md",
+        "inspect_results.py": "docs/tutorials/inspect-results.md",
+        "stages.py": "docs/tutorials/stages.md",
+    }
+    if example in documents:
+        # Execute the code readers copy, including its imports and main().
+        program = python_blocks(Path(documents[example]).read_text())[0]
+        (root / "examples" / example).write_text(program + "\n")
+    if example == "download_training.py":
+        # Exercise the real HTTP client against a controlled server. Only the
+        # endpoint and allowlist change; the declared dataset digest is retained.
+        script = root / "examples" / example
+        program = script.read_text()
+        start = program.index("            url=(")
+        end = program.index("            version=", start)
+        program = (
+            program[:start]
+            + f'            url="http://{host}:{port}/tiny.csv",\n'
+            + program[end:]
+        )
+        program = program.replace('frozenset({"https"})', 'frozenset({"http"})')
+        program = program.replace(
+            'frozenset({"raw.githubusercontent.com"})', f'frozenset({{ "{host}" }})'
+        )
+        program = program.replace("frozenset({443})", f"frozenset({{{port}}})")
+        script.write_text(program)
     (root / "viper.toml").write_text("[workspace]\nschema_version = 2\n")
     _run(root, "git", "init", "--quiet")
     _run(root, "git", "config", "user.email", "viper@example.com")
@@ -70,7 +112,7 @@ def test_extended_examples_execute_complete_workflows(
         ]
         assert len(weights) == 4
         assert len(set(weights)) == 2
-    else:
+    elif example == "evaluation.py":
         assert "benchmark: passed " in completed.stdout
         predictions = list(
             root.glob(
@@ -81,6 +123,54 @@ def test_extended_examples_execute_complete_workflows(
         pairs = json.loads(predictions[0].read_text())
         assert [pair[1] for pair in pairs] == [8.0, 12.0]
         assert [pair[0] for pair in pairs] == pytest.approx([8.0, 12.0], abs=0.001)
+    elif example == "recovery.py":
+        assert "successful attempt: 2" in completed.stdout
+        assert "reused run: succeeded" in completed.stdout
+        stages = list(
+            (root / ".viper/store").glob(
+                "*/experiments/recovery/runs/baseline/*/stages/train/resolved.yaml"
+            )
+        )
+        assert any("kind: reused" in path.read_text() for path in stages)
+    elif example == "download_training.py":
+        assert "result: succeeded" in completed.stdout
+        assert ("/tiny.csv", None) in received
+        models = list(
+            root.glob(
+                "experiments/download_training/runs/baseline/*/artifacts/train/model/model.json"
+            )
+        )
+        assert len(models) == 1
+        assert json.loads(models[0].read_text())["weight"] == pytest.approx(2, abs=1e-5)
+    elif example == "stages.py":
+        assert "result: succeeded" in completed.stdout
+        runs = list(root.glob("experiments/stage_pipeline/runs/baseline/*"))
+        assert len(runs) == 1
+        artifacts = runs[0] / "artifacts"
+        assert json.loads((artifacts / "embed/features/features.json").read_text()) == [
+            [1.0, 1.0],
+            [2.0, 4.0],
+            [3.0, 9.0],
+        ]
+        assert (artifacts / "report/report/rows.txt").read_text() == "rows: 3\n"
+        assert (
+            artifacts / "prepare/dataset/sorted.csv"
+        ).read_text() == "x,y\n1,2\n2,4\n3,6\n"
+        assert json.loads((artifacts / "train/model/model.json").read_text())[
+            "weight"
+        ] == pytest.approx(2, abs=1e-5)
+    else:
+        assert "verified measurements: 20" in completed.stdout
+        assert "indexed runs: 2" in completed.stdout
+        assert "successful runs: 2" in completed.stdout
+        assert "model artifacts: 2" in completed.stdout
+        assert "indexed measurements: 40" in completed.stdout
+        assert "observations: 1" in completed.stdout
+        restored = list((root / "restored").glob("*.json"))
+        assert len(restored) == 1
+        assert json.loads(restored[0].read_text())["weight"] == pytest.approx(
+            2, abs=1e-5
+        )
 
 
 @pytest.mark.parametrize(
@@ -192,7 +282,7 @@ def test_documented_http_request_identifies_the_example_file() -> None:
         request.expected_body_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
     )
     assert request.expected_body_bytes == source.stat().st_size
-    assert namespace["load_rows"](source) == [(1.0, 2.0), (2.0, 4.0), (3.0, 6.0)]
+    assert namespace["load_text"](source) == source.read_text(encoding="utf-8")
 
 
 def test_documented_checkpoint_round_trip(capsys: pytest.CaptureFixture[str]) -> None:
@@ -411,3 +501,62 @@ def test_read_source_discovers_from_nested_directory(
     expected = read_source(policy_workspace)
     monkeypatch.chdir(policy_workspace / "examples")
     assert read_source() == expected
+
+
+def test_documented_metrics_compute_and_persist_values(tmp_path: Path) -> None:
+    """Run the printed metric implementations through their recording handles."""
+    blocks = python_blocks(Path("docs/how-to/metrics-and-benchmarks.md").read_text())
+    namespace = {}
+    for block in blocks:
+        if (
+            "def mean_squared_error(" in block
+            or "class MeanAbsoluteError(" in block
+            or "class DistanceConfig(" in block
+        ):
+            exec(compile(block, "<documented metric>", "exec"), namespace)
+    config = namespace["MetricConfig"]()
+    path = tmp_path / "measurements.jsonl"
+    sink = MeasurementSink(
+        path,
+        run_id="01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        attempt_id=1,
+        stage_id="train",
+        metric_id="mean_squared_error",
+    )
+    mse = MetricHandle(
+        namespace["mean_squared_error"], sink, MetricContext(config=config)
+    )
+    assert mse.record((1.0, 3.0), (2.0, 5.0), epoch=1, step=1).value == 2.5
+    saved = json.loads(path.read_text())
+    assert (saved["value"], saved["epoch"], saved["step"]) == (2.5, 1, 1)
+    for predictions, targets in [((), ()), ((1.0,), (1.0, 2.0))]:
+        with pytest.raises(ValueError):
+            mse.record(predictions, targets)
+    assert len(path.read_text().splitlines()) == 1
+
+    mae_sink = MeasurementSink(
+        tmp_path / "mae.jsonl",
+        run_id=sink.run_id,
+        attempt_id=1,
+        stage_id="train",
+        metric_id="mean_absolute_error",
+    )
+    mae = MetricHandle(
+        namespace["MeanAbsoluteError"], mae_sink, MetricContext(config=config)
+    )
+    with pytest.raises(ValueError, match="at least one observation"):
+        mae.record()
+    mae.update(1.0, 2.0)
+    mae.update(3.0, 5.0)
+    assert mae.record(step=2).value == 1.5
+    mae.update(5.0, 5.0)
+    assert mae.record(step=3).value == 1.0
+    assert len(mae_sink.path.read_text().splitlines()) == 2
+
+    for order, expected in [(1, 7.0), (2, 5.0)]:
+        context = MetricContext(config=namespace["DistanceConfig"](order=order))
+        assert namespace["vector_distance"](context, (0.0, 0.0), (3.0, 4.0)) == expected
+        with pytest.raises(ValueError):
+            namespace["vector_distance"](context, (0.0,), (3.0, 4.0))
+    with pytest.raises(ValueError):
+        namespace["DistanceConfig"](order=0)

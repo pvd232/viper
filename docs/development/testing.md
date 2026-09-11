@@ -56,6 +56,12 @@ Run the live CUDA tests on the designated GPU host:
 make check-live
 ```
 
+## Documentation coverage
+
+The [documentation review](documentation-review.md) maps public workflows to
+executable examples and their tests. Printed programs are compared with their
+source files; execution checks run them in temporary Git workspaces.
+
 ## Cost tiers
 
 | Tier | Boundary |

@@ -5,15 +5,14 @@ from examples.workflow_functions import RowLimit, limit_rows, load_text
 from viper import execution
 from viper.authoring import (
     VariantDraft,
+    expand,
     experiment,
     factor,
     input,
-    plan,
     replicate,
     stage,
     variant,
 )
-from viper.config import TrainConfig
 from viper.metrics import min
 from viper.outputs import StageOutputs, TrainOutputs, output
 from viper.references import GitFileRef
@@ -21,23 +20,20 @@ from viper.repository import read_source, resolve_root
 from viper.runtime import LocalEnvSpec, observe_python_env
 
 
-def training_variant(rows: int, level: str) -> VariantDraft:
+def training_variant(name: str, rows: int, level: str) -> VariantDraft:
     """Connect row selection to the complete quickstart training function."""
     prepared = stage(
         limit_rows,
+        stage_id="prepare",
         config=RowLimit(rows=rows),
         inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
-        outputs=StageOutputs.model_validate(
-            {
-                "dataset": output(
-                    path="selected.csv", loader=load_text, data_role="training"
-                )
-            }
+        outputs=StageOutputs(
+            dataset=output(path="selected.csv", loader=load_text, data_role="training")
         ),
     )
     training = stage(
         fit,
-        config=TrainConfig(),
+        stage_id="train",
         inputs={"dataset": prepared.outputs["dataset"]},
         outputs=TrainOutputs(
             model=output(path="model.json", loader=load_json, data_role="training"),
@@ -49,8 +45,12 @@ def training_variant(rows: int, level: str) -> VariantDraft:
         objective=min(mse),
     )
     return variant(
+        name,
         levels={"training_rows": level},
-        stages={"prepare": prepared, "train": training},
+        stages=(
+            prepared,
+            training,
+        ),
         estimator=training.outputs["model"],
     )
 
@@ -58,11 +58,11 @@ def training_variant(rows: int, level: str) -> VariantDraft:
 study = experiment(
     experiment_id="training_rows",
     factors={"training_rows": factor(levels=("two", "three"))},
-    variants={
-        "two_rows": training_variant(2, "two"),
-        "three_rows": training_variant(3, "three"),
-    },
-    replicates={"seed_7": replicate(seed=7), "seed_19": replicate(seed=19)},
+    variants=(
+        training_variant("two_rows", 2, "two"),
+        training_variant("three_rows", 3, "three"),
+    ),
+    replicates=(replicate(seed=7), replicate(seed=19)),
 )
 
 
@@ -75,17 +75,7 @@ def main() -> None:
         ),
         python_env=observe_python_env(),
     )
-    drafts = tuple(
-        plan(
-            experiment=study,
-            variant=variant_id,
-            replicate=replicate_id,
-            source=source,
-            env=environment,
-        )
-        for variant_id in study.variants
-        for replicate_id in study.replicates
-    )
+    drafts = expand(study, source=source, env=environment)
     root = resolve_root()
     batch = execution.run_many(root, drafts, max_concurrency=2)
     for entry in batch.runs:

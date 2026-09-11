@@ -49,6 +49,7 @@ from .execution._batch import run_many as execute_many
 from .execution._benchmark import benchmark as execute_benchmark_run
 from .execution._restore import restore as restore_run_artifacts
 from .execution._run import run as execute_run
+from .execution._source import RunFetcher, run_git
 from .execution._stage import StageExecutionError, execute_stage_process
 from .execution.errors import BenchmarkExecutionError, RestoreError, RunError
 from .execution.results import ExperimentExecutionResult
@@ -902,10 +903,16 @@ def _local_fetcher(
     repository_root: Path,
     fetcher: StorageFetcher | None,
 ) -> StorageFetcher:
-    """Use an injected fetcher or bind the selected workspace's local store."""
+    """Read both committed workspace source and locally stored run artifacts."""
     if fetcher is not None:
         return fetcher
-    return LocalArtifactStore(repository_root).fetch
+    # Completed runs join Git source references to local artifact references.
+    # Use the execution fetcher so verification follows both kinds of reference.
+    remotes = run_git(repository_root, "remote", "-v").decode().splitlines()
+    repository = next(
+        (row.split()[1] for row in remotes if row.startswith("origin\t")), ""
+    )
+    return RunFetcher(repository_root, LocalArtifactStore(repository_root), repository)
 
 
 def validate_stage(request: ValidateStageRequest) -> ValidateStageSuccess:

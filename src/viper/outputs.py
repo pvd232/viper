@@ -46,6 +46,10 @@ class StageOutputs(BaseModel, Generic[OutputT]):
 
     model_config = ConfigDict(extra="allow", frozen=True)
 
+    def __init__(self, /, **data: OutputT) -> None:
+        """Accept workspace-defined output names as keyword arguments."""
+        super().__init__(**data)
+
     @model_validator(mode="before")
     @classmethod
     def validate_output_values(cls, value: Any) -> Any:

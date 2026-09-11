@@ -1241,7 +1241,7 @@ def test_verified_reuse_skips_stage_process(tmp_path: Path) -> None:
                 estimator=trained.outputs["model"],
             )
         },
-        replicates={"r1": replicate(seed=7)},
+        replicates={"r1": replicate("r1", seed=7)},
     )
     source_ref = GitSource.model_validate(
         {"repository": REPOSITORY, "commit": source_commit}

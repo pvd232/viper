@@ -167,10 +167,10 @@ def fit(context: Context[TrainConfig]) -> None:
 ### 3. Declare the experiment
 
 ```python
-mse = measure(mean_squared_error, config=MetricConfig())
+mse = measure(mean_squared_error)
 training = stage(
     fit,
-    config=TrainConfig(),
+    stage_id="train",
     inputs={
         "dataset": input(
             "examples/data/tiny.csv",
@@ -194,18 +194,21 @@ training = stage(
 )
 study = experiment(
     experiment_id="cpu_quickstart",
-    variants={
-        "baseline": variant(
-            levels={},
-            stages={"train": training},
+    variants=(
+        variant(
+            "baseline",
+            stages=(training,),
             estimator=training.outputs["model"],
-        )
-    },
-    replicates={"seed_7": replicate(seed=7)},
+        ),
+    ),
+    replicates=(replicate(seed=7),),
 )
 ```
 
 ### 4. Identify the source and run the experiment
+
+This experiment has one variant and one replicate, so `plan()` selects them
+automatically. Experiments with several choices require their names.
 
 `read_source()` returns the checked-out commit and the `origin` repository URL.
 Omitting `reproducibility` selects reproducible execution.
@@ -222,8 +225,6 @@ def main() -> None:
     )
     draft = plan(
         experiment=study,
-        variant="baseline",
-        replicate="seed_7",
         source=source,
         env=environment,
     )

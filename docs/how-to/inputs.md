@@ -3,6 +3,11 @@
 Use a local input when the bytes already live in the workspace. Use a download stage
 when execution must retrieve bytes over HTTP and record the response.
 
+Run the complete [download-and-training program](../../examples/download_training.py)
+from the repository root with `python -m examples.download_training`. It retrieves
+the pinned CSV over HTTPS, checks its bytes, and passes the downloaded artifact
+to the training stage. The sections below explain each declaration.
+
 ## Select a local file
 
 Pass the repository-relative path and its role to `input()`:
@@ -19,7 +24,6 @@ The tutorial defines `fit`, `mse`, `load_json`, and `load_state`:
 
 ```python
 from viper.authoring import stage
-from viper.config import TrainConfig
 from viper.metrics import min
 from viper.outputs import TrainOutputs, output
 
@@ -32,7 +36,7 @@ training_outputs = TrainOutputs(
 
 training = stage(
     fit,
-    config=TrainConfig(),
+    stage_id="train",
     inputs={"dataset": dataset},
     outputs=training_outputs,
     metrics=(mse,),
@@ -51,20 +55,18 @@ how much it may accept.
 
 This declaration retrieves the quickstart CSV from a fixed VIPER source commit.
 The expected digest and size identify that committed file.
+`load_text` comes from [workflow_functions.py](../../examples/workflow_functions.py)
+and reads the retrieved CSV as UTF-8 text.
 
 ```python
-from pathlib import Path
-
+from examples.workflow_functions import load_text
 from viper.outputs import StageOutputs, output
 from viper.authoring import download
 from viper.http import HttpRequestSpec, HttpRetrievalPolicy
 
-def load_rows(path: Path) -> list[tuple[float, float]]:
-    lines = path.read_text(encoding="utf-8").splitlines()[1:]
-    return [(float(x), float(y)) for x, y in (line.split(",") for line in lines)]
-
 
 fetch_data = download(
+    stage_id="download",
     inputs={
         "dataset": HttpRequestSpec(
             url=(
@@ -76,13 +78,13 @@ fetch_data = download(
             expected_body_bytes=16,
         )
     },
-    outputs=StageOutputs.model_validate({
-        "dataset": output(
+    outputs=StageOutputs(
+        dataset=output(
             path="train.csv",
-            loader=load_rows,
+            loader=load_text,
             data_role="training",
         )
-    }),
+    ),
     policy=HttpRetrievalPolicy(
         allowed_schemes=frozenset({"https"}),
         allowed_hosts=frozenset({"raw.githubusercontent.com"}),
@@ -107,7 +109,7 @@ above. Select the download stage's output in the downstream stage:
 ```python
 training = stage(
     fit,
-    config=TrainConfig(),
+    stage_id="train",
     inputs={"dataset": fetch_data.outputs["dataset"]},
     outputs=training_outputs,
     metrics=(mse,),
@@ -133,6 +135,19 @@ directory whose member files are recorded together.
 `predictions`. Other stage outputs use `StageOutputs`. An output declaration reserves
 the path and loader; your function writes the file. The recorded file then becomes an
 artifact.
+
+Define loaders as top-level functions in a module whose imports are available
+in the verification environment. Verification retrieves that module from the
+recorded commit; sibling workspace modules require separate installation in
+the environment. The examples keep shared loaders in
+[workflow_functions.py](../../examples/workflow_functions.py), whose imports
+are satisfied by the installed VIPER environment.
+
+`TrainOutputs` specifies required output names. Set each output’s `data_role`
+explicitly to preserve the restrictions inherited from input data. If a
+training stage consumes validation data, its outputs must retain at least the
+`validation` role. Declaring them as `training` would discard that restriction
+and is rejected. Training stages accept only `training` and `validation` inputs.
 
 ## Use an artifact from a completed run
 

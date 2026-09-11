@@ -64,7 +64,8 @@ or config change requires a new plan.
 
 Applications that need stable error codes can use the
 [typed API](../reference/api.md#typed-operations). Direct execution functions
-raise exceptions; typed operations return a success or failure model.
+raise exceptions. Direct typed operations raise `ViperError` on expected failures;
+`api.dispatch()` converts those exceptions to a `ViperFailure` result.
 
 ## Handle partial batch failure
 

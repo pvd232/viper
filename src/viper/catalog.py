@@ -468,19 +468,14 @@ def _artifact_rows(source: CatalogRunSource) -> tuple[CatalogArtifact, ...]:
 
 def _measurement_rows(source: CatalogRunSource) -> tuple[CatalogMeasurement, ...]:
     """Pair each verified measurement with its immutable measurement file."""
-    files = {
-        attempt.attempt_id: attempt.measurement_files
-        for attempt in source.verified.attempts
-    }
-    counts: dict[int, int] = {}
+    if len(source.verified.measurements) != len(source.verified.measurement_references):
+        raise ValueError("measurement is missing its immutable file reference")
     rows: list[CatalogMeasurement] = []
-    for measurement in source.verified.measurements:
-        position = counts.get(measurement.attempt_id, 0)
-        available = files.get(measurement.attempt_id, ())
-        if position >= len(available):
-            raise ValueError("measurement is missing its immutable file reference")
-        reference = available[position]
-        counts[measurement.attempt_id] = position + 1
+    for measurement, reference in zip(
+        source.verified.measurements,
+        source.verified.measurement_references,
+        strict=True,
+    ):
         rows.append(
             CatalogMeasurement(
                 run=source.reference,
@@ -495,11 +490,6 @@ def _measurement_rows(source: CatalogRunSource) -> tuple[CatalogMeasurement, ...
                 measured_at=measurement.measured_at,
             )
         )
-    if any(
-        counts.get(attempt_id, 0) != len(available)
-        for attempt_id, available in files.items()
-    ):
-        raise ValueError("measurement file has no verified measurement")
     return tuple(rows)
 
 

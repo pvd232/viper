@@ -31,15 +31,14 @@ from examples.workflow_functions import RowLimit, limit_rows, load_text
 from viper import execution
 from viper.authoring import (
     VariantDraft,
+    expand,
     experiment,
     factor,
     input,
-    plan,
     replicate,
     stage,
     variant,
 )
-from viper.config import TrainConfig
 from viper.metrics import min
 from viper.outputs import StageOutputs, TrainOutputs, output
 from viper.references import GitFileRef
@@ -47,23 +46,20 @@ from viper.repository import read_source, resolve_root
 from viper.runtime import LocalEnvSpec, observe_python_env
 
 
-def training_variant(rows: int, level: str) -> VariantDraft:
+def training_variant(name: str, rows: int, level: str) -> VariantDraft:
     """Connect row selection to the complete quickstart training function."""
     prepared = stage(
         limit_rows,
+        stage_id="prepare",
         config=RowLimit(rows=rows),
         inputs={"dataset": input("examples/data/tiny.csv", data_role="training")},
-        outputs=StageOutputs.model_validate(
-            {
-                "dataset": output(
-                    path="selected.csv", loader=load_text, data_role="training"
-                )
-            }
+        outputs=StageOutputs(
+            dataset=output(path="selected.csv", loader=load_text, data_role="training")
         ),
     )
     training = stage(
         fit,
-        config=TrainConfig(),
+        stage_id="train",
         inputs={"dataset": prepared.outputs["dataset"]},
         outputs=TrainOutputs(
             model=output(path="model.json", loader=load_json, data_role="training"),
@@ -75,8 +71,12 @@ def training_variant(rows: int, level: str) -> VariantDraft:
         objective=min(mse),
     )
     return variant(
+        name,
         levels={"training_rows": level},
-        stages={"prepare": prepared, "train": training},
+        stages=(
+            prepared,
+            training,
+        ),
         estimator=training.outputs["model"],
     )
 
@@ -84,11 +84,11 @@ def training_variant(rows: int, level: str) -> VariantDraft:
 study = experiment(
     experiment_id="training_rows",
     factors={"training_rows": factor(levels=("two", "three"))},
-    variants={
-        "two_rows": training_variant(2, "two"),
-        "three_rows": training_variant(3, "three"),
-    },
-    replicates={"seed_7": replicate(seed=7), "seed_19": replicate(seed=19)},
+    variants=(
+        training_variant("two_rows", 2, "two"),
+        training_variant("three_rows", 3, "three"),
+    ),
+    replicates=(replicate(seed=7), replicate(seed=19)),
 )
 
 
@@ -101,17 +101,7 @@ def main() -> None:
         ),
         python_env=observe_python_env(),
     )
-    drafts = tuple(
-        plan(
-            experiment=study,
-            variant=variant_id,
-            replicate=replicate_id,
-            source=source,
-            env=environment,
-        )
-        for variant_id in study.variants
-        for replicate_id in study.replicates
-    )
+    drafts = expand(study, source=source, env=environment)
     root = resolve_root()
     batch = execution.run_many(root, drafts, max_concurrency=2)
     for entry in batch.runs:
@@ -127,21 +117,35 @@ if __name__ == "__main__":
     main()
 ```
 
+Variants declare their names. `replicate(seed=7)` automatically names the
+replicate `seed_7` and uses `7` to initialize its random generators.
+The name can describe a trial instead: `replicate("trial_a", seed=7)` has the
+same seed. Distinct replicates may deliberately share a seed.
+
+`stage_id` identifies a stage within the variant. Its decorator determines
+its kind. For example, two stages named `encoder` and `classifier` can both
+use `@train`; the names distinguish their outputs and measurements. Tuples
+preserve declaration order and reject duplicate names. Mappings remain useful
+when building experiments from a configuration file; a mapping key must agree
+with any name on its value.
+
 Each factor lists the permitted labels for one experimental choice. Here
 `training_rows` permits `two` and `three`. `RowLimit.rows` actually controls
 which rows the function writes; the labels describe that choice. Every variant
 must assign one level to every declared factor.
 
-The program creates four plans and prints one outcome per run. `plan()` assigns
-each plan a new run ID. `run_many()` saves each draft and executes the batch. The two variants learn different weights after twenty
-updates. This training function uses fixed inputs and a fixed initial weight, so changing
-the seed alone preserves its result.
+`expand()` creates one plan for each variant-replicate pair and generates their
+run IDs. `run_many()` saves the plans and executes the batch. To run one pair
+instead, call `plan()` with explicit `variant=` and `replicate=` selections.
+
+The program prints four outcomes. The two variants learn different weights
+after twenty updates. This training function uses fixed inputs and a fixed
+initial weight, so changing the seed alone preserves its result.
 
 ## Supply run IDs with expand
 
 Use `expand()` when your caller already has a run ID for every selected pair.
-Inside `main()` above, replace the `drafts = tuple(...)` assignment with this
-block and add `expand` to the imports from `viper.authoring`:
+Inside `main()` above, replace the `drafts = expand(...)` assignment with:
 
 ```python
 drafts = expand(
@@ -163,8 +167,8 @@ drafts = expand(
 
 These fixed IDs permit one batch; use fresh IDs for another. `expand()` orders
 the drafts by variant declaration, then replicate declaration. To select a
-subset, pass `variants=("two_rows",)` or `replicates=("seed_7",)` and restrict
-`run_ids` to exactly those pairs. Missing pairs, extra pairs, and duplicate IDs
+subset, pass `variants=("two_rows",)` or `replicates=("seed_7",)`. When supplying
+`run_ids`, restrict the mapping to exactly those pairs. Missing pairs, extra pairs, and duplicate IDs
 are rejected.
 
 For either approach, `max_concurrency` limits simultaneous local runs. See

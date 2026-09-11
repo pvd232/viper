@@ -89,6 +89,8 @@ class VerifiedRunResult:
     attempts: tuple[RunAttempt, ...]
     resolved_stages: dict[StageId, ResolvedBaseSpec]
     measurements: tuple[Measurement, ...]
+    # Each entry identifies the JSONL file containing the same-position measurement.
+    measurement_references: tuple[ResolvedFileRef, ...] = ()
     inputs: dict[StageId, dict[InputName, VerifiedInput]] = field(default_factory=dict)
     reuse: dict[StageId, StageReuseReceipt] = field(default_factory=dict)
 

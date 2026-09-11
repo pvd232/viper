@@ -50,7 +50,7 @@ one value. `metric_id` is the name used to access the metric during execution.
 Create a configured metric with `measure()`:
 
 ```python
-mse = measure(mean_squared_error, config=MetricConfig())
+mse = measure(mean_squared_error)
 ```
 
 Attaching `mse` through `stage(metrics=(mse,))`, as shown below, makes a
@@ -78,7 +78,8 @@ stateful metrics and recomputation from saved files.
 ```python
 training = stage(
     fit,
-    config=TrainConfig(),
+    stage_id="train",
+
     inputs={
         "dataset": input(
             "examples/data/tiny.csv",
@@ -126,14 +127,14 @@ seeds for repeated execution of a variant:
 ```python
 study = experiment(
     experiment_id="cpu_quickstart",
-    variants={
-        "baseline": variant(
-            levels={},
-            stages={"train": training},
+    variants=(
+        variant(
+            "baseline",
+            stages=(training,),
             estimator=training.outputs["model"],
-        )
-    },
-    replicates={"seed_7": replicate(seed=7)},
+        ),
+    ),
+    replicates=(replicate(seed=7),),
 )
 ```
 
@@ -161,8 +162,7 @@ def main() -> None:
     )
     draft = plan(
         experiment=study,
-        variant="baseline",
-        replicate="seed_7",
+
         source=source,
         env=environment,
     )

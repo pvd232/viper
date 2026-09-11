@@ -117,6 +117,7 @@ def mean_squared_error(
         for prediction, target in zip(predictions, targets, strict=True)
     ) / len(targets)
 
+
 @train(config=TrainConfig)
 def fit(context: Context[TrainConfig]) -> None:
     """Fit ``y = weight * x`` with gradient descent on the local CPU."""
@@ -164,10 +165,10 @@ def fit(context: Context[TrainConfig]) -> None:
 ### Declare the experiment
 
 ```python
-mse = measure(mean_squared_error, config=MetricConfig())
+mse = measure(mean_squared_error)
 training = stage(
     fit,
-    config=TrainConfig(),
+    stage_id="train",
     inputs={
         "dataset": input(
             "examples/data/tiny.csv",
@@ -191,14 +192,14 @@ training = stage(
 )
 study = experiment(
     experiment_id="cpu_quickstart",
-    variants={
-        "baseline": variant(
-            levels={},
-            stages={"train": training},
+    variants=(
+        variant(
+            "baseline",
+            stages=(training,),
             estimator=training.outputs["model"],
-        )
-    },
-    replicates={"seed_7": replicate(seed=7)},
+        ),
+    ),
+    replicates=(replicate(seed=7),),
 )
 ```
 
@@ -219,8 +220,6 @@ def main() -> None:
     )
     draft = plan(
         experiment=study,
-        variant="baseline",
-        replicate="seed_7",
         source=source,
         env=environment,
     )
@@ -273,11 +272,11 @@ Continue from a saved plan or run result:
 | Author and execute a plan | `viper.authoring.plan()` and `viper.execution.run()` | [Get started](docs/tutorials/getting-started.md) |
 | Connect stage inputs and outputs | `viper.authoring.stage()` | [Compose stages](docs/how-to/stages.md) |
 | Execute a batch and handle failures | `viper.execution.run_many()` | [Execution outcomes](docs/how-to/execution.md) |
-| Retry a failed run | `viper.execution.retry()` or `viper retry` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
+| Retry a failed run | `viper.execution.retry()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
 | Confirm a benchmark | `viper.execution.benchmark()` | [Metrics and benchmarks](docs/how-to/metrics-and-benchmarks.md) |
 | Restore verified artifacts | `viper.execution.restore()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
-| Inspect lineage or compare runs | `viper lineage` and `viper compare-runs` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
-| Search completed measurements | `viper catalog-refresh` and `viper search-measurements` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
+| Inspect lineage or compare runs | `viper.api.lineage()` and `viper.api.compare_runs()` | [Retry, restore, and compare](docs/how-to/retry-restore-compare.md) |
+| Search completed measurements | `viper.api.catalog_refresh()` and `catalog().measurements()` | [Catalog, knowledge, and MCP](docs/how-to/catalog-knowledge-mcp.md) |
 | Give an agent typed access | `viper mcp --root .` | [How VIPER works](docs/explanation/how-viper-works.md) |
 
 Place `--json` before a CLI command when another program needs one typed result

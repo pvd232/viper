@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Generate batch run IDs in `expand()` when callers omit `run_ids`.
+- Accept tuples of named stages and variants, derive replicate names from seeds,
+  and reject duplicate or conflicting declaration names.
+- Use the sole variant and replicate when plan selections are omitted; require
+  explicit selections when several choices exist. Use decorated config defaults
+  when stage config is omitted.
+- Fix Python verification of mixed Git/local references and catalog indexing of
+  multiple measurements from one JSONL file.
+- Add complete Python inspection, stage-pipeline, HTTP-training, and recovery
+  examples, with execution and documentation/source agreement checks.
+
 - Explain stage and metric contexts before use, and provide complete batch and
   benchmark examples with their data and function definitions.
 - Accept Python drafts in `execution.run_many()` and retain stored plan

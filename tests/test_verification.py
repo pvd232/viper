@@ -1490,6 +1490,27 @@ class RunPlanRelationshipTests(unittest.TestCase):
             {"train": train},
         )
 
+        # The output container identifies checkpoint roles, not data provenance.
+        # Keeping model/resume_state names must not permit a validation downgrade.
+        for name in ("model", "resume_state"):
+            with self.subTest(output=name):
+                outputs = type(train.outputs).model_validate(
+                    {
+                        output_name: declared.model_copy(
+                            update={"data_role": "training"}
+                        )
+                        if output_name == name
+                        else declared
+                        for output_name, declared in train.outputs.items()
+                    }
+                )
+                downgraded = train.model_copy(update={"outputs": outputs})
+                changed_run, _ = run_spec([("train", downgraded)])
+                with self.assertRaisesRegex(VerificationError, "less restricted"):
+                    verify_run_plan_relationships(
+                        changed_run, experiment, variant, None, {"train": downgraded}
+                    )
+
     def test_training_rejects_evaluation_inputs(self) -> None:
         """Reject evaluation data supplied to a training stage."""
         train = train_spec()

@@ -64,7 +64,7 @@ def mean_squared_error(
     ) / len(targets)
 
 
-mse = measure(mean_squared_error, config=MetricConfig())
+mse = measure(mean_squared_error)
 ```
 
 Set `metrics=(mse,)` in the stage declaration, as in the
@@ -219,10 +219,51 @@ class MeanAbsoluteError(StatefulMetric[MetricConfig]):
         return self.total / self.count
 
 
-mae = measure(MeanAbsoluteError, config=MetricConfig())
+mae = measure(MeanAbsoluteError)
 ```
 
 Attach `mae` to the stage. Call
 `context.metrics["mean_absolute_error"].update(prediction, target)` for each pair,
 then call `context.metrics["mean_absolute_error"].record(step=step)` to save the
 mean absolute error. Accumulated state persists after recording.
+
+## Configure a distance metric
+
+A metric can read its own settings from `context.config`. This example measures
+the distance between two vectors. `order=1` sums absolute coordinate differences;
+`order=2` computes Euclidean distance. The setting belongs to the metric,
+independently of the training algorithm:
+
+```python
+from typing import Literal
+
+from viper.config import MetricConfig
+from viper.metrics import MetricContext, measure, metric
+
+
+class DistanceConfig(MetricConfig):
+    """Choose the norm used to compare vectors."""
+
+    order: Literal[1, 2] = 2
+
+
+@metric(metric_id="vector_distance", mode="stateless")
+def vector_distance(
+    context: MetricContext[DistanceConfig],
+    left: tuple[float, ...],
+    right: tuple[float, ...],
+) -> float:
+    """Compute L1 or L2 distance between nonempty, equally sized vectors."""
+    if not left:
+        raise ValueError("vector_distance requires nonempty vectors")
+    order = context.config.order
+    total = sum(abs(a - b) ** order for a, b in zip(left, right, strict=True))
+    return total ** (1 / order)
+
+
+distance = measure(vector_distance, config=DistanceConfig(order=2))
+```
+
+Attach `distance` with `stage(metrics=(distance,))`. Inside that stage,
+`context.metrics["vector_distance"].record((0.0, 0.0), (3.0, 4.0))` records `5.0`.
+Changing the configured order to `1` records `7.0` for the same vectors.
