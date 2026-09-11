@@ -177,17 +177,18 @@ CPU quickstart. The complete file includes these dependencies together. It uses 
 data roles because the run includes benchmark criteria. The excerpt below
 uses those same roles.
 
-The functions below have separate jobs. `predict` reads the model's `weight`
-and applies it to each selected test row's `x` value. It writes
-`[prediction, target]` pairs to the declared `predictions` output. With weight
-`2.0` and selected rows `(1, 3)` and `(3, 7)`, that file contains
-`[[2.0, 3.0], [6.0, 7.0]]`.
+The `evaluation` declaration connects the model to its metric:
 
-`root_mean_squared_error` reads those saved pairs and returns `1.0` for this
-example. Its `MetricDependency` selects the evaluation output named
-`predictions`. VIPER passes that file's path through the metric's
-`context.artifacts`; the evaluation function writes it through the stage's
-`context.outputs`. These are two contexts supplied to two different functions.
+| Declaration | Connection |
+| --- | --- |
+| `"model": training.outputs["model"]` | Supplies the training stage's model to `predict`. |
+| `predictions` in `EvalOutputs` | Names the file where `predict` writes `[prediction, target]` pairs. |
+| `metrics=(rmse,)` | Attaches RMSE to this evaluation stage. |
+| `name="predictions"` in `MetricDependency` | Selects this stage's output for the metric's `context.artifacts`. |
+
+The variant contains both stages. Each has a `stage_id`; output names such as
+`model` and `predictions` belong to their stage. The run identifies the execution
+that produced the files.
 
 ```python
 import json

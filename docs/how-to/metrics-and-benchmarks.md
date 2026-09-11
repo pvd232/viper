@@ -100,28 +100,13 @@ including scores that lack the mathematical properties of a distance metric.
 
 ## Recompute a stateless metric
 
-Save the inputs to a calculation when you want VIPER to repeat it during
-verification. In this example, the evaluation stage uses the trained model to
-make predictions. RMSE measures the differences between those predictions and
-the known targets.
+The [evaluation stage](stages.md#evaluate-against-saved-test-data) selects its
+model with `"model": training.outputs["model"]`. Its `predict` function writes
+`[prediction, target]` pairs to the stage's `predictions` output.
 
-The [`predict` function and its stage declaration](stages.md#evaluate-against-saved-test-data)
-show the producer of the metric's input. `predict` reads the model's `weight`,
-the test CSV, and the selected row indices. It writes a JSON array to
-`context.outputs["predictions"]`, with one `[prediction, target]` pair per
-selected row. For example, a weight of `2.0` and selected test rows `(1, 3)`
-and `(3, 7)` produce:
-
-```json
-[[2.0, 3.0], [6.0, 7.0]]
-```
-
-The linked stage declaration names the output `predictions` in `EvalOutputs`
-and assigns it the filename `predictions.json`.
-The dependency below selects that output by its name, `predictions`.
-VIPER supplies its local file path as `context.artifacts["predictions"]` when
-calling the metric. The metric opens the file and computes RMSE from its pairs;
-the model weights are used by `predict` earlier in the evaluation.
+Attach the metric below to that stage. `MetricDependency` selects its
+`predictions` output, and `context.artifacts["predictions"]` supplies the file's
+path. For example, `[[2.0, 3.0], [6.0, 7.0]]` gives RMSE `1.0`.
 
 ```python
 import json
@@ -155,19 +140,13 @@ rmse = measure(
 )
 ```
 
-Attach `rmse` to the evaluation stage with `metrics=(rmse,)`. VIPER calls it
-after `predict` returns, then calls it again during verification using the
-saved prediction file. Both calls receive a `MetricContext` containing the
-prediction file's path. For the pairs above, the
-squared errors are both `1.0`, so RMSE is `1.0`.
+Set `metrics=(rmse,)` on the evaluation stage. VIPER computes RMSE after
+`predict` returns and repeats it from the saved file during verification.
 
-`dependencies` selects the files needed to repeat the calculation, and
-`comparator` defines how to compare the repeated value with the saved measurement.
-Supply both arguments together. A recomputable metric must accept its context
-alone. Save any inputs needed for recomputation as declared file dependencies.
-A difference of at most `1e-12` passes this comparator. Use `mode="exact"` for
-exact equality or `mode="relative"` with a positive tolerance for relative error.
-The required data role must match the selected artifact.
+Supply `dependencies` and `comparator` together; the function must accept its
+context alone. The dependency's data role must match the output. This comparator
+allows an absolute difference of `1e-12`; `exact` requires equality, and
+`relative` applies a positive relative tolerance.
 
 ## Add benchmark criteria
 
