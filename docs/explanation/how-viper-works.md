@@ -188,9 +188,9 @@ check; see [What VIPER guarantees](guarantees.md).
 
 Common failures include:
 
-- `RootError` from `viper.repository`: `read_source()` cannot find a valid
-  workspace, source commit, or selected Git remote. Run from the workspace and
-  check that its source is committed.
+- `RootError` from `viper.repository`: the workspace, source commit, or
+  selected Git remote is missing or invalid. Run from the workspace and check
+  that its source is committed.
 - `ValueError` from `plan()`: the variant or replicate name is absent from the
   experiment, or the supplied settings are invalid. Correct the declaration
   before executing it.
