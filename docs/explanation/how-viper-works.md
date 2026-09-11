@@ -1,94 +1,207 @@
 # How VIPER works
 
-VIPER saves an experiment's plan, runs its stages, and checks the results against
-that plan. The [CPU quickstart](../../examples/cpu_quickstart.py) shows this with
-a linear model trained on a small CSV dataset.
+VIPER executes Python functions according to a saved experiment plan.
+The code below comes from the complete [CPU quickstart](../../examples/cpu_quickstart.py).
+For installation and the full program, see the [tutorial](../tutorials/getting-started.md).
 
-Run it from the workspace root:
+## Define a metric
 
-```bash
-python examples/cpu_quickstart.py
+A metric function computes a measured quantity. This function computes mean
+squared error from predictions and targets:
+
+```python
+@metric(metric_id="mean_squared_error", mode="stateless")
+def mean_squared_error(
+    _context: MetricContext[MetricConfig],
+    predictions: tuple[float, ...],
+    targets: tuple[float, ...],
+) -> float:
+    """Compute mean squared error over matching predictions and targets."""
+    if not targets:
+        raise ValueError("mean_squared_error requires at least one target")
+    return sum(
+        (prediction - target) ** 2
+        for prediction, target in zip(predictions, targets, strict=True)
+    ) / len(targets)
 ```
 
-The model learns a weight close to 2. The program prints the weight, the run's
-status, and the path to `resolved.yaml`, which records the result.
-See the [tutorial](../tutorials/getting-started.md) for the complete program.
+The two tuples must have the same length, and `targets` must contain at least
+one value. `metric_id` is the name used to access the metric during execution.
+`mode="stateless"` means each call computes its value from the supplied arguments.
 
-## Declare the training stage
+Create a configured metric with `measure()`:
 
-`fit()` reads the dataset and trains the model. Its `@train(config=TrainConfig)`
-decorator identifies it as a training function. `stage()` connects that function
-to the dataset and declares where it will save the model and checkpoint.
+```python
+mse = measure(mean_squared_error, config=MetricConfig())
+```
 
-VIPER passes a `Context` to `fit()`. The function reads the CSV from
-`context.inputs["dataset"]` and writes the learned weight to
-`context.outputs["model"]`. It saves the training state separately through
-`context.outputs["resume_state"]`.
+Inside `fit()`, the following call computes and saves the measurement:
 
-Each of the twenty training steps computes predictions and updates the weight.
-The `mean_squared_error` function calculates the error from those predictions
-and their targets. Calling `context.metrics["mean_squared_error"]` evaluates
-that function and records its value for the current epoch.
+```python
+measurement = context.metrics["mean_squared_error"].record(
+    predictions, targets, epoch=epoch, step=epoch
+)
+loss = measurement.value
+```
 
-The experiment declaration, `study`, places this stage in the `baseline`
-variant and defines a replicate with seed 7. Variants select different stage
-configurations; replicates repeat a variant with a selected seed.
+`record()` calls `mean_squared_error` with the predictions and targets. It
+returns a `Measurement` containing the computed value and records its epoch
+and step. See [metrics and benchmarks](../how-to/metrics-and-benchmarks.md) for
+stateful metrics and recomputation from saved files.
 
-## Select a run
+## Declare a stage
 
-`plan()` selects the `baseline` variant and the `seed_7` replicate from `study`.
-It assigns a run ID and returns a `RunPlanDraft`.
+`stage()` connects a function to its inputs and outputs:
 
-The draft includes the source commit returned by `read_source()`. It also
-records the Python environment and lockfile selected by the example. Omitting
-`reproducibility` selects the reproducible policy; the concrete settings are
-saved in the draft. Later changes to the original configuration objects leave
-the draft unchanged.
+```python
+training = stage(
+    fit,
+    config=TrainConfig(),
+    inputs={
+        "dataset": input(
+            "examples/data/tiny.csv",
+            data_role="training",
+        )
+    },
+    outputs=TrainOutputs(
+        model=output(
+            path="model.json",
+            loader=load_json,
+            data_role="training",
+        ),
+        resume_state=output(
+            path="resume_state.pt",
+            loader=load_state,
+            data_role="training",
+        ),
+    ),
+    metrics=(mse,),
+    objective=min(mse),
+)
+```
 
-## Save the plan and execute it
+`fit` is the training function declared with `@train(config=TrainConfig)` in
+the quickstart. VIPER passes the `TrainConfig()` instance through
+`context.config` when it calls that function.
 
-`execution.run(draft)` saves the plan before starting the stage. VIPER records
-the source file and function name for each implementation, together with a hash
-of the file's contents. These references let VIPER check that it uses the code
-selected by the plan.
+- `inputs["dataset"]` selects the CSV file. The worker supplies its local path
+  through `context.inputs["dataset"]`.
+- `outputs` declares the model and checkpoint files. `fit()` must write both
+  files through `context.outputs`; their loaders validate them after the call.
+- `metrics` makes `mse` available through `context.metrics`.
+- `objective=min(mse)` declares that smaller metric values are preferable.
+  The gradient-descent update is implemented in `fit()`.
 
-Before starting work, VIPER checks the plan and its source files and confirms
-that the runtime meets the plan's requirements. It then starts a worker process
-for `fit()`. The worker applies the execution settings and records the active
-PyTorch controls immediately before calling the function.
+The return value, `training`, is a `StageDraft`. Constructing it declares the
+work; `execution.run()` executes it. See [stage kinds](../how-to/stages.md) for
+download, evaluation, and other stage declarations.
 
-A run can have several attempts. Each attempt records stage progress so that a
-failure can be inspected or retried. Retrying keeps the same plan; changing the
-experiment requires a new plan.
+## Organize variants and replicates
+
+An experiment groups stage configurations into variants. Replicates select
+seeds for repeated execution of a variant:
+
+```python
+study = experiment(
+    experiment_id="cpu_quickstart",
+    variants={
+        "baseline": variant(
+            levels={},
+            stages={"train": training},
+            estimator=training.outputs["model"],
+        )
+    },
+    replicates={"seed_7": replicate(seed=7)},
+)
+```
+
+`baseline` contains one stage, named `train`. Its `estimator` selects the model
+output for the run. The `seed_7` replicate sets the run's seed to 7.
+
+Add variants to compare stage configurations. Add replicates to run a variant
+with different seeds. [Variants and replicates](../how-to/variants-and-replicates.md)
+shows how to expand those combinations into run plans.
+
+## Select and execute a run
+
+`plan()` selects one variant and replicate. The quickstart executes that plan
+from its entry point:
+
+```python
+def main() -> None:
+    """Run the training experiment with the default reproducible policy."""
+    source = read_source()
+    environment = LocalEnvSpec(
+        lockfile=GitFileRef(
+            repository=source.repository, commit=source.commit, path="pyproject.toml"
+        ),
+        python_env=observe_python_env(),
+    )
+    draft = plan(
+        experiment=study,
+        variant="baseline",
+        replicate="seed_7",
+        source=source,
+        env=environment,
+    )
+    resolved_run = execution.run(draft)
+    model_path = resolved_run.path.parent / "artifacts/train/model/model.json"
+    print(f"status: {resolved_run.status}")
+    print(f"model: {model_path.read_text(encoding='utf-8').strip()}")
+    print(f"result: {resolved_run.path}")
+```
+
+`read_source()` finds the workspace from the current directory and reads its
+Git commit and `origin` URL. The environment declaration records the Python
+packages and the selected lockfile. Commit source changes before creating a
+new plan so the saved commit contains the code you intend to run.
+
+`plan()` returns a `RunPlanDraft` with a new run ID. The default execution
+policy is `reproducible`. Use `reproducibility="relaxed"` to permit
+nondeterministic algorithms, or supply a `ReproducibilitySpec` for custom
+settings. The [policy example](../../examples/execution_policies.py) runs each
+selection with the same training experiment.
+
+`execution.run(draft)` saves the plan, checks its source and runtime
+requirements, and starts the stage worker. The worker records the active
+runtime controls immediately before calling `fit()`.
 
 To execute a plan later, save it with `freeze_run_plan()`. The
-[execution guide](../how-to/execution.md#save-a-plan-for-later) shows how to run
-that saved plan later.
+[execution guide](../how-to/execution.md#save-a-plan-for-later) shows both saved
+plans and batch execution.
 
-## Check the output
+## Read the result
 
-After `fit()` returns, VIPER checks its declared outputs and records each file's
-path, size, and SHA-256 hash. A hash lets later verification detect changed
-file contents. The saved measurements identify the stage, metric, and epoch
-that produced each value.
+`execution.run()` returns a `RunResult` after verification succeeds:
 
-Before returning a successful result, VIPER verifies the completed run against
-its plan. Required stages must have completed, file contents must match their
-recorded hashes, and recorded runtime controls must match the selected settings.
-Measurements must belong to metrics declared by the stage.
+- `.status` is the run's final status.
+- `.path` is the local path to `resolved.yaml`.
+- `.record` contains the saved run record.
+- `.reference` identifies the stored copy used by restore and verification.
 
-The returned `RunResult` exposes `.status` and `.path`. Its `.record` contains
-the saved run record, and `.reference` identifies the stored copy. The example
-uses `.path` to locate `resolved.yaml` and read the model file beside it.
+Verification checks the completed stages and their outputs against the saved
+plan. It checks file hashes and compares the recorded runtime controls with
+the selected settings. Comparing output bytes between two runs is a separate
+check; see [What VIPER guarantees](guarantees.md).
 
-## Use the saved run
+## Handle a failure
 
-The saved records identify which source, data, and settings produced the model.
-You can [restore its artifacts or compare it with another
-run](../how-to/retry-restore-compare.md), or [index it for
-search](../how-to/catalog-knowledge-mcp.md).
+Common failures include:
 
-Verification checks the recorded execution. Comparing repeated output bytes is
-a separate check, and assessing the experiment's scientific conclusions still
-requires judgment about the data and method. See [What VIPER
-guarantees](guarantees.md) for the scope of these checks.
+- `RootError` from `viper.repository`: `read_source()` cannot find a valid
+  workspace, source commit, or selected Git remote. Run from the workspace and
+  check that its source is committed.
+- `ValueError` from `plan()`: the variant or replicate name is absent from the
+  experiment, or the supplied settings are invalid. Correct the declaration
+  before executing it.
+- `RunError` from `viper.execution.errors`: an attempt failed during execution
+  or verification. Its message identifies the saved failure record; the
+  original exception is available through `__cause__`.
+
+The failed attempt retains its logs and journal. Use the saved failure record
+to locate them; the [troubleshooting guide](../how-to/troubleshooting.md)
+explains the common failure codes.
+
+Use `execution.retry()` to retry a failed run with the same saved plan. Changes
+to source code or configuration require a new plan. See [retry, restore, and
+compare](../how-to/retry-restore-compare.md) for the commands.
